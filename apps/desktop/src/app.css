@@ -120,3 +120,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Schedule-X dark theme overrides — neutral gray, no purple */
+.is-dark {
+  --sx-color-background: #191919;
+  --sx-color-on-background: #e8e8e8;
+  --sx-color-surface: #252525;
+  --sx-color-surface-dim: #191919;
+  --sx-color-surface-bright: #2f2f2f;
+  --sx-color-on-surface: #e8e8e8;
+  --sx-color-surface-container: #212121;
+  --sx-color-surface-container-low: #1c1c1c;
+  --sx-color-surface-container-high: #2f2f2f;
+  --sx-color-outline: rgba(255, 255, 255, 0.1);
+  --sx-color-outline-variant: rgba(255, 255, 255, 0.06);
+  --sx-color-primary: #e8e8e8;
+  --sx-color-on-primary: #191919;
+  --sx-color-primary-container: #3a3a3a;
+  --sx-color-on-primary-container: #e8e8e8;
+  --sx-color-secondary: #a0a0a0;
+  --sx-color-on-secondary: #191919;
+  --sx-color-secondary-container: #333333;
+  --sx-color-on-secondary-container: #e8e8e8;
+  --sx-internal-color-text: #e8e8e8;
+  --sx-internal-color-gray-ripple-background: rgba(255, 255, 255, 0.06);
+  --sx-internal-color-light-gray: #252525;
+}
