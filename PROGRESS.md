@@ -14,7 +14,8 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 - Phase 0: designed 12-phase roadmap covering all product spec systems, verified coverage
 - Phase 1: monorepo scaffold (Turborepo + pnpm workspaces + Cargo workspace)
 - Phase 1: Tauri v2 + Svelte 5 + Vite app (plain Svelte, not SvelteKit)
-- Phase 1: shadcn-svelte + Tailwind CSS v4 with dark theme (slate base)
+- Phase 1: shadcn-svelte + Tailwind CSS v4 with notion-like neutral gray theme (dark + light)
+- Phase 1: custom in-app title bar (decorations: false, drag region, window controls)
 - Phase 1: shared-types package (Task, SessionBlock, SkillNode, XpEntry types)
 - Phase 1: SQLite schema (tasks, session_blocks, skill_nodes, skill_branches, pomodoro_sessions, xp_entries, streaks, daily_xp_caps)
 - Phase 1: app shell with sidebar navigation (calendar, kanban, pomodoro, skill-tree views)
@@ -42,4 +43,4 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 
 | Date | Summary |
 |---|---|
-| 2026-03-09 | Created tracking documents and 12-phase roadmap. Started Phase 1: monorepo scaffold, Tauri+Svelte app, shadcn-svelte, SQLite schema, app shell, Pomodoro timer, Kanban board. |
+| 2026-03-09 | Created tracking documents and 12-phase roadmap. Started Phase 1: monorepo scaffold, Tauri+Svelte app, shadcn-svelte, SQLite schema, app shell, Pomodoro timer, Kanban board. Custom title bar with window controls. Notion-like neutral gray theme. |

@@ -18,10 +18,8 @@
   ];
 </script>
 
-<aside class="flex w-16 flex-col items-center border-r border-border bg-card py-4">
-  <div class="mb-6 text-lg font-bold text-primary">G</div>
-
-  <nav class="flex flex-1 flex-col gap-1">
+<aside class="flex w-16 flex-shrink-0 flex-col border-r border-border bg-card">
+  <nav class="flex flex-1 flex-col items-center gap-1 py-3">
     {#each items as item}
       <button
         onclick={() => nav.navigate(item.view)}
@@ -42,7 +40,7 @@
   </nav>
 
   {#if pomodoro.isRunning}
-    <div class="mt-auto text-xs font-mono text-muted-foreground">
+    <div class="pb-4 text-center text-xs font-mono text-muted-foreground">
       {pomodoro.formattedTime}
     </div>
   {/if}
