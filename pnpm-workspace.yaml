@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+  - plugins/*
+  - packages/*
+  - extensions/*
+
+onlyBuiltDependencies: '[''esbuild'']'
