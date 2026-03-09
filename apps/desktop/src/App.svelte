@@ -1,7 +1,25 @@
 <script lang="ts">
+  import { getNavigation } from "$lib/stores/navigation.svelte";
+  import Sidebar from "$lib/components/Sidebar.svelte";
+  import CalendarView from "$lib/components/calendar/CalendarView.svelte";
+  import KanbanView from "$lib/components/kanban/KanbanView.svelte";
+  import PomodoroView from "$lib/components/pomodoro/PomodoroView.svelte";
+  import SkillTreeView from "$lib/components/skill-tree/SkillTreeView.svelte";
+
+  const nav = getNavigation();
 </script>
 
-<main>
-  <h1>GanbaruAI</h1>
-  <p>Phase 1 — Core loop</p>
-</main>
+<div class="flex h-screen overflow-hidden">
+  <Sidebar />
+  <main class="flex-1 overflow-auto">
+    {#if nav.current === "calendar"}
+      <CalendarView />
+    {:else if nav.current === "kanban"}
+      <KanbanView />
+    {:else if nav.current === "pomodoro"}
+      <PomodoroView />
+    {:else if nav.current === "skill-tree"}
+      <SkillTreeView />
+    {/if}
+  </main>
+</div>
