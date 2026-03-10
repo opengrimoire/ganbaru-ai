@@ -113,6 +113,9 @@
 }
 
 @layer base {
+  html {
+    font-size: 14px;
+  }
   * {
     @apply border-border outline-ring/50;
   }
@@ -121,7 +124,7 @@
   }
 }
 
-/* Schedule-X dark theme overrides — neutral gray, no purple */
+/* Calendar dark theme overrides — neutral gray, no purple */
 .is-dark {
   --sx-color-background: #191919;
   --sx-color-on-background: #e8e8e8;

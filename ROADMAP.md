@@ -12,7 +12,7 @@ The minimum viable cycle: plan sessions, focus with a timer, earn XP, see progre
 
 - Monorepo scaffold: Turborepo + pnpm workspaces + Tauri v2 + Svelte 5 + Vite
 - SQLite setup via tauri-plugin-sql with initial schema (sessions, tasks, XP ledger, skill tree nodes, streaks)
-- Calendar with session blocks (Schedule-X): day/week/month views, drag-and-drop event creation and resizing, session blocks carrying task references, Pomodoro counts, and skill tree branch tags
+- Calendar with session blocks: day/week/month views, drag-and-drop event creation and resizing, session blocks carrying task references, Pomodoro counts, and skill tree branch tags
 - Basic Pomodoro timer: configurable focus/break durations, cycle counting per session block, timer state in Svelte runes, auto-start when session block activates
 - Basic personal Kanban: four default columns (backlog, to do, in progress, done), task cards with priority tiers (easy/medium/hard/epic), estimated Pomodoro count, drag-and-drop reordering (svelte-dnd-action), task-to-session-block linking
 - Simplified Pomodoro-to-XP pipeline: basic Activity XP on Pomodoro completion and task completion (by difficulty tier), simplified Will Focus tracking via timer adherence (completing vs. abandoning cycles, break extension tracking), session XP stored in SQLite
@@ -314,7 +314,7 @@ Every system from the product spec is accounted for:
 
 | System | Phase |
 |---|---|
-| Calendar (session blocks, Schedule-X) | 1 |
+| Calendar (session blocks) | 1 |
 | Kanban (personal) | 1 |
 | Kanban (project, requirement version control) | 9 |
 | Pomodoro timer | 1 |

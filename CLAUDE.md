@@ -20,7 +20,7 @@ ganbaruai/
 │   │   ├── src/                          ← Svelte frontend
 │   │   │   ├── lib/                      ← shared frontend code
 │   │   │   │   ├── components/           ← reusable Svelte components
-│   │   │   │   │   ├── calendar/         ← Schedule-X wrappers, session block rendering
+│   │   │   │   │   ├── calendar/         ← calendar wrappers, session block rendering
 │   │   │   │   │   ├── kanban/           ← board columns, task cards, drag-and-drop
 │   │   │   │   │   ├── pomodoro/         ← timer display, break screen, XP results
 │   │   │   │   │   ├── notes/            ← Tiptap editor wrapper, slash commands

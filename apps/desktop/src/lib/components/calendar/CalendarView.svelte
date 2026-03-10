@@ -26,8 +26,8 @@
   // Selected event for detail panel
   let selectedEvent = $state<CalendarEventExternal | null>(null);
 
-  function addOneHour(scheduleXDate: string): string {
-    const [datePart, timePart] = scheduleXDate.split(" ");
+  function addOneHour(calendarDate: string): string {
+    const [datePart, timePart] = calendarDate.split(" ");
     const [h, m] = timePart.split(":").map(Number);
     const newH = (h + 1) % 24;
     return `${datePart} ${String(newH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;

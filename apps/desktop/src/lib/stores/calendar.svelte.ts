@@ -9,13 +9,13 @@ interface DbSessionBlock {
   pomodoro_count: number;
 }
 
-function toScheduleXDate(isoOrSqlite: string): string {
+function toCalendarDate(isoOrSqlite: string): string {
   // Handles both 'YYYY-MM-DD HH:MM:SS' (SQLite) and ISO 8601 strings
   return isoOrSqlite.substring(0, 16).replace("T", " ");
 }
 
-function toIsoString(scheduleXDate: string): string {
-  return new Date(scheduleXDate.replace(" ", "T")).toISOString();
+function toIsoString(calendarDate: string): string {
+  return new Date(calendarDate.replace(" ", "T")).toISOString();
 }
 
 let blocks = $state<CalendarEventExternal[]>([]);
@@ -33,8 +33,8 @@ export function getCalendar() {
       blocks = rows.map((r) => ({
         id: r.id,
         title: r.title,
-        start: toScheduleXDate(r.start_time),
-        end: toScheduleXDate(r.end_time),
+        start: toCalendarDate(r.start_time),
+        end: toCalendarDate(r.end_time),
       }));
     },
 

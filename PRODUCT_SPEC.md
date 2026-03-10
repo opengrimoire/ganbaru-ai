@@ -24,7 +24,7 @@ The calendar is the central planning hub. When users plan their week, they are n
 
 Each calendar event (called a "session block") contains: the task or project it belongs to, the number of Pomodoro cycles allocated, the work environment configuration (which apps to open, which browser tabs, which music playlist, which blocker rules), and which skill tree branches it contributes XP to.
 
-The calendar supports day, week, and month views with drag-and-drop event creation and resizing (powered by Schedule-X). Overlapping events are displayed with proper layout.
+The calendar supports day, week, and month views with drag-and-drop event creation and resizing. Overlapping events are displayed with proper layout.
 
 When the current time reaches a session block's start, the app automatically activates the associated work environment — opening apps, arranging browser tabs, starting the playlist, and enabling the correct blocker configuration. This happens without user intervention. The user decides their environment once during planning; the app enforces it.
 

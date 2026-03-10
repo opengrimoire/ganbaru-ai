@@ -18,7 +18,7 @@
   ];
 </script>
 
-<aside class="flex w-16 flex-shrink-0 flex-col border-r border-border bg-card">
+<aside class="flex w-16 shrink-0 flex-col border-r border-border bg-card">
   <nav class="flex flex-1 flex-col items-center gap-1 py-3">
     {#each items as item}
       <button
@@ -31,7 +31,7 @@
         )}
         title={item.label}
       >
-        <item.icon size={20} />
+        <item.icon size={17} />
         {#if item.view === "pomodoro" && pomodoro.isRunning}
           <span class="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-green-500"></span>
         {/if}
