@@ -1,0 +1,368 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ganbaruai.app/schemas/skill-tree.json",
+  "title": "GanbaruAI skill tree",
+  "description": "Schema for a radial DAG skill tree used in GanbaruAI. Defines branches, nodes (basic/notable/keystone), cross-branch connections (bridge/multi_parent/synergy), tags, and rendering hints.",
+  "type": "object",
+  "required": ["metadata", "branches", "nodes", "tag_definitions", "rendering_hints"],
+  "additionalProperties": false,
+
+  "properties": {
+
+    "metadata": {
+      "type": "object",
+      "description": "Tree-level metadata and design documentation.",
+      "required": ["name", "version", "description", "total_nodes", "max_depth"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for this skill tree template."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semver version string."
+        },
+        "description": {
+          "type": "string",
+          "description": "Summary of the tree's purpose and scope."
+        },
+        "total_nodes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Expected total node count. Used for validation."
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum depth level in the tree (origin = 0)."
+        },
+        "design_notes": {
+          "type": "object",
+          "description": "Free-form design documentation for implementers.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+
+    "branches": {
+      "type": "array",
+      "description": "The 5–8 first-level domain branches radiating from the origin.",
+      "minItems": 5,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/definitions/branch"
+      }
+    },
+
+    "nodes": {
+      "type": "array",
+      "description": "All nodes in the DAG, including the origin, branch nodes, and cross-branch nodes.",
+      "minItems": 50,
+      "items": {
+        "$ref": "#/definitions/node"
+      }
+    },
+
+    "tag_definitions": {
+      "type": "array",
+      "description": "All tags used across nodes. Tags enable cross-branch filtering in the UI.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/tag_definition"
+      }
+    },
+
+    "rendering_hints": {
+      "type": "object",
+      "description": "Visual and interaction guidance for the frontend renderer (D3/SVG).",
+      "required": ["layout", "node_size_by_tier", "progressive_disclosure", "semantic_zoom"],
+      "additionalProperties": true,
+      "properties": {
+        "layout": {
+          "type": "string",
+          "description": "Layout algorithm description. Expected: radial DAG from center."
+        },
+        "branch_arc_degrees": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360,
+          "description": "Degrees of arc each branch occupies in the radial layout."
+        },
+        "node_size_by_tier": {
+          "type": "object",
+          "description": "Pixel diameter for each node tier.",
+          "required": ["origin", "basic", "notable", "keystone"],
+          "properties": {
+            "origin": { "type": "integer", "minimum": 1 },
+            "basic": { "type": "integer", "minimum": 1 },
+            "notable": { "type": "integer", "minimum": 1 },
+            "keystone": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "edge_style": {
+          "type": "object",
+          "description": "Visual style for edges between nodes.",
+          "properties": {
+            "same_branch": { "type": "string" },
+            "cross_branch": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "progressive_disclosure": {
+          "type": "object",
+          "description": "Opacity and style rules for nodes based on unlock distance.",
+          "required": ["unlocked", "immediate_neighbor"],
+          "properties": {
+            "unlocked": { "type": "string" },
+            "immediate_neighbor": { "type": "string" },
+            "two_steps_away": { "type": "string" },
+            "hidden_synergy": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "decay_visual": {
+          "type": "string",
+          "description": "Description of how skill decay is rendered visually on nodes."
+        },
+        "semantic_zoom": {
+          "type": "object",
+          "description": "What is visible at each zoom level.",
+          "required": ["far", "medium", "close", "detail"],
+          "properties": {
+            "far": { "type": "string" },
+            "medium": { "type": "string" },
+            "close": { "type": "string" },
+            "detail": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "mobile": {
+          "type": "object",
+          "description": "Mobile-specific rendering and interaction guidance.",
+          "properties": {
+            "default_view": { "type": "string" },
+            "interaction": { "type": "string" },
+            "navigation": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+
+  "definitions": {
+
+    "hex_color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$",
+      "description": "Hex color code, e.g. '#4CAF50'."
+    },
+
+    "branch": {
+      "type": "object",
+      "description": "A first-level domain branch of the skill tree.",
+      "required": ["id", "name", "color", "icon", "description", "radial_position_degrees"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Unique branch identifier. Lowercase alphanumeric + underscore."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name for the branch."
+        },
+        "color": {
+          "$ref": "#/definitions/hex_color",
+          "description": "Primary color for this branch. Used for nodes, edges, and UI accents."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier (e.g. lucide icon name) for the branch."
+        },
+        "description": {
+          "type": "string",
+          "description": "Short description shown when the branch is selected or hovered."
+        },
+        "radial_position_degrees": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360,
+          "description": "Angular position in the radial layout (0 = top/north, clockwise)."
+        }
+      }
+    },
+
+    "node": {
+      "type": "object",
+      "description": "A single node in the skill tree DAG.",
+      "required": ["id", "name", "description", "branch", "level", "tier", "prerequisites", "tags", "xp_to_unlock"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Unique node identifier. Convention: branch prefix + short name (e.g. 'hlth_cardio'). Cross-branch nodes use 'xbr_' prefix."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name shown on the node."
+        },
+        "description": {
+          "type": "string",
+          "description": "Full description shown in the detail view. Should explain what this skill is and what progressing in it looks like."
+        },
+        "branch": {
+          "type": ["string", "null"],
+          "description": "Branch ID this node belongs to. null for cross-branch nodes and the origin."
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Depth level in the tree. 0 = origin, 1 = branch roots, 2 = clusters, 3+ = specific skills."
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["origin", "basic", "notable", "keystone"],
+          "description": "Node visual and gameplay tier. origin: center node only. basic: small, connective tissue. notable: medium, named landmarks. keystone: large, mastery-level, often requires cross-branch prerequisites."
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of node IDs that must be unlocked before this node becomes available. Empty array for the origin node."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of tag IDs from tag_definitions. Used for cross-branch filtering and the tag system view."
+        },
+        "xp_to_unlock": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "XP required to unlock this node (in addition to meeting prerequisites). 0 for origin and branch root nodes."
+        },
+        "flavor_text": {
+          "type": "string",
+          "description": "Short RPG-style quote displayed in the detail view. Thematic, not instructional."
+        },
+        "cross_branch": {
+          "description": "Present only on cross-branch nodes (bridge, multi_parent, or synergy). Defines the connection type and involved branches.",
+          "oneOf": [
+            { "$ref": "#/definitions/cross_branch_bridge" },
+            { "$ref": "#/definitions/cross_branch_multi_parent" },
+            { "$ref": "#/definitions/cross_branch_synergy" }
+          ]
+        }
+      }
+    },
+
+    "cross_branch_bridge": {
+      "type": "object",
+      "description": "A bridge node sits at the visual boundary between two branches, requiring prerequisites from both.",
+      "required": ["type", "bridges", "visual_position"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "bridge"
+        },
+        "bridges": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "The two branch IDs this node bridges."
+        },
+        "visual_position": {
+          "type": "string",
+          "description": "Hint for the renderer about where to place this node in the radial layout."
+        }
+      }
+    },
+
+    "cross_branch_multi_parent": {
+      "type": "object",
+      "description": "A multi-parent DAG node requires prerequisites from 2+ branches but does not visually sit on a boundary.",
+      "required": ["type", "parents", "visual_position"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "multi_parent"
+        },
+        "parents": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "description": "Branch IDs that contribute prerequisite paths to this node."
+        },
+        "visual_position": {
+          "type": "string",
+          "description": "Hint for the renderer about where to place this node."
+        }
+      }
+    },
+
+    "cross_branch_synergy": {
+      "type": "object",
+      "description": "A hidden synergy node that only appears when specific trigger nodes from different branches are both completed.",
+      "required": ["type", "trigger_nodes", "hidden_until_triggered", "visual_position"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "synergy"
+        },
+        "trigger_nodes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "description": "Node IDs from different branches that must both be completed to reveal this synergy node."
+        },
+        "hidden_until_triggered": {
+          "type": "boolean",
+          "const": true,
+          "description": "Always true. Synergy nodes are invisible in the tree until trigger conditions are met."
+        },
+        "visual_position": {
+          "type": "string",
+          "description": "Hint for the renderer about where to place this node once revealed."
+        }
+      }
+    },
+
+    "tag_definition": {
+      "type": "object",
+      "description": "A tag used for cross-branch filtering. Nodes carry tag IDs; the UI can filter the tree view by tag.",
+      "required": ["id", "name", "color"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Unique tag identifier. Lowercase, alphanumeric, hyphens, underscores."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name for the tag."
+        },
+        "color": {
+          "$ref": "#/definitions/hex_color",
+          "description": "Color used when highlighting nodes matching this tag."
+        }
+      }
+    }
+  }
+}

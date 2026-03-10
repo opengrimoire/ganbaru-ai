@@ -6,7 +6,7 @@ Phase 1 — Core loop
 
 ## Status
 
-Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomodoro timer, Kanban board, and SQLite schema are done. Calendar and skill tree (D3.js) views are placeholder stubs. XP pipeline not yet wired.
+Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomodoro timer, Kanban board, SQLite schema, calendar, and XP pipeline are done. Skill tree rebuilt with Shield Hero-style center-snap navigation replacing D3.js force graph.
 
 ## Completed
 
@@ -22,7 +22,8 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 - Phase 1: Pomodoro timer (focus/short_break/long_break phases, cycle tracking, start/pause/reset/skip)
 - Phase 1: Kanban board with CRUD (backlog/todo/in_progress/done columns, task creation, move between columns, delete, priority badges)
 - Phase 1: calendar view (week/day/month, session block create/move/delete, SQLite-backed)
-- Phase 1: skill tree view (D3.js force-directed graph, sample data, zoom/pan, node details, XP progress arcs)
+- Phase 1: skill tree view (SVG + Svelte center-snap navigation, neighborhood culling, sub-layer navigation, keyboard nav, locked/available/unlocked visual states, node detail panel, removed D3.js dependency)
+- Phase 1: skill tree data (153-node temporal tree from JSON, 7 branches with radial tree layout adapter, cluster sub-graphs, auto-focus, always-visible detail panel)
 - Phase 1: XP pipeline (Pomodoro → pomodoro_sessions + xp_entries in SQLite, +XP toast on completion)
 
 ## In progress
@@ -45,4 +46,4 @@ Phase 2 — Notes and Diary:
 
 | Date | Summary |
 |---|---|
-| 2026-03-09 | Created tracking documents and 12-phase roadmap. Phase 1 complete: monorepo scaffold, Tauri+Svelte, SQLite, app shell, Pomodoro timer, Kanban board, calendar with session blocks, D3.js skill tree, XP pipeline. Custom title bar + Notion-like theme. |
+| 2026-03-09 | Created tracking documents and 12-phase roadmap. Phase 1 complete: monorepo scaffold, Tauri+Svelte, SQLite, app shell, Pomodoro timer, Kanban board, calendar with session blocks, XP pipeline. Custom title bar + Notion-like theme. Skill tree rewritten: replaced D3.js force graph with SVG + Svelte center-snap navigation (Shield Hero style), neighborhood culling, sub-layer navigation, authored graph data, keyboard controls, visual states. Updated PRODUCT_SPEC, TECH_STACK, ROADMAP, DECISIONS, CLAUDE.md. Integrated 153-node temporal skill tree JSON (7 branches, radial layout adapter, cluster sub-graphs). Fixed: center-snap positioning, kanban/calendar scroll, auto-focus, always-visible detail panel, simplified keyboard nav. |

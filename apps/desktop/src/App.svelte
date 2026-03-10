@@ -14,7 +14,7 @@
   <TitleBar />
   <div class="flex flex-1 overflow-hidden">
     <Sidebar />
-    <main class="flex-1 overflow-auto">
+    <main class="flex-1 overflow-hidden">
       {#if nav.current === "calendar"}
         <CalendarView />
       {:else if nav.current === "kanban"}

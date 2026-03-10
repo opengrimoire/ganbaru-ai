@@ -78,7 +78,7 @@
 </script>
 
 <div class="relative flex h-full flex-col overflow-hidden">
-  <div class="sx-container flex-1 overflow-hidden">
+  <div class="sx-container min-h-0 flex-1 overflow-auto">
     <ScheduleXCalendar calendarApp={calendarApp} />
   </div>
 

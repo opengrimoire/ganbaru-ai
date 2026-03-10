@@ -18,13 +18,13 @@
   });
 </script>
 
-<div class="flex h-full flex-col p-6">
+<div class="flex h-full flex-col overflow-hidden p-6">
   <div class="mb-6">
     <h1 class="text-2xl font-bold">Kanban</h1>
     <p class="text-sm text-muted-foreground">Manage your tasks</p>
   </div>
 
-  <div class="flex flex-1 gap-4 overflow-x-auto">
+  <div class="flex min-h-0 flex-1 gap-4 overflow-x-auto">
     {#each columns as column}
       <KanbanColumn
         status={column.status}
