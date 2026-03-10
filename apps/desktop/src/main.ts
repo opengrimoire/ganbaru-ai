@@ -1,3 +1,4 @@
+import "temporal-polyfill/global";
 import App from "./App.svelte";
 import { mount } from "svelte";
 import "./app.css";

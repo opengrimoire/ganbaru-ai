@@ -17,6 +17,7 @@
     "@schedule-x/events-service": "^3.7.3",
     "@schedule-x/svelte": "^3.0.0",
     "@schedule-x/theme-default": "^3.7.3",
+    "temporal-polyfill": "0.3.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.3.2",
