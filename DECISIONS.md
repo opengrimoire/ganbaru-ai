@@ -39,3 +39,19 @@ Each entry records:
 **Reasoning:** Svelte 5 runes are the recommended approach and provide fine-grained reactivity without the boilerplate of writable/readable stores. The getter pattern keeps the API surface clean and allows encapsulating mutations. No external state management library needed.
 
 **Alternatives considered:** Svelte stores (`writable`), Svelte context API, or external libraries like Zustand. All add unnecessary abstraction when runes handle the use case natively.
+
+---
+
+### 2026-03-09 — SVG + Svelte skill tree instead of D3.js force-directed graph
+
+**Decision:** replaced the D3.js force-directed graph skill tree with a custom SVG + Svelte component-based implementation using center-snap discrete navigation, neighborhood culling, and authored graph data.
+
+**Reasoning:** the D3.js force simulation is designed for data visualization, not game-like navigation. It produces unpredictable node positions (different every render), jittery physics, and defaults to free pan/zoom — all of which fight the intended Shield Hero-style UX where the user navigates one step at a time and the world moves to center the focused node. The force layout also has no concept of layered sub-graphs, which is needed for the "generalist but deep" tree structure (broad categories at the top, specialized skills nested within).
+
+The new approach renders nodes as pure Svelte components within SVG `<g>` elements (avoiding `<foreignObject>` due to WebKitGTK rendering quirks). Node positions are hand-authored within each sub-graph (TypeScript constants), not computed. Navigation is discrete — arrow keys or click, one step at a time, with spring-animated center-snap. Neighborhood culling by graph distance (BFS depth 0–2 from focal node) caps the rendered set at ~15–40 nodes regardless of total tree size.
+
+**Alternatives considered:**
+- **D3.js force layout** (previous implementation): rejected for reasons above.
+- **Svelte Flow (`@xyflow/svelte`)**: designed for user-editable node graphs with free pan/zoom. Would require fighting its defaults at every step.
+- **Canvas (HTML5)**: loses the Svelte component model, requires manual hit detection. Only worth it for a "galaxy overview" mode, which can be added later if needed.
+- **Keeping D3.js for layout only, custom rendering**: still produces unpredictable positions. The core issue is computed vs authored positions, not the rendering layer.

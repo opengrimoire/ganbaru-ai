@@ -406,15 +406,54 @@ All implemented as secondary Tauri windows for fully custom UI rather than OS no
 
 ## Skill tree visualization
 
-The skill tree is a directed acyclic graph (DAG) rendered as an interactive, zoomable radial visualization. This is one of the most visually complex components in the app.
+An RPG-style, cinematic skill tree rendered as SVG within Svelte components. The reference aesthetic is The Rising of the Shield Hero's skill tree — dark background, glowing nodes, discrete center-focused navigation, animated transitions. The tree serves dual purposes: gamification feedback (unlocking skills as the user grows) and personal/professional growth visualization.
 
-### SVG + D3.js (layout engine)
+### SVG + Svelte components (not D3.js, not Canvas)
 
-D3's force-directed and hierarchical layout algorithms compute node positions for the DAG structure. The rendering itself uses SVG within Svelte components — nodes, edges, and labels are standard SVG elements styled via CSS, which keeps them consistent with the rest of the app's RPG aesthetic and allows CSS-driven effects like skill decay dimming, corruption visual effects on failed Contract branches, and unlock animations.
+D3.js was evaluated and rejected — its force-directed layout is designed for data visualization, not game-like navigation. It produces unpredictable positions, jittery physics, and defaults to free pan/zoom which fights the intended UX. Canvas was rejected because it loses the Svelte component model and requires manual hit detection.
 
-Semantic zoom is essential: zoomed out shows branch clusters with completion percentages as colored regions. Zoomed in shows individual nodes with descriptions, XP requirements, and prerequisites. On mobile, the tree renders in a pinch-to-zoom container with node details appearing in bottom sheets.
+Instead, nodes are pure Svelte components rendering SVG `<g>` elements (not `<foreignObject>`, which has WebKitGTK rendering quirks). Each node reacts to state changes via Svelte runes. CSS handles all visual states (locked/available/unlocked glows, opacity, filters). Browser hit-testing is free.
 
-The tree supports 100–200 total nodes across 5–8 first-level branches with up to 5 levels of depth. Three node visual tiers (basic, notable, keystone) are distinguished by size and style. Cross-branch connections (bridge nodes, multi-parent DAG nodes, synergy bonuses) are rendered as edges that cross branch color boundaries.
+### Center-snap navigation
+
+The core interaction contract: **the world moves, the camera does not.** Selecting a node animates the entire graph so that node lands at the viewport center. Navigation is discrete — the user moves one step at a time through the graph via arrow keys or click. No free pan, no free zoom during normal navigation. No drag-and-drop — users navigate and unlock, they never reposition nodes.
+
+The animation uses a spring (via `svelte/motion`) on the root SVG `<g>` element's `translate` transform. When the focused node changes, the offset is recalculated to center the target node, and the spring interpolates the transition.
+
+Keyboard controls: arrow keys traverse edges to adjacent nodes, Enter/Space opens detail or confirms unlock, Escape exits a sub-layer.
+
+### Neighborhood culling
+
+Instead of virtualizing by viewport rectangle, cull by **graph distance from the focal node**:
+
+- Depth 0 (focal node): render fully, centered
+- Depth 1 (direct neighbors): render fully
+- Depth 2 (neighbors of neighbors): render at reduced opacity/scale
+- Depth 3+: do not render; optionally show a faint indicator
+
+This caps the rendered node count at roughly 15–40 nodes regardless of total tree size. The visible set is a `$derived` computation from BFS on the adjacency list, recomputed only when the focused node changes. SVG filter friction starts around 300–500 nodes — neighborhood culling ensures we never approach that.
+
+### Layered sub-graphs
+
+A node can contain its own skill graph. The top layer shows broad categories (Mind, Body, Craft, Social, Creative), and navigating into a node enters its sub-tree. A navigation stack tracks the current graph context — going back pops the stack. The renderer always reads from the top of the stack. This is the same mental model as zones in a game.
+
+### Authored graph data
+
+The graph structure is curated static data (TypeScript constants), not user-generated or computed. Node positions are hand-authored within each sub-graph. Only node unlock states are user-specific and persisted to SQLite. The graph definition lives in the codebase and is versioned with the app.
+
+### Visual states
+
+Each node gets a data attribute reflecting its state. All visual differences are CSS-only:
+
+- **Locked**: low opacity, grayscale filter, no interaction
+- **Available**: medium opacity, colored glow (`drop-shadow`), cursor pointer
+- **Unlocked**: full opacity, bright glow, increased brightness
+
+Edge lines change stroke based on whether the source node is unlocked. Depth-based fading is a CSS variable injected per node.
+
+### Capacity
+
+The tree supports 200+ total nodes across 5–8 first-level branches with arbitrary depth via sub-graphs. Three node visual tiers (basic, notable, keystone) are distinguished by size and glow intensity. Cross-branch connections are rendered as edges that cross sub-graph boundaries or as bridge nodes visible in multiple layers.
 
 ---
 
@@ -525,7 +564,7 @@ Donations accepted as an additional voluntary contribution.
 | Sync server               | Hocuspocus                                           | Yjs server with persistence, presence, and auth hooks                              |
 | Encryption                | libsodium / `@noble/ciphers`                         | E2E encryption, server sees only ciphertext                                        |
 | Local DB                  | SQLite via `tauri-plugin-sql`                        | Metadata, search, tags, XP, Will metrics, contracts, streaks, requirement diffs    |
-| Skill tree rendering      | SVG + D3.js                                          | DAG layout computation, semantic zoom, interactive radial visualization            |
+| Skill tree rendering      | SVG + Svelte components                              | Center-snap navigation, neighborhood culling, CSS-driven visual states            |
 | Media engine (video)      | `ffmpeg-next`                                        | FFmpeg Rust bindings for full audio/video format support                           |
 | Media engine (audio-only) | Symphonia (optional)                                 | Pure-Rust audio decoding, lighter than FFmpeg for playlist-only use                |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |

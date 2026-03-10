@@ -266,61 +266,77 @@ The Contract system creates a powerful psychological loop: the higher the stakes
 
 ### Skill tree
 
-Inspired by The Rising of the Shield Hero's skill tree system and informed by research into Path of Exile's passive tree, Final Fantasy X's Sphere Grid, and Maker Skill Trees.
+Inspired by The Rising of the Shield Hero's skill tree system and informed by research into Path of Exile's passive tree, Final Fantasy X's Sphere Grid, and Maker Skill Trees. The reference aesthetic is Shield Hero's skill tree — dark background, glowing circular nodes with icons, a center-focused node, animated transitions between nodes, and a detail panel showing unlock information.
 
-**Architecture:** a directed acyclic graph (DAG), not a linear tree. The tree starts from a central node representing the user's avatar/identity and expands radially outward in all directions. Cross-branch connections are allowed and encouraged for skills that genuinely span multiple domains.
+**Architecture:** a directed acyclic graph (DAG) with **layered sub-graphs**. The top layer shows broad life/work categories as navigable nodes. Entering a node reveals its own sub-graph with more specific skills. This creates a "generalist but deep" structure — broad at the surface, specialized within.
+
+**Navigation model (the core UX contract):**
+
+- **The world moves, the camera does not.** Selecting a node animates the entire graph so that node lands at the center of the viewport. The user never drags or pans — the graph repositions itself.
+- **Navigation is discrete.** Arrow keys or click traverse edges one step at a time. No free pan, no free zoom during normal navigation.
+- **No drag-and-drop.** Users navigate and unlock; they never reposition nodes.
+- **Depth is bounded per view.** From any focal node, only adjacent neighbors (depth 1) and their neighbors (depth 2) are rendered. Depth 3+ nodes are hidden. This caps the visible set at ~15–40 nodes regardless of total tree size.
 
 **Structure:**
 
-- **Central node:** the user's avatar. Not a skill — it is "home." All branches radiate from here.
-- **First-level branches (5–8):** broad life/work domains. Examples: Health, Career, Relationships, Financial, Creative, Knowledge, Adventure, Inner Growth. These are the major categories visible when zoomed out.
-- **Second-level clusters:** subcategories within each branch. For Career, this might include Technical Skills, Leadership, Communication, Industry Knowledge. For Health: Physical Fitness, Nutrition, Mental Health, Sleep.
-- **Third-level and beyond (up to 5 levels deep):** increasingly specific skills. Career → Technical Skills → Programming → Rust, or Health → Physical Fitness → Strength → Deadlift Form.
-- **Target: 100–200 total nodes.** At any single node, the user sees only 3–5 next choices to avoid paradox of choice.
+- **Root graph (5–8 nodes):** broad life/work domains. Examples: Mind, Body, Craft, Social, Creative. Each is a navigable node containing its own sub-graph.
+- **Sub-graphs within each domain:** subcategories. Craft might contain Programming, Writing, Design. Mind might contain Focus, Memory, Learning.
+- **Further depth via nested sub-graphs:** Programming might contain Rust, TypeScript, Python. Arbitrary nesting depth, though 3–4 levels is practical.
+- **Target: 200+ total nodes across all layers.** At any single focal point, the user sees only 3–5 adjacent choices.
 
 **Node types (three-tier hierarchy from Path of Exile):**
 
-1. **Basic nodes** (small, incremental): the connective tissue. Represent small improvements or subskills. Relatively easy to unlock. These form the paths between notable nodes.
-2. **Notable nodes** (medium, named, significant): landmarks in the tree. Represent meaningful competencies. Serve as visual anchors when zoomed out. Harder to unlock — require multiple basic nodes or prerequisites from other branches.
-3. **Keystone nodes** (large, transformative): fundamentally change how a branch works. Represent mastery-level achievements. Very hard to unlock — may require prerequisites from 2+ branches (cross-disciplinary mastery).
+1. **Basic nodes** (small, subtle glow): the connective tissue. Represent small improvements or subskills. Low cost to unlock.
+2. **Notable nodes** (medium, named, brighter glow): landmarks. Represent meaningful competencies. Higher cost, may require multiple basic prerequisites.
+3. **Keystone nodes** (large, intense glow): transformative. Represent mastery-level achievements. Very high cost — may require prerequisites from 2+ sub-graphs.
+
+**Node states:**
+
+- **Locked:** all prerequisites not yet met. Visually dimmed, grayscale, non-interactive.
+- **Available:** all prerequisites unlocked. Glowing border, interactive. User can spend skill points to unlock.
+- **Unlocked:** purchased by the user. Full brightness, colored glow.
+
+There is no reverse transition in normal play. If respec is supported, it is a separate operation.
+
+**Skill points:** XP earned through productivity (Pomodoro sessions, task completions, streak maintenance) converts to spendable skill points. The user chooses which available nodes to unlock. This gives agency — the user decides their growth path, not the system.
 
 **Cross-disciplinary connections (four mechanisms):**
 
-1. **Bridge nodes:** sit at the visual boundary between two branch colors, with prerequisite paths from both branches. Example: "Technical Writing" bridges Career/Technical and Creative/Writing.
-2. **Multi-parent DAG nodes:** require prerequisites from 2+ branches. Example: "Public Speaking" requires nodes from both Career/Communication and Creative/Performance.
-3. **Synergy bonuses:** hidden nodes that appear when related skills across branches are both completed. Example: completing "Data Analysis" (Career) and "Scientific Method" (Knowledge) reveals a hidden "Research Design" node.
-4. **Tag system:** skills carry labels (Communication, Leadership, Analytical, Creative) that can be filtered to reveal cross-branch connections dynamically. The user can view the tree filtered by tag to see all Communication-related nodes regardless of branch.
+1. **Bridge nodes:** sit at the boundary between two sub-graphs, with prerequisite paths from both. Example: "Technical Writing" bridges Craft/Programming and Craft/Writing.
+2. **Multi-parent nodes:** require prerequisites from 2+ sub-graphs. Example: "Public Speaking" requires nodes from Social/Communication and Creative/Performance.
+3. **Synergy bonuses:** hidden nodes that appear when related skills across sub-graphs are both completed.
+4. **Tag system:** skills carry labels (Communication, Leadership, Analytical, Creative) that can be filtered to reveal cross-branch connections.
 
-**Progressive disclosure (critical for UX):**
+**Neighborhood culling (critical for performance and UX):**
 
-- Show only unlocked nodes plus their immediate neighbors. Fade nodes 2+ steps away.
-- Semantic zoom: zoomed out shows branch clusters with completion percentages. Zoomed in shows individual nodes with descriptions, XP requirements, and prerequisites.
-- On mobile: show only the current neighborhood with pinch-to-zoom. Node details appear in bottom sheets.
-- Always highlight a "recommended next step" based on the user's recent activity patterns. The user can deviate, but having a default reduces choice paralysis.
-- First-time experience: start with guided, constrained paths (like FFX's Standard Sphere Grid — appears open but channels new users through a mostly linear path early on). The full radial tree reveals itself progressively as the user gains confidence and levels.
+The visible node set is computed by BFS from the focal node, not by viewport intersection. Depth 0 renders fully centered, depth 1 renders fully, depth 2 renders at reduced opacity, depth 3+ is hidden. This is a `$derived` rune that recomputes only when the focal node changes. Total tree size is irrelevant to render performance.
+
+On mobile: the same neighborhood culling applies. Node details appear in bottom sheets instead of side panels.
+
+**Center-snap animation:**
+
+When the focused node changes, the entire graph translates via a spring animation so the new focal node lands at the viewport center. The spring uses `svelte/motion` for the elastic, game-like feel. Only one animated value (the `<g>` container's translate offset) drives all movement.
 
 **How the skill tree connects to productivity data:**
 
-- Calendar session blocks are tagged to skill tree branches. Completing a session block in "Project X" (tagged to Career → Programming → Rust) generates XP for those nodes.
-- Kanban task completion generates XP for the tagged branch.
-- Pomodoro sessions generate XP in the branches associated with the current task.
-- Note-taking and cross-referencing generates Clarity XP distributed across the branches the notes are tagged to.
-- Contract bonuses apply XP multipliers to specific branches.
-- The skill tree is the primary visual representation of long-term growth. It is not just a cosmetic layer — it reflects genuine accumulated effort in specific domains, verified by automated tracking.
+- Calendar session blocks are tagged to skill tree sub-graphs. Completing a session block generates skill points.
+- Kanban task completion generates skill points proportional to difficulty tier.
+- Pomodoro sessions generate skill points in the sub-graphs associated with the current task.
+- Note-taking and cross-referencing generates Clarity XP which converts to skill points.
+- Contract bonuses apply multipliers to skill point earnings in specific sub-graphs.
+- The skill tree is the primary visual representation of long-term growth. It reflects genuine accumulated effort verified by automated tracking.
 
 **Skill decay (based on spaced repetition science):**
 
-Skills visibly decline without practice: `displayed_level = actual_level × e^(-0.03 × days_since_practice)`. After 7 days without practice: retention shows at ~81% (barely noticeable). After 14 days: ~66% (visible decline). After 30 days: ~41% (significant). "Refresher" activities (even one Pomodoro in the relevant domain) restore the displayed level cheaply. This creates natural re-engagement loops: the user sees a branch dimming and feels motivated to return to it.
-
-Skill decay mirrors real cognitive science — skills genuinely do decay without practice — while providing a loss-aversion engagement hook. The decay is on the displayed level only; the actual earned level is preserved. This means returning after a break is cheap (one session restores display), but prolonged absence is visible.
+Skills visibly decline without practice: `displayed_level = actual_level * e^(-0.03 * days_since_practice)`. After 7 days: ~81% retention (barely noticeable). After 14 days: ~66% (visible decline). After 30 days: ~41% (significant). One Pomodoro in the relevant domain restores the displayed level. The actual earned level is preserved — returning after a break is cheap, but prolonged absence is visible.
 
 **Deep layers and deep branches:**
 
-Deep layers are additional depth tiers within the skill tree that are gated behind tier upgrades and/or Contract achievements. They represent advanced specialization that goes beyond the standard 5-level depth.
+Deep layers are additional depth tiers gated behind tier upgrades and/or Contract achievements. Deep branches are entirely new sub-graphs that only appear after specific Contract completions. Both serve as exclusive content that rewards commitment — visible as "locked" indicators that incentivize progression.
 
-Deep branches are entirely new branches or sub-branches that only appear after specific Contract completions or tier upgrades. They represent specialized domains that the user has committed to through the Contract system.
+**Authored graph data:**
 
-Both serve as exclusive content that rewards commitment — visible to the user as "locked" content that incentivizes progression and Contract engagement.
+The graph structure is curated static data (TypeScript constants or JSON), not user-generated. Node positions within each sub-graph are hand-authored. Only node unlock states and skill point balance are user-specific and persisted to SQLite. The graph definition is versioned with the app.
 
 ### Tier upgrade system
 

@@ -4,5 +4,12 @@ export type {
   PomodoroPhase,
   PomodoroState,
 } from "./session.js";
-export type { SkillNode, SkillBranch, NodeType } from "./skill-tree.js";
+export type {
+  SkillNode,
+  SkillEdge,
+  SkillGraph,
+  NodeState,
+  NodeTier,
+  PersistedNodeState,
+} from "./skill-tree.js";
 export type { XpEntry, WillScores } from "./xp.js";

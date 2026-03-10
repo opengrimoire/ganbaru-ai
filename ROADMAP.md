@@ -16,7 +16,7 @@ The minimum viable cycle: plan sessions, focus with a timer, earn XP, see progre
 - Basic Pomodoro timer: configurable focus/break durations, cycle counting per session block, timer state in Svelte runes, auto-start when session block activates
 - Basic personal Kanban: four default columns (backlog, to do, in progress, done), task cards with priority tiers (easy/medium/hard/epic), estimated Pomodoro count, drag-and-drop reordering (svelte-dnd-action), task-to-session-block linking
 - Simplified Pomodoro-to-XP pipeline: basic Activity XP on Pomodoro completion and task completion (by difficulty tier), simplified Will Focus tracking via timer adherence (completing vs. abandoning cycles, break extension tracking), session XP stored in SQLite
-- Basic skill tree view: static SVG rendering of a sample DAG structure, nodes showing XP progress, read-only visualization (no interactive features yet)
+- Skill tree: SVG + Svelte component-based rendering with center-snap discrete navigation, neighborhood culling, authored graph data (TypeScript constants), locked/available/unlocked visual states, keyboard navigation (arrow keys, enter, escape), sub-layer navigation via graph stack, node detail panel
 - Basic RPG-themed UI shell: shadcn-svelte component setup, global CSS theme variables, main window layout with navigation between calendar/kanban/pomodoro/skill-tree views
 
 **Depends on:** nothing
@@ -123,24 +123,25 @@ Complete the experience measurement engine with all four Will categories and ant
 
 ---
 
-## Phase 6 — Skill tree and rewards
+## Phase 6 — Skill tree rewards and polish
 
-Transform the static skill tree view into a fully interactive, visually rich reward system.
+Expand the skill tree with reward mechanics, skill decay visualization, and full integration with the XP pipeline.
 
 **Includes:**
 
-- Interactive skill tree: D3.js force-directed and hierarchical layout for DAG, SVG rendering within Svelte components, semantic zoom (branch clusters when zoomed out, individual nodes when zoomed in), pan and zoom controls
-- Progressive disclosure: show unlocked nodes + immediate neighbors, fade distant nodes, recommended next step highlighting, guided constrained paths for new users
-- Skill decay visualization: displayed_level = actual_level x e^(-0.03 x days_since_practice), dimming effect on unpracticed branches, cheap restoration on re-engagement
-- Three node types: basic (small, incremental), notable (medium, named landmarks), keystone (large, transformative, multi-branch prerequisites)
-- Cross-branch connections: bridge nodes at branch boundaries, multi-parent DAG nodes, synergy bonuses (hidden nodes revealed when related cross-branch skills complete), tag-based filtering
+- Skill decay visualization: displayed_level = actual_level x e^(-0.03 x days_since_practice), dimming effect on unpracticed nodes, cheap restoration on re-engagement (one Pomodoro session restores display)
+- Skill point spending: XP earned through productivity (Pomodoro, tasks, streaks) converts to spendable skill points, user chooses which available nodes to unlock
+- Cross-branch connections: bridge nodes at sub-graph boundaries, multi-parent nodes requiring prerequisites from 2+ branches, synergy bonuses (hidden nodes revealed when related cross-branch skills complete), tag-based filtering
 - Tier upgrade system: overall progression gating access to deep content and features
+- Audio feedback: sound effects on node hover, focus change, unlock, denied attempt, sub-layer entry (deferred from Phase 1 skill tree, evaluated against Web Audio API vs library)
+- Particle effects and animated edges on unlock
+- Breadcrumb navigation showing current layer path
 - Badges: achievement markers for milestones, streaks, project completions. Displayed on profile
 - Skill Capsules: gacha mechanic (common 60%, rare 25%, epic 10%, legendary 5%), pity system (guaranteed rare+ every 10, epic+ every 50), animated reveal sequence, cosmetic-only rewards (profile decorations, tree themes, avatar accessories, UI color schemes)
 - Endowed progress effect: onboarding questions (profession, interests, experience) pre-populate foundational skills as "already begun"
 - Profile sharing: opt-in display of skill tree, tier, badges, streaks
 
-**Depends on:** phase 5 (full XP formula feeding the tree), phase 1 (basic skill tree data model and schema)
+**Depends on:** phase 5 (full XP formula feeding the tree), phase 1 (skill tree core with center-snap navigation and visual states)
 
 **Out of scope:** deep layers/branches (contract-gated, phase 7), contract corruption effects (phase 7), conversational AI onboarding (phase 12)
 
@@ -333,7 +334,7 @@ Every system from the product spec is accounted for:
 | Consistency tracking | 3 |
 | Streaks and multipliers | 3 |
 | XP formula (compound, anti-grinding) | 1 (basic), 5 (full) |
-| Skill tree (DAG, progressive disclosure, decay) | 1 (basic view), 6 (full) |
+| Skill tree (center-snap nav, sub-layers, visual states) | 1 (core), 6 (rewards, decay, polish) |
 | Tier upgrade system | 6 |
 | Badges | 6 |
 | Skill Capsules (gacha) | 6 |

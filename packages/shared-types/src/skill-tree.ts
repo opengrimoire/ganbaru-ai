@@ -1,23 +1,34 @@
-export type NodeType = "basic" | "notable" | "keystone";
+export type NodeState = "locked" | "available" | "unlocked";
+export type NodeTier = "basic" | "notable" | "keystone";
 
 export interface SkillNode {
   id: string;
-  name: string;
+  label: string;
   description: string;
-  nodeType: NodeType;
-  branchId: string;
-  parentIds: string[];
-  level: number;
-  currentXp: number;
-  requiredXp: number;
-  unlocked: boolean;
-  lastPracticedAt: string | null;
+  icon: string;
+  tier: NodeTier;
+  cost: number;
+  prerequisites: string[];
+  position: { x: number; y: number };
+  subGraphId?: string;
+  metadata?: Record<string, unknown>;
 }
 
-export interface SkillBranch {
+export interface SkillEdge {
   id: string;
-  name: string;
-  color: string;
-  parentBranchId: string | null;
-  depth: number;
+  source: string;
+  target: string;
+}
+
+export interface SkillGraph {
+  id: string;
+  label: string;
+  nodes: SkillNode[];
+  edges: SkillEdge[];
+}
+
+export interface PersistedNodeState {
+  nodeId: string;
+  graphId: string;
+  state: NodeState;
 }

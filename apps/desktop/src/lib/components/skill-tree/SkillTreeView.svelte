@@ -1,285 +1,302 @@
 <script lang="ts">
-  import * as d3 from "d3";
+  import { spring } from "svelte/motion";
   import { onMount } from "svelte";
+  import { getSkillTree } from "$lib/stores/skill-tree.svelte";
+  import SkillNode from "./SkillNode.svelte";
+  import SkillEdge from "./SkillEdge.svelte";
+  import NodeDetailPanel from "./NodeDetailPanel.svelte";
 
-  interface Branch {
-    id: string;
-    name: string;
-    color: string;
-  }
+  const tree = getSkillTree();
 
-  interface SkillNode {
-    id: string;
-    name: string;
-    branchId: string;
-    level: number;
-    currentXp: number;
-    requiredXp: number;
-    unlocked: boolean;
-    nodeType: "branch" | "basic" | "notable" | "keystone";
-    color?: string;
-  }
-
-  interface GraphLink {
-    source: string;
-    target: string;
-  }
-
-  // Sample data for Phase 1
-  const branches: Branch[] = [
-    { id: "programming", name: "Programming", color: "#818cf8" },
-    { id: "health", name: "Health", color: "#4ade80" },
-    { id: "creativity", name: "Creativity", color: "#fb923c" },
-    { id: "productivity", name: "Productivity", color: "#38bdf8" },
-  ];
-
-  const skills: SkillNode[] = [
-    // Programming branch
-    { id: "py", name: "Python", branchId: "programming", level: 2, currentXp: 80, requiredXp: 100, unlocked: true, nodeType: "basic" },
-    { id: "ts", name: "TypeScript", branchId: "programming", level: 3, currentXp: 120, requiredXp: 150, unlocked: true, nodeType: "notable" },
-    { id: "rust", name: "Rust", branchId: "programming", level: 1, currentXp: 20, requiredXp: 200, unlocked: false, nodeType: "keystone" },
-    { id: "sql", name: "SQL", branchId: "programming", level: 2, currentXp: 60, requiredXp: 100, unlocked: true, nodeType: "basic" },
-    // Health branch
-    { id: "exercise", name: "Exercise", branchId: "health", level: 4, currentXp: 200, requiredXp: 250, unlocked: true, nodeType: "notable" },
-    { id: "sleep", name: "Sleep discipline", branchId: "health", level: 2, currentXp: 40, requiredXp: 100, unlocked: true, nodeType: "basic" },
-    { id: "nutrition", name: "Nutrition", branchId: "health", level: 1, currentXp: 10, requiredXp: 100, unlocked: false, nodeType: "basic" },
-    // Creativity branch
-    { id: "drawing", name: "Drawing", branchId: "creativity", level: 2, currentXp: 90, requiredXp: 150, unlocked: true, nodeType: "basic" },
-    { id: "music", name: "Music theory", branchId: "creativity", level: 1, currentXp: 30, requiredXp: 100, unlocked: false, nodeType: "basic" },
-    // Productivity branch
-    { id: "focus", name: "Deep focus", branchId: "productivity", level: 5, currentXp: 300, requiredXp: 300, unlocked: true, nodeType: "keystone" },
-    { id: "planning", name: "Planning", branchId: "productivity", level: 3, currentXp: 150, requiredXp: 150, unlocked: true, nodeType: "notable" },
-    { id: "writing", name: "Writing", branchId: "productivity", level: 2, currentXp: 60, requiredXp: 100, unlocked: true, nodeType: "basic" },
-  ];
-
-  const links: GraphLink[] = [
-    { source: "programming", target: "py" },
-    { source: "programming", target: "ts" },
-    { source: "py", target: "rust" },
-    { source: "py", target: "sql" },
-    { source: "health", target: "exercise" },
-    { source: "health", target: "sleep" },
-    { source: "sleep", target: "nutrition" },
-    { source: "creativity", target: "drawing" },
-    { source: "creativity", target: "music" },
-    { source: "productivity", target: "focus" },
-    { source: "productivity", target: "planning" },
-    { source: "planning", target: "writing" },
-  ];
-
-  // Combine branch nodes and skill nodes for D3
-  type GraphNode = (Branch & { nodeType: "branch"; x?: number; y?: number; vx?: number; vy?: number; fx?: number | null; fy?: number | null }) | (SkillNode & { x?: number; y?: number; vx?: number; vy?: number; fx?: number | null; fy?: number | null });
-
-  let svgEl: SVGSVGElement | undefined = $state(undefined);
-  let selectedNode: GraphNode | null = $state(null);
   let containerEl: HTMLDivElement | undefined = $state(undefined);
+  let svgWidth = $state(800);
+  let svgHeight = $state(600);
 
-  function nodeRadius(node: GraphNode): number {
-    if (node.nodeType === "branch") return 20;
-    if (node.nodeType === "keystone") return 14;
-    if (node.nodeType === "notable") return 11;
-    return 8;
-  }
+  // Spring-animated offset for center-snap
+  const offset = spring(
+    { x: 0, y: 0 },
+    { stiffness: 0.12, damping: 0.7 },
+  );
 
-  function nodeColor(node: GraphNode): string {
-    if (node.nodeType === "branch") {
-      return (node as Branch).color;
+  // Recompute offset when focal node changes
+  $effect(() => {
+    const focal = tree.focalNode;
+    if (focal) {
+      offset.set({
+        x: svgWidth / 2 - focal.position.x,
+        y: svgHeight / 2 - focal.position.y,
+      });
     }
-    const branch = branches.find((b) => b.id === (node as SkillNode).branchId);
-    const base = branch?.color ?? "#888";
-    return (node as SkillNode).unlocked ? base : "#3a3a3a";
-  }
+  });
 
-  function nodeStroke(node: GraphNode): string {
-    if (node.nodeType === "branch") return (node as Branch).color;
-    const branch = branches.find((b) => b.id === (node as SkillNode).branchId);
-    return branch?.color ?? "#888";
-  }
+  // Track container size
+  $effect(() => {
+    if (!containerEl) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        svgWidth = entry.contentRect.width;
+        svgHeight = entry.contentRect.height;
+      }
+    });
+    observer.observe(containerEl);
+    return () => observer.disconnect();
+  });
 
+  // Auto-focus container on mount so keyboard works immediately
   onMount(() => {
-    if (!svgEl || !containerEl) return;
+    containerEl?.focus();
+  });
 
-    const { width, height } = containerEl.getBoundingClientRect();
+  function handleNodeClick(nodeId: string) {
+    tree.focusNode(nodeId);
+  }
 
-    const graphNodes: GraphNode[] = [
-      ...branches.map((b) => ({ ...b, nodeType: "branch" as const })),
-      ...skills,
-    ];
+  function handleNodeDblClick(nodeId: string) {
+    const node = tree.visibleNodes.find((n) => n.id === nodeId);
+    if (!node) return;
 
-    const svg = d3.select(svgEl).attr("width", width).attr("height", height);
+    if (node.subGraphId && node.state === "unlocked") {
+      tree.enterNode(nodeId);
+    } else if (node.state === "available") {
+      tree.unlockNode(nodeId);
+    }
+  }
 
-    // Zoom behavior
-    const g = svg.append("g");
-    svg.call(
-      d3
-        .zoom<SVGSVGElement, unknown>()
-        .scaleExtent([0.3, 3])
-        .on("zoom", (event) => {
-          g.attr("transform", event.transform);
-        }),
-    );
+  function handleKeydown(e: KeyboardEvent) {
+    switch (e.key) {
+      case "ArrowUp":
+        e.preventDefault();
+        tree.navigate("up");
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        tree.navigate("down");
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        tree.navigate("left");
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        tree.navigate("right");
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (tree.focalNode) {
+          const node = tree.focalNode;
+          if (node.subGraphId && node.state === "unlocked") {
+            tree.enterNode(node.id);
+          } else if (node.state === "available") {
+            tree.unlockNode(node.id);
+          }
+        }
+        break;
+      case "Escape":
+      case "Backspace":
+        e.preventDefault();
+        if (tree.canGoBack) {
+          tree.exitLayer();
+        }
+        break;
+    }
+  }
 
-    // Links
-    const linkSel = g
-      .append("g")
-      .selectAll("line")
-      .data(links)
-      .join("line")
-      .attr("stroke", "#2a2a2a")
-      .attr("stroke-width", 1.5);
-
-    // Nodes
-    const nodeSel = g
-      .append("g")
-      .selectAll<SVGGElement, GraphNode>("g")
-      .data(graphNodes)
-      .join("g")
-      .style("cursor", "pointer")
-      .on("click", (_event, d) => {
-        selectedNode = d;
-      });
-
-    nodeSel
-      .append("circle")
-      .attr("r", nodeRadius)
-      .attr("fill", nodeColor)
-      .attr("stroke", nodeStroke)
-      .attr("stroke-width", (d) => (d.nodeType === "branch" ? 2.5 : 1.5))
-      .attr("opacity", (d) =>
-        d.nodeType !== "branch" && !(d as SkillNode).unlocked ? 0.35 : 1,
-      );
-
-    // XP progress arc for skill nodes
-    nodeSel
-      .filter((d) => d.nodeType !== "branch")
-      .append("circle")
-      .attr("r", nodeRadius)
-      .attr("fill", "none")
-      .attr("stroke", nodeStroke)
-      .attr("stroke-width", 2)
-      .attr("stroke-dasharray", (d) => {
-        const n = d as SkillNode;
-        const r = nodeRadius(d);
-        const circ = 2 * Math.PI * r;
-        const pct = Math.min(n.currentXp / n.requiredXp, 1);
-        return `${circ * pct} ${circ}`;
-      })
-      .attr("stroke-dashoffset", (d) => {
-        const r = nodeRadius(d);
-        const circ = 2 * Math.PI * r;
-        return circ * 0.25; // rotate to start at top
-      })
-      .attr("opacity", 0.6)
-      .attr("transform", "rotate(-90)");
-
-    // Labels
-    nodeSel
-      .append("text")
-      .text((d) => d.name)
-      .attr("text-anchor", "middle")
-      .attr("dy", (d) => nodeRadius(d) + 13)
-      .attr("font-size", (d) => (d.nodeType === "branch" ? 11 : 9))
-      .attr("fill", "#a0a0a0")
-      .attr("font-family", "sans-serif")
-      .attr("pointer-events", "none");
-
-    // Drag behavior
-    nodeSel.call(
-      d3
-        .drag<SVGGElement, GraphNode>()
-        .on("start", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
-        })
-        .on("drag", (event, d) => {
-          d.fx = event.x;
-          d.fy = event.y;
-        })
-        .on("end", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0);
-          d.fx = null;
-          d.fy = null;
-        }),
-    );
-
-    // Force simulation
-    const simulation = d3
-      .forceSimulation<GraphNode>(graphNodes)
-      .force(
-        "link",
-        d3
-          .forceLink<GraphNode, d3.SimulationLinkDatum<GraphNode>>(links as d3.SimulationLinkDatum<GraphNode>[])
-          .id((d) => (d as { id: string }).id)
-          .distance((l) => {
-            const s = l.source as GraphNode;
-            return s.nodeType === "branch" ? 100 : 70;
-          }),
-      )
-      .force("charge", d3.forceManyBody().strength(-250))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + 18))
-      .on("tick", () => {
-        linkSel
-          .attr("x1", (d) => (d.source as unknown as GraphNode).x ?? 0)
-          .attr("y1", (d) => (d.source as unknown as GraphNode).y ?? 0)
-          .attr("x2", (d) => (d.target as unknown as GraphNode).x ?? 0)
-          .attr("y2", (d) => (d.target as unknown as GraphNode).y ?? 0);
-
-        nodeSel.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
-      });
-
-    return () => simulation.stop();
+  // Build a position lookup for edges
+  const nodePositions = $derived.by(() => {
+    const map = new Map<string, { x: number; y: number }>();
+    for (const node of tree.visibleNodes) {
+      map.set(node.id, { x: node.position.x, y: node.position.y });
+    }
+    return map;
   });
 </script>
 
-<div class="relative flex h-full flex-col overflow-hidden" bind:this={containerEl}>
-  <svg bind:this={svgEl} class="h-full w-full"></svg>
-
-  <!-- Node detail panel -->
-  {#if selectedNode}
-    <div class="absolute bottom-4 right-4 w-64 rounded-lg border border-border bg-card p-4 shadow-lg">
-      <div class="mb-2 flex items-start justify-between">
-        <div>
-          <p class="text-sm font-semibold">{selectedNode.name}</p>
-          <p class="text-xs text-muted-foreground capitalize">{selectedNode.nodeType}</p>
-        </div>
-        <button
-          onclick={() => (selectedNode = null)}
-          class="text-xs text-muted-foreground hover:text-foreground"
-        >
-          ✕
-        </button>
-      </div>
-
-      {#if selectedNode.nodeType !== "branch"}
-        {@const skill = selectedNode as SkillNode}
-        <div class="mt-3 space-y-1">
-          <div class="flex justify-between text-xs text-muted-foreground">
-            <span>Level {skill.level}</span>
-            <span>{skill.currentXp} / {skill.requiredXp} XP</span>
-          </div>
-          <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              class="h-full rounded-full"
-              style="width: {Math.min((skill.currentXp / skill.requiredXp) * 100, 100)}%; background-color: {nodeColor(selectedNode)}"
-            ></div>
-          </div>
-          <p class="pt-1 text-xs text-muted-foreground">
-            {skill.unlocked ? "Unlocked" : "Locked — earn more XP to unlock"}
-          </p>
-        </div>
-      {/if}
+<div
+  class="skill-tree-viewport"
+  bind:this={containerEl}
+  role="application"
+  aria-label="Skill tree"
+  tabindex="0"
+  onkeydown={handleKeydown}
+>
+  <!-- Breadcrumb navigation -->
+  {#if tree.breadcrumbs.length > 1}
+    <div class="skill-tree-breadcrumb">
+      {#each tree.breadcrumbs as crumb, i}
+        {#if i > 0}
+          <span class="skill-tree-breadcrumb__sep">/</span>
+        {/if}
+        {#if i < tree.breadcrumbs.length - 1}
+          <button
+            class="skill-tree-breadcrumb__item"
+            onclick={() => tree.navigateToBreadcrumb(i)}
+          >
+            {crumb.label}
+          </button>
+        {:else}
+          <span class="skill-tree-breadcrumb__current">{crumb.label}</span>
+        {/if}
+      {/each}
     </div>
   {/if}
 
-  <!-- Legend -->
-  <div class="absolute bottom-4 left-4 flex gap-3">
-    {#each branches as branch}
-      <div class="flex items-center gap-1.5">
-        <span class="h-2.5 w-2.5 rounded-full" style="background-color: {branch.color}"></span>
-        <span class="text-xs text-muted-foreground">{branch.name}</span>
-      </div>
-    {/each}
+  <!-- Skill points display -->
+  <div class="skill-tree-sp">
+    <span class="skill-tree-sp__value">{tree.skillPoints}</span>
+    <span class="skill-tree-sp__label">SP</span>
+  </div>
+
+  <!-- SVG viewport -->
+  <svg
+    width={svgWidth}
+    height={svgHeight}
+    class="skill-tree-svg"
+  >
+    <g transform="translate({$offset.x}, {$offset.y})">
+      <!-- Edges first (below nodes) -->
+      {#each tree.visibleEdges as edge (edge.id)}
+        {@const src = nodePositions.get(edge.source)}
+        {@const tgt = nodePositions.get(edge.target)}
+        {#if src && tgt}
+          <SkillEdge
+            x1={src.x}
+            y1={src.y}
+            x2={tgt.x}
+            y2={tgt.y}
+            state={edge.state}
+          />
+        {/if}
+      {/each}
+
+      <!-- Nodes -->
+      {#each tree.visibleNodes as node (node.id)}
+        <SkillNode
+          id={node.id}
+          label={node.label}
+          tier={node.tier}
+          state={node.state}
+          depth={node.depth}
+          x={node.position.x}
+          y={node.position.y}
+          isFocal={node.depth === 0}
+          hasSubGraph={!!node.subGraphId}
+          onclick={handleNodeClick}
+          ondblclick={handleNodeDblClick}
+        />
+      {/each}
+    </g>
+  </svg>
+
+  <!-- Detail panel always visible for focal node -->
+  {#if tree.focalNode}
+    <NodeDetailPanel
+      label={tree.focalNode.label}
+      description={tree.focalNode.description}
+      tier={tree.focalNode.tier}
+      state={tree.focalNode.state}
+      cost={tree.focalNode.cost}
+      skillPoints={tree.skillPoints}
+      hasSubGraph={!!tree.focalNode.subGraphId}
+      onunlock={() => {
+        if (tree.focalNode) tree.unlockNode(tree.focalNode.id);
+      }}
+      onenter={() => {
+        if (tree.focalNode) tree.enterNode(tree.focalNode.id);
+      }}
+    />
+  {/if}
+
+  <!-- Navigation hint -->
+  <div class="skill-tree-hint">
+    Arrow keys to navigate &middot; Enter to select &middot; Esc to go back
   </div>
 </div>
+
+<style>
+  .skill-tree-viewport {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #0d0d0d;
+    overflow: hidden;
+    outline: none;
+  }
+
+  .skill-tree-svg {
+    display: block;
+  }
+
+  /* Breadcrumb */
+  .skill-tree-breadcrumb {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    z-index: 10;
+  }
+
+  .skill-tree-breadcrumb__sep {
+    color: #444;
+    font-size: 0.75rem;
+  }
+
+  .skill-tree-breadcrumb__item {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0.125rem 0.25rem;
+    border-radius: 3px;
+  }
+
+  .skill-tree-breadcrumb__item:hover {
+    color: #e8e8e8;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .skill-tree-breadcrumb__current {
+    color: #a0a0a0;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  /* Skill points */
+  .skill-tree-sp {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    z-index: 10;
+  }
+
+  .skill-tree-sp__value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #f59e0b;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .skill-tree-sp__label {
+    font-size: 0.6875rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Navigation hint */
+  .skill-tree-hint {
+    position: absolute;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    font-size: 0.6875rem;
+    color: #444;
+    pointer-events: none;
+    z-index: 10;
+  }
+</style>

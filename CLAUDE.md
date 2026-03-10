@@ -24,7 +24,7 @@ ganbaruai/
 │   │   │   │   │   ├── kanban/           ← board columns, task cards, drag-and-drop
 │   │   │   │   │   ├── pomodoro/         ← timer display, break screen, XP results
 │   │   │   │   │   ├── notes/            ← Tiptap editor wrapper, slash commands
-│   │   │   │   │   ├── skill-tree/       ← D3/SVG tree rendering, node details
+│   │   │   │   │   ├── skill-tree/       ← SVG + Svelte center-snap tree, node components
 │   │   │   │   │   ├── diary/            ← morning/evening entry forms
 │   │   │   │   │   ├── music/            ← player controls, playlist management
 │   │   │   │   │   ├── visual-novel/     ← NPC dialogue, conversation state machine
