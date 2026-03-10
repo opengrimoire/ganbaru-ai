@@ -23,10 +23,11 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 - Phase 1: Kanban board with CRUD (backlog/todo/in_progress/done columns, task creation, move between columns, delete, priority badges)
 - Phase 1: calendar view (Schedule-X week/day/month, session block create/move/delete, SQLite-backed)
 - Phase 1: skill tree view (D3.js force-directed graph, sample data, zoom/pan, node details, XP progress arcs)
+- Phase 1: XP pipeline (Pomodoro → pomodoro_sessions + xp_entries in SQLite, +XP toast on completion)
 
 ## In progress
 
-- Phase 1: XP pipeline (Pomodoro completion → Activity XP + Will Focus → skill tree)
+(none — Phase 1 core loop complete)
 
 ## Blocked / needs decision
 
@@ -34,13 +35,14 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 
 ## Next up
 
-- Integrate Schedule-X calendar with session block creation/editing
-- Implement D3.js skill tree with sample data
-- Wire XP pipeline: Pomodoro completion → XP calculation → SQLite → skill tree update
-- Add basic Will Focus tracking (timer adherence, break extensions)
+Phase 2 — Notes and Diary:
+- Tiptap rich text editor integration (markdown storage)
+- Morning and evening diary entry forms
+- Note creation, editing, and linking
+- Bidirectional backlink index in SQLite
 
 ## Session log
 
 | Date | Summary |
 |---|---|
-| 2026-03-09 | Created tracking documents and 12-phase roadmap. Started Phase 1: monorepo scaffold, Tauri+Svelte app, shadcn-svelte, SQLite schema, app shell, Pomodoro timer, Kanban board. Custom title bar with window controls. Notion-like neutral gray theme. |
+| 2026-03-09 | Created tracking documents and 12-phase roadmap. Phase 1 complete: monorepo scaffold, Tauri+Svelte, SQLite, app shell, Pomodoro timer, Kanban board, Schedule-X calendar with session blocks, D3.js skill tree, XP pipeline. Custom title bar + Notion-like theme. |

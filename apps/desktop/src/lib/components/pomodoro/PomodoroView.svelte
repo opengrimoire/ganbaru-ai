@@ -32,9 +32,17 @@
           : 15 * 60;
     return ((totalSeconds - pomodoro.remainingSeconds) / totalSeconds) * 100;
   });
+
+  // Auto-dismiss XP notification after 3 seconds
+  $effect(() => {
+    if (pomodoro.lastXp !== null) {
+      const t = setTimeout(() => pomodoro.clearLastXp(), 3000);
+      return () => clearTimeout(t);
+    }
+  });
 </script>
 
-<div class="flex h-full flex-col items-center justify-center p-6">
+<div class="relative flex h-full flex-col items-center justify-center p-6">
   <div class="flex flex-col items-center gap-8">
     <Badge variant="outline" class={phaseColor}>
       {phaseLabel}
@@ -97,4 +105,14 @@
       </Button>
     </div>
   </div>
+
+  <!-- XP earned notification -->
+  {#if pomodoro.lastXp !== null}
+    <div
+      class="absolute bottom-8 left-1/2 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-2 rounded-lg border border-border bg-card px-5 py-3 text-center shadow-lg"
+    >
+      <p class="text-lg font-bold text-green-400">+{pomodoro.lastXp} XP</p>
+      <p class="text-xs text-muted-foreground">Focus session complete</p>
+    </div>
+  {/if}
 </div>
