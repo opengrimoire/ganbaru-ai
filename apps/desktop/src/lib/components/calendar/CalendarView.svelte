@@ -14,6 +14,8 @@
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { onMount } from "svelte";
 
+  let { isDark = false }: { isDark?: boolean } = $props();
+
   const calendarStore = getCalendar();
   const eventsService = createEventsServicePlugin();
 
@@ -37,7 +39,7 @@
     {
       defaultView: viewWeek.name,
       views: [viewWeek, viewDay, viewMonthGrid],
-      isDark: true,
+      isDark,
       events: [],
       callbacks: {
         onDoubleClickDateTime: (dt) => {
