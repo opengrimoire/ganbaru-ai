@@ -22,10 +22,10 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 - Phase 1: Pomodoro timer (focus/short_break/long_break phases, cycle tracking, start/pause/reset/skip)
 - Phase 1: Kanban board with CRUD (backlog/todo/in_progress/done columns, task creation, move between columns, delete, priority badges)
 - Phase 1: calendar view (Schedule-X week/day/month, session block create/move/delete, SQLite-backed)
+- Phase 1: skill tree view (D3.js force-directed graph, sample data, zoom/pan, node details, XP progress arcs)
 
 ## In progress
 
-- Phase 1: skill tree view (D3.js SVG rendering)
 - Phase 1: XP pipeline (Pomodoro completion → Activity XP + Will Focus → skill tree)
 
 ## Blocked / needs decision
