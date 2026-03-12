@@ -8,9 +8,8 @@
     isSameDay,
     isPastDay,
   } from "./utils";
-  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
 
@@ -55,10 +54,12 @@
   } = $props();
 
   const viewOptions: { mode: CalendarViewMode; label: string }[] = [
-    { mode: "day", label: "Day" },
-    { mode: "week", label: "Week" },
-    { mode: "month", label: "Month" },
+    { mode: "day", label: "1d" },
+    { mode: "week", label: "7d" },
+    { mode: "month", label: "31d" },
   ];
+
+  const isOnToday = $derived(isToday(anchorDate));
 
   // Mini calendar state — independent month navigation
   let miniDate = $state(new Date());
@@ -262,41 +263,29 @@
     {/if}
   </div>
 
-  <!-- Navigation row -->
-  <div class="mx-3 mt-1 mb-3 flex items-center gap-1">
-    <button
-      onclick={() => onNavigate("today")}
-      class="rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
-    >
-      Today
-    </button>
-    <div class="flex-1"></div>
-    <button
-      onclick={() => onNavigate("back")}
-      class="flex h-7 w-7 items-center justify-center rounded-full text-foreground transition-colors hover:bg-accent"
-    >
-      <ChevronLeft size={16} />
-    </button>
-    <button
-      onclick={() => onNavigate("forward")}
-      class="flex h-7 w-7 items-center justify-center rounded-full text-foreground transition-colors hover:bg-accent"
-    >
-      <ChevronRight size={16} />
-    </button>
-  </div>
-
-  <!-- View selector -->
-  <div class="mx-3 flex flex-col gap-0.5">
+  <!-- View selector + today -->
+  <div class="mx-3 mt-1 mb-3 flex items-center gap-0.5">
     {#each viewOptions as opt}
       <button
         onclick={() => onViewChange(opt.mode)}
-        class="rounded-md px-2.5 py-1.5 text-left text-sm font-medium transition-colors {viewMode === opt.mode
+        class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {viewMode === opt.mode
           ? 'bg-card text-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
       >
         {opt.label}
       </button>
     {/each}
+    <div class="flex-1"></div>
+    <button
+      onclick={() => onNavigate("today")}
+      disabled={isOnToday}
+      class="flex h-6 w-6 items-center justify-center rounded-md transition-colors {isOnToday
+        ? 'text-muted-foreground/30 cursor-default'
+        : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+      title="Go to today"
+    >
+      <RotateCcw size={13} />
+    </button>
   </div>
 
   <!-- Spacer to push account picker to the bottom -->
