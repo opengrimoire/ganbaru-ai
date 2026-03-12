@@ -30,6 +30,7 @@
     onAddTimezone,
     onRemoveTimezone,
     onWheelNavigate,
+    onDayHeaderClick,
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
@@ -42,6 +43,7 @@
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
+    onDayHeaderClick?: (date: Date) => void;
   } = $props();
 
   const weekDays = $derived(getWeekDays(anchorDate));
@@ -256,8 +258,11 @@
           {@const past = isPastDay(day)}
           <div
             bind:this={headerCells[i]}
-            class="flex items-center justify-center"
+            class="flex cursor-pointer items-center justify-center hover:bg-accent/50"
             style="{past ? 'opacity: 0.45;' : ''}"
+            onclick={() => onDayHeaderClick?.(day)}
+            role="button"
+            tabindex="-1"
           >
             <span class="text-[13px] font-semibold" style="color: var(--foreground);">
               {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}

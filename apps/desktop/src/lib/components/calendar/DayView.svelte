@@ -28,6 +28,7 @@
     onAddTimezone,
     onRemoveTimezone,
     onWheelNavigate,
+    onDayHeaderClick,
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
@@ -40,6 +41,7 @@
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
+    onDayHeaderClick?: () => void;
   } = $props();
 
   let scrollContainer: HTMLDivElement | undefined = $state();
@@ -199,8 +201,11 @@
         onRemove={(i) => onRemoveTimezone?.(i)}
       />
       <div
-        class="flex items-center px-4"
+        class="flex cursor-pointer items-center px-4 hover:bg-accent/50"
         style="{past ? 'opacity: 0.45;' : ''}"
+        onclick={() => onDayHeaderClick?.()}
+        role="button"
+        tabindex="-1"
       >
         <span class="text-[13px] font-semibold" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
           {dayLabel}

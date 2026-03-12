@@ -18,6 +18,37 @@
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
 
+  // View history for Alt+Left/Right navigation
+  type ViewState = { mode: CalendarViewMode; date: Date };
+  let history: ViewState[] = $state([{ mode: "week", date: new Date() }]);
+  let historyIndex = $state(0);
+  let isNavigatingHistory = false;
+
+  function pushHistory(mode: CalendarViewMode, date: Date) {
+    if (isNavigatingHistory) return;
+    // Trim forward history when making a new navigation
+    history = [...history.slice(0, historyIndex + 1), { mode, date }];
+    historyIndex = history.length - 1;
+  }
+
+  function historyBack() {
+    if (historyIndex <= 0) return;
+    historyIndex--;
+    isNavigatingHistory = true;
+    viewMode = history[historyIndex].mode;
+    anchorDate = history[historyIndex].date;
+    isNavigatingHistory = false;
+  }
+
+  function historyForward() {
+    if (historyIndex >= history.length - 1) return;
+    historyIndex++;
+    isNavigatingHistory = true;
+    viewMode = history[historyIndex].mode;
+    anchorDate = history[historyIndex].date;
+    isNavigatingHistory = false;
+  }
+
   function addTimezone(tz: string) {
     if (timezones.length < 3 && !timezones.includes(tz)) {
       timezones = [...timezones, tz];
@@ -40,6 +71,18 @@
 
   onMount(async () => {
     await calendarStore.load();
+
+    function handleKeydown(e: KeyboardEvent) {
+      if (e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        historyBack();
+      } else if (e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        historyForward();
+      }
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
   });
 
   function navigate(direction: "today" | "back" | "forward") {
@@ -66,6 +109,7 @@
   }
 
   function changeView(mode: CalendarViewMode) {
+    pushHistory(mode, anchorDate);
     viewMode = mode;
   }
 
@@ -107,8 +151,22 @@
   }
 
   function handleDayClickFromMonth(date: Date) {
+    pushHistory("day", date);
     anchorDate = date;
     viewMode = "day";
+  }
+
+  // Week view: click day header -> go to day view
+  function handleWeekDayHeaderClick(date: Date) {
+    pushHistory("day", date);
+    anchorDate = date;
+    viewMode = "day";
+  }
+
+  // Day view: click day header -> go to week view
+  function handleDayHeaderClick() {
+    pushHistory("week", anchorDate);
+    viewMode = "week";
   }
 </script>
 
@@ -134,6 +192,7 @@
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}
+        onDayHeaderClick={handleWeekDayHeaderClick}
       />
     {:else if viewMode === "day"}
       <DayView
@@ -147,6 +206,7 @@
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}
+        onDayHeaderClick={handleDayHeaderClick}
       />
     {:else}
       <MonthView
