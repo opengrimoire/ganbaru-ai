@@ -42,8 +42,9 @@ export function getCalendar() {
       title: string,
       start: string,
       end: string,
+      existingId?: string,
     ): Promise<CalendarEvent> {
-      const id = crypto.randomUUID();
+      const id = existingId ?? crypto.randomUUID();
       const now = new Date().toISOString();
       await execute(
         `INSERT INTO session_blocks (id, title, start_time, end_time, created_at, updated_at)

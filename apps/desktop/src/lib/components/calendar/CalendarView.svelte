@@ -18,7 +18,8 @@
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
 
-  // View history for Alt+Left/Right navigation
+  // View history for Alt+Left/Right navigation (capped at 50)
+  const VIEW_HISTORY_LIMIT = 50;
   type ViewState = { mode: CalendarViewMode; date: Date };
   let history: ViewState[] = $state([{ mode: "week", date: new Date() }]);
   let historyIndex = $state(0);
@@ -26,8 +27,10 @@
 
   function pushHistory(mode: CalendarViewMode, date: Date) {
     if (isNavigatingHistory) return;
-    // Trim forward history when making a new navigation
     history = [...history.slice(0, historyIndex + 1), { mode, date }];
+    if (history.length > VIEW_HISTORY_LIMIT) {
+      history = history.slice(history.length - VIEW_HISTORY_LIMIT);
+    }
     historyIndex = history.length - 1;
   }
 
@@ -61,6 +64,81 @@
     }
   }
 
+  // Event undo/redo (capped at 20)
+  const UNDO_LIMIT = 20;
+  type UndoAction =
+    | { type: "add"; event: CalendarEvent }
+    | { type: "delete"; event: CalendarEvent }
+    | { type: "update"; before: CalendarEvent; after: CalendarEvent };
+  let undoStack: UndoAction[] = $state([]);
+  let redoStack: UndoAction[] = $state([]);
+
+  function pushUndo(action: UndoAction) {
+    undoStack = [...undoStack, action].slice(-UNDO_LIMIT);
+  }
+
+  // Confirmation dialog for undo/redo
+  let confirmAction: (() => Promise<void>) | null = $state(null);
+  let confirmMessage = $state("");
+
+  function requestConfirm(message: string, action: () => Promise<void>) {
+    confirmMessage = message;
+    confirmAction = action;
+  }
+
+  async function confirmYes() {
+    const action = confirmAction;
+    confirmAction = null;
+    confirmMessage = "";
+    if (action) await action();
+  }
+
+  function confirmNo() {
+    confirmAction = null;
+    confirmMessage = "";
+  }
+
+  function requestUndo() {
+    const action = undoStack[undoStack.length - 1];
+    if (!action) return;
+    let message = "";
+    if (action.type === "add") message = `Undo creating "${action.event.title}"?`;
+    else if (action.type === "delete") message = `Undo deleting "${action.event.title}"?`;
+    else message = `Undo moving "${action.after.title}"?`;
+    requestConfirm(message, async () => {
+      undoStack = undoStack.slice(0, -1);
+      if (action.type === "add") {
+        await calendarStore.deleteBlock(action.event.id);
+      } else if (action.type === "delete") {
+        await calendarStore.addBlock(action.event.title, action.event.start, action.event.end, action.event.id);
+      } else {
+        await calendarStore.updateBlock(action.before);
+      }
+      redoStack = [...redoStack, action];
+      selectedEvent = null;
+    });
+  }
+
+  function requestRedo() {
+    const action = redoStack[redoStack.length - 1];
+    if (!action) return;
+    let message = "";
+    if (action.type === "add") message = `Redo creating "${action.event.title}"?`;
+    else if (action.type === "delete") message = `Redo deleting "${action.event.title}"?`;
+    else message = `Redo moving "${action.after.title}"?`;
+    requestConfirm(message, async () => {
+      redoStack = redoStack.slice(0, -1);
+      if (action.type === "add") {
+        await calendarStore.addBlock(action.event.title, action.event.start, action.event.end, action.event.id);
+      } else if (action.type === "delete") {
+        await calendarStore.deleteBlock(action.event.id);
+      } else {
+        await calendarStore.updateBlock(action.after);
+      }
+      pushUndo(action);
+    });
+  }
+
   // Create dialog state
   let showCreateDialog = $state(false);
   let pendingStart = $state("");
@@ -79,6 +157,18 @@
       } else if (e.altKey && e.key === "ArrowRight") {
         e.preventDefault();
         historyForward();
+      } else if (confirmAction && e.key === "Enter") {
+        e.preventDefault();
+        confirmYes();
+      } else if (confirmAction && e.key === "Escape") {
+        e.preventDefault();
+        confirmNo();
+      } else if (e.ctrlKey && e.key === "z") {
+        e.preventDefault();
+        requestUndo();
+      } else if (e.ctrlKey && e.key === "y") {
+        e.preventDefault();
+        requestRedo();
       }
     }
     window.addEventListener("keydown", handleKeydown);
@@ -132,8 +222,12 @@
   }
 
   async function handleEventUpdate(event: CalendarEvent) {
+    const before = calendarStore.events.find((e) => e.id === event.id);
     await calendarStore.updateBlock(event);
-    // If viewing the updated event, refresh the selection
+    if (before) {
+      pushUndo({ type: "update", before: { ...before }, after: { ...event } });
+      redoStack = [];
+    }
     if (selectedEvent?.id === event.id) {
       selectedEvent = event;
     }
@@ -141,12 +235,19 @@
 
   async function handleCreate(title: string, start: string, end: string) {
     if (!start || !end) return;
-    await calendarStore.addBlock(title, start, end);
+    const event = await calendarStore.addBlock(title, start, end);
+    pushUndo({ type: "add", event: { ...event } });
+    redoStack = [];
     showCreateDialog = false;
   }
 
   async function handleDelete(id: string) {
+    const event = calendarStore.events.find((e) => e.id === id);
     await calendarStore.deleteBlock(id);
+    if (event) {
+      pushUndo({ type: "delete", event: { ...event } });
+      redoStack = [];
+    }
     selectedEvent = null;
   }
 
@@ -228,6 +329,39 @@
       onConfirm={handleCreate}
       onCancel={() => (showCreateDialog = false)}
     />
+  {/if}
+
+  <!-- Undo/redo confirmation -->
+  {#if confirmAction}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      onclick={confirmNo}
+    >
+      <div class="absolute inset-0 bg-black/40"></div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="relative z-10 rounded-lg border border-border bg-card px-6 py-4 shadow-xl"
+        onclick={(e) => e.stopPropagation()}
+      >
+        <p class="mb-4 text-sm text-foreground">{confirmMessage}</p>
+        <div class="flex items-center justify-end gap-2">
+          <button
+            onclick={confirmNo}
+            class="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            No (Esc)
+          </button>
+          <button
+            onclick={confirmYes}
+            class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Yes (Enter)
+          </button>
+        </div>
+      </div>
+    </div>
   {/if}
 
   <!-- Event detail panel -->
