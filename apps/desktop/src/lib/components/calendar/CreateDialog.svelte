@@ -56,7 +56,7 @@
       bind:value={title}
       placeholder="Session title..."
       class="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
-      onkeydown={handleKeydown}
+      onkeydown={(e) => { e.stopPropagation(); handleKeydown(e); }}
     />
     <div class="mt-3 flex justify-end gap-2">
       <button
