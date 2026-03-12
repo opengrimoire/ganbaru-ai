@@ -28,8 +28,6 @@
     onAddTimezone,
     onRemoveTimezone,
     onWheelNavigate,
-    navTrigger = 0,
-    navDirection = "forward" as "back" | "forward",
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
@@ -42,29 +40,10 @@
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
-    navTrigger?: number;
-    navDirection?: "back" | "forward";
   } = $props();
 
   let scrollContainer: HTMLDivElement | undefined = $state();
-  let dayHeaderEl: HTMLDivElement | undefined = $state();
-  let dayColumnEl: HTMLDivElement | undefined = $state();
   let wheelCooldown = false;
-  let lastNavTrigger = 0;
-
-  $effect(() => {
-    if (navTrigger > lastNavTrigger) {
-      lastNavTrigger = navTrigger;
-      const x = navDirection === "forward" ? "40px" : "-40px";
-      const frames = [
-        { transform: `translateX(${x})` },
-        { transform: "translateX(0)" },
-      ];
-      const opts: KeyframeAnimationOptions = { duration: 200, easing: "ease-out" };
-      dayHeaderEl?.animate(frames, opts);
-      dayColumnEl?.animate(frames, opts);
-    }
-  });
 
   function handleHeaderWheel(e: WheelEvent) {
     e.preventDefault();
@@ -221,7 +200,6 @@
         onRemove={(i) => onRemoveTimezone?.(i)}
       />
       <div
-        bind:this={dayHeaderEl}
         class="flex items-center px-4"
         style="border-left: 1px solid var(--cal-gridline);{past ? ' opacity: 0.45;' : ''}"
       >
@@ -233,7 +211,7 @@
 
     <!-- Body row -->
     <TimeGutter {hourHeight} {timezones} {anchorDate} {tzCount} />
-    <div bind:this={dayColumnEl} class="min-w-0">
+    <div class="min-w-0">
       <DayColumn
         date={anchorDate}
         {events}

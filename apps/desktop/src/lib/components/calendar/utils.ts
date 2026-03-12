@@ -99,8 +99,6 @@ export function getMonthGrid(year: number, month: number): Date[][] {
       cursor.setDate(cursor.getDate() + 1);
     }
     weeks.push(week);
-    // Stop if we've passed the month and filled at least 4 weeks
-    if (cursor.getMonth() !== month && w >= 3) break;
   }
   return weeks;
 }

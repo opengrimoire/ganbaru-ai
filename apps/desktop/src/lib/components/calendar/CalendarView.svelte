@@ -17,8 +17,6 @@
   let viewMode: CalendarViewMode = $state("week");
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
-  let navDirection: "back" | "forward" = $state("forward");
-  let navTrigger = $state(0);
 
   function addTimezone(tz: string) {
     if (timezones.length < 3 && !timezones.includes(tz)) {
@@ -46,14 +44,10 @@
 
   function navigate(direction: "today" | "back" | "forward") {
     if (direction === "today") {
-      navDirection = "forward";
-      navTrigger++;
       anchorDate = new Date();
       return;
     }
 
-    navDirection = direction === "forward" ? "forward" : "back";
-    navTrigger++;
     const delta = direction === "forward" ? 1 : -1;
 
     if (viewMode === "week") {
@@ -134,8 +128,6 @@
         events={calendarStore.events}
         isDark={theme.isDark}
         {timezones}
-        {navTrigger}
-        {navDirection}
         onSlotClick={handleSlotClick}
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
@@ -149,8 +141,6 @@
         events={calendarStore.events}
         isDark={theme.isDark}
         {timezones}
-        {navTrigger}
-        {navDirection}
         onSlotClick={handleSlotClick}
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
@@ -163,8 +153,6 @@
         {anchorDate}
         events={calendarStore.events}
         isDark={theme.isDark}
-        {navTrigger}
-        {navDirection}
         onDayClick={handleDayClickFromMonth}
         onEventClick={handleEventClick}
         onWheelNavigate={handleWheelNavigate}

@@ -14,8 +14,6 @@
     onDayClick,
     onEventClick,
     onWheelNavigate,
-    navTrigger = 0,
-    navDirection = "forward" as "back" | "forward",
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
@@ -23,28 +21,9 @@
     onDayClick: (date: Date) => void;
     onEventClick: (event: CalendarEvent) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
-    navTrigger?: number;
-    navDirection?: "back" | "forward";
   } = $props();
 
-  let dayHeadersEl: HTMLDivElement | undefined = $state();
-  let bodyEl: HTMLDivElement | undefined = $state();
   let wheelCooldown = false;
-  let lastNavTrigger = 0;
-
-  $effect(() => {
-    if (navTrigger > lastNavTrigger) {
-      lastNavTrigger = navTrigger;
-      const x = navDirection === "forward" ? "40px" : "-40px";
-      const frames = [
-        { transform: `translateX(${x})` },
-        { transform: "translateX(0)" },
-      ];
-      const opts: KeyframeAnimationOptions = { duration: 200, easing: "ease-out" };
-      dayHeadersEl?.animate(frames, opts);
-      bodyEl?.animate(frames, opts);
-    }
-  });
 
   function handleHeaderWheel(e: WheelEvent) {
     e.preventDefault();
@@ -66,22 +45,22 @@
   const maxVisible = 3;
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="flex h-full flex-col overflow-hidden"
   style="background-color: var(--cal-bg);"
+  onwheel={handleHeaderWheel}
 >
   <!-- Day name headers (matches week/day view design) -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="sticky top-0 z-10 shrink-0 border-b"
-    onwheel={handleHeaderWheel}
     style="
       height: var(--cal-header-row-h);
       background-color: var(--cal-header-bg);
       border-color: var(--cal-gridline);
     "
   >
-    <div bind:this={dayHeadersEl} class="grid h-full grid-cols-7">
+    <div class="grid h-full grid-cols-7">
       {#each dayNameDates as day}
         <div
           class="flex items-center justify-center"
@@ -96,7 +75,8 @@
   </div>
 
   <!-- Week rows -->
-  <div bind:this={bodyEl} class="grid min-h-0 flex-1 auto-rows-fr overflow-x-hidden">
+  <div class="grid min-h-0 flex-1 overflow-x-hidden" style="grid-template-rows: repeat({weeks.length}, minmax(0, 1fr));"
+  >
     {#each weeks as week}
       <div
         class="grid grid-cols-7"
