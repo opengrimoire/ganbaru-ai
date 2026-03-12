@@ -190,7 +190,6 @@
         grid-template-columns: subgrid;
         height: var(--cal-header-row-h);
         background-color: var(--cal-header-bg);
-        border-bottom: 1px solid var(--cal-gridline);
       "
     >
       <TimezoneSelector
@@ -201,7 +200,7 @@
       />
       <div
         class="flex items-center px-4"
-        style="border-left: 1px solid var(--cal-gridline);{past ? ' opacity: 0.45;' : ''}"
+        style="{past ? 'opacity: 0.45;' : ''}"
       >
         <span class="text-[13px] font-semibold" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
           {dayLabel}

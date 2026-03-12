@@ -53,18 +53,17 @@
 >
   <!-- Day name headers (matches week/day view design) -->
   <div
-    class="sticky top-0 z-10 shrink-0 border-b"
+    class="sticky top-0 z-10 shrink-0"
     style="
       height: var(--cal-header-row-h);
       background-color: var(--cal-header-bg);
-      border-color: var(--cal-gridline);
     "
   >
     <div class="grid h-full grid-cols-7">
       {#each dayNameDates as day}
         <div
           class="flex items-center justify-center"
-          style="border-left: 1px solid var(--cal-gridline);"
+          style=""
         >
           <span class="text-[13px] font-semibold" style="color: var(--foreground);">
             {day.toLocaleDateString("en-US", { weekday: "short" })}

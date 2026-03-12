@@ -65,7 +65,7 @@
   {#each timezones as tz, i}
     <span
       class="flex items-center justify-center"
-      style={i > 0 ? "border-left: 1px solid var(--cal-gridline);" : ""}
+      style=""
     >
       {getTimezoneAbbr(tz)}
     </span>

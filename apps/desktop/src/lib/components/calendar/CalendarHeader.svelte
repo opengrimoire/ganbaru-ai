@@ -89,22 +89,22 @@
 </script>
 
 <div
-  class="flex w-48 shrink-0 flex-col border-r"
-  style="background-color: var(--cal-header-bg); border-color: var(--cal-gridline);"
+  class="flex w-48 shrink-0 flex-col"
+  style="background-color: var(--cal-header-bg);"
 >
   <!-- Month/year label — aligned with sticky day-header row -->
   <div
-    class="flex shrink-0 items-center border-b px-3"
-    style="border-color: var(--cal-gridline); height: var(--cal-header-row-h);"
+    class="flex shrink-0 items-center justify-center px-3"
+    style="height: var(--cal-header-row-h);"
   >
-    <span class="text-lg font-semibold text-foreground">
+    <span class="text-lg leading-none font-semibold text-foreground">
       {formatMonthYear(anchorDate)}
     </span>
   </div>
 
   <!-- Mini monthly calendar -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="mx-2 mt-2 mb-1" onwheel={handleMiniWheel}>
+  <div class="mx-2 mt-0.5 mb-1" onwheel={handleMiniWheel}>
     <!-- Day letters -->
     <div class="grid grid-cols-7 text-center">
       {#each dayLetters as letter}
@@ -123,10 +123,7 @@
           {@const past = isPastDay(day)}
           <button
             onclick={() => selectDay(day)}
-            class="flex h-5 w-full items-center justify-center text-[10px] transition-colors hover:bg-accent"
-            class:rounded={!inWeek}
-            class:rounded-l={inWeek && isSameDay(day, anchorWeekDays[0])}
-            class:rounded-r={inWeek && isSameDay(day, anchorWeekDays[6])}
+            class="flex h-5 w-full items-center justify-center rounded-sm text-[10px] hover:bg-accent"
             style={today
               ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
               : selected

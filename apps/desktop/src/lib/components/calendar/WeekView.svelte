@@ -238,7 +238,6 @@
         grid-template-columns: subgrid;
         height: var(--cal-header-row-h);
         background-color: var(--cal-header-bg);
-        border-bottom: 1px solid var(--cal-gridline);
       "
     >
       <!-- Timezone header cells — subgrid aligns with TimeGutter columns -->
@@ -258,7 +257,7 @@
           <div
             bind:this={headerCells[i]}
             class="flex items-center justify-center"
-            style="border-left: 1px solid var(--cal-gridline);{past ? ' opacity: 0.45;' : ''}"
+            style="{past ? 'opacity: 0.45;' : ''}"
           >
             <span class="text-[13px] font-semibold" style="color: var(--foreground);">
               {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}

@@ -112,7 +112,7 @@
   }
 </script>
 
-<div class="relative flex h-full overflow-hidden">
+<div class="relative flex h-full overflow-hidden rounded-tl-lg">
   <CalendarHeader
     {anchorDate}
     {viewMode}
