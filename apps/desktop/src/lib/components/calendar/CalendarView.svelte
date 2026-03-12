@@ -18,6 +18,21 @@
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
 
+  // Calendar account visibility
+  let enabledAccounts = $state(new Set(["ganbaruai"]));
+
+  function toggleAccount(id: string) {
+    const next = new Set(enabledAccounts);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    enabledAccounts = next;
+  }
+
+  // All current events belong to "ganbaruai"; filter them based on account visibility
+  const visibleEvents = $derived(
+    enabledAccounts.has("ganbaruai") ? calendarStore.events : [],
+  );
+
   // View history for Alt+Left/Right navigation (capped at 50)
   const VIEW_HISTORY_LIMIT = 50;
   type ViewState = { mode: CalendarViewMode; date: Date };
@@ -275,16 +290,18 @@
   <CalendarHeader
     {anchorDate}
     {viewMode}
+    {enabledAccounts}
     onNavigate={navigate}
     onViewChange={changeView}
     onDaySelect={(date) => { anchorDate = date; }}
+    onAccountToggle={toggleAccount}
   />
 
   <div class="min-w-0 flex-1 overflow-hidden">
     {#if viewMode === "week"}
       <WeekView
         {anchorDate}
-        events={calendarStore.events}
+        events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
         onSlotClick={handleSlotClick}
@@ -298,7 +315,7 @@
     {:else if viewMode === "day"}
       <DayView
         {anchorDate}
-        events={calendarStore.events}
+        events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
         onSlotClick={handleSlotClick}
@@ -312,7 +329,7 @@
     {:else}
       <MonthView
         {anchorDate}
-        events={calendarStore.events}
+        events={visibleEvents}
         isDark={theme.isDark}
         onDayClick={handleDayClickFromMonth}
         onEventClick={handleEventClick}

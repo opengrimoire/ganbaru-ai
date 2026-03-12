@@ -10,6 +10,8 @@
   import TreePine from "@lucide/svelte/icons/tree-pine";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
+  import CircleHelp from "@lucide/svelte/icons/circle-help";
+  import Settings from "@lucide/svelte/icons/settings";
   import Minus from "@lucide/svelte/icons/minus";
   import Square from "@lucide/svelte/icons/square";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
@@ -83,6 +85,24 @@
     {:else}
       <Moon size={14} />
     {/if}
+  </button>
+
+  <!-- TODO: implement help panel -->
+  <button
+    onclick={() => {}}
+    class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+    title="Help"
+  >
+    <CircleHelp size={14} />
+  </button>
+
+  <!-- TODO: implement settings panel -->
+  <button
+    onclick={() => {}}
+    class="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+    title="Settings"
+  >
+    <Settings size={14} />
   </button>
 
   <!-- Window controls -->

@@ -10,19 +10,48 @@
   } from "./utils";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import Check from "@lucide/svelte/icons/check";
+  import Plus from "@lucide/svelte/icons/plus";
+
+  // Calendar account selector state
+  let showAccountPicker = $state(false);
+
+  // Mock calendar accounts
+  const calendarAccounts = [
+    { id: "ganbaruai", label: "GanbaruAI" },
+  ];
+
+  // Picker drill-down: days (default) -> months -> years
+  type PickerMode = "days" | "months" | "years";
+  let pickerMode: PickerMode = $state("days");
+  let pickerYear = $state(new Date().getFullYear());
+  let yearPageStart = $state(new Date().getFullYear() - 4);
+
+  const shortMonths = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const yearPageYears = $derived(
+    Array.from({ length: 12 }, (_, i) => yearPageStart + i),
+  );
 
   let {
     anchorDate,
     viewMode,
+    enabledAccounts,
     onNavigate,
     onViewChange,
     onDaySelect,
+    onAccountToggle,
   }: {
     anchorDate: Date;
     viewMode: CalendarViewMode;
+    enabledAccounts: Set<string>;
     onNavigate: (direction: "today" | "back" | "forward") => void;
     onViewChange: (mode: CalendarViewMode) => void;
     onDaySelect: (date: Date) => void;
+    onAccountToggle: (id: string) => void;
   } = $props();
 
   const viewOptions: { mode: CalendarViewMode; label: string }[] = [
@@ -50,6 +79,40 @@
   const miniWeeks = $derived(getMonthGrid(miniYear, miniMonth));
   const miniLabel = $derived(formatMonthYear(miniDate));
 
+  // Reset picker to days when anchorDate changes (navigation or selection),
+  // unless the change came from scrolling within the picker itself.
+  let skipPickerReset = false; // plain variable, not $state — avoids re-triggering the effect
+  $effect(() => {
+    anchorDate;
+    if (skipPickerReset) {
+      skipPickerReset = false;
+      return;
+    }
+    pickerMode = "days";
+  });
+
+  function handleHeaderClick() {
+    if (pickerMode === "days") {
+      pickerYear = anchorDate.getFullYear();
+      pickerMode = "months";
+    } else if (pickerMode === "months") {
+      yearPageStart = pickerYear - 4;
+      pickerMode = "years";
+    } else {
+      pickerMode = "days";
+    }
+  }
+
+  function selectMonth(monthIndex: number) {
+    const d = new Date(pickerYear, monthIndex, 1);
+    onDaySelect(d);
+  }
+
+  function selectYear(year: number) {
+    pickerYear = year;
+    pickerMode = "months";
+  }
+
   // Current viewed week days (for week view highlight)
   const anchorWeekDays = $derived(getWeekDays(anchorDate));
 
@@ -62,12 +125,27 @@
   // Wheel navigation on mini calendar
   let wheelCooldown = false;
 
-  function handleMiniWheel(e: WheelEvent) {
+  function handlePickerWheel(e: WheelEvent) {
     e.preventDefault();
     if (wheelCooldown) return;
     if (Math.abs(e.deltaY) < 5) return;
     wheelCooldown = true;
-    onNavigate(e.deltaY > 0 ? "forward" : "back");
+
+    const delta = e.deltaY > 0 ? 1 : -1;
+
+    if (pickerMode === "days") {
+      onNavigate(delta > 0 ? "forward" : "back");
+    } else if (pickerMode === "months") {
+      const d = new Date(anchorDate);
+      d.setMonth(d.getMonth() + delta);
+      d.setDate(1);
+      pickerYear = d.getFullYear();
+      skipPickerReset = true;
+      onDaySelect(d);
+    } else {
+      yearPageStart += delta * 12;
+    }
+
     setTimeout(() => { wheelCooldown = false; }, 300);
   }
 
@@ -97,50 +175,91 @@
     class="flex shrink-0 items-center justify-center px-3"
     style="height: var(--cal-header-row-h);"
   >
-    <span class="text-lg leading-none font-semibold text-foreground">
-      {formatMonthYear(anchorDate)}
-    </span>
+    <button
+      onclick={handleHeaderClick}
+      class="rounded-md px-2 py-0.5 text-lg leading-none font-semibold text-foreground hover:bg-accent"
+    >
+      {#if pickerMode === "days"}
+        {formatMonthYear(anchorDate)}
+      {:else}
+        {pickerYear}
+      {/if}
+    </button>
   </div>
 
-  <!-- Mini monthly calendar -->
+  <!-- Mini calendar / month picker / year picker -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="mx-2 mt-0.5 mb-1" onwheel={handleMiniWheel}>
-    <!-- Day letters -->
-    <div class="grid grid-cols-7 text-center">
-      {#each dayLetters as letter}
-        <span class="py-0.5 text-[10px] text-muted-foreground">{letter}</span>
-      {/each}
-    </div>
-
-    <!-- Date grid -->
-    {#each miniWeeks as week}
+  <div class="mx-2 mt-0.5 mb-1" onwheel={handlePickerWheel}>
+    {#if pickerMode === "days"}
+      <!-- Day letters -->
       <div class="grid grid-cols-7 text-center">
-        {#each week as day}
-          {@const inMonth = day.getMonth() === miniMonth}
-          {@const today = isToday(day)}
-          {@const selected = viewMode === "day" && isSameDay(day, anchorDate)}
-          {@const inWeek = viewMode === "week" && isInAnchorWeek(day)}
-          {@const past = isPastDay(day)}
+        {#each dayLetters as letter}
+          <span class="py-0.5 text-[10px] text-muted-foreground">{letter}</span>
+        {/each}
+      </div>
+
+      <!-- Date grid -->
+      {#each miniWeeks as week}
+        <div class="grid grid-cols-7 text-center">
+          {#each week as day}
+            {@const inMonth = day.getMonth() === miniMonth}
+            {@const today = isToday(day)}
+            {@const selected = viewMode === "day" && isSameDay(day, anchorDate)}
+            {@const inWeek = viewMode === "week" && isInAnchorWeek(day)}
+            {@const past = isPastDay(day)}
+            <button
+              onclick={() => selectDay(day)}
+              class="flex h-5 w-full items-center justify-center rounded-sm text-[10px] hover:bg-accent"
+              style={today
+                ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
+                : selected
+                  ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+                  : inWeek
+                    ? "background-color: var(--accent); opacity: 0.5; color: var(--foreground);"
+                    : !inMonth
+                      ? "opacity: 0.25;"
+                      : past
+                        ? "opacity: 0.45; color: var(--foreground);"
+                        : "color: var(--foreground);"}
+            >
+              {day.getDate()}
+            </button>
+          {/each}
+        </div>
+      {/each}
+
+    {:else if pickerMode === "months"}
+      <!-- Month grid (4 rows x 3 cols) -->
+      <div class="grid grid-cols-3 gap-0.5 py-1">
+        {#each shortMonths as name, i}
+          {@const isAnchor = pickerYear === anchorDate.getFullYear() && i === anchorDate.getMonth()}
           <button
-            onclick={() => selectDay(day)}
-            class="flex h-5 w-full items-center justify-center rounded-sm text-[10px] hover:bg-accent"
-            style={today
-              ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
-              : selected
-                ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-                : inWeek
-                  ? "background-color: var(--accent); opacity: 0.5; color: var(--foreground);"
-                  : !inMonth
-                    ? "opacity: 0.25;"
-                    : past
-                      ? "opacity: 0.45; color: var(--foreground);"
-                      : "color: var(--foreground);"}
+            onclick={() => selectMonth(i)}
+            class="rounded-sm py-2 text-center text-xs font-medium hover:bg-accent {isAnchor
+              ? 'bg-primary text-primary-foreground'
+              : 'text-foreground'}"
           >
-            {day.getDate()}
+            {name}
           </button>
         {/each}
       </div>
-    {/each}
+
+    {:else}
+      <!-- Year grid (4 rows x 3 cols, scrollable by page) -->
+      <div class="grid grid-cols-3 gap-0.5 py-1">
+        {#each yearPageYears as year}
+          {@const isAnchor = year === anchorDate.getFullYear()}
+          <button
+            onclick={() => selectYear(year)}
+            class="rounded-sm py-2 text-center text-xs font-medium hover:bg-accent {isAnchor
+              ? 'bg-primary text-primary-foreground'
+              : 'text-foreground'}"
+          >
+            {year}
+          </button>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   <!-- Navigation row -->
@@ -178,5 +297,54 @@
         {opt.label}
       </button>
     {/each}
+  </div>
+
+  <!-- Spacer to push account picker to the bottom -->
+  <div class="flex-1"></div>
+
+  <!-- Calendar account picker -->
+  <div class="relative mx-2 mb-2">
+    {#if showAccountPicker}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
+      <div class="absolute bottom-full left-0 z-50 mb-1 w-full rounded-md border border-border bg-card p-2 shadow-lg">
+        <p class="mb-1.5 px-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
+        {#each calendarAccounts as account}
+          {@const checked = enabledAccounts.has(account.id)}
+          <button
+            onclick={() => onAccountToggle(account.id)}
+            class="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-accent"
+          >
+            <span
+              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border {checked ? 'border-primary bg-primary' : 'border-muted-foreground'}"
+            >
+              {#if checked}
+                <Check size={10} class="text-primary-foreground" />
+              {/if}
+            </span>
+            <span class="truncate text-xs text-foreground">{account.label}</span>
+          </button>
+        {/each}
+        <div class="my-1.5 border-t border-border"></div>
+        <!-- TODO: implement account sync flow -->
+        <button
+          onclick={() => {}}
+          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Plus size={12} />
+          <span>Sync other accounts</span>
+        </button>
+      </div>
+    {/if}
+
+    <button
+      onclick={() => (showAccountPicker = !showAccountPicker)}
+      class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-primary"></span>
+      <span class="flex-1 truncate">My calendars</span>
+      <ChevronUp size={12} class={showAccountPicker ? "" : "rotate-180"} />
+    </button>
   </div>
 </div>
