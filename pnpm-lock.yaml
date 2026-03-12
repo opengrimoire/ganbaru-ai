@@ -17,21 +17,6 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@schedule-x/calendar':
-        specifier: ^3.7.3
-        version: 3.7.3(@preact/signals@2.8.2(preact@10.28.4))(preact@10.28.4)(temporal-polyfill@0.3.0)
-      '@schedule-x/drag-and-drop':
-        specifier: ^3.7.3
-        version: 3.7.3
-      '@schedule-x/events-service':
-        specifier: ^3.7.3
-        version: 3.7.3
-      '@schedule-x/svelte':
-        specifier: ^3.0.0
-        version: 3.0.0(@schedule-x/calendar@3.7.3(@preact/signals@2.8.2(preact@10.28.4))(preact@10.28.4)(temporal-polyfill@0.3.0))(@schedule-x/shared@3.7.3(@preact/signals@2.8.2(preact@10.28.4)))(svelte@5.53.8)
-      '@schedule-x/theme-default':
-        specifier: ^3.7.3
-        version: 3.7.3
       '@tauri-apps/api':
         specifier: ^2
         version: 2.10.1
@@ -291,14 +276,6 @@ packages:
     peerDependencies:
       svelte: ^5
 
-  '@preact/signals-core@1.14.0':
-    resolution: {integrity: sha512-AowtCcCU/33lFlh1zRFf/u+12rfrhtNakj7UpaGEsmMwUKpKWMVvcktOGcwBBNiB4lWrZWc01LhiyyzVklJyaQ==}
-
-  '@preact/signals@2.8.2':
-    resolution: {integrity: sha512-gym5yoa64c+0w2kL7zRAAjY548qzWXbbuOfjsK9F1nWrEqooDwyWnih5SNdonjhQSp27zUqYh7UrxIRnkCyFCA==}
-    peerDependencies:
-      preact: '>= 10.25.0 || >=11.0.0-0'
-
   '@rollup/rollup-android-arm-eabi@4.59.0':
     resolution: {integrity: sha512-upnNBkA6ZH2VKGcBj9Fyl9IGNPULcjXRlg0LLeaioQWueH30p6IXtJEbKAgvyv+mJaMxSm1l6xwDXYjpEMiLMg==}
     cpu: [arm]
@@ -423,34 +400,6 @@ packages:
     resolution: {integrity: sha512-2HRCml6OztYXyJXAvdDXPKcawukWY2GpR5/nxKp4iBgiO3wcoEGkAaqctIbZcNB6KlUQBIqt8VYkNSj2397EfA==}
     cpu: [x64]
     os: [win32]
-
-  '@schedule-x/calendar@3.7.3':
-    resolution: {integrity: sha512-plVdesJSaz5I2ukAoIqgC6Dro4UkbQZvMll2OEdoSURgUX9Hk5abCHV4S2O/+8oRvmEX4wXQeHIapYYIY8/GIg==}
-    peerDependencies:
-      '@preact/signals': ^2.0.2
-      preact: ^10.19.2
-      temporal-polyfill: 0.3.0
-
-  '@schedule-x/drag-and-drop@3.7.3':
-    resolution: {integrity: sha512-nHwZKzdIKWNTdT5BEXy4vLlHOmOH3C3M744QUIU0EOXPAFZQR1bBTviGs2NhmvaLiGstnVx2/TZtdhocy60hgg==}
-
-  '@schedule-x/events-service@3.7.3':
-    resolution: {integrity: sha512-MxfKuyzK+2TeQ/CmvaXx/jO8yjegD6JZ7b2q1NIm7tH59GKDfWI+h87vTZ0yPfINoAMXRfxaKKLXXxfYWsL+ug==}
-
-  '@schedule-x/shared@3.7.3':
-    resolution: {integrity: sha512-VjDnL+3onIynplHqfsQK/eplQl/bsD2XjqnzKQFo6Ji2FYmusALP3Vmtww1brJSAzc+aV9ML2fWCHi14AR/YBg==}
-    peerDependencies:
-      '@preact/signals': ^2.0.2
-
-  '@schedule-x/svelte@3.0.0':
-    resolution: {integrity: sha512-/p91n/sl3iR/pdgvu3QwWTU3OiQoZCm4ftchU8NUcG1exReSxyKnWkiLWc00eK0eS2oTC+cG2v8H8pwggIzIng==}
-    peerDependencies:
-      '@schedule-x/calendar': ^3.0.0
-      '@schedule-x/shared': ^3.0.0
-      svelte: ^4 || ^5
-
-  '@schedule-x/theme-default@3.7.3':
-    resolution: {integrity: sha512-suJs+AyQT6OhTq7e752Psg5IwaGE4EzPOSBhp7L8e9FgmluxOvnzlfbWod2i9mfYAsdkzX+WMIlCfBFkRu1o1A==}
 
   '@sveltejs/acorn-typescript@1.0.9':
     resolution: {integrity: sha512-lVJX6qEgs/4DOcRTpo56tmKzVPtoWAaVbL4hfO7t7NVwl9AAXzQR6cihesW1BmNMPl+bK6dreu2sOKBP2Q9CIA==}
@@ -855,9 +804,6 @@ packages:
     resolution: {integrity: sha512-OW/rX8O/jXnm82Ey1k44pObPtdblfiuWnrd8X7GJ7emImCOstunGbXUpp7HdBrFQX6rJzn3sPT397Wp5aCwCHg==}
     engines: {node: ^10 || ^12 || >=14}
 
-  preact@10.28.4:
-    resolution: {integrity: sha512-uKFfOHWuSNpRFVTnljsCluEFq57OKT+0QdOiQo8XWnQ/pSvg7OpX5eNOejELXJMWy+BwM2nobz0FkvzmnpCNsQ==}
-
   readdirp@4.1.2:
     resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
     engines: {node: '>= 14.18.0'}
@@ -1157,13 +1103,6 @@ snapshots:
     dependencies:
       svelte: 5.53.8
 
-  '@preact/signals-core@1.14.0': {}
-
-  '@preact/signals@2.8.2(preact@10.28.4)':
-    dependencies:
-      '@preact/signals-core': 1.14.0
-      preact: 10.28.4
-
   '@rollup/rollup-android-arm-eabi@4.59.0':
     optional: true
 
@@ -1238,28 +1177,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
-
-  '@schedule-x/calendar@3.7.3(@preact/signals@2.8.2(preact@10.28.4))(preact@10.28.4)(temporal-polyfill@0.3.0)':
-    dependencies:
-      '@preact/signals': 2.8.2(preact@10.28.4)
-      preact: 10.28.4
-      temporal-polyfill: 0.3.0
-
-  '@schedule-x/drag-and-drop@3.7.3': {}
-
-  '@schedule-x/events-service@3.7.3': {}
-
-  '@schedule-x/shared@3.7.3(@preact/signals@2.8.2(preact@10.28.4))':
-    dependencies:
-      '@preact/signals': 2.8.2(preact@10.28.4)
-
-  '@schedule-x/svelte@3.0.0(@schedule-x/calendar@3.7.3(@preact/signals@2.8.2(preact@10.28.4))(preact@10.28.4)(temporal-polyfill@0.3.0))(@schedule-x/shared@3.7.3(@preact/signals@2.8.2(preact@10.28.4)))(svelte@5.53.8)':
-    dependencies:
-      '@schedule-x/calendar': 3.7.3(@preact/signals@2.8.2(preact@10.28.4))(preact@10.28.4)(temporal-polyfill@0.3.0)
-      '@schedule-x/shared': 3.7.3(@preact/signals@2.8.2(preact@10.28.4))
-      svelte: 5.53.8
-
-  '@schedule-x/theme-default@3.7.3': {}
 
   '@sveltejs/acorn-typescript@1.0.9(acorn@8.16.0)':
     dependencies:
@@ -1592,8 +1509,6 @@ snapshots:
       nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
-
-  preact@10.28.4: {}
 
   readdirp@4.1.2: {}
 

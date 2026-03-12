@@ -1,6 +1,5 @@
 <script lang="ts">
   import { getNavigation, type View } from "$lib/stores/navigation.svelte";
-  import { getTheme } from "$lib/stores/theme.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
@@ -8,7 +7,6 @@
   import SkillTreeView from "$lib/components/skill-tree/SkillTreeView.svelte";
 
   const nav = getNavigation();
-  const theme = getTheme();
 
   const views: View[] = ["calendar", "kanban", "pomodoro", "skill-tree"];
 
@@ -52,9 +50,7 @@
   <TitleBar />
   <main class="mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-xl bg-background">
     {#if nav.current === "calendar"}
-      {#key theme.isDark}
-        <CalendarView isDark={theme.isDark} />
-      {/key}
+      <CalendarView />
     {:else if nav.current === "kanban"}
       <KanbanView />
     {:else if nav.current === "pomodoro"}

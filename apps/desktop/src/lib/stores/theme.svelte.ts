@@ -1,6 +1,11 @@
 export type Theme = "light" | "dark";
 
-let current = $state<Theme>("light");
+let current = $state<Theme>("dark");
+
+// Apply dark class on module load so first paint is dark
+if (typeof document !== "undefined") {
+  document.documentElement.classList.add("dark");
+}
 
 export function getTheme() {
   return {

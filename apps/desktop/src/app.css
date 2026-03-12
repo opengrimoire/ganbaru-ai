@@ -8,11 +8,11 @@
   --radius: 0.5rem;
 
   /* Content area */
-  --background: #E1EAF5;
+  --background: #F8FAFD;
   --foreground: #141420;
-  --card: #ECF1FA;
+  --card: #FFFFFF;
   --card-foreground: #141420;
-  --popover: #F2F6FC;
+  --popover: #FFFFFF;
   --popover-foreground: #141420;
   --primary: #4A7CC9;
   --primary-foreground: #F4F7FC;
@@ -45,19 +45,19 @@
 
 .dark {
   /* Content area */
-  --background: #131314;
+  --background: #27282A;
   --foreground: #ECECF2;
-  --card: #1A1A1C;
+  --card: #2E2F31;
   --card-foreground: #ECECF2;
-  --popover: #222224;
+  --popover: #353638;
   --popover-foreground: #ECECF2;
   --primary: #ECECF2;
-  --primary-foreground: #131314;
-  --secondary: #222226;
+  --primary-foreground: #27282A;
+  --secondary: #333436;
   --secondary-foreground: #ECECF2;
-  --muted: #222226;
+  --muted: #333436;
   --muted-foreground: #9494A0;
-  --accent: #28282C;
+  --accent: #3B3B3F;
   --accent-foreground: #ECECF2;
   --destructive: #E54545;
   --border: rgba(255, 255, 255, 0.10);
@@ -70,12 +70,12 @@
   --chart-5: oklch(0.65 0.18 25);
 
   /* Frame / contour (titlebar) */
-  --sidebar: #1B1B1B;
-  --sidebar-foreground: #D4D4DC;
-  --sidebar-primary: #ECECF2;
-  --sidebar-primary-foreground: #1B1B1B;
-  --sidebar-accent: #2A2A2E;
-  --sidebar-accent-foreground: #ECECF2;
+  --sidebar: #1E1E23;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #FFFFFF;
+  --sidebar-primary-foreground: #1E1E23;
+  --sidebar-accent: #3B3B3F;
+  --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #606070;
 }
@@ -120,7 +120,7 @@
 
 @layer base {
   html {
-    font-size: 14px;
+    font-size: 15px;
   }
   * {
     @apply border-border outline-ring/50;
@@ -130,54 +130,28 @@
   }
 }
 
-/* Calendar light theme overrides */
-.sx-container {
-  --sx-color-background: #E1EAF5;
-  --sx-color-on-background: #141420;
-  --sx-color-surface: #ECF1FA;
-  --sx-color-surface-dim: #E1EAF5;
-  --sx-color-surface-bright: #F2F6FC;
-  --sx-color-on-surface: #141420;
-  --sx-color-surface-container: #E8EFF8;
-  --sx-color-surface-container-low: #E1EAF5;
-  --sx-color-surface-container-high: #ECF1FA;
-  --sx-color-outline: rgba(0, 30, 80, 0.12);
-  --sx-color-outline-variant: rgba(0, 30, 80, 0.06);
-  --sx-color-primary: #4A7CC9;
-  --sx-color-on-primary: #F4F7FC;
-  --sx-color-primary-container: #BDD4F0;
-  --sx-color-on-primary-container: #1e2030;
-  --sx-color-secondary: #6B7890;
-  --sx-color-on-secondary: #F4F7FC;
-  --sx-color-secondary-container: #D5E2F2;
-  --sx-color-on-secondary-container: #1e2030;
-  --sx-internal-color-text: #141420;
-  --sx-internal-color-gray-ripple-background: rgba(0, 30, 80, 0.06);
-  --sx-internal-color-light-gray: #ECF1FA;
+/* Calendar theme variables */
+:root {
+  --cal-bg: #FFFFFF;
+  --cal-header-bg: #F8FAFD;
+  --cal-gridline: #DDE3EA;
+  --cal-today-circle: #1A56DB;
+  --cal-today-circle-text: #FFFFFF;
+  --cal-time-label: #3D4A60;
+  --cal-current-time: #EA4335;
+  --cal-hover: rgba(0, 30, 80, 0.04);
+  --cal-past-overlay: rgba(0, 0, 0, 0.04);
+  --cal-header-row-h: 44px;
 }
 
-/* Calendar dark theme overrides */
-.is-dark {
-  --sx-color-background: #131314;
-  --sx-color-on-background: #ECECF2;
-  --sx-color-surface: #1A1A1C;
-  --sx-color-surface-dim: #131314;
-  --sx-color-surface-bright: #222224;
-  --sx-color-on-surface: #ECECF2;
-  --sx-color-surface-container: #1A1A1C;
-  --sx-color-surface-container-low: #161618;
-  --sx-color-surface-container-high: #222224;
-  --sx-color-outline: rgba(255, 255, 255, 0.10);
-  --sx-color-outline-variant: rgba(255, 255, 255, 0.06);
-  --sx-color-primary: #DCDCE4;
-  --sx-color-on-primary: #131314;
-  --sx-color-primary-container: #303036;
-  --sx-color-on-primary-container: #DCDCE4;
-  --sx-color-secondary: #8A8A94;
-  --sx-color-on-secondary: #131314;
-  --sx-color-secondary-container: #28282C;
-  --sx-color-on-secondary-container: #DCDCE4;
-  --sx-internal-color-text: #ECECF2;
-  --sx-internal-color-gray-ripple-background: rgba(255, 255, 255, 0.06);
-  --sx-internal-color-light-gray: #1A1A1C;
+.dark {
+  --cal-bg: #131314;
+  --cal-header-bg: #27282A;
+  --cal-gridline: #333537;
+  --cal-today-circle: #A4C4F7;
+  --cal-today-circle-text: #0A1929;
+  --cal-time-label: #9494A0;
+  --cal-current-time: #EA4335;
+  --cal-hover: rgba(255, 255, 255, 0.04);
+  --cal-past-overlay: rgba(0, 0, 0, 0.15);
 }

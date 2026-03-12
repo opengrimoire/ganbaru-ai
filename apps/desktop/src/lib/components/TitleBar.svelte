@@ -53,8 +53,8 @@
         class={cn(
           "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
           nav.current === tab.view
-            ? "bg-background text-foreground"
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            ? "bg-background dark:bg-accent text-foreground dark:text-white"
+            : "text-sidebar-foreground dark:text-white/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
         title={`${tab.label} (Alt+${i + 1})`}
       >
@@ -75,7 +75,7 @@
   <!-- Theme toggle -->
   <button
     onclick={() => theme.toggle()}
-    class="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+    class="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
     title={theme.isDark ? "Switch to light mode" : "Switch to dark mode"}
   >
     {#if theme.isDark}
@@ -88,14 +88,14 @@
   <!-- Window controls -->
   <button
     onclick={() => win.minimize()}
-    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 dark:text-white hover:bg-sidebar-accent hover:text-sidebar-foreground"
     title="Minimize"
   >
     <Minus size={14} />
   </button>
   <button
     onclick={() => win.toggleMaximize()}
-    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 dark:text-white hover:bg-sidebar-accent hover:text-sidebar-foreground"
     title={isMaximized ? "Restore" : "Maximize"}
   >
     {#if isMaximized}
@@ -106,7 +106,7 @@
   </button>
   <button
     onclick={() => win.close()}
-    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 hover:bg-destructive hover:text-white"
+    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 dark:text-white hover:bg-destructive hover:text-white"
     title="Close"
   >
     <X size={14} />

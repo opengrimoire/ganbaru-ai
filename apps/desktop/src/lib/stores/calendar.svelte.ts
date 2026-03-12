@@ -1,5 +1,5 @@
 import { execute, select } from "$lib/api/db";
-import type { CalendarEventExternal } from "@schedule-x/calendar";
+import type { CalendarEvent } from "$lib/components/calendar/types";
 
 interface DbSessionBlock {
   id: string;
@@ -18,11 +18,11 @@ function toIsoString(calendarDate: string): string {
   return new Date(calendarDate.replace(" ", "T")).toISOString();
 }
 
-let blocks = $state<CalendarEventExternal[]>([]);
+let blocks = $state<CalendarEvent[]>([]);
 
 export function getCalendar() {
   return {
-    get events(): CalendarEventExternal[] {
+    get events(): CalendarEvent[] {
       return blocks;
     },
 
@@ -42,7 +42,7 @@ export function getCalendar() {
       title: string,
       start: string,
       end: string,
-    ): Promise<CalendarEventExternal> {
+    ): Promise<CalendarEvent> {
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       await execute(
@@ -50,12 +50,12 @@ export function getCalendar() {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [id, title, toIsoString(start), toIsoString(end), now, now],
       );
-      const event: CalendarEventExternal = { id, title, start, end };
+      const event: CalendarEvent = { id, title, start, end };
       blocks = [...blocks, event];
       return event;
     },
 
-    async updateBlock(event: CalendarEventExternal) {
+    async updateBlock(event: CalendarEvent) {
       const now = new Date().toISOString();
       await execute(
         `UPDATE session_blocks
