@@ -2,9 +2,7 @@
   import type { CalendarEvent } from "./types";
   import {
     getMonthGrid,
-    isToday,
-    isSameDay,
-    formatDatePart,
+    isPastDay,
     eventsForDay,
     getEventColor,
   } from "./utils";
@@ -15,20 +13,56 @@
     isDark = false,
     onDayClick,
     onEventClick,
+    onWheelNavigate,
+    navTrigger = 0,
+    navDirection = "forward" as "back" | "forward",
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
     isDark?: boolean;
     onDayClick: (date: Date) => void;
     onEventClick: (event: CalendarEvent) => void;
+    onWheelNavigate?: (direction: "back" | "forward") => void;
+    navTrigger?: number;
+    navDirection?: "back" | "forward";
   } = $props();
+
+  let dayHeadersEl: HTMLDivElement | undefined = $state();
+  let bodyEl: HTMLDivElement | undefined = $state();
+  let wheelCooldown = false;
+  let lastNavTrigger = 0;
+
+  $effect(() => {
+    if (navTrigger > lastNavTrigger) {
+      lastNavTrigger = navTrigger;
+      const x = navDirection === "forward" ? "40px" : "-40px";
+      const frames = [
+        { transform: `translateX(${x})` },
+        { transform: "translateX(0)" },
+      ];
+      const opts: KeyframeAnimationOptions = { duration: 200, easing: "ease-out" };
+      dayHeadersEl?.animate(frames, opts);
+      bodyEl?.animate(frames, opts);
+    }
+  });
+
+  function handleHeaderWheel(e: WheelEvent) {
+    e.preventDefault();
+    if (!onWheelNavigate || wheelCooldown) return;
+    if (Math.abs(e.deltaY) < 5) return;
+    wheelCooldown = true;
+    onWheelNavigate(e.deltaY > 0 ? "forward" : "back");
+    setTimeout(() => { wheelCooldown = false; }, 300);
+  }
 
   const currentMonth = $derived(anchorDate.getMonth());
   const weeks = $derived(
     getMonthGrid(anchorDate.getFullYear(), anchorDate.getMonth()),
   );
 
-  const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  // Reference days for day-of-week headers (Mon-Sun from first week)
+  const dayNameDates = $derived(weeks[0]);
+
   const maxVisible = 3;
 </script>
 
@@ -36,44 +70,62 @@
   class="flex h-full flex-col overflow-hidden"
   style="background-color: var(--cal-bg);"
 >
-  <!-- Day name headers -->
+  <!-- Day name headers (matches week/day view design) -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="grid shrink-0 grid-cols-7 border-b"
-    style="border-color: var(--cal-gridline);"
+    class="sticky top-0 z-10 shrink-0 border-b"
+    onwheel={handleHeaderWheel}
+    style="
+      height: var(--cal-header-row-h);
+      background-color: var(--cal-header-bg);
+      border-color: var(--cal-gridline);
+    "
   >
-    {#each dayNames as name}
-      <div
-        class="py-1.5 text-center text-[11px] font-medium"
-        style="color: var(--cal-time-label);"
-      >
-        {name}
-      </div>
-    {/each}
+    <div bind:this={dayHeadersEl} class="grid h-full grid-cols-7">
+      {#each dayNameDates as day}
+        <div
+          class="flex items-center justify-center"
+          style="border-left: 1px solid var(--cal-gridline);"
+        >
+          <span class="text-[13px] font-semibold" style="color: var(--foreground);">
+            {day.toLocaleDateString("en-US", { weekday: "short" })}
+          </span>
+        </div>
+      {/each}
+    </div>
   </div>
 
   <!-- Week rows -->
-  <div class="grid min-h-0 flex-1 auto-rows-fr">
+  <div bind:this={bodyEl} class="grid min-h-0 flex-1 auto-rows-fr overflow-x-hidden">
     {#each weeks as week}
       <div
         class="grid grid-cols-7"
         style="border-bottom: 1px solid var(--cal-gridline);"
       >
         {#each week as day}
-          {@const today = isToday(day)}
           {@const inMonth = day.getMonth() === currentMonth}
+          {@const past = isPastDay(day)}
+          {@const active = inMonth && !past}
+          {@const textOpacity = !inMonth ? 0.25 : 1}
           {@const dayEvts = eventsForDay(events, day)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
-            class="flex min-h-0 cursor-pointer flex-col overflow-hidden p-1"
-            style="border-right: 1px solid var(--cal-gridline); opacity: {inMonth ? 1 : 0.4};"
+            class="relative flex min-h-0 cursor-pointer flex-col overflow-hidden p-1"
+            style="border-right: 1px solid var(--cal-gridline);"
             onclick={() => onDayClick(day)}
           >
+            <!-- Past day overlay (all past days, including previous/next month) -->
+            {#if past}
+              <div
+                class="pointer-events-none absolute inset-0 z-[1]"
+                style="background-color: var(--cal-past-overlay);"
+              ></div>
+            {/if}
+
             <span
-              class="mb-0.5 flex h-6 w-6 items-center justify-center self-center rounded-full text-xs font-medium"
-              style={today
-                ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
-                : "color: var(--foreground);"}
+              class="relative z-[2] mb-0.5 flex h-6 w-6 items-center justify-center self-center text-xs"
+              style="color: {active ? 'var(--foreground)' : 'var(--muted-foreground)'}; opacity: {textOpacity};{active && !isDark ? ' font-weight: 700;' : ''}"
             >
               {day.getDate()}
             </span>
@@ -82,8 +134,8 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
-                style="background-color: {getEventColor(evt.color, isDark).bg}; color: {getEventColor(evt.color, isDark).text};"
+                class="relative z-[2] mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
+                style="background-color: {getEventColor(evt.color, isDark).bg}; color: {getEventColor(evt.color, isDark).text}; opacity: {past ? 0.45 : textOpacity};"
                 onclick={(e) => { e.stopPropagation(); onEventClick(evt); }}
               >
                 <span class="truncate">{evt.title}</span>
@@ -91,7 +143,7 @@
             {/each}
 
             {#if dayEvts.length > maxVisible}
-              <span class="mt-px text-center text-[10px] text-muted-foreground">
+              <span class="relative z-[2] mt-px text-center text-[10px] text-muted-foreground" style="opacity: {past ? 0.45 : textOpacity};">
                 +{dayEvts.length - maxVisible} more
               </span>
             {/if}

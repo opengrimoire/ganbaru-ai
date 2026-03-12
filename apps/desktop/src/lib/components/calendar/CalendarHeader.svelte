@@ -3,6 +3,7 @@
   import {
     formatMonthYear,
     getMonthGrid,
+    getWeekDays,
     isToday,
     isSameDay,
     isPastDay,
@@ -49,7 +50,26 @@
   const miniWeeks = $derived(getMonthGrid(miniYear, miniMonth));
   const miniLabel = $derived(formatMonthYear(miniDate));
 
+  // Current viewed week days (for week view highlight)
+  const anchorWeekDays = $derived(getWeekDays(anchorDate));
+
+  function isInAnchorWeek(day: Date): boolean {
+    return anchorWeekDays.some((wd) => isSameDay(wd, day));
+  }
+
   const dayLetters = ["M", "T", "W", "T", "F", "S", "S"];
+
+  // Wheel navigation on mini calendar
+  let wheelCooldown = false;
+
+  function handleMiniWheel(e: WheelEvent) {
+    e.preventDefault();
+    if (wheelCooldown) return;
+    if (Math.abs(e.deltaY) < 5) return;
+    wheelCooldown = true;
+    onNavigate(e.deltaY > 0 ? "forward" : "back");
+    setTimeout(() => { wheelCooldown = false; }, 300);
+  }
 
   function miniPrev() {
     const d = new Date(miniDate);
@@ -83,7 +103,8 @@
   </div>
 
   <!-- Mini monthly calendar -->
-  <div class="mx-2 mt-2 mb-1">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="mx-2 mt-2 mb-1" onwheel={handleMiniWheel}>
     <!-- Day letters -->
     <div class="grid grid-cols-7 text-center">
       {#each dayLetters as letter}
@@ -97,20 +118,26 @@
         {#each week as day}
           {@const inMonth = day.getMonth() === miniMonth}
           {@const today = isToday(day)}
-          {@const selected = isSameDay(day, anchorDate)}
+          {@const selected = viewMode === "day" && isSameDay(day, anchorDate)}
+          {@const inWeek = viewMode === "week" && isInAnchorWeek(day)}
           {@const past = isPastDay(day)}
           <button
             onclick={() => selectDay(day)}
-            class="flex h-5 w-full items-center justify-center rounded text-[10px] transition-colors hover:bg-accent"
+            class="flex h-5 w-full items-center justify-center text-[10px] transition-colors hover:bg-accent"
+            class:rounded={!inWeek}
+            class:rounded-l={inWeek && isSameDay(day, anchorWeekDays[0])}
+            class:rounded-r={inWeek && isSameDay(day, anchorWeekDays[6])}
             style={today
               ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
               : selected
                 ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-                : !inMonth
-                  ? "opacity: 0.25;"
-                  : past
-                    ? "opacity: 0.45; color: var(--foreground);"
-                    : "color: var(--foreground);"}
+                : inWeek
+                  ? "background-color: var(--accent); opacity: 0.5; color: var(--foreground);"
+                  : !inMonth
+                    ? "opacity: 0.25;"
+                    : past
+                      ? "opacity: 0.45; color: var(--foreground);"
+                      : "color: var(--foreground);"}
           >
             {day.getDate()}
           </button>

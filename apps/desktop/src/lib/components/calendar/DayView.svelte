@@ -2,6 +2,7 @@
   import type { CalendarEvent, DragState, PositionedEvent } from "./types";
   import {
     isToday,
+    isPastDay,
     formatDatePart,
     formatDayName,
     minuteOfDay,
@@ -78,6 +79,7 @@
   let dragPreview: PositionedEvent | null = $state(null);
 
   const today = $derived(isToday(anchorDate));
+  const past = $derived(isPastDay(anchorDate));
   const dateStr = $derived(formatDatePart(anchorDate));
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
@@ -221,9 +223,9 @@
       <div
         bind:this={dayHeaderEl}
         class="flex items-center px-4"
-        style="border-left: 1px solid var(--cal-gridline);"
+        style="border-left: 1px solid var(--cal-gridline);{past ? ' opacity: 0.45;' : ''}"
       >
-        <span class="text-[13px] font-semibold" style="color: var(--foreground);">
+        <span class="text-[13px] font-semibold" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
           {dayLabel}
         </span>
       </div>
@@ -237,6 +239,7 @@
         {events}
         {hourHeight}
         isToday={today}
+        isPast={past}
         {isDark}
         {currentTimeMinute}
         {dragPreview}

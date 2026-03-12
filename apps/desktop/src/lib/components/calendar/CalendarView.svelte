@@ -163,8 +163,11 @@
         {anchorDate}
         events={calendarStore.events}
         isDark={theme.isDark}
+        {navTrigger}
+        {navDirection}
         onDayClick={handleDayClickFromMonth}
         onEventClick={handleEventClick}
+        onWheelNavigate={handleWheelNavigate}
       />
     {/if}
   </div>
