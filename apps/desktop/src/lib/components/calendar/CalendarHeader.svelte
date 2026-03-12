@@ -216,7 +216,7 @@
                 : selected
                   ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
                   : inWeek
-                    ? "background-color: var(--accent); opacity: 0.5; color: var(--foreground);"
+                    ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
                     : !inMonth
                       ? "opacity: 0.25;"
                       : past

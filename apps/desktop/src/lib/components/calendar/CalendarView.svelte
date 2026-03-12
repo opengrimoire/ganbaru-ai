@@ -42,7 +42,11 @@
 
   function pushHistory(mode: CalendarViewMode, date: Date) {
     if (isNavigatingHistory) return;
-    history = [...history.slice(0, historyIndex + 1), { mode, date }];
+    // Snapshot current position before pushing — scroll/navigation may have
+    // moved anchorDate since the current entry was created
+    const base = history.slice(0, historyIndex + 1);
+    base[base.length - 1] = { mode: viewMode, date: new Date(anchorDate) };
+    history = [...base, { mode, date }];
     if (history.length > VIEW_HISTORY_LIMIT) {
       history = history.slice(history.length - VIEW_HISTORY_LIMIT);
     }
