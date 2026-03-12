@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CalendarEvent, DragState, PositionedEvent } from "./types";
+  import type { DayNameFormat } from "./utils";
   import {
     isToday,
     isPastDay,
@@ -67,9 +68,29 @@
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) 1fr`,
   );
 
-  const dayLabel = $derived(
-    `${formatDayName(anchorDate, "long")}, ${anchorDate.toLocaleDateString("en-US", { month: "long" })} ${anchorDate.getDate()}`,
-  );
+  // Responsive day name format based on header width
+  let headerCell: HTMLElement | undefined = $state();
+  let dayFormat: DayNameFormat = $state("long");
+
+  $effect(() => {
+    const el = headerCell;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0].contentBoxSize[0].inlineSize;
+      if (w >= 200) dayFormat = "long";
+      else if (w >= 100) dayFormat = "short";
+      else if (w >= 60) dayFormat = "narrow";
+      else dayFormat = "none";
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  });
+
+  const dayLabel = $derived.by(() => {
+    const name = formatDayName(anchorDate, dayFormat);
+    const monthStr = anchorDate.toLocaleDateString("en-US", { month: dayFormat === "long" ? "long" : "short" });
+    return name ? `${name}, ${monthStr} ${anchorDate.getDate()}` : `${monthStr} ${anchorDate.getDate()}`;
+  });
 
   function updateCurrentTime() {
     const now = new Date();
@@ -201,13 +222,13 @@
         onRemove={(i) => onRemoveTimezone?.(i)}
       />
       <div
+        bind:this={headerCell}
         class="flex cursor-pointer items-center px-4 hover:bg-accent/50"
-        style="{past ? 'opacity: 0.45;' : ''}"
         onclick={() => onDayHeaderClick?.()}
         role="button"
         tabindex="-1"
       >
-        <span class="text-[13px] font-semibold" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+        <span class="text-[13px] {past ? '' : 'font-semibold'}" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
           {dayLabel}
         </span>
       </div>

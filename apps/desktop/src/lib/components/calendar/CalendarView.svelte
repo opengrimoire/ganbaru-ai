@@ -188,6 +188,14 @@
       } else if (e.ctrlKey && e.key === "y") {
         e.preventDefault();
         requestRedo();
+      } else if (!e.ctrlKey && !e.altKey && !e.metaKey && !showCreateDialog && !confirmAction && !selectedEvent) {
+        if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          navigate("back");
+        } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          navigate("forward");
+        }
       }
     }
     window.addEventListener("keydown", handleKeydown);

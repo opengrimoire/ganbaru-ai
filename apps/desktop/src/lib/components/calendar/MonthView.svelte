@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { CalendarEvent } from "./types";
+  import type { DayNameFormat } from "./utils";
   import {
     getMonthGrid,
     isPastDay,
     eventsForDay,
     getEventColor,
+    formatDayName,
   } from "./utils";
 
   let {
@@ -42,6 +44,23 @@
   // Reference days for day-of-week headers (Mon-Sun from first week)
   const dayNameDates = $derived(weeks[0]);
 
+  // Responsive day name format based on column width
+  let headerCells: HTMLElement[] = $state([]);
+  let dayFormat: DayNameFormat = $state("short");
+
+  $effect(() => {
+    const el = headerCells[0];
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0].contentBoxSize[0].inlineSize;
+      if (w >= 110) dayFormat = "long";
+      else if (w >= 60) dayFormat = "short";
+      else dayFormat = "narrow";
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  });
+
   const maxVisible = 3;
 </script>
 
@@ -60,13 +79,13 @@
     "
   >
     <div class="grid h-full grid-cols-7">
-      {#each dayNameDates as day}
+      {#each dayNameDates as day, i}
         <div
+          bind:this={headerCells[i]}
           class="flex items-center justify-center"
-          style=""
         >
           <span class="text-[13px] font-semibold" style="color: var(--foreground);">
-            {day.toLocaleDateString("en-US", { weekday: "short" })}
+            {formatDayName(day, dayFormat)}
           </span>
         </div>
       {/each}

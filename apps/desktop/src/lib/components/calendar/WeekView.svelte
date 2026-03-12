@@ -259,12 +259,11 @@
           <div
             bind:this={headerCells[i]}
             class="flex cursor-pointer items-center justify-center hover:bg-accent/50"
-            style="{past ? 'opacity: 0.45;' : ''}"
             onclick={() => onDayHeaderClick?.(day)}
             role="button"
             tabindex="-1"
           >
-            <span class="text-[13px] font-semibold" style="color: var(--foreground);">
+            <span class="text-[13px] {past ? '' : 'font-semibold'}" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
               {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}
             </span>
           </div>
