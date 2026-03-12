@@ -41,11 +41,29 @@
     });
     return () => cleanup?.();
   });
+
+  let tabWheelCooldown = false;
+
+  function handleTabWheel(e: WheelEvent) {
+    e.preventDefault();
+    if (tabWheelCooldown) return;
+    if (Math.abs(e.deltaY) < 5) return;
+    tabWheelCooldown = true;
+    const currentIndex = tabs.findIndex((t) => t.view === nav.current);
+    const delta = e.deltaY > 0 ? 1 : -1;
+    const nextIndex = Math.max(0, Math.min(tabs.length - 1, currentIndex + delta));
+    if (nextIndex !== currentIndex) {
+      nav.navigate(tabs[nextIndex].view);
+    }
+    setTimeout(() => { tabWheelCooldown = false; }, 300);
+  }
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-tauri-drag-region
   class="flex h-12 w-full shrink-0 select-none items-center bg-sidebar"
+  onwheel={handleTabWheel}
 >
   <!-- Navigation tabs -->
   <div class="flex items-center gap-0.5 pl-3">
