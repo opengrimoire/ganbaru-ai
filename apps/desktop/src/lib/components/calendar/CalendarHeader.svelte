@@ -172,9 +172,11 @@
   style="background-color: var(--cal-header-bg);"
 >
   <!-- Month/year label — aligned with sticky day-header row -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="flex shrink-0 items-center justify-center px-3"
     style="height: var(--cal-header-row-h);"
+    onwheel={handlePickerWheel}
   >
     <button
       onclick={handleHeaderClick}

@@ -309,7 +309,7 @@
     onAccountToggle={toggleAccount}
   />
 
-  <div class="min-w-0 flex-1 overflow-hidden">
+  <div class="min-w-0 flex-1 overflow-hidden" style="background-color: var(--cal-bg);">
     {#if viewMode === "week"}
       <WeekView
         {anchorDate}
