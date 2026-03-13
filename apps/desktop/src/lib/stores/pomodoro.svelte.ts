@@ -44,9 +44,7 @@ function initListeners() {
 
   listen("pomodoro-skip-break", () => {
     if (phase === "short_break" || phase === "long_break") {
-      phase = "focus";
-      remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
-      phaseEndTime = Date.now() + remainingSeconds * 1000;
+      startFocusSession();
     } else {
       skipNextBreak = true;
     }
@@ -54,14 +52,7 @@ function initListeners() {
 
   listen("pomodoro-break-acknowledged", () => {
     if (phase === "short_break" || phase === "long_break") {
-      advancePhase();
-      // Auto-start the next focus session
-      if (!isRunning) {
-        isRunning = true;
-        phaseEndTime = Date.now() + remainingSeconds * 1000;
-        sessionStartTime = new Date().toISOString();
-        intervalId = setInterval(tick, 1000);
-      }
+      startFocusSession();
     }
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
 
@@ -74,7 +65,22 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
 }
 
+function startFocusSession() {
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+  phase = "focus";
+  remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
+  notificationShown = false;
+  isRunning = true;
+  phaseEndTime = Date.now() + remainingSeconds * 1000;
+  sessionStartTime = new Date().toISOString();
+  intervalId = setInterval(tick, 1000);
+}
+
 function showBreakOverlay(breakSeconds: number) {
+  initListeners();
   invoke("show_break_overlay", { breakSeconds }).catch((e) =>
     console.warn("Failed to show break overlay:", e),
   );
