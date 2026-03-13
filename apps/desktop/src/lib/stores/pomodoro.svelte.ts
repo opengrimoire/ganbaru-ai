@@ -34,6 +34,7 @@ let lastXp = $state<number | null>(null);
 let skipNextBreak = false;
 let listenersInitialized = false;
 let notificationShown = false;
+let phaseEndTime: number | null = null;
 
 const NOTIFICATION_THRESHOLD = 10;
 
@@ -45,6 +46,7 @@ function initListeners() {
     if (phase === "short_break" || phase === "long_break") {
       phase = "focus";
       remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
     } else {
       skipNextBreak = true;
     }
@@ -52,6 +54,9 @@ function initListeners() {
 
   listen<{ seconds: number }>("pomodoro-add-time", (event) => {
     remainingSeconds += event.payload.seconds;
+    if (phaseEndTime !== null) {
+      phaseEndTime += event.payload.seconds * 1000;
+    }
     notificationShown = false;
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
 }
@@ -99,11 +104,15 @@ async function saveCompletedSession(
 }
 
 function tick() {
+  if (phaseEndTime !== null) {
+    const now = Date.now();
+    remainingSeconds = Math.max(0, Math.ceil((phaseEndTime - now) / 1000));
+  }
+
   if (remainingSeconds <= 0) {
     advancePhase();
     return;
   }
-  remainingSeconds -= 1;
 
   if (
     phase === "focus" &&
@@ -128,6 +137,7 @@ function advancePhase() {
       skipNextBreak = false;
       phase = "focus";
       remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
       if (currentCycle < totalCycles) {
         currentCycle += 1;
       } else {
@@ -136,17 +146,20 @@ function advancePhase() {
     } else if (currentCycle >= totalCycles) {
       phase = "long_break";
       remainingSeconds = config.longBreakMinutes * TIME_MULTIPLIER;
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle = 1;
       showBreakOverlay(remainingSeconds);
     } else {
       phase = "short_break";
       remainingSeconds = config.shortBreakMinutes * TIME_MULTIPLIER;
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle += 1;
       showBreakOverlay(remainingSeconds);
     }
   } else {
     phase = "focus";
     remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
+    phaseEndTime = Date.now() + remainingSeconds * 1000;
   }
 }
 
@@ -191,6 +204,7 @@ export function getPomodoro() {
       if (isRunning) return;
       initListeners();
       isRunning = true;
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
       if (!sessionStartTime) {
         sessionStartTime = new Date().toISOString();
       }
@@ -198,6 +212,7 @@ export function getPomodoro() {
     },
     pause() {
       isRunning = false;
+      phaseEndTime = null;
       if (intervalId) {
         clearInterval(intervalId);
         intervalId = null;
@@ -205,6 +220,7 @@ export function getPomodoro() {
     },
     reset() {
       isRunning = false;
+      phaseEndTime = null;
       if (intervalId) {
         clearInterval(intervalId);
         intervalId = null;

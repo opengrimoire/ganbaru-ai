@@ -128,13 +128,72 @@ impl SavedShortcuts {
     }
 }
 
+/// Inhibit screensaver/idle via D-Bus, returns cookie for uninhibit
+#[cfg(target_os = "linux")]
+fn screensaver_inhibit() -> Option<u32> {
+    let output = std::process::Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.ScreenSaver",
+            "--object-path",
+            "/org/freedesktop/ScreenSaver",
+            "--method",
+            "org.freedesktop.ScreenSaver.Inhibit",
+            "GanbaruAI",
+            "Break timer active",
+        ])
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Output format: "(uint32 1234,)"
+    stdout
+        .trim()
+        .strip_prefix("(uint32 ")?
+        .strip_suffix(",)")?
+        .parse::<u32>()
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+fn screensaver_uninhibit(cookie: u32) {
+    let _ = std::process::Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.ScreenSaver",
+            "--object-path",
+            "/org/freedesktop/ScreenSaver",
+            "--method",
+            "org.freedesktop.ScreenSaver.UnInhibit",
+            &cookie.to_string(),
+        ])
+        .output();
+}
+
+#[cfg(target_os = "linux")]
+fn format_remaining(secs: u64) -> String {
+    if secs >= 60 {
+        format!("{}:{:02}", secs / 60, secs % 60)
+    } else {
+        secs.to_string()
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(), String> {
     app.clone().run_on_main_thread(move || {
         use gtk::prelude::*;
+        use std::time::{Duration, SystemTime};
 
         let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable());
+        let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
+        let end_time = SystemTime::now() + Duration::from_secs(break_seconds as u64);
+        let end_time = std::rc::Rc::new(std::cell::Cell::new(end_time));
 
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
         window.set_decorated(false);
@@ -147,9 +206,10 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             gtk::glib::Propagation::Proceed
         });
 
+        let display = format_remaining(break_seconds as u64);
         let timer_label = gtk::Label::new(None);
         timer_label.set_markup(&format!(
-            "<span font='80' foreground='#FFFFFF'>{break_seconds}</span>"
+            "<span font='80' foreground='#FFFFFF'>{display}</span>"
         ));
 
         let hint_label = gtk::Label::new(None);
@@ -166,16 +226,19 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
 
         window.fullscreen();
 
-        let remaining = std::rc::Rc::new(std::cell::Cell::new(break_seconds));
         let is_hidden = std::rc::Rc::new(std::cell::Cell::new(false));
         let space_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
         let esc_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
 
-        // Restore shortcuts when window is destroyed
+        // Restore shortcuts and uninhibit screensaver when window is destroyed
         {
             let saved = saved.clone();
+            let cookie = inhibit_cookie.clone();
             window.connect_destroy(move |_| {
                 saved.restore();
+                if let Some(c) = cookie.get() {
+                    screensaver_uninhibit(c);
+                }
             });
         }
 
@@ -186,6 +249,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             let esc_count = esc_count.clone();
             let is_hidden = is_hidden.clone();
             let saved = saved.clone();
+            let cookie = inhibit_cookie.clone();
             let w = window.clone();
             let app = app.clone();
             window.connect_key_press_event(move |_, event| {
@@ -198,6 +262,10 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                         space_count.set(0);
                         is_hidden.set(true);
                         saved.restore();
+                        if let Some(c) = cookie.get() {
+                            screensaver_uninhibit(c);
+                            cookie.set(None);
+                        }
                         w.hide();
                     }
                 } else if key == gdk::keys::constants::Escape {
@@ -216,22 +284,26 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             });
         }
 
-        // Countdown (runs regardless of visibility)
+        // Countdown using wall clock time (survives suspend)
         {
-            let remaining = remaining.clone();
+            let end_time = end_time.clone();
             let is_hidden = is_hidden.clone();
             let w = window.clone();
             let timer_label = timer_label.clone();
             gtk::glib::timeout_add_seconds_local(1, move || {
-                let r = remaining.get().saturating_sub(1);
-                remaining.set(r);
-                if r == 0 {
+                let now = SystemTime::now();
+                let et = end_time.get();
+                let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
+                let secs = remaining.as_secs();
+
+                if secs == 0 {
                     w.close();
                     return gtk::glib::ControlFlow::Break;
                 }
                 if !is_hidden.get() {
+                    let display = format_remaining(secs);
                     timer_label.set_markup(&format!(
-                        "<span font='80' foreground='#FFFFFF'>{r}</span>"
+                        "<span font='80' foreground='#FFFFFF'>{display}</span>"
                     ));
                 }
                 gtk::glib::ControlFlow::Continue
@@ -240,12 +312,15 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
 
         // Re-show overlay after 30s of system inactivity when hidden
         {
-            let remaining = remaining.clone();
+            let end_time = end_time.clone();
             let is_hidden = is_hidden.clone();
+            let inhibit_cookie = inhibit_cookie.clone();
             let w = window.clone();
             let timer_label = timer_label.clone();
             gtk::glib::timeout_add_seconds_local(5, move || {
-                if remaining.get() == 0 {
+                let now = SystemTime::now();
+                let et = end_time.get();
+                if now >= et {
                     return gtk::glib::ControlFlow::Break;
                 }
                 if !is_hidden.get() {
@@ -256,9 +331,12 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                 if idle_ms >= 30_000 {
                     is_hidden.set(false);
                     let _ = SavedShortcuts::save_and_disable();
-                    let r = remaining.get();
+                    inhibit_cookie.set(screensaver_inhibit());
+
+                    let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
+                    let display = format_remaining(remaining.as_secs());
                     timer_label.set_markup(&format!(
-                        "<span font='80' foreground='#FFFFFF'>{r}</span>"
+                        "<span font='80' foreground='#FFFFFF'>{display}</span>"
                     ));
                     w.show_all();
                     w.fullscreen();
