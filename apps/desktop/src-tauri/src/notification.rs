@@ -227,32 +227,57 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         window.fullscreen();
 
         let is_hidden = std::rc::Rc::new(std::cell::Cell::new(false));
+        let break_finished = std::rc::Rc::new(std::cell::Cell::new(false));
         let space_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
         let esc_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
 
         // Restore shortcuts and uninhibit screensaver when window is destroyed
+        // Runs in a background thread to avoid blocking the UI
         {
             let saved = saved.clone();
             let cookie = inhibit_cookie.clone();
             window.connect_destroy(move |_| {
-                saved.restore();
-                if let Some(c) = cookie.get() {
-                    screensaver_uninhibit(c);
-                }
+                let overlay_key = saved.overlay_key.clone();
+                let dock_hotkeys = saved.dock_hotkeys.clone();
+                let disabled = saved.disabled.clone();
+                let cookie_val = cookie.get();
+                std::thread::spawn(move || {
+                    gsettings_set("org.gnome.mutter", "overlay-key", &overlay_key);
+                    gsettings_set(
+                        "org.gnome.shell.extensions.dash-to-dock",
+                        "hot-keys",
+                        &dock_hotkeys,
+                    );
+                    for (schema, key, val) in &disabled {
+                        gsettings_set(schema, key, val);
+                    }
+                    if let Some(c) = cookie_val {
+                        screensaver_uninhibit(c);
+                    }
+                });
             });
         }
 
-        // Space x3: temporarily dismiss (break continues, shortcuts restored)
-        // Escape x3: skip break entirely (emit event, close overlay)
+        // Key handler:
+        // - Break finished: any key closes overlay and starts next focus
+        // - During break: space x3 temporarily dismiss, Esc x3 skip break
         {
             let space_count = space_count.clone();
             let esc_count = esc_count.clone();
             let is_hidden = is_hidden.clone();
+            let break_finished = break_finished.clone();
             let saved = saved.clone();
             let cookie = inhibit_cookie.clone();
             let w = window.clone();
             let app = app.clone();
             window.connect_key_press_event(move |_, event| {
+                if break_finished.get() {
+                    let _ = app.emit("pomodoro-break-acknowledged", ());
+                    w.hide();
+                    w.close();
+                    return gtk::glib::Propagation::Stop;
+                }
+
                 let key = event.keyval();
                 if key == gdk::keys::constants::space {
                     esc_count.set(0);
@@ -274,6 +299,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                     esc_count.set(count);
                     if count >= 3 {
                         let _ = app.emit("pomodoro-skip-break", ());
+                        w.hide();
                         w.close();
                     }
                 } else {
@@ -284,20 +310,56 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             });
         }
 
+        // Click handler: close overlay when break is finished
+        {
+            let break_finished = break_finished.clone();
+            let w = window.clone();
+            let app = app.clone();
+            window.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
+            window.connect_button_press_event(move |_, _| {
+                if break_finished.get() {
+                    let _ = app.emit("pomodoro-break-acknowledged", ());
+                    w.hide();
+                    w.close();
+                }
+                gtk::glib::Propagation::Stop
+            });
+        }
+
         // Countdown using wall clock time (survives suspend)
         {
             let end_time = end_time.clone();
             let is_hidden = is_hidden.clone();
+            let break_finished = break_finished.clone();
             let w = window.clone();
             let timer_label = timer_label.clone();
+            let hint_label = hint_label.clone();
             gtk::glib::timeout_add_seconds_local(1, move || {
+                if break_finished.get() {
+                    return gtk::glib::ControlFlow::Break;
+                }
+
                 let now = SystemTime::now();
                 let et = end_time.get();
                 let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
                 let secs = remaining.as_secs();
 
                 if secs == 0 {
-                    w.close();
+                    break_finished.set(true);
+                    timer_label.set_markup(
+                        "<span font='48' foreground='#22C55E'>Break finished</span>"
+                    );
+                    hint_label.set_markup(
+                        "<span font='18' foreground='#BBBBBB'>Press any key or click to start next session</span>",
+                    );
+                    // If hidden (space x3), re-show the overlay
+                    if is_hidden.get() {
+                        is_hidden.set(false);
+                        let _ = SavedShortcuts::save_and_disable();
+                        w.show_all();
+                        w.fullscreen();
+                        w.present();
+                    }
                     return gtk::glib::ControlFlow::Break;
                 }
                 if !is_hidden.get() {

@@ -52,6 +52,19 @@ function initListeners() {
     }
   }).catch((e) => console.warn("Failed to listen for pomodoro-skip-break:", e));
 
+  listen("pomodoro-break-acknowledged", () => {
+    if (phase === "short_break" || phase === "long_break") {
+      advancePhase();
+      // Auto-start the next focus session
+      if (!isRunning) {
+        isRunning = true;
+        phaseEndTime = Date.now() + remainingSeconds * 1000;
+        sessionStartTime = new Date().toISOString();
+        intervalId = setInterval(tick, 1000);
+      }
+    }
+  }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
+
   listen<{ seconds: number }>("pomodoro-add-time", (event) => {
     remainingSeconds += event.payload.seconds;
     if (phaseEndTime !== null) {
@@ -110,6 +123,16 @@ function tick() {
   }
 
   if (remainingSeconds <= 0) {
+    // During break, don't auto-advance — wait for user acknowledgment
+    if (phase === "short_break" || phase === "long_break") {
+      remainingSeconds = 0;
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      isRunning = false;
+      return;
+    }
     advancePhase();
     return;
   }
