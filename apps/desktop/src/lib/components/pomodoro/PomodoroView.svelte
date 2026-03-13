@@ -6,7 +6,6 @@
   import Pause from "@lucide/svelte/icons/pause";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
-
   const pomodoro = getPomodoro();
 
   const phaseLabel = $derived(
@@ -24,13 +23,8 @@
   );
 
   const progressPercent = $derived(() => {
-    const totalSeconds =
-      pomodoro.phase === "focus"
-        ? 25 * 60
-        : pomodoro.phase === "short_break"
-          ? 5 * 60
-          : 15 * 60;
-    return ((totalSeconds - pomodoro.remainingSeconds) / totalSeconds) * 100;
+    const total = pomodoro.totalSecondsForPhase;
+    return ((total - pomodoro.remainingSeconds) / total) * 100;
   });
 
   // Auto-dismiss XP notification after 3 seconds
@@ -92,7 +86,7 @@
       {:else}
         <Button size="lg" onclick={() => pomodoro.start()}>
           <Play size={20} />
-          {pomodoro.remainingSeconds === 25 * 60 && pomodoro.currentCycle === 1 ? "Start" : "Resume"}
+          {pomodoro.remainingSeconds === pomodoro.totalSecondsForPhase && pomodoro.currentCycle === 1 ? "Start" : "Resume"}
         </Button>
       {/if}
 
@@ -103,6 +97,7 @@
       <Button variant="ghost" size="lg" onclick={() => pomodoro.reset()} title="Reset timer">
         <RotateCcw size={20} />
       </Button>
+
     </div>
   </div>
 

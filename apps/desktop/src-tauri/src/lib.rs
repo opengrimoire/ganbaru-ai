@@ -1,3 +1,6 @@
+mod db;
+mod notification;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -8,8 +11,10 @@ pub fn run() {
                 .add_migrations("sqlite:ganbaruai.db", db::migrations())
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![
+            notification::show_pomodoro_notification,
+            notification::show_break_overlay,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-mod db;
