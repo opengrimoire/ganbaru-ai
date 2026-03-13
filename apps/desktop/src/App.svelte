@@ -5,7 +5,6 @@
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
   import PomodoroView from "$lib/components/pomodoro/PomodoroView.svelte";
   import SkillTreeView from "$lib/components/skill-tree/SkillTreeView.svelte";
-
   const nav = getNavigation();
 
   const views: View[] = ["calendar", "kanban", "pomodoro", "skill-tree"];

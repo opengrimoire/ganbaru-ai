@@ -4,7 +4,6 @@
   import { Badge } from "$lib/components/ui/badge";
   import Play from "@lucide/svelte/icons/play";
   import Pause from "@lucide/svelte/icons/pause";
-  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   const pomodoro = getPomodoro();
 
@@ -92,10 +91,6 @@
 
       <Button variant="ghost" size="lg" onclick={() => pomodoro.skip()} title="Skip to next phase">
         <SkipForward size={20} />
-      </Button>
-
-      <Button variant="ghost" size="lg" onclick={() => pomodoro.reset()} title="Reset timer">
-        <RotateCcw size={20} />
       </Button>
 
     </div>

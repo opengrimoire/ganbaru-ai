@@ -38,6 +38,22 @@ let phaseEndTime: number | null = null;
 
 const NOTIFICATION_THRESHOLD = 10;
 
+function updateTray() {
+  const totalSeconds =
+    phase === "focus"
+      ? config.focusMinutes * TIME_MULTIPLIER
+      : phase === "short_break"
+        ? config.shortBreakMinutes * TIME_MULTIPLIER
+        : config.longBreakMinutes * TIME_MULTIPLIER;
+
+  invoke("update_tray", {
+    phase,
+    remainingSeconds,
+    totalSeconds,
+    isRunning,
+  }).catch(() => {});
+}
+
 function initListeners() {
   if (listenersInitialized) return;
   listenersInitialized = true;
@@ -55,6 +71,30 @@ function initListeners() {
       startFocusSession();
     }
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
+
+  listen("tray-pause-resume", () => {
+    if (isRunning) {
+      isRunning = false;
+      phaseEndTime = null;
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    } else {
+      isRunning = true;
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
+      if (phase === "focus" && !sessionStartTime) {
+        sessionStartTime = new Date().toISOString();
+      }
+      intervalId = setInterval(tick, 1000);
+    }
+    updateTray();
+  }).catch((e) => console.warn("Failed to listen for tray-pause-resume:", e));
+
+  listen("tray-skip", () => {
+    advancePhase();
+    updateTray();
+  }).catch((e) => console.warn("Failed to listen for tray-skip:", e));
 
   listen<{ seconds: number }>("pomodoro-add-time", (event) => {
     remainingSeconds += event.payload.seconds;
@@ -77,6 +117,7 @@ function startFocusSession() {
   phaseEndTime = Date.now() + remainingSeconds * 1000;
   sessionStartTime = new Date().toISOString();
   intervalId = setInterval(tick, 1000);
+  updateTray();
 }
 
 function showBreakOverlay(breakSeconds: number) {
@@ -150,6 +191,8 @@ function tick() {
   ) {
     showNotification();
   }
+
+  updateTray();
 }
 
 function advancePhase() {
@@ -193,6 +236,7 @@ function advancePhase() {
 }
 
 export function getPomodoro() {
+  initListeners();
   return {
     get phase() {
       return phase;
@@ -238,6 +282,7 @@ export function getPomodoro() {
         sessionStartTime = new Date().toISOString();
       }
       intervalId = setInterval(tick, 1000);
+      updateTray();
     },
     pause() {
       isRunning = false;
@@ -246,6 +291,7 @@ export function getPomodoro() {
         clearInterval(intervalId);
         intervalId = null;
       }
+      updateTray();
     },
     reset() {
       isRunning = false;
@@ -262,9 +308,11 @@ export function getPomodoro() {
       lastXp = null;
       skipNextBreak = false;
       notificationShown = false;
+      updateTray();
     },
     skip() {
       advancePhase();
+      updateTray();
     },
     configure(newConfig: Partial<PomodoroConfig>) {
       config = { ...config, ...newConfig };
