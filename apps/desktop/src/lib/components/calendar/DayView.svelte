@@ -1,31 +1,29 @@
 <script lang="ts">
-  import type { CalendarEvent, DragState, PositionedEvent } from "./types";
+  import type { CalendarEvent } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
     isToday,
     isPastDay,
     formatDatePart,
     formatDayName,
-    minuteOfDay,
-    minuteToTop,
-    snapToGrid,
-    clampMinute,
     GUTTER_WIDTH_PER_TZ,
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
+  import { useDragController } from "./useDragController.svelte";
   import { onMount } from "svelte";
 
   let {
     anchorDate,
     events,
-    hourHeight = 48,
+    hourHeight = 58,
     isDark = false,
     timezones = [] as string[],
-    onSlotClick,
     onEventClick,
     onEventUpdate,
+    onEventCreate,
+    pendingCreatePreview = null,
     onAddTimezone,
     onRemoveTimezone,
     onWheelNavigate,
@@ -36,9 +34,10 @@
     hourHeight?: number;
     isDark?: boolean;
     timezones?: string[];
-    onSlotClick: (dateStr: string, startMinute: number) => void;
     onEventClick: (event: CalendarEvent) => void;
     onEventUpdate: (event: CalendarEvent) => void;
+    onEventCreate: (start: string, end: string) => void;
+    pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number } | null;
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
@@ -56,9 +55,8 @@
     onWheelNavigate(e.deltaY > 0 ? "forward" : "back");
     setTimeout(() => { wheelCooldown = false; }, 300);
   }
+
   let currentTimeMinute = $state(-1);
-  let dragState: DragState | null = $state(null);
-  let dragPreview: PositionedEvent | null = $state(null);
 
   const today = $derived(isToday(anchorDate));
   const past = $derived(isPastDay(anchorDate));
@@ -68,7 +66,6 @@
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) 1fr`,
   );
 
-  // Responsive day name format based on header width
   let headerCell: HTMLElement | undefined = $state();
   let dayFormat: DayNameFormat = $state("long");
 
@@ -110,91 +107,13 @@
     return () => clearInterval(interval);
   });
 
-  function handleDragStart(eventId: string, e: PointerEvent) {
-    const event = events.find((ev) => ev.id === eventId);
-    if (!event) return;
-
-    dragState = {
-      eventId,
-      type: "move",
-      originDate: dateStr,
-      originStartMinute: minuteOfDay(event.start),
-      originEndMinute: minuteOfDay(event.end),
-      pointerStartY: e.clientY,
-      pointerStartX: e.clientX,
-      columnWidth: 0,
-      startColumnIndex: 0,
-    };
-
-    window.addEventListener("pointermove", handleDragMove);
-    window.addEventListener("pointerup", handleDragEnd);
-  }
-
-  function handleDragMove(e: PointerEvent) {
-    if (!dragState) return;
-
-    const event = events.find((ev) => ev.id === dragState!.eventId);
-    if (!event) return;
-
-    const deltaY = e.clientY - dragState.pointerStartY;
-    const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60);
-
-    let newStart: number;
-    let newEnd: number;
-
-    if (dragState.type === "move") {
-      newStart = clampMinute(dragState.originStartMinute + deltaMinutes);
-      const dur = dragState.originEndMinute - dragState.originStartMinute;
-      newEnd = clampMinute(newStart + dur);
-      if (newEnd > 1440) {
-        newEnd = 1440;
-        newStart = newEnd - dur;
-      }
-      if (newStart < 0) {
-        newStart = 0;
-        newEnd = dur;
-      }
-    } else if (dragState.type === "resize-top") {
-      newStart = clampMinute(dragState.originStartMinute + deltaMinutes);
-      newEnd = dragState.originEndMinute;
-      if (newStart >= newEnd - 15) newStart = newEnd - 15;
-    } else {
-      newStart = dragState.originStartMinute;
-      newEnd = clampMinute(dragState.originEndMinute + deltaMinutes);
-      if (newEnd <= newStart + 15) newEnd = newStart + 15;
-    }
-
-    const startH = String(Math.floor(newStart / 60)).padStart(2, "0");
-    const startM = String(newStart % 60).padStart(2, "0");
-    const endH = String(Math.floor(Math.min(newEnd, 1440) / 60)).padStart(2, "0");
-    const endM = String(Math.min(newEnd, 1440) % 60).padStart(2, "0");
-
-    dragPreview = {
-      event: {
-        ...event,
-        start: `${dateStr} ${startH}:${startM}`,
-        end: `${dateStr} ${endH}:${endM}`,
-      },
-      top: minuteToTop(newStart, hourHeight),
-      height: ((newEnd - newStart) / 60) * hourHeight,
-      left: 0,
-      width: 100,
-      column: 0,
-      totalColumns: 1,
-    };
-  }
-
-  function handleDragEnd() {
-    window.removeEventListener("pointermove", handleDragMove);
-    window.removeEventListener("pointerup", handleDragEnd);
-
-    if (dragPreview) {
-      onEventUpdate(dragPreview.event);
-    }
-
-    dragState = null;
-    dragPreview = null;
-  }
+  const drag = useDragController({
+    events: () => events,
+    hourHeight: () => hourHeight,
+    getColumnDate: () => dateStr,
+    onEventUpdate,
+    onEventCreate,
+  });
 </script>
 
 <div
@@ -245,10 +164,13 @@
         isPast={past}
         {isDark}
         {currentTimeMinute}
-        {dragPreview}
-        onSlotClick={onSlotClick}
+        dragPreview={drag.getDragPreviewForDate(dateStr)}
+        createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
+        hideSnapLine={drag.getHideSnapLine()}
+        snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
         onEventClick={onEventClick}
-        onDragStart={handleDragStart}
+        onDragStart={drag.handleDragStart}
+        onCreateStart={drag.handleCreateStart}
       />
     </div>
   </div>

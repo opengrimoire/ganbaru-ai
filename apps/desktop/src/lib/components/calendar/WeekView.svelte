@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, DragState, PositionedEvent } from "./types";
+  import type { CalendarEvent } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
     getWeekDays,
@@ -7,26 +7,24 @@
     isPastDay,
     formatDayName,
     formatDatePart,
-    minuteOfDay,
-    minuteToTop,
-    snapToGrid,
-    clampMinute,
     GUTTER_WIDTH_PER_TZ,
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
+  import { useDragController } from "./useDragController.svelte";
   import { onMount } from "svelte";
 
   let {
     anchorDate,
     events,
-    hourHeight = 48,
+    hourHeight = 58,
     isDark = false,
     timezones = [] as string[],
-    onSlotClick,
     onEventClick,
     onEventUpdate,
+    onEventCreate,
+    pendingCreatePreview = null,
     onAddTimezone,
     onRemoveTimezone,
     onWheelNavigate,
@@ -37,9 +35,10 @@
     hourHeight?: number;
     isDark?: boolean;
     timezones?: string[];
-    onSlotClick: (dateStr: string, startMinute: number) => void;
     onEventClick: (event: CalendarEvent) => void;
     onEventUpdate: (event: CalendarEvent) => void;
+    onEventCreate: (start: string, end: string) => void;
+    pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number } | null;
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
@@ -52,7 +51,6 @@
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) repeat(7, 1fr)`,
   );
 
-  // Responsive day name format based on column width
   let headerCells: HTMLElement[] = $state([]);
   let dayFormat: DayNameFormat = $state("short");
 
@@ -82,9 +80,6 @@
     onWheelNavigate(e.deltaY > 0 ? "forward" : "back");
     setTimeout(() => { wheelCooldown = false; }, 300);
   }
-  let dragState: DragState | null = $state(null);
-  let dragPreviewDate: string | null = $state(null);
-  let dragPreview: PositionedEvent | null = $state(null);
 
   function updateCurrentTime() {
     const now = new Date();
@@ -104,121 +99,31 @@
     return () => clearInterval(interval);
   });
 
-  function handleDragStart(eventId: string, e: PointerEvent) {
-    const event = events.find((ev) => ev.id === eventId);
-    if (!event) return;
-
-    const dateStr = event.start.split(" ")[0];
-
+  // Column date resolution for cross-column move drag
+  function getColumnDate(clientX: number): string {
     const gridEl = scrollContainer?.querySelector(".week-grid");
-    const firstCol = gridEl?.querySelector(".day-col") as HTMLElement | null;
-    const columnWidth = firstCol?.getBoundingClientRect().width ?? 100;
+    const cols = gridEl?.querySelectorAll(".day-col");
+    if (!cols?.length) return formatDatePart(weekDays[0]);
 
-    dragState = {
-      eventId,
-      type: "move",
-      originDate: dateStr,
-      originStartMinute: minuteOfDay(event.start),
-      originEndMinute: minuteOfDay(event.end),
-      pointerStartY: e.clientY,
-      pointerStartX: e.clientX,
-      columnWidth,
-      startColumnIndex: weekDays.findIndex(
-        (d) => formatDatePart(d) === dateStr,
-      ),
-    };
-
-    const blockEl = (e.target as HTMLElement).closest(".event-block-wrapper");
-    if (blockEl) {
-      const rect = blockEl.getBoundingClientRect();
-      const relY = e.clientY - rect.top;
-      if (relY <= 6) {
-        dragState.type = "resize-top";
-      } else if (relY >= rect.height - 6) {
-        dragState.type = "resize-bottom";
+    for (let i = 0; i < cols.length; i++) {
+      const rect = cols[i].getBoundingClientRect();
+      if (clientX >= rect.left && clientX < rect.right) {
+        return formatDatePart(weekDays[i]);
       }
     }
-
-    window.addEventListener("pointermove", handleDragMove);
-    window.addEventListener("pointerup", handleDragEnd);
+    // Fallback: closest edge
+    const firstRect = cols[0].getBoundingClientRect();
+    if (clientX < firstRect.left) return formatDatePart(weekDays[0]);
+    return formatDatePart(weekDays[6]);
   }
 
-  function handleDragMove(e: PointerEvent) {
-    if (!dragState) return;
-
-    const event = events.find((ev) => ev.id === dragState!.eventId);
-    if (!event) return;
-
-    const deltaY = e.clientY - dragState.pointerStartY;
-    const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60);
-
-    let newStart: number;
-    let newEnd: number;
-    let targetDate = dragState.originDate;
-
-    if (dragState.type === "move") {
-      const deltaX = e.clientX - dragState.pointerStartX;
-      const colShift = Math.round(deltaX / dragState.columnWidth);
-      const newColIndex = Math.max(
-        0,
-        Math.min(6, dragState.startColumnIndex + colShift),
-      );
-      targetDate = formatDatePart(weekDays[newColIndex]);
-
-      newStart = clampMinute(dragState.originStartMinute + deltaMinutes);
-      const dur = dragState.originEndMinute - dragState.originStartMinute;
-      newEnd = clampMinute(newStart + dur);
-      if (newEnd > 1440) {
-        newEnd = 1440;
-        newStart = newEnd - dur;
-      }
-      if (newStart < 0) {
-        newStart = 0;
-        newEnd = dur;
-      }
-    } else if (dragState.type === "resize-top") {
-      newStart = clampMinute(dragState.originStartMinute + deltaMinutes);
-      newEnd = dragState.originEndMinute;
-      if (newStart >= newEnd - 15) newStart = newEnd - 15;
-    } else {
-      newStart = dragState.originStartMinute;
-      newEnd = clampMinute(dragState.originEndMinute + deltaMinutes);
-      if (newEnd <= newStart + 15) newEnd = newStart + 15;
-    }
-
-    const startH = String(Math.floor(newStart / 60)).padStart(2, "0");
-    const startM = String(newStart % 60).padStart(2, "0");
-    const endH = String(Math.floor(Math.min(newEnd, 1440) / 60)).padStart(2, "0");
-    const endM = String(Math.min(newEnd, 1440) % 60).padStart(2, "0");
-
-    dragPreviewDate = targetDate;
-    dragPreview = {
-      event: {
-        ...event,
-        start: `${targetDate} ${startH}:${startM}`,
-        end: `${targetDate} ${endH}:${endM}`,
-      },
-      top: minuteToTop(newStart, hourHeight),
-      height: ((newEnd - newStart) / 60) * hourHeight,
-      left: 0,
-      width: 100,
-      column: 0,
-      totalColumns: 1,
-    };
-  }
-
-  function handleDragEnd() {
-    window.removeEventListener("pointermove", handleDragMove);
-    window.removeEventListener("pointerup", handleDragEnd);
-
-    if (dragPreview) {
-      onEventUpdate(dragPreview.event);
-    }
-
-    dragState = null;
-    dragPreview = null;
-    dragPreviewDate = null;
-  }
+  const drag = useDragController({
+    events: () => events,
+    hourHeight: () => hourHeight,
+    getColumnDate,
+    onEventUpdate,
+    onEventCreate,
+  });
 </script>
 
 <div
@@ -242,7 +147,6 @@
         background-color: var(--cal-header-bg);
       "
     >
-      <!-- Timezone header cells — subgrid aligns with TimeGutter columns -->
       <TimezoneSelector
         {timezones}
         tzCount={tzCount}
@@ -289,10 +193,13 @@
             isPast={isPastDay(day)}
             {isDark}
             {currentTimeMinute}
-            dragPreview={dragPreviewDate === dateStr ? dragPreview : null}
-            onSlotClick={onSlotClick}
+            dragPreview={drag.getDragPreviewForDate(dateStr)}
+            createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
+            hideSnapLine={drag.getHideSnapLine()}
+            snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
             onEventClick={onEventClick}
-            onDragStart={handleDragStart}
+            onDragStart={drag.handleDragStart}
+            onCreateStart={drag.handleCreateStart}
           />
         </div>
       {/each}

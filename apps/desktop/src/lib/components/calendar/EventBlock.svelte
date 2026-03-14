@@ -35,7 +35,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
-  class="absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight select-none"
+  class="event-block-wrapper absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight select-none transition-all hover:shadow-md hover:ring-1 hover:ring-white/30 hover:brightness-125"
   style="
     top: {positioned.top}px;
     height: {positioned.height}px;
@@ -51,8 +51,34 @@
   onclick={handleClick}
   onpointerdown={handlePointerDown}
 >
+  <!-- Resize handle: top -->
+  <div class="resize-handle-top" onpointerdown={handlePointerDown}></div>
+
   <div class="truncate font-medium">{positioned.event.title}</div>
   {#if positioned.height > 28}
     <div class="truncate opacity-80">{startTime} - {endTime}</div>
   {/if}
+
+  <!-- Resize handle: bottom -->
+  <div class="resize-handle-bottom" onpointerdown={handlePointerDown}></div>
 </div>
+
+<style>
+  .resize-handle-top,
+  .resize-handle-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 6px;
+    cursor: ns-resize;
+    z-index: 2;
+  }
+
+  .resize-handle-top {
+    top: 0;
+  }
+
+  .resize-handle-bottom {
+    bottom: 0;
+  }
+</style>

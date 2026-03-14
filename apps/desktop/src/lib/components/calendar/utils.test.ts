@@ -162,11 +162,12 @@ describe("durationMinutes", () => {
 });
 
 describe("snapToGrid", () => {
-  it("snaps to 15-minute grid by default", () => {
-    expect(snapToGrid(7)).toBe(0);
-    expect(snapToGrid(8)).toBe(15);
-    expect(snapToGrid(22)).toBe(15);
-    expect(snapToGrid(23)).toBe(30);
+  it("snaps to 10-minute grid by default", () => {
+    expect(snapToGrid(4)).toBe(0);
+    expect(snapToGrid(5)).toBe(10);
+    expect(snapToGrid(14)).toBe(10);
+    expect(snapToGrid(15)).toBe(20);
+    expect(snapToGrid(25)).toBe(30);
   });
 
   it("snaps to custom grid size", () => {

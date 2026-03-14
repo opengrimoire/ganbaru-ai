@@ -162,6 +162,7 @@
   let showCreateDialog = $state(false);
   let pendingStart = $state("");
   let pendingEnd = $state("");
+  let pendingCreatePreview: { dateStr: string; startMinute: number; endMinute: number } | null = $state(null);
 
   // Event detail state
   let selectedEvent: CalendarEvent | null = $state(null);
@@ -228,15 +229,15 @@
     viewMode = mode;
   }
 
-  function handleSlotClick(dateStr: string, startMinute: number) {
-    const h = String(Math.floor(startMinute / 60)).padStart(2, "0");
-    const m = String(startMinute % 60).padStart(2, "0");
-    pendingStart = `${dateStr} ${h}:${m}`;
+  function handleEventCreate(start: string, end: string) {
+    pendingStart = start;
+    pendingEnd = end;
 
-    const endMinute = Math.min(startMinute + 60, 1440);
-    const eh = String(Math.floor(endMinute / 60)).padStart(2, "0");
-    const em = String(endMinute % 60).padStart(2, "0");
-    pendingEnd = `${dateStr} ${eh}:${em}`;
+    // Extract date and minutes for preview
+    const dateStr = start.split(" ")[0];
+    const [sh, sm] = (start.split(" ")[1] ?? "0:0").split(":").map(Number);
+    const [eh, em] = (end.split(" ")[1] ?? "0:0").split(":").map(Number);
+    pendingCreatePreview = { dateStr, startMinute: sh * 60 + sm, endMinute: eh * 60 + em };
 
     showCreateDialog = true;
     selectedEvent = null;
@@ -264,6 +265,7 @@
     pushUndo({ type: "add", event: { ...event } });
     redoStack = [];
     showCreateDialog = false;
+    pendingCreatePreview = null;
   }
 
   async function handleDelete(id: string) {
@@ -314,9 +316,10 @@
         events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
-        onSlotClick={handleSlotClick}
+        {pendingCreatePreview}
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
+        onEventCreate={handleEventCreate}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}
@@ -328,9 +331,10 @@
         events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
-        onSlotClick={handleSlotClick}
+        {pendingCreatePreview}
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
+        onEventCreate={handleEventCreate}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}
@@ -354,7 +358,7 @@
       startTime={pendingStart}
       endTime={pendingEnd}
       onConfirm={handleCreate}
-      onCancel={() => (showCreateDialog = false)}
+      onCancel={() => { showCreateDialog = false; pendingCreatePreview = null; }}
     />
   {/if}
 

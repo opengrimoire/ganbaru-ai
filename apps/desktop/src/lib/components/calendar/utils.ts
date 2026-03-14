@@ -4,7 +4,7 @@ import type {
   PositionedEvent,
 } from "./types";
 
-const MIN_EVENT_HEIGHT = 20;
+const MIN_EVENT_HEIGHT = 12;
 
 // --- Date parsing and formatting ---
 
@@ -354,7 +354,7 @@ export function searchTimezones(
   return [...results].slice(0, limit);
 }
 
-export function snapToGrid(minute: number, gridMinutes: number = 15): number {
+export function snapToGrid(minute: number, gridMinutes: number = 10): number {
   return Math.round(minute / gridMinutes) * gridMinutes;
 }
 
