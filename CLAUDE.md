@@ -9,6 +9,7 @@ GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first producti
 - **PROGRESS.md** — always read at the start of every session to know current state
 - **ROADMAP.md** — phased development plan
 - **DECISIONS.md** — implementation decisions log
+- **TESTING.md** — test setup, conventions, and what is covered
 
 ## Workspace structure
 
@@ -103,3 +104,4 @@ ganbaruai/
 ## Rules
 
 - After every session where files are created, modified, or deleted, update PROGRESS.md before finishing.
+- When adding or modifying pure functions (utils, helpers, formulas), write or update unit tests. Tests live next to the source with `.test.ts` suffix. Run `pnpm test` from `apps/desktop/` to verify. Update TESTING.md if new test categories are added.
