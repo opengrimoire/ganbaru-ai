@@ -152,11 +152,12 @@
   }
 </script>
 
+<!-- Gridline uses box-shadow instead of border-left to avoid WebKitGTK GPU compositing color artifacts during drag -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={columnEl}
   class="relative min-w-0"
-  style="height: {totalHeight}px; border-left: 1px solid var(--cal-gridline);"
+  style="height: {totalHeight}px; box-shadow: -1px 0 0 0 var(--cal-gridline); overflow: hidden;"
   onmousemove={handleColumnMouseMove}
   onmouseleave={handleColumnMouseLeave}
 >

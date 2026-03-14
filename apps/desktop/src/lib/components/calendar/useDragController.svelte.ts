@@ -263,7 +263,7 @@ export function useDragController(config: DragControllerConfig) {
   }
 
   function getHideSnapLine(): boolean {
-    return dragState?.type === "move" && !!dragPreview;
+    return dragState?.type === "move";
   }
 
   function getSnapOverrideMinute(dateStr: string): number | null {
