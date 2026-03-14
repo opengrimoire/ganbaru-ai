@@ -1,6 +1,23 @@
 import type { CalendarEvent, DragState, PositionedEvent } from "./types";
 import { minuteOfDay, minuteToTop, snapToGrid, clampMinute, formatDatePart } from "./utils";
 
+let cursorStyle: HTMLStyleElement | null = null;
+
+function lockCursor(cursor: string) {
+  unlockCursor();
+  cursorStyle = document.createElement("style");
+  cursorStyle.textContent = `* { cursor: ${cursor} !important; }`;
+  document.head.appendChild(cursorStyle);
+}
+
+function unlockCursor() {
+  if (cursorStyle) {
+    cursorStyle.remove();
+    cursorStyle = null;
+  }
+  document.body.style.cursor = "";
+}
+
 export interface DragControllerConfig {
   events: () => CalendarEvent[];
   hourHeight: () => number;
@@ -51,6 +68,12 @@ export function useDragController(config: DragControllerConfig) {
       } else if (relY >= rect.height - 6) {
         dragState.type = "resize-bottom";
       }
+    }
+
+    if (dragState.type === "resize-top" || dragState.type === "resize-bottom") {
+      lockCursor("ns-resize");
+    } else {
+      lockCursor("grabbing");
     }
 
     window.addEventListener("pointermove", handleDragMove);
@@ -124,6 +147,7 @@ export function useDragController(config: DragControllerConfig) {
   function handleDragEnd() {
     window.removeEventListener("pointermove", handleDragMove);
     window.removeEventListener("pointerup", handleDragEnd);
+    unlockCursor();
 
     if (dragPreview) {
       config.onEventUpdate(dragPreview.event);
@@ -147,6 +171,7 @@ export function useDragController(config: DragControllerConfig) {
     createPreviewDate = dateStr;
     createPreview = buildPreview(dateStr, minute, endMinute);
 
+    lockCursor("crosshair");
     window.addEventListener("pointermove", handleCreateMove);
     window.addEventListener("pointerup", handleCreateEnd);
   }
@@ -174,6 +199,7 @@ export function useDragController(config: DragControllerConfig) {
   function handleCreateEnd() {
     window.removeEventListener("pointermove", handleCreateMove);
     window.removeEventListener("pointerup", handleCreateEnd);
+    unlockCursor();
 
     if (createPreview) {
       config.onEventCreate(createPreview.event.start, createPreview.event.end);
