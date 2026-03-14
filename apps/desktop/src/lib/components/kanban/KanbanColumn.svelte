@@ -71,6 +71,7 @@
   <div class="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
     {#if isAdding}
       <div class="rounded-md border border-border bg-card p-2">
+        <!-- svelte-ignore a11y_autofocus -->
         <input
           type="text"
           bind:value={newTitle}
