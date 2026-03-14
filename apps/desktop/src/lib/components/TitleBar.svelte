@@ -160,7 +160,7 @@
   </div>
 
   <!-- Draggable spacer -->
-  <div class="flex-1" />
+  <div class="flex-1"></div>
 
   <!-- RAM usage (dev) -->
   {#if memoryMb > 0}
@@ -294,6 +294,7 @@
 </div>
 
 {#if showResetConfirm}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-50"
@@ -301,6 +302,8 @@
   >
     <div class="absolute inset-0 bg-background/90"></div>
     <div class="relative flex h-full flex-col items-center justify-center">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="flex flex-col items-center gap-5"
         onclick={(e) => e.stopPropagation()}
@@ -328,6 +331,7 @@
 {/if}
 
 {#if showCloseConfirm}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-50"
@@ -335,6 +339,8 @@
   >
     <div class="absolute inset-0 bg-background/90"></div>
     <div class="relative flex h-full flex-col items-center justify-center">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="flex flex-col items-center gap-5"
         onclick={(e) => e.stopPropagation()}

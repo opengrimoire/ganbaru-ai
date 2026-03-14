@@ -13,7 +13,7 @@ let current = $state<Theme>(loadSavedTheme());
 
 // Apply theme class on module load
 if (typeof document !== "undefined") {
-  document.documentElement.classList.toggle("dark", current === "dark");
+  document.documentElement.classList.toggle("dark", loadSavedTheme() === "dark");
 }
 
 export function getTheme() {

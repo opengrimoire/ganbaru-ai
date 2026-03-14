@@ -151,6 +151,8 @@
   >
     <div class="absolute inset-0 bg-background/90"></div>
     <div class="relative flex h-full flex-col items-center justify-center">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="flex flex-col items-center gap-5"
         onclick={(e) => e.stopPropagation()}

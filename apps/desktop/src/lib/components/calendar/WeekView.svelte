@@ -151,8 +151,8 @@
     events: () => events,
     hourHeight: () => hourHeight,
     getColumnDate,
-    onEventUpdate,
-    onEventCreate,
+    onEventUpdate: (e) => onEventUpdate(e),
+    onEventCreate: (s, e) => onEventCreate(s, e),
   });
 </script>
 
@@ -190,6 +190,7 @@
       >
         {#each weekDays as day, i}
           {@const past = isPastDay(day)}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
             bind:this={headerCells[i]}
             class="flex cursor-pointer items-center justify-center hover:bg-accent/50"

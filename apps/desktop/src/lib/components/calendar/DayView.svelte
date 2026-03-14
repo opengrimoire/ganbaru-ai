@@ -141,8 +141,8 @@
     events: () => events,
     hourHeight: () => hourHeight,
     getColumnDate: () => dateStr,
-    onEventUpdate,
-    onEventCreate,
+    onEventUpdate: (e) => onEventUpdate(e),
+    onEventCreate: (s, e) => onEventCreate(s, e),
   });
 </script>
 
@@ -170,6 +170,7 @@
         onAdd={(tz) => onAddTimezone?.(tz)}
         onRemove={(i) => onRemoveTimezone?.(i)}
       />
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
         bind:this={headerCell}
         class="flex cursor-pointer items-center px-4 hover:bg-accent/50"
