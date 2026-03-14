@@ -8,15 +8,22 @@
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
   import SkillTreeView from "$lib/components/skill-tree/SkillTreeView.svelte";
+  import { onMount } from "svelte";
 
   const nav = getNavigation();
   const calendar = getCalendar();
   const pomodoro = getPomodoro();
 
+  // Load calendar data before any child component mounts
+  onMount(() => {
+    calendar.load();
+  });
+
   const views: View[] = ["calendar", "kanban", "skill-tree"];
 
   let showStopConfirm = $state(false);
   let savedBlockState: CalendarEvent | null = null;
+  let reverting = false;
 
   function navigatePrev() {
     const i = views.indexOf(nav.current);
@@ -29,6 +36,13 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // Modal keyboard shortcuts
+    if (showStopConfirm) {
+      if (e.key === "Escape") { cancelStop(); return; }
+      if (e.key === "Enter") { confirmStop(); return; }
+      return;
+    }
+
     if (e.altKey && e.key >= "1" && e.key <= String(views.length)) {
       e.preventDefault();
       nav.navigate(views[parseInt(e.key) - 1]);
@@ -58,11 +72,10 @@
     });
   }
 
-  // Save the active block's position whenever one becomes active
   let trackedBlockSnapshot: CalendarEvent | null = null;
 
   function checkActiveBlock() {
-    if (showStopConfirm) return;
+    if (showStopConfirm || reverting) return;
 
     const activeBlock = findActiveBlock();
 
@@ -73,14 +86,11 @@
         longBreakMinutes: activeBlock.longBreakMinutes ?? 15,
         cyclesBeforeLongBreak: activeBlock.pomodoroCount ?? 4,
       });
-      // Save snapshot of the active block for potential revert
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
-      // The active block disappeared — save its last known good state
       savedBlockState = trackedBlockSnapshot;
       showStopConfirm = true;
     } else if (pomodoro.activeBlockId) {
-      // Block was deleted entirely, no revert possible
       pomodoro.stopSession();
     }
   }
@@ -93,12 +103,17 @@
   }
 
   function cancelStop() {
-    showStopConfirm = false;
-    if (savedBlockState) {
-      // Revert the block to its original position
-      calendar.updateBlock(savedBlockState);
-      savedBlockState = null;
+    if (!savedBlockState) {
+      showStopConfirm = false;
+      return;
     }
+    const blockToRestore = savedBlockState;
+    showStopConfirm = false;
+    savedBlockState = null;
+    reverting = true;
+    calendar.updateBlock(blockToRestore).then(() => {
+      reverting = false;
+    });
   }
 
   // React to calendar event changes immediately
@@ -133,8 +148,6 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-50"
-    onclick={confirmStop}
-    onkeydown={(e) => { if (e.key === "Escape") cancelStop(); }}
   >
     <div class="absolute inset-0 bg-background/90"></div>
     <div class="relative flex h-full flex-col items-center justify-center">

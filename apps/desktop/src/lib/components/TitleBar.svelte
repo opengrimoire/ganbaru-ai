@@ -3,7 +3,9 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getNavigation, type View } from "$lib/stores/navigation.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { execute } from "$lib/api/db";
   import { cn } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
@@ -20,11 +22,22 @@
   const win = getCurrentWindow();
   const nav = getNavigation();
   const pomodoro = getPomodoro();
+  const calendar = getCalendar();
   const theme = getTheme();
 
   let isMaximized = $state(false);
   let showCloseConfirm = $state(false);
   let showPomodoroMenu = $state(false);
+  let showResetConfirm = $state(false);
+
+  async function confirmReset() {
+    showResetConfirm = false;
+    pomodoro.stopSession();
+    await calendar.clearAll();
+    await execute("DELETE FROM pomodoro_sessions");
+    await execute("DELETE FROM xp_entries");
+    await execute("DELETE FROM tasks");
+  }
 
   function handleClose() {
     showCloseConfirm = true;
@@ -76,6 +89,19 @@
     };
   });
 
+  function handleModalKeydown(e: KeyboardEvent) {
+    if (showCloseConfirm) {
+      if (e.key === "Escape") { cancelClose(); e.stopPropagation(); }
+      if (e.key === "Enter") { confirmClose(); e.stopPropagation(); }
+    } else if (showResetConfirm) {
+      if (e.key === "Escape") { showResetConfirm = false; e.stopPropagation(); }
+      if (e.key === "Enter") { confirmReset(); e.stopPropagation(); }
+    } else if (e.ctrlKey && e.shiftKey && e.key === "W") {
+      e.preventDefault();
+      handleClose();
+    }
+  }
+
   let tabWheelCooldown = false;
 
   function handleTabWheel(e: WheelEvent) {
@@ -92,6 +118,8 @@
     setTimeout(() => { tabWheelCooldown = false; }, 300);
   }
 </script>
+
+<svelte:window onkeydown={handleModalKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -159,25 +187,31 @@
         onkeydown={(e) => { if (e.key === "Escape") showPomodoroMenu = false; }}
       ></div>
       <div class="absolute right-0 top-9 z-50 min-w-36 rounded-lg border border-border bg-popover py-1 shadow-lg">
-        <div class="px-3 py-1.5 text-xs text-muted-foreground">
-          {pomodoro.formattedTime} left
-        </div>
-        <div class="my-1 h-px bg-border"></div>
-        {#if pomodoro.isRunning}
+        {#if isActive}
+          <div class="px-3 py-1.5 text-xs text-muted-foreground">
+            {pomodoro.formattedTime} left
+          </div>
+          <div class="my-1 h-px bg-border"></div>
+          {#if pomodoro.isRunning}
+            <button
+              onclick={() => { pomodoro.pause(); showPomodoroMenu = false; }}
+              class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+            >Pause</button>
+          {:else}
+            <button
+              onclick={() => { pomodoro.start(); showPomodoroMenu = false; }}
+              class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+            >Resume</button>
+          {/if}
           <button
-            onclick={() => { pomodoro.pause(); showPomodoroMenu = false; }}
+            onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
             class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-          >Pause</button>
+          >Skip</button>
         {:else}
-          <button
-            onclick={() => { pomodoro.start(); showPomodoroMenu = false; }}
-            class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-          >Resume</button>
+          <div class="px-3 py-1.5 text-xs text-muted-foreground">
+            No active session
+          </div>
         {/if}
-        <button
-          onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
-          class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-        >Skip</button>
       </div>
     {/if}
   </div>
@@ -204,11 +238,11 @@
     <CircleHelp size={14} />
   </button>
 
-  <!-- TODO: implement settings panel -->
+  <!-- Provisional: reset database -->
   <button
-    onclick={() => {}}
+    onclick={() => { showResetConfirm = true; }}
     class="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-    title="Settings"
+    title="Reset database"
   >
     <Settings size={14} />
   </button>
@@ -241,12 +275,45 @@
   </button>
 </div>
 
+{#if showResetConfirm}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-50"
+    onclick={() => { showResetConfirm = false; }}
+  >
+    <div class="absolute inset-0 bg-background/90"></div>
+    <div class="relative flex h-full flex-col items-center justify-center">
+      <div
+        class="flex flex-col items-center gap-5"
+        onclick={(e) => e.stopPropagation()}
+      >
+        <p class="text-sm text-foreground dark:text-white">
+          This will permanently delete all session blocks, tasks, and XP data.
+        </p>
+        <div class="flex gap-3">
+          <button
+            onclick={() => { showResetConfirm = false; }}
+            class="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
+          >
+            Cancel
+          </button>
+          <button
+            onclick={confirmReset}
+            class="rounded-lg bg-red-800/80 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700/80"
+          >
+            Reset everything
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
 {#if showCloseConfirm}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-50"
     onclick={cancelClose}
-    onkeydown={(e) => { if (e.key === "Escape") cancelClose(); }}
   >
     <div class="absolute inset-0 bg-background/90"></div>
     <div class="relative flex h-full flex-col items-center justify-center">

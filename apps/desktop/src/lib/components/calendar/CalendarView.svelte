@@ -166,9 +166,7 @@
   // Event detail state
   let selectedEvent: CalendarEvent | null = $state(null);
 
-  onMount(async () => {
-    await calendarStore.load();
-
+  onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
       if (e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();

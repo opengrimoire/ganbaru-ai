@@ -12,13 +12,25 @@ interface DbSessionBlock {
   long_break_minutes: number;
 }
 
-function toCalendarDate(isoOrSqlite: string): string {
-  // Handles both 'YYYY-MM-DD HH:MM:SS' (SQLite) and ISO 8601 strings
-  return isoOrSqlite.substring(0, 16).replace("T", " ");
+function toCalendarDate(dbTime: string): string {
+  // "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SS..." → "YYYY-MM-DD HH:MM"
+  return dbTime.substring(0, 16).replace("T", " ");
 }
 
-function toIsoString(calendarDate: string): string {
-  return new Date(calendarDate.replace(" ", "T")).toISOString();
+function toDbTime(calendarDate: string): string {
+  // "YYYY-MM-DD HH:MM" → "YYYY-MM-DD HH:MM:00" (local time, no timezone conversion)
+  return calendarDate + ":00";
+}
+
+function nowLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${day} ${h}:${min}:${s}`;
 }
 
 let blocks = $state<CalendarEvent[]>([]);
@@ -54,11 +66,11 @@ export function getCalendar() {
       existingId?: string,
     ): Promise<CalendarEvent> {
       const id = existingId ?? crypto.randomUUID();
-      const now = new Date().toISOString();
+      const now = nowLocal();
       await execute(
         `INSERT INTO session_blocks (id, title, start_time, end_time, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [id, title, toIsoString(start), toIsoString(end), now, now],
+        [id, title, toDbTime(start), toDbTime(end), now, now],
       );
       const event: CalendarEvent = { id, title, start, end };
       blocks = [...blocks, event];
@@ -66,15 +78,15 @@ export function getCalendar() {
     },
 
     async updateBlock(event: CalendarEvent) {
-      const now = new Date().toISOString();
+      const now = nowLocal();
       await execute(
         `UPDATE session_blocks
          SET title = $1, start_time = $2, end_time = $3, updated_at = $4
          WHERE id = $5`,
         [
           event.title,
-          toIsoString(String(event.start)),
-          toIsoString(String(event.end)),
+          toDbTime(String(event.start)),
+          toDbTime(String(event.end)),
           now,
           String(event.id),
         ],
@@ -87,6 +99,11 @@ export function getCalendar() {
     async deleteBlock(id: string) {
       await execute("DELETE FROM session_blocks WHERE id = $1", [id]);
       blocks = blocks.filter((b) => b.id !== id);
+    },
+
+    async clearAll() {
+      await execute("DELETE FROM session_blocks");
+      blocks = [];
     },
   };
 }
