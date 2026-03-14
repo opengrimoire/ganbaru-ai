@@ -35,6 +35,7 @@ let skipNextBreak = false;
 let listenersInitialized = false;
 let notificationShown = false;
 let phaseEndTime: number | null = null;
+let activeBlockId: string | null = null;
 
 const NOTIFICATION_THRESHOLD = 10;
 
@@ -270,8 +271,63 @@ export function getPomodoro() {
       const secs = remainingSeconds % 60;
       return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     },
+    get activeBlockId() {
+      return activeBlockId;
+    },
     clearLastXp() {
       lastXp = null;
+    },
+    startFromBlock(blockId: string, blockConfig: Partial<PomodoroConfig>) {
+      if (activeBlockId === blockId) return;
+      initListeners();
+
+      // Stop any running session first
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+
+      activeBlockId = blockId;
+      config = { ...DEFAULT_CONFIG, ...blockConfig };
+      totalCycles = config.cyclesBeforeLongBreak;
+      phase = "focus";
+      remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
+      currentCycle = 1;
+      completedPomodoros = 0;
+      skipNextBreak = false;
+      notificationShown = false;
+
+      isRunning = true;
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
+      sessionStartTime = new Date().toISOString();
+      intervalId = setInterval(tick, 1000);
+      updateTray();
+    },
+    stopSession() {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      isRunning = false;
+      phaseEndTime = null;
+      activeBlockId = null;
+      phase = "focus";
+      remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+      currentCycle = 1;
+      completedPomodoros = 0;
+      sessionStartTime = null;
+      skipNextBreak = false;
+      notificationShown = false;
+      updateTray();
+    },
+    pause() {
+      isRunning = false;
+      phaseEndTime = null;
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      updateTray();
     },
     start() {
       if (isRunning) return;
@@ -284,45 +340,9 @@ export function getPomodoro() {
       intervalId = setInterval(tick, 1000);
       updateTray();
     },
-    pause() {
-      isRunning = false;
-      phaseEndTime = null;
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-      updateTray();
-    },
-    reset() {
-      isRunning = false;
-      phaseEndTime = null;
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-      phase = "focus";
-      remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
-      currentCycle = 1;
-      completedPomodoros = 0;
-      sessionStartTime = null;
-      lastXp = null;
-      skipNextBreak = false;
-      notificationShown = false;
-      updateTray();
-    },
     skip() {
       advancePhase();
       updateTray();
-    },
-    configure(newConfig: Partial<PomodoroConfig>) {
-      config = { ...config, ...newConfig };
-      totalCycles = config.cyclesBeforeLongBreak;
-      if (!isRunning) {
-        remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
-      }
-    },
-    setTotalCycles(cycles: number) {
-      totalCycles = cycles;
     },
   };
 }

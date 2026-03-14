@@ -7,7 +7,6 @@
   import { cn } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
-  import Timer from "@lucide/svelte/icons/timer";
   import TreePine from "@lucide/svelte/icons/tree-pine";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
@@ -53,7 +52,6 @@
   const tabs: { view: View; label: string; icon: typeof CalendarDays }[] = [
     { view: "calendar", label: "Calendar", icon: CalendarDays },
     { view: "kanban", label: "Kanban", icon: LayoutList },
-    { view: "pomodoro", label: "Pomodoro", icon: Timer },
     { view: "skill-tree", label: "Skill tree", icon: TreePine },
   ];
 
@@ -114,12 +112,7 @@
         )}
         title={`${tab.label} (Alt+${i + 1})`}
       >
-        <span class="relative">
-          <tab.icon size={14} />
-          {#if tab.view === "pomodoro" && pomodoro.isRunning}
-            <span class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-green-500"></span>
-          {/if}
-        </span>
+        <tab.icon size={14} />
         <span>{tab.label}</span>
       </button>
     {/each}

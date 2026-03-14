@@ -16,6 +16,10 @@ export interface CalendarEvent {
   start: string; // "YYYY-MM-DD HH:MM"
   end: string; // "YYYY-MM-DD HH:MM"
   color?: EventColor;
+  focusDurationMinutes?: number;
+  shortBreakMinutes?: number;
+  longBreakMinutes?: number;
+  pomodoroCount?: number;
 }
 
 export interface PositionedEvent {

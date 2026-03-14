@@ -7,6 +7,9 @@ interface DbSessionBlock {
   start_time: string;
   end_time: string;
   pomodoro_count: number;
+  focus_duration_minutes: number;
+  short_break_minutes: number;
+  long_break_minutes: number;
 }
 
 function toCalendarDate(isoOrSqlite: string): string {
@@ -28,13 +31,19 @@ export function getCalendar() {
 
     async load() {
       const rows = await select<DbSessionBlock>(
-        "SELECT id, title, start_time, end_time FROM session_blocks ORDER BY start_time ASC",
+        `SELECT id, title, start_time, end_time, pomodoro_count,
+                focus_duration_minutes, short_break_minutes, long_break_minutes
+         FROM session_blocks ORDER BY start_time ASC`,
       );
       blocks = rows.map((r) => ({
         id: r.id,
         title: r.title,
         start: toCalendarDate(r.start_time),
         end: toCalendarDate(r.end_time),
+        pomodoroCount: r.pomodoro_count,
+        focusDurationMinutes: r.focus_duration_minutes,
+        shortBreakMinutes: r.short_break_minutes,
+        longBreakMinutes: r.long_break_minutes,
       }));
     },
 
