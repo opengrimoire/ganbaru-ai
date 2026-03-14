@@ -68,6 +68,19 @@
     { view: "skill-tree", label: "Skill tree", icon: TreePine },
   ];
 
+  let memoryMb = $state(0);
+
+  $effect(() => {
+    function updateMemory() {
+      invoke("get_memory_usage_mb").then((mb) => {
+        memoryMb = Math.round(mb as number);
+      });
+    }
+    updateMemory();
+    const id = setInterval(updateMemory, 5000);
+    return () => clearInterval(id);
+  });
+
   $effect(() => {
     win.isMaximized().then((v) => (isMaximized = v));
     let cleanupResize: (() => void) | undefined;
@@ -148,6 +161,11 @@
 
   <!-- Draggable spacer -->
   <div class="flex-1" />
+
+  <!-- RAM usage (dev) -->
+  {#if memoryMb > 0}
+    <span class="mr-2 text-[11px] tabular-nums text-sidebar-foreground/40">{memoryMb} MB</span>
+  {/if}
 
   <!-- Pomodoro progress ring with dropdown -->
   <div class="relative mr-1">
