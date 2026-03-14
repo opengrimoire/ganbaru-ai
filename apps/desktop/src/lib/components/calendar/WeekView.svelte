@@ -215,7 +215,7 @@
     >
       {#each weekDays as day}
         {@const dateStr = formatDatePart(day)}
-        <div class="day-col min-w-0">
+        <div class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">
           <DayColumn
             date={day}
             {events}

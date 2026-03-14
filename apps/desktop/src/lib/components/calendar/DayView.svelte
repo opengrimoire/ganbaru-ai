@@ -186,7 +186,7 @@
 
     <!-- Body row -->
     <TimeGutter {hourHeight} {timezones} {anchorDate} {tzCount} />
-    <div class="min-w-0">
+    <div class="min-w-0" style="border-left: 1px solid var(--cal-gridline);">
       <DayColumn
         date={anchorDate}
         {events}
