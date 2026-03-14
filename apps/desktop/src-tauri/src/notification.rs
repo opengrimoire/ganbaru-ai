@@ -2,6 +2,7 @@ use notify_rust::{Hint, Notification};
 use serde::Serialize;
 use tauri::Emitter;
 
+
 #[derive(Clone, Serialize)]
 struct AddTimePayload {
     seconds: u32,
@@ -231,8 +232,8 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         let space_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
         let esc_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
 
-        // Restore shortcuts and uninhibit screensaver when window is destroyed
-        // Runs in a background thread to avoid blocking the UI
+        // Restore shortcuts, uninhibit screensaver, and re-focus main window on destroy
+        // gsettings restore runs in a background thread to avoid blocking the UI
         {
             let saved = saved.clone();
             let cookie = inhibit_cookie.clone();
@@ -273,6 +274,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             window.connect_key_press_event(move |_, event| {
                 if break_finished.get() {
                     let _ = app.emit("pomodoro-break-acknowledged", ());
+
                     w.hide();
                     w.close();
                     return gtk::glib::Propagation::Stop;
@@ -291,6 +293,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                             screensaver_uninhibit(c);
                             cookie.set(None);
                         }
+    
                         w.hide();
                     }
                 } else if key == gdk::keys::constants::Escape {
@@ -299,6 +302,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                     esc_count.set(count);
                     if count >= 3 {
                         let _ = app.emit("pomodoro-skip-break", ());
+    
                         w.hide();
                         w.close();
                     }
@@ -319,6 +323,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             window.connect_button_press_event(move |_, _| {
                 if break_finished.get() {
                     let _ = app.emit("pomodoro-break-acknowledged", ());
+
                     w.hide();
                     w.close();
                 }

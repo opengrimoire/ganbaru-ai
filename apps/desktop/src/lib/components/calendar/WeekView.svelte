@@ -18,13 +18,15 @@
   let {
     anchorDate,
     events,
-    hourHeight = 58,
+    hourHeight = 67,
     isDark = false,
     timezones = [] as string[],
     onEventClick,
     onEventUpdate,
     onEventCreate,
     pendingCreatePreview = null,
+    initialScrollMinute = -1,
+    onScrollChange,
     onAddTimezone,
     onRemoveTimezone,
     onWheelNavigate,
@@ -39,6 +41,8 @@
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string) => void;
     pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number } | null;
+    initialScrollMinute?: number;
+    onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
@@ -70,7 +74,10 @@
 
   let scrollContainer: HTMLDivElement | undefined = $state();
   let currentTimeMinute = $state(-1);
+  let isScrolling = $state(false);
+  let scrollDebounce: ReturnType<typeof setTimeout> | null = null;
   let wheelCooldown = false;
+  let ready = $state(false);
 
   function handleHeaderWheel(e: WheelEvent) {
     e.preventDefault();
@@ -91,13 +98,36 @@
     const interval = setInterval(updateCurrentTime, 60000);
 
     if (scrollContainer) {
-      const now = new Date();
-      const targetHour = Math.max(0, now.getHours() - 2);
-      scrollContainer.scrollTop = targetHour * hourHeight;
+      if (initialScrollMinute >= 0) {
+        scrollContainer.scrollTop = (initialScrollMinute / 60) * hourHeight;
+      } else {
+        const now = new Date();
+        const targetHour = Math.max(0, now.getHours() - 2);
+        scrollContainer.scrollTop = targetHour * hourHeight;
+      }
+
+      scrollContainer.addEventListener("scroll", handleScroll);
+      ready = true;
     }
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      scrollContainer?.removeEventListener("scroll", handleScroll);
+    };
   });
+
+  function handleScroll() {
+    if (!scrollContainer) return;
+
+    isScrolling = true;
+    if (scrollDebounce) clearTimeout(scrollDebounce);
+    scrollDebounce = setTimeout(() => { isScrolling = false; }, 150);
+
+    if (onScrollChange) {
+      const minute = (scrollContainer.scrollTop / hourHeight) * 60;
+      onScrollChange(Math.round(minute));
+    }
+  }
 
   // Column date resolution for cross-column move drag
   function getColumnDate(clientX: number): string {
@@ -129,7 +159,7 @@
 <div
   bind:this={scrollContainer}
   class="h-full overflow-y-auto overflow-x-hidden"
-  style="background-color: var(--cal-bg);"
+  style="background-color: var(--cal-bg); visibility: {ready ? 'visible' : 'hidden'};"
 >
   <div
     class="week-grid grid"
@@ -195,6 +225,7 @@
             {currentTimeMinute}
             dragPreview={drag.getDragPreviewForDate(dateStr)}
             createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
+            {isScrolling}
             hideSnapLine={drag.getHideSnapLine()}
             snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
             onEventClick={onEventClick}

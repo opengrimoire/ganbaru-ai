@@ -10,6 +10,7 @@
     minuteToTop,
   } from "./utils";
   import EventBlock from "./EventBlock.svelte";
+  import { onMount } from "svelte";
 
   let {
     date,
@@ -22,6 +23,7 @@
     dragPreview = null,
     createPreview = null,
     hideSnapLine = false,
+    isScrolling = false,
     snapOverrideMinute = null,
     onEventClick,
     onDragStart,
@@ -37,6 +39,7 @@
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
     hideSnapLine?: boolean;
+    isScrolling?: boolean;
     snapOverrideMinute?: number | null;
     onEventClick: (event: CalendarEvent) => void;
     onDragStart: (eventId: string, e: PointerEvent) => void;
@@ -62,6 +65,29 @@
   let snapLineY: number | null = $state(null);
   let snapTimeLabel: string = $state("");
   let columnEl: HTMLDivElement | undefined = $state();
+
+  // Clear snap line when scrolling starts (prevents stale flash on stop)
+  $effect(() => {
+    if (isScrolling) {
+      snapLineY = null;
+    }
+  });
+
+  onMount(() => {
+    function clearSnap() {
+      snapLineY = null;
+    }
+    window.addEventListener("blur", clearSnap);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) snapLineY = null;
+    });
+    // Clear snap line when break overlay closes (GTK overlay steals WebView focus)
+    document.addEventListener("ganbaruai-clear-snap", clearSnap);
+    return () => {
+      window.removeEventListener("blur", clearSnap);
+      document.removeEventListener("ganbaruai-clear-snap", clearSnap);
+    };
+  });
 
   const effectiveSnapY = $derived(
     snapOverrideMinute != null
@@ -215,7 +241,7 @@
   {/if}
 
   <!-- Snap position indicator line with time label — always on top -->
-  {#if effectiveSnapY !== null && !hideSnapLine}
+  {#if effectiveSnapY !== null && !hideSnapLine && !isScrolling}
     <div
       class="pointer-events-none absolute left-0 right-0"
       style="top: {effectiveSnapY}px; z-index: 30;"

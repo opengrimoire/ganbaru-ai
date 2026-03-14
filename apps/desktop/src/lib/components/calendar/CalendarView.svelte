@@ -164,6 +164,9 @@
   let pendingEnd = $state("");
   let pendingCreatePreview: { dateStr: string; startMinute: number; endMinute: number } | null = $state(null);
 
+  // Shared scroll position (preserved across view switches)
+  let scrollMinute = $state(-1);
+
   // Event detail state
   let selectedEvent: CalendarEvent | null = $state(null);
 
@@ -317,6 +320,8 @@
         isDark={theme.isDark}
         {timezones}
         {pendingCreatePreview}
+        initialScrollMinute={scrollMinute}
+        onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}
@@ -332,6 +337,8 @@
         isDark={theme.isDark}
         {timezones}
         {pendingCreatePreview}
+        initialScrollMinute={scrollMinute}
+        onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}

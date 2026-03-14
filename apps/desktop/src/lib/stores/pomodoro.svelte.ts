@@ -60,6 +60,7 @@ function initListeners() {
   listenersInitialized = true;
 
   listen("pomodoro-skip-break", () => {
+    document.dispatchEvent(new Event("ganbaruai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
       startFocusSession();
     } else {
@@ -68,6 +69,7 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-skip-break:", e));
 
   listen("pomodoro-break-acknowledged", () => {
+    document.dispatchEvent(new Event("ganbaruai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
       startFocusSession();
     }
