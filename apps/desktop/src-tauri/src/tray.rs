@@ -70,7 +70,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let idle_icon = render_progress_icon(0.0, false);
     let icon = Image::new_owned(idle_icon, ICON_SIZE, ICON_SIZE);
 
-    let status_item = MenuItemBuilder::with_id("status", "GanbaruAI")
+    let status_item = MenuItemBuilder::with_id("status", "No active session")
         .enabled(false)
         .build(app)?;
     let menu = MenuBuilder::new(app).item(&status_item).build()?;
@@ -98,7 +98,8 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// Initialized to sentinel values so the first update always applies
 static LAST_ICON_STEP: std::sync::Mutex<(u8, bool)> = std::sync::Mutex::new((255, true));
 
-static LAST_MENU_STATE: std::sync::Mutex<(bool, u8)> = std::sync::Mutex::new((true, 255));
+static LAST_MENU_STATE: std::sync::Mutex<(bool, u8, bool)> = std::sync::Mutex::new((true, 255, true));
+// (is_running, phase_id, active)
 
 /// Stored reference to status menu item for lightweight text updates
 static STATUS_ITEM: std::sync::Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>> =
@@ -166,15 +167,14 @@ pub fn update_tray(
         }
     }
 
-    // Only rebuild full menu when running state or phase changes
+    // Only rebuild full menu when running state, phase, or active state changes
     {
         let mut last = LAST_MENU_STATE.lock().unwrap();
-        if last.0 != is_running || last.1 != pid {
-            *last = (is_running, pid);
+        if last.0 != is_running || last.1 != pid || last.2 != active {
+            *last = (is_running, pid, active);
 
-            let pause_resume_label = if is_running { "Pause" } else { "Resume" };
             let status_item =
-                MenuItemBuilder::with_id("status", &status_text)
+                MenuItemBuilder::with_id("status", if active { &status_text } else { "No active session" })
                     .enabled(false)
                     .build(&app)
                     .map_err(|e| e.to_string())?;
@@ -185,21 +185,29 @@ pub fn update_tray(
                 *stored = Some(status_item.clone());
             }
 
-            let pause_resume_item =
-                MenuItemBuilder::with_id("pause_resume", pause_resume_label)
+            let menu = if active {
+                let pause_resume_label = if is_running { "Pause" } else { "Resume" };
+                let pause_resume_item =
+                    MenuItemBuilder::with_id("pause_resume", pause_resume_label)
+                        .build(&app)
+                        .map_err(|e| e.to_string())?;
+                let skip_item = MenuItemBuilder::with_id("skip", "Skip")
                     .build(&app)
                     .map_err(|e| e.to_string())?;
-            let skip_item = MenuItemBuilder::with_id("skip", "Skip")
-                .build(&app)
-                .map_err(|e| e.to_string())?;
-            let sep1 = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
-            let menu = MenuBuilder::new(&app)
-                .item(&status_item)
-                .item(&sep1)
-                .item(&pause_resume_item)
-                .item(&skip_item)
-                .build()
-                .map_err(|e| e.to_string())?;
+                let sep1 = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
+                MenuBuilder::new(&app)
+                    .item(&status_item)
+                    .item(&sep1)
+                    .item(&pause_resume_item)
+                    .item(&skip_item)
+                    .build()
+                    .map_err(|e| e.to_string())?
+            } else {
+                MenuBuilder::new(&app)
+                    .item(&status_item)
+                    .build()
+                    .map_err(|e| e.to_string())?
+            };
 
             tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
         }

@@ -3,6 +3,7 @@
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
+  import type { CalendarEvent } from "$lib/components/calendar/types";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
@@ -13,6 +14,9 @@
   const pomodoro = getPomodoro();
 
   const views: View[] = ["calendar", "kanban", "skill-tree"];
+
+  let showStopConfirm = $state(false);
+  let savedBlockState: CalendarEvent | null = null;
 
   function navigatePrev() {
     const i = views.indexOf(nav.current);
@@ -45,14 +49,22 @@
     }
   }
 
-  // Session watcher: auto-start/stop pomodoro based on active calendar blocks
-  function checkActiveBlock() {
+  function findActiveBlock() {
     const now = new Date();
-    const activeBlock = calendar.events.find((event) => {
+    return calendar.events.find((event) => {
       const start = parseCalendarDate(event.start);
       const end = parseCalendarDate(event.end);
       return now >= start && now < end;
     });
+  }
+
+  // Save the active block's position whenever one becomes active
+  let trackedBlockSnapshot: CalendarEvent | null = null;
+
+  function checkActiveBlock() {
+    if (showStopConfirm) return;
+
+    const activeBlock = findActiveBlock();
 
     if (activeBlock) {
       pomodoro.startFromBlock(activeBlock.id, {
@@ -61,13 +73,42 @@
         longBreakMinutes: activeBlock.longBreakMinutes ?? 15,
         cyclesBeforeLongBreak: activeBlock.pomodoroCount ?? 4,
       });
+      // Save snapshot of the active block for potential revert
+      trackedBlockSnapshot = { ...activeBlock };
+    } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
+      // The active block disappeared — save its last known good state
+      savedBlockState = trackedBlockSnapshot;
+      showStopConfirm = true;
     } else if (pomodoro.activeBlockId) {
+      // Block was deleted entirely, no revert possible
       pomodoro.stopSession();
     }
   }
 
+  function confirmStop() {
+    showStopConfirm = false;
+    savedBlockState = null;
+    trackedBlockSnapshot = null;
+    pomodoro.stopSession();
+  }
+
+  function cancelStop() {
+    showStopConfirm = false;
+    if (savedBlockState) {
+      // Revert the block to its original position
+      calendar.updateBlock(savedBlockState);
+      savedBlockState = null;
+    }
+  }
+
+  // React to calendar event changes immediately
   $effect(() => {
+    const _events = calendar.events;
     checkActiveBlock();
+  });
+
+  // Also poll for time-based transitions
+  $effect(() => {
     const id = setInterval(checkActiveBlock, 30_000);
     return () => clearInterval(id);
   });
@@ -87,3 +128,38 @@
     {/if}
   </main>
 </div>
+
+{#if showStopConfirm}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-50"
+    onclick={confirmStop}
+    onkeydown={(e) => { if (e.key === "Escape") cancelStop(); }}
+  >
+    <div class="absolute inset-0 bg-background/90"></div>
+    <div class="relative flex h-full flex-col items-center justify-center">
+      <div
+        class="flex flex-col items-center gap-5"
+        onclick={(e) => e.stopPropagation()}
+      >
+        <p class="text-sm text-foreground dark:text-white">
+          No active session blocks right now. All focus features will stop.
+        </p>
+        <div class="flex gap-3">
+          <button
+            onclick={cancelStop}
+            class="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
+          >
+            Undo changes
+          </button>
+          <button
+            onclick={confirmStop}
+            class="rounded-lg bg-red-800/80 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700/80"
+          >
+            Stop session
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
