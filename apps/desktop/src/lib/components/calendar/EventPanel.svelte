@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, EventColor, RepeatRule } from "./types";
+  import type { CalendarEvent, EventColor, PomodoroConfig, RecurringScope, RepeatRule } from "./types";
   import { EVENT_COLOR_OPTIONS, getEventColor } from "./utils";
   import { getTheme } from "$lib/stores/theme.svelte";
   import X from "@lucide/svelte/icons/x";
@@ -24,6 +24,7 @@
     onDelete,
     onClose,
     onChange,
+    onScopeChange,
   }: {
     mode: "create" | "edit";
     start?: string;
@@ -38,13 +39,12 @@
       description: string;
       repeatRule: RepeatRule;
       notificationMinutes?: number;
-      focusDurationMinutes: number;
-      shortBreakMinutes: number;
-      longBreakMinutes: number;
-    }) => void;
-    onDelete?: (id: string) => void;
+      pomodoroConfig: PomodoroConfig;
+    }, scope?: RecurringScope) => void;
+    onDelete?: (id: string, scope?: RecurringScope) => void;
     onClose: () => void;
     onChange?: (data: Partial<CalendarEvent>) => void;
+    onScopeChange?: (scope: RecurringScope) => void;
   } = $props();
 
   let title = $state("");
@@ -58,8 +58,10 @@
   let focusDuration = $state(40);
   let shortBreak = $state(5);
   let longBreak = $state(10);
+  let pomodoroCount = $state(4);
 
   let openDropdown: "repeat" | "notification" | "pomodoro" | null = $state(null);
+  let scope: RecurringScope = $state("this");
 
   let titleInput: HTMLInputElement | undefined = $state();
   let panelEl: HTMLDivElement | undefined = $state();
@@ -68,6 +70,10 @@
   let repeatBtnEl: HTMLButtonElement | undefined = $state();
   let notifBtnEl: HTMLButtonElement | undefined = $state();
   let pomoBtnEl: HTMLButtonElement | undefined = $state();
+
+  const isRecurring = $derived(
+    mode === "edit" && !!event && (!!event.recurringParentId || (!!event.repeatRule && event.repeatRule !== "none")),
+  );
 
   const REPEAT_OPTIONS: { value: RepeatRule; label: string }[] = [
     { value: "none", label: "No repeat" },
@@ -100,9 +106,10 @@
       description = event.description ?? "";
       repeatRule = event.repeatRule ?? "none";
       notificationMinutes = event.notificationMinutes;
-      focusDuration = event.focusDurationMinutes ?? 40;
-      shortBreak = event.shortBreakMinutes ?? 5;
-      longBreak = event.longBreakMinutes ?? 10;
+      focusDuration = event.pomodoroConfig?.focusDurationMinutes ?? 40;
+      shortBreak = event.pomodoroConfig?.shortBreakMinutes ?? 5;
+      longBreak = event.pomodoroConfig?.longBreakMinutes ?? 10;
+      pomodoroCount = event.pomodoroConfig?.pomodoroCount ?? 4;
     } else if (mode === "create") {
       title = "";
       startDate = (start ?? "").split(" ")[0] ?? "";
@@ -115,8 +122,10 @@
       focusDuration = 40;
       shortBreak = 5;
       longBreak = 10;
+      pomodoroCount = 4;
     }
     openDropdown = null;
+    scope = "this";
   });
 
   function emitChange() {
@@ -128,9 +137,12 @@
       description,
       repeatRule,
       notificationMinutes,
-      focusDurationMinutes: focusDuration,
-      shortBreakMinutes: shortBreak,
-      longBreakMinutes: longBreak,
+      pomodoroConfig: {
+        focusDurationMinutes: focusDuration,
+        shortBreakMinutes: shortBreak,
+        longBreakMinutes: longBreak,
+        pomodoroCount,
+      },
     });
   }
 
@@ -188,11 +200,11 @@
 
   const pomodoroLabel = $derived(`${focusDuration}/${shortBreak}/${longBreak}`);
 
-  function handleSave() {
+  function buildSaveData() {
     let st = startTime;
     let et = endTime;
     if (et < st) [st, et] = [et, st];
-    onSave({
+    return {
       title: title.trim() || "Focus session",
       start: `${startDate} ${st}`,
       end: `${startDate} ${et}`,
@@ -200,10 +212,26 @@
       description,
       repeatRule,
       notificationMinutes,
-      focusDurationMinutes: focusDuration,
-      shortBreakMinutes: shortBreak,
-      longBreakMinutes: longBreak,
-    });
+      pomodoroConfig: {
+        focusDurationMinutes: focusDuration,
+        shortBreakMinutes: shortBreak,
+        longBreakMinutes: longBreak,
+        pomodoroCount,
+      },
+    };
+  }
+
+  function handleSave() {
+    onSave(buildSaveData(), isRecurring ? scope : undefined);
+  }
+
+  function handleDeleteClick() {
+    if (event && onDelete) onDelete(event.id, isRecurring ? scope : undefined);
+  }
+
+  function handleScopeClick(s: RecurringScope) {
+    scope = s;
+    onScopeChange?.(s);
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -253,7 +281,7 @@
     <div class="flex items-center justify-end gap-1">
       {#if mode === "edit" && onDelete && event}
         <button
-          onclick={() => onDelete(event.id)}
+          onclick={handleDeleteClick}
           class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           title="Delete"
         >
@@ -267,6 +295,22 @@
         <X size={14} />
       </button>
     </div>
+
+    <!-- Scope selector for recurring events -->
+    {#if isRecurring}
+      <div class="flex rounded-md border border-border overflow-hidden">
+        {#each [["this", "This event"], ["following", "Following"], ["all", "All events"]] as [value, label]}
+          <button
+            onclick={() => handleScopeClick(value as RecurringScope)}
+            class="flex-1 px-2 py-1 text-[11px] font-medium transition-colors {scope === value
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+          >
+            {label}
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <!-- Title input with color dot -->
     <div class="flex items-center gap-2">

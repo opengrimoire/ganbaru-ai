@@ -20,6 +20,11 @@ import {
 } from "./utils";
 import type { CalendarEvent } from "./types";
 
+/** Build a CalendarEvent with required timezone/calendarId defaults. */
+function evt(base: Omit<CalendarEvent, "timezone" | "calendarId">): CalendarEvent {
+  return { timezone: "UTC", calendarId: "local", ...base };
+}
+
 describe("parseCalendarDate", () => {
   it("parses YYYY-MM-DD HH:MM to a local Date", () => {
     const d = parseCalendarDate("2026-03-13 14:30");
@@ -196,9 +201,9 @@ describe("formatHour", () => {
 
 describe("eventsForDay", () => {
   const events: CalendarEvent[] = [
-    { id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 10:00" },
-    { id: "2", title: "B", start: "2026-03-14 09:00", end: "2026-03-14 10:00" },
-    { id: "3", title: "C", start: "2026-03-13 14:00", end: "2026-03-13 15:00" },
+    evt({ id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 10:00" }),
+    evt({ id: "2", title: "B", start: "2026-03-14 09:00", end: "2026-03-14 10:00" }),
+    evt({ id: "3", title: "C", start: "2026-03-13 14:00", end: "2026-03-13 15:00" }),
   ];
 
   it("filters events for a specific day", () => {
@@ -214,7 +219,7 @@ describe("eventsForDay", () => {
 
   it("includes cross-midnight events on the next day", () => {
     const crossEvents: CalendarEvent[] = [
-      { id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" },
+      evt({ id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" }),
     ];
     // Should appear on both Mar 13 and Mar 14
     expect(eventsForDay(crossEvents, new Date(2026, 2, 13))).toHaveLength(1);
@@ -224,7 +229,7 @@ describe("eventsForDay", () => {
 
   it("excludes events ending exactly at midnight of the queried day", () => {
     const crossEvents: CalendarEvent[] = [
-      { id: "1", title: "Until midnight", start: "2026-03-13 22:00", end: "2026-03-14 00:00" },
+      evt({ id: "1", title: "Until midnight", start: "2026-03-13 22:00", end: "2026-03-14 00:00" }),
     ];
     // Ends at midnight of Mar 14 — should NOT appear on Mar 14
     expect(eventsForDay(crossEvents, new Date(2026, 2, 13))).toHaveLength(1);
@@ -233,7 +238,7 @@ describe("eventsForDay", () => {
 
   it("includes multi-day events on intermediate days", () => {
     const multiDay: CalendarEvent[] = [
-      { id: "1", title: "Long", start: "2026-03-13 22:00", end: "2026-03-16 06:00" },
+      evt({ id: "1", title: "Long", start: "2026-03-13 22:00", end: "2026-03-16 06:00" }),
     ];
     expect(eventsForDay(multiDay, new Date(2026, 2, 13))).toHaveLength(1);
     expect(eventsForDay(multiDay, new Date(2026, 2, 14))).toHaveLength(1);
@@ -245,36 +250,36 @@ describe("eventsForDay", () => {
 
 describe("effectiveMinuteRange", () => {
   it("returns actual minutes for same-day events", () => {
-    const event: CalendarEvent = {
+    const event: CalendarEvent = evt({
       id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 11:00",
-    };
+    });
     const range = effectiveMinuteRange(event, "2026-03-13");
     expect(range.startMinute).toBe(540);
     expect(range.endMinute).toBe(660);
   });
 
   it("clips cross-midnight event on start day", () => {
-    const event: CalendarEvent = {
+    const event: CalendarEvent = evt({
       id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00",
-    };
+    });
     const range = effectiveMinuteRange(event, "2026-03-13");
     expect(range.startMinute).toBe(1320); // 22:00
     expect(range.endMinute).toBe(1440); // fills to bottom
   });
 
   it("clips cross-midnight event on end day", () => {
-    const event: CalendarEvent = {
+    const event: CalendarEvent = evt({
       id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00",
-    };
+    });
     const range = effectiveMinuteRange(event, "2026-03-14");
     expect(range.startMinute).toBe(0); // starts at top
     expect(range.endMinute).toBe(120); // 02:00
   });
 
   it("fills full day for intermediate days of multi-day events", () => {
-    const event: CalendarEvent = {
+    const event: CalendarEvent = evt({
       id: "1", title: "Long", start: "2026-03-13 22:00", end: "2026-03-16 06:00",
-    };
+    });
     const range = effectiveMinuteRange(event, "2026-03-14");
     expect(range.startMinute).toBe(0);
     expect(range.endMinute).toBe(1440);
@@ -302,7 +307,7 @@ describe("minuteOffsetToDateStr", () => {
 describe("layoutEventsForDay", () => {
   it("positions a single event correctly", () => {
     const events: CalendarEvent[] = [
-      { id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 10:00" },
+      evt({ id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 10:00" }),
     ];
     const layout = layoutEventsForDay(events, 48, "2026-03-13");
     expect(layout).toHaveLength(1);
@@ -314,8 +319,8 @@ describe("layoutEventsForDay", () => {
 
   it("splits overlapping events into columns", () => {
     const events: CalendarEvent[] = [
-      { id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 11:00" },
-      { id: "2", title: "B", start: "2026-03-13 10:00", end: "2026-03-13 12:00" },
+      evt({ id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 11:00" }),
+      evt({ id: "2", title: "B", start: "2026-03-13 10:00", end: "2026-03-13 12:00" }),
     ];
     const layout = layoutEventsForDay(events, 48, "2026-03-13");
     expect(layout).toHaveLength(2);
@@ -331,7 +336,7 @@ describe("layoutEventsForDay", () => {
 
   it("positions cross-midnight event on start day from start to bottom", () => {
     const events: CalendarEvent[] = [
-      { id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" },
+      evt({ id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" }),
     ];
     const layout = layoutEventsForDay(events, 60, "2026-03-13");
     expect(layout).toHaveLength(1);
@@ -344,7 +349,7 @@ describe("layoutEventsForDay", () => {
 
   it("positions cross-midnight event on end day from top to end", () => {
     const events: CalendarEvent[] = [
-      { id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" },
+      evt({ id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" }),
     ];
     const layout = layoutEventsForDay(events, 60, "2026-03-14");
     expect(layout).toHaveLength(1);

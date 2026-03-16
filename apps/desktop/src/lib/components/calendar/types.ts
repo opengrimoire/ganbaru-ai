@@ -18,19 +18,27 @@ export type RepeatRule =
   | "monthly"
   | "yearly";
 
+export type RecurringScope = "this" | "following" | "all";
+
+export interface PomodoroConfig {
+  focusDurationMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  pomodoroCount: number;
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
   start: string; // "YYYY-MM-DD HH:MM"
   end: string; // "YYYY-MM-DD HH:MM"
+  timezone: string;
+  calendarId: string;
   color?: EventColor;
   description?: string;
   repeatRule?: RepeatRule;
   notificationMinutes?: number;
-  focusDurationMinutes?: number;
-  shortBreakMinutes?: number;
-  longBreakMinutes?: number;
-  pomodoroCount?: number;
+  pomodoroConfig?: PomodoroConfig;
   /** Dates excluded from recurrence expansion (YYYY-MM-DD). */
   exceptions?: string[];
   /** Stop generating recurring instances after this date (YYYY-MM-DD). */

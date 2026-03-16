@@ -81,10 +81,10 @@
 
     if (activeBlock) {
       pomodoro.startFromBlock(activeBlock.id, {
-        focusMinutes: activeBlock.focusDurationMinutes ?? 40,
-        shortBreakMinutes: activeBlock.shortBreakMinutes ?? 5,
-        longBreakMinutes: activeBlock.longBreakMinutes ?? 10,
-        cyclesBeforeLongBreak: activeBlock.pomodoroCount ?? 4,
+        focusMinutes: activeBlock.pomodoroConfig?.focusDurationMinutes ?? 40,
+        shortBreakMinutes: activeBlock.pomodoroConfig?.shortBreakMinutes ?? 5,
+        longBreakMinutes: activeBlock.pomodoroConfig?.longBreakMinutes ?? 10,
+        cyclesBeforeLongBreak: activeBlock.pomodoroConfig?.pomodoroCount ?? 4,
       });
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {

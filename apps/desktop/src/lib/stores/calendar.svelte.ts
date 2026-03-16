@@ -1,21 +1,25 @@
 import { execute, select } from "$lib/api/db";
-import type { CalendarEvent, EventColor, RepeatRule } from "$lib/components/calendar/types";
+import type { CalendarEvent, EventColor, PomodoroConfig, RecurringScope, RepeatRule } from "$lib/components/calendar/types";
+import { repeatRuleToRrule, rruleToRepeatRule } from "$lib/components/calendar/rrule";
 
-interface DbSessionBlock {
+interface DbCalendarEvent {
   id: string;
   title: string;
   start_time: string;
   end_time: string;
-  pomodoro_count: number;
-  focus_duration_minutes: number;
-  short_break_minutes: number;
-  long_break_minutes: number;
+  timezone: string;
+  calendar_id: string;
   color: string | null;
   description: string;
-  repeat_rule: string | null;
+  rrule: string | null;
   notification_minutes: number | null;
   exceptions: string | null;
   repeat_until: string | null;
+  // LEFT JOIN pomodoro_configs
+  focus_duration_minutes: number | null;
+  short_break_minutes: number | null;
+  long_break_minutes: number | null;
+  pomodoro_count: number | null;
 }
 
 function toCalendarDate(dbTime: string): string {
@@ -35,6 +39,10 @@ function nowLocal(): string {
   const min = String(d.getMinutes()).padStart(2, "0");
   const s = String(d.getSeconds()).padStart(2, "0");
   return `${y}-${m}-${day} ${h}:${min}:${s}`;
+}
+
+function localTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
 // --- Recurrence helpers ---
@@ -85,6 +93,9 @@ function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
 
   for (const evt of templates) {
     const startDateStr = evt.start.split(" ")[0];
+
+    // Skip entirely if template's own date is past its repeat_until
+    if (evt.repeatUntil && startDateStr > evt.repeatUntil) continue;
 
     // Skip template's own date if it was detached into a standalone event
     if (!evt.exceptions?.includes(startDateStr)) {
@@ -141,6 +152,8 @@ function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
 let rawBlocks = $state<CalendarEvent[]>([]);
 /** Expanded events including virtual recurring instances. */
 let blocks = $state<CalendarEvent[]>([]);
+/** Snapshot of rawBlocks taken before editing, used to revert preview changes. */
+let rawBlocksSnapshot: CalendarEvent[] | null = null;
 
 function reexpand() {
   blocks = expandRecurring(rawBlocks);
@@ -175,6 +188,29 @@ function mergeIntoTemplate(template: CalendarEvent, changes: CalendarEvent): Cal
   };
 }
 
+function mapRow(r: DbCalendarEvent): CalendarEvent {
+  return {
+    id: r.id,
+    title: r.title,
+    start: toCalendarDate(r.start_time),
+    end: toCalendarDate(r.end_time),
+    timezone: r.timezone,
+    calendarId: r.calendar_id,
+    color: (r.color as EventColor) ?? undefined,
+    description: r.description || undefined,
+    repeatRule: rruleToRepeatRule(r.rrule),
+    notificationMinutes: r.notification_minutes ?? undefined,
+    exceptions: r.exceptions ? JSON.parse(r.exceptions) as string[] : undefined,
+    repeatUntil: r.repeat_until ?? undefined,
+    pomodoroConfig: r.focus_duration_minutes != null ? {
+      focusDurationMinutes: r.focus_duration_minutes,
+      shortBreakMinutes: r.short_break_minutes!,
+      longBreakMinutes: r.long_break_minutes!,
+      pomodoroCount: r.pomodoro_count!,
+    } : undefined,
+  };
+}
+
 export function getCalendar() {
   return {
     get events(): CalendarEvent[] {
@@ -184,30 +220,18 @@ export function getCalendar() {
     async load() {
       console.log("[calendar] load() called");
       try {
-        const rows = await select<DbSessionBlock>(
-          `SELECT id, title, start_time, end_time, pomodoro_count,
-                  focus_duration_minutes, short_break_minutes, long_break_minutes,
-                  color, description, repeat_rule, notification_minutes,
-                  exceptions, repeat_until
-           FROM session_blocks ORDER BY start_time ASC`,
+        const rows = await select<DbCalendarEvent>(
+          `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
+                  ce.calendar_id, ce.color, ce.description, ce.rrule,
+                  ce.notification_minutes, ce.exceptions, ce.repeat_until,
+                  pc.focus_duration_minutes, pc.short_break_minutes,
+                  pc.long_break_minutes, pc.pomodoro_count
+           FROM calendar_events ce
+           LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
+           ORDER BY ce.start_time ASC`,
         );
         console.log(`[calendar] loaded ${rows.length} blocks from DB`, rows);
-        rawBlocks = rows.map((r) => ({
-          id: r.id,
-          title: r.title,
-          start: toCalendarDate(r.start_time),
-          end: toCalendarDate(r.end_time),
-          pomodoroCount: r.pomodoro_count,
-          focusDurationMinutes: r.focus_duration_minutes,
-          shortBreakMinutes: r.short_break_minutes,
-          longBreakMinutes: r.long_break_minutes,
-          color: (r.color as EventColor) ?? undefined,
-          description: r.description || undefined,
-          repeatRule: (r.repeat_rule as RepeatRule) ?? undefined,
-          notificationMinutes: r.notification_minutes ?? undefined,
-          exceptions: r.exceptions ? JSON.parse(r.exceptions) as string[] : undefined,
-          repeatUntil: r.repeat_until ?? undefined,
-        }));
+        rawBlocks = rows.map(mapRow);
         reexpand();
         console.log(`[calendar] blocks set, count: ${blocks.length} (${rawBlocks.length} templates)`);
       } catch (e) {
@@ -216,26 +240,48 @@ export function getCalendar() {
       }
     },
 
-    async addBlock(
-      title: string,
-      start: string,
-      end: string,
-      existingId?: string,
-      color?: EventColor,
-      description?: string,
-      repeatRule?: RepeatRule,
-      notificationMinutes?: number,
-    ): Promise<CalendarEvent> {
-      const id = existingId ?? crypto.randomUUID();
+    async addBlock(opts: {
+      title: string;
+      start: string;
+      end: string;
+      id?: string;
+      color?: EventColor;
+      description?: string;
+      repeatRule?: RepeatRule;
+      notificationMinutes?: number;
+      pomodoroConfig?: PomodoroConfig;
+    }): Promise<CalendarEvent> {
+      const id = opts.id ?? crypto.randomUUID();
       const now = nowLocal();
+      const timezone = localTimezone();
+      const rrule = opts.repeatRule && opts.repeatRule !== "none"
+        ? repeatRuleToRrule(opts.repeatRule)
+        : null;
       await execute(
-        `INSERT INTO session_blocks (id, title, start_time, end_time, focus_duration_minutes, short_break_minutes, long_break_minutes, color, description, repeat_rule, notification_minutes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 40, 5, 10, $5, $6, $7, $8, $9, $10)`,
-        [id, title, toDbTime(start), toDbTime(end), color ?? null, description ?? "",
-         repeatRule && repeatRule !== "none" ? repeatRule : null,
-         notificationMinutes ?? null, now, now],
+        `INSERT INTO calendar_events
+           (id, title, start_time, end_time, timezone, calendar_id,
+            color, description, rrule, notification_minutes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [id, opts.title, toDbTime(opts.start), toDbTime(opts.end),
+         timezone, "local", opts.color ?? null, opts.description ?? "",
+         rrule, opts.notificationMinutes ?? null, now, now],
       );
-      const event: CalendarEvent = { id, title, start, end, color, description, repeatRule, notificationMinutes };
+      if (opts.pomodoroConfig) {
+        await execute(
+          `INSERT INTO pomodoro_configs
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [id, opts.pomodoroConfig.focusDurationMinutes, opts.pomodoroConfig.shortBreakMinutes,
+           opts.pomodoroConfig.longBreakMinutes, opts.pomodoroConfig.pomodoroCount],
+        );
+      }
+      const event: CalendarEvent = {
+        id, title: opts.title, start: opts.start, end: opts.end,
+        timezone, calendarId: "local",
+        color: opts.color, description: opts.description,
+        repeatRule: opts.repeatRule, notificationMinutes: opts.notificationMinutes,
+        pomodoroConfig: opts.pomodoroConfig,
+      };
       rawBlocks = [...rawBlocks, event];
       reexpand();
       return event;
@@ -254,29 +300,41 @@ export function getCalendar() {
       toUpdate = { ...toUpdate, recurringParentId: undefined };
 
       const now = nowLocal();
+      const rrule = toUpdate.repeatRule && toUpdate.repeatRule !== "none"
+        ? repeatRuleToRrule(toUpdate.repeatRule)
+        : null;
       await execute(
-        `UPDATE session_blocks
+        `UPDATE calendar_events
          SET title = $1, start_time = $2, end_time = $3,
              color = $4, description = $5,
-             focus_duration_minutes = $6, short_break_minutes = $7, long_break_minutes = $8,
-             repeat_rule = $9, notification_minutes = $10,
-             updated_at = $11
-         WHERE id = $12`,
+             rrule = $6, notification_minutes = $7,
+             updated_at = $8
+         WHERE id = $9`,
         [
           toUpdate.title,
           toDbTime(String(toUpdate.start)),
           toDbTime(String(toUpdate.end)),
           toUpdate.color ?? null,
           toUpdate.description ?? "",
-          toUpdate.focusDurationMinutes ?? 40,
-          toUpdate.shortBreakMinutes ?? 5,
-          toUpdate.longBreakMinutes ?? 10,
-          toUpdate.repeatRule && toUpdate.repeatRule !== "none" ? toUpdate.repeatRule : null,
+          rrule,
           toUpdate.notificationMinutes ?? null,
           now,
           parentId,
         ],
       );
+      if (toUpdate.pomodoroConfig) {
+        await execute(
+          `INSERT OR REPLACE INTO pomodoro_configs
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [parentId, toUpdate.pomodoroConfig.focusDurationMinutes,
+           toUpdate.pomodoroConfig.shortBreakMinutes,
+           toUpdate.pomodoroConfig.longBreakMinutes,
+           toUpdate.pomodoroConfig.pomodoroCount],
+        );
+      } else {
+        await execute("DELETE FROM pomodoro_configs WHERE event_id = $1", [parentId]);
+      }
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, ...toUpdate, id: parentId } : b,
       );
@@ -305,7 +363,7 @@ export function getCalendar() {
     async deleteBlock(id: string) {
       // Resolve recurring instance to parent
       const parentId = id.includes("::") ? id.split("::")[0] : id;
-      await execute("DELETE FROM session_blocks WHERE id = $1", [parentId]);
+      await execute("DELETE FROM calendar_events WHERE id = $1", [parentId]);
       rawBlocks = rawBlocks.filter((b) => b.id !== parentId);
       reexpand();
     },
@@ -333,27 +391,39 @@ export function getCalendar() {
 
       // Add exception to parent
       await execute(
-        `UPDATE session_blocks SET exceptions = $1, updated_at = $2 WHERE id = $3`,
+        `UPDATE calendar_events SET exceptions = $1, updated_at = $2 WHERE id = $3`,
         [JSON.stringify(exceptions), now, parentId],
       );
 
       // Create standalone event
       const newId = crypto.randomUUID();
+      const timezone = parent.timezone || localTimezone();
       await execute(
-        `INSERT INTO session_blocks (id, title, start_time, end_time, focus_duration_minutes, short_break_minutes, long_break_minutes, color, description, notification_minutes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        `INSERT INTO calendar_events
+           (id, title, start_time, end_time, timezone, calendar_id,
+            color, description, notification_minutes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           newId, instanceEvent.title,
           toDbTime(instanceEvent.start), toDbTime(instanceEvent.end),
-          instanceEvent.focusDurationMinutes ?? 40,
-          instanceEvent.shortBreakMinutes ?? 5,
-          instanceEvent.longBreakMinutes ?? 10,
+          timezone, parent.calendarId,
           instanceEvent.color ?? null,
           instanceEvent.description ?? "",
           instanceEvent.notificationMinutes ?? null,
           now, now,
         ],
       );
+      if (parent.pomodoroConfig) {
+        await execute(
+          `INSERT INTO pomodoro_configs
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [newId, parent.pomodoroConfig.focusDurationMinutes,
+           parent.pomodoroConfig.shortBreakMinutes,
+           parent.pomodoroConfig.longBreakMinutes,
+           parent.pomodoroConfig.pomodoroCount],
+        );
+      }
 
       // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
@@ -362,10 +432,13 @@ export function getCalendar() {
       const standalone: CalendarEvent = {
         ...instanceEvent,
         id: newId,
+        timezone,
+        calendarId: parent.calendarId,
         repeatRule: undefined,
         recurringParentId: undefined,
         exceptions: undefined,
         repeatUntil: undefined,
+        pomodoroConfig: parent.pomodoroConfig,
       };
       rawBlocks = [...rawBlocks, standalone];
       reexpand();
@@ -382,7 +455,7 @@ export function getCalendar() {
       const exceptions = [...(parent.exceptions ?? []), date];
       const now = nowLocal();
       await execute(
-        `UPDATE session_blocks SET exceptions = $1, updated_at = $2 WHERE id = $3`,
+        `UPDATE calendar_events SET exceptions = $1, updated_at = $2 WHERE id = $3`,
         [JSON.stringify(exceptions), now, parentId],
       );
       rawBlocks = rawBlocks.map((b) =>
@@ -400,7 +473,7 @@ export function getCalendar() {
 
       const now = nowLocal();
       await execute(
-        `UPDATE session_blocks SET repeat_until = $1, updated_at = $2 WHERE id = $3`,
+        `UPDATE calendar_events SET repeat_until = $1, updated_at = $2 WHERE id = $3`,
         [date, now, parentId],
       );
       rawBlocks = rawBlocks.map((b) =>
@@ -423,40 +496,63 @@ export function getCalendar() {
       if (!parent) throw new Error("Parent template not found");
 
       const splitDate = instanceEvent.start.split(" ")[0];
-      const dayBefore = fmtYMD(
-        new Date(parseYMD(splitDate).getTime() - 86400000),
-      );
+      const newStartDateStr = changes.start
+        ? String(changes.start).split(" ")[0]
+        : splitDate;
+      // Cap old series before the earlier of instance date and new start date
+      const capDate = newStartDateStr < splitDate ? newStartDateStr : splitDate;
+      const capBefore = parseYMD(capDate);
+      capBefore.setDate(capBefore.getDate() - 1);
+      const dayBefore = fmtYMD(capBefore);
       const now = nowLocal();
 
       // Set repeat_until on original template
       await execute(
-        `UPDATE session_blocks SET repeat_until = $1, updated_at = $2 WHERE id = $3`,
+        `UPDATE calendar_events SET repeat_until = $1, updated_at = $2 WHERE id = $3`,
         [dayBefore, now, parentId],
       );
 
-      // Create new recurring template from split date
+      // Create new recurring template starting at changes' full position
       const newId = crypto.randomUUID();
-      const startTime = instanceEvent.start.split(" ")[1];
-      const endTime = instanceEvent.end.split(" ")[1];
+      const newStart = changes.start
+        ? String(changes.start)
+        : `${splitDate} ${instanceEvent.start.split(" ")[1]}`;
+      const newEnd = changes.end
+        ? String(changes.end)
+        : `${splitDate} ${instanceEvent.end.split(" ")[1]}`;
       const merged = { ...parent, ...changes };
+      const rrule = parent.repeatRule && parent.repeatRule !== "none"
+        ? repeatRuleToRrule(parent.repeatRule)
+        : null;
 
       await execute(
-        `INSERT INTO session_blocks (id, title, start_time, end_time, focus_duration_minutes, short_break_minutes, long_break_minutes, color, description, repeat_rule, notification_minutes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        `INSERT INTO calendar_events
+           (id, title, start_time, end_time, timezone, calendar_id,
+            color, description, rrule, notification_minutes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           newId, merged.title ?? parent.title,
-          toDbTime(`${splitDate} ${startTime}`),
-          toDbTime(`${splitDate} ${endTime}`),
-          merged.focusDurationMinutes ?? 40,
-          merged.shortBreakMinutes ?? 5,
-          merged.longBreakMinutes ?? 10,
+          toDbTime(newStart),
+          toDbTime(newEnd),
+          parent.timezone, parent.calendarId,
           merged.color ?? null,
           merged.description ?? "",
-          parent.repeatRule && parent.repeatRule !== "none" ? parent.repeatRule : null,
+          rrule,
           merged.notificationMinutes ?? null,
           now, now,
         ],
       );
+
+      const pomConfig = merged.pomodoroConfig ?? parent.pomodoroConfig;
+      if (pomConfig) {
+        await execute(
+          `INSERT INTO pomodoro_configs
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [newId, pomConfig.focusDurationMinutes, pomConfig.shortBreakMinutes,
+           pomConfig.longBreakMinutes, pomConfig.pomodoroCount],
+        );
+      }
 
       // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
@@ -466,19 +562,138 @@ export function getCalendar() {
         ...parent,
         ...changes,
         id: newId,
-        start: `${splitDate} ${startTime}`,
-        end: `${splitDate} ${endTime}`,
+        start: newStart,
+        end: newEnd,
         recurringParentId: undefined,
         exceptions: undefined,
         repeatUntil: undefined,
+        pomodoroConfig: pomConfig,
       };
       rawBlocks = [...rawBlocks, newTemplate];
       reexpand();
       return newTemplate;
     },
 
+    /** Save a snapshot of rawBlocks before editing for preview revert. */
+    saveSnapshot() {
+      rawBlocksSnapshot = rawBlocks.map((b) => ({ ...b }));
+    },
+
+    /** Revert rawBlocks from snapshot and re-expand. */
+    restoreSnapshot() {
+      if (rawBlocksSnapshot) {
+        rawBlocks = rawBlocksSnapshot;
+        rawBlocksSnapshot = null;
+        reexpand();
+      }
+    },
+
+    /** Discard snapshot without reverting (after successful DB write). */
+    discardSnapshot() {
+      rawBlocksSnapshot = null;
+    },
+
+    /**
+     * Preview a recurring event edit in-memory under the given scope.
+     * Always resets from snapshot first so switching scopes doesn't stack.
+     */
+    previewRecurring(
+      instanceEvent: CalendarEvent,
+      changes: Partial<CalendarEvent>,
+      scope: RecurringScope,
+    ) {
+      if (!rawBlocksSnapshot) return;
+      // Reset from snapshot
+      rawBlocks = rawBlocksSnapshot.map((b) => ({ ...b }));
+
+      const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
+      const template = rawBlocks.find((b) => b.id === parentId);
+      if (!template) { reexpand(); return; }
+
+      const instanceDate = instanceEvent.start.split(" ")[0];
+
+      if (scope === "this") {
+        // Add exception to hide this instance, inject standalone preview
+        const exceptions = [...(template.exceptions ?? []), instanceDate];
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId ? { ...b, exceptions } : b,
+        );
+        const preview: CalendarEvent = {
+          ...instanceEvent,
+          ...changes,
+          id: `preview::${instanceDate}`,
+          start: changes.start ?? instanceEvent.start,
+          end: changes.end ?? instanceEvent.end,
+          recurringParentId: undefined,
+          repeatRule: undefined,
+          exceptions: undefined,
+          repeatUntil: undefined,
+        };
+        rawBlocks = [...rawBlocks, preview];
+      } else if (scope === "all") {
+        // Shift template dates by the day delta between original instance and changes
+        const origDateStr = instanceDate;
+        const changesDateStr = changes.start ? String(changes.start).split(" ")[0] : origDateStr;
+        const deltaDays = Math.round(
+          (parseYMD(changesDateStr).getTime() - parseYMD(origDateStr).getTime()) / 86400000,
+        );
+        const newStartTime = changes.start ? String(changes.start).split(" ")[1] : instanceEvent.start.split(" ")[1];
+        const newEndTime = changes.end ? String(changes.end).split(" ")[1] : instanceEvent.end.split(" ")[1];
+        let newStartDate = template.start.split(" ")[0];
+        let newEndDate = template.end.split(" ")[0];
+        if (deltaDays !== 0) {
+          const sd = parseYMD(newStartDate);
+          sd.setDate(sd.getDate() + deltaDays);
+          newStartDate = fmtYMD(sd);
+          const ed = parseYMD(newEndDate);
+          ed.setDate(ed.getDate() + deltaDays);
+          newEndDate = fmtYMD(ed);
+        }
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId ? {
+            ...template, ...changes,
+            id: template.id,
+            start: `${newStartDate} ${newStartTime}`,
+            end: `${newEndDate} ${newEndTime}`,
+            recurringParentId: undefined,
+          } : b,
+        );
+      } else {
+        // "following": cap old series before the earlier of instance date and new start date
+        const newStartDateStr = changes.start
+          ? String(changes.start).split(" ")[0]
+          : instanceDate;
+        const capDate = newStartDateStr < instanceDate ? newStartDateStr : instanceDate;
+        const capBefore = parseYMD(capDate);
+        capBefore.setDate(capBefore.getDate() - 1);
+        const dayBefore = fmtYMD(capBefore);
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId ? { ...b, repeatUntil: dayBefore } : b,
+        );
+        const newStart = changes.start
+          ? String(changes.start)
+          : `${instanceDate} ${instanceEvent.start.split(" ")[1]}`;
+        const newEnd = changes.end
+          ? String(changes.end)
+          : `${instanceDate} ${instanceEvent.end.split(" ")[1]}`;
+        const newTemplate: CalendarEvent = {
+          ...template,
+          ...changes,
+          id: `preview-following::${instanceDate}`,
+          start: newStart,
+          end: newEnd,
+          recurringParentId: undefined,
+          exceptions: undefined,
+          repeatUntil: undefined,
+        };
+        rawBlocks = [...rawBlocks, newTemplate];
+      }
+
+      reexpand();
+    },
+
     async clearAll() {
-      await execute("DELETE FROM session_blocks");
+      await execute("DELETE FROM calendar_events");
       rawBlocks = [];
       blocks = [];
     },

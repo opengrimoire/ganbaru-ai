@@ -8,15 +8,22 @@ export interface PomodoroState {
   isRunning: boolean;
 }
 
+export interface PomodoroConfig {
+  focusDurationMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  pomodoroCount: number;
+}
+
 export interface SessionBlock {
   id: string;
   title: string;
   taskIds: string[];
   skillBranchIds: string[];
-  pomodoroCount: number;
-  focusDurationMinutes: number;
-  shortBreakMinutes: number;
-  longBreakMinutes: number;
+  timezone: string;
+  calendarId: string;
+  rrule: string | null;
+  pomodoroConfig: PomodoroConfig | null;
   startTime: string;
   endTime: string;
   environmentId: string | null;

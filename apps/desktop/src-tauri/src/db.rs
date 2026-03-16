@@ -167,5 +167,41 @@ pub fn migrations() -> Vec<Migration> {
             ALTER TABLE session_blocks ADD COLUMN repeat_until TEXT;
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 4,
+        description: "restructure calendar schema: rename table, add timezone/calendar_id, normalize pomodoro config",
+        sql: "
+            ALTER TABLE session_blocks RENAME TO calendar_events;
+
+            ALTER TABLE calendar_events ADD COLUMN timezone TEXT NOT NULL DEFAULT '';
+            ALTER TABLE calendar_events ADD COLUMN calendar_id TEXT NOT NULL DEFAULT 'local';
+            ALTER TABLE calendar_events RENAME COLUMN repeat_rule TO rrule;
+
+            ALTER TABLE calendar_events DROP COLUMN pomodoro_count;
+            ALTER TABLE calendar_events DROP COLUMN focus_duration_minutes;
+            ALTER TABLE calendar_events DROP COLUMN short_break_minutes;
+            ALTER TABLE calendar_events DROP COLUMN long_break_minutes;
+
+            CREATE TABLE IF NOT EXISTS pomodoro_configs (
+                event_id TEXT PRIMARY KEY REFERENCES calendar_events(id) ON DELETE CASCADE,
+                focus_duration_minutes INTEGER NOT NULL DEFAULT 40,
+                short_break_minutes INTEGER NOT NULL DEFAULT 5,
+                long_break_minutes INTEGER NOT NULL DEFAULT 10,
+                pomodoro_count INTEGER NOT NULL DEFAULT 4
+            );
+
+            CREATE TABLE IF NOT EXISTS calendar_event_skill_branches (
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                branch_id TEXT NOT NULL REFERENCES skill_branches(id),
+                PRIMARY KEY (event_id, branch_id)
+            );
+            DROP TABLE IF EXISTS session_block_skill_branches;
+
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events(start_time);
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_end ON calendar_events(end_time);
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_calendar ON calendar_events(calendar_id);
+        ",
+        kind: MigrationKind::Up,
     }]
 }
