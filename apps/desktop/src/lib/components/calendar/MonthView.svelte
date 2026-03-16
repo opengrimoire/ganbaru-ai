@@ -123,7 +123,7 @@
 
             <span
               class="relative z-[2] mb-0.5 flex h-6 w-6 items-center justify-center self-center text-xs"
-              style="color: {active ? 'var(--foreground)' : 'var(--muted-foreground)'}; opacity: {textOpacity};{active && !isDark ? ' font-weight: 700;' : ''}"
+              style="color: {active ? 'var(--foreground)' : 'var(--muted-foreground)'}; opacity: {textOpacity};"
             >
               {day.getDate()}
             </span>

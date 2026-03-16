@@ -168,7 +168,7 @@
 </script>
 
 <div
-  class="flex w-48 shrink-0 flex-col"
+  class="flex w-60 shrink-0 flex-col"
   style="background-color: var(--cal-header-bg);"
 >
   <!-- Month/year label — aligned with sticky day-header row -->
@@ -192,18 +192,18 @@
 
   <!-- Mini calendar / month picker / year picker -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="mx-2 mt-0.5 mb-1" onwheel={handlePickerWheel}>
+  <div class="mx-3 mt-0 mb-1.5" onwheel={handlePickerWheel}>
     {#if pickerMode === "days"}
       <!-- Day letters -->
-      <div class="grid grid-cols-7 text-center">
+      <div class="grid grid-cols-7 gap-x-0 text-center">
         {#each dayLetters as letter}
-          <span class="py-0.5 text-[10px] text-muted-foreground">{letter}</span>
+          <span class="py-1 text-xs text-muted-foreground">{letter}</span>
         {/each}
       </div>
 
       <!-- Date grid -->
       {#each miniWeeks as week}
-        <div class="grid grid-cols-7 text-center">
+        <div class="grid grid-cols-7 gap-x-0 text-center">
           {#each week as day}
             {@const inMonth = day.getMonth() === miniMonth}
             {@const today = isToday(day)}
@@ -212,7 +212,7 @@
             {@const past = isPastDay(day)}
             <button
               onclick={() => selectDay(day)}
-              class="flex h-5 w-full items-center justify-center rounded-sm text-[10px] hover:bg-accent"
+              class="flex h-6 w-full items-center justify-center rounded-sm text-xs hover:bg-accent"
               style={today
                 ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
                 : selected
@@ -233,12 +233,12 @@
 
     {:else if pickerMode === "months"}
       <!-- Month grid (4 rows x 3 cols) -->
-      <div class="grid grid-cols-3 gap-0.5 py-1">
+      <div class="grid grid-cols-3 gap-1 py-1">
         {#each shortMonths as name, i}
           {@const isAnchor = pickerYear === anchorDate.getFullYear() && i === anchorDate.getMonth()}
           <button
             onclick={() => selectMonth(i)}
-            class="rounded-sm py-2 text-center text-xs font-medium hover:bg-accent {isAnchor
+            class="rounded-sm py-2.5 text-center text-sm font-medium hover:bg-accent {isAnchor
               ? 'bg-primary text-primary-foreground'
               : 'text-foreground'}"
           >
@@ -249,12 +249,12 @@
 
     {:else}
       <!-- Year grid (4 rows x 3 cols, scrollable by page) -->
-      <div class="grid grid-cols-3 gap-0.5 py-1">
+      <div class="grid grid-cols-3 gap-1 py-1">
         {#each yearPageYears as year}
           {@const isAnchor = year === anchorDate.getFullYear()}
           <button
             onclick={() => selectYear(year)}
-            class="rounded-sm py-2 text-center text-xs font-medium hover:bg-accent {isAnchor
+            class="rounded-sm py-2.5 text-center text-sm font-medium hover:bg-accent {isAnchor
               ? 'bg-primary text-primary-foreground'
               : 'text-foreground'}"
           >
@@ -299,31 +299,31 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
-      <div class="absolute bottom-full left-0 z-50 mb-1 w-full rounded-md border border-border bg-card p-2 shadow-lg">
-        <p class="mb-1.5 px-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
+      <div class="absolute bottom-full left-0 z-50 mb-1 w-full rounded-md border border-border bg-card p-2.5 shadow-lg">
+        <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
         {#each calendarAccounts as account}
           {@const checked = enabledAccounts.has(account.id)}
           <button
             onclick={() => onAccountToggle(account.id)}
-            class="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-accent"
+            class="flex w-full cursor-pointer items-center gap-2 rounded px-1.5 py-1.5 hover:bg-accent"
           >
             <span
-              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border {checked ? 'border-primary bg-primary' : 'border-muted-foreground'}"
+              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border {checked ? 'border-primary bg-primary' : 'border-muted-foreground'}"
             >
               {#if checked}
-                <Check size={10} class="text-primary-foreground" />
+                <Check size={12} class="text-primary-foreground" />
               {/if}
             </span>
-            <span class="truncate text-xs text-foreground">{account.label}</span>
+            <span class="truncate text-sm text-foreground">{account.label}</span>
           </button>
         {/each}
         <div class="my-1.5 border-t border-border"></div>
         <!-- TODO: implement account sync flow -->
         <button
           onclick={() => {}}
-          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          class="flex w-full items-center gap-2 rounded px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <Plus size={12} />
+          <Plus size={14} />
           <span>Sync other accounts</span>
         </button>
       </div>
@@ -331,11 +331,11 @@
 
     <button
       onclick={() => (showAccountPicker = !showAccountPicker)}
-      class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
-      <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-primary"></span>
+      <span class="h-3 w-3 shrink-0 rounded-full bg-primary"></span>
       <span class="flex-1 truncate">My calendars</span>
-      <ChevronUp size={12} class={showAccountPicker ? "" : "rotate-180"} />
+      <ChevronUp size={14} class={showAccountPicker ? "" : "rotate-180"} />
     </button>
   </div>
 </div>

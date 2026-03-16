@@ -318,11 +318,24 @@ export function useDragController(config: DragControllerConfig) {
     return null;
   }
 
-  function getHideSnapLine(): boolean {
-    return dragState?.type === "move";
+  function getHideSnapLine(dateStr: string): boolean {
+    if (dragState?.type === "move") return true;
+    // During create-by-drag, only show snap on the column being drawn on
+    if (createState) return createPreviewDate !== dateStr;
+    // During resize, hide hover snap on columns without an active snap override
+    if (dragState) return getSnapOverrideMinute(dateStr) === null;
+    return false;
   }
 
   function getSnapOverrideMinute(dateStr: string): number | null {
+    // During create-by-drag, show snap at the active edge on the create column
+    if (createState && createPreview && createPreviewDate === dateStr) {
+      const anchor = createState.anchorMinute;
+      const startMin = minuteOfDay(createPreview.event.start);
+      const endMin = minuteOfDay(createPreview.event.end);
+      return startMin === anchor ? endMin : startMin;
+    }
+
     if (!dragPreview || !dragState || dragState.type === "move") return null;
 
     const previewStartDate = dragPreview.event.start.split(" ")[0];

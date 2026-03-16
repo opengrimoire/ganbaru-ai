@@ -227,7 +227,7 @@
             dragPreview={drag.getDragPreviewForDate(dateStr)}
             createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
             {isScrolling}
-            hideSnapLine={drag.getHideSnapLine()}
+            hideSnapLine={drag.getHideSnapLine(dateStr)}
             snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
             onEventClick={onEventClick}
             onDragStart={drag.handleDragStart}
