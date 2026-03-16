@@ -14,6 +14,8 @@ import {
   clampMinute,
   eventsForDay,
   layoutEventsForDay,
+  effectiveMinuteRange,
+  minuteOffsetToDateStr,
   formatHour,
 } from "./utils";
 import type { CalendarEvent } from "./types";
@@ -209,6 +211,92 @@ describe("eventsForDay", () => {
     const result = eventsForDay(events, new Date(2026, 2, 15));
     expect(result).toHaveLength(0);
   });
+
+  it("includes cross-midnight events on the next day", () => {
+    const crossEvents: CalendarEvent[] = [
+      { id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" },
+    ];
+    // Should appear on both Mar 13 and Mar 14
+    expect(eventsForDay(crossEvents, new Date(2026, 2, 13))).toHaveLength(1);
+    expect(eventsForDay(crossEvents, new Date(2026, 2, 14))).toHaveLength(1);
+    expect(eventsForDay(crossEvents, new Date(2026, 2, 15))).toHaveLength(0);
+  });
+
+  it("excludes events ending exactly at midnight of the queried day", () => {
+    const crossEvents: CalendarEvent[] = [
+      { id: "1", title: "Until midnight", start: "2026-03-13 22:00", end: "2026-03-14 00:00" },
+    ];
+    // Ends at midnight of Mar 14 — should NOT appear on Mar 14
+    expect(eventsForDay(crossEvents, new Date(2026, 2, 13))).toHaveLength(1);
+    expect(eventsForDay(crossEvents, new Date(2026, 2, 14))).toHaveLength(0);
+  });
+
+  it("includes multi-day events on intermediate days", () => {
+    const multiDay: CalendarEvent[] = [
+      { id: "1", title: "Long", start: "2026-03-13 22:00", end: "2026-03-16 06:00" },
+    ];
+    expect(eventsForDay(multiDay, new Date(2026, 2, 13))).toHaveLength(1);
+    expect(eventsForDay(multiDay, new Date(2026, 2, 14))).toHaveLength(1);
+    expect(eventsForDay(multiDay, new Date(2026, 2, 15))).toHaveLength(1);
+    expect(eventsForDay(multiDay, new Date(2026, 2, 16))).toHaveLength(1);
+    expect(eventsForDay(multiDay, new Date(2026, 2, 17))).toHaveLength(0);
+  });
+});
+
+describe("effectiveMinuteRange", () => {
+  it("returns actual minutes for same-day events", () => {
+    const event: CalendarEvent = {
+      id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 11:00",
+    };
+    const range = effectiveMinuteRange(event, "2026-03-13");
+    expect(range.startMinute).toBe(540);
+    expect(range.endMinute).toBe(660);
+  });
+
+  it("clips cross-midnight event on start day", () => {
+    const event: CalendarEvent = {
+      id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00",
+    };
+    const range = effectiveMinuteRange(event, "2026-03-13");
+    expect(range.startMinute).toBe(1320); // 22:00
+    expect(range.endMinute).toBe(1440); // fills to bottom
+  });
+
+  it("clips cross-midnight event on end day", () => {
+    const event: CalendarEvent = {
+      id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00",
+    };
+    const range = effectiveMinuteRange(event, "2026-03-14");
+    expect(range.startMinute).toBe(0); // starts at top
+    expect(range.endMinute).toBe(120); // 02:00
+  });
+
+  it("fills full day for intermediate days of multi-day events", () => {
+    const event: CalendarEvent = {
+      id: "1", title: "Long", start: "2026-03-13 22:00", end: "2026-03-16 06:00",
+    };
+    const range = effectiveMinuteRange(event, "2026-03-14");
+    expect(range.startMinute).toBe(0);
+    expect(range.endMinute).toBe(1440);
+  });
+});
+
+describe("minuteOffsetToDateStr", () => {
+  it("returns same day for normal minutes", () => {
+    expect(minuteOffsetToDateStr("2026-03-13", 540)).toBe("2026-03-13 09:00");
+  });
+
+  it("rolls to next day for minutes > 1440", () => {
+    expect(minuteOffsetToDateStr("2026-03-13", 1560)).toBe("2026-03-14 02:00");
+  });
+
+  it("handles exactly midnight (1440)", () => {
+    expect(minuteOffsetToDateStr("2026-03-13", 1440)).toBe("2026-03-14 00:00");
+  });
+
+  it("handles month boundary rollover", () => {
+    expect(minuteOffsetToDateStr("2026-01-31", 1500)).toBe("2026-02-01 01:00");
+  });
 });
 
 describe("layoutEventsForDay", () => {
@@ -216,7 +304,7 @@ describe("layoutEventsForDay", () => {
     const events: CalendarEvent[] = [
       { id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 10:00" },
     ];
-    const layout = layoutEventsForDay(events, 48);
+    const layout = layoutEventsForDay(events, 48, "2026-03-13");
     expect(layout).toHaveLength(1);
     expect(layout[0].left).toBe(0);
     expect(layout[0].width).toBe(100);
@@ -229,7 +317,7 @@ describe("layoutEventsForDay", () => {
       { id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 11:00" },
       { id: "2", title: "B", start: "2026-03-13 10:00", end: "2026-03-13 12:00" },
     ];
-    const layout = layoutEventsForDay(events, 48);
+    const layout = layoutEventsForDay(events, 48, "2026-03-13");
     expect(layout).toHaveLength(2);
     expect(layout[0].totalColumns).toBe(2);
     expect(layout[1].totalColumns).toBe(2);
@@ -238,7 +326,33 @@ describe("layoutEventsForDay", () => {
   });
 
   it("returns empty array for no events", () => {
-    expect(layoutEventsForDay([], 48)).toEqual([]);
+    expect(layoutEventsForDay([], 48, "2026-03-13")).toEqual([]);
+  });
+
+  it("positions cross-midnight event on start day from start to bottom", () => {
+    const events: CalendarEvent[] = [
+      { id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" },
+    ];
+    const layout = layoutEventsForDay(events, 60, "2026-03-13");
+    expect(layout).toHaveLength(1);
+    expect(layout[0].top).toBe((1320 / 60) * 60); // 22:00 = minute 1320
+    // Height covers 22:00 to 24:00 = 120 minutes
+    expect(layout[0].height).toBe((120 / 60) * 60);
+    expect(layout[0].isClippedTop).toBe(false);
+    expect(layout[0].isClippedBottom).toBe(true);
+  });
+
+  it("positions cross-midnight event on end day from top to end", () => {
+    const events: CalendarEvent[] = [
+      { id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" },
+    ];
+    const layout = layoutEventsForDay(events, 60, "2026-03-14");
+    expect(layout).toHaveLength(1);
+    expect(layout[0].top).toBe(0);
+    // Height covers 00:00 to 02:00 = 120 minutes
+    expect(layout[0].height).toBe((120 / 60) * 60);
+    expect(layout[0].isClippedTop).toBe(true);
+    expect(layout[0].isClippedBottom).toBe(false);
   });
 });
 

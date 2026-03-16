@@ -30,14 +30,17 @@ export interface PositionedEvent {
   width: number; // percentage 0-100
   column: number;
   totalColumns: number;
+  isClippedTop?: boolean; // event continues from previous day
+  isClippedBottom?: boolean; // event continues into next day
 }
 
 export interface DragState {
   eventId: string;
   type: "move" | "resize-top" | "resize-bottom";
-  originDate: string;
+  originDate: string; // event's original start date "YYYY-MM-DD"
+  startColumnDate: string; // column date where drag started "YYYY-MM-DD"
   originStartMinute: number;
-  originEndMinute: number;
+  originEndMinute: number; // offset from originDate midnight, can be >1440
   pointerStartY: number;
   pointerStartX: number;
   columnWidth: number;

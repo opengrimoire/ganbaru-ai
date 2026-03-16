@@ -362,6 +362,50 @@ export function clampMinute(minute: number): number {
   return Math.max(0, Math.min(1440, minute));
 }
 
+// --- Cross-midnight helpers ---
+
+/**
+ * Returns the effective minute range for an event within a specific day.
+ * For events that span midnight, this clips to [0, 1440] for the given day.
+ */
+export function effectiveMinuteRange(
+  event: CalendarEvent,
+  dateStr: string,
+): { startMinute: number; endMinute: number } {
+  const eventStartDate = event.start.split(" ")[0];
+  const eventEndDate = event.end.split(" ")[0];
+
+  const startMinute =
+    eventStartDate < dateStr
+      ? 0
+      : eventStartDate === dateStr
+        ? minuteOfDay(event.start)
+        : 1440;
+
+  const endMinute =
+    eventEndDate > dateStr
+      ? 1440
+      : eventEndDate === dateStr
+        ? minuteOfDay(event.end)
+        : 0;
+
+  return { startMinute, endMinute };
+}
+
+/**
+ * Converts a base date string + minute offset to a full "YYYY-MM-DD HH:MM" string.
+ * Handles overflow (minute > 1440 rolls to next day, negative rolls back).
+ */
+export function minuteOffsetToDateStr(
+  baseDate: string,
+  minute: number,
+): string {
+  const [y, m, d] = baseDate.split("-").map(Number);
+  const base = new Date(y, m - 1, d, 0, 0, 0, 0);
+  base.setMinutes(minute);
+  return formatCalendarDate(base);
+}
+
 // --- Event filtering ---
 
 export function eventsForDay(
@@ -369,41 +413,63 @@ export function eventsForDay(
   date: Date,
 ): CalendarEvent[] {
   const dateStr = formatDatePart(date);
-  return events.filter((e) => e.start.startsWith(dateStr));
+  const nextDateStr = formatDatePart(addDays(date, 1));
+  const dayStart = `${dateStr} 00:00`;
+  const dayEnd = `${nextDateStr} 00:00`;
+  return events.filter((e) => e.start < dayEnd && e.end > dayStart);
 }
 
 // --- Overlap layout algorithm ---
 
+interface EventWithRange {
+  event: CalendarEvent;
+  startMinute: number;
+  endMinute: number;
+}
+
 export function layoutEventsForDay(
   events: CalendarEvent[],
   hourHeight: number,
+  dateStr?: string,
 ): PositionedEvent[] {
   if (events.length === 0) return [];
 
+  // Compute effective minute ranges for each event on this date
+  const items: EventWithRange[] = events.map((event) => {
+    if (dateStr) {
+      return { event, ...effectiveMinuteRange(event, dateStr) };
+    }
+    // Fallback for callers that don't pass dateStr (e.g. month view)
+    return {
+      event,
+      startMinute: minuteOfDay(event.start),
+      endMinute: minuteOfDay(event.end),
+    };
+  });
+
   // Sort by start time, then by duration descending (longer first)
-  const sorted = [...events].sort((a, b) => {
-    const startDiff = minuteOfDay(a.start) - minuteOfDay(b.start);
+  const sorted = [...items].sort((a, b) => {
+    const startDiff = a.startMinute - b.startMinute;
     if (startDiff !== 0) return startDiff;
-    return durationMinutes(b.start, b.end) - durationMinutes(a.start, a.end);
+    return (
+      b.endMinute - b.startMinute - (a.endMinute - a.startMinute)
+    );
   });
 
   // Build collision groups
-  const groups: CalendarEvent[][] = [];
-  let currentGroup: CalendarEvent[] = [];
+  const groups: EventWithRange[][] = [];
+  let currentGroup: EventWithRange[] = [];
   let groupEnd = 0;
 
-  for (const event of sorted) {
-    const startMin = minuteOfDay(event.start);
-    const endMin = minuteOfDay(event.end);
-
-    if (currentGroup.length > 0 && startMin >= groupEnd) {
+  for (const item of sorted) {
+    if (currentGroup.length > 0 && item.startMinute >= groupEnd) {
       groups.push(currentGroup);
       currentGroup = [];
       groupEnd = 0;
     }
 
-    currentGroup.push(event);
-    groupEnd = Math.max(groupEnd, endMin);
+    currentGroup.push(item);
+    groupEnd = Math.max(groupEnd, item.endMinute);
   }
   if (currentGroup.length > 0) groups.push(currentGroup);
 
@@ -411,48 +477,56 @@ export function layoutEventsForDay(
   const result: PositionedEvent[] = [];
 
   for (const group of groups) {
-    const columns: CalendarEvent[][] = [];
+    const columns: EventWithRange[][] = [];
 
-    for (const event of group) {
-      const eStart = minuteOfDay(event.start);
-      const eEnd = minuteOfDay(event.end);
+    for (const item of group) {
       let placed = false;
 
       for (let colIdx = 0; colIdx < columns.length; colIdx++) {
         const col = columns[colIdx];
         const lastInCol = col[col.length - 1];
-        if (eStart >= minuteOfDay(lastInCol.end)) {
-          col.push(event);
+        if (item.startMinute >= lastInCol.endMinute) {
+          col.push(item);
           placed = true;
           break;
         }
       }
 
       if (!placed) {
-        columns.push([event]);
+        columns.push([item]);
       }
     }
 
     const totalColumns = columns.length;
 
     for (let colIdx = 0; colIdx < columns.length; colIdx++) {
-      for (const event of columns[colIdx]) {
-        const startMin = minuteOfDay(event.start);
-        const dur = durationMinutes(event.start, event.end);
-        const top = minuteToTop(startMin, hourHeight);
+      for (const item of columns[colIdx]) {
+        const top = minuteToTop(item.startMinute, hourHeight);
+        const dur = item.endMinute - item.startMinute;
         const rawHeight = (dur / 60) * hourHeight;
         const height = Math.max(rawHeight, MIN_EVENT_HEIGHT);
         const left = (colIdx / totalColumns) * 100;
         const width = (1 / totalColumns) * 100;
 
+        const isClippedTop = dateStr
+          ? item.startMinute === 0 &&
+            item.event.start.split(" ")[0] !== dateStr
+          : false;
+        const isClippedBottom = dateStr
+          ? item.endMinute === 1440 &&
+            item.event.end.split(" ")[0] !== dateStr
+          : false;
+
         result.push({
-          event,
+          event: item.event,
           top,
           height,
           left,
           width,
           column: colIdx,
           totalColumns,
+          isClippedTop,
+          isClippedBottom,
         });
       }
     }

@@ -1,5 +1,14 @@
 import type { CalendarEvent, DragState, PositionedEvent } from "./types";
-import { minuteOfDay, minuteToTop, snapToGrid, clampMinute, formatDatePart } from "./utils";
+import {
+  minuteOfDay,
+  minuteToTop,
+  snapToGrid,
+  clampMinute,
+  formatDatePart,
+  durationMinutes,
+  minuteOffsetToDateStr,
+  parseCalendarDate,
+} from "./utils";
 
 let cursorStyle: HTMLStyleElement | null = null;
 
@@ -46,13 +55,16 @@ export function useDragController(config: DragControllerConfig) {
     if (!event) return;
 
     const dateStr = event.start.split(" ")[0];
+    const startMin = minuteOfDay(event.start);
+    const dur = durationMinutes(event.start, event.end);
 
     dragState = {
       eventId,
       type: "move",
       originDate: dateStr,
-      originStartMinute: minuteOfDay(event.start),
-      originEndMinute: minuteOfDay(event.end),
+      startColumnDate: config.getColumnDate(e.clientX),
+      originStartMinute: startMin,
+      originEndMinute: startMin + dur,
       pointerStartY: e.clientY,
       pointerStartX: e.clientX,
       columnWidth: 0,
@@ -95,48 +107,59 @@ export function useDragController(config: DragControllerConfig) {
     let targetDate = dragState.originDate;
 
     if (dragState.type === "move") {
-      targetDate = config.getColumnDate(e.clientX);
-      newStart = clampMinute(dragState.originStartMinute + deltaMinutes);
+      // Compute column delta to handle dragging from continuation blocks
+      const currentColumnDate = config.getColumnDate(e.clientX);
+      const startCol = parseCalendarDate(`${dragState.startColumnDate} 00:00`);
+      const currentCol = parseCalendarDate(`${currentColumnDate} 00:00`);
+      const dayDelta = Math.round(
+        (currentCol.getTime() - startCol.getTime()) / 86400000,
+      );
+      const originDate = parseCalendarDate(`${dragState.originDate} 00:00`);
+      originDate.setDate(originDate.getDate() + dayDelta);
+      targetDate = formatDatePart(originDate);
+
       const dur = dragState.originEndMinute - dragState.originStartMinute;
-      newEnd = clampMinute(newStart + dur);
-      if (newEnd > 1440) {
-        newEnd = 1440;
-        newStart = newEnd - dur;
-      }
-      if (newStart < 0) {
-        newStart = 0;
-        newEnd = dur;
-      }
+      newStart = snapToGrid(dragState.originStartMinute + deltaMinutes);
+      newStart = Math.max(0, Math.min(1430, newStart));
+      newEnd = newStart + dur; // may exceed 1440 — cross-midnight
     } else if (dragState.type === "resize-top") {
-      newStart = clampMinute(dragState.originStartMinute + deltaMinutes);
+      newStart = snapToGrid(dragState.originStartMinute + deltaMinutes);
+      newStart = Math.max(0, newStart);
       newEnd = dragState.originEndMinute;
-      if (newStart > newEnd) {
-        [newStart, newEnd] = [newEnd, newStart];
-      }
+      if (newStart >= newEnd) newStart = newEnd - 10;
       if (newEnd - newStart < 10) newEnd = newStart + 10;
     } else {
+      // resize-bottom: allow crossing midnight
       newStart = dragState.originStartMinute;
-      newEnd = clampMinute(dragState.originEndMinute + deltaMinutes);
-      if (newEnd < newStart) {
-        [newStart, newEnd] = [newEnd, newStart];
-      }
+      newEnd = snapToGrid(dragState.originEndMinute + deltaMinutes);
+      if (newEnd <= newStart) newEnd = newStart + 10;
       if (newEnd - newStart < 10) newEnd = newStart + 10;
     }
 
-    const startH = String(Math.floor(newStart / 60)).padStart(2, "0");
-    const startM = String(newStart % 60).padStart(2, "0");
-    const endH = String(Math.floor(Math.min(newEnd, 1440) / 60)).padStart(2, "0");
-    const endM = String(Math.min(newEnd, 1440) % 60).padStart(2, "0");
+    // During resize, if end reaches midnight, snap to at least 00:30 next day
+    // so the continuation "tip" is clearly visible and easy to grab.
+    // For move, exact midnight (1440) is valid since duration is preserved.
+    if (dragState.type !== "move" && newEnd >= 1440 && newEnd < 1470) {
+      newEnd = 1470;
+    }
+
+    const startStr = minuteOffsetToDateStr(targetDate, newStart);
+    const endStr = minuteOffsetToDateStr(targetDate, newEnd);
+
+    // Visual metrics for the primary (start) day column
+    const visibleEnd = Math.min(newEnd, 1440);
+    const top = minuteToTop(newStart, hourHeight);
+    const height = ((visibleEnd - newStart) / 60) * hourHeight;
 
     dragPreviewDate = targetDate;
     dragPreview = {
       event: {
         ...event,
-        start: `${targetDate} ${startH}:${startM}`,
-        end: `${targetDate} ${endH}:${endM}`,
+        start: startStr,
+        end: endStr,
       },
-      top: minuteToTop(newStart, hourHeight),
-      height: ((newEnd - newStart) / 60) * hourHeight,
+      top,
+      height,
       left: 0,
       width: 100,
       column: 0,
@@ -240,7 +263,40 @@ export function useDragController(config: DragControllerConfig) {
   // --- Computed helpers for DayColumn props ---
 
   function getDragPreviewForDate(dateStr: string): PositionedEvent | null {
-    return dragPreviewDate === dateStr ? dragPreview : null;
+    if (!dragPreview) return null;
+
+    const previewStartDate = dragPreview.event.start.split(" ")[0];
+    const previewEndDate = dragPreview.event.end.split(" ")[0];
+
+    // Single-day event — return preview as-is for its date
+    if (previewStartDate === previewEndDate) {
+      return dateStr === previewStartDate ? dragPreview : null;
+    }
+
+    const hourHeight = config.hourHeight();
+
+    // Start day — show from event start to bottom of day
+    if (dateStr === previewStartDate) {
+      const startMin = minuteOfDay(dragPreview.event.start);
+      return {
+        ...dragPreview,
+        top: minuteToTop(startMin, hourHeight),
+        height: ((1440 - startMin) / 60) * hourHeight,
+      };
+    }
+
+    // End day — show from top to event end
+    if (dateStr === previewEndDate) {
+      const endMin = minuteOfDay(dragPreview.event.end);
+      if (endMin <= 0) return null;
+      return {
+        ...dragPreview,
+        top: 0,
+        height: (endMin / 60) * hourHeight,
+      };
+    }
+
+    return null;
   }
 
   function getCreatePreviewForDate(
@@ -268,16 +324,31 @@ export function useDragController(config: DragControllerConfig) {
 
   function getSnapOverrideMinute(dateStr: string): number | null {
     if (!dragPreview || !dragState || dragState.type === "move") return null;
-    if (dragPreviewDate !== dateStr) return null;
+
+    const previewStartDate = dragPreview.event.start.split(" ")[0];
+    const previewEndDate = dragPreview.event.end.split(" ")[0];
 
     if (dragState.type === "resize-top") {
-      return minuteOfDay(dragPreview.event.start) < dragState.originEndMinute
-        ? minuteOfDay(dragPreview.event.start)
-        : minuteOfDay(dragPreview.event.end);
+      // Snap line tracks the start handle
+      if (dateStr === previewStartDate) {
+        return minuteOfDay(dragPreview.event.start);
+      }
+      return null;
     }
-    return minuteOfDay(dragPreview.event.end) > dragState.originStartMinute
-      ? minuteOfDay(dragPreview.event.end)
-      : minuteOfDay(dragPreview.event.start);
+
+    // resize-bottom: snap line tracks the end handle
+    if (previewStartDate === previewEndDate) {
+      // Same day — show snap on that day
+      return dateStr === previewStartDate
+        ? minuteOfDay(dragPreview.event.end)
+        : null;
+    }
+
+    // Cross-midnight — show snap on the end day only
+    if (dateStr === previewEndDate) {
+      return minuteOfDay(dragPreview.event.end);
+    }
+    return null;
   }
 
   return {

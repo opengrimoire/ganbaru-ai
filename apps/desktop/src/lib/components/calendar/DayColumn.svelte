@@ -3,6 +3,7 @@
   import {
     eventsForDay,
     layoutEventsForDay,
+    effectiveMinuteRange,
     formatDatePart,
     minuteOfDay,
     snapToGrid,
@@ -56,11 +57,11 @@
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
+  const dateStr = $derived(formatDatePart(date));
   const dayEvents = $derived(eventsForDay(events, date));
-  const positioned = $derived(layoutEventsForDay(dayEvents, hourHeight));
+  const positioned = $derived(layoutEventsForDay(dayEvents, hourHeight, dateStr));
 
   const totalHeight = $derived(24 * hourHeight);
-  const dateStr = $derived(formatDatePart(date));
 
   let snapLineY: number | null = $state(null);
   let snapTimeLabel: string = $state("");
@@ -103,7 +104,8 @@
   function isEventPast(event: CalendarEvent): boolean {
     if (isPast) return true;
     if (isToday && currentTimeMinute >= 0) {
-      return minuteOfDay(event.end) <= currentTimeMinute;
+      const { endMinute } = effectiveMinuteRange(event, dateStr);
+      return endMinute <= currentTimeMinute;
     }
     return false;
   }
@@ -132,11 +134,13 @@
       const cursorY = offsetY;
 
       if (Math.abs(cursorY - blockTop) < 8) {
-        snapped = minuteOfDay(pos.event.start);
+        const { startMinute } = effectiveMinuteRange(pos.event, dateStr);
+        snapped = startMinute;
         break;
       }
       if (Math.abs(cursorY - blockBottom) < 8) {
-        snapped = minuteOfDay(pos.event.end);
+        const { endMinute } = effectiveMinuteRange(pos.event, dateStr);
+        snapped = endMinute;
         break;
       }
     }
