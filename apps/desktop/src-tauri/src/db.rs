@@ -147,5 +147,25 @@ pub fn migrations() -> Vec<Migration> {
             INSERT OR IGNORE INTO streaks (id) VALUES ('current');
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 2,
+        description: "add color, description, repeat, notification to session blocks",
+        sql: "
+            ALTER TABLE session_blocks ADD COLUMN color TEXT;
+            ALTER TABLE session_blocks ADD COLUMN description TEXT NOT NULL DEFAULT '';
+            ALTER TABLE session_blocks ADD COLUMN repeat_rule TEXT;
+            ALTER TABLE session_blocks ADD COLUMN notification_minutes INTEGER;
+        ",
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 3,
+        description: "add exceptions and repeat_until for recurring event overrides",
+        sql: "
+            ALTER TABLE session_blocks ADD COLUMN exceptions TEXT;
+            ALTER TABLE session_blocks ADD COLUMN repeat_until TEXT;
+        ",
+        kind: MigrationKind::Up,
     }]
 }

@@ -1,4 +1,4 @@
-import type { CalendarEvent, DragState, PositionedEvent } from "./types";
+import type { CalendarEvent, DragState, EventColor, PositionedEvent } from "./types";
 import {
   minuteOfDay,
   minuteToTop,
@@ -237,6 +237,8 @@ export function useDragController(config: DragControllerConfig) {
     dateStr: string,
     startMinute: number,
     endMinute: number,
+    title?: string,
+    color?: EventColor,
   ): PositionedEvent {
     const hourHeight = config.hourHeight();
     const sh = String(Math.floor(startMinute / 60)).padStart(2, "0");
@@ -247,9 +249,10 @@ export function useDragController(config: DragControllerConfig) {
     return {
       event: {
         id: "__create__",
-        title: "",
+        title: title ?? "",
         start: `${dateStr} ${sh}:${sm}`,
         end: `${dateStr} ${eh}:${em}`,
+        color,
       },
       top: minuteToTop(startMinute, hourHeight),
       height: ((endMinute - startMinute) / 60) * hourHeight,
@@ -305,6 +308,8 @@ export function useDragController(config: DragControllerConfig) {
       dateStr: string;
       startMinute: number;
       endMinute: number;
+      title?: string;
+      color?: EventColor;
     } | null,
   ): PositionedEvent | null {
     if (createPreviewDate === dateStr) return createPreview;
@@ -313,6 +318,8 @@ export function useDragController(config: DragControllerConfig) {
         dateStr,
         pendingCreatePreview.startMinute,
         pendingCreatePreview.endMinute,
+        pendingCreatePreview.title,
+        pendingCreatePreview.color,
       );
     }
     return null;

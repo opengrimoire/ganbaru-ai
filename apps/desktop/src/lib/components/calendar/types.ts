@@ -10,16 +10,33 @@ export type EventColor =
   | "pink"
   | "gray";
 
+export type RepeatRule =
+  | "none"
+  | "daily"
+  | "weekdays"
+  | "weekly"
+  | "monthly"
+  | "yearly";
+
 export interface CalendarEvent {
   id: string;
   title: string;
   start: string; // "YYYY-MM-DD HH:MM"
   end: string; // "YYYY-MM-DD HH:MM"
   color?: EventColor;
+  description?: string;
+  repeatRule?: RepeatRule;
+  notificationMinutes?: number;
   focusDurationMinutes?: number;
   shortBreakMinutes?: number;
   longBreakMinutes?: number;
   pomodoroCount?: number;
+  /** Dates excluded from recurrence expansion (YYYY-MM-DD). */
+  exceptions?: string[];
+  /** Stop generating recurring instances after this date (YYYY-MM-DD). */
+  repeatUntil?: string;
+  /** Set on virtual recurring instances; points to the DB-backed template event. */
+  recurringParentId?: string;
 }
 
 export interface PositionedEvent {

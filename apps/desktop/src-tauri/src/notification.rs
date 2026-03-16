@@ -612,6 +612,19 @@ pub fn show_break_overlay(_app: tauri::AppHandle, _break_seconds: u32) -> Result
 }
 
 #[tauri::command]
+pub fn show_event_notification(title: String, body: String) {
+    std::thread::spawn(move || {
+        let _ = Notification::new()
+            .summary(&title)
+            .body(&body)
+            .timeout(10_000)
+            .hint(Hint::Transient(true))
+            .hint(Hint::SoundName("message-new-instant".into()))
+            .show();
+    });
+}
+
+#[tauri::command]
 pub fn show_pomodoro_notification(app: tauri::AppHandle, remaining_seconds: u32) {
     let timeout_ms = remaining_seconds * 1000;
 

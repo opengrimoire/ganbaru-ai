@@ -290,7 +290,7 @@
     </button>
   </div>
 
-  <!-- Spacer to push account picker to the bottom -->
+  <!-- Spacer -->
   <div class="flex-1"></div>
 
   <!-- Calendar account picker -->

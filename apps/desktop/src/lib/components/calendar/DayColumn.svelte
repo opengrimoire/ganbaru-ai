@@ -9,6 +9,7 @@
     snapToGrid,
     clampMinute,
     minuteToTop,
+    getEventColor,
   } from "./utils";
   import EventBlock from "./EventBlock.svelte";
   import { onMount } from "svelte";
@@ -42,7 +43,7 @@
     hideSnapLine?: boolean;
     isScrolling?: boolean;
     snapOverrideMinute?: number | null;
-    onEventClick: (event: CalendarEvent) => void;
+    onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onDragStart: (eventId: string, e: PointerEvent) => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
   } = $props();
@@ -205,7 +206,7 @@
       positioned={pos}
       {isDark}
       isPast={isEventPast(pos.event)}
-      onclick={() => onEventClick(pos.event)}
+      onclick={(rect) => onEventClick(pos.event, rect)}
       onpointerdown={(e) => onDragStart(pos.event.id, e)}
     />
   {/each}
@@ -229,18 +230,23 @@
 
   <!-- Create preview (new block being drawn) -->
   {#if createPreview}
+    {@const previewColor = createPreview.event.color ? getEventColor(createPreview.event.color, isDark) : null}
     <div
+      data-create-preview
       class="pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight opacity-70"
       style="
         top: {createPreview.top}px;
         height: {createPreview.height}px;
         left: 0;
         width: 100%;
-        background-color: var(--cal-today-circle);
+        background-color: {previewColor?.bg ?? 'var(--muted)'};
+        border-left: 3px solid {previewColor?.border ?? 'var(--muted-foreground)'};
         z-index: 10;
       "
     >
-      <div class="truncate font-medium text-white">New block</div>
+      <div class="truncate font-medium" style="color: {previewColor?.text ?? 'var(--muted-foreground)'};">
+        {createPreview.event.title || "Focus session"}
+      </div>
     </div>
   {/if}
 

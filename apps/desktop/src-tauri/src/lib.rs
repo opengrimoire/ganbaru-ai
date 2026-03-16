@@ -112,6 +112,7 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
+            notification::show_event_notification,
             notification::show_break_overlay,
             tray::update_tray,
             force_quit,

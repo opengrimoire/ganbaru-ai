@@ -4,6 +4,7 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
+  import { invoke } from "@tauri-apps/api/core";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
@@ -124,6 +125,46 @@
   // Also poll for time-based transitions
   $effect(() => {
     const id = setInterval(checkActiveBlock, 30_000);
+    return () => clearInterval(id);
+  });
+
+  // --- Event notifications ---
+  const notifiedEvents = new Set<string>();
+
+  function checkEventNotifications() {
+    const now = new Date();
+    for (const event of calendar.events) {
+      if (event.notificationMinutes === undefined) continue;
+      if (notifiedEvents.has(event.id)) continue;
+
+      const startTime = parseCalendarDate(event.start);
+      const notifyTime = new Date(startTime.getTime() - event.notificationMinutes * 60_000);
+      const diff = now.getTime() - notifyTime.getTime();
+
+      // Fire if within a 90-second window (covers 30s polling interval with margin)
+      if (diff >= 0 && diff < 90_000) {
+        notifiedEvents.add(event.id);
+        const minutesUntil = Math.round((startTime.getTime() - now.getTime()) / 60_000);
+        let body: string;
+        if (minutesUntil <= 0) body = "Starting now";
+        else if (minutesUntil === 1) body = "Starts in 1 minute";
+        else if (minutesUntil < 60) body = `Starts in ${minutesUntil} minutes`;
+        else body = `Starts in ${Math.round(minutesUntil / 60)} hour(s)`;
+        invoke("show_event_notification", { title: event.title, body }).catch((e) =>
+          console.error("[notifications] failed:", e),
+        );
+      }
+    }
+  }
+
+  // Check notifications on event changes and every 30s
+  $effect(() => {
+    const _events = calendar.events;
+    checkEventNotifications();
+  });
+
+  $effect(() => {
+    const id = setInterval(checkEventNotifications, 30_000);
     return () => clearInterval(id);
   });
 </script>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent } from "./types";
+  import type { CalendarEvent, EventColor } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
     getWeekDays,
@@ -37,10 +37,10 @@
     hourHeight?: number;
     isDark?: boolean;
     timezones?: string[];
-    onEventClick: (event: CalendarEvent) => void;
+    onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string) => void;
-    pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number } | null;
+    pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor } | null;
     initialScrollMinute?: number;
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
