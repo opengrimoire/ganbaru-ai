@@ -116,17 +116,6 @@ impl SavedShortcuts {
         }
     }
 
-    fn restore(&self) {
-        gsettings_set("org.gnome.mutter", "overlay-key", &self.overlay_key);
-        gsettings_set(
-            "org.gnome.shell.extensions.dash-to-dock",
-            "hot-keys",
-            &self.dock_hotkeys,
-        );
-        for (schema, key, val) in &self.disabled {
-            gsettings_set(schema, key, val);
-        }
-    }
 }
 
 /// Inhibit screensaver/idle via D-Bus, returns cookie for uninhibit
@@ -177,11 +166,7 @@ fn screensaver_uninhibit(cookie: u32) {
 
 #[cfg(target_os = "linux")]
 fn format_remaining(secs: u64) -> String {
-    if secs >= 60 {
-        format!("{}:{:02}", secs / 60, secs % 60)
-    } else {
-        secs.to_string()
-    }
+    format!("{:02}:{:02}", secs / 60, secs % 60)
 }
 
 #[cfg(target_os = "linux")]
@@ -195,49 +180,125 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
         let end_time = SystemTime::now() + Duration::from_secs(break_seconds as u64);
         let end_time = std::rc::Rc::new(std::cell::Cell::new(end_time));
+        let display = gdk::Display::default().unwrap();
+        let screen = display.default_screen();
+        let n_monitors = display.n_monitors();
+        let primary_idx = match display.primary_monitor() {
+            Some(primary) => (0..n_monitors)
+                .find(|&i| display.monitor(i).as_ref() == Some(&primary))
+                .unwrap_or(0),
+            None => 0,
+        };
+        let ui_margin = {
+            let geom = display.monitor(primary_idx)
+                .map(|m| m.geometry())
+                .unwrap_or(gdk::Rectangle::new(0, 0, 1920, 1080));
+            ((geom.height().min(geom.width()) as f64 * 0.03).max(16.0)) as i32
+        };
 
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
         window.set_decorated(false);
         window.set_keep_above(true);
         window.set_app_paintable(true);
 
-        window.connect_draw(|_, cr| {
-            cr.set_source_rgb(0.0, 0.0, 0.0);
-            cr.paint().unwrap();
-            gtk::glib::Propagation::Proceed
+        window.connect_draw(move |_, cr| {
+                cr.set_source_rgb(0.0, 0.0, 0.0);
+                cr.paint().unwrap();
+                gtk::glib::Propagation::Proceed
         });
 
-        let display = format_remaining(break_seconds as u64);
+        // Timer (centered)
         let timer_label = gtk::Label::new(None);
+        let display_str = format_remaining(break_seconds as u64);
         timer_label.set_markup(&format!(
-            "<span font='80' foreground='#FFFFFF'>{display}</span>"
+            "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
         ));
 
-        let hint_label = gtk::Label::new(None);
-        hint_label.set_markup(
-            "<span font='14' foreground='#AAAAAA'>Space x3: temporarily dismiss  |  Esc x3: skip break</span>",
+        let timer_container = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        timer_container.set_halign(gtk::Align::Center);
+        timer_container.set_valign(gtk::Align::Center);
+        timer_container.add(&timer_label);
+
+        // Hint lines (bottom center)
+        let extend_hint = gtk::Label::new(None);
+        extend_hint.set_markup(
+            "<span font='Sans 11' foreground='#9CA3AF'>Press Ctrl+Shift+Space to extend the break 1 minute (not recommended)</span>"
+        );
+        let esc_hint = gtk::Label::new(None);
+        esc_hint.set_markup(
+            "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
         );
 
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        vbox.set_valign(gtk::Align::Center);
-        vbox.set_halign(gtk::Align::Center);
-        vbox.add(&timer_label);
-        vbox.add(&hint_label);
-        window.add(&vbox);
+        let keys_container = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        keys_container.set_halign(gtk::Align::Center);
+        keys_container.set_valign(gtk::Align::End);
+        keys_container.set_margin_bottom(ui_margin * 2);
+        keys_container.add(&extend_hint);
+        keys_container.add(&esc_hint);
 
-        window.fullscreen();
+        // Finished container (centered, hidden until break ends)
+        let finished_container = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        finished_container.set_halign(gtk::Align::Center);
+        finished_container.set_valign(gtk::Align::Center);
+        let finished_title = gtk::Label::new(None);
+        finished_title.set_markup(
+            "<span font='Sans Light 48' foreground='#FFFFFF'>Break complete</span>"
+        );
+        let finished_subtitle = gtk::Label::new(None);
+        finished_subtitle.set_markup(
+            "<span font='Sans 14' foreground='#9CA3AF'>press any key or click to continue</span>"
+        );
+        finished_container.add(&finished_title);
+        finished_container.add(&finished_subtitle);
+        finished_container.set_no_show_all(true);
+
+        // Overlay layout
+        let overlay = gtk::Overlay::new();
+        let base = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        overlay.add(&base);
+        overlay.add_overlay(&timer_container);
+        overlay.add_overlay(&keys_container);
+        overlay.add_overlay(&finished_container);
+        window.add(&overlay);
+
+        window.fullscreen_on_monitor(&screen, primary_idx);
 
         let is_hidden = std::rc::Rc::new(std::cell::Cell::new(false));
         let break_finished = std::rc::Rc::new(std::cell::Cell::new(false));
-        let space_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
-        let esc_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
+        let esc_press = std::rc::Rc::new(std::cell::Cell::new(0u32));
+        let extra_break_mins = std::rc::Rc::new(std::cell::Cell::new(0u32));
+
+        // Black overlay windows for non-primary monitors
+        let secondary_windows: std::rc::Rc<Vec<(i32, gtk::Window)>> = {
+            let mut wins = Vec::new();
+            for i in 0..n_monitors {
+                if i == primary_idx { continue; }
+                let sw = gtk::Window::new(gtk::WindowType::Toplevel);
+                sw.set_decorated(false);
+                sw.set_keep_above(true);
+                sw.set_app_paintable(true);
+                sw.connect_draw(|_, cr| {
+                    cr.set_source_rgb(0.0, 0.0, 0.0);
+                    cr.paint().unwrap();
+                    gtk::glib::Propagation::Proceed
+                });
+                sw.fullscreen_on_monitor(&screen, i);
+                wins.push((i, sw));
+            }
+            std::rc::Rc::new(wins)
+        };
 
         // Restore shortcuts, uninhibit screensaver, and re-focus main window on destroy
         // gsettings restore runs in a background thread to avoid blocking the UI
         {
             let saved = saved.clone();
             let cookie = inhibit_cookie.clone();
+            let sec = secondary_windows.clone();
             window.connect_destroy(move |_| {
+                for (_, sw) in sec.iter() {
+                    sw.hide();
+                    sw.close();
+                }
                 let overlay_key = saved.overlay_key.clone();
                 let dock_hotkeys = saved.dock_hotkeys.clone();
                 let disabled = saved.disabled.clone();
@@ -259,56 +320,73 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             });
         }
 
-        // Key handler:
-        // - Break finished: any key closes overlay and starts next focus
-        // - During break: space x3 temporarily dismiss, Esc x3 skip break
+        // Key handler: Space x3 = work 3 more min, Esc x3 = skip, Ctrl+Shift+Space = extend break
         {
-            let space_count = space_count.clone();
-            let esc_count = esc_count.clone();
-            let is_hidden = is_hidden.clone();
             let break_finished = break_finished.clone();
-            let saved = saved.clone();
-            let cookie = inhibit_cookie.clone();
+            let esc_press = esc_press.clone();
+            let extra_break = extra_break_mins.clone();
+            let end_time = end_time.clone();
             let w = window.clone();
             let app = app.clone();
+            let sec = secondary_windows.clone();
+            let exh = extend_hint.clone();
+            let eh = esc_hint.clone();
             window.connect_key_press_event(move |_, event| {
                 if break_finished.get() {
                     let _ = app.emit("pomodoro-break-acknowledged", ());
-
+                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
                     w.hide();
                     w.close();
                     return gtk::glib::Propagation::Stop;
                 }
 
                 let key = event.keyval();
-                if key == gdk::keys::constants::space {
-                    esc_count.set(0);
-                    let count = space_count.get() + 1;
-                    space_count.set(count);
-                    if count >= 3 {
-                        space_count.set(0);
-                        is_hidden.set(true);
-                        saved.restore();
-                        if let Some(c) = cookie.get() {
-                            screensaver_uninhibit(c);
-                            cookie.set(None);
+                let state = event.state();
+                let ctrl = state.contains(gdk::ModifierType::CONTROL_MASK);
+                let shift = state.contains(gdk::ModifierType::SHIFT_MASK);
+
+                if key == gdk::keys::constants::space && ctrl && shift {
+                    // Ctrl+Shift+Space: extend break by 1 minute (max 5)
+                    esc_press.set(0);
+                    eh.set_markup(
+                        "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
+                    );
+                    let added = extra_break.get();
+                    if added < 5 {
+                        extra_break.set(added + 1);
+                        let et = end_time.get();
+                        end_time.set(et + std::time::Duration::from_secs(60));
+                        let total = added + 1;
+                        let remain = 5 - total;
+                        if remain > 0 {
+                            exh.set_markup(&format!(
+                                "<span font='Sans 11' foreground='#9CA3AF'>Break extended by {total} min \u{2014} Press Ctrl+Shift+Space to add more ({remain} left, not recommended)</span>"
+                            ));
+                        } else {
+                            exh.set_markup(
+                                "<span font='Sans 11' foreground='#9CA3AF'>Break extended by 5 minutes (maximum reached)</span>"
+                            );
                         }
-    
-                        w.hide();
                     }
                 } else if key == gdk::keys::constants::Escape {
-                    space_count.set(0);
-                    let count = esc_count.get() + 1;
-                    esc_count.set(count);
+                    let count = esc_press.get() + 1;
+                    esc_press.set(count);
+                    let remaining = 3 - count;
+                    eh.set_markup(&format!(
+                        "<span font='Sans 11' foreground='#9CA3AF'>Press {remaining}x Esc to skip the break entirely (not recommended)</span>"
+                    ));
                     if count >= 3 {
+                        esc_press.set(0);
                         let _ = app.emit("pomodoro-skip-break", ());
-    
+                        for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
                         w.hide();
                         w.close();
                     }
                 } else {
-                    space_count.set(0);
-                    esc_count.set(0);
+                    esc_press.set(0);
+                    eh.set_markup(
+                        "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
+                    );
                 }
                 gtk::glib::Propagation::Stop
             });
@@ -319,16 +397,76 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             let break_finished = break_finished.clone();
             let w = window.clone();
             let app = app.clone();
+            let sec = secondary_windows.clone();
             window.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
             window.connect_button_press_event(move |_, _| {
                 if break_finished.get() {
                     let _ = app.emit("pomodoro-break-acknowledged", ());
-
+                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
                     w.hide();
                     w.close();
                 }
                 gtk::glib::Propagation::Stop
             });
+        }
+
+        // Key and click handlers on secondary monitors
+        for (_, sw) in secondary_windows.iter() {
+            {
+                let break_finished = break_finished.clone();
+                let esc_press = esc_press.clone();
+                let main = window.clone();
+                let app = app.clone();
+                let sec = secondary_windows.clone();
+                let eh = esc_hint.clone();
+                sw.connect_key_press_event(move |_, event| {
+                    if break_finished.get() {
+                        let _ = app.emit("pomodoro-break-acknowledged", ());
+                        for (_, s) in sec.iter() { s.hide(); s.close(); }
+                        main.hide();
+                        main.close();
+                        return gtk::glib::Propagation::Stop;
+                    }
+                    let key = event.keyval();
+                    if key == gdk::keys::constants::Escape {
+                        let count = esc_press.get() + 1;
+                        esc_press.set(count);
+                        let remaining = 3 - count;
+                        eh.set_markup(&format!(
+                            "<span font='Sans 11' foreground='#9CA3AF'>Press {remaining}x Esc to skip the break entirely (not recommended)</span>"
+                        ));
+                        if count >= 3 {
+                            esc_press.set(0);
+                            let _ = app.emit("pomodoro-skip-break", ());
+                            for (_, s) in sec.iter() { s.hide(); s.close(); }
+                            main.hide();
+                            main.close();
+                        }
+                    } else {
+                        esc_press.set(0);
+                        eh.set_markup(
+                            "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
+                        );
+                    }
+                    gtk::glib::Propagation::Stop
+                });
+            }
+            {
+                let break_finished = break_finished.clone();
+                let main = window.clone();
+                let app = app.clone();
+                let sec = secondary_windows.clone();
+                sw.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
+                sw.connect_button_press_event(move |_, _| {
+                    if break_finished.get() {
+                        let _ = app.emit("pomodoro-break-acknowledged", ());
+                        for (_, s) in sec.iter() { s.hide(); s.close(); }
+                        main.hide();
+                        main.close();
+                    }
+                    gtk::glib::Propagation::Stop
+                });
+            }
         }
 
         // Countdown using wall clock time (survives suspend)
@@ -337,8 +475,12 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             let is_hidden = is_hidden.clone();
             let break_finished = break_finished.clone();
             let w = window.clone();
+            let sec = secondary_windows.clone();
+            let screen_ref = screen.clone();
             let timer_label = timer_label.clone();
-            let hint_label = hint_label.clone();
+            let timer_ctr = timer_container.clone();
+            let keys_ctr = keys_container.clone();
+            let finished_ctr = finished_container.clone();
             gtk::glib::timeout_add_seconds_local(1, move || {
                 if break_finished.get() {
                     return gtk::glib::ControlFlow::Break;
@@ -351,26 +493,33 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
 
                 if secs == 0 {
                     break_finished.set(true);
-                    timer_label.set_markup(
-                        "<span font='48' foreground='#22C55E'>Break finished</span>"
-                    );
-                    hint_label.set_markup(
-                        "<span font='18' foreground='#BBBBBB'>Press any key or click to start next session</span>",
-                    );
+
+                    // Hide timer, show centered finished message
+                    timer_ctr.set_no_show_all(true);
+                    timer_ctr.hide();
+                    keys_ctr.set_no_show_all(true);
+                    keys_ctr.hide();
+                    finished_ctr.set_no_show_all(false);
+                    finished_ctr.show_all();
+
                     // If hidden (space x3), re-show the overlay
                     if is_hidden.get() {
                         is_hidden.set(false);
                         let _ = SavedShortcuts::save_and_disable();
-                        w.show_all();
+                        for (idx, sw) in sec.iter() {
+                            sw.show_all();
+                            sw.fullscreen_on_monitor(&screen_ref, *idx);
+                        }
+                        w.show();
                         w.fullscreen();
                         w.present();
                     }
                     return gtk::glib::ControlFlow::Break;
                 }
                 if !is_hidden.get() {
-                    let display = format_remaining(secs);
+                    let display_str = format_remaining(secs);
                     timer_label.set_markup(&format!(
-                        "<span font='80' foreground='#FFFFFF'>{display}</span>"
+                        "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
                     ));
                 }
                 gtk::glib::ControlFlow::Continue
@@ -383,6 +532,8 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             let is_hidden = is_hidden.clone();
             let inhibit_cookie = inhibit_cookie.clone();
             let w = window.clone();
+            let sec = secondary_windows.clone();
+            let screen_ref = screen.clone();
             let timer_label = timer_label.clone();
             gtk::glib::timeout_add_seconds_local(5, move || {
                 let now = SystemTime::now();
@@ -401,11 +552,15 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                     inhibit_cookie.set(screensaver_inhibit());
 
                     let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
-                    let display = format_remaining(remaining.as_secs());
+                    let display_str = format_remaining(remaining.as_secs());
                     timer_label.set_markup(&format!(
-                        "<span font='80' foreground='#FFFFFF'>{display}</span>"
+                        "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
                     ));
-                    w.show_all();
+                    for (idx, sw) in sec.iter() {
+                        sw.show_all();
+                        sw.fullscreen_on_monitor(&screen_ref, *idx);
+                    }
+                    w.show();
                     w.fullscreen();
                     w.present();
                 }
@@ -414,6 +569,9 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             });
         }
 
+        for (_, sw) in secondary_windows.iter() {
+            sw.show_all();
+        }
         window.show_all();
     })
     .map_err(|e| e.to_string())?;
@@ -459,10 +617,8 @@ pub fn show_pomodoro_notification(app: tauri::AppHandle, remaining_seconds: u32)
 
     std::thread::spawn(move || {
         let result = Notification::new()
-            .summary("Focus ending soon")
-            .body(&format!("{remaining_seconds} seconds remaining"))
-            .action("skip_break", "Skip break")
-            .action("add_time", "Add 10 seconds")
+            .summary("Focus session ending in 1 minute")
+            .action("add_time", "+3 minutes")
             .timeout(timeout_ms as i32)
             .id(9001)
             .hint(Hint::Transient(true))
@@ -472,11 +628,8 @@ pub fn show_pomodoro_notification(app: tauri::AppHandle, remaining_seconds: u32)
         match result {
             Ok(handle) => {
                 handle.wait_for_action(|action| match action {
-                    "skip_break" => {
-                        let _ = app.emit("pomodoro-skip-break", ());
-                    }
                     "add_time" => {
-                        let _ = app.emit("pomodoro-add-time", AddTimePayload { seconds: 10 });
+                        let _ = app.emit("pomodoro-add-time", AddTimePayload { seconds: 180 });
                     }
                     _ => {}
                 });

@@ -42,21 +42,29 @@ export function getCalendar() {
     },
 
     async load() {
-      const rows = await select<DbSessionBlock>(
-        `SELECT id, title, start_time, end_time, pomodoro_count,
-                focus_duration_minutes, short_break_minutes, long_break_minutes
-         FROM session_blocks ORDER BY start_time ASC`,
-      );
-      blocks = rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        start: toCalendarDate(r.start_time),
-        end: toCalendarDate(r.end_time),
-        pomodoroCount: r.pomodoro_count,
-        focusDurationMinutes: r.focus_duration_minutes,
-        shortBreakMinutes: r.short_break_minutes,
-        longBreakMinutes: r.long_break_minutes,
-      }));
+      console.log("[calendar] load() called");
+      try {
+        const rows = await select<DbSessionBlock>(
+          `SELECT id, title, start_time, end_time, pomodoro_count,
+                  focus_duration_minutes, short_break_minutes, long_break_minutes
+           FROM session_blocks ORDER BY start_time ASC`,
+        );
+        console.log(`[calendar] loaded ${rows.length} blocks from DB`, rows);
+        blocks = rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          start: toCalendarDate(r.start_time),
+          end: toCalendarDate(r.end_time),
+          pomodoroCount: r.pomodoro_count,
+          focusDurationMinutes: r.focus_duration_minutes,
+          shortBreakMinutes: r.short_break_minutes,
+          longBreakMinutes: r.long_break_minutes,
+        }));
+        console.log(`[calendar] blocks set, count: ${blocks.length}`);
+      } catch (e) {
+        console.error("[calendar] load() failed:", e);
+        throw e;
+      }
     },
 
     async addBlock(
@@ -68,8 +76,8 @@ export function getCalendar() {
       const id = existingId ?? crypto.randomUUID();
       const now = nowLocal();
       await execute(
-        `INSERT INTO session_blocks (id, title, start_time, end_time, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+        `INSERT INTO session_blocks (id, title, start_time, end_time, focus_duration_minutes, short_break_minutes, long_break_minutes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 40, 5, 10, $5, $6)`,
         [id, title, toDbTime(start), toDbTime(end), now, now],
       );
       const event: CalendarEvent = { id, title, start, end };

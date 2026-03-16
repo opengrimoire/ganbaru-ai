@@ -12,14 +12,13 @@ interface PomodoroConfig {
 }
 
 const DEFAULT_CONFIG: PomodoroConfig = {
-  focusMinutes: 25,
+  focusMinutes: 40,
   shortBreakMinutes: 5,
-  longBreakMinutes: 15,
+  longBreakMinutes: 10,
   cyclesBeforeLongBreak: 4,
 };
 
-// --- Testing flag: set to 1 to treat minutes as seconds ---
-const TIME_MULTIPLIER = 1;
+const TIME_MULTIPLIER = 60;
 
 let phase = $state<PomodoroPhase>("focus");
 let remainingSeconds = $state(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
@@ -37,7 +36,7 @@ let notificationShown = false;
 let phaseEndTime: number | null = null;
 let activeBlockId: string | null = null;
 
-const NOTIFICATION_THRESHOLD = 10;
+const NOTIFICATION_THRESHOLD = 60;
 
 function updateTray() {
   const totalSeconds =
@@ -104,7 +103,6 @@ function initListeners() {
     if (phaseEndTime !== null) {
       phaseEndTime += event.payload.seconds * 1000;
     }
-    notificationShown = false;
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
 }
 

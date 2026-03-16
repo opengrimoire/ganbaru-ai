@@ -3,9 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getNavigation, type View } from "$lib/stores/navigation.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
-  import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import { execute } from "$lib/api/db";
   import { cn } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
@@ -22,7 +20,6 @@
   const win = getCurrentWindow();
   const nav = getNavigation();
   const pomodoro = getPomodoro();
-  const calendar = getCalendar();
   const theme = getTheme();
 
   let isMaximized = $state(false);
@@ -33,10 +30,7 @@
   async function confirmReset() {
     showResetConfirm = false;
     pomodoro.stopSession();
-    await calendar.clearAll();
-    await execute("DELETE FROM pomodoro_sessions");
-    await execute("DELETE FROM xp_entries");
-    await execute("DELETE FROM tasks");
+    await invoke("reset_database");
   }
 
   function handleClose() {

@@ -186,15 +186,15 @@ pub fn update_tray(
             }
 
             let menu = if active {
+                let skip_item = MenuItemBuilder::with_id("skip", "Skip")
+                    .build(&app)
+                    .map_err(|e| e.to_string())?;
+                let sep1 = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
                 let pause_resume_label = if is_running { "Pause" } else { "Resume" };
                 let pause_resume_item =
                     MenuItemBuilder::with_id("pause_resume", pause_resume_label)
                         .build(&app)
                         .map_err(|e| e.to_string())?;
-                let skip_item = MenuItemBuilder::with_id("skip", "Skip")
-                    .build(&app)
-                    .map_err(|e| e.to_string())?;
-                let sep1 = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
                 MenuBuilder::new(&app)
                     .item(&status_item)
                     .item(&sep1)

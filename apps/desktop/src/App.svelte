@@ -14,9 +14,8 @@
   const calendar = getCalendar();
   const pomodoro = getPomodoro();
 
-  // Load calendar data before any child component mounts
   onMount(() => {
-    calendar.load();
+    calendar.load().catch((e) => console.error("Failed to load calendar:", e));
   });
 
   const views: View[] = ["calendar", "kanban", "skill-tree"];
@@ -81,9 +80,9 @@
 
     if (activeBlock) {
       pomodoro.startFromBlock(activeBlock.id, {
-        focusMinutes: activeBlock.focusDurationMinutes ?? 25,
+        focusMinutes: activeBlock.focusDurationMinutes ?? 40,
         shortBreakMinutes: activeBlock.shortBreakMinutes ?? 5,
-        longBreakMinutes: activeBlock.longBreakMinutes ?? 15,
+        longBreakMinutes: activeBlock.longBreakMinutes ?? 10,
         cyclesBeforeLongBreak: activeBlock.pomodoroCount ?? 4,
       });
       trackedBlockSnapshot = { ...activeBlock };

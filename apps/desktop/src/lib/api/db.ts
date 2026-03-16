@@ -1,12 +1,15 @@
 import Database from "@tauri-apps/plugin-sql";
 
-let db: Database | null = null;
+let dbPromise: Promise<Database> | null = null;
 
 export async function getDb(): Promise<Database> {
-  if (!db) {
-    db = await Database.load("sqlite:ganbaruai.db");
+  if (!dbPromise) {
+    dbPromise = Database.load("sqlite:ganbaruai.db");
+    dbPromise.catch(() => {
+      dbPromise = null;
+    });
   }
-  return db;
+  return dbPromise;
 }
 
 export async function execute(
