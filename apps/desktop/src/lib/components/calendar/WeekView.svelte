@@ -198,7 +198,7 @@
             role="button"
             tabindex="-1"
           >
-            <span class="text-[13px] {past ? '' : 'font-semibold'}" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+            <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
               {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}
             </span>
           </div>

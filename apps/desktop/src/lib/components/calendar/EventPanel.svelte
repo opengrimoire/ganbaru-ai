@@ -339,6 +339,50 @@
   }
 
   // ─── Mini calendar picker (recurrence end date) ────────────────
+  let recEndPickerOpen = $state(false);
+  let recEndDateBtn: HTMLInputElement | undefined = $state();
+  let recEndDateText = $state("");
+
+  function syncRecEndDateText() {
+    const d = recEndDate || defaultUntilDate();
+    const [y, m, day] = d.split("-").map(Number);
+    const dt = new Date(y, m - 1, day);
+    recEndDateText = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function parseRecEndDateInput() {
+    const parsed = new Date(recEndDateText);
+    if (!isNaN(parsed.getTime())) {
+      const iso = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+      updateRecEndDate(iso);
+      const [y, m] = iso.split("-").map(Number);
+      calYear = y;
+      calMonth = m;
+    }
+    syncRecEndDateText();
+  }
+
+  $effect(() => {
+    // Keep text in sync when recEndDate changes (e.g. from calendar pick)
+    const _dep = recEndDate;
+    syncRecEndDateText();
+  });
+
+  function positionEndPicker(node: HTMLElement) {
+    function update() {
+      if (!recEndDateBtn) return;
+      const r = recEndDateBtn.getBoundingClientRect();
+      const pw = 224; // w-56 = 14rem = 224px
+      let left = r.left + r.width / 2 - pw / 2;
+      left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+      node.style.left = `${left}px`;
+      node.style.top = `${r.bottom + 4}px`;
+    }
+    update();
+    return { destroy() {} };
+  }
+
+
   let calYear = $state(new Date().getFullYear());
   let calMonth = $state(new Date().getMonth() + 1);
 
@@ -449,6 +493,7 @@
     const [y, m] = day.dateStr.split("-").map(Number);
     calYear = y;
     calMonth = m;
+    recEndPickerOpen = false;
   }
 
   // ─── Date picker ──────────────────────────────────────────────
@@ -840,7 +885,8 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={panelEl}
-  class="panel-root max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-border shadow-2xl"
+  class="panel-root max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-border"
+  style:box-shadow="0 2px 8px rgba(0,0,0,0.3)"
   style="{panelStyle} background-color: var(--panel-bg);"
   onclick={(e) => e.stopPropagation()}
   onkeydown={handleKeydown}
@@ -1115,7 +1161,7 @@
             <Timer size={14} />
           </button>
           <button onclick={() => handleExpand("pomodoro")}
-            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40">
+            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
             <span class="text-[12px] {pomodoroEnabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
             <span class="ml-auto truncate text-[10px] text-muted-foreground">{pomoSummary}</span>
           </button>
@@ -1174,7 +1220,7 @@
             <Bell size={14} />
           </button>
           <button onclick={() => handleExpand("notifications")}
-            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40">
+            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
             <span class="text-[12px] {notifEnabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
             <span class="ml-auto truncate text-[10px] text-muted-foreground">{notifSummary}</span>
           </button>
@@ -1253,7 +1299,7 @@
             <Repeat size={14} />
           </button>
           <button onclick={() => handleExpand("repeat")}
-            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40">
+            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
             <span class="text-[12px] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
             <span class="ml-auto truncate text-[10px] text-muted-foreground">{recurrence ? recurrenceLabel : "None"}</span>
           </button>
@@ -1266,7 +1312,7 @@
               <input type="number" value={recInterval}
                 oninput={(e) => updateRecInterval(parseInt(e.currentTarget.value, 10) || 1)}
                 min={1} max={99}
-                class="num-input w-10 rounded-md px-1 py-1 text-center text-[11px] text-foreground outline-none ring-1 ring-inset ring-border/60 focus:ring-primary/50"
+                class="num-input w-10 rounded-md px-1 py-1 text-center text-[11px] text-foreground outline-none"
                 style="background-color: var(--panel-contrast);"
                 onkeydown={(e) => e.stopPropagation()} />
               <div class="flex gap-1">
@@ -1276,7 +1322,7 @@
                       {recFrequency === opt.value
                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'}"
-                  >{recInterval === 1 ? opt.singular : opt.plural}</button>
+                  >{opt.plural}</button>
                 {/each}
               </div>
             </div>
@@ -1301,107 +1347,152 @@
             <!-- Ends -->
             <div class="flex flex-col gap-1.5">
               <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Ends</span>
-              {#each [
-                { type: "never" as const, label: "Never" },
-                { type: "until" as const, label: "On date" },
-                { type: "count" as const, label: "After" },
-              ] as opt}
-                <button onclick={() => updateRecEndType(opt.type)}
-                  class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
-                    {recEndType === opt.type
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                      : 'text-foreground hover:bg-accent/60'}"
-                >
-                  <div class="flex h-3.5 w-3.5 items-center justify-center rounded-full ring-1 ring-inset
-                    {recEndType === opt.type ? 'ring-emerald-500' : 'ring-border'}">
-                    {#if recEndType === opt.type}
+
+              <!-- Never -->
+              <button onclick={() => updateRecEndType("never")}
+                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
+                  {recEndType === 'never'
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                    : 'text-foreground hover:bg-accent/60'}">
+                <div class="flex h-3.5 w-3.5 items-center justify-center rounded-full ring-1 ring-inset
+                  {recEndType === 'never' ? 'ring-emerald-500' : 'ring-border'}">
+                  {#if recEndType === "never"}
+                    <div class="h-2 w-2 rounded-full bg-emerald-500"></div>
+                  {/if}
+                </div>
+                <span>Never</span>
+              </button>
+
+              <!-- On -->
+              <div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]">
+                <button onclick={() => updateRecEndType("until")}
+                  class="flex w-12 items-center gap-2 transition-all
+                    {recEndType === 'until'
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-foreground'}">
+                  <div class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full ring-1 ring-inset
+                    {recEndType === 'until' ? 'ring-emerald-500' : 'ring-border'}">
+                    {#if recEndType === "until"}
                       <div class="h-2 w-2 rounded-full bg-emerald-500"></div>
                     {/if}
                   </div>
-                  <span>{opt.label}</span>
-                  {#if opt.type === "count" && recEndType === "count"}
-                    <input type="number" value={recEndCount}
-                      oninput={(e) => updateRecEndCount(parseInt(e.currentTarget.value, 10) || 1)}
-                      min={1} max={999}
-                      class="num-input w-12 rounded px-1.5 py-0.5 text-center text-[12px] text-foreground outline-none ring-1 ring-inset ring-border/60 focus:ring-primary/50"
-                      style="background-color: var(--panel-contrast);"
-                      onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} />
-                    <span class="text-muted-foreground">times</span>
-                  {/if}
+                  <span>On</span>
                 </button>
-              {/each}
+                <div class="relative">
+                  <input bind:this={recEndDateBtn}
+                    type="text"
+                    bind:value={recEndDateText}
+                    onclick={() => { if (recEndType !== "until") updateRecEndType("until"); recEndPickerOpen = !recEndPickerOpen; }}
+                    onblur={parseRecEndDateInput}
+                    onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); parseRecEndDateInput(); recEndPickerOpen = false; } }}
+                    class="w-[110px] rounded px-2 py-0.5 text-[11px] outline-none transition-colors
+                      {recEndType === 'until' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}
+                      {recEndPickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-accent/60'}"
+                    style="background-color: var(--panel-contrast);" />
 
-              <!-- Mini calendar -->
-              {#if recEndType === "until"}
-                <div class="mt-0.5 rounded-lg p-2 ring-1 ring-inset ring-border/60" style="background-color: var(--panel-contrast);">
-                  <!-- Header — clickable drill-down -->
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <div class="mb-1 flex items-center justify-center" onwheel={handleCalWheel}>
-                    <button onclick={handleCalHeaderClick}
-                      class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-accent">
-                      {#if calPickerMode === "days"}
-                        {calMonthLabel}
-                      {:else}
-                        {calYear}
-                      {/if}
-                    </button>
-                  </div>
-
-                  <!-- Grid — scrollable -->
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <div onwheel={handleCalWheel}>
-                    {#if calPickerMode === "days"}
-                      <!-- Day letters -->
-                      <div class="grid grid-cols-7 gap-x-0 text-center">
-                        {#each ["M", "T", "W", "T", "F", "S", "S"] as letter}
-                          <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
-                        {/each}
-                      </div>
-                      <!-- Date grid -->
-                      <div class="grid grid-cols-7 gap-x-0 text-center">
-                        {#each calDays as day}
-                          {@const now = new Date()}
-                          {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
-                          <button onclick={() => selectCalDay(day)}
-                            class="flex h-6 w-full items-center justify-center rounded-sm text-[11px] hover:bg-accent"
-                            style={day.selected
-                              ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-                              : day.today
-                                ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
-                                : !day.currentMonth
-                                  ? "opacity: 0.25;"
-                                  : past
-                                    ? "opacity: 0.45; color: var(--foreground);"
-                                    : "color: var(--foreground);"}
-                          >{day.day}</button>
-                        {/each}
+                  <!-- Floating date picker -->
+                  {#if recEndPickerOpen}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div class="fixed inset-0 z-[60]" onclick={() => { recEndPickerOpen = false; }}></div>
+                    <div class="fixed z-[61] w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
+                      use:positionEndPicker>
+                      <!-- Header — clickable drill-down -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div class="mb-1 flex items-center justify-center" onwheel={handleCalWheel}>
+                        <button onclick={handleCalHeaderClick}
+                          class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-accent">
+                          {#if calPickerMode === "days"}
+                            {calMonthLabel}
+                          {:else}
+                            {calYear}
+                          {/if}
+                        </button>
                       </div>
 
-                    {:else if calPickerMode === "months"}
-                      <div class="grid grid-cols-3 gap-1 py-1">
-                        {#each dpShortMonths as name, i}
-                          <button onclick={() => selectCalMonth(i)}
-                            class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-accent
-                              {i + 1 === calMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
-                            {name}
-                          </button>
-                        {/each}
-                      </div>
+                      <!-- Grid — scrollable -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div onwheel={handleCalWheel}>
+                        {#if calPickerMode === "days"}
+                          <div class="grid grid-cols-7 gap-x-0 text-center">
+                            {#each ["M", "T", "W", "T", "F", "S", "S"] as letter}
+                              <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
+                            {/each}
+                          </div>
+                          <div class="grid grid-cols-7 gap-x-0 text-center">
+                            {#each calDays as day}
+                              {@const now = new Date()}
+                              {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
+                              <button onclick={() => selectCalDay(day)}
+                                class="flex h-6 w-full items-center justify-center rounded-sm text-[11px] hover:bg-accent"
+                                style={day.selected
+                                  ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+                                  : day.today
+                                    ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
+                                    : !day.currentMonth
+                                      ? "opacity: 0.25;"
+                                      : past
+                                        ? "opacity: 0.45; color: var(--foreground);"
+                                        : "color: var(--foreground);"}
+                              >{day.day}</button>
+                            {/each}
+                          </div>
 
-                    {:else}
-                      <div class="grid grid-cols-3 gap-1 py-1">
-                        {#each calYearPageYears as year}
-                          <button onclick={() => selectCalYear(year)}
-                            class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-accent
-                              {year === calYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
-                            {year}
-                          </button>
-                        {/each}
+                        {:else if calPickerMode === "months"}
+                          <div class="grid grid-cols-3 gap-1 py-1">
+                            {#each dpShortMonths as name, i}
+                              <button onclick={() => selectCalMonth(i)}
+                                class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-accent
+                                  {i + 1 === calMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                                {name}
+                              </button>
+                            {/each}
+                          </div>
+
+                        {:else}
+                          <div class="grid grid-cols-3 gap-1 py-1">
+                            {#each calYearPageYears as year}
+                              <button onclick={() => selectCalYear(year)}
+                                class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-accent
+                                  {year === calYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                                {year}
+                              </button>
+                            {/each}
+                          </div>
+                        {/if}
                       </div>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- After -->
+              <div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]">
+                <button onclick={() => updateRecEndType("count")}
+                  class="flex w-12 items-center gap-2 transition-all
+                    {recEndType === 'count'
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-foreground'}">
+                  <div class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full ring-1 ring-inset
+                    {recEndType === 'count' ? 'ring-emerald-500' : 'ring-border'}">
+                    {#if recEndType === "count"}
+                      <div class="h-2 w-2 rounded-full bg-emerald-500"></div>
                     {/if}
                   </div>
+                  <span>After</span>
+                </button>
+                <div class="flex items-center gap-1.5">
+                  <input type="number" value={recEndCount}
+                    onfocus={() => { if (recEndType !== "count") updateRecEndType("count"); }}
+                    oninput={(e) => updateRecEndCount(parseInt(e.currentTarget.value, 10) || 1)}
+                    min={1} max={999}
+                    class="num-input w-10 rounded px-1 py-0.5 text-center text-[11px] outline-none
+                      {recEndType === 'count' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}"
+                    style="background-color: var(--panel-contrast);"
+                    onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} />
+                  <span class="{recEndType === 'count' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}">times</span>
                 </div>
-              {/if}
+              </div>
             </div>
 
           </div>
@@ -1415,7 +1506,7 @@
             <Music size={14} />
           </button>
           <button onclick={() => handleExpand("music")}
-            class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors hover:bg-accent/40">
+            class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
             <span class="text-[12px] text-muted-foreground">Music</span>
           </button>
         </div>

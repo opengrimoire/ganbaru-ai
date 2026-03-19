@@ -84,7 +84,7 @@
           bind:this={headerCells[i]}
           class="flex items-center justify-center"
         >
-          <span class="text-[13px] font-semibold" style="color: var(--foreground);">
+          <span class="text-[13px]" style="color: var(--foreground);">
             {formatDayName(day, dayFormat)}
           </span>
         </div>
