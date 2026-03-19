@@ -253,6 +253,8 @@ export function useDragController(config: DragControllerConfig) {
         start: `${dateStr} ${sh}:${sm}`,
         end: `${dateStr} ${eh}:${em}`,
         color,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        calendarId: "default",
       },
       top: minuteToTop(startMinute, hourHeight),
       height: ((endMinute - startMinute) / 60) * hourHeight,

@@ -22,8 +22,8 @@
 
   const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
-  const hasRepeat = $derived(positioned.event.repeatRule && positioned.event.repeatRule !== "none");
-  const hasNotification = $derived(positioned.event.notificationMinutes !== undefined);
+  const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
+  const hasNotification = $derived(positioned.event.notifications && positioned.event.notifications.length > 0);
 
   function handlePointerDown(e: PointerEvent) {
     e.stopPropagation();

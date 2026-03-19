@@ -134,25 +134,29 @@
   function checkEventNotifications() {
     const now = new Date();
     for (const event of calendar.events) {
-      if (event.notificationMinutes === undefined) continue;
-      if (notifiedEvents.has(event.id)) continue;
+      if (!event.notifications || event.notifications.length === 0) continue;
 
       const startTime = parseCalendarDate(event.start);
-      const notifyTime = new Date(startTime.getTime() - event.notificationMinutes * 60_000);
-      const diff = now.getTime() - notifyTime.getTime();
+      for (const minutes of event.notifications) {
+        const notifKey = `${event.id}::${minutes}`;
+        if (notifiedEvents.has(notifKey)) continue;
 
-      // Fire if within a 90-second window (covers 30s polling interval with margin)
-      if (diff >= 0 && diff < 90_000) {
-        notifiedEvents.add(event.id);
-        const minutesUntil = Math.round((startTime.getTime() - now.getTime()) / 60_000);
-        let body: string;
-        if (minutesUntil <= 0) body = "Starting now";
-        else if (minutesUntil === 1) body = "Starts in 1 minute";
-        else if (minutesUntil < 60) body = `Starts in ${minutesUntil} minutes`;
-        else body = `Starts in ${Math.round(minutesUntil / 60)} hour(s)`;
-        invoke("show_event_notification", { title: event.title, body }).catch((e) =>
-          console.error("[notifications] failed:", e),
-        );
+        const notifyTime = new Date(startTime.getTime() - minutes * 60_000);
+        const diff = now.getTime() - notifyTime.getTime();
+
+        // Fire if within a 90-second window (covers 30s polling interval with margin)
+        if (diff >= 0 && diff < 90_000) {
+          notifiedEvents.add(notifKey);
+          const minutesUntil = Math.round((startTime.getTime() - now.getTime()) / 60_000);
+          let body: string;
+          if (minutesUntil <= 0) body = "Starting now";
+          else if (minutesUntil === 1) body = "Starts in 1 minute";
+          else if (minutesUntil < 60) body = `Starts in ${minutesUntil} minutes`;
+          else body = `Starts in ${Math.round(minutesUntil / 60)} hour(s)`;
+          invoke("show_event_notification", { title: event.title, body }).catch((e) =>
+            console.error("[notifications] failed:", e),
+          );
+        }
       }
     }
   }

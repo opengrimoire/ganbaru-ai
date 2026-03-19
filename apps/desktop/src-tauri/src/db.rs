@@ -203,5 +203,16 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_calendar_events_calendar ON calendar_events(calendar_id);
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 5,
+        description: "multi-notification support: add notifications JSON column",
+        sql: "
+            ALTER TABLE calendar_events ADD COLUMN notifications TEXT;
+            UPDATE calendar_events
+              SET notifications = '[' || notification_minutes || ']'
+              WHERE notification_minutes IS NOT NULL;
+        ",
+        kind: MigrationKind::Up,
     }]
 }

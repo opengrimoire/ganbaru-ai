@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, CalendarViewMode, EventColor, PomodoroConfig, RecurringScope, RepeatRule } from "./types";
+  import type { CalendarEvent, CalendarViewMode, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
   import { addDays, getLocalTimezone } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
@@ -131,7 +131,7 @@
         await calendarStore.addBlock({
           title: action.event.title, start: action.event.start, end: action.event.end,
           id: action.event.id, color: action.event.color, description: action.event.description,
-          repeatRule: action.event.repeatRule, notificationMinutes: action.event.notificationMinutes,
+          recurrence: action.event.recurrence, notifications: action.event.notifications,
           pomodoroConfig: action.event.pomodoroConfig,
         });
       } else {
@@ -155,7 +155,7 @@
         await calendarStore.addBlock({
           title: action.event.title, start: action.event.start, end: action.event.end,
           id: action.event.id, color: action.event.color, description: action.event.description,
-          repeatRule: action.event.repeatRule, notificationMinutes: action.event.notificationMinutes,
+          recurrence: action.event.recurrence, notifications: action.event.notifications,
           pomodoroConfig: action.event.pomodoroConfig,
         });
       } else if (action.type === "delete") {
@@ -180,7 +180,7 @@
   let currentScope: RecurringScope = $state("this");
 
   function isRecurring(event: CalendarEvent): boolean {
-    return !!event.recurringParentId || (!!event.repeatRule && event.repeatRule !== "none");
+    return !!event.recurringParentId || !!event.recurrence;
   }
 
   // Shared scroll position (preserved across view switches)
@@ -188,6 +188,10 @@
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
+      // Let contenteditable elements handle their own shortcuts
+      const active = document.activeElement;
+      if (active && (active as HTMLElement).isContentEditable) return;
+
       if (e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();
         historyBack();
@@ -331,11 +335,18 @@
       // Non-recurring: direct preview
       calendarStore.previewBlock({ ...panelState.event, ...data });
     } else if (panelState.mode === "create" && pendingCreatePreview) {
-      pendingCreatePreview = {
-        ...pendingCreatePreview,
-        title: data.title,
-        color: data.color,
-      };
+      const updated = { ...pendingCreatePreview, title: data.title, color: data.color };
+      if (data.start) {
+        const dateStr = data.start.split(" ")[0];
+        const [sh, sm] = (data.start.split(" ")[1] ?? "0:0").split(":").map(Number);
+        updated.dateStr = dateStr;
+        updated.startMinute = sh * 60 + sm;
+      }
+      if (data.end) {
+        const [eh, em] = (data.end.split(" ")[1] ?? "0:0").split(":").map(Number);
+        updated.endMinute = eh * 60 + em;
+      }
+      pendingCreatePreview = updated;
     }
   }
 
@@ -359,8 +370,8 @@
     end: string;
     color?: EventColor;
     description: string;
-    repeatRule: RepeatRule;
-    notificationMinutes?: number;
+    recurrence?: RecurrenceConfig;
+    notifications?: number[];
     pomodoroConfig?: PomodoroConfig;
   }, scope?: RecurringScope) {
     const currentPanel = panelState;
@@ -372,7 +383,7 @@
       const event = await calendarStore.addBlock({
         title: data.title, start: data.start, end: data.end,
         color: data.color, description: data.description,
-        repeatRule: data.repeatRule, notificationMinutes: data.notificationMinutes,
+        recurrence: data.recurrence, notifications: data.notifications,
         pomodoroConfig: data.pomodoroConfig,
       });
       pushUndo({ type: "add", event: { ...event } });
@@ -382,7 +393,7 @@
         const instanceEvent = currentPanel.instanceEvent;
         if (scope === "this") {
           const standalone = await calendarStore.detachInstance(instanceEvent);
-          const updated: CalendarEvent = { ...standalone, ...data, repeatRule: undefined };
+          const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
           await calendarStore.updateBlock(updated);
         } else if (scope === "following") {
           await calendarStore.splitSeries(instanceEvent, data);

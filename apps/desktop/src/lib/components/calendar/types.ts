@@ -10,7 +10,23 @@ export type EventColor =
   | "pink"
   | "gray";
 
-export type RepeatRule =
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
+
+export type Weekday = "MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU";
+
+export type RecurrenceEnd =
+  | { type: "never" }
+  | { type: "until"; date: string }
+  | { type: "count"; count: number };
+
+export interface RecurrenceConfig {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  weekdays?: Weekday[];
+  end: RecurrenceEnd;
+}
+
+export type RecurrencePreset =
   | "none"
   | "daily"
   | "weekdays"
@@ -36,13 +52,12 @@ export interface CalendarEvent {
   calendarId: string;
   color?: EventColor;
   description?: string;
-  repeatRule?: RepeatRule;
-  notificationMinutes?: number;
+  recurrence?: RecurrenceConfig;
+  /** Array of notification times in minutes before the event start. */
+  notifications?: number[];
   pomodoroConfig?: PomodoroConfig;
   /** Dates excluded from recurrence expansion (YYYY-MM-DD). */
   exceptions?: string[];
-  /** Stop generating recurring instances after this date (YYYY-MM-DD). */
-  repeatUntil?: string;
   /** Set on virtual recurring instances; points to the DB-backed template event. */
   recurringParentId?: string;
 }
