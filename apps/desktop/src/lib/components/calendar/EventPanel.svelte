@@ -4,6 +4,7 @@
     RecurrenceConfig, RecurrenceFrequency, RecurringScope, Weekday,
   } from "./types";
   import { formatRecurrenceLabel } from "./rrule";
+  import { untrack } from "svelte";
   import "@fontsource-variable/inter";
   import { EVENT_COLOR_OPTIONS, getEventColor } from "./utils";
   import { getTheme } from "$lib/stores/theme.svelte";
@@ -41,6 +42,7 @@
     onClose,
     onChange,
     onScopeChange,
+    onDirtyChange,
   }: {
     mode: "create" | "edit";
     start?: string;
@@ -61,6 +63,7 @@
     onClose: () => void;
     onChange?: (data: Partial<CalendarEvent>) => void;
     onScopeChange?: (scope: RecurringScope) => void;
+    onDirtyChange?: (dirty: boolean) => void;
   } = $props();
 
   // ─── Core fields ────────────────────────────────────────────────
@@ -105,15 +108,59 @@
     handleEditorInput();
   }
 
-  function insertLink() {
+  let linkPopoverOpen = $state(false);
+  let linkUrl = $state("https://");
+  let linkBtnEl: HTMLButtonElement | undefined = $state();
+  let linkInputEl: HTMLInputElement | undefined = $state();
+  let savedSelection: Range | null = null;
+
+  function openLinkPopover() {
     const sel = window.getSelection();
-    const selectedText = sel?.toString() ?? "";
-    const url = prompt("URL:", selectedText.startsWith("http") ? selectedText : "https://");
-    if (url) {
-      document.execCommand("createLink", false, url);
-      editorEl?.focus();
-      handleEditorInput();
+    if (sel && sel.rangeCount > 0) {
+      savedSelection = sel.getRangeAt(0).cloneRange();
     }
+    const selectedText = sel?.toString() ?? "";
+    linkUrl = selectedText.startsWith("http") ? selectedText : "https://";
+    linkPopoverOpen = true;
+    requestAnimationFrame(() => {
+      linkInputEl?.focus();
+      linkInputEl?.select();
+    });
+  }
+
+  function handleEditorPaste(e: ClipboardEvent) {
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    if (!text.startsWith("http")) return; // let normal paste happen
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return; // no selection, normal paste
+    e.preventDefault();
+    document.execCommand("createLink", false, text);
+    handleEditorInput();
+  }
+
+  function applyLink() {
+    if (!linkUrl || linkUrl === "https://") { linkPopoverOpen = false; return; }
+    if (savedSelection) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(savedSelection);
+    }
+    document.execCommand("createLink", false, linkUrl);
+    editorEl?.focus();
+    handleEditorInput();
+    linkPopoverOpen = false;
+    savedSelection = null;
+  }
+
+  function positionLinkPopover(node: HTMLElement) {
+    if (!linkBtnEl) return { destroy() {} };
+    const r = linkBtnEl.getBoundingClientRect();
+    const pw = node.offsetWidth || 220;
+    let left = r.left + r.width / 2 - pw / 2;
+    left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+    node.style.left = `${left}px`;
+    node.style.top = `${r.bottom + 4}px`;
+    return { destroy() {} };
   }
 
   const descPreview = $derived.by(() => {
@@ -127,10 +174,10 @@
   // ─── Pomodoro ───────────────────────────────────────────────────
   type PomodoroPreset = "auto" | "deep" | "creative" | "extended" | "custom";
   const POMO_PRESETS: Record<Exclude<PomodoroPreset, "custom">, { focus: number; short: number; long: number; label: string; desc: string }> = {
-    auto: { focus: 40, short: 5, long: 10, label: "Automatic", desc: "Match block duration" },
-    deep: { focus: 40, short: 5, long: 10, label: "Deep focus", desc: "40 / 5 / 10" },
-    creative: { focus: 25, short: 5, long: 15, label: "Creative", desc: "25 / 5 / 15" },
-    extended: { focus: 50, short: 10, long: 10, label: "Extended", desc: "50 / 10 / 10" },
+    auto: { focus: 40, short: 5, long: 10, label: "Automatic", desc: "Default" },
+    deep: { focus: 40, short: 5, long: 10, label: "Deep focus", desc: "F 40 / SB 5 / LB 10" },
+    creative: { focus: 25, short: 5, long: 15, label: "Creative", desc: "F 25 / SB 5 / LB 15" },
+    extended: { focus: 50, short: 10, long: 10, label: "Extended", desc: "F 50 / SB 10 / LB 10" },
   };
   let pomodoroEnabled = $state(false);
   let pomodoroPreset: PomodoroPreset = $state("auto");
@@ -180,6 +227,8 @@
   let notifEnabled = $state(false);
   let notifSelected = $state(new Set<number>());
   let customNotifs: { amount: number; unit: number }[] = $state([]);
+  let customNotifDropdown = $state<number | null>(null);
+  let customNotifBtns: (HTMLButtonElement | undefined)[] = $state([]);
 
   function toggleNotif(minutes: number) {
     const next = new Set(notifSelected);
@@ -203,6 +252,18 @@
   function updateCustomNotif(idx: number, amount: number, unit: number) {
     customNotifs = customNotifs.map((n, i) => i === idx ? { amount, unit } : n);
     emitChange();
+  }
+
+  function positionNotifDropdown(node: HTMLElement, idx: number) {
+    const btn = customNotifBtns[idx];
+    if (!btn) return { destroy() {} };
+    const r = btn.getBoundingClientRect();
+    const pw = node.offsetWidth || 120;
+    let left = r.left;
+    left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+    node.style.left = `${left}px`;
+    node.style.top = `${r.bottom + 4}px`;
+    return { destroy() {} };
   }
 
   function collectNotifications(): number[] | undefined {
@@ -676,6 +737,8 @@
   let dragOffset = $state({ x: 0, y: 0 });
   let isDragging = $state(false);
   let dragStart = { x: 0, y: 0 };
+  let baseLeft = $state(0);
+  let baseTop = $state(0);
 
   const isRecurring = $derived(
     mode === "edit" && !!event && (!!event.recurringParentId || !!event.recurrence),
@@ -762,6 +825,17 @@
     dragOffset = { x: 0, y: 0 };
   });
 
+  // Sync date/time from event prop when block is dragged/resized externally.
+  // Only updates time fields — not title/description/etc. which the user may
+  // have edited in the panel. Doesn't trigger hasChanges since the drag already
+  // committed the time change to the DB.
+  $effect(() => {
+    if (mode !== "edit" || !event) return;
+    startDate = event.start.split(" ")[0] ?? "";
+    startTime = event.start.split(" ")[1] ?? "";
+    endTime = event.end.split(" ")[1] ?? "";
+  });
+
   // Sync editor content when it first appears (e.g. editing existing event with description)
   $effect(() => {
     if (descOpen && editorEl && editorEl.innerHTML !== description) {
@@ -769,7 +843,7 @@
     }
   });
 
-  // Track actual panel height so position clamping works as content grows/shrinks
+  // Track actual panel height for initial placement estimates
   $effect(() => {
     if (!panelEl) return;
     const observer = new ResizeObserver(() => {
@@ -779,9 +853,31 @@
     return () => observer.disconnect();
   });
 
+  // Pin base position when anchor changes; read panelHeight without tracking
+  // so height changes from expanding sections don't reposition the panel
+  $effect(() => {
+    const _a = anchor;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const ph = untrack(() => panelHeight) || 520;
+
+    let left: number;
+    const rightSpace = vw - _a.x - PANEL_GAP;
+    const leftSpace = _a.x - _a.width - PANEL_GAP;
+    if (rightSpace >= PANEL_WIDTH) left = _a.x + PANEL_GAP;
+    else if (leftSpace >= PANEL_WIDTH) left = _a.x - _a.width - PANEL_GAP - PANEL_WIDTH;
+    else left = Math.max(PANEL_GAP, (vw - PANEL_WIDTH) / 2);
+
+    baseLeft = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, left));
+    baseTop = Math.max(PANEL_GAP, Math.min(vh - ph - PANEL_GAP, _a.y));
+    dragOffset = { x: 0, y: 0 };
+  });
+
   // ─── Dirty tracking ────────────────────────────────────────────
   let hasChanges = $state(false);
   const saveReady = $derived(mode === "create" || hasChanges);
+
+  $effect(() => { onDirtyChange?.(hasChanges); });
 
   // ─── Emit changes ───────────────────────────────────────────────
   function emitChange() {
@@ -808,24 +904,22 @@
   });
 
   // ─── Panel position ─────────────────────────────────────────────
+  // Uses pinned baseTop/baseLeft so expanding sections grow downward
+  // without shifting the top. When the bottom would exceed the viewport,
+  // the top nudges upward by exactly the overflow — switching to purely
+  // upward growth. No scroll; Save button stays visible.
   const panelStyle = $derived.by(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const ph = panelHeight || 520; // fallback before first ResizeObserver callback
+    const ph = panelHeight || 520;
 
-    // Base horizontal position: prefer right of anchor, then left, then centered
-    let left: number;
-    const rightSpace = vw - anchor.x - PANEL_GAP;
-    const leftSpace = anchor.x - anchor.width - PANEL_GAP;
-    if (rightSpace >= PANEL_WIDTH) left = anchor.x + PANEL_GAP;
-    else if (leftSpace >= PANEL_WIDTH) left = anchor.x - anchor.width - PANEL_GAP - PANEL_WIDTH;
-    else left = Math.max(PANEL_GAP, (vw - PANEL_WIDTH) / 2);
+    let left = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, baseLeft + dragOffset.x));
+    let top = Math.max(PANEL_GAP, baseTop + dragOffset.y);
 
-    let top = anchor.y;
-
-    // Apply drag offset, then clamp within viewport
-    left = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, left + dragOffset.x));
-    top = Math.max(PANEL_GAP, Math.min(vh - ph - PANEL_GAP, top + dragOffset.y));
+    const overflow = top + ph + PANEL_GAP - vh;
+    if (overflow > 0) {
+      top = Math.max(PANEL_GAP, top - overflow);
+    }
 
     return `position:fixed; left:${left}px; top:${top}px; width:${PANEL_WIDTH}px; z-index:50;`;
   });
@@ -878,14 +972,14 @@
     // Let the description editor handle its own shortcuts (Ctrl+Z, etc.)
     if (descOpen && editorEl?.contains(document.activeElement)) return;
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSave(); }
-    if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    // Escape is handled by CalendarView's global keydown listener
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={panelEl}
-  class="panel-root max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-border"
+  class="panel-root rounded-xl border border-border"
   style:box-shadow="0 2px 8px rgba(0,0,0,0.3)"
   style="{panelStyle} background-color: var(--panel-bg);"
   onclick={(e) => e.stopPropagation()}
@@ -918,7 +1012,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div onclick={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
       <button onclick={onClose}
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
         title="Close">
         <X size={13} />
       </button>
@@ -962,7 +1056,7 @@
       <!-- Date button -->
       <button onclick={toggleDatepicker}
         class="rounded px-1.5 py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-          {datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-accent/60'}">
+          {datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
         {shortDate}
       </button>
 
@@ -976,7 +1070,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="mb-1 flex items-center justify-center" onwheel={handleDpWheel}>
             <button onclick={handleDpHeaderClick}
-              class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-accent">
+              class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
               {#if dpPickerMode === "days"}
                 {dpMonthLabel}
               {:else}
@@ -1001,7 +1095,7 @@
                   {@const now = new Date()}
                   {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
                   <button onclick={() => selectDpDay(day)}
-                    class="flex h-6 w-full items-center justify-center rounded-sm text-[12px] hover:bg-accent"
+                    class="flex h-6 w-full items-center justify-center rounded-sm text-[12px] hover:bg-black/5 dark:hover:bg-black/15"
                     style={day.selected
                       ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
                       : day.today
@@ -1019,7 +1113,7 @@
               <div class="grid grid-cols-3 gap-1 py-1">
                 {#each dpShortMonths as name, i}
                   <button onclick={() => selectDpMonth(i)}
-                    class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-accent
+                    class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
                       {i + 1 === dpMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
                     {name}
                   </button>
@@ -1030,7 +1124,7 @@
               <div class="grid grid-cols-3 gap-1 py-1">
                 {#each dpYearPageYears as year}
                   <button onclick={() => selectDpYear(year)}
-                    class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-accent
+                    class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
                       {year === dpYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
                     {year}
                   </button>
@@ -1048,7 +1142,7 @@
           onclick={() => openTimePicker("start")}
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-            {timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-accent/60'}"
+            {timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => e.stopPropagation()} />
         <span class="text-muted-foreground/60">&ndash;</span>
         <input type="text" bind:value={endTime}
@@ -1056,7 +1150,7 @@
           onclick={() => openTimePicker("end")}
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-            {timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-accent/60'}"
+            {timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => e.stopPropagation()} />
 
         <!-- Floating time picker -->
@@ -1072,7 +1166,7 @@
                 class="w-full px-3 py-1.5 text-left text-[12px] transition-colors
                   {(timePickerTarget === 'start' ? startTime : endTime) === slot
                     ? 'bg-accent font-medium text-foreground'
-                    : 'text-foreground hover:bg-accent/50'}">
+                    : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
                 {slot}
               </button>
             {/each}
@@ -1095,7 +1189,7 @@
             <button
               onmousedown={(e) => e.preventDefault()}
               onclick={() => execFormat(btn.cmd)}
-              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
               title={btn.title}
             ><Icon size={13} /></button>
           {/each}
@@ -1108,21 +1202,38 @@
             <button
               onmousedown={(e) => e.preventDefault()}
               onclick={() => execFormat(btn.cmd)}
-              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
               title={btn.title}
             ><Icon size={13} /></button>
           {/each}
           <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
-          <button
+          <button bind:this={linkBtnEl}
             onmousedown={(e) => e.preventDefault()}
-            onclick={insertLink}
-            class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onclick={openLinkPopover}
+            class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
             title="Insert link"
           ><Link size={13} /></button>
+          {#if linkPopoverOpen}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="fixed inset-0 z-[60]" onclick={() => { linkPopoverOpen = false; }}></div>
+            <div class="fixed z-[61] flex items-center gap-1.5 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
+              use:positionLinkPopover>
+              <input bind:this={linkInputEl}
+                type="text" bind:value={linkUrl} placeholder="https://..."
+                onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { linkPopoverOpen = false; } }}
+                class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none placeholder:text-muted-foreground"
+              />
+              <button onclick={applyLink}
+                class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">
+                Apply
+              </button>
+            </div>
+          {/if}
           <button
             onmousedown={(e) => e.preventDefault()}
             onclick={() => execFormat("removeFormat")}
-            class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
             title="Remove formatting"
           ><RemoveFormatting size={13} /></button>
         </div>
@@ -1132,8 +1243,9 @@
           contenteditable="true"
           class="desc-editor min-h-[60px] max-h-[120px] overflow-y-auto px-2.5 py-2 text-[12px] text-foreground outline-none"
           oninput={handleEditorInput}
+          onpaste={handleEditorPaste}
           onkeydown={(e) => e.stopPropagation()}
-          onblur={() => { if (!description.replace(/<[^>]*>/g, "").trim()) descOpen = false; }}
+          onblur={() => { if (!linkPopoverOpen && !description.replace(/<[^>]*>/g, "").trim()) descOpen = false; }}
         ></div>
       </div>
     {:else}
@@ -1141,7 +1253,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         onclick={openDescEditor}
-        class="-mt-1.5 flex cursor-text items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors hover:bg-muted/40
+        class="-mt-1.5 flex cursor-text items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
           {descPreview ? 'text-foreground' : 'text-muted-foreground/60'}"
       >
         <AlignLeft size={13} class="shrink-0 text-muted-foreground/60" />
@@ -1156,12 +1268,12 @@
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-stretch">
           <button onclick={() => handleToggle("pomodoro")}
-            class="flex w-9 shrink-0 items-center justify-center transition-colors
-              {pomodoroEnabled ? 'text-emerald-500 bg-emerald-500/5' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
+            class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
+              {pomodoroEnabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
             <Timer size={14} />
           </button>
           <button onclick={() => handleExpand("pomodoro")}
-            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
+            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
             <span class="text-[12px] {pomodoroEnabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
             <span class="ml-auto truncate text-[10px] text-muted-foreground">{pomoSummary}</span>
           </button>
@@ -1173,36 +1285,36 @@
                 onclick={() => applyPomoPreset(key as PomodoroPreset)}
                 class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] transition-all
                   {pomodoroPreset === key
-                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                    : 'text-foreground hover:bg-accent/60'}"
+                    ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                    : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
               >
                 <span>{val.label}</span>
-                <span class="ml-auto text-[10px] {pomodoroPreset === key ? 'text-emerald-600/70 dark:text-emerald-400/70' : 'text-muted-foreground'}">{val.desc}</span>
+                <span class="ml-auto text-[10px] {pomodoroPreset === key ? 'text-muted-foreground' : 'text-muted-foreground'}">{val.desc}</span>
               </button>
             {/each}
             <button
               onclick={() => applyPomoPreset("custom")}
               class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] transition-all
                 {pomodoroPreset === 'custom'
-                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                  : 'text-foreground hover:bg-accent/60'}"
+                  ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                  : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
             >
               <span>Custom</span>
             </button>
             {#if pomodoroPreset === "custom"}
-              <div class="flex items-center gap-2 px-2.5 pt-1">
+              <div class="flex flex-col gap-1.5 px-2.5 pt-1">
                 {#each [
-                  { label: "F", value: focusDuration, set: (v: number) => { focusDuration = v; emitChange(); }, min: 1, max: 120 },
-                  { label: "SB", value: shortBreak, set: (v: number) => { shortBreak = v; emitChange(); }, min: 1, max: 30 },
-                  { label: "LB", value: longBreak, set: (v: number) => { longBreak = v; emitChange(); }, min: 1, max: 60 },
+                  { label: "Focus", value: focusDuration, set: (v: number) => { focusDuration = v; emitChange(); }, min: 1, max: 120 },
+                  { label: "Short break", value: shortBreak, set: (v: number) => { shortBreak = v; emitChange(); }, min: 1, max: 30 },
+                  { label: "Long break", value: longBreak, set: (v: number) => { longBreak = v; emitChange(); }, min: 1, max: 60 },
                 ] as field}
-                  <label class="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    {field.label}
+                  <label class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <span class="w-16">{field.label}</span>
                     <input type="number" value={field.value} min={field.min} max={field.max}
                       oninput={(e) => field.set(parseInt(e.currentTarget.value, 10) || field.min)}
-                      class="num-input w-10 rounded px-1 py-0.5 text-center text-[11px] text-foreground outline-none ring-1 ring-inset ring-border/60 focus:ring-primary/50"
-                      style="background-color: var(--panel-contrast);"
+                      class="num-input w-8 rounded bg-black/5 dark:bg-black/15 px-0.5 py-0.5 text-center text-[10px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
                       onkeydown={(e) => e.stopPropagation()} />
+                    <span class="text-muted-foreground">min</span>
                   </label>
                 {/each}
               </div>
@@ -1215,12 +1327,12 @@
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-stretch">
           <button onclick={() => handleToggle("notifications")}
-            class="flex w-9 shrink-0 items-center justify-center transition-colors
-              {notifEnabled ? 'text-emerald-500 bg-emerald-500/5' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
+            class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
+              {notifEnabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
             <Bell size={14} />
           </button>
           <button onclick={() => handleExpand("notifications")}
-            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
+            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
             <span class="text-[12px] {notifEnabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
             <span class="ml-auto truncate text-[10px] text-muted-foreground">{notifSummary}</span>
           </button>
@@ -1233,56 +1345,58 @@
                   onclick={() => toggleNotif(opt.value)}
                   class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-all
                     {notifSelected.has(opt.value)
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                      : 'text-foreground hover:bg-accent/60'}"
+                      ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                      : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
                 >
-                  <div class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded
-                    {notifSelected.has(opt.value) ? 'bg-emerald-500' : 'ring-1 ring-inset ring-border'}">
-                    {#if notifSelected.has(opt.value)}
-                      <svg viewBox="0 0 12 12" class="h-2.5 w-2.5 text-primary-foreground"><path d="M2.5 6l2.5 2.5 4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
-                    {/if}
+                  <div class="h-3.5 w-3.5 shrink-0 rounded
+                    {notifSelected.has(opt.value) ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
                   </div>
                   <span>{opt.label}</span>
                 </button>
               {/each}
             </div>
             {#each customNotifs as cn, idx}
-              <div class="flex flex-col gap-1 rounded-lg p-2 ring-1 ring-inset ring-border/60" style="background-color: var(--panel-contrast);">
-                <div class="flex items-center gap-1.5">
-                  <input type="number" value={cn.amount} min={1} max={999}
-                    oninput={(e) => updateCustomNotif(idx, parseInt(e.currentTarget.value, 10) || 1, cn.unit)}
-                    class="num-input w-10 rounded px-1 py-1 text-center text-[11px] text-foreground outline-none ring-1 ring-inset ring-border/60 focus:ring-primary/50"
-                    style="background-color: var(--panel-bg);"
-                    onkeydown={(e) => e.stopPropagation()} />
-                  <span class="text-[11px] text-muted-foreground">{CUSTOM_UNITS.find((u) => u.value === cn.unit)?.label ?? "minutes"} before</span>
-                  <button onclick={() => removeCustomNotif(idx)}
-                    class="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
-                    <X size={12} />
-                  </button>
-                </div>
-                <div class="flex flex-col gap-0.5">
-                  {#each CUSTOM_UNITS as u}
-                    <button onclick={() => updateCustomNotif(idx, cn.amount, u.value)}
-                      class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-[11px] transition-all
-                        {cn.unit === u.value
-                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                          : 'text-foreground hover:bg-accent/60'}"
-                    >
-                      <div class="flex h-3 w-3 shrink-0 items-center justify-center rounded-full
-                        {cn.unit === u.value ? 'ring-emerald-500' : 'ring-border'} ring-1 ring-inset">
-                        {#if cn.unit === u.value}
-                          <div class="h-1.5 w-1.5 rounded-full bg-emerald-500"></div>
-                        {/if}
-                      </div>
-                      <span>{u.label}</span>
-                    </button>
-                  {/each}
-                </div>
+              <div class="flex items-center gap-1.5 px-2">
+                <input type="number" value={cn.amount} min={1} max={999}
+                  oninput={(e) => updateCustomNotif(idx, parseInt(e.currentTarget.value, 10) || 1, cn.unit)}
+                  class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
+                  onkeydown={(e) => e.stopPropagation()} />
+                <button bind:this={customNotifBtns[idx]}
+                  onclick={() => { customNotifDropdown = customNotifDropdown === idx ? null : idx; }}
+                  class="rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] transition-colors
+                    {customNotifDropdown === idx ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}
+                    text-[#1F1F1F] dark:text-[#E3E3E3]">
+                  {CUSTOM_UNITS.find((u) => u.value === cn.unit)?.label ?? "minutes"}
+                </button>
+                <span class="text-[11px] text-muted-foreground">before</span>
+                <button onclick={() => { removeCustomNotif(idx); customNotifDropdown = null; }}
+                  class="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
+                  <X size={12} />
+                </button>
+
+                <!-- Floating unit dropdown -->
+                {#if customNotifDropdown === idx}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div class="fixed inset-0 z-[60]" onclick={() => { customNotifDropdown = null; }}></div>
+                  <div class="fixed z-[61] rounded-lg bg-popover py-1 shadow-lg ring-1 ring-border/60"
+                    use:positionNotifDropdown={idx}>
+                    {#each CUSTOM_UNITS as u}
+                      <button onclick={() => { updateCustomNotif(idx, cn.amount, u.value); customNotifDropdown = null; }}
+                        class="flex w-full items-center px-3 py-1.5 text-left text-[11px] transition-colors
+                          {cn.unit === u.value
+                            ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                            : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
+                        {u.label}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/each}
             {#if customNotifs.length < 2}
               <button onclick={addCustomNotif}
-                class="flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] text-emerald-600 dark:text-emerald-400 transition-colors hover:bg-emerald-500/10">
+                class="flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15">
                 <Plus size={12} /> <span>Custom</span>
               </button>
             {/if}
@@ -1294,12 +1408,12 @@
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-stretch">
           <button onclick={() => handleToggle("repeat")}
-            class="flex w-9 shrink-0 items-center justify-center transition-colors
-              {recurrence ? 'text-emerald-500 bg-emerald-500/5' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
+            class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
+              {recurrence ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
             <Repeat size={14} />
           </button>
           <button onclick={() => handleExpand("repeat")}
-            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
+            class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
             <span class="text-[12px] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
             <span class="ml-auto truncate text-[10px] text-muted-foreground">{recurrence ? recurrenceLabel : "None"}</span>
           </button>
@@ -1312,16 +1426,15 @@
               <input type="number" value={recInterval}
                 oninput={(e) => updateRecInterval(parseInt(e.currentTarget.value, 10) || 1)}
                 min={1} max={99}
-                class="num-input w-10 rounded-md px-1 py-1 text-center text-[11px] text-foreground outline-none"
-                style="background-color: var(--panel-contrast);"
+                class="num-input w-10 rounded-md bg-black/5 dark:bg-black/15 px-1 py-1 text-center text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
                 onkeydown={(e) => e.stopPropagation()} />
               <div class="flex gap-1">
                 {#each FREQ_OPTIONS as opt}
                   <button onclick={() => updateRecFrequency(opt.value)}
                     class="rounded-md px-2 py-1 text-[11px] transition-all
                       {recFrequency === opt.value
-                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'}"
+                        ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
                   >{opt.plural}</button>
                 {/each}
               </div>
@@ -1336,8 +1449,8 @@
                     <button onclick={() => toggleWeekday(wd.value)}
                       class="flex h-7 items-center justify-center rounded-md text-[10px] transition-all
                         {recWeekdays.has(wd.value)
-                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'}"
+                          ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                          : 'bg-black/[0.02] dark:bg-black/[0.06] text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
                     >{wd.label}</button>
                   {/each}
                 </div>
@@ -1352,13 +1465,10 @@
               <button onclick={() => updateRecEndType("never")}
                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
                   {recEndType === 'never'
-                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                    : 'text-foreground hover:bg-accent/60'}">
-                <div class="flex h-3.5 w-3.5 items-center justify-center rounded-full ring-1 ring-inset
-                  {recEndType === 'never' ? 'ring-emerald-500' : 'ring-border'}">
-                  {#if recEndType === "never"}
-                    <div class="h-2 w-2 rounded-full bg-emerald-500"></div>
-                  {/if}
+                    ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                    : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
+                <div class="h-3.5 w-3.5 shrink-0 rounded-full
+                  {recEndType === 'never' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
                 </div>
                 <span>Never</span>
               </button>
@@ -1368,13 +1478,10 @@
                 <button onclick={() => updateRecEndType("until")}
                   class="flex w-12 items-center gap-2 transition-all
                     {recEndType === 'until'
-                      ? 'text-emerald-700 dark:text-emerald-400'
+                      ? 'text-foreground'
                       : 'text-foreground'}">
-                  <div class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full ring-1 ring-inset
-                    {recEndType === 'until' ? 'ring-emerald-500' : 'ring-border'}">
-                    {#if recEndType === "until"}
-                      <div class="h-2 w-2 rounded-full bg-emerald-500"></div>
-                    {/if}
+                  <div class="h-3.5 w-3.5 shrink-0 rounded-full
+                    {recEndType === 'until' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
                   </div>
                   <span>On</span>
                 </button>
@@ -1385,10 +1492,9 @@
                     onclick={() => { if (recEndType !== "until") updateRecEndType("until"); recEndPickerOpen = !recEndPickerOpen; }}
                     onblur={parseRecEndDateInput}
                     onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); parseRecEndDateInput(); recEndPickerOpen = false; } }}
-                    class="w-[110px] rounded px-2 py-0.5 text-[11px] outline-none transition-colors
+                    class="w-[110px] rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] outline-none transition-colors
                       {recEndType === 'until' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}
-                      {recEndPickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-accent/60'}"
-                    style="background-color: var(--panel-contrast);" />
+                      {recEndPickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}" />
 
                   <!-- Floating date picker -->
                   {#if recEndPickerOpen}
@@ -1401,7 +1507,7 @@
                       <!-- svelte-ignore a11y_no_static_element_interactions -->
                       <div class="mb-1 flex items-center justify-center" onwheel={handleCalWheel}>
                         <button onclick={handleCalHeaderClick}
-                          class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-accent">
+                          class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
                           {#if calPickerMode === "days"}
                             {calMonthLabel}
                           {:else}
@@ -1424,7 +1530,7 @@
                               {@const now = new Date()}
                               {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
                               <button onclick={() => selectCalDay(day)}
-                                class="flex h-6 w-full items-center justify-center rounded-sm text-[11px] hover:bg-accent"
+                                class="flex h-6 w-full items-center justify-center rounded-sm text-[11px] hover:bg-black/5 dark:hover:bg-black/15"
                                 style={day.selected
                                   ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
                                   : day.today
@@ -1442,7 +1548,7 @@
                           <div class="grid grid-cols-3 gap-1 py-1">
                             {#each dpShortMonths as name, i}
                               <button onclick={() => selectCalMonth(i)}
-                                class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-accent
+                                class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-black/5 dark:hover:bg-black/15
                                   {i + 1 === calMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
                                 {name}
                               </button>
@@ -1453,7 +1559,7 @@
                           <div class="grid grid-cols-3 gap-1 py-1">
                             {#each calYearPageYears as year}
                               <button onclick={() => selectCalYear(year)}
-                                class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-accent
+                                class="rounded-sm py-2 text-center text-[11px] font-medium hover:bg-black/5 dark:hover:bg-black/15
                                   {year === calYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
                                 {year}
                               </button>
@@ -1471,13 +1577,10 @@
                 <button onclick={() => updateRecEndType("count")}
                   class="flex w-12 items-center gap-2 transition-all
                     {recEndType === 'count'
-                      ? 'text-emerald-700 dark:text-emerald-400'
+                      ? 'text-foreground'
                       : 'text-foreground'}">
-                  <div class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full ring-1 ring-inset
-                    {recEndType === 'count' ? 'ring-emerald-500' : 'ring-border'}">
-                    {#if recEndType === "count"}
-                      <div class="h-2 w-2 rounded-full bg-emerald-500"></div>
-                    {/if}
+                  <div class="h-3.5 w-3.5 shrink-0 rounded-full
+                    {recEndType === 'count' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
                   </div>
                   <span>After</span>
                 </button>
@@ -1486,9 +1589,8 @@
                     onfocus={() => { if (recEndType !== "count") updateRecEndType("count"); }}
                     oninput={(e) => updateRecEndCount(parseInt(e.currentTarget.value, 10) || 1)}
                     min={1} max={999}
-                    class="num-input w-10 rounded px-1 py-0.5 text-center text-[11px] outline-none
+                    class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[11px] outline-none
                       {recEndType === 'count' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}"
-                    style="background-color: var(--panel-contrast);"
                     onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} />
                   <span class="{recEndType === 'count' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}">times</span>
                 </div>
@@ -1502,11 +1604,11 @@
       <!-- 4) Music -->
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-stretch">
-          <button class="flex w-9 shrink-0 items-center justify-center text-muted-foreground/50">
+          <button class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15 text-muted-foreground/50">
             <Music size={14} />
           </button>
           <button onclick={() => handleExpand("music")}
-            class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors hover:bg-accent/40 dark:hover:bg-black/20">
+            class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
             <span class="text-[12px] text-muted-foreground">Music</span>
           </button>
         </div>

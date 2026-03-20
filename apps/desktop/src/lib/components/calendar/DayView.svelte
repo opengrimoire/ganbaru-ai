@@ -24,6 +24,7 @@
     onEventUpdate,
     onEventCreate,
     pendingCreatePreview = null,
+    editingEventId,
     initialScrollMinute = -1,
     onScrollChange,
     onAddTimezone,
@@ -40,6 +41,7 @@
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string) => void;
     pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor } | null;
+    editingEventId?: string;
     initialScrollMinute?: number;
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
@@ -195,6 +197,7 @@
         isPast={past}
         {isDark}
         {currentTimeMinute}
+        {editingEventId}
         dragPreview={drag.getDragPreviewForDate(dateStr)}
         createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
         {isScrolling}

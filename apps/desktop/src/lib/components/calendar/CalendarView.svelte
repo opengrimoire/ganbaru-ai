@@ -95,13 +95,21 @@
     undoStack = [...undoStack, action].slice(-UNDO_LIMIT);
   }
 
-  // Confirmation dialog for undo/redo
+  // Confirmation dialog
   let confirmAction: (() => Promise<void>) | null = $state(null);
   let confirmMessage = $state("");
+  let confirmYesLabel = $state("Yes (Enter)");
+  let confirmNoLabel = $state("No (Esc)");
 
-  function requestConfirm(message: string, action: () => Promise<void>) {
+  function requestConfirm(
+    message: string,
+    action: () => Promise<void>,
+    opts?: { yesLabel?: string; noLabel?: string },
+  ) {
     confirmMessage = message;
     confirmAction = action;
+    confirmYesLabel = opts?.yesLabel ?? "Yes (Enter)";
+    confirmNoLabel = opts?.noLabel ?? "No (Esc)";
   }
 
   async function confirmYes() {
@@ -178,6 +186,12 @@
   let pendingCreatePreview: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor } | null = $state(null);
   let lastPanelChanges: Partial<CalendarEvent> | null = $state(null);
   let currentScope: RecurringScope = $state("this");
+  let panelDirty = $state(false);
+
+  const editingEventId = $derived.by(() => {
+    const ps = panelState;
+    return ps.mode === "edit" ? ps.event.id : undefined;
+  });
 
   function isRecurring(event: CalendarEvent): boolean {
     return !!event.recurringParentId || !!event.recurrence;
@@ -358,10 +372,25 @@
   }
 
   function handlePanelClose() {
+    if (panelDirty) {
+      requestConfirm(
+        "Discard unsaved changes?",
+        async () => {
+          calendarStore.restoreSnapshot();
+          panelState = { mode: "closed" };
+          pendingCreatePreview = null;
+          lastPanelChanges = null;
+          panelDirty = false;
+        },
+        { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+      );
+      return;
+    }
     calendarStore.restoreSnapshot();
     panelState = { mode: "closed" };
     pendingCreatePreview = null;
     lastPanelChanges = null;
+    panelDirty = false;
   }
 
   async function handlePanelSave(data: {
@@ -437,6 +466,7 @@
     panelState = { mode: "closed" };
     pendingCreatePreview = null;
     lastPanelChanges = null;
+    panelDirty = false;
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {
@@ -475,6 +505,7 @@
     calendarStore.discardSnapshot();
     panelState = { mode: "closed" };
     lastPanelChanges = null;
+    panelDirty = false;
   }
 
   function handleDayClickFromMonth(date: Date) {
@@ -516,6 +547,7 @@
         isDark={theme.isDark}
         {timezones}
         {pendingCreatePreview}
+        {editingEventId}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -533,6 +565,7 @@
         isDark={theme.isDark}
         {timezones}
         {pendingCreatePreview}
+        {editingEventId}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -560,7 +593,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="fixed inset-0 z-50 flex items-center justify-center"
+      class="fixed inset-0 z-[60] flex items-center justify-center"
       onclick={confirmNo}
     >
       <div class="absolute inset-0 bg-black/40"></div>
@@ -575,13 +608,13 @@
             onclick={confirmNo}
             class="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            No (Esc)
+            {confirmNoLabel}
           </button>
           <button
             onclick={confirmYes}
             class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Yes (Enter)
+            {confirmYesLabel}
           </button>
         </div>
       </div>
@@ -602,6 +635,7 @@
         onSave={handlePanelSave}
         onChange={handlePanelChange}
         onClose={handlePanelClose}
+        onDirtyChange={(d) => { panelDirty = d; }}
       />
     {:else if panelState.mode === "edit"}
       <EventPanel
@@ -613,6 +647,7 @@
         onChange={handlePanelChange}
         onClose={handlePanelClose}
         onScopeChange={handleScopeChange}
+        onDirtyChange={(d) => { panelDirty = d; }}
       />
     {/if}
   {/if}

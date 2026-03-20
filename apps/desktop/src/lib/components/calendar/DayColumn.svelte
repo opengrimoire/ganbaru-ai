@@ -30,6 +30,7 @@
     onEventClick,
     onDragStart,
     onCreateStart,
+    editingEventId,
   }: {
     date: Date;
     events: CalendarEvent[];
@@ -38,6 +39,7 @@
     isPast?: boolean;
     isDark?: boolean;
     currentTimeMinute?: number;
+    editingEventId?: string;
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
     hideSnapLine?: boolean;
@@ -206,6 +208,7 @@
       positioned={pos}
       {isDark}
       isPast={isEventPast(pos.event)}
+      editing={pos.event.id === editingEventId}
       onclick={(rect) => onEventClick(pos.event, rect)}
       onpointerdown={(e) => onDragStart(pos.event.id, e)}
     />

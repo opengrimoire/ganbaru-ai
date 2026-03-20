@@ -8,12 +8,14 @@
     positioned,
     isDark = false,
     isPast = false,
+    editing = false,
     onclick,
     onpointerdown,
   }: {
     positioned: PositionedEvent;
     isDark?: boolean;
     isPast?: boolean;
+    editing?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
@@ -53,7 +55,7 @@
     border-left: 3px solid {colors.border};
     color: {colors.text};
     cursor: grab;
-    z-index: 1;
+    z-index: {editing ? 45 : 1};
     opacity: {isPast ? 0.45 : 1};
   "
   onclick={handleClick}
