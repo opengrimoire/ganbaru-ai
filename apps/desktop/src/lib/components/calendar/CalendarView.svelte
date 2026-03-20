@@ -217,11 +217,20 @@
     return undefined;
   });
 
-  const editingTemplateId = $derived.by(() => {
+  // All template IDs involved in the current edit (base + preview/following templates)
+  const editingTemplateIds = $derived.by(() => {
     const ps = panelState;
-    if (ps.mode === "edit") return ps.event.recurringParentId ?? ps.event.id;
-    if (ps.mode === "create") return PENDING_CREATE_ID;
-    return undefined;
+    if (ps.mode === "create") return new Set([PENDING_CREATE_ID]);
+    if (ps.mode !== "edit") return new Set<string>();
+    const baseId = ps.event.recurringParentId ?? ps.event.id;
+    const ids = new Set([baseId]);
+    // Include preview templates created by previewRecurring
+    for (const evt of calendarStore.events) {
+      if (!evt.recurringParentId && evt.id.startsWith("preview")) {
+        ids.add(evt.id);
+      }
+    }
+    return ids;
   });
 
   function isRecurring(event: CalendarEvent): boolean {
@@ -369,6 +378,7 @@
 
       lastPanelChanges = { start: event.start, end: event.end };
       currentScope = "this";
+      panelDirty = true;
       calendarStore.saveSnapshot();
       // Use originalInstance so exception/split targets the correct date
       calendarStore.previewRecurring(originalInstance, lastPanelChanges, currentScope);
@@ -601,7 +611,7 @@
         {timezones}
         pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
         {editingEventId}
-        {editingTemplateId}
+        {editingTemplateIds}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -620,7 +630,7 @@
         {timezones}
         pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
         {editingEventId}
-        {editingTemplateId}
+        {editingTemplateIds}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}

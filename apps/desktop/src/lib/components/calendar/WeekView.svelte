@@ -26,7 +26,7 @@
     onEventCreate,
     pendingCreatePreview = null,
     editingEventId,
-    editingTemplateId,
+    editingTemplateIds,
     initialScrollMinute = -1,
     onScrollChange,
     onAddTimezone,
@@ -44,7 +44,7 @@
     onEventCreate: (start: string, end: string) => void;
     pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor } | null;
     editingEventId?: string;
-    editingTemplateId?: string;
+    editingTemplateIds?: Set<string>;
     initialScrollMinute?: number;
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
@@ -229,7 +229,7 @@
             {isDark}
             {currentTimeMinute}
             {editingEventId}
-            {editingTemplateId}
+            {editingTemplateIds}
             draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
             dragPreview={drag.getDragPreviewForDate(dateStr)}
             createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
