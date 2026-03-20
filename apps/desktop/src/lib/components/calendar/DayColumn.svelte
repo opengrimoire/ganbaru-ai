@@ -275,7 +275,7 @@
   <!-- Current time line -->
   {#if isToday && currentTimeMinute >= 0}
     <div
-      class="pointer-events-none absolute left-0 right-0 z-[2]"
+      class="pointer-events-none absolute left-0 right-0 z-[46]"
       style="top: {(currentTimeMinute / 60) * hourHeight}px;"
     >
       <div class="flex items-center">

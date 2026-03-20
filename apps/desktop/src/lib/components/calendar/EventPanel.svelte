@@ -748,7 +748,7 @@
   let lastInitKey = "";
 
   $effect(() => {
-    const key = mode === "edit" ? (event?.id ?? "") : `create:${start}:${end}`;
+    const key = mode === "edit" ? (event?.id ?? "") : "create";
     if (key === lastInitKey) return;
     lastInitKey = key;
 
@@ -830,10 +830,15 @@
   // have edited in the panel. Doesn't trigger hasChanges since the drag already
   // committed the time change to the DB.
   $effect(() => {
-    if (mode !== "edit" || !event) return;
-    startDate = event.start.split(" ")[0] ?? "";
-    startTime = event.start.split(" ")[1] ?? "";
-    endTime = event.end.split(" ")[1] ?? "";
+    if (mode === "edit" && event) {
+      startDate = event.start.split(" ")[0] ?? "";
+      startTime = event.start.split(" ")[1] ?? "";
+      endTime = event.end.split(" ")[1] ?? "";
+    } else if (mode === "create") {
+      startDate = (start ?? "").split(" ")[0] ?? "";
+      startTime = (start ?? "").split(" ")[1] ?? "";
+      endTime = (end ?? "").split(" ")[1] ?? "";
+    }
   });
 
   // Sync editor content when it first appears (e.g. editing existing event with description)

@@ -27,10 +27,29 @@
     enabledAccounts = next;
   }
 
-  // All current events belong to "ganbaruai"; filter them based on account visibility
-  const visibleEvents = $derived(
-    enabledAccounts.has("ganbaruai") ? calendarStore.events : [],
-  );
+  // All current events belong to "ganbaruai"; filter them based on account visibility.
+  // When the create panel is open, inject a pseudo-event so DayColumn renders
+  // it as a full EventBlock with drag/resize support.
+  const PENDING_CREATE_ID = "__pending_create__";
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const fmtMin = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+
+  const visibleEvents = $derived.by(() => {
+    const events = enabledAccounts.has("ganbaruai") ? calendarStore.events : [];
+    if (panelState.mode === "create" && pendingCreatePreview) {
+      const p = pendingCreatePreview;
+      return [...events, {
+        id: PENDING_CREATE_ID,
+        title: p.title || "",
+        start: `${p.dateStr} ${fmtMin(p.startMinute)}`,
+        end: `${p.dateStr} ${fmtMin(p.endMinute)}`,
+        timezone: "",
+        calendarId: "ganbaruai",
+        color: p.color,
+      } satisfies CalendarEvent];
+    }
+    return events;
+  });
 
   // View history for Alt+Left/Right navigation (capped at 50)
   const VIEW_HISTORY_LIMIT = 50;
@@ -190,7 +209,9 @@
 
   const editingEventId = $derived.by(() => {
     const ps = panelState;
-    return ps.mode === "edit" ? ps.event.id : undefined;
+    if (ps.mode === "edit") return ps.event.id;
+    if (ps.mode === "create") return PENDING_CREATE_ID;
+    return undefined;
   });
 
   function isRecurring(event: CalendarEvent): boolean {
@@ -304,6 +325,23 @@
   }
 
   async function handleEventUpdate(event: CalendarEvent) {
+    // Pseudo-event from create preview drag/resize
+    if (event.id === PENDING_CREATE_ID) {
+      if (panelState.mode === "create" && pendingCreatePreview) {
+        const dateStr = event.start.split(" ")[0];
+        const [sh, sm] = (event.start.split(" ")[1] ?? "0:0").split(":").map(Number);
+        const [eh, em] = (event.end.split(" ")[1] ?? "0:0").split(":").map(Number);
+        pendingCreatePreview = {
+          ...pendingCreatePreview,
+          dateStr,
+          startMinute: sh * 60 + sm,
+          endMinute: eh * 60 + em,
+        };
+        panelState = { mode: "create", start: event.start, end: event.end, anchor: panelState.anchor };
+      }
+      return;
+    }
+
     if (isRecurring(event)) {
       // Resolve the original instance before drag modified its position.
       // calendarStore.events still has the pre-drag expanded list.
@@ -546,7 +584,7 @@
         events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
-        {pendingCreatePreview}
+        pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
         {editingEventId}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
@@ -564,7 +602,7 @@
         events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
-        {pendingCreatePreview}
+        pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
         {editingEventId}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
