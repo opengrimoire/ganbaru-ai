@@ -31,6 +31,8 @@
     onDragStart,
     onCreateStart,
     editingEventId,
+    editingTemplateId,
+    draggingEventId,
   }: {
     date: Date;
     events: CalendarEvent[];
@@ -40,11 +42,13 @@
     isDark?: boolean;
     currentTimeMinute?: number;
     editingEventId?: string;
+    editingTemplateId?: string;
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
     hideSnapLine?: boolean;
     isScrolling?: boolean;
     snapOverrideMinute?: number | null;
+    draggingEventId?: string;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onDragStart: (eventId: string, e: PointerEvent) => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
@@ -70,9 +74,9 @@
   let snapTimeLabel: string = $state("");
   let columnEl: HTMLDivElement | undefined = $state();
 
-  // Clear snap line when scrolling starts (prevents stale flash on stop)
+  // Clear snap line when scrolling or dragging starts (prevents stale flash)
   $effect(() => {
-    if (isScrolling) {
+    if (isScrolling || hideSnapLine) {
       snapLineY = null;
     }
   });
@@ -124,7 +128,7 @@
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
-    if (!columnEl) return;
+    if (!columnEl || hideSnapLine) return;
     const rect = columnEl.getBoundingClientRect();
     const offsetY = e.clientY - rect.top;
     const rawMinute = (offsetY / hourHeight) * 60;
@@ -202,52 +206,65 @@
     ></div>
   {/each}
 
-  <!-- Events -->
+  <!-- Events (hide the one being dragged — the drag preview replaces it) -->
   {#each positioned as pos (pos.event.id)}
-    <EventBlock
-      positioned={pos}
-      {isDark}
-      isPast={isEventPast(pos.event)}
-      editing={pos.event.id === editingEventId}
-      onclick={(rect) => onEventClick(pos.event, rect)}
-      onpointerdown={(e) => onDragStart(pos.event.id, e)}
-    />
+    {#if pos.event.id !== draggingEventId}
+      <EventBlock
+        positioned={pos}
+        {isDark}
+        isPast={isEventPast(pos.event)}
+        editing={pos.event.id === editingEventId}
+        preview={pos.event.id === editingEventId || (!!editingTemplateId && (pos.event.recurringParentId === editingTemplateId || pos.event.id === editingTemplateId))}
+        onclick={(rect) => onEventClick(pos.event, rect)}
+        onpointerdown={(e) => onDragStart(pos.event.id, e)}
+      />
+    {/if}
   {/each}
 
-  <!-- Drag preview (existing event move/resize) -->
+  <!-- Drag preview (replaces the original block at the target position) -->
   {#if dragPreview}
+    {@const dragColor = dragPreview.event.color ? getEventColor(dragPreview.event.color, isDark) : null}
     <div
-      class="pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight opacity-50"
+      class="preview-stripe pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
       style="
         top: {dragPreview.top}px;
         height: {dragPreview.height}px;
         left: 0;
         width: 100%;
-        background-color: var(--cal-today-circle);
-        z-index: 10;
+        background-color: {dragColor?.bg ?? (isDark ? '#2A2A2C' : '#E8E8E8')};
+        border-left: 3px solid {dragColor?.border ?? (isDark ? '#888' : '#AAAAAA')};
+        color: {dragColor?.text ?? (isDark ? '#CACACA' : '#666666')};
+        --stripe-color: {isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};
+        z-index: 46;
       "
     >
       <div class="truncate font-medium">{dragPreview.event.title}</div>
+      {#if dragPreview.height > 28}
+        {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
+        {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
+        <div class="truncate opacity-80">{st} - {et}</div>
+      {/if}
     </div>
   {/if}
 
   <!-- Create preview (new block being drawn) -->
   {#if createPreview}
-    {@const previewColor = createPreview.event.color ? getEventColor(createPreview.event.color, isDark) : null}
     <div
       data-create-preview
-      class="pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight opacity-70"
+      class="preview-stripe pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
       style="
         top: {createPreview.top}px;
         height: {createPreview.height}px;
         left: 0;
         width: 100%;
-        background-color: {previewColor?.bg ?? 'var(--muted)'};
-        border-left: 3px solid {previewColor?.border ?? 'var(--muted-foreground)'};
+        background-color: {isDark ? '#2A2A2C' : '#E8E8E8'};
+        border-left: 3px solid {isDark ? '#888' : '#AAAAAA'};
+        color: {isDark ? '#CACACA' : '#666666'};
+        --stripe-color: {isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};
         z-index: 10;
       "
     >
-      <div class="truncate font-medium" style="color: {previewColor?.text ?? 'var(--muted-foreground)'};">
+      <div class="truncate font-medium">
         {createPreview.event.title || "Focus session"}
       </div>
     </div>
@@ -257,7 +274,7 @@
   {#if effectiveSnapY !== null && !hideSnapLine && !isScrolling}
     <div
       class="pointer-events-none absolute left-0 right-0"
-      style="top: {effectiveSnapY}px; z-index: 30;"
+      style="top: {effectiveSnapY}px; z-index: 47;"
     >
       <div class="relative">
         <span
@@ -275,8 +292,8 @@
   <!-- Current time line -->
   {#if isToday && currentTimeMinute >= 0}
     <div
-      class="pointer-events-none absolute left-0 right-0 z-[46]"
-      style="top: {(currentTimeMinute / 60) * hourHeight}px;"
+      class="pointer-events-none absolute left-0 right-0"
+      style="top: {(currentTimeMinute / 60) * hourHeight}px; z-index: 46;"
     >
       <div class="flex items-center">
         <div
@@ -291,3 +308,23 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .preview-stripe {
+    position: relative;
+  }
+
+  .preview-stripe::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 5px,
+      var(--stripe-color) 5px,
+      var(--stripe-color) 10px
+    );
+    pointer-events: none;
+  }
+</style>

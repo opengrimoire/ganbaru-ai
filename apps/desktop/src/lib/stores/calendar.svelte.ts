@@ -104,7 +104,7 @@ function advanceDate(from: Date, config: RecurrenceConfig): Date {
 const EXPANSION_DAYS = 180;
 const MAX_INSTANCES = 500;
 
-function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
+export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
   const horizon = new Date();
   horizon.setDate(horizon.getDate() + EXPANSION_DAYS);
 

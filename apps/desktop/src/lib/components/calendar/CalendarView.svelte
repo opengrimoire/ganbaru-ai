@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { CalendarEvent, CalendarViewMode, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
   import { addDays, getLocalTimezone } from "./utils";
-  import { getCalendar } from "$lib/stores/calendar.svelte";
+  import { getCalendar, expandRecurring } from "$lib/stores/calendar.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { onMount } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
@@ -38,7 +38,7 @@
     const events = enabledAccounts.has("ganbaruai") ? calendarStore.events : [];
     if (panelState.mode === "create" && pendingCreatePreview) {
       const p = pendingCreatePreview;
-      return [...events, {
+      const template: CalendarEvent = {
         id: PENDING_CREATE_ID,
         title: p.title || "",
         start: `${p.dateStr} ${fmtMin(p.startMinute)}`,
@@ -46,7 +46,10 @@
         timezone: "",
         calendarId: "ganbaruai",
         color: p.color,
-      } satisfies CalendarEvent];
+        recurrence: p.recurrence,
+      };
+      const expanded = p.recurrence ? expandRecurring([template]) : [template];
+      return [...events, ...expanded];
     }
     return events;
   });
@@ -202,7 +205,7 @@
     | { mode: "edit"; event: CalendarEvent; anchor: PanelAnchor; instanceEvent?: CalendarEvent };
   let panelState: PanelState = $state({ mode: "closed" });
   let containerEl: HTMLDivElement | undefined = $state();
-  let pendingCreatePreview: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor } | null = $state(null);
+  let pendingCreatePreview: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor; recurrence?: RecurrenceConfig } | null = $state(null);
   let lastPanelChanges: Partial<CalendarEvent> | null = $state(null);
   let currentScope: RecurringScope = $state("this");
   let panelDirty = $state(false);
@@ -210,6 +213,13 @@
   const editingEventId = $derived.by(() => {
     const ps = panelState;
     if (ps.mode === "edit") return ps.event.id;
+    if (ps.mode === "create") return PENDING_CREATE_ID;
+    return undefined;
+  });
+
+  const editingTemplateId = $derived.by(() => {
+    const ps = panelState;
+    if (ps.mode === "edit") return ps.event.recurringParentId ?? ps.event.id;
     if (ps.mode === "create") return PENDING_CREATE_ID;
     return undefined;
   });
@@ -308,6 +318,9 @@
   }
 
   function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
+    // Ignore clicks on the pseudo create-preview block and its recurring instances
+    if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
+
     pendingCreatePreview = null;
     lastPanelChanges = null;
     currentScope = "this";
@@ -363,9 +376,11 @@
       return;
     }
 
-    // Non-recurring: commit immediately
+    // Non-recurring: update in-memory immediately (prevents flash when drag
+    // state clears before the async DB write completes), then persist.
     const template = calendarStore.getTemplate(event);
     const before = template ? { ...template } : undefined;
+    calendarStore.previewBlock(event);
     await calendarStore.updateBlock(event);
     if (before) {
       const after = calendarStore.getTemplate(event) ?? event;
@@ -387,7 +402,7 @@
       // Non-recurring: direct preview
       calendarStore.previewBlock({ ...panelState.event, ...data });
     } else if (panelState.mode === "create" && pendingCreatePreview) {
-      const updated = { ...pendingCreatePreview, title: data.title, color: data.color };
+      const updated = { ...pendingCreatePreview, title: data.title, color: data.color, recurrence: data.recurrence };
       if (data.start) {
         const dateStr = data.start.split(" ")[0];
         const [sh, sm] = (data.start.split(" ")[1] ?? "0:0").split(":").map(Number);
@@ -586,6 +601,7 @@
         {timezones}
         pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
         {editingEventId}
+        {editingTemplateId}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -604,6 +620,7 @@
         {timezones}
         pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
         {editingEventId}
+        {editingTemplateId}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}

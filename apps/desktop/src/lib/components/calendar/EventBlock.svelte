@@ -9,6 +9,7 @@
     isDark = false,
     isPast = false,
     editing = false,
+    preview = false,
     onclick,
     onpointerdown,
   }: {
@@ -16,11 +17,18 @@
     isDark?: boolean;
     isPast?: boolean;
     editing?: boolean;
+    preview?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
   const colors = $derived(getEventColor(positioned.event.color, isDark));
+  const neutralColors = $derived(isDark
+    ? { bg: "#2A2A2C", border: "#888", text: "#CACACA" }
+    : { bg: "#E8E8E8", border: "#AAAAAA", text: "#666666" },
+  );
+  // Preview with no color selected: neutral gray; preview with color: event color; saved: event color
+  const activeColors = $derived(preview && !positioned.event.color ? neutralColors : colors);
 
   const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
@@ -45,18 +53,19 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   bind:this={blockEl}
-  class="event-block-wrapper absolute overflow-hidden px-1.5 py-0.5 text-[11px] leading-tight select-none transition-all hover:shadow-md hover:ring-1 hover:ring-white/30 hover:brightness-125 {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute overflow-hidden px-1.5 py-0.5 text-[11px] leading-tight select-none {preview ? 'event-preview' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
     height: {positioned.height}px;
     left: {positioned.left}%;
     width: {positioned.width}%;
-    background-color: {colors.bg};
-    border-left: 3px solid {colors.border};
-    color: {colors.text};
+    background-color: {activeColors.bg};
+    border-left: 3px solid {activeColors.border};
+    color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};
-    opacity: {isPast ? 0.45 : 1};
+    {isPast ? 'filter: saturate(0.7) brightness(0.9);' : ''}
+    {preview ? `--stripe-color: ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};` : ''}
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -98,5 +107,23 @@
 
   .resize-handle-bottom {
     bottom: 0;
+  }
+
+  .event-preview {
+    position: relative;
+  }
+
+  .event-preview::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 5px,
+      var(--stripe-color) 5px,
+      var(--stripe-color) 10px
+    );
+    pointer-events: none;
   }
 </style>

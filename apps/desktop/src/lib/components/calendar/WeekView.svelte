@@ -26,6 +26,7 @@
     onEventCreate,
     pendingCreatePreview = null,
     editingEventId,
+    editingTemplateId,
     initialScrollMinute = -1,
     onScrollChange,
     onAddTimezone,
@@ -43,6 +44,7 @@
     onEventCreate: (start: string, end: string) => void;
     pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor } | null;
     editingEventId?: string;
+    editingTemplateId?: string;
     initialScrollMinute?: number;
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
@@ -170,7 +172,7 @@
     <!-- Sticky header row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="sticky top-0 z-10 grid"
+      class="sticky top-0 z-[48] grid"
       onwheel={handleHeaderWheel}
       style="
         grid-column: 1 / -1;
@@ -227,6 +229,8 @@
             {isDark}
             {currentTimeMinute}
             {editingEventId}
+            {editingTemplateId}
+            draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
             dragPreview={drag.getDragPreviewForDate(dateStr)}
             createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
             {isScrolling}
