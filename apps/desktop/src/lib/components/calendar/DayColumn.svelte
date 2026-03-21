@@ -222,15 +222,6 @@
       : snapTimeLabel,
   );
 
-  function isEventPast(event: CalendarEvent): boolean {
-    if (isPast) return true;
-    if (isToday && currentTimeMinute >= 0) {
-      const { endMinute } = effectiveMinuteRange(event, dateStr);
-      return endMinute <= currentTimeMinute;
-    }
-    return false;
-  }
-
   function handleSlotPointerDown(e: PointerEvent, hour: number) {
     if (e.button !== 0) return;
     const target = e.currentTarget as HTMLElement;
@@ -279,12 +270,33 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  bind:this={columnEl}
   class="relative min-w-0"
-  style="height: {totalHeight}px; overflow: hidden;"
-  onmousemove={handleColumnMouseMove}
-  onmouseleave={handleColumnMouseLeave}
+  style="height: {totalHeight}px;"
 >
+  <!-- Current time indicator (outside overflow-hidden so the circle can bleed left) -->
+  {#if isToday && currentTimeMinute >= 0}
+    <div
+      class="pointer-events-none absolute left-0 right-0"
+      style="top: {(currentTimeMinute / 60) * hourHeight}px; z-index: 46;"
+    >
+      <div class="flex items-center">
+        <div
+          class="h-2.5 w-2.5 shrink-0 rounded-full"
+          style="background-color: var(--cal-current-time); margin-left: -5px;"
+        ></div>
+        <div
+          class="h-[2px] flex-1"
+          style="background-color: var(--cal-current-time);"
+        ></div>
+      </div>
+    </div>
+  {/if}
+  <div
+    bind:this={columnEl}
+    class="absolute inset-0 overflow-hidden"
+    onmousemove={handleColumnMouseMove}
+    onmouseleave={handleColumnMouseLeave}
+  >
   <!-- Past time dimming overlay -->
   {#if pastOverlayHeight > 0}
     <div
@@ -326,7 +338,6 @@
       <EventBlock
         positioned={pos}
         {isDark}
-        isPast={isEventPast(pos.event)}
         editing={pos.event.id === editingId}
         preview={previewedIds?.has(pos.event.id) === true}
         accentSegments={accentBandsMap.get(pos.event.id)}
@@ -404,24 +415,7 @@
     </div>
   {/if}
 
-  <!-- Current time line -->
-  {#if isToday && currentTimeMinute >= 0}
-    <div
-      class="pointer-events-none absolute left-0 right-0"
-      style="top: {(currentTimeMinute / 60) * hourHeight}px; z-index: 46;"
-    >
-      <div class="flex items-center">
-        <div
-          class="h-2.5 w-2.5 shrink-0 rounded-full"
-          style="background-color: var(--cal-current-time); margin-left: -5px;"
-        ></div>
-        <div
-          class="h-[2px] flex-1"
-          style="background-color: var(--cal-current-time);"
-        ></div>
-      </div>
-    </div>
-  {/if}
+  </div>
 </div>
 
 <style>

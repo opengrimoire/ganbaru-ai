@@ -50,6 +50,15 @@ let overtimeIntervalId: ReturnType<typeof setInterval> | null = null;
 
 const NOTIFICATION_THRESHOLD = 60;
 
+// --- Config helpers ---
+
+function configEquals(a: PomodoroConfig, b: PomodoroConfig): boolean {
+  return a.focusMinutes === b.focusMinutes &&
+    a.shortBreakMinutes === b.shortBreakMinutes &&
+    a.longBreakMinutes === b.longBreakMinutes &&
+    a.cyclesBeforeLongBreak === b.cyclesBeforeLongBreak;
+}
+
 // --- Segment helpers ---
 
 function nowIso(): string {
@@ -139,6 +148,159 @@ function clearSegments() {
   segments = [];
   currentSegmentIndex = -1;
   activeRunId = null;
+}
+
+async function reconfigureSession(
+  blockId: string,
+  newConfig: PomodoroConfig,
+  eventEnd: string,
+  eventDate: string,
+) {
+  // Compute elapsed time in current phase using old config durations
+  const oldPhaseDurationSec = phase === "focus"
+    ? config.focusMinutes * TIME_MULTIPLIER
+    : phase === "short_break"
+      ? config.shortBreakMinutes * TIME_MULTIPLIER
+      : config.longBreakMinutes * TIME_MULTIPLIER;
+  const elapsedSeconds = Math.max(0, oldPhaseDurationSec - remainingSeconds);
+
+  // Apply new config
+  config = newConfig;
+  totalCycles = config.cyclesBeforeLongBreak;
+
+  // Adjust remaining time for current phase with new durations
+  const newPhaseDurationSec = phase === "focus"
+    ? config.focusMinutes * TIME_MULTIPLIER
+    : phase === "short_break"
+      ? config.shortBreakMinutes * TIME_MULTIPLIER
+      : config.longBreakMinutes * TIME_MULTIPLIER;
+  remainingSeconds = Math.max(0, newPhaseDurationSec - elapsedSeconds);
+
+  // Adjust timer state
+  if (isRunning) {
+    phaseEndTime = Date.now() + remainingSeconds * 1000;
+  } else if (overtimeIntervalId && remainingSeconds > 0) {
+    // Was in break overtime but new config extends the break duration
+    stopOvertime();
+    isRunning = true;
+    phaseEndTime = Date.now() + remainingSeconds * 1000;
+    intervalId = setInterval(tick, 1000);
+  }
+
+  // Reset notification if remaining time increased past threshold
+  if (phase === "focus" && remainingSeconds > NOTIFICATION_THRESHOLD) {
+    notificationShown = false;
+  }
+
+  // Clean up old segments: mark current as completed, remaining planned as skipped
+  if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+    markSegment(currentSegmentIndex, "completed", true);
+  }
+  for (let i = currentSegmentIndex + 1; i < segments.length; i++) {
+    if (segments[i].status === "planned") {
+      segments[i].status = "skipped";
+      execute(
+        `UPDATE pomodoro_segments SET status = 'skipped' WHERE id = $1`,
+        [segments[i].id],
+      ).catch((e) => console.warn("Failed to skip segment:", e));
+    }
+  }
+
+  // Build new segment plan from now to event end
+  const runId = crypto.randomUUID();
+  activeRunId = runId;
+  const now = new Date();
+  const nowStr = now.toISOString();
+  const end = new Date(eventEnd.replace(" ", "T"));
+  const totalRemainingMinutes = Math.max(0, (end.getTime() - now.getTime()) / 60000);
+  const bridgeMinutes = remainingSeconds / 60;
+  const currentPhaseType: SegmentPhase = phase === "focus" ? "focus"
+    : phase === "short_break" ? "short_break" : "long_break";
+
+  const newSegments: PersistedSegment[] = [];
+
+  // Bridge segment: remainder of current phase
+  if (bridgeMinutes > 0) {
+    newSegments.push({
+      id: crypto.randomUUID(),
+      eventId: blockId,
+      eventDate,
+      runId,
+      cycleNumber: currentCycle,
+      phase: currentPhaseType,
+      plannedStart: nowStr,
+      plannedEnd: addMinutesToIso(nowStr, bridgeMinutes),
+      actualStart: nowStr,
+      actualEnd: null,
+      status: "active",
+    });
+  }
+
+  // Future segments after current phase ends
+  const afterMinutes = totalRemainingMinutes - bridgeMinutes;
+  if (afterMinutes > 0) {
+    const baseAfter = addMinutesToIso(nowStr, bridgeMinutes);
+    let offset = 0;
+    let cycle = currentCycle;
+    let nextIsFocus = phase !== "focus";
+
+    while (offset < afterMinutes) {
+      if (nextIsFocus) {
+        const duration = Math.min(config.focusMinutes, afterMinutes - offset);
+        newSegments.push({
+          id: crypto.randomUUID(),
+          eventId: blockId,
+          eventDate,
+          runId,
+          cycleNumber: cycle,
+          phase: "focus",
+          plannedStart: addMinutesToIso(baseAfter, offset),
+          plannedEnd: addMinutesToIso(baseAfter, offset + duration),
+          actualStart: null,
+          actualEnd: null,
+          status: "planned",
+        });
+        offset += duration;
+        if (offset >= afterMinutes) break;
+        nextIsFocus = false;
+      } else {
+        const isLongBreak = cycle >= config.cyclesBeforeLongBreak;
+        const breakPhase: SegmentPhase = isLongBreak ? "long_break" : "short_break";
+        const breakDur = isLongBreak ? config.longBreakMinutes : config.shortBreakMinutes;
+        const duration = Math.min(breakDur, afterMinutes - offset);
+        newSegments.push({
+          id: crypto.randomUUID(),
+          eventId: blockId,
+          eventDate,
+          runId,
+          cycleNumber: cycle,
+          phase: breakPhase,
+          plannedStart: addMinutesToIso(baseAfter, offset),
+          plannedEnd: addMinutesToIso(baseAfter, offset + duration),
+          actualStart: null,
+          actualEnd: null,
+          status: "planned",
+        });
+        offset += duration;
+        cycle = isLongBreak ? 1 : cycle + 1;
+        nextIsFocus = true;
+      }
+    }
+  }
+
+  // Persist new segments
+  for (const seg of newSegments) {
+    await execute(
+      `INSERT INTO pomodoro_segments
+        (id, event_id, event_date, run_id, cycle_number, phase, planned_start, planned_end, actual_start, actual_end, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [seg.id, seg.eventId, seg.eventDate, seg.runId, seg.cycleNumber, seg.phase, seg.plannedStart, seg.plannedEnd, seg.actualStart, seg.actualEnd, seg.status],
+    ).catch((e) => console.warn("Failed to insert segment:", e));
+  }
+
+  segments = newSegments;
+  currentSegmentIndex = bridgeMinutes > 0 ? 0 : -1;
+  updateTray();
 }
 
 // --- Tray ---
@@ -479,7 +641,15 @@ export function getPomodoro() {
       eventEnd?: string,
       eventDate?: string,
     ) {
-      if (activeBlockId === blockId) return;
+      const newConfig = { ...DEFAULT_CONFIG, ...blockConfig };
+
+      if (activeBlockId === blockId) {
+        // Same block: reconfigure only if config actually changed
+        if (configEquals(config, newConfig) || !eventEnd || !eventDate) return;
+        reconfigureSession(blockId, newConfig, eventEnd, eventDate);
+        return;
+      }
+
       initListeners();
 
       // Stop any running session first
@@ -489,7 +659,7 @@ export function getPomodoro() {
       }
 
       activeBlockId = blockId;
-      config = { ...DEFAULT_CONFIG, ...blockConfig };
+      config = newConfig;
       totalCycles = config.cyclesBeforeLongBreak;
       phase = "focus";
       remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;

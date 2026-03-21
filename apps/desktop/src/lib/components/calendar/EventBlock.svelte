@@ -7,7 +7,6 @@
   let {
     positioned,
     isDark = false,
-    isPast = false,
     editing = false,
     preview = false,
     accentSegments,
@@ -16,7 +15,6 @@
   }: {
     positioned: PositionedEvent;
     isDark?: boolean;
-    isPast?: boolean;
     editing?: boolean;
     preview?: boolean;
     accentSegments?: AccentBarBand[];
@@ -65,7 +63,7 @@
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};
-    {isPast ? 'filter: saturate(0.7) brightness(0.9);' : ''}
+
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
