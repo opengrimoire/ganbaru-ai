@@ -75,15 +75,19 @@
   <div class="shrink-0" style="width: 10%; background-color: {activeColors.accent};"></div>
 
   <!-- Content -->
-  <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};">
-    <div class="flex items-center gap-0.5 truncate font-medium">
-      <span class="truncate">{positioned.event.title}</span>
-      {#if hasRepeat}
-        <Repeat size={9} class="shrink-0 opacity-70" />
-      {/if}
-      {#if hasNotification}
-        <Bell size={9} class="shrink-0 opacity-70" />
-      {/if}
+  <div class="relative min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};">
+    {#if hasRepeat || hasNotification}
+      <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
+        {#if hasRepeat}
+          <Repeat size={8} class="shrink-0 opacity-70" />
+        {/if}
+        {#if hasNotification}
+          <Bell size={8} class="shrink-0 opacity-70" />
+        {/if}
+      </div>
+    {/if}
+    <div class="truncate font-medium" class:pr-5={hasRepeat || hasNotification}>
+      {positioned.event.title}
     </div>
     {#if positioned.height > 28}
       <div class="truncate opacity-80">{startTime} - {endTime}</div>
