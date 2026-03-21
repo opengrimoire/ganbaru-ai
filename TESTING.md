@@ -31,6 +31,9 @@ apps/desktop/src/lib/
     utils.test.ts      ← test
     rrule.ts           ← source
     rrule.test.ts      ← test
+  utils/
+    pomodoro-segments.ts      ← source
+    pomodoro-segments.test.ts ← test
 ```
 
 ## What is tested
@@ -42,6 +45,7 @@ apps/desktop/src/lib/
 | `utils/xp.test.ts` | XP calculation formula, focus score multiplier, rounding |
 | `components/calendar/utils.test.ts` | Date parsing/formatting round-trip, week/day helpers, minute-of-day extraction, duration calculation, grid snapping, event filtering, overlap layout algorithm, time storage round-trip |
 | `components/calendar/rrule.test.ts` | RepeatRule-to-RRULE conversion, reverse mapping, round-trip for all presets, null/unknown handling |
+| `utils/pomodoro-segments.test.ts` | Planned segment computation (cycle iteration, clipping, long break placement, cycle reset), accent band fraction mapping |
 
 ### Not tested (and why)
 
