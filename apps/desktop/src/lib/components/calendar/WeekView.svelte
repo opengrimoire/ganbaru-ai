@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, EventColor } from "./types";
+  import type { CalendarEvent } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
     getWeekDays,
@@ -24,9 +24,8 @@
     onEventClick,
     onEventUpdate,
     onEventCreate,
-    pendingCreatePreview = null,
-    editingEventId,
-    editingTemplateIds,
+    editingId,
+    previewedIds,
     initialScrollMinute = -1,
     onScrollChange,
     onAddTimezone,
@@ -42,9 +41,8 @@
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string) => void;
-    pendingCreatePreview?: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor } | null;
-    editingEventId?: string;
-    editingTemplateIds?: Set<string>;
+    editingId?: string;
+    previewedIds?: Set<string>;
     initialScrollMinute?: number;
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
@@ -228,11 +226,11 @@
             isPast={isPastDay(day)}
             {isDark}
             {currentTimeMinute}
-            {editingEventId}
-            {editingTemplateIds}
+            {editingId}
+            {previewedIds}
             draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
             dragPreview={drag.getDragPreviewForDate(dateStr)}
-            createPreview={drag.getCreatePreviewForDate(dateStr, pendingCreatePreview)}
+            createPreview={drag.getCreatePreviewForDate(dateStr)}
             {isScrolling}
             hideSnapLine={drag.getHideSnapLine(dateStr)}
             snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}

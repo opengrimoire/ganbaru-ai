@@ -53,12 +53,13 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   bind:this={blockEl}
+  data-event-id={positioned.event.id}
   class="event-block-wrapper absolute overflow-hidden px-1.5 py-0.5 text-[11px] leading-tight select-none {preview ? 'event-preview' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
     height: {positioned.height}px;
-    left: {positioned.left}%;
-    width: {positioned.width}%;
+    left: {editing ? 0 : positioned.left}%;
+    width: {editing ? 100 : positioned.width}%;
     background-color: {activeColors.bg};
     border-left: 3px solid {activeColors.border};
     color: {activeColors.text};

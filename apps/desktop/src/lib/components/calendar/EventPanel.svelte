@@ -37,18 +37,19 @@
     end,
     event,
     anchor,
+    externalDirty = false,
     onSave,
     onDelete,
     onClose,
     onChange,
     onScopeChange,
-    onDirtyChange,
   }: {
     mode: "create" | "edit";
     start?: string;
     end?: string;
     event?: CalendarEvent;
     anchor: { x: number; y: number; width: number; height: number };
+    externalDirty?: boolean;
     onSave: (data: {
       title: string;
       start: string;
@@ -63,7 +64,6 @@
     onClose: () => void;
     onChange?: (data: Partial<CalendarEvent>) => void;
     onScopeChange?: (scope: RecurringScope) => void;
-    onDirtyChange?: (dirty: boolean) => void;
   } = $props();
 
   // ─── Core fields ────────────────────────────────────────────────
@@ -880,9 +880,7 @@
 
   // ─── Dirty tracking ────────────────────────────────────────────
   let hasChanges = $state(false);
-  const saveReady = $derived(mode === "create" || hasChanges);
-
-  $effect(() => { onDirtyChange?.(hasChanges); });
+  const saveReady = $derived(mode === "create" || hasChanges || externalDirty);
 
   // ─── Emit changes ───────────────────────────────────────────────
   function emitChange() {

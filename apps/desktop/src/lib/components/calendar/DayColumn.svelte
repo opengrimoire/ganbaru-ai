@@ -30,8 +30,8 @@
     onEventClick,
     onDragStart,
     onCreateStart,
-    editingEventId,
-    editingTemplateIds,
+    editingId,
+    previewedIds,
     draggingEventId,
   }: {
     date: Date;
@@ -41,8 +41,8 @@
     isPast?: boolean;
     isDark?: boolean;
     currentTimeMinute?: number;
-    editingEventId?: string;
-    editingTemplateIds?: Set<string>;
+    editingId?: string;
+    previewedIds?: Set<string>;
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
     hideSnapLine?: boolean;
@@ -213,8 +213,8 @@
         positioned={pos}
         {isDark}
         isPast={isEventPast(pos.event)}
-        editing={pos.event.id === editingEventId || pos.event.id.startsWith("preview")}
-        preview={pos.event.id === editingEventId || (editingTemplateIds?.has(pos.event.recurringParentId ?? "") || editingTemplateIds?.has(pos.event.id))}
+        editing={pos.event.id === editingId}
+        preview={previewedIds?.has(pos.event.id) === true}
         onclick={(rect) => onEventClick(pos.event, rect)}
         onpointerdown={(e) => onDragStart(pos.event.id, e)}
       />

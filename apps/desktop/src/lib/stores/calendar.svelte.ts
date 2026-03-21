@@ -1,6 +1,9 @@
 import { execute, select } from "$lib/api/db";
-import type { CalendarEvent, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope, Weekday } from "$lib/components/calendar/types";
+import type { CalendarEvent, EventColor, PomodoroConfig, RecurrenceConfig } from "$lib/components/calendar/types";
 import { recurrenceToRrule, rruleToRecurrence } from "$lib/components/calendar/rrule";
+import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
+
+export { expandRecurring, parseYMD, fmtYMD };
 
 interface DbCalendarEvent {
   id: string;
@@ -46,139 +49,12 @@ function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// --- Recurrence helpers ---
-
-function parseYMD(s: string): Date {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function fmtYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-const DAY_INDEX: Record<Weekday, number> = {
-  SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6,
-};
-
-function advanceDate(from: Date, config: RecurrenceConfig): Date {
-  const d = new Date(from);
-
-  if (config.frequency === "weekly" && config.weekdays && config.weekdays.length > 0) {
-    const allowedDays = new Set(config.weekdays.map((w) => DAY_INDEX[w]));
-    // Advance to next allowed weekday within the interval pattern
-    const startDay = d.getDay();
-    const sortedDays = [...allowedDays].sort((a, b) => a - b);
-    // Find next allowed day after current
-    const nextInWeek = sortedDays.find((day) => day > startDay);
-    if (nextInWeek !== undefined) {
-      d.setDate(d.getDate() + (nextInWeek - startDay));
-    } else {
-      // Wrap to first allowed day of next interval-week
-      const daysUntilEndOfWeek = 7 - startDay;
-      const skipWeeks = (config.interval - 1) * 7;
-      d.setDate(d.getDate() + daysUntilEndOfWeek + skipWeeks + sortedDays[0]);
-    }
-    return d;
-  }
-
-  switch (config.frequency) {
-    case "daily":
-      d.setDate(d.getDate() + config.interval);
-      return d;
-    case "weekly":
-      d.setDate(d.getDate() + 7 * config.interval);
-      return d;
-    case "monthly":
-      d.setMonth(d.getMonth() + config.interval);
-      return d;
-    case "yearly":
-      d.setFullYear(d.getFullYear() + config.interval);
-      return d;
-  }
-}
-
-const EXPANSION_DAYS = 180;
-const MAX_INSTANCES = 500;
-
-export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
-  const horizon = new Date();
-  horizon.setDate(horizon.getDate() + EXPANSION_DAYS);
-
-  const result: CalendarEvent[] = [];
-
-  for (const evt of templates) {
-    const startDateStr = evt.start.split(" ")[0];
-    const config = evt.recurrence;
-    const untilDate = config?.end.type === "until" ? config.end.date : undefined;
-
-    // Skip entirely if template's own date is past its until date
-    if (untilDate && startDateStr > untilDate) continue;
-
-    // Skip template's own date if it was detached into a standalone event
-    if (!evt.exceptions?.includes(startDateStr)) {
-      result.push(evt);
-    }
-    if (!config) continue;
-
-    const startTimeStr = evt.start.split(" ")[1];
-    const endDateStr = evt.end.split(" ")[0];
-    const endTimeStr = evt.end.split(" ")[1];
-    const origStart = parseYMD(startDateStr);
-    const origEnd = parseYMD(endDateStr);
-    const daySpan = Math.round((origEnd.getTime() - origStart.getTime()) / 86400000);
-
-    const exceptionsSet = evt.exceptions ? new Set(evt.exceptions) : null;
-    const maxCount = config.end.type === "count" ? config.end.count : MAX_INSTANCES;
-
-    let cursor = advanceDate(origStart, config);
-    // Count includes the template itself (first instance)
-    let generated = 1;
-
-    while (cursor <= horizon && generated < maxCount) {
-      const occStartStr = fmtYMD(cursor);
-
-      // Stop if past until date
-      if (untilDate && occStartStr > untilDate) break;
-
-      // Skip exception dates
-      if (exceptionsSet?.has(occStartStr)) {
-        cursor = advanceDate(cursor, config);
-        continue;
-      }
-
-      const occEndDate = new Date(cursor);
-      occEndDate.setDate(occEndDate.getDate() + daySpan);
-      const occEndStr = fmtYMD(occEndDate);
-
-      result.push({
-        ...evt,
-        id: `${evt.id}::${occStartStr}`,
-        start: `${occStartStr} ${startTimeStr}`,
-        end: `${occEndStr} ${endTimeStr}`,
-        recurringParentId: evt.id,
-      });
-
-      cursor = advanceDate(cursor, config);
-      generated++;
-    }
-  }
-
-  return result;
-}
-
 // --- Store ---
 
 /** DB-backed template events (no virtual instances). */
 let rawBlocks = $state<CalendarEvent[]>([]);
 /** Expanded events including virtual recurring instances. */
 let blocks = $state<CalendarEvent[]>([]);
-/** Snapshot of rawBlocks taken before editing, used to revert preview changes. */
-let rawBlocksSnapshot: CalendarEvent[] | null = null;
-
 function reexpand() {
   blocks = expandRecurring(rawBlocks);
 }
@@ -240,6 +116,10 @@ export function getCalendar() {
   return {
     get events(): CalendarEvent[] {
       return blocks;
+    },
+
+    get rawBlocks(): CalendarEvent[] {
+      return rawBlocks;
     },
 
     async load() {
@@ -369,25 +249,6 @@ export function getCalendar() {
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, ...toUpdate, id: parentId } : b,
       );
-      reexpand();
-    },
-
-    /** Update in-memory only (no DB write) for live preview. */
-    previewBlock(event: CalendarEvent) {
-      const parentId = event.recurringParentId ?? event.id;
-      if (event.recurringParentId) {
-        const template = rawBlocks.find((b) => b.id === parentId);
-        if (template) {
-          const merged = mergeIntoTemplate(template, event);
-          rawBlocks = rawBlocks.map((b) =>
-            b.id === parentId ? merged : b,
-          );
-        }
-      } else {
-        rawBlocks = rawBlocks.map((b) =>
-          b.id === event.id ? { ...b, ...event } : b,
-        );
-      }
       reexpand();
     },
 
@@ -617,129 +478,6 @@ export function getCalendar() {
       rawBlocks = [...rawBlocks, newTemplate];
       reexpand();
       return newTemplate;
-    },
-
-    /** Save a snapshot of rawBlocks before editing for preview revert. */
-    saveSnapshot() {
-      rawBlocksSnapshot = rawBlocks.map((b) => ({ ...b }));
-    },
-
-    /** Revert rawBlocks from snapshot and re-expand. */
-    restoreSnapshot() {
-      if (rawBlocksSnapshot) {
-        rawBlocks = rawBlocksSnapshot;
-        rawBlocksSnapshot = null;
-        reexpand();
-      }
-    },
-
-    /** Discard snapshot without reverting (after successful DB write). */
-    discardSnapshot() {
-      rawBlocksSnapshot = null;
-    },
-
-    /**
-     * Preview a recurring event edit in-memory under the given scope.
-     * Always resets from snapshot first so switching scopes doesn't stack.
-     */
-    previewRecurring(
-      instanceEvent: CalendarEvent,
-      changes: Partial<CalendarEvent>,
-      scope: RecurringScope,
-    ) {
-      if (!rawBlocksSnapshot) return;
-      // Reset from snapshot
-      rawBlocks = rawBlocksSnapshot.map((b) => ({ ...b }));
-
-      const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
-      const template = rawBlocks.find((b) => b.id === parentId);
-      if (!template) { reexpand(); return; }
-
-      const instanceDate = instanceEvent.start.split(" ")[0];
-
-      if (scope === "this") {
-        // Add exception to hide this instance, inject standalone preview
-        const exceptions = [...(template.exceptions ?? []), instanceDate];
-        rawBlocks = rawBlocks.map((b) =>
-          b.id === parentId ? { ...b, exceptions } : b,
-        );
-        const preview: CalendarEvent = {
-          ...instanceEvent,
-          ...changes,
-          id: `preview::${instanceDate}`,
-          start: changes.start ?? instanceEvent.start,
-          end: changes.end ?? instanceEvent.end,
-          recurringParentId: undefined,
-          recurrence: undefined,
-          exceptions: undefined,
-        };
-        rawBlocks = [...rawBlocks, preview];
-      } else if (scope === "all") {
-        // Shift template dates by the day delta between original instance and changes
-        const origDateStr = instanceDate;
-        const changesDateStr = changes.start ? String(changes.start).split(" ")[0] : origDateStr;
-        const deltaDays = Math.round(
-          (parseYMD(changesDateStr).getTime() - parseYMD(origDateStr).getTime()) / 86400000,
-        );
-        const newStartTime = changes.start ? String(changes.start).split(" ")[1] : instanceEvent.start.split(" ")[1];
-        const newEndTime = changes.end ? String(changes.end).split(" ")[1] : instanceEvent.end.split(" ")[1];
-        let newStartDate = template.start.split(" ")[0];
-        let newEndDate = template.end.split(" ")[0];
-        if (deltaDays !== 0) {
-          const sd = parseYMD(newStartDate);
-          sd.setDate(sd.getDate() + deltaDays);
-          newStartDate = fmtYMD(sd);
-          const ed = parseYMD(newEndDate);
-          ed.setDate(ed.getDate() + deltaDays);
-          newEndDate = fmtYMD(ed);
-        }
-        rawBlocks = rawBlocks.map((b) =>
-          b.id === parentId ? {
-            ...template, ...changes,
-            id: template.id,
-            start: `${newStartDate} ${newStartTime}`,
-            end: `${newEndDate} ${newEndTime}`,
-            recurringParentId: undefined,
-          } : b,
-        );
-      } else {
-        // "following": cap old series before the earlier of instance date and new start date
-        const newStartDateStr = changes.start
-          ? String(changes.start).split(" ")[0]
-          : instanceDate;
-        const capDate = newStartDateStr < instanceDate ? newStartDateStr : instanceDate;
-        const capBefore = parseYMD(capDate);
-        capBefore.setDate(capBefore.getDate() - 1);
-        const dayBefore = fmtYMD(capBefore);
-        const cappedRecurrence: RecurrenceConfig | undefined = template.recurrence
-          ? { ...template.recurrence, end: { type: "until", date: dayBefore } }
-          : undefined;
-        rawBlocks = rawBlocks.map((b) =>
-          b.id === parentId ? { ...b, recurrence: cappedRecurrence } : b,
-        );
-        const newStart = changes.start
-          ? String(changes.start)
-          : `${instanceDate} ${instanceEvent.start.split(" ")[1]}`;
-        const newEnd = changes.end
-          ? String(changes.end)
-          : `${instanceDate} ${instanceEvent.end.split(" ")[1]}`;
-        const newRecurrence: RecurrenceConfig | undefined = template.recurrence
-          ? { ...template.recurrence, end: { type: "never" } }
-          : undefined;
-        const newTemplate: CalendarEvent = {
-          ...template,
-          ...changes,
-          id: `preview-following::${instanceDate}`,
-          start: newStart,
-          end: newEnd,
-          recurrence: newRecurrence,
-          recurringParentId: undefined,
-          exceptions: undefined,
-        };
-        rawBlocks = [...rawBlocks, newTemplate];
-      }
-
-      reexpand();
     },
 
     async clearAll() {

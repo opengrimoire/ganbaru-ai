@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { CalendarEvent, CalendarViewMode, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
   import { addDays, getLocalTimezone } from "./utils";
-  import { getCalendar, expandRecurring } from "$lib/stores/calendar.svelte";
+  import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { onMount } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
@@ -9,6 +9,16 @@
   import DayView from "./DayView.svelte";
   import MonthView from "./MonthView.svelte";
   import EventPanel from "./EventPanel.svelte";
+  import { createEditSession } from "./edit-session.svelte";
+  import type { PanelAnchor } from "./edit-session.svelte";
+  import {
+    closedDisplay,
+    buildCreateDisplay,
+    computeEditDisplay,
+    dateDiffDays,
+    shiftDateStr,
+    PENDING_CREATE_ID,
+  } from "./display-events";
 
   const calendarStore = getCalendar();
   const theme = getTheme();
@@ -27,32 +37,41 @@
     enabledAccounts = next;
   }
 
-  // All current events belong to "ganbaruai"; filter them based on account visibility.
-  // When the create panel is open, inject a pseudo-event so DayColumn renders
-  // it as a full EventBlock with drag/resize support.
-  const PENDING_CREATE_ID = "__pending_create__";
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-  const fmtMin = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+  // --- Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.) ---
+  const session = createEditSession();
 
-  const visibleEvents = $derived.by(() => {
-    const events = enabledAccounts.has("ganbaruai") ? calendarStore.events : [];
-    if (panelState.mode === "create" && pendingCreatePreview) {
-      const p = pendingCreatePreview;
-      const template: CalendarEvent = {
-        id: PENDING_CREATE_ID,
-        title: p.title || "",
-        start: `${p.dateStr} ${fmtMin(p.startMinute)}`,
-        end: `${p.dateStr} ${fmtMin(p.endMinute)}`,
-        timezone: "",
-        calendarId: "ganbaruai",
-        color: p.color,
-        recurrence: p.recurrence,
-      };
-      const expanded = p.recurrence ? expandRecurring([template]) : [template];
-      return [...events, ...expanded];
-    }
-    return events;
+  // --- Display events (pure overlay, no store mutation) ---
+  const displayResult = $derived.by(() => {
+    const storeEvents = enabledAccounts.has("ganbaruai") ? calendarStore.events : [];
+    const s = session.state;
+    if (s.mode === "closed") return closedDisplay(storeEvents);
+    if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes);
+    // mode === "edit": dispatch by scope
+    return computeEditDisplay(
+      calendarStore.rawBlocks,
+      storeEvents,
+      { originalEvent: s.originalEvent, instanceEvent: s.instanceEvent, templateId: s.templateId },
+      session.changes,
+      session.scope,
+    );
   });
+
+  const visibleEvents = $derived(displayResult.events);
+  const previewedIds = $derived(displayResult.previewedIds);
+  const editingId = $derived(displayResult.editingId);
+
+  // Merged event for the panel (original + changes, so panel sees drag/resize updates)
+  const panelEvent = $derived.by(() => {
+    const s = session.state;
+    if (s.mode === "edit") {
+      return { ...s.originalEvent, ...session.changes } as CalendarEvent;
+    }
+    return undefined;
+  });
+
+  function isRecurring(event: CalendarEvent): boolean {
+    return !!event.recurringParentId || !!event.recurrence;
+  }
 
   // View history for Alt+Left/Right navigation (capped at 50)
   const VIEW_HISTORY_LIMIT = 50;
@@ -63,8 +82,6 @@
 
   function pushHistory(mode: CalendarViewMode, date: Date) {
     if (isNavigatingHistory) return;
-    // Snapshot current position before pushing — scroll/navigation may have
-    // moved anchorDate since the current entry was created
     const base = history.slice(0, historyIndex + 1);
     base[base.length - 1] = { mode: viewMode, date: new Date(anchorDate) };
     history = [...base, { mode, date }];
@@ -168,7 +185,7 @@
         await calendarStore.updateBlock(action.before);
       }
       redoStack = [...redoStack, action];
-      panelState = { mode: "closed" };
+      session.close();
     });
   }
 
@@ -197,52 +214,13 @@
     });
   }
 
-  // Event panel state
-  type PanelAnchor = { x: number; y: number; width: number; height: number };
-  type PanelState =
-    | { mode: "closed" }
-    | { mode: "create"; start: string; end: string; anchor: PanelAnchor }
-    | { mode: "edit"; event: CalendarEvent; anchor: PanelAnchor; instanceEvent?: CalendarEvent };
-  let panelState: PanelState = $state({ mode: "closed" });
   let containerEl: HTMLDivElement | undefined = $state();
-  let pendingCreatePreview: { dateStr: string; startMinute: number; endMinute: number; title?: string; color?: EventColor; recurrence?: RecurrenceConfig } | null = $state(null);
-  let lastPanelChanges: Partial<CalendarEvent> | null = $state(null);
-  let currentScope: RecurringScope = $state("this");
-  let panelDirty = $state(false);
-
-  const editingEventId = $derived.by(() => {
-    const ps = panelState;
-    if (ps.mode === "edit") return ps.event.id;
-    if (ps.mode === "create") return PENDING_CREATE_ID;
-    return undefined;
-  });
-
-  // All template IDs involved in the current edit (base + preview/following templates)
-  const editingTemplateIds = $derived.by(() => {
-    const ps = panelState;
-    if (ps.mode === "create") return new Set([PENDING_CREATE_ID]);
-    if (ps.mode !== "edit") return new Set<string>();
-    const baseId = ps.event.recurringParentId ?? ps.event.id;
-    const ids = new Set([baseId]);
-    // Include preview templates created by previewRecurring
-    for (const evt of calendarStore.events) {
-      if (!evt.recurringParentId && evt.id.startsWith("preview")) {
-        ids.add(evt.id);
-      }
-    }
-    return ids;
-  });
-
-  function isRecurring(event: CalendarEvent): boolean {
-    return !!event.recurringParentId || !!event.recurrence;
-  }
 
   // Shared scroll position (preserved across view switches)
   let scrollMinute = $state(-1);
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
-      // Let contenteditable elements handle their own shortcuts
       const active = document.activeElement;
       if (active && (active as HTMLElement).isContentEditable) return;
 
@@ -264,10 +242,10 @@
       } else if (e.ctrlKey && e.key === "y") {
         e.preventDefault();
         requestRedo();
-      } else if (e.key === "Escape" && panelState.mode !== "closed") {
+      } else if (e.key === "Escape" && session.state.mode !== "closed") {
         e.preventDefault();
         handlePanelClose();
-      } else if (!e.ctrlKey && !e.altKey && !e.metaKey && panelState.mode === "closed" && !confirmAction) {
+      } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
         if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
           e.preventDefault();
           navigate("back");
@@ -310,150 +288,98 @@
   }
 
   function handleEventCreate(start: string, end: string) {
-    // Extract date and minutes for preview
-    const dateStr = start.split(" ")[0];
-    const [sh, sm] = (start.split(" ")[1] ?? "0:0").split(":").map(Number);
-    const [eh, em] = (end.split(" ")[1] ?? "0:0").split(":").map(Number);
-    pendingCreatePreview = { dateStr, startMinute: sh * 60 + sm, endMinute: eh * 60 + em };
-
-    // Find the create preview element to anchor the panel
     const previewEl = containerEl?.querySelector("[data-create-preview]");
     const rect = previewEl?.getBoundingClientRect();
     const anchor: PanelAnchor = rect
       ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-    panelState = { mode: "create", start, end, anchor };
+    session.openCreate(start, end, anchor);
   }
 
   function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
-    // Ignore clicks on the pseudo create-preview block and its recurring instances
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
-    pendingCreatePreview = null;
-    lastPanelChanges = null;
-    currentScope = "this";
     const anchor: PanelAnchor = rect
       ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-    calendarStore.saveSnapshot();
-
     if (isRecurring(event)) {
-      panelState = { mode: "edit", event, anchor, instanceEvent: event };
+      session.openEdit(event, anchor, event);
     } else {
-      panelState = { mode: "edit", event, anchor };
+      session.openEdit(event, anchor);
     }
   }
 
   async function handleEventUpdate(event: CalendarEvent) {
     // Pseudo-event from create preview drag/resize
     if (event.id === PENDING_CREATE_ID) {
-      if (panelState.mode === "create" && pendingCreatePreview) {
-        const dateStr = event.start.split(" ")[0];
-        const [sh, sm] = (event.start.split(" ")[1] ?? "0:0").split(":").map(Number);
-        const [eh, em] = (event.end.split(" ")[1] ?? "0:0").split(":").map(Number);
-        pendingCreatePreview = {
-          ...pendingCreatePreview,
-          dateStr,
-          startMinute: sh * 60 + sm,
-          endMinute: eh * 60 + em,
-        };
-        panelState = { mode: "create", start: event.start, end: event.end, anchor: panelState.anchor };
+      if (session.state.mode === "create") {
+        session.updateChanges({ start: event.start, end: event.end });
       }
       return;
     }
 
     if (isRecurring(event)) {
-      // Resolve the original instance before drag modified its position.
-      // calendarStore.events still has the pre-drag expanded list.
+      // If the dragged event matches the current editing ID (may be a virtual ID
+      // from Following/All overlay), route the time changes to the session
+      if (session.state.mode === "edit" && (
+        session.state.originalEvent.id === event.id || editingId === event.id
+      )) {
+        session.updateChanges({ start: event.start, end: event.end });
+        return;
+      }
+
+      // Resolve the original instance before drag modified its position
       const originalInstance = calendarStore.events.find((e) => e.id === event.id);
       if (!originalInstance) return;
 
+      // Drag on recurring without panel open -- open panel with changes
       const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
       const rect = el?.getBoundingClientRect();
       const anchor: PanelAnchor = rect
         ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
         : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-      lastPanelChanges = { start: event.start, end: event.end };
-      currentScope = "this";
-      panelDirty = true;
-      calendarStore.saveSnapshot();
-      // Use originalInstance so exception/split targets the correct date
-      calendarStore.previewRecurring(originalInstance, lastPanelChanges, currentScope);
-      panelState = { mode: "edit", event: { ...event }, anchor, instanceEvent: originalInstance };
+      session.openEdit(event, anchor, originalInstance);
+      session.updateChanges({ start: event.start, end: event.end });
       return;
     }
 
-    // Non-recurring: update in-memory immediately (prevents flash when drag
-    // state clears before the async DB write completes), then persist.
+    // Non-recurring: persist directly (no panel needed for drag)
     const template = calendarStore.getTemplate(event);
     const before = template ? { ...template } : undefined;
-    calendarStore.previewBlock(event);
     await calendarStore.updateBlock(event);
     if (before) {
       const after = calendarStore.getTemplate(event) ?? event;
       pushUndo({ type: "update", before, after: { ...after } });
       redoStack = [];
     }
-    if (panelState.mode === "edit" && panelState.event.id === event.id) {
-      const updated = calendarStore.getTemplate(panelState.event) ?? panelState.event;
-      panelState = { mode: "edit", event: updated, anchor: panelState.anchor };
+    // If panel is open for this event, update it
+    if (session.state.mode === "edit" && session.state.originalEvent.id === event.id) {
+      const updated = calendarStore.getTemplate(event) ?? event;
+      session.openEdit(updated, session.state.anchor);
     }
   }
 
   function handlePanelChange(data: Partial<CalendarEvent>) {
-    lastPanelChanges = data;
-    if (panelState.mode === "edit" && panelState.instanceEvent) {
-      // Recurring: scope-aware preview
-      calendarStore.previewRecurring(panelState.instanceEvent, data, currentScope);
-    } else if (panelState.mode === "edit") {
-      // Non-recurring: direct preview
-      calendarStore.previewBlock({ ...panelState.event, ...data });
-    } else if (panelState.mode === "create" && pendingCreatePreview) {
-      const updated = { ...pendingCreatePreview, title: data.title, color: data.color, recurrence: data.recurrence };
-      if (data.start) {
-        const dateStr = data.start.split(" ")[0];
-        const [sh, sm] = (data.start.split(" ")[1] ?? "0:0").split(":").map(Number);
-        updated.dateStr = dateStr;
-        updated.startMinute = sh * 60 + sm;
-      }
-      if (data.end) {
-        const [eh, em] = (data.end.split(" ")[1] ?? "0:0").split(":").map(Number);
-        updated.endMinute = eh * 60 + em;
-      }
-      pendingCreatePreview = updated;
-    }
+    session.updateChanges(data);
   }
 
-  function handleScopeChange(scope: RecurringScope) {
-    currentScope = scope;
-    if (panelState.mode === "edit" && panelState.instanceEvent && lastPanelChanges) {
-      calendarStore.previewRecurring(panelState.instanceEvent, lastPanelChanges, scope);
-    }
+  function handleScopeChange(newScope: RecurringScope) {
+    session.updateScope(newScope);
   }
 
   function handlePanelClose() {
-    if (panelDirty) {
+    if (session.dirty) {
       requestConfirm(
         "Discard unsaved changes?",
-        async () => {
-          calendarStore.restoreSnapshot();
-          panelState = { mode: "closed" };
-          pendingCreatePreview = null;
-          lastPanelChanges = null;
-          panelDirty = false;
-        },
+        async () => { session.close(); },
         { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
       return;
     }
-    calendarStore.restoreSnapshot();
-    panelState = { mode: "closed" };
-    pendingCreatePreview = null;
-    lastPanelChanges = null;
-    panelDirty = false;
+    session.close();
   }
 
   async function handlePanelSave(data: {
@@ -466,12 +392,9 @@
     notifications?: number[];
     pomodoroConfig?: PomodoroConfig;
   }, scope?: RecurringScope) {
-    const currentPanel = panelState;
+    const s = session.state;
 
-    // Revert preview before DB writes so store operates on clean state
-    calendarStore.restoreSnapshot();
-
-    if (currentPanel.mode === "create") {
+    if (s.mode === "create") {
       const event = await calendarStore.addBlock({
         title: data.title, start: data.start, end: data.end,
         color: data.color, description: data.description,
@@ -480,9 +403,11 @@
       });
       pushUndo({ type: "add", event: { ...event } });
       redoStack = [];
-    } else if (currentPanel.mode === "edit") {
-      if (scope && currentPanel.instanceEvent) {
-        const instanceEvent = currentPanel.instanceEvent;
+    } else if (s.mode === "edit") {
+      const instanceEvent = s.instanceEvent;
+      const isRec = isRecurring(s.originalEvent);
+
+      if (isRec && scope) {
         if (scope === "this") {
           const standalone = await calendarStore.detachInstance(instanceEvent);
           const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
@@ -490,63 +415,49 @@
         } else if (scope === "following") {
           await calendarStore.splitSeries(instanceEvent, data);
         } else {
+          // "all": shift template dates by day delta
           const template = calendarStore.getTemplate(instanceEvent);
           if (template) {
-            // Compute day delta between original instance and save data (DST-safe)
-            const [oy, om, od] = instanceEvent.start.split(" ")[0].split("-").map(Number);
-            const [dy, dm, dd] = data.start.split(" ")[0].split("-").map(Number);
-            const deltaDays = Math.round(
-              (new Date(dy, dm - 1, dd).getTime() - new Date(oy, om - 1, od).getTime()) / 86400000,
-            );
-            const [sy, sm, sd] = template.start.split(" ")[0].split("-").map(Number);
-            const [ey, em, ed] = template.end.split(" ")[0].split("-").map(Number);
-            const sDate = new Date(sy, sm - 1, sd);
-            const eDate = new Date(ey, em - 1, ed);
-            if (deltaDays !== 0) {
-              sDate.setDate(sDate.getDate() + deltaDays);
-              eDate.setDate(eDate.getDate() + deltaDays);
-            }
-            const fmtD = (d: Date) =>
-              `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            const instanceDateStr = instanceEvent.start.split(" ")[0];
+            const changesDateStr = data.start.split(" ")[0];
+            const delta = dateDiffDays(instanceDateStr, changesDateStr);
+            const templateStartDate = template.start.split(" ")[0];
+            const templateEndDate = template.end.split(" ")[0];
+            const newStartDate = delta !== 0 ? shiftDateStr(templateStartDate, delta) : templateStartDate;
+            const newEndDate = delta !== 0 ? shiftDateStr(templateEndDate, delta) : templateEndDate;
             const updated: CalendarEvent = {
               ...template, ...data,
-              start: `${fmtD(sDate)} ${data.start.split(" ")[1]}`,
-              end: `${fmtD(eDate)} ${data.end.split(" ")[1]}`,
+              start: `${newStartDate} ${data.start.split(" ")[1]}`,
+              end: `${newEndDate} ${data.end.split(" ")[1]}`,
             };
             await calendarStore.updateBlock(updated);
           }
         }
       } else {
         // Non-recurring: update directly
-        const updated: CalendarEvent = { ...currentPanel.event, ...data };
-        const before = calendarStore.getTemplate(currentPanel.event) ?? currentPanel.event;
+        const updated: CalendarEvent = { ...s.originalEvent, ...data };
+        const before = calendarStore.getTemplate(s.originalEvent) ?? s.originalEvent;
         await calendarStore.updateBlock(updated);
         pushUndo({ type: "update", before: { ...before }, after: { ...updated } });
         redoStack = [];
       }
     }
-    calendarStore.discardSnapshot();
-    panelState = { mode: "closed" };
-    pendingCreatePreview = null;
-    lastPanelChanges = null;
-    panelDirty = false;
+
+    session.close();
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {
-    // Revert preview before DB writes
-    calendarStore.restoreSnapshot();
+    const s = session.state;
 
-    if (scope && panelState.mode === "edit" && panelState.instanceEvent) {
-      const instanceEvent = panelState.instanceEvent;
+    if (scope && s.mode === "edit") {
+      const instanceEvent = s.instanceEvent;
       const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
       if (scope === "this") {
         const instanceDate = instanceEvent.start.split(" ")[0];
         await calendarStore.addException(parentId, instanceDate);
       } else if (scope === "following") {
         const instanceDate = instanceEvent.start.split(" ")[0];
-        const d = new Date(instanceDate + "T00:00:00");
-        d.setDate(d.getDate() - 1);
-        const dayBefore = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const dayBefore = shiftDateStr(instanceDate, -1);
         await calendarStore.setRepeatUntil(parentId, dayBefore);
       } else {
         const template = calendarStore.getTemplate(instanceEvent);
@@ -565,10 +476,8 @@
         redoStack = [];
       }
     }
-    calendarStore.discardSnapshot();
-    panelState = { mode: "closed" };
-    lastPanelChanges = null;
-    panelDirty = false;
+
+    session.close();
   }
 
   function handleDayClickFromMonth(date: Date) {
@@ -577,14 +486,12 @@
     viewMode = "day";
   }
 
-  // Week view: click day header -> go to day view
   function handleWeekDayHeaderClick(date: Date) {
     pushHistory("day", date);
     anchorDate = date;
     viewMode = "day";
   }
 
-  // Day view: click day header -> go to week view
   function handleDayHeaderClick() {
     pushHistory("week", anchorDate);
     viewMode = "week";
@@ -609,9 +516,8 @@
         events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
-        pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
-        {editingEventId}
-        {editingTemplateIds}
+        editingId={editingId}
+        {previewedIds}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -628,9 +534,8 @@
         events={visibleEvents}
         isDark={theme.isDark}
         {timezones}
-        pendingCreatePreview={panelState.mode === "create" ? null : pendingCreatePreview}
-        {editingEventId}
-        {editingTemplateIds}
+        editingId={editingId}
+        {previewedIds}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -687,32 +592,31 @@
   {/if}
 
   <!-- Floating event panel -->
-  {#if panelState.mode === "create" || panelState.mode === "edit"}
+  {#if session.state.mode === "create" || session.state.mode === "edit"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="fixed inset-0 z-40" onclick={handlePanelClose}></div>
-    {#if panelState.mode === "create"}
+    {#if session.state.mode === "create"}
       <EventPanel
         mode="create"
-        start={panelState.start}
-        end={panelState.end}
-        anchor={panelState.anchor}
+        start={session.state.start}
+        end={session.state.end}
+        anchor={session.state.anchor}
         onSave={handlePanelSave}
         onChange={handlePanelChange}
         onClose={handlePanelClose}
-        onDirtyChange={(d) => { panelDirty = d; }}
       />
-    {:else if panelState.mode === "edit"}
+    {:else if session.state.mode === "edit"}
       <EventPanel
         mode="edit"
-        event={panelState.event}
-        anchor={panelState.anchor}
+        event={panelEvent}
+        anchor={session.state.anchor}
+        externalDirty={session.dirty}
         onSave={handlePanelSave}
         onDelete={handleDelete}
         onChange={handlePanelChange}
         onClose={handlePanelClose}
         onScopeChange={handleScopeChange}
-        onDirtyChange={(d) => { panelDirty = d; }}
       />
     {/if}
   {/if}

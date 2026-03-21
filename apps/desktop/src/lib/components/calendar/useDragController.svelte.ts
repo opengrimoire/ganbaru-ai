@@ -304,26 +304,8 @@ export function useDragController(config: DragControllerConfig) {
     return null;
   }
 
-  function getCreatePreviewForDate(
-    dateStr: string,
-    pendingCreatePreview?: {
-      dateStr: string;
-      startMinute: number;
-      endMinute: number;
-      title?: string;
-      color?: EventColor;
-    } | null,
-  ): PositionedEvent | null {
+  function getCreatePreviewForDate(dateStr: string): PositionedEvent | null {
     if (createPreviewDate === dateStr) return createPreview;
-    if (pendingCreatePreview?.dateStr === dateStr) {
-      return buildPreview(
-        dateStr,
-        pendingCreatePreview.startMinute,
-        pendingCreatePreview.endMinute,
-        pendingCreatePreview.title,
-        pendingCreatePreview.color,
-      );
-    }
     return null;
   }
 
