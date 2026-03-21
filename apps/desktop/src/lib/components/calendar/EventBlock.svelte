@@ -58,10 +58,9 @@
   style="
     top: {positioned.top}px;
     height: {positioned.height}px;
-    left: {editing ? 0 : positioned.left}%;
-    width: {editing ? 100 : positioned.width}%;
+    left: {positioned.left}%;
+    width: {positioned.width}%;
     background-color: {activeColors.bg};
-    border-left: 3px solid {activeColors.border};
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};

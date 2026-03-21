@@ -230,9 +230,8 @@
         top: {dragPreview.top}px;
         height: {dragPreview.height}px;
         left: 0;
-        width: 100%;
+        width: 92%;
         background-color: {dragColor?.bg ?? (isDark ? '#2A2A2C' : '#E8E8E8')};
-        border-left: 3px solid {dragColor?.border ?? (isDark ? '#888' : '#AAAAAA')};
         color: {dragColor?.text ?? (isDark ? '#CACACA' : '#666666')};
         --stripe-color: {isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};
         z-index: 46;
@@ -256,9 +255,8 @@
         top: {createPreview.top}px;
         height: {createPreview.height}px;
         left: 0;
-        width: 100%;
+        width: 92%;
         background-color: {isDark ? '#2A2A2C' : '#E8E8E8'};
-        border-left: 3px solid {isDark ? '#888' : '#AAAAAA'};
         color: {isDark ? '#CACACA' : '#666666'};
         --stripe-color: {isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};
         z-index: 10;

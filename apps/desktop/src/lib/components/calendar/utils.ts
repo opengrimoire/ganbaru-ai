@@ -498,6 +498,8 @@ export function layoutEventsForDay(
     }
 
     const totalColumns = columns.length;
+    const RIGHT_GUTTER_PCT = 8;
+    const usable = 100 - RIGHT_GUTTER_PCT;
 
     for (let colIdx = 0; colIdx < columns.length; colIdx++) {
       for (const item of columns[colIdx]) {
@@ -505,8 +507,8 @@ export function layoutEventsForDay(
         const dur = item.endMinute - item.startMinute;
         const rawHeight = (dur / 60) * hourHeight;
         const height = Math.max(rawHeight, MIN_EVENT_HEIGHT);
-        const left = (colIdx / totalColumns) * 100;
-        const width = (1 / totalColumns) * 100;
+        const left = (colIdx / totalColumns) * usable;
+        const width = (1 / totalColumns) * usable;
 
         const isClippedTop = dateStr
           ? item.startMinute === 0 &&
