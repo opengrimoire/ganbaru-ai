@@ -1,16 +1,19 @@
 <script lang="ts">
-  import type { CalendarEvent, PositionedEvent } from "./types";
+  import type { CalendarEvent, PositionedEvent, AccentBarBand } from "./types";
   import {
     eventsForDay,
     layoutEventsForDay,
     effectiveMinuteRange,
     formatDatePart,
     minuteOfDay,
+    parseCalendarDate,
     snapToGrid,
     clampMinute,
     minuteToTop,
     getEventColor,
   } from "./utils";
+  import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
+  import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import EventBlock from "./EventBlock.svelte";
   import { onMount } from "svelte";
 
@@ -69,6 +72,117 @@
   const positioned = $derived(layoutEventsForDay(dayEvents, hourHeight, dateStr));
 
   const totalHeight = $derived(24 * hourHeight);
+
+  // Pomodoro accent bar bands
+  const pomodoro = getPomodoro();
+
+  const accentBandsMap = $derived.by(() => {
+    // Reading breakOvertimeSeconds subscribes to it, so bands recompute
+    // each second while the user hasn't acknowledged a finished break.
+    void pomodoro.breakOvertimeSeconds;
+    const map = new Map<string, AccentBarBand[]>();
+    const now = new Date();
+
+    for (const pos of positioned) {
+      const ev = pos.event;
+      if (!ev.pomodoroConfig) continue;
+
+      const evStartMs = parseCalendarDate(ev.start).getTime();
+      const evEndMs = parseCalendarDate(ev.end).getTime();
+      const totalDurMs = evEndMs - evStartMs;
+      if (totalDurMs <= 0) continue;
+
+      // Visible range of this event on this day column
+      const { startMinute, endMinute } = effectiveMinuteRange(ev, dateStr);
+      const dayMidnightMs = parseCalendarDate(`${dateStr} 00:00`).getTime();
+      const visStartFrac = (dayMidnightMs + startMinute * 60000 - evStartMs) / totalDurMs;
+      const visEndFrac = (dayMidnightMs + endMinute * 60000 - evStartMs) / totalDurMs;
+      const visDur = visEndFrac - visStartFrac;
+      if (visDur <= 0) continue;
+
+      let bands: AccentBarBand[];
+
+      if (ev.id === pomodoro.activeBlockId && pomodoro.segments.length > 0) {
+        // Active event: project future segment positions from current timer state.
+        // Reading remainingSeconds makes this reactive to every tick.
+        const currentEndMs = now.getTime() + pomodoro.remainingSeconds * 1000;
+        const activeIdx = pomodoro.segments.findIndex((s) => s.status === "active");
+        bands = [];
+        let cursor = currentEndMs;
+
+        for (let i = 0; i < pomodoro.segments.length; i++) {
+          const seg = pomodoro.segments[i];
+          const plannedDurMs = new Date(seg.plannedEnd).getTime() - new Date(seg.plannedStart).getTime();
+
+          if (seg.status === "completed" || seg.status === "skipped" || seg.status === "interrupted") {
+            if (seg.phase === "focus") continue;
+            const startMs = new Date(seg.actualStart ?? seg.plannedStart).getTime();
+            const endMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
+            bands.push({
+              topFraction: (startMs - evStartMs) / totalDurMs,
+              heightFraction: (endMs - startMs) / totalDurMs,
+              phase: seg.phase,
+              status: seg.status,
+            });
+          } else if (i === activeIdx) {
+            if (seg.phase !== "focus") {
+              const startMs = new Date(seg.actualStart!).getTime();
+              bands.push({
+                topFraction: (startMs - evStartMs) / totalDurMs,
+                heightFraction: (cursor - startMs) / totalDurMs,
+                phase: seg.phase,
+                status: seg.status,
+              });
+            }
+          } else {
+            if (seg.phase !== "focus") {
+              bands.push({
+                topFraction: (cursor - evStartMs) / totalDurMs,
+                heightFraction: plannedDurMs / totalDurMs,
+                phase: seg.phase,
+                status: seg.status,
+              });
+            }
+            cursor += plannedDurMs;
+          }
+        }
+      } else {
+        // Planned view: compute from config, starting from effective start
+        if (now.getTime() >= evEndMs) continue;
+
+        const effectiveStartMs = Math.max(now.getTime(), evStartMs);
+        const remainingMin = (evEndMs - effectiveStartMs) / 60000;
+        const offsetMin = (effectiveStartMs - evStartMs) / 60000;
+        const totalDurMin = totalDurMs / 60000;
+
+        const planned = computePlannedSegments(ev.pomodoroConfig, remainingMin);
+        bands = planned
+          .filter((s) => s.phase !== "focus")
+          .map((s) => ({
+            topFraction: (offsetMin + s.startOffsetMinutes) / totalDurMin,
+            heightFraction: (s.endOffsetMinutes - s.startOffsetMinutes) / totalDurMin,
+            phase: s.phase,
+            status: "planned" as const,
+          }));
+      }
+
+      // Clip bands to this day's visible portion and remap fractions
+      const clipped: AccentBarBand[] = [];
+      for (const band of bands) {
+        const bStart = Math.max(band.topFraction, visStartFrac);
+        const bEnd = Math.min(band.topFraction + band.heightFraction, visEndFrac);
+        if (bStart >= bEnd) continue;
+        clipped.push({
+          topFraction: (bStart - visStartFrac) / visDur,
+          heightFraction: (bEnd - bStart) / visDur,
+          phase: band.phase,
+          status: band.status,
+        });
+      }
+      if (clipped.length > 0) map.set(ev.id, clipped);
+    }
+    return map;
+  });
 
   let snapLineY: number | null = $state(null);
   let snapTimeLabel: string = $state("");
@@ -215,6 +329,7 @@
         isPast={isEventPast(pos.event)}
         editing={pos.event.id === editingId}
         preview={previewedIds?.has(pos.event.id) === true}
+        accentSegments={accentBandsMap.get(pos.event.id)}
         onclick={(rect) => onEventClick(pos.event, rect)}
         onpointerdown={(e) => onDragStart(pos.event.id, e)}
       />

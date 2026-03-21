@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PositionedEvent } from "./types";
+  import type { PositionedEvent, AccentBarBand } from "./types";
   import { getEventColor } from "./utils";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
@@ -10,6 +10,7 @@
     isPast = false,
     editing = false,
     preview = false,
+    accentSegments,
     onclick,
     onpointerdown,
   }: {
@@ -18,6 +19,7 @@
     isPast?: boolean;
     editing?: boolean;
     preview?: boolean;
+    accentSegments?: AccentBarBand[];
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
@@ -72,7 +74,24 @@
   <div class="resize-handle-top" onpointerdown={handlePointerDown}></div>
 
   <!-- Accent bar -->
-  <div class="shrink-0" style="width: 10%; background-color: {activeColors.accent};"></div>
+  <div class="relative shrink-0 overflow-hidden" style="width: 10%; background-color: {activeColors.accent};">
+    {#if accentSegments}
+      {#each accentSegments as band}
+        {#if band.status !== "skipped"}
+          <div
+            class="absolute left-0 right-0 {band.status === 'active' ? 'break-band-active' : ''}"
+            style="
+              top: {band.topFraction * 100}%;
+              height: {band.heightFraction * 100}%;
+              background-color: {band.status === 'completed' ? activeColors.bg : activeColors.accent};
+              opacity: {band.status === 'planned' ? 0.4 : 1};
+              {band.status === 'completed' ? '' : 'filter: brightness(0.7);'}
+            "
+          ></div>
+        {/if}
+      {/each}
+    {/if}
+  </div>
 
   <!-- Content -->
   <div class="relative min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};">
@@ -124,5 +143,14 @@
   @keyframes preview-pulse {
     0%, 100% { opacity: 0.75; }
     50% { opacity: 1; }
+  }
+
+  .break-band-active {
+    animation: break-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes break-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.9; }
   }
 </style>

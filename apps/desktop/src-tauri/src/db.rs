@@ -44,7 +44,6 @@ pub fn migrations() -> Vec<Migration> {
                 priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('easy', 'medium', 'hard', 'epic')),
                 estimated_pomodoros INTEGER NOT NULL DEFAULT 1,
                 actual_pomodoros INTEGER NOT NULL DEFAULT 0,
-                session_block_id TEXT REFERENCES session_blocks(id),
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -64,33 +63,67 @@ pub fn migrations() -> Vec<Migration> {
                 PRIMARY KEY (task_id, tag)
             );
 
-            -- calendar session blocks
-            CREATE TABLE IF NOT EXISTS session_blocks (
+            -- calendar events
+            CREATE TABLE IF NOT EXISTS calendar_events (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
-                pomodoro_count INTEGER NOT NULL DEFAULT 4,
-                focus_duration_minutes INTEGER NOT NULL DEFAULT 25,
-                short_break_minutes INTEGER NOT NULL DEFAULT 5,
-                long_break_minutes INTEGER NOT NULL DEFAULT 15,
                 start_time TEXT NOT NULL,
                 end_time TEXT NOT NULL,
+                timezone TEXT NOT NULL DEFAULT '',
+                calendar_id TEXT NOT NULL DEFAULT 'local',
+                color TEXT,
+                description TEXT NOT NULL DEFAULT '',
+                rrule TEXT,
+                notifications TEXT,
+                exceptions TEXT,
+                repeat_until TEXT,
                 environment_id TEXT,
                 playlist_id TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events(start_time);
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_end ON calendar_events(end_time);
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_calendar ON calendar_events(calendar_id);
 
-            -- session block to skill branch mapping
-            CREATE TABLE IF NOT EXISTS session_block_skill_branches (
-                session_block_id TEXT NOT NULL REFERENCES session_blocks(id) ON DELETE CASCADE,
+            -- pomodoro config per event
+            CREATE TABLE IF NOT EXISTS pomodoro_configs (
+                event_id TEXT PRIMARY KEY REFERENCES calendar_events(id) ON DELETE CASCADE,
+                focus_duration_minutes INTEGER NOT NULL DEFAULT 40,
+                short_break_minutes INTEGER NOT NULL DEFAULT 5,
+                long_break_minutes INTEGER NOT NULL DEFAULT 10,
+                pomodoro_count INTEGER NOT NULL DEFAULT 4
+            );
+
+            -- pomodoro segment tracking
+            CREATE TABLE IF NOT EXISTS pomodoro_segments (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                event_date TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                cycle_number INTEGER NOT NULL,
+                phase TEXT NOT NULL CHECK(phase IN ('focus', 'short_break', 'long_break')),
+                planned_start TEXT NOT NULL,
+                planned_end TEXT NOT NULL,
+                actual_start TEXT,
+                actual_end TEXT,
+                status TEXT NOT NULL DEFAULT 'planned'
+                    CHECK(status IN ('planned', 'active', 'completed', 'skipped', 'interrupted')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_event ON pomodoro_segments(event_id, event_date);
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_run ON pomodoro_segments(run_id);
+
+            -- calendar event to skill branch mapping
+            CREATE TABLE IF NOT EXISTS calendar_event_skill_branches (
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
                 branch_id TEXT NOT NULL REFERENCES skill_branches(id),
-                PRIMARY KEY (session_block_id, branch_id)
+                PRIMARY KEY (event_id, branch_id)
             );
 
             -- pomodoro sessions (completed focus periods)
             CREATE TABLE IF NOT EXISTS pomodoro_sessions (
                 id TEXT PRIMARY KEY,
-                session_block_id TEXT REFERENCES session_blocks(id),
                 task_id TEXT REFERENCES tasks(id),
                 start_time TEXT NOT NULL,
                 end_time TEXT NOT NULL,
@@ -104,7 +137,6 @@ pub fn migrations() -> Vec<Migration> {
             -- xp ledger
             CREATE TABLE IF NOT EXISTS xp_entries (
                 id TEXT PRIMARY KEY,
-                session_block_id TEXT REFERENCES session_blocks(id),
                 task_id TEXT REFERENCES tasks(id),
                 pomodoro_session_id TEXT REFERENCES pomodoro_sessions(id),
                 activity_xp REAL NOT NULL DEFAULT 0,
@@ -145,73 +177,6 @@ pub fn migrations() -> Vec<Migration> {
 
             -- insert initial streak record
             INSERT OR IGNORE INTO streaks (id) VALUES ('current');
-        ",
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 2,
-        description: "add color, description, repeat, notification to session blocks",
-        sql: "
-            ALTER TABLE session_blocks ADD COLUMN color TEXT;
-            ALTER TABLE session_blocks ADD COLUMN description TEXT NOT NULL DEFAULT '';
-            ALTER TABLE session_blocks ADD COLUMN repeat_rule TEXT;
-            ALTER TABLE session_blocks ADD COLUMN notification_minutes INTEGER;
-        ",
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 3,
-        description: "add exceptions and repeat_until for recurring event overrides",
-        sql: "
-            ALTER TABLE session_blocks ADD COLUMN exceptions TEXT;
-            ALTER TABLE session_blocks ADD COLUMN repeat_until TEXT;
-        ",
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 4,
-        description: "restructure calendar schema: rename table, add timezone/calendar_id, normalize pomodoro config",
-        sql: "
-            ALTER TABLE session_blocks RENAME TO calendar_events;
-
-            ALTER TABLE calendar_events ADD COLUMN timezone TEXT NOT NULL DEFAULT '';
-            ALTER TABLE calendar_events ADD COLUMN calendar_id TEXT NOT NULL DEFAULT 'local';
-            ALTER TABLE calendar_events RENAME COLUMN repeat_rule TO rrule;
-
-            ALTER TABLE calendar_events DROP COLUMN pomodoro_count;
-            ALTER TABLE calendar_events DROP COLUMN focus_duration_minutes;
-            ALTER TABLE calendar_events DROP COLUMN short_break_minutes;
-            ALTER TABLE calendar_events DROP COLUMN long_break_minutes;
-
-            CREATE TABLE IF NOT EXISTS pomodoro_configs (
-                event_id TEXT PRIMARY KEY REFERENCES calendar_events(id) ON DELETE CASCADE,
-                focus_duration_minutes INTEGER NOT NULL DEFAULT 40,
-                short_break_minutes INTEGER NOT NULL DEFAULT 5,
-                long_break_minutes INTEGER NOT NULL DEFAULT 10,
-                pomodoro_count INTEGER NOT NULL DEFAULT 4
-            );
-
-            CREATE TABLE IF NOT EXISTS calendar_event_skill_branches (
-                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
-                branch_id TEXT NOT NULL REFERENCES skill_branches(id),
-                PRIMARY KEY (event_id, branch_id)
-            );
-            DROP TABLE IF EXISTS session_block_skill_branches;
-
-            CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events(start_time);
-            CREATE INDEX IF NOT EXISTS idx_calendar_events_end ON calendar_events(end_time);
-            CREATE INDEX IF NOT EXISTS idx_calendar_events_calendar ON calendar_events(calendar_id);
-        ",
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 5,
-        description: "multi-notification support: add notifications JSON column",
-        sql: "
-            ALTER TABLE calendar_events ADD COLUMN notifications TEXT;
-            UPDATE calendar_events
-              SET notifications = '[' || notification_minutes || ']'
-              WHERE notification_minutes IS NOT NULL;
         ",
         kind: MigrationKind::Up,
     }]

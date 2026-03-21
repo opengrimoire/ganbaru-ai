@@ -76,12 +76,17 @@
     const activeBlock = findActiveBlock();
 
     if (activeBlock) {
-      pomodoro.startFromBlock(activeBlock.id, {
-        focusMinutes: activeBlock.pomodoroConfig?.focusDurationMinutes ?? 40,
-        shortBreakMinutes: activeBlock.pomodoroConfig?.shortBreakMinutes ?? 5,
-        longBreakMinutes: activeBlock.pomodoroConfig?.longBreakMinutes ?? 10,
-        cyclesBeforeLongBreak: activeBlock.pomodoroConfig?.pomodoroCount ?? 4,
-      });
+      pomodoro.startFromBlock(
+        activeBlock.id,
+        {
+          focusMinutes: activeBlock.pomodoroConfig?.focusDurationMinutes ?? 40,
+          shortBreakMinutes: activeBlock.pomodoroConfig?.shortBreakMinutes ?? 5,
+          longBreakMinutes: activeBlock.pomodoroConfig?.longBreakMinutes ?? 10,
+          cyclesBeforeLongBreak: activeBlock.pomodoroConfig?.pomodoroCount ?? 4,
+        },
+        activeBlock.end,
+        activeBlock.start.split(" ")[0],
+      );
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
       savedBlockState = trackedBlockSnapshot;

@@ -86,6 +86,40 @@ export interface PositionedEvent {
   isClippedBottom?: boolean; // event continues into next day
 }
 
+// --- Pomodoro segment types ---
+
+export type SegmentPhase = "focus" | "short_break" | "long_break";
+
+export type SegmentStatus = "planned" | "active" | "completed" | "skipped" | "interrupted";
+
+export interface PlannedSegment {
+  cycleNumber: number;
+  phase: SegmentPhase;
+  startOffsetMinutes: number;
+  endOffsetMinutes: number;
+}
+
+export interface AccentBarBand {
+  topFraction: number;
+  heightFraction: number;
+  phase: SegmentPhase;
+  status?: SegmentStatus;
+}
+
+export interface PersistedSegment {
+  id: string;
+  eventId: string;
+  eventDate: string;
+  runId: string;
+  cycleNumber: number;
+  phase: SegmentPhase;
+  plannedStart: string;
+  plannedEnd: string;
+  actualStart: string | null;
+  actualEnd: string | null;
+  status: SegmentStatus;
+}
+
 export interface DragState {
   eventId: string;
   type: "move" | "resize-top" | "resize-bottom";

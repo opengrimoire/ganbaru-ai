@@ -1,6 +1,8 @@
 import type { PomodoroPhase } from "@ganbaruai/shared-types";
+import type { PersistedSegment, SegmentPhase } from "$lib/components/calendar/types";
 import { execute } from "$lib/api/db";
 import { calculateActivityXp } from "$lib/utils/xp";
+import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -36,7 +38,110 @@ let notificationShown = false;
 let phaseEndTime: number | null = null;
 let activeBlockId: string | null = null;
 
+// Segment tracking state
+let segments = $state<PersistedSegment[]>([]);
+let currentSegmentIndex = -1;
+let activeRunId: string | null = null;
+
+// Tracks seconds elapsed after a break timer reaches 0 but before user acknowledgment.
+// Reactive ($state) so the accent bar derived recomputes and bands keep shifting.
+let breakOvertimeSeconds = $state(0);
+let overtimeIntervalId: ReturnType<typeof setInterval> | null = null;
+
 const NOTIFICATION_THRESHOLD = 60;
+
+// --- Segment helpers ---
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function addMinutesToIso(base: string, minutes: number): string {
+  const d = new Date(base);
+  d.setMinutes(d.getMinutes() + minutes);
+  return d.toISOString();
+}
+
+function markSegment(index: number, status: PersistedSegment["status"], setActualEnd: boolean = false) {
+  if (index < 0 || index >= segments.length) return;
+  const seg = segments[index];
+  seg.status = status;
+  if (setActualEnd) seg.actualEnd = nowIso();
+
+  execute(
+    `UPDATE pomodoro_segments SET status = $1, actual_start = $2, actual_end = $3 WHERE id = $4`,
+    [seg.status, seg.actualStart, seg.actualEnd, seg.id],
+  ).catch((e) => console.warn("Failed to update segment:", e));
+}
+
+function activateSegment(index: number) {
+  if (index < 0 || index >= segments.length) return;
+  const seg = segments[index];
+  seg.status = "active";
+  seg.actualStart = nowIso();
+  currentSegmentIndex = index;
+
+  execute(
+    `UPDATE pomodoro_segments SET status = 'active', actual_start = $1 WHERE id = $2`,
+    [seg.actualStart, seg.id],
+  ).catch((e) => console.warn("Failed to activate segment:", e));
+}
+
+async function createSegments(eventId: string, eventEnd: string, eventDate: string) {
+  const runId = crypto.randomUUID();
+  activeRunId = runId;
+
+  const now = new Date();
+  const end = new Date(eventEnd.replace(" ", "T"));
+  const remainingMinutes = Math.max(0, (end.getTime() - now.getTime()) / 60000);
+
+  const planned = computePlannedSegments(
+    {
+      focusDurationMinutes: config.focusMinutes,
+      shortBreakMinutes: config.shortBreakMinutes,
+      longBreakMinutes: config.longBreakMinutes,
+      pomodoroCount: config.cyclesBeforeLongBreak,
+    },
+    remainingMinutes,
+  );
+
+  const baseIso = now.toISOString();
+
+  const newSegments: PersistedSegment[] = planned.map((s, i) => ({
+    id: crypto.randomUUID(),
+    eventId,
+    eventDate,
+    runId,
+    cycleNumber: s.cycleNumber,
+    phase: s.phase as SegmentPhase,
+    plannedStart: addMinutesToIso(baseIso, s.startOffsetMinutes),
+    plannedEnd: addMinutesToIso(baseIso, s.endOffsetMinutes),
+    actualStart: i === 0 ? baseIso : null,
+    actualEnd: null,
+    status: i === 0 ? "active" as const : "planned" as const,
+  }));
+
+  // Batch insert
+  for (const seg of newSegments) {
+    await execute(
+      `INSERT INTO pomodoro_segments
+        (id, event_id, event_date, run_id, cycle_number, phase, planned_start, planned_end, actual_start, actual_end, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [seg.id, seg.eventId, seg.eventDate, seg.runId, seg.cycleNumber, seg.phase, seg.plannedStart, seg.plannedEnd, seg.actualStart, seg.actualEnd, seg.status],
+    ).catch((e) => console.warn("Failed to insert segment:", e));
+  }
+
+  segments = newSegments;
+  currentSegmentIndex = 0;
+}
+
+function clearSegments() {
+  segments = [];
+  currentSegmentIndex = -1;
+  activeRunId = null;
+}
+
+// --- Tray ---
 
 function updateTray() {
   const totalSeconds =
@@ -54,6 +159,8 @@ function updateTray() {
   }).catch(() => {});
 }
 
+// --- Listeners ---
+
 function initListeners() {
   if (listenersInitialized) return;
   listenersInitialized = true;
@@ -61,6 +168,8 @@ function initListeners() {
   listen("pomodoro-skip-break", () => {
     document.dispatchEvent(new Event("ganbaruai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
+      // Mark current break segment as skipped
+      markSegment(currentSegmentIndex, "skipped", true);
       startFocusSession();
     } else {
       skipNextBreak = true;
@@ -70,6 +179,8 @@ function initListeners() {
   listen("pomodoro-break-acknowledged", () => {
     document.dispatchEvent(new Event("ganbaruai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
+      // Mark current break segment as completed
+      markSegment(currentSegmentIndex, "completed", true);
       startFocusSession();
     }
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
@@ -106,11 +217,22 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
 }
 
+// --- Session control ---
+
+function stopOvertime() {
+  if (overtimeIntervalId) {
+    clearInterval(overtimeIntervalId);
+    overtimeIntervalId = null;
+  }
+  breakOvertimeSeconds = 0;
+}
+
 function startFocusSession() {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
   }
+  stopOvertime();
   phase = "focus";
   remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
   notificationShown = false;
@@ -118,6 +240,15 @@ function startFocusSession() {
   phaseEndTime = Date.now() + remainingSeconds * 1000;
   sessionStartTime = new Date().toISOString();
   intervalId = setInterval(tick, 1000);
+
+  // Activate the next focus segment
+  const nextFocus = segments.findIndex(
+    (s, i) => i > currentSegmentIndex && s.phase === "focus" && s.status === "planned",
+  );
+  if (nextFocus !== -1) {
+    activateSegment(nextFocus);
+  }
+
   updateTray();
 }
 
@@ -164,6 +295,8 @@ async function saveCompletedSession(
   lastXp = xp;
 }
 
+// --- Timer ---
+
 function tick() {
   if (phaseEndTime !== null) {
     const now = Date.now();
@@ -171,7 +304,7 @@ function tick() {
   }
 
   if (remainingSeconds <= 0) {
-    // During break, don't auto-advance — wait for user acknowledgment
+    // During break, don't auto-advance - wait for user acknowledgment
     if (phase === "short_break" || phase === "long_break") {
       remainingSeconds = 0;
       if (intervalId) {
@@ -179,6 +312,13 @@ function tick() {
         intervalId = null;
       }
       isRunning = false;
+      // Start overtime counter so accent bar bands keep updating
+      breakOvertimeSeconds = 0;
+      if (!overtimeIntervalId) {
+        overtimeIntervalId = setInterval(() => {
+          breakOvertimeSeconds += 1;
+        }, 1000);
+      }
       return;
     }
     advancePhase();
@@ -206,11 +346,35 @@ function advancePhase() {
     sessionStartTime = null;
     notificationShown = false;
 
+    // Mark current focus segment as completed
+    markSegment(currentSegmentIndex, "completed", true);
+
     if (skipNextBreak) {
       skipNextBreak = false;
       phase = "focus";
       remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
       phaseEndTime = Date.now() + remainingSeconds * 1000;
+
+      // Mark the break segment as skipped, activate next focus
+      const breakIdx = currentSegmentIndex + 1;
+      if (breakIdx < segments.length && segments[breakIdx].phase !== "focus") {
+        const now = nowIso();
+        segments[breakIdx].status = "skipped";
+        segments[breakIdx].actualStart = now;
+        segments[breakIdx].actualEnd = now;
+        execute(
+          `UPDATE pomodoro_segments SET status = 'skipped', actual_start = $1, actual_end = $2 WHERE id = $3`,
+          [now, now, segments[breakIdx].id],
+        ).catch((e) => console.warn("Failed to skip segment:", e));
+
+        const nextFocus = segments.findIndex(
+          (s, i) => i > breakIdx && s.phase === "focus" && s.status === "planned",
+        );
+        if (nextFocus !== -1) {
+          activateSegment(nextFocus);
+        }
+      }
+
       if (currentCycle < totalCycles) {
         currentCycle += 1;
       } else {
@@ -221,20 +385,46 @@ function advancePhase() {
       remainingSeconds = config.longBreakMinutes * TIME_MULTIPLIER;
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle = 1;
+
+      // Activate the break segment
+      const breakIdx = currentSegmentIndex + 1;
+      if (breakIdx < segments.length && segments[breakIdx].phase === "long_break") {
+        activateSegment(breakIdx);
+      }
+
       showBreakOverlay(remainingSeconds);
     } else {
       phase = "short_break";
       remainingSeconds = config.shortBreakMinutes * TIME_MULTIPLIER;
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle += 1;
+
+      // Activate the break segment
+      const breakIdx = currentSegmentIndex + 1;
+      if (breakIdx < segments.length && segments[breakIdx].phase === "short_break") {
+        activateSegment(breakIdx);
+      }
+
       showBreakOverlay(remainingSeconds);
     }
   } else {
+    // Transition from break to focus (via tray-skip)
+    markSegment(currentSegmentIndex, "completed", true);
     phase = "focus";
     remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
     phaseEndTime = Date.now() + remainingSeconds * 1000;
+
+    // Activate next focus segment
+    const nextFocus = segments.findIndex(
+      (s, i) => i > currentSegmentIndex && s.phase === "focus" && s.status === "planned",
+    );
+    if (nextFocus !== -1) {
+      activateSegment(nextFocus);
+    }
   }
 }
+
+// --- Public API ---
 
 export function getPomodoro() {
   initListeners();
@@ -274,10 +464,21 @@ export function getPomodoro() {
     get activeBlockId() {
       return activeBlockId;
     },
+    get breakOvertimeSeconds() {
+      return breakOvertimeSeconds;
+    },
+    get segments() {
+      return segments;
+    },
     clearLastXp() {
       lastXp = null;
     },
-    startFromBlock(blockId: string, blockConfig: Partial<PomodoroConfig>) {
+    startFromBlock(
+      blockId: string,
+      blockConfig: Partial<PomodoroConfig>,
+      eventEnd?: string,
+      eventDate?: string,
+    ) {
       if (activeBlockId === blockId) return;
       initListeners();
 
@@ -301,13 +502,34 @@ export function getPomodoro() {
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       sessionStartTime = new Date().toISOString();
       intervalId = setInterval(tick, 1000);
+
+      // Create segments from now to event end
+      if (eventEnd && eventDate) {
+        createSegments(blockId, eventEnd, eventDate);
+      }
+
       updateTray();
     },
     stopSession() {
+      // Mark current segment as interrupted, remaining as skipped
+      if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+        markSegment(currentSegmentIndex, "interrupted", true);
+        for (let i = currentSegmentIndex + 1; i < segments.length; i++) {
+          if (segments[i].status === "planned") {
+            segments[i].status = "skipped";
+            execute(
+              `UPDATE pomodoro_segments SET status = 'skipped' WHERE id = $1`,
+              [segments[i].id],
+            ).catch((e) => console.warn("Failed to skip segment:", e));
+          }
+        }
+      }
+
       if (intervalId) {
         clearInterval(intervalId);
         intervalId = null;
       }
+      stopOvertime();
       isRunning = false;
       phaseEndTime = null;
       activeBlockId = null;
@@ -318,6 +540,7 @@ export function getPomodoro() {
       sessionStartTime = null;
       skipNextBreak = false;
       notificationShown = false;
+      clearSegments();
       updateTray();
     },
     pause() {
