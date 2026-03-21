@@ -30,8 +30,8 @@ fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
 
-    // Restart the app so the database is recreated from migrations
-    app.restart();
+    app.exit(0);
+    Ok(())
 }
 
 #[tauri::command]
