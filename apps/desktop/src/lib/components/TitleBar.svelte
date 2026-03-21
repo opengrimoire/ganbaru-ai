@@ -16,6 +16,7 @@
   import Square from "@lucide/svelte/icons/square";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import X from "@lucide/svelte/icons/x";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const win = getCurrentWindow();
   const nav = getNavigation();
@@ -97,13 +98,7 @@
   });
 
   function handleModalKeydown(e: KeyboardEvent) {
-    if (showCloseConfirm) {
-      if (e.key === "Escape") { cancelClose(); e.stopPropagation(); }
-      if (e.key === "Enter") { confirmClose(); e.stopPropagation(); }
-    } else if (showResetConfirm) {
-      if (e.key === "Escape") { showResetConfirm = false; e.stopPropagation(); }
-      if (e.key === "Enter") { confirmReset(); e.stopPropagation(); }
-    } else if (e.ctrlKey && e.shiftKey && e.key === "W") {
+    if (e.ctrlKey && e.shiftKey && e.key === "W") {
       e.preventDefault();
       handleClose();
     }
@@ -288,75 +283,21 @@
 </div>
 
 {#if showResetConfirm}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="fixed inset-0 z-50"
-    onclick={() => { showResetConfirm = false; }}
-  >
-    <div class="absolute inset-0 bg-background/90"></div>
-    <div class="relative flex h-full flex-col items-center justify-center">
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="flex flex-col items-center gap-5"
-        onclick={(e) => e.stopPropagation()}
-      >
-        <p class="text-sm text-foreground dark:text-white">
-          This will permanently delete all session blocks, tasks, and XP data.
-        </p>
-        <div class="flex gap-3">
-          <button
-            onclick={() => { showResetConfirm = false; }}
-            class="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
-          >
-            Cancel
-          </button>
-          <button
-            onclick={confirmReset}
-            class="rounded-lg bg-red-800/80 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700/80"
-          >
-            Reset everything
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ConfirmDialog
+    message="This will permanently delete all session blocks, tasks, and XP data."
+    confirmLabel="Reset everything (Enter)"
+    cancelLabel="Cancel (Esc)"
+    onConfirm={confirmReset}
+    onCancel={() => { showResetConfirm = false; }}
+  />
 {/if}
 
 {#if showCloseConfirm}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="fixed inset-0 z-50"
-    onclick={cancelClose}
-  >
-    <div class="absolute inset-0 bg-background/90"></div>
-    <div class="relative flex h-full flex-col items-center justify-center">
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="flex flex-col items-center gap-5"
-        onclick={(e) => e.stopPropagation()}
-      >
-        <p class="text-sm text-foreground dark:text-white">
-          All productivity features will stop working if you close the app.
-        </p>
-        <div class="flex gap-3">
-          <button
-            onclick={cancelClose}
-            class="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
-          >
-            Stay
-          </button>
-          <button
-            onclick={confirmClose}
-            class="rounded-lg bg-red-800/80 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700/80"
-          >
-            Close anyway
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ConfirmDialog
+    message="All productivity features will stop working if you close the app."
+    confirmLabel="Close anyway (Enter)"
+    cancelLabel="Stay (Esc)"
+    onConfirm={confirmClose}
+    onCancel={cancelClose}
+  />
 {/if}

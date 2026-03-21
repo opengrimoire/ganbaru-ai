@@ -65,7 +65,6 @@
     cursor: grab;
     z-index: {editing ? 45 : 1};
     {isPast ? 'filter: saturate(0.7) brightness(0.9);' : ''}
-    {preview ? `--stripe-color: ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};` : ''}
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -110,20 +109,11 @@
   }
 
   .event-preview {
-    position: relative;
+    animation: preview-pulse 2s ease-in-out infinite;
   }
 
-  .event-preview::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 5px,
-      var(--stripe-color) 5px,
-      var(--stripe-color) 10px
-    );
-    pointer-events: none;
+  @keyframes preview-pulse {
+    0%, 100% { opacity: 0.75; }
+    50% { opacity: 1; }
   }
 </style>

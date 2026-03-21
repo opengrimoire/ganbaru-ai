@@ -9,6 +9,7 @@
   import DayView from "./DayView.svelte";
   import MonthView from "./MonthView.svelte";
   import EventPanel from "./EventPanel.svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { createEditSession } from "./edit-session.svelte";
   import type { PanelAnchor } from "./edit-session.svelte";
   import {
@@ -139,7 +140,6 @@
   let confirmMessage = $state("");
   let confirmYesLabel = $state("Yes (Enter)");
   let confirmNoLabel = $state("No (Esc)");
-
   function requestConfirm(
     message: string,
     action: () => Promise<void>,
@@ -230,12 +230,6 @@
       } else if (e.altKey && e.key === "ArrowRight") {
         e.preventDefault();
         historyForward();
-      } else if (confirmAction && e.key === "Enter") {
-        e.preventDefault();
-        confirmYes();
-      } else if (confirmAction && e.key === "Escape") {
-        e.preventDefault();
-        confirmNo();
       } else if (e.ctrlKey && e.key === "z") {
         e.preventDefault();
         requestUndo();
@@ -558,37 +552,14 @@
     {/if}
   </div>
 
-  <!-- Undo/redo confirmation -->
   {#if confirmAction}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="fixed inset-0 z-[60] flex items-center justify-center"
-      onclick={confirmNo}
-    >
-      <div class="absolute inset-0 bg-black/40"></div>
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="relative z-10 rounded-lg border border-border bg-card px-6 py-4 shadow-xl"
-        onclick={(e) => e.stopPropagation()}
-      >
-        <p class="mb-4 text-sm text-foreground">{confirmMessage}</p>
-        <div class="flex items-center justify-end gap-2">
-          <button
-            onclick={confirmNo}
-            class="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            {confirmNoLabel}
-          </button>
-          <button
-            onclick={confirmYes}
-            class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            {confirmYesLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      message={confirmMessage}
+      confirmLabel={confirmYesLabel}
+      cancelLabel={confirmNoLabel}
+      onConfirm={confirmYes}
+      onCancel={confirmNo}
+    />
   {/if}
 
   <!-- Floating event panel -->

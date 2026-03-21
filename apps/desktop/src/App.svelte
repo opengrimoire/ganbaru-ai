@@ -9,6 +9,7 @@
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
   import SkillTreeView from "$lib/components/skill-tree/SkillTreeView.svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { onMount } from "svelte";
 
   const nav = getNavigation();
@@ -36,12 +37,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // Modal keyboard shortcuts
-    if (showStopConfirm) {
-      if (e.key === "Escape") { cancelStop(); return; }
-      if (e.key === "Enter") { confirmStop(); return; }
-      return;
-    }
+    if (showStopConfirm) return;
 
     if (e.altKey && e.key >= "1" && e.key <= String(views.length)) {
       e.preventDefault();
@@ -189,36 +185,11 @@
 </div>
 
 {#if showStopConfirm}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="fixed inset-0 z-50"
-  >
-    <div class="absolute inset-0 bg-background/90"></div>
-    <div class="relative flex h-full flex-col items-center justify-center">
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="flex flex-col items-center gap-5"
-        onclick={(e) => e.stopPropagation()}
-      >
-        <p class="text-sm text-foreground dark:text-white">
-          No active session blocks right now. All focus features will stop.
-        </p>
-        <div class="flex gap-3">
-          <button
-            onclick={cancelStop}
-            class="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
-          >
-            Undo changes
-          </button>
-          <button
-            onclick={confirmStop}
-            class="rounded-lg bg-red-800/80 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700/80"
-          >
-            Stop session
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ConfirmDialog
+    message="No active session blocks right now. All focus features will stop."
+    confirmLabel="Stop session (Enter)"
+    cancelLabel="Undo changes (Esc)"
+    onConfirm={confirmStop}
+    onCancel={cancelStop}
+  />
 {/if}

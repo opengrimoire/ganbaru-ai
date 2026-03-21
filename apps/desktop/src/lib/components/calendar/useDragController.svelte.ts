@@ -31,7 +31,7 @@ export interface DragControllerConfig {
   events: () => CalendarEvent[];
   hourHeight: () => number;
   getColumnDate: (clientX: number) => string;
-  onEventUpdate: (event: CalendarEvent) => void;
+  onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
   onEventCreate: (start: string, end: string) => void;
 }
 
@@ -167,13 +167,13 @@ export function useDragController(config: DragControllerConfig) {
     };
   }
 
-  function handleDragEnd() {
+  async function handleDragEnd() {
     window.removeEventListener("pointermove", handleDragMove);
     window.removeEventListener("pointerup", handleDragEnd);
     unlockCursor();
 
     if (dragPreview) {
-      config.onEventUpdate(dragPreview.event);
+      await config.onEventUpdate(dragPreview.event);
     }
 
     dragState = null;

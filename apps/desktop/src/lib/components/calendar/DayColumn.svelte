@@ -225,7 +225,7 @@
   {#if dragPreview}
     {@const dragColor = dragPreview.event.color ? getEventColor(dragPreview.event.color, isDark) : null}
     <div
-      class="preview-stripe pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
+      class="preview-pulse pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
       style="
         top: {dragPreview.top}px;
         height: {dragPreview.height}px;
@@ -233,7 +233,6 @@
         width: 92%;
         background-color: {dragColor?.bg ?? (isDark ? '#2A2A2C' : '#E8E8E8')};
         color: {dragColor?.text ?? (isDark ? '#CACACA' : '#666666')};
-        --stripe-color: {isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};
         z-index: 46;
       "
     >
@@ -250,7 +249,7 @@
   {#if createPreview}
     <div
       data-create-preview
-      class="preview-stripe pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
+      class="preview-pulse pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
       style="
         top: {createPreview.top}px;
         height: {createPreview.height}px;
@@ -258,7 +257,6 @@
         width: 92%;
         background-color: {isDark ? '#2A2A2C' : '#E8E8E8'};
         color: {isDark ? '#CACACA' : '#666666'};
-        --stripe-color: {isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)'};
         z-index: 10;
       "
     >
@@ -308,21 +306,12 @@
 </div>
 
 <style>
-  .preview-stripe {
-    position: relative;
+  .preview-pulse {
+    animation: preview-pulse 2s ease-in-out infinite;
   }
 
-  .preview-stripe::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 5px,
-      var(--stripe-color) 5px,
-      var(--stripe-color) 10px
-    );
-    pointer-events: none;
+  @keyframes preview-pulse {
+    0%, 100% { opacity: 0.75; }
+    50% { opacity: 1; }
   }
 </style>
