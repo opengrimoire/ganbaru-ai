@@ -1,14 +1,26 @@
 export type CalendarViewMode = "week" | "day" | "month";
 
 export type EventColor =
-  | "blue"
-  | "teal"
-  | "green"
+  | "ruby"
+  | "coral"
+  | "tangerine"
   | "amber"
-  | "red"
+  | "honey"
+  | "lime"
+  | "emerald"
+  | "jade"
+  | "teal"
+  | "cyan"
+  | "sky"
+  | "azure"
+  | "indigo"
+  | "violet"
   | "purple"
-  | "pink"
-  | "gray";
+  | "orchid"
+  | "rose"
+  | "blush"
+  | "slate"
+  | "sage";
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
 

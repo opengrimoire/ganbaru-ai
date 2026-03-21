@@ -24,8 +24,8 @@
 
   const colors = $derived(getEventColor(positioned.event.color, isDark));
   const neutralColors = $derived(isDark
-    ? { bg: "#2A2A2C", border: "#888", text: "#CACACA" }
-    : { bg: "#E8E8E8", border: "#AAAAAA", text: "#666666" },
+    ? { bg: "#2A2A2C", accent: "#888", text: "#CACACA" }
+    : { bg: "#E8E8E8", accent: "#AAAAAA", text: "#666666" },
   );
   // Preview with no color selected: neutral gray; preview with color: event color; saved: event color
   const activeColors = $derived(preview && !positioned.event.color ? neutralColors : colors);
@@ -54,13 +54,12 @@
 <div
   bind:this={blockEl}
   data-event-id={positioned.event.id}
-  class="event-block-wrapper absolute overflow-hidden px-1.5 py-0.5 text-[11px] leading-tight select-none {preview ? 'event-preview' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {preview ? 'event-preview' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
     height: {positioned.height}px;
     left: {positioned.left}%;
     width: {positioned.width}%;
-    background-color: {activeColors.bg};
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};
@@ -72,18 +71,24 @@
   <!-- Resize handle: top -->
   <div class="resize-handle-top" onpointerdown={handlePointerDown}></div>
 
-  <div class="flex items-center gap-0.5 truncate font-medium">
-    <span class="truncate">{positioned.event.title}</span>
-    {#if hasRepeat}
-      <Repeat size={9} class="shrink-0 opacity-70" />
-    {/if}
-    {#if hasNotification}
-      <Bell size={9} class="shrink-0 opacity-70" />
+  <!-- Accent bar -->
+  <div class="shrink-0" style="width: 10%; background-color: {activeColors.accent};"></div>
+
+  <!-- Content -->
+  <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};">
+    <div class="flex items-center gap-0.5 truncate font-medium">
+      <span class="truncate">{positioned.event.title}</span>
+      {#if hasRepeat}
+        <Repeat size={9} class="shrink-0 opacity-70" />
+      {/if}
+      {#if hasNotification}
+        <Bell size={9} class="shrink-0 opacity-70" />
+      {/if}
+    </div>
+    {#if positioned.height > 28}
+      <div class="truncate opacity-80">{startTime} - {endTime}</div>
     {/if}
   </div>
-  {#if positioned.height > 28}
-    <div class="truncate opacity-80">{startTime} - {endTime}</div>
-  {/if}
 
   <!-- Resize handle: bottom -->
   <div class="resize-handle-bottom" onpointerdown={handlePointerDown}></div>

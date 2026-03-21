@@ -541,47 +541,70 @@ export function layoutEventsForDay(
 
 interface ColorEntry {
   bg: string;
-  border: string;
+  accent: string;
   text: string;
 }
 
+const LIGHT_TEXT = "#1c1c1e";
+const DARK_TEXT = "#f0f0f2";
+
 const LIGHT_COLORS: Record<EventColor, ColorEntry> = {
-  blue: { bg: "#D3E3FD", border: "#4A7CC9", text: "#1A3A6B" },
-  teal: { bg: "#C8F0E8", border: "#2D9D8F", text: "#14524A" },
-  green: { bg: "#C8E6C9", border: "#4CAF50", text: "#1B5E20" },
-  amber: { bg: "#FFE0B2", border: "#F9A825", text: "#7A4100" },
-  red: { bg: "#FFCDD2", border: "#E53935", text: "#7F1D1D" },
-  purple: { bg: "#E1D5F0", border: "#8E6BBF", text: "#3E1F6E" },
-  pink: { bg: "#F8D0D8", border: "#D4708A", text: "#6B1D32" },
-  gray: { bg: "#E0E0E0", border: "#9E9E9E", text: "#424242" },
+  ruby:      { bg: "#f0c2c2", accent: "#b82e2e", text: LIGHT_TEXT },
+  coral:     { bg: "#f0cec2", accent: "#b8532e", text: LIGHT_TEXT },
+  tangerine: { bg: "#f0d7c2", accent: "#b86e2e", text: LIGHT_TEXT },
+  amber:     { bg: "#f0e0c2", accent: "#b88a2e", text: LIGHT_TEXT },
+  honey:     { bg: "#f0e8c2", accent: "#b8a12e", text: LIGHT_TEXT },
+  lime:      { bg: "#e4f0c2", accent: "#95b82e", text: LIGHT_TEXT },
+  emerald:   { bg: "#c2f0d5", accent: "#2eb867", text: LIGHT_TEXT },
+  jade:      { bg: "#c2f0e4", accent: "#2eb895", text: LIGHT_TEXT },
+  teal:      { bg: "#c2f0ee", accent: "#2eb8b3", text: LIGHT_TEXT },
+  cyan:      { bg: "#c2e7f0", accent: "#2e9cb8", text: LIGHT_TEXT },
+  sky:       { bg: "#c2dbf0", accent: "#2e7ab8", text: LIGHT_TEXT },
+  azure:     { bg: "#c2d1f0", accent: "#2e5cb8", text: LIGHT_TEXT },
+  indigo:    { bg: "#c2c6f0", accent: "#2e39b8", text: LIGHT_TEXT },
+  violet:    { bg: "#d0c2f0", accent: "#572eb8", text: LIGHT_TEXT },
+  purple:    { bg: "#ddc2f0", accent: "#7e2eb8", text: LIGHT_TEXT },
+  orchid:    { bg: "#ecc2f0", accent: "#ac2eb8", text: LIGHT_TEXT },
+  rose:      { bg: "#f0c2d5", accent: "#b82e67", text: LIGHT_TEXT },
+  blush:     { bg: "#f0c2c9", accent: "#b82e45", text: LIGHT_TEXT },
+  slate:     { bg: "#d2d8e0", accent: "#5e6f87", text: LIGHT_TEXT },
+  sage:      { bg: "#d0e1d6", accent: "#5a8c6a", text: LIGHT_TEXT },
 };
 
 const DARK_COLORS: Record<EventColor, ColorEntry> = {
-  blue: { bg: "#1A3556", border: "#5B9BF5", text: "#C4DBFC" },
-  teal: { bg: "#0D3D38", border: "#4DB6A9", text: "#B2DFDB" },
-  green: { bg: "#1A3A1F", border: "#66BB6A", text: "#A5D6A7" },
-  amber: { bg: "#3E2E10", border: "#FFB74D", text: "#FFE0B2" },
-  red: { bg: "#3B1515", border: "#EF5350", text: "#FFCDD2" },
-  purple: { bg: "#2A1845", border: "#AB87D8", text: "#D7C4EC" },
-  pink: { bg: "#3B1525", border: "#E08AA0", text: "#F8D0D8" },
-  gray: { bg: "#2A2A2C", border: "#888", text: "#CACACA" },
+  ruby:      { bg: "#6f2a2a", accent: "#c05959", text: DARK_TEXT },
+  coral:     { bg: "#6f3c2a", accent: "#c07459", text: DARK_TEXT },
+  tangerine: { bg: "#6f4a2a", accent: "#c08959", text: DARK_TEXT },
+  amber:     { bg: "#6f582a", accent: "#c09d59", text: DARK_TEXT },
+  honey:     { bg: "#6f632a", accent: "#c0af59", text: DARK_TEXT },
+  lime:      { bg: "#5e6f2a", accent: "#a6c059", text: DARK_TEXT },
+  emerald:   { bg: "#2a6f47", accent: "#59c084", text: DARK_TEXT },
+  jade:      { bg: "#2a6f5e", accent: "#59c0a6", text: DARK_TEXT },
+  teal:      { bg: "#2a6f6d", accent: "#59c0bc", text: DARK_TEXT },
+  cyan:      { bg: "#2a616f", accent: "#59abc0", text: DARK_TEXT },
+  sky:       { bg: "#2a506f", accent: "#5991c0", text: DARK_TEXT },
+  azure:     { bg: "#2a416f", accent: "#597bc0", text: DARK_TEXT },
+  indigo:    { bg: "#2a306f", accent: "#5961c0", text: DARK_TEXT },
+  violet:    { bg: "#3f2a6f", accent: "#7859c0", text: DARK_TEXT },
+  purple:    { bg: "#522a6f", accent: "#9559c0", text: DARK_TEXT },
+  orchid:    { bg: "#692a6f", accent: "#b759c0", text: DARK_TEXT },
+  rose:      { bg: "#6f2a47", accent: "#c05984", text: DARK_TEXT },
+  blush:     { bg: "#6f2a36", accent: "#c0596a", text: DARK_TEXT },
+  slate:     { bg: "#414b58", accent: "#7b899d", text: DARK_TEXT },
+  sage:      { bg: "#3f5a48", accent: "#78a185", text: DARK_TEXT },
 };
 
 export function getEventColor(
   color: EventColor | undefined,
   isDark: boolean,
 ): ColorEntry {
-  const key = color ?? "blue";
+  const key = color ?? "sky";
   return isDark ? DARK_COLORS[key] : LIGHT_COLORS[key];
 }
 
 export const EVENT_COLOR_OPTIONS: EventColor[] = [
-  "blue",
-  "teal",
-  "green",
-  "amber",
-  "red",
-  "purple",
-  "pink",
-  "gray",
+  "ruby", "coral", "tangerine", "amber", "honey",
+  "lime", "emerald", "jade", "teal", "cyan",
+  "sky", "azure", "indigo", "violet", "purple",
+  "orchid", "rose", "blush", "slate", "sage",
 ];

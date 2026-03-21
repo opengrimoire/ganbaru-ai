@@ -928,7 +928,7 @@
   });
 
   const colorEntry = $derived(getEventColor(color, theme.isDark));
-  const accentColor = $derived(color ? colorEntry.border : "var(--primary)");
+  const accentColor = $derived(color ? colorEntry.accent : "var(--primary)");
 
   const shortDate = $derived.by(() => {
     if (!startDate) return "";
@@ -1623,12 +1623,12 @@
     </div>
 
     <!-- Colors -->
-    <div class="flex items-center gap-2.5">
+    <div class="flex flex-wrap items-center gap-2">
       {#each EVENT_COLOR_OPTIONS as c}
         {@const entry = getEventColor(c, theme.isDark)}
         <button onclick={() => { color = color === c ? undefined : c; emitChange(); }}
           class="h-[18px] w-[18px] shrink-0 rounded-full transition-all hover:scale-110"
-          style="background:{entry.border}; {color === c ? `box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px ${entry.border}; transform: scale(1.15);` : ''}"
+          style="background:{entry.accent}; {color === c ? `box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px ${entry.accent}; transform: scale(1.15);` : ''}"
           title={c}></button>
       {/each}
     </div>

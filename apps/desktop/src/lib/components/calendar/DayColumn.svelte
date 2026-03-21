@@ -225,23 +225,25 @@
   {#if dragPreview}
     {@const dragColor = dragPreview.event.color ? getEventColor(dragPreview.event.color, isDark) : null}
     <div
-      class="preview-pulse pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
+      class="preview-pulse pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
         top: {dragPreview.top}px;
         height: {dragPreview.height}px;
         left: 0;
         width: 92%;
-        background-color: {dragColor?.bg ?? (isDark ? '#2A2A2C' : '#E8E8E8')};
         color: {dragColor?.text ?? (isDark ? '#CACACA' : '#666666')};
         z-index: 46;
       "
     >
-      <div class="truncate font-medium">{dragPreview.event.title}</div>
-      {#if dragPreview.height > 28}
-        {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
-        {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
-        <div class="truncate opacity-80">{st} - {et}</div>
-      {/if}
+      <div class="shrink-0" style="width: 10%; background-color: {dragColor?.accent ?? (isDark ? '#888' : '#AAAAAA')};"></div>
+      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragColor?.bg ?? (isDark ? '#2A2A2C' : '#E8E8E8')};">
+        <div class="truncate font-medium">{dragPreview.event.title}</div>
+        {#if dragPreview.height > 28}
+          {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
+          {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
+          <div class="truncate opacity-80">{st} - {et}</div>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -249,19 +251,21 @@
   {#if createPreview}
     <div
       data-create-preview
-      class="preview-pulse pointer-events-none absolute overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-tight"
+      class="preview-pulse pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
         top: {createPreview.top}px;
         height: {createPreview.height}px;
         left: 0;
         width: 92%;
-        background-color: {isDark ? '#2A2A2C' : '#E8E8E8'};
         color: {isDark ? '#CACACA' : '#666666'};
         z-index: 10;
       "
     >
-      <div class="truncate font-medium">
-        {createPreview.event.title || "Focus session"}
+      <div class="shrink-0" style="width: 10%; background-color: {isDark ? '#888' : '#AAAAAA'};"></div>
+      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {isDark ? '#2A2A2C' : '#E8E8E8'};">
+        <div class="truncate font-medium">
+          {createPreview.event.title || "Focus session"}
+        </div>
       </div>
     </div>
   {/if}
