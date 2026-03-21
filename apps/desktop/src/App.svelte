@@ -61,10 +61,24 @@
 
   function findActiveBlock() {
     const now = new Date();
-    return calendar.events.find((event) => {
+    const active = calendar.events.filter((event) => {
       const start = parseCalendarDate(event.start);
       const end = parseCalendarDate(event.end);
       return now >= start && now < end;
+    });
+    if (active.length === 0) return undefined;
+
+    // Prefer the block the pomodoro is already running on
+    if (pomodoro.activeBlockId) {
+      const current = active.find((e) => e.id === pomodoro.activeBlockId);
+      if (current) return current;
+    }
+
+    // Otherwise pick the one with the most remaining time
+    return active.reduce((best, e) => {
+      const bestEnd = parseCalendarDate(best.end).getTime();
+      const eEnd = parseCalendarDate(e.end).getTime();
+      return eEnd > bestEnd ? e : best;
     });
   }
 

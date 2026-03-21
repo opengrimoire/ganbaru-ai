@@ -150,48 +150,12 @@ function clearSegments() {
   activeRunId = null;
 }
 
-async function reconfigureSession(
-  blockId: string,
-  newConfig: PomodoroConfig,
-  eventEnd: string,
-  eventDate: string,
-) {
-  // Compute elapsed time in current phase using old config durations
-  const oldPhaseDurationSec = phase === "focus"
-    ? config.focusMinutes * TIME_MULTIPLIER
-    : phase === "short_break"
-      ? config.shortBreakMinutes * TIME_MULTIPLIER
-      : config.longBreakMinutes * TIME_MULTIPLIER;
-  const elapsedSeconds = Math.max(0, oldPhaseDurationSec - remainingSeconds);
-
-  // Apply new config
-  config = newConfig;
-  totalCycles = config.cyclesBeforeLongBreak;
-
-  // Adjust remaining time for current phase with new durations
-  const newPhaseDurationSec = phase === "focus"
-    ? config.focusMinutes * TIME_MULTIPLIER
-    : phase === "short_break"
-      ? config.shortBreakMinutes * TIME_MULTIPLIER
-      : config.longBreakMinutes * TIME_MULTIPLIER;
-  remainingSeconds = Math.max(0, newPhaseDurationSec - elapsedSeconds);
-
-  // Adjust timer state
-  if (isRunning) {
-    phaseEndTime = Date.now() + remainingSeconds * 1000;
-  } else if (overtimeIntervalId && remainingSeconds > 0) {
-    // Was in break overtime but new config extends the break duration
-    stopOvertime();
-    isRunning = true;
-    phaseEndTime = Date.now() + remainingSeconds * 1000;
-    intervalId = setInterval(tick, 1000);
-  }
-
-  // Reset notification if remaining time increased past threshold
-  if (phase === "focus" && remainingSeconds > NOTIFICATION_THRESHOLD) {
-    notificationShown = false;
-  }
-
+/**
+ * Marks old segments as completed/skipped, builds a new segment plan
+ * (bridge for current phase remainder + future segments), and persists.
+ * Used by both reconfigureSession and transitionToBlock.
+ */
+async function rebuildSegments(blockId: string, eventEnd: string, eventDate: string) {
   // Clean up old segments: mark current as completed, remaining planned as skipped
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
     markSegment(currentSegmentIndex, "completed", true);
@@ -300,6 +264,135 @@ async function reconfigureSession(
 
   segments = newSegments;
   currentSegmentIndex = bridgeMinutes > 0 ? 0 : -1;
+}
+
+/**
+ * User explicitly changed the pomodoro config on the active block.
+ * Adjusts the current phase timer to the new duration and rebuilds segments.
+ */
+async function reconfigureSession(
+  blockId: string,
+  newConfig: PomodoroConfig,
+  eventEnd: string,
+  eventDate: string,
+) {
+  // Compute elapsed time in current phase using old config durations
+  const oldPhaseDurationSec = phase === "focus"
+    ? config.focusMinutes * TIME_MULTIPLIER
+    : phase === "short_break"
+      ? config.shortBreakMinutes * TIME_MULTIPLIER
+      : config.longBreakMinutes * TIME_MULTIPLIER;
+  const elapsedSeconds = Math.max(0, oldPhaseDurationSec - remainingSeconds);
+
+  // Apply new config
+  config = newConfig;
+  totalCycles = config.cyclesBeforeLongBreak;
+
+  // Adjust remaining time for current phase with new durations
+  const newPhaseDurationSec = phase === "focus"
+    ? config.focusMinutes * TIME_MULTIPLIER
+    : phase === "short_break"
+      ? config.shortBreakMinutes * TIME_MULTIPLIER
+      : config.longBreakMinutes * TIME_MULTIPLIER;
+  remainingSeconds = Math.max(0, newPhaseDurationSec - elapsedSeconds);
+
+  // Adjust timer state
+  if (isRunning) {
+    phaseEndTime = Date.now() + remainingSeconds * 1000;
+  } else if (overtimeIntervalId && remainingSeconds > 0) {
+    stopOvertime();
+    isRunning = true;
+    phaseEndTime = Date.now() + remainingSeconds * 1000;
+    intervalId = setInterval(tick, 1000);
+  }
+
+  // Reset notification if remaining time increased past threshold
+  if (phase === "focus" && remainingSeconds > NOTIFICATION_THRESHOLD) {
+    notificationShown = false;
+  }
+
+  await rebuildSegments(blockId, eventEnd, eventDate);
+  updateTray();
+}
+
+/**
+ * Seamless transition between adjacent/overlapping blocks.
+ * Preserves focus continuity via inheritance: accumulated focus time is
+ * compared to the new block's focus threshold. If exceeded, a break triggers.
+ * If not, focus continues with adjusted remaining time.
+ */
+async function transitionToBlock(
+  blockId: string,
+  newConfig: PomodoroConfig,
+  eventEnd: string,
+  eventDate: string,
+) {
+  activeBlockId = blockId;
+  initListeners();
+
+  const previousConfig = config;
+  config = newConfig;
+  totalCycles = config.cyclesBeforeLongBreak;
+
+  if (phase === "focus") {
+    // Compute accumulated focus time (seconds of focus consumed in current phase)
+    const oldFocusSec = previousConfig.focusMinutes * TIME_MULTIPLIER;
+    const accumulatedFocusSec = Math.max(0, oldFocusSec - remainingSeconds);
+    const newFocusThresholdSec = config.focusMinutes * TIME_MULTIPLIER;
+
+    if (accumulatedFocusSec >= newFocusThresholdSec) {
+      // Already exceeded the new config's focus threshold: trigger break.
+      // Save the completed focus session first.
+      const endTime = new Date().toISOString();
+      if (sessionStartTime) {
+        saveCompletedSession(sessionStartTime, endTime);
+      }
+      completedPomodoros += 1;
+      sessionStartTime = null;
+      notificationShown = false;
+
+      // Determine break type from cycle state
+      const isLong = currentCycle >= totalCycles;
+      phase = isLong ? "long_break" : "short_break";
+      remainingSeconds = isLong
+        ? config.longBreakMinutes * TIME_MULTIPLIER
+        : config.shortBreakMinutes * TIME_MULTIPLIER;
+      if (isLong) {
+        currentCycle = 1;
+      } else {
+        currentCycle += 1;
+      }
+
+      phaseEndTime = Date.now() + remainingSeconds * 1000;
+      if (!isRunning) {
+        isRunning = true;
+        if (intervalId) clearInterval(intervalId);
+        intervalId = setInterval(tick, 1000);
+      } else {
+        // Timer already running, just update end time
+        phaseEndTime = Date.now() + remainingSeconds * 1000;
+      }
+
+      showBreakOverlay(remainingSeconds);
+    } else {
+      // Continue focus with inherited time: remainingSeconds = threshold - accumulated
+      remainingSeconds = newFocusThresholdSec - accumulatedFocusSec;
+
+      if (isRunning) {
+        phaseEndTime = Date.now() + remainingSeconds * 1000;
+      }
+
+      // Reset notification if remaining went above threshold
+      if (remainingSeconds > NOTIFICATION_THRESHOLD) {
+        notificationShown = false;
+      }
+    }
+  }
+  // For break phases (short_break, long_break): keep the current break running as-is.
+  // The break duration doesn't change (user already earned it). After the break,
+  // startFocusSession will use the new config for the next focus.
+
+  await rebuildSegments(blockId, eventEnd, eventDate);
   updateTray();
 }
 
@@ -647,6 +740,13 @@ export function getPomodoro() {
         // Same block: reconfigure only if config actually changed
         if (configEquals(config, newConfig) || !eventEnd || !eventDate) return;
         reconfigureSession(blockId, newConfig, eventEnd, eventDate);
+        return;
+      }
+
+      if (activeBlockId && eventEnd && eventDate) {
+        // Pomodoro is active on a different block: seamless transition
+        // with focus inheritance (accumulated focus vs new threshold)
+        transitionToBlock(blockId, newConfig, eventEnd, eventDate);
         return;
       }
 

@@ -12,7 +12,7 @@
     minuteToTop,
     getEventColor,
   } from "./utils";
-  import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
+  import { computePlannedSegments, computeTrailingFocusMinutes, computeTrailingCycleNumber } from "$lib/utils/pomodoro-segments";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import EventBlock from "./EventBlock.svelte";
   import { onMount } from "svelte";
@@ -83,6 +83,54 @@
     const map = new Map<string, AccentBarBand[]>();
     const now = new Date();
 
+    // Pre-compute focus and cycle inheritance: for each event, how much focus
+    // and which cycle number carries over from a preceding event that touches/overlaps it.
+    const focusInheritanceMap = new Map<string, number>();
+    const cycleInheritanceMap = new Map<string, number>();
+    const pomodoroEvents = positioned
+      .filter((p) => p.event.pomodoroConfig)
+      .map((p) => ({
+        id: p.event.id,
+        config: p.event.pomodoroConfig!,
+        startMs: parseCalendarDate(p.event.start).getTime(),
+        endMs: parseCalendarDate(p.event.end).getTime(),
+      }))
+      .sort((a, b) => a.startMs - b.startMs);
+
+    // Process events in order: each event's trailing focus/cycle can carry to the next
+    const trailingFocusAtEnd = new Map<string, number>();
+    const trailingCycleAtEnd = new Map<string, number>();
+    for (const ev of pomodoroEvents) {
+      // Find the best predecessor: an event that ends at or after this event's start,
+      // started before this event, and has the latest end time (most overlap)
+      let bestPredecessor: { id: string; endMs: number } | null = null;
+      for (const other of pomodoroEvents) {
+        if (other.id === ev.id) continue;
+        if (other.startMs >= ev.startMs) continue;
+        // Predecessor must touch or overlap: its end >= this event's start
+        if (other.endMs < ev.startMs) continue;
+        if (!bestPredecessor || other.endMs > bestPredecessor.endMs) {
+          bestPredecessor = { id: other.id, endMs: other.endMs };
+        }
+      }
+
+      if (bestPredecessor) {
+        const inheritedFocus = trailingFocusAtEnd.get(bestPredecessor.id) ?? 0;
+        const inheritedCycle = trailingCycleAtEnd.get(bestPredecessor.id) ?? 1;
+        if (inheritedFocus > 0) focusInheritanceMap.set(ev.id, inheritedFocus);
+        if (inheritedCycle > 1) cycleInheritanceMap.set(ev.id, inheritedCycle);
+      }
+
+      // Compute this event's planned segments (with inheritance) to determine trailing state
+      const effectiveStartMs = Math.max(now.getTime(), ev.startMs);
+      const remainingMin = Math.max(0, (ev.endMs - effectiveStartMs) / 60000);
+      const inheritedFocus = focusInheritanceMap.get(ev.id) ?? 0;
+      const inheritedCycle = cycleInheritanceMap.get(ev.id) ?? 1;
+      const planned = computePlannedSegments(ev.config, remainingMin, inheritedFocus, inheritedCycle);
+      trailingFocusAtEnd.set(ev.id, computeTrailingFocusMinutes(planned));
+      trailingCycleAtEnd.set(ev.id, computeTrailingCycleNumber(planned));
+    }
+
     for (const pos of positioned) {
       const ev = pos.event;
       if (!ev.pomodoroConfig) continue;
@@ -147,7 +195,7 @@
           }
         }
       } else {
-        // Planned view: compute from config, starting from effective start
+        // Planned view: compute from config, with focus inheritance from predecessors
         if (now.getTime() >= evEndMs) continue;
 
         const effectiveStartMs = Math.max(now.getTime(), evStartMs);
@@ -155,7 +203,11 @@
         const offsetMin = (effectiveStartMs - evStartMs) / 60000;
         const totalDurMin = totalDurMs / 60000;
 
-        const planned = computePlannedSegments(ev.pomodoroConfig, remainingMin);
+        // Compute inherited focus and cycle from predecessor events that touch/overlap this one
+        const inheritedFocusMin = focusInheritanceMap.get(ev.id) ?? 0;
+        const inheritedCycle = cycleInheritanceMap.get(ev.id) ?? 1;
+
+        const planned = computePlannedSegments(ev.pomodoroConfig, remainingMin, inheritedFocusMin, inheritedCycle);
         bands = planned
           .filter((s) => s.phase !== "focus")
           .map((s) => ({
