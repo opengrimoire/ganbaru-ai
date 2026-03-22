@@ -793,6 +793,41 @@ pub fn show_break_overlay(_app: tauri::AppHandle, _break_seconds: u32) -> Result
     Err("Break overlay not yet implemented for this platform".into())
 }
 
+// ── Alert sound ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn play_alert_sound() {
+    std::thread::spawn(|| {
+        #[cfg(target_os = "linux")]
+        {
+            // Try canberra-gtk-play first (most desktop environments), then paplay
+            let ok = std::process::Command::new("canberra-gtk-play")
+                .args(["--id", "bell"])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !ok {
+                let _ = std::process::Command::new("paplay")
+                    .arg("/usr/share/sounds/freedesktop/stereo/bell.oga")
+                    .status();
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command",
+                    "[System.Media.SystemSounds]::Exclamation.Play()"])
+                .status();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("afplay")
+                .arg("/System/Library/Sounds/Glass.aiff")
+                .status();
+        }
+    });
+}
+
 #[tauri::command]
 pub fn show_event_notification(title: String, body: String) {
     std::thread::spawn(move || {

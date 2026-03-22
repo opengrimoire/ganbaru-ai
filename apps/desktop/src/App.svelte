@@ -10,6 +10,7 @@
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
   import SkillTreeView from "$lib/components/skill-tree/SkillTreeView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import IdleOverlay from "$lib/components/pomodoro/IdleOverlay.svelte";
   import { onMount } from "svelte";
 
   const nav = getNavigation();
@@ -239,12 +240,9 @@
 {/if}
 
 {#if idleInfo}
-  <ConfirmDialog
-    message="No activity detected for {formatAwayDuration(idleInfo.idleSeconds)}. Focus session paused."
-    confirmLabel="Resume (Enter)"
-    cancelLabel="Stop session (Esc)"
-    danger={false}
-    onConfirm={() => pomodoro.dismissIdle(true)}
-    onCancel={() => pomodoro.dismissIdle(false)}
+  <IdleOverlay
+    idleSeconds={idleInfo.idleSeconds}
+    onResume={() => pomodoro.dismissIdle(true)}
+    onStop={() => pomodoro.dismissIdle(false)}
   />
 {/if}
