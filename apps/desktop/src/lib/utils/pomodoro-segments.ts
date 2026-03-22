@@ -2,6 +2,7 @@ import type {
   PomodoroConfig,
   PlannedSegment,
   AccentBarBand,
+  PauseInterval,
   PersistedSegment,
   TimelineBand,
   SegmentPhase,
@@ -342,6 +343,60 @@ function filterContained(events: TimelineEvent[]): TimelineEvent[] {
 }
 
 /**
+ * Split a time range [startMs, endMs] into sub-ranges excluding pause intervals.
+ * Each returned range is a filled period where focus was actually running.
+ */
+function splitAroundPauses(
+  startMs: number,
+  endMs: number,
+  pauseLog: PauseInterval[],
+): Array<{ start: number; end: number }> {
+  if (pauseLog.length === 0) return [{ start: startMs, end: endMs }];
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  let cursor = startMs;
+
+  for (const [pauseStart, pauseEnd] of pauseLog) {
+    const pStartMs = new Date(pauseStart).getTime();
+    const pEndMs = pauseEnd ? new Date(pauseEnd).getTime() : endMs;
+
+    if (pStartMs > cursor) {
+      ranges.push({ start: cursor, end: Math.min(pStartMs, endMs) });
+    }
+    cursor = Math.min(pEndMs, endMs);
+    if (cursor >= endMs) break;
+  }
+
+  if (cursor < endMs) {
+    ranges.push({ start: cursor, end: endMs });
+  }
+
+  return ranges;
+}
+
+/**
+ * Emit focus fill bands for a segment, splitting around pause gaps.
+ */
+function emitFocusFillBands(
+  startMs: number,
+  endMs: number,
+  pauseLog: PauseInterval[],
+  dayStartMs: number,
+  ev: TimelineEvent,
+  status: SegmentStatus,
+  bands: TimelineBand[],
+): void {
+  const ranges = splitAroundPauses(startMs, endMs, pauseLog);
+  for (const r of ranges) {
+    const topMinute = (r.start - dayStartMs) / 60000;
+    const heightMinutes = (r.end - r.start) / 60000;
+    if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
+      bands.push({ topMinute, heightMinutes, phase: "focus", status });
+    }
+  }
+}
+
+/**
  * Project bands from persisted (active) segments onto minute-of-day coordinates.
  * Outputs both focus fill bands and break bands.
  */
@@ -365,25 +420,24 @@ function projectActiveSegments(
       if (seg.status === "skipped") continue;
       const startMs = new Date(seg.actualStart ?? seg.plannedStart).getTime();
       const endMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
-      const topMinute = (startMs - dayStartMs) / 60000;
-      const heightMinutes = (endMs - startMs) / 60000;
-      if (topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
-        bands.push({ topMinute, heightMinutes, phase: seg.phase, status: seg.status });
+      if (seg.phase === "focus") {
+        emitFocusFillBands(startMs, endMs, seg.pauseLog, dayStartMs, ev, seg.status, bands);
+      } else {
+        const topMinute = (startMs - dayStartMs) / 60000;
+        const heightMinutes = (endMs - startMs) / 60000;
+        if (topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
+          bands.push({ topMinute, heightMinutes, phase: seg.phase, status: seg.status });
+        }
       }
     } else if (i === activeIdx) {
       if (seg.phase === "focus") {
-        // Active focus: fill from actual_start to now (capped at segment end).
-        // When paused, remainingSeconds stops changing, so the derived that calls
-        // this function stops re-running, and nowMs freezes naturally.
+        // Active focus: fill from actual_start to now (capped at segment end),
+        // split around pause gaps.
         const startMs = new Date(seg.actualStart!).getTime();
         const segEndMs = startMs + plannedDurMs;
         const fillEndMs = Math.min(nowMs, segEndMs);
         if (fillEndMs > startMs) {
-          const topMinute = (startMs - dayStartMs) / 60000;
-          const heightMinutes = (fillEndMs - startMs) / 60000;
-          if (topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
-            bands.push({ topMinute, heightMinutes, phase: "focus", status: "active" });
-          }
+          emitFocusFillBands(startMs, fillEndMs, seg.pauseLog, dayStartMs, ev, "active", bands);
         }
       } else {
         // Active break
@@ -428,10 +482,14 @@ function projectPersistedSegments(
     const startMs = new Date(seg.actualStart).getTime();
     const endMs = seg.actualEnd ? new Date(seg.actualEnd).getTime() : startMs;
     if (endMs <= startMs) continue;
-    const topMinute = (startMs - dayStartMs) / 60000;
-    const heightMinutes = (endMs - startMs) / 60000;
-    if (topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
-      bands.push({ topMinute, heightMinutes, phase: seg.phase, status: seg.status });
+    if (seg.phase === "focus") {
+      emitFocusFillBands(startMs, endMs, seg.pauseLog, dayStartMs, ev, seg.status, bands);
+    } else {
+      const topMinute = (startMs - dayStartMs) / 60000;
+      const heightMinutes = (endMs - startMs) / 60000;
+      if (topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
+        bands.push({ topMinute, heightMinutes, phase: seg.phase, status: seg.status });
+      }
     }
   }
   return bands;

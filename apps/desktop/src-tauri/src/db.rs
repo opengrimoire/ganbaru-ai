@@ -107,6 +107,7 @@ pub fn migrations() -> Vec<Migration> {
                 planned_end TEXT NOT NULL,
                 actual_start TEXT,
                 actual_end TEXT,
+                pause_log TEXT,
                 status TEXT NOT NULL DEFAULT 'planned'
                     CHECK(status IN ('planned', 'active', 'completed', 'skipped', 'interrupted')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))

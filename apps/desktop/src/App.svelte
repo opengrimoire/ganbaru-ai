@@ -18,6 +18,7 @@
 
   onMount(() => {
     calendar.load().catch((e) => console.error("Failed to load calendar:", e));
+    pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
   });
 
   const views: View[] = ["calendar", "kanban", "skill-tree"];
@@ -36,8 +37,19 @@
     nav.navigate(views[(i + 1) % views.length]);
   }
 
+  const suspendInfo = $derived(pomodoro.suspendedAway);
+
+  function formatAwayDuration(totalSeconds: number): string {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h`;
+    if (minutes > 0) return `${minutes}m`;
+    return `${totalSeconds}s`;
+  }
+
   function handleKeydown(e: KeyboardEvent) {
-    if (showStopConfirm) return;
+    if (showStopConfirm || suspendInfo) return;
 
     if (e.altKey && e.key >= "1" && e.key <= String(views.length)) {
       e.preventDefault();
@@ -85,7 +97,7 @@
   let trackedBlockSnapshot: CalendarEvent | null = null;
 
   function checkActiveBlock() {
-    if (showStopConfirm || reverting) return;
+    if (showStopConfirm || reverting || suspendInfo) return;
 
     const activeBlock = findActiveBlock();
 
@@ -210,5 +222,16 @@
     cancelLabel="Undo changes (Esc)"
     onConfirm={confirmStop}
     onCancel={cancelStop}
+  />
+{/if}
+
+{#if suspendInfo}
+  <ConfirmDialog
+    message="You were away for {formatAwayDuration(suspendInfo.awaySeconds)}. Resume focus session?"
+    confirmLabel="Resume (Enter)"
+    cancelLabel="Stop session (Esc)"
+    danger={false}
+    onConfirm={() => pomodoro.dismissSuspend(true)}
+    onCancel={() => pomodoro.dismissSuspend(false)}
   />
 {/if}

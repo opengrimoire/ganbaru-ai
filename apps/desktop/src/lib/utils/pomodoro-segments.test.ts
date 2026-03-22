@@ -507,6 +507,7 @@ describe("computeDayTimelineBands", () => {
           plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
           actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+          pauseLog: [],
           status: "completed",
         },
         {
@@ -516,6 +517,7 @@ describe("computeDayTimelineBands", () => {
           plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
           actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
           actualEnd: null,
+          pauseLog: [],
           status: "active",
         },
         {
@@ -524,6 +526,7 @@ describe("computeDayTimelineBands", () => {
           plannedStart: new Date(segStartMs + 45 * 60000).toISOString(),
           plannedEnd: new Date(segStartMs + 85 * 60000).toISOString(),
           actualStart: null, actualEnd: null,
+          pauseLog: [],
           status: "planned",
         },
         {
@@ -532,6 +535,7 @@ describe("computeDayTimelineBands", () => {
           plannedStart: new Date(segStartMs + 85 * 60000).toISOString(),
           plannedEnd: new Date(segStartMs + 90 * 60000).toISOString(),
           actualStart: null, actualEnd: null,
+          pauseLog: [],
           status: "planned",
         },
       ],
@@ -598,6 +602,7 @@ describe("computeDayTimelineBands", () => {
           plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
           actualEnd: null,
+          pauseLog: [],
           status: "active",
         },
       ],
@@ -629,6 +634,7 @@ describe("computeDayTimelineBands", () => {
           plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
           actualEnd: null,
+          pauseLog: [],
           status: "active",
         },
       ],
@@ -658,6 +664,7 @@ describe("computeDayTimelineBands", () => {
           plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
           actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+          pauseLog: [],
           status: "completed",
         },
         {
@@ -667,6 +674,7 @@ describe("computeDayTimelineBands", () => {
           plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
           actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
           actualEnd: null,
+          pauseLog: [],
           status: "active",
         },
       ],
@@ -698,6 +706,7 @@ describe("computeDayTimelineBands", () => {
         plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(segStartMs).toISOString(),
         actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        pauseLog: [],
         status: "completed",
       },
       {
@@ -707,6 +716,7 @@ describe("computeDayTimelineBands", () => {
         plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
         actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
         actualEnd: new Date(segStartMs + 45 * 60000).toISOString(),
+        pauseLog: [],
         status: "completed",
       },
       {
@@ -716,6 +726,7 @@ describe("computeDayTimelineBands", () => {
         plannedEnd: new Date(segStartMs + 85 * 60000).toISOString(),
         actualStart: new Date(segStartMs + 45 * 60000).toISOString(),
         actualEnd: new Date(segStartMs + 85 * 60000).toISOString(),
+        pauseLog: [],
         status: "completed",
       },
     ]);
@@ -763,6 +774,7 @@ describe("computeDayTimelineBands", () => {
         plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(segStartMs).toISOString(),
         actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        pauseLog: [],
         status: "completed",
       },
       {
@@ -771,6 +783,7 @@ describe("computeDayTimelineBands", () => {
         plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
         plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
         actualStart: null, actualEnd: null,
+        pauseLog: [],
         status: "skipped",
       },
     ]);
@@ -780,5 +793,80 @@ describe("computeDayTimelineBands", () => {
     // Only the completed focus band, skipped break is excluded
     expect(bands.length).toBe(1);
     expect(bands[0].phase).toBe("focus");
+  });
+
+  it("active focus with pauses shows gaps in green fill", () => {
+    const ev = makeEvent("A", 10, 12);
+    const segStartMs = DAY_MS + 10 * 3600000; // 10:00
+    const pauseStartMs = segStartMs + 10 * 60000; // paused at 10:10
+    const resumeMs = segStartMs + 15 * 60000; // resumed at 10:15
+    const plannedDurMs = 40 * 60000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(segStartMs).toISOString(),
+          plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
+          actualStart: new Date(segStartMs).toISOString(),
+          actualEnd: null,
+          pauseLog: [
+            [new Date(pauseStartMs).toISOString(), new Date(resumeMs).toISOString()],
+          ],
+          status: "active",
+        },
+      ],
+      remainingSeconds: 15 * 60,
+      breakOvertimeSeconds: 0,
+    };
+
+    const nowMs = segStartMs + 30 * 60000; // 10:30
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, nowMs);
+
+    const focusBands = bands.filter((b) => b.phase === "focus");
+    expect(focusBands.length).toBe(2); // two bands with a gap
+    // First band: 10:00-10:10
+    expect(focusBands[0].topMinute).toBe(600);
+    expect(focusBands[0].heightMinutes).toBe(10);
+    // Second band: 10:15-10:30
+    expect(focusBands[1].topMinute).toBe(615);
+    expect(focusBands[1].heightMinutes).toBe(15);
+  });
+
+  it("persisted focus with pauses shows gaps in completed fill", () => {
+    const ev = makeEvent("A", 8, 10);
+    const segStartMs = DAY_MS + 8 * 3600000; // 8:00
+    const pauseStartMs = segStartMs + 20 * 60000; // paused at 8:20
+    const resumeMs = segStartMs + 25 * 60000; // resumed at 8:25
+    const nowMs = DAY_MS + 12 * 3600000;
+
+    const persistedSegments = new Map<string, import("$lib/components/calendar/types").PersistedSegment[]>();
+    persistedSegments.set("A", [
+      {
+        id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 1, phase: "focus",
+        plannedStart: new Date(segStartMs).toISOString(),
+        plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        actualStart: new Date(segStartMs).toISOString(),
+        actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        pauseLog: [
+          [new Date(pauseStartMs).toISOString(), new Date(resumeMs).toISOString()],
+        ],
+        status: "completed",
+      },
+    ]);
+
+    const bands = computeDayTimelineBands([ev], null, DAY_MS, nowMs, persistedSegments);
+
+    const focusBands = bands.filter((b) => b.phase === "focus");
+    expect(focusBands.length).toBe(2);
+    // First band: 8:00-8:20
+    expect(focusBands[0].topMinute).toBe(480);
+    expect(focusBands[0].heightMinutes).toBe(20);
+    // Second band: 8:25-9:00 (8:00 + 40min = end at planned)
+    expect(focusBands[1].topMinute).toBe(505);
+    // The actual_end is 8:40, so second band: 8:25-8:40 = 15 min
+    expect(focusBands[1].heightMinutes).toBe(15);
   });
 });

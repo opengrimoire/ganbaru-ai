@@ -107,6 +107,12 @@
     updateCurrentTime();
     const interval = setInterval(updateCurrentTime, 1000);
 
+    // Immediately refresh time on wake from sleep / tab re-focus
+    function onVisibilityChange() {
+      if (!document.hidden) updateCurrentTime();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     if (scrollContainer) {
       if (initialScrollMinute >= 0) {
         scrollContainer.scrollTop = (initialScrollMinute / 60) * hourHeight;
@@ -122,6 +128,7 @@
 
     return () => {
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       scrollContainer?.removeEventListener("scroll", handleScroll);
     };
   });

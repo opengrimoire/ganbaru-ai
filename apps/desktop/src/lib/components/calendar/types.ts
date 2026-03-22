@@ -106,6 +106,8 @@ export interface AccentBarBand {
   status?: SegmentStatus;
 }
 
+export type PauseInterval = [string, string | null]; // [pauseStartIso, resumeIso | null]
+
 export interface PersistedSegment {
   id: string;
   eventId: string;
@@ -117,6 +119,7 @@ export interface PersistedSegment {
   plannedEnd: string;
   actualStart: string | null;
   actualEnd: string | null;
+  pauseLog: PauseInterval[];
   status: SegmentStatus;
 }
 

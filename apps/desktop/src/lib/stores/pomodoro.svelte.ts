@@ -37,6 +37,7 @@ let listenersInitialized = false;
 let notificationShown = false;
 let phaseEndTime: number | null = null;
 let activeBlockId: string | null = null;
+let activeBlockEndMs: number | null = null;
 
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
@@ -49,6 +50,11 @@ let breakOvertimeSeconds = $state(0);
 let overtimeIntervalId: ReturnType<typeof setInterval> | null = null;
 
 const NOTIFICATION_THRESHOLD = 60;
+
+// Suspend/wake detection
+let lastTickMs: number | null = null;
+const SUSPEND_THRESHOLD_MS = 5000;
+let suspendedAway = $state<{ awaySeconds: number } | null>(null);
 
 // --- Config helpers ---
 
@@ -77,9 +83,16 @@ function markSegment(index: number, status: PersistedSegment["status"], setActua
   seg.status = status;
   if (setActualEnd) seg.actualEnd = nowIso();
 
+  // Close any open pause interval
+  const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
+  if (lastPause && lastPause[1] === null) {
+    lastPause[1] = seg.actualEnd ?? nowIso();
+    seg.pauseLog = [...seg.pauseLog];
+  }
+
   execute(
-    `UPDATE pomodoro_segments SET status = $1, actual_start = $2, actual_end = $3 WHERE id = $4`,
-    [seg.status, seg.actualStart, seg.actualEnd, seg.id],
+    `UPDATE pomodoro_segments SET status = $1, actual_start = $2, actual_end = $3, pause_log = $4 WHERE id = $5`,
+    [seg.status, seg.actualStart, seg.actualEnd, JSON.stringify(seg.pauseLog), seg.id],
   ).catch((e) => console.warn("Failed to update segment:", e));
 }
 
@@ -97,6 +110,26 @@ function activateSegment(index: number) {
 }
 
 async function createSegments(eventId: string, eventEnd: string, eventDate: string) {
+  // Clean up any orphaned segments from a previous session on this event
+  // (e.g. app closed while running/paused)
+  await execute(
+    `UPDATE pomodoro_segments
+     SET status = 'interrupted',
+         actual_end = COALESCE(actual_end, actual_start, datetime('now')),
+         pause_log = CASE
+           WHEN pause_log IS NOT NULL AND pause_log LIKE '%null]%'
+           THEN REPLACE(pause_log, 'null]', '"' || datetime('now') || 'Z"]')
+           ELSE pause_log
+         END
+     WHERE event_id = $1 AND status = 'active'`,
+    [eventId],
+  ).catch((e) => console.warn("Failed to clean up orphaned active segments:", e));
+
+  await execute(
+    `UPDATE pomodoro_segments SET status = 'skipped' WHERE event_id = $1 AND status = 'planned'`,
+    [eventId],
+  ).catch((e) => console.warn("Failed to clean up orphaned planned segments:", e));
+
   const runId = crypto.randomUUID();
   activeRunId = runId;
 
@@ -127,6 +160,7 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
     plannedEnd: addMinutesToIso(baseIso, s.endOffsetMinutes),
     actualStart: i === 0 ? baseIso : null,
     actualEnd: null,
+    pauseLog: [],
     status: i === 0 ? "active" as const : "planned" as const,
   }));
 
@@ -134,9 +168,9 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
   for (const seg of newSegments) {
     await execute(
       `INSERT INTO pomodoro_segments
-        (id, event_id, event_date, run_id, cycle_number, phase, planned_start, planned_end, actual_start, actual_end, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [seg.id, seg.eventId, seg.eventDate, seg.runId, seg.cycleNumber, seg.phase, seg.plannedStart, seg.plannedEnd, seg.actualStart, seg.actualEnd, seg.status],
+        (id, event_id, event_date, run_id, cycle_number, phase, planned_start, planned_end, actual_start, actual_end, pause_log, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [seg.id, seg.eventId, seg.eventDate, seg.runId, seg.cycleNumber, seg.phase, seg.plannedStart, seg.plannedEnd, seg.actualStart, seg.actualEnd, "[]", seg.status],
     ).catch((e) => console.warn("Failed to insert segment:", e));
   }
 
@@ -196,6 +230,7 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
       plannedEnd: addMinutesToIso(nowStr, bridgeMinutes),
       actualStart: nowStr,
       actualEnd: null,
+      pauseLog: [],
       status: "active",
     });
   }
@@ -222,6 +257,7 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
           plannedEnd: addMinutesToIso(baseAfter, offset + duration),
           actualStart: null,
           actualEnd: null,
+          pauseLog: [],
           status: "planned",
         });
         offset += duration;
@@ -243,6 +279,7 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
           plannedEnd: addMinutesToIso(baseAfter, offset + duration),
           actualStart: null,
           actualEnd: null,
+          pauseLog: [],
           status: "planned",
         });
         offset += duration;
@@ -256,9 +293,9 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
   for (const seg of newSegments) {
     await execute(
       `INSERT INTO pomodoro_segments
-        (id, event_id, event_date, run_id, cycle_number, phase, planned_start, planned_end, actual_start, actual_end, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [seg.id, seg.eventId, seg.eventDate, seg.runId, seg.cycleNumber, seg.phase, seg.plannedStart, seg.plannedEnd, seg.actualStart, seg.actualEnd, seg.status],
+        (id, event_id, event_date, run_id, cycle_number, phase, planned_start, planned_end, actual_start, actual_end, pause_log, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [seg.id, seg.eventId, seg.eventDate, seg.runId, seg.cycleNumber, seg.phase, seg.plannedStart, seg.plannedEnd, seg.actualStart, seg.actualEnd, JSON.stringify(seg.pauseLog), seg.status],
     ).catch((e) => console.warn("Failed to insert segment:", e));
   }
 
@@ -276,6 +313,8 @@ async function reconfigureSession(
   eventEnd: string,
   eventDate: string,
 ) {
+  activeBlockEndMs = new Date(eventEnd.replace(" ", "T")).getTime();
+
   // Compute elapsed time in current phase using old config durations
   const oldPhaseDurationSec = phase === "focus"
     ? config.focusMinutes * TIME_MULTIPLIER
@@ -304,6 +343,7 @@ async function reconfigureSession(
     isRunning = true;
     phaseEndTime = Date.now() + remainingSeconds * 1000;
     intervalId = setInterval(tick, 1000);
+    lastTickMs = Date.now();
   }
 
   // Reset notification if remaining time increased past threshold
@@ -328,6 +368,7 @@ async function transitionToBlock(
   eventDate: string,
 ) {
   activeBlockId = blockId;
+  activeBlockEndMs = new Date(eventEnd.replace(" ", "T")).getTime();
   initListeners();
 
   const previousConfig = config;
@@ -368,6 +409,7 @@ async function transitionToBlock(
         isRunning = true;
         if (intervalId) clearInterval(intervalId);
         intervalId = setInterval(tick, 1000);
+    lastTickMs = Date.now();
       } else {
         // Timer already running, just update end time
         phaseEndTime = Date.now() + remainingSeconds * 1000;
@@ -441,9 +483,11 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
 
   listen("tray-pause-resume", () => {
+    if (suspendedAway) return;
     if (isRunning) {
       isRunning = false;
       phaseEndTime = null;
+      lastTickMs = null;
       if (intervalId) {
         clearInterval(intervalId);
         intervalId = null;
@@ -455,11 +499,13 @@ function initListeners() {
         sessionStartTime = new Date().toISOString();
       }
       intervalId = setInterval(tick, 1000);
+    lastTickMs = Date.now();
     }
     updateTray();
   }).catch((e) => console.warn("Failed to listen for tray-pause-resume:", e));
 
   listen("tray-skip", () => {
+    if (suspendedAway) return;
     advancePhase();
     updateTray();
   }).catch((e) => console.warn("Failed to listen for tray-skip:", e));
@@ -495,6 +541,7 @@ function startFocusSession() {
   phaseEndTime = Date.now() + remainingSeconds * 1000;
   sessionStartTime = new Date().toISOString();
   intervalId = setInterval(tick, 1000);
+  lastTickMs = Date.now();
 
   // Activate the next focus segment
   const nextFocus = segments.findIndex(
@@ -505,6 +552,53 @@ function startFocusSession() {
   }
 
   updateTray();
+}
+
+function dismissSuspend(resume: boolean) {
+  suspendedAway = null;
+  if (resume) {
+    isRunning = true;
+    phaseEndTime = Date.now() + remainingSeconds * 1000;
+    lastTickMs = Date.now();
+    intervalId = setInterval(tick, 1000);
+    updateTray();
+  } else {
+    // Stop: save partial session up to suspend start
+    if (phase === "focus" && sessionStartTime) {
+      const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
+        ? segments[currentSegmentIndex] : null;
+      const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
+      const endIso = lastPause ? lastPause[0] : nowIso();
+      saveCompletedSession(sessionStartTime, endIso);
+    }
+    if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+      markSegment(currentSegmentIndex, "interrupted", true);
+      for (let i = currentSegmentIndex + 1; i < segments.length; i++) {
+        if (segments[i].status === "planned") {
+          segments[i].status = "skipped";
+          execute(
+            `UPDATE pomodoro_segments SET status = 'skipped' WHERE id = $1`,
+            [segments[i].id],
+          ).catch((e) => console.warn("Failed to skip segment:", e));
+        }
+      }
+    }
+    stopOvertime();
+    isRunning = false;
+    phaseEndTime = null;
+    activeBlockId = null;
+    activeBlockEndMs = null;
+    lastTickMs = null;
+    phase = "focus";
+    remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+    currentCycle = 1;
+    completedPomodoros = 0;
+    sessionStartTime = null;
+    skipNextBreak = false;
+    notificationShown = false;
+    clearSegments();
+    updateTray();
+  }
 }
 
 function showBreakOverlay(breakSeconds: number) {
@@ -553,8 +647,116 @@ async function saveCompletedSession(
 // --- Timer ---
 
 function tick() {
+  const now = Date.now();
+
+  // --- Suspend/wake detection ---
+  if (lastTickMs !== null && (now - lastTickMs) > SUSPEND_THRESHOLD_MS) {
+    const suspendStartIso = new Date(lastTickMs).toISOString();
+    const suspendEndIso = new Date(now).toISOString();
+    const awaySeconds = Math.round((now - lastTickMs) / 1000);
+
+    // Record synthetic pause on current segment
+    if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+      const seg = segments[currentSegmentIndex];
+      seg.pauseLog = [...seg.pauseLog, [suspendStartIso, suspendEndIso]];
+      execute(
+        `UPDATE pomodoro_segments SET pause_log = $1 WHERE id = $2`,
+        [JSON.stringify(seg.pauseLog), seg.id],
+      ).catch((e) => console.warn("Failed to save suspend pause:", e));
+    }
+
+    // Re-anchor phaseEndTime so remainingSeconds stays at pre-suspend value
+    if (phaseEndTime !== null) {
+      const preSuspendRemaining = Math.max(0, Math.ceil((phaseEndTime - lastTickMs) / 1000));
+      remainingSeconds = preSuspendRemaining;
+      phaseEndTime = now + preSuspendRemaining * 1000;
+    }
+
+    // Pause the timer
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    isRunning = false;
+    lastTickMs = null;
+
+    // If event also ended during suspend, auto-stop (no dialog)
+    if (activeBlockEndMs !== null && now >= activeBlockEndMs) {
+      if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+        markSegment(currentSegmentIndex, "completed", true);
+        for (let i = currentSegmentIndex + 1; i < segments.length; i++) {
+          if (segments[i].status === "planned") {
+            segments[i].status = "skipped";
+            execute(
+              `UPDATE pomodoro_segments SET status = 'skipped' WHERE id = $1`,
+              [segments[i].id],
+            ).catch((e) => console.warn("Failed to skip segment:", e));
+          }
+        }
+      }
+      if (phase === "focus" && sessionStartTime) {
+        saveCompletedSession(sessionStartTime, suspendStartIso);
+        sessionStartTime = null;
+      }
+      stopOvertime();
+      phaseEndTime = null;
+      activeBlockId = null;
+      activeBlockEndMs = null;
+      phase = "focus";
+      remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+      currentCycle = 1;
+      completedPomodoros = 0;
+      clearSegments();
+      updateTray();
+      return;
+    }
+
+    // Show resume dialog
+    suspendedAway = { awaySeconds };
+    updateTray();
+    return;
+  }
+
+  lastTickMs = now;
+
+  // Auto-stop if the calendar event has ended
+  if (activeBlockEndMs !== null && now >= activeBlockEndMs) {
+    if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+      markSegment(currentSegmentIndex, "completed", true);
+      for (let i = currentSegmentIndex + 1; i < segments.length; i++) {
+        if (segments[i].status === "planned") {
+          segments[i].status = "skipped";
+          execute(
+            `UPDATE pomodoro_segments SET status = 'skipped' WHERE id = $1`,
+            [segments[i].id],
+          ).catch((e) => console.warn("Failed to skip segment:", e));
+        }
+      }
+    }
+    if (phase === "focus" && sessionStartTime) {
+      saveCompletedSession(sessionStartTime, new Date(activeBlockEndMs).toISOString());
+      sessionStartTime = null;
+    }
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    stopOvertime();
+    isRunning = false;
+    lastTickMs = null;
+    phaseEndTime = null;
+    activeBlockId = null;
+    activeBlockEndMs = null;
+    phase = "focus";
+    remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+    currentCycle = 1;
+    completedPomodoros = 0;
+    clearSegments();
+    updateTray();
+    return;
+  }
+
   if (phaseEndTime !== null) {
-    const now = Date.now();
     remainingSeconds = Math.max(0, Math.ceil((phaseEndTime - now) / 1000));
   }
 
@@ -725,6 +927,12 @@ export function getPomodoro() {
     get segments() {
       return segments;
     },
+    get suspendedAway() {
+      return suspendedAway;
+    },
+    dismissSuspend(resume: boolean) {
+      dismissSuspend(resume);
+    },
     clearLastXp() {
       lastXp = null;
     },
@@ -737,9 +945,18 @@ export function getPomodoro() {
       const newConfig = { ...DEFAULT_CONFIG, ...blockConfig };
 
       if (activeBlockId === blockId) {
-        // Same block: reconfigure only if config actually changed
-        if (configEquals(config, newConfig) || !eventEnd || !eventDate) return;
-        reconfigureSession(blockId, newConfig, eventEnd, eventDate);
+        if (!eventEnd || !eventDate) return;
+        const newEndMs = new Date(eventEnd.replace(" ", "T")).getTime();
+        const configChanged = !configEquals(config, newConfig);
+        const endChanged = activeBlockEndMs !== newEndMs;
+        if (!configChanged && !endChanged) return;
+        if (configChanged) {
+          reconfigureSession(blockId, newConfig, eventEnd, eventDate);
+        } else {
+          // Event resized but config unchanged: rebuild segments for new duration
+          activeBlockEndMs = newEndMs;
+          rebuildSegments(blockId, eventEnd, eventDate);
+        }
         return;
       }
 
@@ -759,6 +976,7 @@ export function getPomodoro() {
       }
 
       activeBlockId = blockId;
+      activeBlockEndMs = eventEnd ? new Date(eventEnd.replace(" ", "T")).getTime() : null;
       config = newConfig;
       totalCycles = config.cyclesBeforeLongBreak;
       phase = "focus";
@@ -772,6 +990,7 @@ export function getPomodoro() {
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       sessionStartTime = new Date().toISOString();
       intervalId = setInterval(tick, 1000);
+    lastTickMs = Date.now();
 
       // Create segments from now to event end
       if (eventEnd && eventDate) {
@@ -801,8 +1020,10 @@ export function getPomodoro() {
       }
       stopOvertime();
       isRunning = false;
+      lastTickMs = null;
       phaseEndTime = null;
       activeBlockId = null;
+      activeBlockEndMs = null;
       phase = "focus";
       remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
       currentCycle = 1;
@@ -816,9 +1037,20 @@ export function getPomodoro() {
     pause() {
       isRunning = false;
       phaseEndTime = null;
+      lastTickMs = null;
       if (intervalId) {
         clearInterval(intervalId);
         intervalId = null;
+      }
+      // Record pause start on current segment
+      if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+        const seg = segments[currentSegmentIndex];
+        const now = nowIso();
+        seg.pauseLog = [...seg.pauseLog, [now, null]];
+        execute(
+          `UPDATE pomodoro_segments SET pause_log = $1 WHERE id = $2`,
+          [JSON.stringify(seg.pauseLog), seg.id],
+        ).catch((e) => console.warn("Failed to save pause:", e));
       }
       updateTray();
     },
@@ -830,12 +1062,42 @@ export function getPomodoro() {
       if (!sessionStartTime) {
         sessionStartTime = new Date().toISOString();
       }
+      // Record resume on current segment's open pause interval
+      if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+        const seg = segments[currentSegmentIndex];
+        const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
+        if (lastPause && lastPause[1] === null) {
+          lastPause[1] = nowIso();
+          seg.pauseLog = [...seg.pauseLog]; // trigger reactivity
+          execute(
+            `UPDATE pomodoro_segments SET pause_log = $1 WHERE id = $2`,
+            [JSON.stringify(seg.pauseLog), seg.id],
+          ).catch((e) => console.warn("Failed to save resume:", e));
+        }
+      }
       intervalId = setInterval(tick, 1000);
+    lastTickMs = Date.now();
       updateTray();
     },
     skip() {
       advancePhase();
       updateTray();
+    },
+    /** Clean up orphaned segments from previous app sessions. Call once on startup. */
+    async cleanupOrphans() {
+      // Mark orphaned active segments as interrupted (e.g. app closed while running)
+      await execute(
+        `UPDATE pomodoro_segments
+         SET status = 'interrupted',
+             actual_end = COALESCE(actual_end, actual_start, datetime('now'))
+         WHERE status = 'active'`,
+        [],
+      ).catch((e) => console.warn("Failed to clean up orphaned segments:", e));
+      // Mark orphaned planned segments as skipped
+      await execute(
+        `UPDATE pomodoro_segments SET status = 'skipped' WHERE status = 'planned'`,
+        [],
+      ).catch((e) => console.warn("Failed to clean up planned segments:", e));
     },
   };
 }

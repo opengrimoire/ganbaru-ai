@@ -98,6 +98,7 @@
     }
     return merged;
   });
+  const gridLeft = $derived(railSegments.length > 0 ? railWidth + 4 : 0);
 
   // Load persisted segments from DB for all pomodoro events on this day
   interface DbSegmentRow {
@@ -111,6 +112,7 @@
     planned_end: string;
     actual_start: string | null;
     actual_end: string | null;
+    pause_log: string | null;
     status: string;
   }
 
@@ -127,7 +129,7 @@
     const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
     select<DbSegmentRow>(
       `SELECT id, event_id, event_date, run_id, cycle_number, phase,
-              planned_start, planned_end, actual_start, actual_end, status
+              planned_start, planned_end, actual_start, actual_end, pause_log, status
        FROM pomodoro_segments
        WHERE event_id IN (${placeholders})
          AND (status = 'completed' OR status = 'active' OR status = 'interrupted')
@@ -147,6 +149,7 @@
           plannedEnd: r.planned_end,
           actualStart: r.actual_start,
           actualEnd: r.actual_end,
+          pauseLog: r.pause_log ? JSON.parse(r.pause_log) : [],
           status: r.status as PersistedSegment["status"],
         };
         const arr = map.get(seg.eventId) ?? [];
@@ -159,6 +162,7 @@
 
   const timelineBands = $derived.by(() => {
     void pomodoro.breakOvertimeSeconds;
+    void currentTimeMinute; // re-run every second (even during pause)
     const dayMidnight = parseCalendarDate(`${dateStr} 00:00`);
     const dayStartMs = dayMidnight.getTime();
     const nowMs = Date.now();
@@ -292,6 +296,18 @@
     </div>
   {/if}
 
+  <!-- Gridlines (start after rail area so they don't show behind it) -->
+  {#each hours as hour}
+    <div
+      class="pointer-events-none absolute right-0"
+      style="left: {gridLeft}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
+    ></div>
+    <div
+      class="pointer-events-none absolute right-0"
+      style="left: {gridLeft}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
+    ></div>
+  {/each}
+
   <!-- Past time dimming overlay (full width, behind rail and content) -->
   {#if pastOverlayHeight > 0}
     <div
@@ -303,7 +319,7 @@
   <!-- Pomodoro timeline rails (one per contiguous group of pomodoro events) -->
   {#each railSegments as seg}
     <div
-      class="pointer-events-none absolute z-[2]"
+      class="pointer-events-none absolute z-[2] overflow-hidden"
       style="
         left: 2px;
         width: {railWidth}px;
@@ -347,30 +363,13 @@
     onmousemove={handleColumnMouseMove}
     onmouseleave={handleColumnMouseLeave}
   >
-  <!-- Hour cells (click targets + gridlines) -->
+  <!-- Hour cells (click targets only, gridlines are in outer container) -->
   {#each hours as hour}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="absolute w-full cursor-crosshair"
-      style="
-        top: {hour * hourHeight}px;
-        height: {hourHeight}px;
-        border-bottom: 1px solid var(--cal-gridline);
-      "
+      style="top: {hour * hourHeight}px; height: {hourHeight}px;"
       onpointerdown={(e) => handleSlotPointerDown(e, hour)}
-    ></div>
-  {/each}
-
-  <!-- Half-hour dashed lines -->
-  {#each hours as hour}
-    <div
-      class="pointer-events-none absolute w-full"
-      style="
-        top: {hour * hourHeight + hourHeight / 2}px;
-        height: 0;
-        border-bottom: 1px dashed var(--cal-gridline);
-        opacity: 0.4;
-      "
     ></div>
   {/each}
 
