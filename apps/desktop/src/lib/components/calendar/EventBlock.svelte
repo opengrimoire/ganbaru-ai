@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PositionedEvent, AccentBarBand } from "./types";
+  import type { PositionedEvent } from "./types";
   import { getEventColor } from "./utils";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
@@ -9,7 +9,6 @@
     isDark = false,
     editing = false,
     preview = false,
-    accentSegments,
     onclick,
     onpointerdown,
   }: {
@@ -17,15 +16,14 @@
     isDark?: boolean;
     editing?: boolean;
     preview?: boolean;
-    accentSegments?: AccentBarBand[];
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
   const colors = $derived(getEventColor(positioned.event.color, isDark));
   const neutralColors = $derived(isDark
-    ? { bg: "#2A2A2C", accent: "#888", text: "#CACACA" }
-    : { bg: "#E8E8E8", accent: "#AAAAAA", text: "#666666" },
+    ? { bg: "#2A2A2C", text: "#CACACA" }
+    : { bg: "#E8E8E8", text: "#666666" },
   );
   // Preview with no color selected: neutral gray; preview with color: event color; saved: event color
   const activeColors = $derived(preview && !positioned.event.color ? neutralColors : colors);
@@ -70,26 +68,6 @@
 >
   <!-- Resize handle: top -->
   <div class="resize-handle-top" onpointerdown={handlePointerDown}></div>
-
-  <!-- Accent bar -->
-  <div class="relative shrink-0 overflow-hidden" style="width: 10%; background-color: {activeColors.accent};">
-    {#if accentSegments}
-      {#each accentSegments as band}
-        {#if band.status !== "skipped"}
-          <div
-            class="absolute left-0 right-0 {band.status === 'active' ? 'break-band-active' : ''}"
-            style="
-              top: {band.topFraction * 100}%;
-              height: {band.heightFraction * 100}%;
-              background-color: {band.status === 'completed' ? activeColors.bg : activeColors.accent};
-              opacity: {band.status === 'planned' ? 0.4 : 1};
-              {band.status === 'completed' ? '' : 'filter: brightness(0.7);'}
-            "
-          ></div>
-        {/if}
-      {/each}
-    {/if}
-  </div>
 
   <!-- Content -->
   <div class="relative min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};">
@@ -143,12 +121,4 @@
     50% { opacity: 1; }
   }
 
-  .break-band-active {
-    animation: break-pulse 1.5s ease-in-out infinite;
-  }
-
-  @keyframes break-pulse {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 0.9; }
-  }
 </style>

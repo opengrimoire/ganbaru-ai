@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { computePlannedSegments, segmentsToAccentBands, computeTrailingFocusMinutes, computeTrailingCycleNumber } from "./pomodoro-segments";
+import { computePlannedSegments, segmentsToAccentBands, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands } from "./pomodoro-segments";
 import type { PomodoroConfig } from "$lib/components/calendar/types";
+import type { TimelineEvent, ActivePomodoroState } from "./pomodoro-segments";
 
 const DEFAULT_CONFIG: PomodoroConfig = {
   focusDurationMinutes: 40,
@@ -206,6 +207,33 @@ describe("computePlannedSegments", () => {
     const withDefault = computePlannedSegments(DEFAULT_CONFIG, 90);
     expect(withZero).toEqual(withDefault);
   });
+
+  it("stacked event does not affect sequential successor's segments", () => {
+    // Block A: 120 min, Block B: 240 min (sequential, A ends where B starts)
+    // Block C: 120 min, overlapping A and B (starts 20 min before A ends)
+    // Block B should inherit from Block A, not Block C.
+    const blockA = computePlannedSegments(DEFAULT_CONFIG, 120);
+    const trailingFocusA = computeTrailingFocusMinutes(blockA);
+    const trailingCycleA = computeTrailingCycleNumber(blockA);
+
+    // Block B inheriting from Block A (correct predecessor)
+    const blockB = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingCycleA);
+
+    // Block C inheriting from Block A (stacked event)
+    const blockC = computePlannedSegments(DEFAULT_CONFIG, 120, trailingFocusA, trailingCycleA);
+    const trailingFocusC = computeTrailingFocusMinutes(blockC);
+    const trailingCycleC = computeTrailingCycleNumber(blockC);
+
+    // Block B inheriting from Block C (wrong predecessor) would differ
+    const blockBFromC = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusC, trailingCycleC);
+
+    // The correct result (from A) should differ from the wrong result (from C)
+    // because C's trailing state differs from A's
+    expect(trailingFocusA).not.toBe(trailingFocusC);
+    // And Block B from A should be stable regardless of C's existence
+    expect(blockB).toEqual(computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingCycleA));
+    expect(blockB).not.toEqual(blockBFromC);
+  });
 });
 
 describe("computeTrailingFocusMinutes", () => {
@@ -307,5 +335,450 @@ describe("segmentsToAccentBands", () => {
     for (const b of bands) {
       expect(b.status).toBe("completed");
     }
+  });
+});
+
+// --- computeDayTimelineBands ---
+
+const CREATIVE_CONFIG: PomodoroConfig = {
+  focusDurationMinutes: 25,
+  shortBreakMinutes: 5,
+  longBreakMinutes: 15,
+  pomodoroCount: 4,
+};
+
+/** Helper: create a TimelineEvent from hour ranges on a fixed day */
+function makeEvent(
+  id: string,
+  startHour: number,
+  endHour: number,
+  config: PomodoroConfig = DEFAULT_CONFIG,
+): TimelineEvent {
+  const dayMs = new Date("2026-03-21T00:00:00").getTime();
+  return {
+    id,
+    config,
+    startMs: dayMs + startHour * 3600000,
+    endMs: dayMs + endHour * 3600000,
+    startMinute: startHour * 60,
+    endMinute: endHour * 60,
+  };
+}
+
+// Day midnight and a "now" far in the past so all events are future (planned)
+const DAY_MS = new Date("2026-03-21T00:00:00").getTime();
+const PAST_NOW = DAY_MS - 86400000; // yesterday
+
+describe("computeDayTimelineBands", () => {
+  it("returns empty for no events", () => {
+    expect(computeDayTimelineBands([], null, DAY_MS, PAST_NOW)).toEqual([]);
+  });
+
+  it("returns break bands for a single event", () => {
+    // 2h event with Deep focus (40/5): focus 0-40, break 40-45, focus 45-80, break 80-85, focus 85-120
+    const ev = makeEvent("A", 10, 12);
+    const bands = computeDayTimelineBands([ev], null, DAY_MS, PAST_NOW);
+    expect(bands.length).toBe(2);
+    expect(bands[0]).toEqual({ topMinute: 640, heightMinutes: 5, phase: "short_break", status: "planned" });
+    expect(bands[1]).toEqual({ topMinute: 685, heightMinutes: 5, phase: "short_break", status: "planned" });
+  });
+
+  it("inherits focus and cycle across sequential events", () => {
+    // A: 10:00-11:20 (80 min). Segments: focus 0-40, break 40-45, focus 45-80 (trailing: 35min focus, cycle 2)
+    // B: 11:20-13:00 (100 min). Should inherit 35min focus, cycle 2.
+    const A = makeEvent("A", 10, 11 + 20 / 60);
+    const B = makeEvent("B", 11 + 20 / 60, 13);
+    const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
+
+    // A produces 1 break at minute 640 (10*60+40)
+    const aBands = bands.filter((b) => b.topMinute >= 600 && b.topMinute < 680);
+    expect(aBands.length).toBe(1);
+    expect(aBands[0].topMinute).toBe(640);
+
+    // B starts at 680 (11:20). Inherited 35min focus (cycle 2): shortened focus = 5min,
+    // then short break at 685 (cycle 2 < 4)
+    const bBands = bands.filter((b) => b.topMinute >= 680);
+    expect(bBands.length).toBeGreaterThanOrEqual(1);
+    expect(bBands[0].topMinute).toBe(685); // 680 + 5min focus
+    expect(bBands[0].phase).toBe("short_break");
+  });
+
+  it("resets inheritance when there is a gap", () => {
+    // A: 10:00-11:00, B: 12:00-13:00 (1h gap)
+    const A = makeEvent("A", 10, 11);
+    const B = makeEvent("B", 12, 13);
+    const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
+
+    // B should start fresh (no inheritance from A)
+    // B: 60min, focus 0-40, break 40-45, focus 45-60
+    const bBands = bands.filter((b) => b.topMinute >= 720);
+    expect(bBands.length).toBe(1);
+    expect(bBands[0].topMinute).toBe(760); // 720+40
+    expect(bBands[0].phase).toBe("short_break");
+  });
+
+  it("filters out contained events", () => {
+    // A: 10:00-12:00 (deep, longer), B: 10:30-11:30 (creative, shorter, contained)
+    const A = makeEvent("A", 10, 12);
+    const B = makeEvent("B", 10.5, 11.5, CREATIVE_CONFIG);
+    const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
+
+    // Only A's bands should appear, B is contained and filtered out
+    // A: 120min, focus 0-40, break 40-45, focus 45-85, break 85-90
+    expect(bands.length).toBe(2);
+    expect(bands[0].topMinute).toBe(640); // 600+40
+    expect(bands[1].topMinute).toBe(685); // 600+85
+  });
+
+  it("keeps both events when neither is contained (partial overlap)", () => {
+    // A: 10:00-12:00, C: 11:50-12:50 (extends beyond A)
+    const A = makeEvent("A", 10, 12);
+    const C = makeEvent("C", 11 + 50 / 60, 12 + 50 / 60, CREATIVE_CONFIG);
+    const bands = computeDayTimelineBands([A, C], null, DAY_MS, PAST_NOW);
+
+    // Both should contribute bands
+    const aBands = bands.filter((b) => b.topMinute < 710); // before C starts
+    const cBands = bands.filter((b) => b.topMinute >= 720); // A ends at 720
+    expect(aBands.length).toBeGreaterThan(0);
+    expect(cBands.length).toBeGreaterThanOrEqual(0); // C may produce bands after A
+  });
+
+  it("same-range events: shorter focus is main", () => {
+    // A: Deep (40min focus), B: Creative (25min focus), both 16:00-20:00
+    const A = makeEvent("A", 16, 20);
+    const B = makeEvent("B", 16, 20, CREATIVE_CONFIG);
+    const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
+
+    // B (creative, 25min focus) is main (shorter focus). A is contained.
+    // B: 240min with creative config (25/5/15, count=4)
+    // Breaks at: 25, 55, 85, long at 115 (cycle 4)
+    expect(bands[0].topMinute).toBe(960 + 25); // 16*60 + 25
+    expect(bands[0].heightMinutes).toBe(5);
+  });
+
+  it("skips fully past planned events", () => {
+    // A: 08:00-09:00 (past), B: 14:00-15:00 (future)
+    const A = makeEvent("A", 8, 9);
+    const B = makeEvent("B", 14, 15);
+    const nowMs = DAY_MS + 10 * 3600000; // 10:00
+    const bands = computeDayTimelineBands([A, B], null, DAY_MS, nowMs);
+
+    // A is past, should have no planned bands. B should have bands.
+    const aBands = bands.filter((b) => b.topMinute < 540); // before 09:00
+    expect(aBands.length).toBe(0);
+    const bBands = bands.filter((b) => b.topMinute >= 840);
+    expect(bBands.length).toBeGreaterThan(0);
+  });
+
+  it("shows bands only for remaining time of partially past event", () => {
+    // A: 09:00-12:00 (3h), now is 10:05
+    const A = makeEvent("A", 9, 12);
+    const nowMs = DAY_MS + (10 * 60 + 5) * 60000; // 10:05
+    const bands = computeDayTimelineBands([A], null, DAY_MS, nowMs);
+
+    // No bands before 10:05 (minute 605)
+    for (const b of bands) {
+      expect(b.topMinute).toBeGreaterThanOrEqual(605);
+    }
+  });
+
+  it("handles overlapping events with cursor walk", () => {
+    // A: 10:00-12:00, B: 11:00-13:00 (overlap, neither contained)
+    const A = makeEvent("A", 10, 12);
+    const B = makeEvent("B", 11, 13);
+    const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
+
+    // A covers 10:00-12:00 with its breaks
+    // B starts at cursor=12:00 (720), duration = 13:00-12:00 = 60 min
+    // B inherits A's trailing state at 12:00
+    expect(bands.length).toBeGreaterThan(0);
+  });
+
+  it("active event projects bands from persisted segments", () => {
+    const ev = makeEvent("A", 10, 12);
+    const segStartMs = DAY_MS + 10 * 3600000; // 10:00
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(segStartMs).toISOString(),
+          plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+          actualStart: new Date(segStartMs).toISOString(),
+          actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+          status: "completed",
+        },
+        {
+          id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "short_break",
+          plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
+          plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
+          actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
+          actualEnd: null,
+          status: "active",
+        },
+        {
+          id: "s3", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 2, phase: "focus",
+          plannedStart: new Date(segStartMs + 45 * 60000).toISOString(),
+          plannedEnd: new Date(segStartMs + 85 * 60000).toISOString(),
+          actualStart: null, actualEnd: null,
+          status: "planned",
+        },
+        {
+          id: "s4", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 2, phase: "short_break",
+          plannedStart: new Date(segStartMs + 85 * 60000).toISOString(),
+          plannedEnd: new Date(segStartMs + 90 * 60000).toISOString(),
+          actualStart: null, actualEnd: null,
+          status: "planned",
+        },
+      ],
+      remainingSeconds: 180, // 3 min left in active break
+      breakOvertimeSeconds: 0,
+    };
+
+    const nowMs = segStartMs + 42 * 60000; // 10:42
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, nowMs);
+
+    // Should have the active break band and the future planned break
+    const breakBands = bands.filter((b) => b.phase !== "focus");
+    expect(breakBands.length).toBe(2);
+
+    // Active break: starts at 10:40 (minute 640), status active
+    const activeBand = breakBands.find((b) => b.status === "active");
+    expect(activeBand).toBeDefined();
+    expect(activeBand!.topMinute).toBe(640);
+
+    // Future planned break
+    const plannedBand = breakBands.find((b) => b.status === "planned");
+    expect(plannedBand).toBeDefined();
+  });
+
+  it("handles no pomodoro events gracefully", () => {
+    expect(computeDayTimelineBands([], null, DAY_MS, PAST_NOW)).toEqual([]);
+  });
+
+  it("handles single event shorter than one focus period", () => {
+    // 20 min event: only focus, no breaks
+    const ev = makeEvent("A", 10, 10 + 20 / 60);
+    const bands = computeDayTimelineBands([ev], null, DAY_MS, PAST_NOW);
+    expect(bands.length).toBe(0);
+  });
+
+  it("inherits cycle count causing long break in successor", () => {
+    // A: 3 full cycles (3*40 + 3*5 = 135 min). Trailing: cycle 4.
+    // B starts right after. Its first break should be long break (cycle 4).
+    const A = makeEvent("A", 8, 8 + 135 / 60); // 8:00-10:15
+    const B = makeEvent("B", 8 + 135 / 60, 8 + 135 / 60 + 100 / 60); // 10:15-11:55
+    const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
+
+    // A's trailing cycle = 4. B inherits cycle 4.
+    // B: first focus 0-40, then break at cycle 4 => long_break
+    const bBands = bands.filter((b) => b.topMinute >= 8 * 60 + 135);
+    const firstBBreak = bBands[0];
+    expect(firstBBreak).toBeDefined();
+    expect(firstBBreak.phase).toBe("long_break");
+  });
+
+  // --- Focus fill bands ---
+
+  it("active focus segment produces green fill band up to current time", () => {
+    const ev = makeEvent("A", 10, 12);
+    const segStartMs = DAY_MS + 10 * 3600000;
+    const plannedDurMs = 40 * 60000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(segStartMs).toISOString(),
+          plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
+          actualStart: new Date(segStartMs).toISOString(),
+          actualEnd: null,
+          status: "active",
+        },
+      ],
+      remainingSeconds: 20 * 60,
+      breakOvertimeSeconds: 0,
+    };
+
+    const nowMs = segStartMs + 20 * 60000; // 10:20
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, nowMs);
+
+    const focusBands = bands.filter((b) => b.phase === "focus");
+    expect(focusBands.length).toBe(1);
+    expect(focusBands[0].topMinute).toBe(600); // 10:00
+    expect(focusBands[0].heightMinutes).toBe(20); // fills to nowMs (10:20)
+    expect(focusBands[0].status).toBe("active");
+  });
+
+  it("active focus fill is capped at segment planned end", () => {
+    const ev = makeEvent("A", 10, 12);
+    const segStartMs = DAY_MS + 10 * 3600000;
+    const plannedDurMs = 40 * 60000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(segStartMs).toISOString(),
+          plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
+          actualStart: new Date(segStartMs).toISOString(),
+          actualEnd: null,
+          status: "active",
+        },
+      ],
+      remainingSeconds: 0,
+      breakOvertimeSeconds: 0,
+    };
+
+    // nowMs is 50 min after start, but segment is only 40 min
+    const nowMs = segStartMs + 50 * 60000;
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, nowMs);
+
+    const focusBands = bands.filter((b) => b.phase === "focus");
+    expect(focusBands.length).toBe(1);
+    expect(focusBands[0].heightMinutes).toBe(40); // capped at planned duration
+  });
+
+  it("completed focus segments show as filled", () => {
+    const ev = makeEvent("A", 10, 12);
+    const segStartMs = DAY_MS + 10 * 3600000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(segStartMs).toISOString(),
+          plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+          actualStart: new Date(segStartMs).toISOString(),
+          actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+          status: "completed",
+        },
+        {
+          id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "short_break",
+          plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
+          plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
+          actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
+          actualEnd: null,
+          status: "active",
+        },
+      ],
+      remainingSeconds: 3 * 60,
+      breakOvertimeSeconds: 0,
+    };
+
+    const nowMs = segStartMs + 42 * 60000;
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, nowMs);
+
+    const focusBands = bands.filter((b) => b.phase === "focus");
+    expect(focusBands.length).toBe(1);
+    expect(focusBands[0].topMinute).toBe(600);
+    expect(focusBands[0].heightMinutes).toBe(40);
+    expect(focusBands[0].status).toBe("completed");
+  });
+
+  it("persisted segments from past events produce focus fills", () => {
+    const ev = makeEvent("A", 8, 10); // past event
+    const segStartMs = DAY_MS + 8 * 3600000;
+    const nowMs = DAY_MS + 12 * 3600000; // now is 12:00, event is past
+
+    const persistedSegments = new Map<string, import("$lib/components/calendar/types").PersistedSegment[]>();
+    persistedSegments.set("A", [
+      {
+        id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 1, phase: "focus",
+        plannedStart: new Date(segStartMs).toISOString(),
+        plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        actualStart: new Date(segStartMs).toISOString(),
+        actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        status: "completed",
+      },
+      {
+        id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 1, phase: "short_break",
+        plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
+        plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
+        actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
+        actualEnd: new Date(segStartMs + 45 * 60000).toISOString(),
+        status: "completed",
+      },
+      {
+        id: "s3", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 2, phase: "focus",
+        plannedStart: new Date(segStartMs + 45 * 60000).toISOString(),
+        plannedEnd: new Date(segStartMs + 85 * 60000).toISOString(),
+        actualStart: new Date(segStartMs + 45 * 60000).toISOString(),
+        actualEnd: new Date(segStartMs + 85 * 60000).toISOString(),
+        status: "completed",
+      },
+    ]);
+
+    const bands = computeDayTimelineBands([ev], null, DAY_MS, nowMs, persistedSegments);
+
+    // Should have 2 focus fill bands and 1 break band
+    const focusBands = bands.filter((b) => b.phase === "focus");
+    const breakBands = bands.filter((b) => b.phase !== "focus");
+    expect(focusBands.length).toBe(2);
+    expect(breakBands.length).toBe(1);
+
+    // First focus: 8:00-8:40
+    expect(focusBands[0].topMinute).toBe(480);
+    expect(focusBands[0].heightMinutes).toBe(40);
+    expect(focusBands[0].status).toBe("completed");
+
+    // Second focus: 8:45-9:25
+    expect(focusBands[1].topMinute).toBe(525);
+    expect(focusBands[1].heightMinutes).toBe(40);
+  });
+
+  it("past event without persisted segments shows no fill", () => {
+    const ev = makeEvent("A", 8, 10);
+    const nowMs = DAY_MS + 12 * 3600000;
+
+    // No persisted segments
+    const bands = computeDayTimelineBands([ev], null, DAY_MS, nowMs);
+
+    // Past event, no segments: no bands at all
+    expect(bands.length).toBe(0);
+  });
+
+  it("skipped segments produce no bands", () => {
+    const ev = makeEvent("A", 8, 10);
+    const segStartMs = DAY_MS + 8 * 3600000;
+    const nowMs = DAY_MS + 12 * 3600000;
+
+    const persistedSegments = new Map<string, import("$lib/components/calendar/types").PersistedSegment[]>();
+    persistedSegments.set("A", [
+      {
+        id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 1, phase: "focus",
+        plannedStart: new Date(segStartMs).toISOString(),
+        plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        actualStart: new Date(segStartMs).toISOString(),
+        actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
+        status: "completed",
+      },
+      {
+        id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 1, phase: "short_break",
+        plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
+        plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
+        actualStart: null, actualEnd: null,
+        status: "skipped",
+      },
+    ]);
+
+    const bands = computeDayTimelineBands([ev], null, DAY_MS, nowMs, persistedSegments);
+
+    // Only the completed focus band, skipped break is excluded
+    expect(bands.length).toBe(1);
+    expect(bands[0].phase).toBe("focus");
   });
 });

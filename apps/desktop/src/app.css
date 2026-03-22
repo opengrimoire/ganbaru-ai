@@ -141,6 +141,9 @@
   --cal-current-time: #EA4335;
   --cal-hover: rgba(0, 30, 80, 0.04);
   --cal-past-overlay: rgba(0, 0, 0, 0.04);
+  --cal-timeline-rail: rgba(0, 0, 0, 0.1);
+  --cal-timeline-break: #6B7280;
+  --cal-timeline-focus: #22C55E;
   --cal-header-row-h: 44px;
 }
 
@@ -154,4 +157,7 @@
   --cal-current-time: #EA4335;
   --cal-hover: rgba(255, 255, 255, 0.04);
   --cal-past-overlay: rgba(0, 0, 0, 0.15);
+  --cal-timeline-rail: rgba(255, 255, 255, 0.1);
+  --cal-timeline-break: #9CA3AF;
+  --cal-timeline-focus: #4ADE80;
 }

@@ -1,19 +1,19 @@
 <script lang="ts">
-  import type { CalendarEvent, PositionedEvent, AccentBarBand } from "./types";
+  import type { CalendarEvent, PositionedEvent, PersistedSegment } from "./types";
   import {
     eventsForDay,
     layoutEventsForDay,
     effectiveMinuteRange,
     formatDatePart,
-    minuteOfDay,
     parseCalendarDate,
     snapToGrid,
     clampMinute,
     minuteToTop,
     getEventColor,
   } from "./utils";
-  import { computePlannedSegments, computeTrailingFocusMinutes, computeTrailingCycleNumber } from "$lib/utils/pomodoro-segments";
+  import { computeDayTimelineBands } from "$lib/utils/pomodoro-segments";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { select } from "$lib/api/db";
   import EventBlock from "./EventBlock.svelte";
   import { onMount } from "svelte";
 
@@ -73,167 +73,116 @@
 
   const totalHeight = $derived(24 * hourHeight);
 
-  // Pomodoro accent bar bands
+  // Centralized pomodoro timeline
   const pomodoro = getPomodoro();
+  const railWidth = 6;
 
-  const accentBandsMap = $derived.by(() => {
-    // Reading breakOvertimeSeconds subscribes to it, so bands recompute
-    // each second while the user hasn't acknowledged a finished break.
+  // One rail segment per contiguous group of pomodoro events (merge overlapping/adjacent)
+  const railSegments = $derived.by(() => {
+    const ranges: { start: number; end: number }[] = [];
+    for (const p of positioned) {
+      if (!p.event.pomodoroConfig) continue;
+      const { startMinute, endMinute } = effectiveMinuteRange(p.event, dateStr);
+      ranges.push({ start: startMinute, end: endMinute });
+    }
+    if (ranges.length === 0) return [];
+    ranges.sort((a, b) => a.start - b.start);
+    const merged: { start: number; end: number }[] = [ranges[0]];
+    for (let i = 1; i < ranges.length; i++) {
+      const last = merged[merged.length - 1];
+      if (ranges[i].start <= last.end) {
+        last.end = Math.max(last.end, ranges[i].end);
+      } else {
+        merged.push(ranges[i]);
+      }
+    }
+    return merged;
+  });
+
+  // Load persisted segments from DB for all pomodoro events on this day
+  interface DbSegmentRow {
+    id: string;
+    event_id: string;
+    event_date: string;
+    run_id: string;
+    cycle_number: number;
+    phase: string;
+    planned_start: string;
+    planned_end: string;
+    actual_start: string | null;
+    actual_end: string | null;
+    status: string;
+  }
+
+  let persistedSegmentsMap = $state(new Map<string, PersistedSegment[]>());
+
+  $effect(() => {
+    const eventIds = positioned
+      .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId)
+      .map((p) => p.event.id);
+    if (eventIds.length === 0) {
+      persistedSegmentsMap = new Map();
+      return;
+    }
+    const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+    select<DbSegmentRow>(
+      `SELECT id, event_id, event_date, run_id, cycle_number, phase,
+              planned_start, planned_end, actual_start, actual_end, status
+       FROM pomodoro_segments
+       WHERE event_id IN (${placeholders})
+         AND (status = 'completed' OR status = 'active' OR status = 'interrupted')
+       ORDER BY planned_start ASC`,
+      eventIds,
+    ).then((rows) => {
+      const map = new Map<string, PersistedSegment[]>();
+      for (const r of rows) {
+        const seg: PersistedSegment = {
+          id: r.id,
+          eventId: r.event_id,
+          eventDate: r.event_date,
+          runId: r.run_id,
+          cycleNumber: r.cycle_number,
+          phase: r.phase as PersistedSegment["phase"],
+          plannedStart: r.planned_start,
+          plannedEnd: r.planned_end,
+          actualStart: r.actual_start,
+          actualEnd: r.actual_end,
+          status: r.status as PersistedSegment["status"],
+        };
+        const arr = map.get(seg.eventId) ?? [];
+        arr.push(seg);
+        map.set(seg.eventId, arr);
+      }
+      persistedSegmentsMap = map;
+    }).catch((e) => console.warn("[DayColumn] Failed to load segments:", e));
+  });
+
+  const timelineBands = $derived.by(() => {
     void pomodoro.breakOvertimeSeconds;
-    const map = new Map<string, AccentBarBand[]>();
-    const now = new Date();
+    const dayMidnight = parseCalendarDate(`${dateStr} 00:00`);
+    const dayStartMs = dayMidnight.getTime();
+    const nowMs = Date.now();
 
-    // Pre-compute focus and cycle inheritance: for each event, how much focus
-    // and which cycle number carries over from a preceding event that touches/overlaps it.
-    const focusInheritanceMap = new Map<string, number>();
-    const cycleInheritanceMap = new Map<string, number>();
     const pomodoroEvents = positioned
       .filter((p) => p.event.pomodoroConfig)
-      .map((p) => ({
-        id: p.event.id,
-        config: p.event.pomodoroConfig!,
-        startMs: parseCalendarDate(p.event.start).getTime(),
-        endMs: parseCalendarDate(p.event.end).getTime(),
-      }))
-      .sort((a, b) => a.startMs - b.startMs);
+      .map((p) => {
+        const { startMinute, endMinute } = effectiveMinuteRange(p.event, dateStr);
+        return {
+          id: p.event.id,
+          config: p.event.pomodoroConfig!,
+          startMs: parseCalendarDate(p.event.start).getTime(),
+          endMs: parseCalendarDate(p.event.end).getTime(),
+          startMinute,
+          endMinute,
+        };
+      });
 
-    // Process events in order: each event's trailing focus/cycle can carry to the next
-    const trailingFocusAtEnd = new Map<string, number>();
-    const trailingCycleAtEnd = new Map<string, number>();
-    for (const ev of pomodoroEvents) {
-      // Find the best predecessor: an event that ends at or after this event's start,
-      // started before this event, and has the latest end time (most overlap)
-      let bestPredecessor: { id: string; endMs: number } | null = null;
-      for (const other of pomodoroEvents) {
-        if (other.id === ev.id) continue;
-        if (other.startMs >= ev.startMs) continue;
-        // Predecessor must touch or overlap: its end >= this event's start
-        if (other.endMs < ev.startMs) continue;
-        if (!bestPredecessor || other.endMs > bestPredecessor.endMs) {
-          bestPredecessor = { id: other.id, endMs: other.endMs };
-        }
-      }
-
-      if (bestPredecessor) {
-        const inheritedFocus = trailingFocusAtEnd.get(bestPredecessor.id) ?? 0;
-        const inheritedCycle = trailingCycleAtEnd.get(bestPredecessor.id) ?? 1;
-        if (inheritedFocus > 0) focusInheritanceMap.set(ev.id, inheritedFocus);
-        if (inheritedCycle > 1) cycleInheritanceMap.set(ev.id, inheritedCycle);
-      }
-
-      // Compute this event's planned segments (with inheritance) to determine trailing state
-      const effectiveStartMs = Math.max(now.getTime(), ev.startMs);
-      const remainingMin = Math.max(0, (ev.endMs - effectiveStartMs) / 60000);
-      const inheritedFocus = focusInheritanceMap.get(ev.id) ?? 0;
-      const inheritedCycle = cycleInheritanceMap.get(ev.id) ?? 1;
-      const planned = computePlannedSegments(ev.config, remainingMin, inheritedFocus, inheritedCycle);
-      trailingFocusAtEnd.set(ev.id, computeTrailingFocusMinutes(planned));
-      trailingCycleAtEnd.set(ev.id, computeTrailingCycleNumber(planned));
-    }
-
-    for (const pos of positioned) {
-      const ev = pos.event;
-      if (!ev.pomodoroConfig) continue;
-
-      const evStartMs = parseCalendarDate(ev.start).getTime();
-      const evEndMs = parseCalendarDate(ev.end).getTime();
-      const totalDurMs = evEndMs - evStartMs;
-      if (totalDurMs <= 0) continue;
-
-      // Visible range of this event on this day column
-      const { startMinute, endMinute } = effectiveMinuteRange(ev, dateStr);
-      const dayMidnightMs = parseCalendarDate(`${dateStr} 00:00`).getTime();
-      const visStartFrac = (dayMidnightMs + startMinute * 60000 - evStartMs) / totalDurMs;
-      const visEndFrac = (dayMidnightMs + endMinute * 60000 - evStartMs) / totalDurMs;
-      const visDur = visEndFrac - visStartFrac;
-      if (visDur <= 0) continue;
-
-      let bands: AccentBarBand[];
-
-      if (ev.id === pomodoro.activeBlockId && pomodoro.segments.length > 0) {
-        // Active event: project future segment positions from current timer state.
-        // Reading remainingSeconds makes this reactive to every tick.
-        const currentEndMs = now.getTime() + pomodoro.remainingSeconds * 1000;
-        const activeIdx = pomodoro.segments.findIndex((s) => s.status === "active");
-        bands = [];
-        let cursor = currentEndMs;
-
-        for (let i = 0; i < pomodoro.segments.length; i++) {
-          const seg = pomodoro.segments[i];
-          const plannedDurMs = new Date(seg.plannedEnd).getTime() - new Date(seg.plannedStart).getTime();
-
-          if (seg.status === "completed" || seg.status === "skipped" || seg.status === "interrupted") {
-            if (seg.phase === "focus") continue;
-            const startMs = new Date(seg.actualStart ?? seg.plannedStart).getTime();
-            const endMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
-            bands.push({
-              topFraction: (startMs - evStartMs) / totalDurMs,
-              heightFraction: (endMs - startMs) / totalDurMs,
-              phase: seg.phase,
-              status: seg.status,
-            });
-          } else if (i === activeIdx) {
-            if (seg.phase !== "focus") {
-              const startMs = new Date(seg.actualStart!).getTime();
-              bands.push({
-                topFraction: (startMs - evStartMs) / totalDurMs,
-                heightFraction: (cursor - startMs) / totalDurMs,
-                phase: seg.phase,
-                status: seg.status,
-              });
-            }
-          } else {
-            if (seg.phase !== "focus") {
-              bands.push({
-                topFraction: (cursor - evStartMs) / totalDurMs,
-                heightFraction: plannedDurMs / totalDurMs,
-                phase: seg.phase,
-                status: seg.status,
-              });
-            }
-            cursor += plannedDurMs;
-          }
-        }
-      } else {
-        // Planned view: compute from config, with focus inheritance from predecessors
-        if (now.getTime() >= evEndMs) continue;
-
-        const effectiveStartMs = Math.max(now.getTime(), evStartMs);
-        const remainingMin = (evEndMs - effectiveStartMs) / 60000;
-        const offsetMin = (effectiveStartMs - evStartMs) / 60000;
-        const totalDurMin = totalDurMs / 60000;
-
-        // Compute inherited focus and cycle from predecessor events that touch/overlap this one
-        const inheritedFocusMin = focusInheritanceMap.get(ev.id) ?? 0;
-        const inheritedCycle = cycleInheritanceMap.get(ev.id) ?? 1;
-
-        const planned = computePlannedSegments(ev.pomodoroConfig, remainingMin, inheritedFocusMin, inheritedCycle);
-        bands = planned
-          .filter((s) => s.phase !== "focus")
-          .map((s) => ({
-            topFraction: (offsetMin + s.startOffsetMinutes) / totalDurMin,
-            heightFraction: (s.endOffsetMinutes - s.startOffsetMinutes) / totalDurMin,
-            phase: s.phase,
-            status: "planned" as const,
-          }));
-      }
-
-      // Clip bands to this day's visible portion and remap fractions
-      const clipped: AccentBarBand[] = [];
-      for (const band of bands) {
-        const bStart = Math.max(band.topFraction, visStartFrac);
-        const bEnd = Math.min(band.topFraction + band.heightFraction, visEndFrac);
-        if (bStart >= bEnd) continue;
-        clipped.push({
-          topFraction: (bStart - visStartFrac) / visDur,
-          heightFraction: (bEnd - bStart) / visDur,
-          phase: band.phase,
-          status: band.status,
-        });
-      }
-      if (clipped.length > 0) map.set(ev.id, clipped);
-    }
-    return map;
+    return computeDayTimelineBands(pomodoroEvents, {
+      activeBlockId: pomodoro.activeBlockId,
+      segments: pomodoro.segments,
+      remainingSeconds: pomodoro.remainingSeconds,
+      breakOvertimeSeconds: pomodoro.breakOvertimeSeconds,
+    }, dayStartMs, nowMs, persistedSegmentsMap);
   });
 
   let snapLineY: number | null = $state(null);
@@ -343,13 +292,8 @@
       </div>
     </div>
   {/if}
-  <div
-    bind:this={columnEl}
-    class="absolute inset-0 overflow-hidden"
-    onmousemove={handleColumnMouseMove}
-    onmouseleave={handleColumnMouseLeave}
-  >
-  <!-- Past time dimming overlay -->
+
+  <!-- Past time dimming overlay (full width, behind rail and content) -->
   {#if pastOverlayHeight > 0}
     <div
       class="pointer-events-none absolute left-0 right-0 top-0 z-[1]"
@@ -357,6 +301,53 @@
     ></div>
   {/if}
 
+  <!-- Pomodoro timeline rails (one per contiguous group of pomodoro events) -->
+  {#each railSegments as seg}
+    <div
+      class="pointer-events-none absolute z-[2]"
+      style="
+        left: 2px;
+        width: {railWidth}px;
+        top: {(seg.start / 60) * hourHeight}px;
+        height: {((seg.end - seg.start) / 60) * hourHeight}px;
+        background-color: var(--cal-timeline-rail);
+        border-radius: 3px;
+      "
+    >
+      <!-- Focus fill bands (green, behind breaks) -->
+      {#each timelineBands.filter(b => b.phase === "focus" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band}
+        <div
+          class="absolute left-0 right-0"
+          style="
+            top: {((band.topMinute - seg.start) / (seg.end - seg.start)) * 100}%;
+            height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0.5)}%;
+            background-color: var(--cal-timeline-focus);
+            opacity: {band.status === 'active' ? 0.85 : 0.7};
+          "
+        ></div>
+      {/each}
+      <!-- Break bands (on top of focus fills) -->
+      {#each timelineBands.filter(b => b.phase !== "focus" && b.status !== "skipped" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band}
+        <div
+          class="absolute left-0 right-0 {band.status === 'active' ? 'break-band-active' : ''}"
+          style="
+            top: {((band.topMinute - seg.start) / (seg.end - seg.start)) * 100}%;
+            height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0.5)}%;
+            background-color: var(--cal-timeline-break);
+            opacity: {band.status === 'planned' ? 0.6 : band.status === 'completed' ? 0.35 : 0.9};
+          "
+        ></div>
+      {/each}
+    </div>
+  {/each}
+
+  <div
+    bind:this={columnEl}
+    class="absolute top-0 right-0 bottom-0 overflow-hidden"
+    style="left: {railSegments.length > 0 ? railWidth + 4 : 0}px;"
+    onmousemove={handleColumnMouseMove}
+    onmouseleave={handleColumnMouseLeave}
+  >
   <!-- Hour cells (click targets + gridlines) -->
   {#each hours as hour}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -392,7 +383,6 @@
         {isDark}
         editing={pos.event.id === editingId}
         preview={previewedIds?.has(pos.event.id) === true}
-        accentSegments={accentBandsMap.get(pos.event.id)}
         onclick={(rect) => onEventClick(pos.event, rect)}
         onpointerdown={(e) => onDragStart(pos.event.id, e)}
       />
@@ -413,7 +403,6 @@
         z-index: 46;
       "
     >
-      <div class="shrink-0" style="width: 10%; background-color: {dragColor?.accent ?? (isDark ? '#888' : '#AAAAAA')};"></div>
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragColor?.bg ?? (isDark ? '#2A2A2C' : '#E8E8E8')};">
         <div class="truncate font-medium">{dragPreview.event.title}</div>
         {#if dragPreview.height > 28}
@@ -439,7 +428,6 @@
         z-index: 10;
       "
     >
-      <div class="shrink-0" style="width: 10%; background-color: {isDark ? '#888' : '#AAAAAA'};"></div>
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {isDark ? '#2A2A2C' : '#E8E8E8'};">
         <div class="truncate font-medium">
           {createPreview.event.title || "Focus session"}
@@ -478,5 +466,14 @@
   @keyframes preview-pulse {
     0%, 100% { opacity: 0.75; }
     50% { opacity: 1; }
+  }
+
+  .break-band-active {
+    animation: break-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes break-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.9; }
   }
 </style>

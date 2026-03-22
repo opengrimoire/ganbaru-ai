@@ -120,6 +120,13 @@ export interface PersistedSegment {
   status: SegmentStatus;
 }
 
+export interface TimelineBand {
+  topMinute: number; // minute-of-day (0-1440)
+  heightMinutes: number; // duration in minutes
+  phase: SegmentPhase;
+  status: SegmentStatus;
+}
+
 export interface DragState {
   eventId: string;
   type: "move" | "resize-top" | "resize-bottom";

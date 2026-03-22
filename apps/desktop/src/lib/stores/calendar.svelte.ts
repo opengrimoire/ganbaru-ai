@@ -15,7 +15,6 @@ interface DbCalendarEvent {
   color: string | null;
   description: string;
   rrule: string | null;
-  notification_minutes: number | null;
   notifications: string | null;
   exceptions: string | null;
   repeat_until: string | null;
@@ -101,7 +100,7 @@ function mapRow(r: DbCalendarEvent): CalendarEvent {
     recurrence: r.rrule ? rruleToRecurrence(r.rrule, r.repeat_until ?? undefined) : undefined,
     notifications: r.notifications
       ? JSON.parse(r.notifications) as number[]
-      : r.notification_minutes != null ? [r.notification_minutes] : undefined,
+      : undefined,
     exceptions: r.exceptions ? JSON.parse(r.exceptions) as string[] : undefined,
     pomodoroConfig: r.focus_duration_minutes != null ? {
       focusDurationMinutes: r.focus_duration_minutes,
@@ -128,7 +127,7 @@ export function getCalendar() {
         const rows = await select<DbCalendarEvent>(
           `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
                   ce.calendar_id, ce.color, ce.description, ce.rrule,
-                  ce.notification_minutes, ce.notifications, ce.exceptions, ce.repeat_until,
+                  ce.notifications, ce.exceptions, ce.repeat_until,
                   pc.focus_duration_minutes, pc.short_break_minutes,
                   pc.long_break_minutes, pc.pomodoro_count
            FROM calendar_events ce
