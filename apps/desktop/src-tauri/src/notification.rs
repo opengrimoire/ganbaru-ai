@@ -611,10 +611,12 @@ pub struct IdleStatus {
     pub webcam_in_use: bool,
 }
 
+// ── Linux idle detection ─────────────────────────────────────────
+
 #[cfg(target_os = "linux")]
 fn is_webcam_in_use() -> bool {
-    // Check if any /dev/video* device is opened by another process.
-    // We read /proc/*/fd/ symlinks looking for /dev/video* targets.
+    // Check if any /dev/video* device is opened by another process
+    // by scanning /proc/*/fd/ symlink targets.
     let my_pid = std::process::id();
     let entries = match std::fs::read_dir("/proc") {
         Ok(e) => e,
@@ -626,7 +628,6 @@ fn is_webcam_in_use() -> bool {
         if !name_str.chars().all(|c| c.is_ascii_digit()) {
             continue;
         }
-        // Skip our own process
         if name_str == my_pid.to_string() {
             continue;
         }
@@ -649,15 +650,135 @@ fn is_webcam_in_use() -> bool {
 }
 
 #[cfg(target_os = "linux")]
+fn get_idle_time_with_fallback() -> u64 {
+    // Try GNOME IdleMonitor first (Mutter/GNOME Shell)
+    if let Some(ms) = get_idle_time_ms() {
+        return ms;
+    }
+    // Fallback: xprintidle (works on X11 with any desktop)
+    if let Ok(output) = std::process::Command::new("xprintidle").output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(ms) = stdout.trim().parse::<u64>() {
+                return ms;
+            }
+        }
+    }
+    0
+}
+
+#[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn get_idle_status() -> IdleStatus {
     IdleStatus {
-        idle_ms: get_idle_time_ms().unwrap_or(0),
+        idle_ms: get_idle_time_with_fallback(),
         webcam_in_use: is_webcam_in_use(),
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+// ── Windows idle detection ───────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+fn get_idle_time_ms_windows() -> u64 {
+    use winapi::um::winuser::{GetLastInputInfo, LASTINPUTINFO};
+    use winapi::um::sysinfoapi::GetTickCount;
+    unsafe {
+        let mut lii = LASTINPUTINFO {
+            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dwTime: 0,
+        };
+        if GetLastInputInfo(&mut lii) != 0 {
+            let now = GetTickCount();
+            (now.wrapping_sub(lii.dwTime)) as u64
+        } else {
+            0
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_webcam_in_use_windows() -> bool {
+    // Check via PowerShell whether any process is using the camera.
+    // Windows 10+ tracks camera usage in the registry.
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile", "-NonInteractive", "-Command",
+            r#"Get-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam\*\*' -Name LastUsedTimeStop -ErrorAction SilentlyContinue | Where-Object { $_.LastUsedTimeStop -eq 0 } | Measure-Object | Select-Object -ExpandProperty Count"#,
+        ])
+        .output();
+    match output {
+        Ok(out) if out.status.success() => {
+            let count = String::from_utf8_lossy(&out.stdout)
+                .trim()
+                .parse::<u32>()
+                .unwrap_or(0);
+            count > 0
+        }
+        _ => false,
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn get_idle_status() -> IdleStatus {
+    IdleStatus {
+        idle_ms: get_idle_time_ms_windows(),
+        webcam_in_use: is_webcam_in_use_windows(),
+    }
+}
+
+// ── macOS idle detection ─────────────────────────────────────────
+
+#[cfg(target_os = "macos")]
+fn get_idle_time_ms_macos() -> u64 {
+    // Read HIDIdleTime from IOKit via ioreg. Returns nanoseconds of idle time.
+    let output = match std::process::Command::new("ioreg")
+        .args(["-c", "IOHIDSystem", "-d", "4", "-S"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return 0,
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if let Some(pos) = line.find("\"HIDIdleTime\"") {
+            // Format: "HIDIdleTime" = 1234567890
+            if let Some(eq) = line[pos..].find('=') {
+                let val_str = line[pos + eq + 1..].trim();
+                if let Ok(ns) = val_str.parse::<u64>() {
+                    return ns / 1_000_000; // nanoseconds to milliseconds
+                }
+            }
+        }
+    }
+    0
+}
+
+#[cfg(target_os = "macos")]
+fn is_webcam_in_use_macos() -> bool {
+    // On macOS, VDCAssistant or AppleCameraAssistant runs when the camera is active.
+    // On Apple Silicon Macs, the process may be called "appleh13camerad".
+    let output = std::process::Command::new("bash")
+        .args(["-c", "pgrep -x 'VDCAssistant|AppleCameraAssistant|appleh13camerad'"])
+        .output();
+    match output {
+        Ok(out) => out.status.success(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn get_idle_status() -> IdleStatus {
+    IdleStatus {
+        idle_ms: get_idle_time_ms_macos(),
+        webcam_in_use: is_webcam_in_use_macos(),
+    }
+}
+
+// ── Fallback (mobile / unknown) ──────────────────────────────────
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 #[tauri::command]
 pub fn get_idle_status() -> IdleStatus {
     IdleStatus {
