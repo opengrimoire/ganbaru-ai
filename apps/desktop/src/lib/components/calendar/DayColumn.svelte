@@ -276,20 +276,19 @@
 >
   <!-- Current time indicator (outside overflow-hidden so the circle can bleed left) -->
   {#if isToday && currentTimeMinute >= 0}
+    {@const timeTop = (currentTimeMinute / 60) * hourHeight}
     <div
       class="pointer-events-none absolute left-0 right-0"
-      style="top: {(currentTimeMinute / 60) * hourHeight}px; z-index: 46;"
+      style="top: {timeTop}px; z-index: 46;"
     >
-      <div class="flex items-center">
-        <div
-          class="h-2.5 w-2.5 shrink-0 rounded-full"
-          style="background-color: var(--cal-current-time); margin-left: -5px;"
-        ></div>
-        <div
-          class="h-[2px] flex-1"
-          style="background-color: var(--cal-current-time);"
-        ></div>
-      </div>
+      <div
+        class="h-2.5 w-2.5 shrink-0 rounded-full absolute"
+        style="background-color: var(--cal-current-time); left: -5px; top: -5px;"
+      ></div>
+      <div
+        class="absolute left-0 right-0 h-[2px]"
+        style="background-color: var(--cal-current-time); top: -1px;"
+      ></div>
     </div>
   {/if}
 

@@ -92,12 +92,12 @@
 
   function updateCurrentTime() {
     const now = new Date();
-    currentTimeMinute = now.getHours() * 60 + now.getMinutes();
+    currentTimeMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   }
 
   onMount(() => {
     updateCurrentTime();
-    const interval = setInterval(updateCurrentTime, 60000);
+    const interval = setInterval(updateCurrentTime, 1000);
 
     if (scrollContainer) {
       if (initialScrollMinute >= 0) {
