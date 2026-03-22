@@ -92,7 +92,8 @@ pub fn migrations() -> Vec<Migration> {
                 focus_duration_minutes INTEGER NOT NULL DEFAULT 40,
                 short_break_minutes INTEGER NOT NULL DEFAULT 5,
                 long_break_minutes INTEGER NOT NULL DEFAULT 10,
-                pomodoro_count INTEGER NOT NULL DEFAULT 4
+                pomodoro_count INTEGER NOT NULL DEFAULT 4,
+                idle_timeout_minutes INTEGER
             );
 
             -- pomodoro segment tracking

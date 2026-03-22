@@ -56,6 +56,11 @@ let lastTickMs: number | null = null;
 const SUSPEND_THRESHOLD_MS = 5000;
 let suspendedAway = $state<{ awaySeconds: number } | null>(null);
 
+// Idle detection
+let idleTimeoutMs: number | null = null; // null = disabled
+let idleCheckIntervalId: ReturnType<typeof setInterval> | null = null;
+let idlePaused = $state<{ idleSeconds: number } | null>(null);
+
 // --- Config helpers ---
 
 function configEquals(a: PomodoroConfig, b: PomodoroConfig): boolean {
@@ -483,7 +488,7 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
 
   listen("tray-pause-resume", () => {
-    if (suspendedAway) return;
+    if (suspendedAway || idlePaused) return;
     if (isRunning) {
       isRunning = false;
       phaseEndTime = null;
@@ -505,7 +510,7 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for tray-pause-resume:", e));
 
   listen("tray-skip", () => {
-    if (suspendedAway) return;
+    if (suspendedAway || idlePaused) return;
     advancePhase();
     updateTray();
   }).catch((e) => console.warn("Failed to listen for tray-skip:", e));
@@ -561,9 +566,144 @@ function dismissSuspend(resume: boolean) {
     phaseEndTime = Date.now() + remainingSeconds * 1000;
     lastTickMs = Date.now();
     intervalId = setInterval(tick, 1000);
+    startIdleChecking();
     updateTray();
   } else {
     // Stop: save partial session up to suspend start
+    if (phase === "focus" && sessionStartTime) {
+      const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
+        ? segments[currentSegmentIndex] : null;
+      const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
+      const endIso = lastPause ? lastPause[0] : nowIso();
+      saveCompletedSession(sessionStartTime, endIso);
+    }
+    if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+      markSegment(currentSegmentIndex, "interrupted", true);
+      for (let i = currentSegmentIndex + 1; i < segments.length; i++) {
+        if (segments[i].status === "planned") {
+          segments[i].status = "skipped";
+          execute(
+            `UPDATE pomodoro_segments SET status = 'skipped' WHERE id = $1`,
+            [segments[i].id],
+          ).catch((e) => console.warn("Failed to skip segment:", e));
+        }
+      }
+    }
+    stopOvertime();
+    stopIdleChecking();
+    isRunning = false;
+    phaseEndTime = null;
+    activeBlockId = null;
+    activeBlockEndMs = null;
+    idleTimeoutMs = null;
+    lastTickMs = null;
+    phase = "focus";
+    remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+    currentCycle = 1;
+    completedPomodoros = 0;
+    sessionStartTime = null;
+    skipNextBreak = false;
+    notificationShown = false;
+    clearSegments();
+    updateTray();
+  }
+}
+
+// --- Idle detection ---
+
+interface IdleStatus {
+  idle_ms: number;
+  webcam_in_use: boolean;
+}
+
+function startIdleChecking() {
+  stopIdleChecking();
+  if (idleTimeoutMs === null) return;
+  idleCheckIntervalId = setInterval(checkIdle, 15_000);
+}
+
+function stopIdleChecking() {
+  if (idleCheckIntervalId !== null) {
+    clearInterval(idleCheckIntervalId);
+    idleCheckIntervalId = null;
+  }
+}
+
+async function checkIdle() {
+  // Only check during active focus (not paused, not during break, not already idle/suspended)
+  if (!isRunning || phase !== "focus" || suspendedAway || idlePaused) return;
+  if (idleTimeoutMs === null) return;
+
+  try {
+    const status = await invoke<IdleStatus>("get_idle_status");
+
+    // If webcam is in use (video meeting), skip idle detection
+    if (status.webcam_in_use) return;
+
+    // If idle time exceeds threshold, pause the timer
+    if (status.idle_ms >= idleTimeoutMs) {
+      const idleSeconds = Math.round(status.idle_ms / 1000);
+      const idleStartMs = Date.now() - status.idle_ms;
+      const idleStartIso = new Date(idleStartMs).toISOString();
+      const nowIsoStr = new Date().toISOString();
+
+      // Record synthetic pause on current segment
+      if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+        const seg = segments[currentSegmentIndex];
+        seg.pauseLog = [...seg.pauseLog, [idleStartIso, null]]; // open-ended pause
+        execute(
+          `UPDATE pomodoro_segments SET pause_log = $1 WHERE id = $2`,
+          [JSON.stringify(seg.pauseLog), seg.id],
+        ).catch((e) => console.warn("Failed to save idle pause:", e));
+      }
+
+      // Re-anchor phaseEndTime to preserve remaining time from idle start
+      if (phaseEndTime !== null) {
+        const preSuspendRemaining = Math.max(0, Math.ceil((phaseEndTime - idleStartMs) / 1000));
+        remainingSeconds = preSuspendRemaining;
+        phaseEndTime = null;
+      }
+
+      // Pause the timer
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      isRunning = false;
+      lastTickMs = null;
+
+      idlePaused = { idleSeconds };
+      updateTray();
+    }
+  } catch (e) {
+    console.warn("Idle check failed:", e);
+  }
+}
+
+function dismissIdle(resume: boolean) {
+  idlePaused = null;
+  if (resume) {
+    // Close the open pause interval
+    if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+      const seg = segments[currentSegmentIndex];
+      const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
+      if (lastPause && lastPause[1] === null) {
+        const updated = [...seg.pauseLog];
+        updated[updated.length - 1] = [lastPause[0], nowIso()];
+        seg.pauseLog = updated;
+        execute(
+          `UPDATE pomodoro_segments SET pause_log = $1 WHERE id = $2`,
+          [JSON.stringify(seg.pauseLog), seg.id],
+        ).catch((e) => console.warn("Failed to close idle pause:", e));
+      }
+    }
+    isRunning = true;
+    phaseEndTime = Date.now() + remainingSeconds * 1000;
+    lastTickMs = Date.now();
+    intervalId = setInterval(tick, 1000);
+    updateTray();
+  } else {
+    // Stop session
     if (phase === "focus" && sessionStartTime) {
       const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
         ? segments[currentSegmentIndex] : null;
@@ -596,6 +736,7 @@ function dismissSuspend(resume: boolean) {
     sessionStartTime = null;
     skipNextBreak = false;
     notificationShown = false;
+    stopIdleChecking();
     clearSegments();
     updateTray();
   }
@@ -933,6 +1074,12 @@ export function getPomodoro() {
     dismissSuspend(resume: boolean) {
       dismissSuspend(resume);
     },
+    get idlePaused() {
+      return idlePaused;
+    },
+    dismissIdle(resume: boolean) {
+      dismissIdle(resume);
+    },
     clearLastXp() {
       lastXp = null;
     },
@@ -941,8 +1088,17 @@ export function getPomodoro() {
       blockConfig: Partial<PomodoroConfig>,
       eventEnd?: string,
       eventDate?: string,
+      blockIdleTimeoutMinutes?: number | null,
     ) {
       const newConfig = { ...DEFAULT_CONFIG, ...blockConfig };
+
+      // Always update idle timeout from the latest block config
+      const newIdleMs = (blockIdleTimeoutMinutes != null && blockIdleTimeoutMinutes > 0)
+        ? blockIdleTimeoutMinutes * 60_000 : null;
+      if (idleTimeoutMs !== newIdleMs) {
+        idleTimeoutMs = newIdleMs;
+        if (isRunning) startIdleChecking();
+      }
 
       if (activeBlockId === blockId) {
         if (!eventEnd || !eventDate) return;
@@ -990,7 +1146,8 @@ export function getPomodoro() {
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       sessionStartTime = new Date().toISOString();
       intervalId = setInterval(tick, 1000);
-    lastTickMs = Date.now();
+      lastTickMs = Date.now();
+      startIdleChecking();
 
       // Create segments from now to event end
       if (eventEnd && eventDate) {
@@ -1019,11 +1176,13 @@ export function getPomodoro() {
         intervalId = null;
       }
       stopOvertime();
+      stopIdleChecking();
       isRunning = false;
       lastTickMs = null;
       phaseEndTime = null;
       activeBlockId = null;
       activeBlockEndMs = null;
+      idleTimeoutMs = null;
       phase = "focus";
       remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
       currentCycle = 1;
@@ -1042,6 +1201,7 @@ export function getPomodoro() {
         clearInterval(intervalId);
         intervalId = null;
       }
+      stopIdleChecking();
       // Record pause start on current segment
       if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
         const seg = segments[currentSegmentIndex];
@@ -1076,7 +1236,8 @@ export function getPomodoro() {
         }
       }
       intervalId = setInterval(tick, 1000);
-    lastTickMs = Date.now();
+      lastTickMs = Date.now();
+      startIdleChecking();
       updateTray();
     },
     skip() {

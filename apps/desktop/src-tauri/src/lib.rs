@@ -114,6 +114,7 @@ pub fn run() {
             notification::show_pomodoro_notification,
             notification::show_event_notification,
             notification::show_break_overlay,
+            notification::get_idle_status,
             tray::update_tray,
             force_quit,
             reset_database,

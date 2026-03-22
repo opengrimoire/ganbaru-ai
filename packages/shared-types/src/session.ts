@@ -13,6 +13,7 @@ export interface PomodoroConfig {
   shortBreakMinutes: number;
   longBreakMinutes: number;
   pomodoroCount: number;
+  idleTimeoutMinutes: number | null;
 }
 
 export interface SessionBlock {

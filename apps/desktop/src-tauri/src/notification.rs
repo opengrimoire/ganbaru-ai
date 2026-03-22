@@ -1,5 +1,5 @@
 use notify_rust::{Hint, Notification};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
 
@@ -603,6 +603,67 @@ fn get_idle_time_ms() -> Option<u64> {
         .strip_suffix(",)")?
         .parse::<u64>()
         .ok()
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct IdleStatus {
+    pub idle_ms: u64,
+    pub webcam_in_use: bool,
+}
+
+#[cfg(target_os = "linux")]
+fn is_webcam_in_use() -> bool {
+    // Check if any /dev/video* device is opened by another process.
+    // We read /proc/*/fd/ symlinks looking for /dev/video* targets.
+    let my_pid = std::process::id();
+    let entries = match std::fs::read_dir("/proc") {
+        Ok(e) => e,
+        Err(_) => return false,
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if !name_str.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        // Skip our own process
+        if name_str == my_pid.to_string() {
+            continue;
+        }
+        let fd_dir = format!("/proc/{name_str}/fd");
+        let fds = match std::fs::read_dir(&fd_dir) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        for fd_entry in fds.flatten() {
+            if let Ok(target) = std::fs::read_link(fd_entry.path()) {
+                if let Some(s) = target.to_str() {
+                    if s.starts_with("/dev/video") {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn get_idle_status() -> IdleStatus {
+    IdleStatus {
+        idle_ms: get_idle_time_ms().unwrap_or(0),
+        webcam_in_use: is_webcam_in_use(),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn get_idle_status() -> IdleStatus {
+    IdleStatus {
+        idle_ms: 0,
+        webcam_in_use: false,
+    }
 }
 
 #[cfg(not(target_os = "linux"))]

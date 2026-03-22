@@ -184,6 +184,8 @@
   let focusDuration = $state(40);
   let shortBreak = $state(5);
   let longBreak = $state(10);
+  let idleTimeoutEnabled = $state(true);
+  const IDLE_TIMEOUT_DEFAULT = 3;
 
   function inferPreset(f: number, s: number, l: number): PomodoroPreset {
     for (const [key, val] of Object.entries(POMO_PRESETS) as [Exclude<PomodoroPreset, "custom">, typeof POMO_PRESETS["auto"]][]) {
@@ -707,7 +709,7 @@
       if (openSection === s) openSection = null;
     } else {
       // Enable with defaults
-      if (s === "pomodoro") { pomodoroEnabled = true; applyPomoPreset("auto"); }
+      if (s === "pomodoro") { pomodoroEnabled = true; applyPomoPreset("auto"); idleTimeoutEnabled = true; }
       if (s === "notifications") { notifEnabled = true; notifSelected = new Set([0]); }
       if (s === "repeat") recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
     }
@@ -768,9 +770,11 @@
         shortBreak = pc.shortBreakMinutes;
         longBreak = pc.longBreakMinutes;
         pomodoroPreset = inferPreset(pc.focusDurationMinutes, pc.shortBreakMinutes, pc.longBreakMinutes);
+        idleTimeoutEnabled = pc.idleTimeoutMinutes !== null;
       } else {
         focusDuration = 40; shortBreak = 5; longBreak = 10;
         pomodoroPreset = "auto";
+        idleTimeoutEnabled = true;
       }
 
       const notifs = event.notifications;
@@ -811,6 +815,7 @@
       pomodoroEnabled = true;
       pomodoroPreset = "auto";
       focusDuration = 40; shortBreak = 5; longBreak = 10;
+      idleTimeoutEnabled = true;
       notifEnabled = true;
       notifSelected = new Set([0]);
       customNotifs = [];
@@ -898,6 +903,7 @@
         shortBreakMinutes: shortBreak,
         longBreakMinutes: longBreak,
         pomodoroCount: 4,
+        idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
     });
   }
@@ -955,6 +961,7 @@
         shortBreakMinutes: shortBreak,
         longBreakMinutes: longBreak,
         pomodoroCount: 4,
+        idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
     };
   }
@@ -1322,6 +1329,14 @@
                 {/each}
               </div>
             {/if}
+            <div class="border-t border-border/40 mt-1 pt-1.5 px-2.5">
+              <label class="flex items-center gap-2 text-[11px] cursor-pointer">
+                <input type="checkbox" checked={idleTimeoutEnabled}
+                  onchange={() => { idleTimeoutEnabled = !idleTimeoutEnabled; emitChange(); }}
+                  class="h-3 w-3 rounded accent-foreground" />
+                <span class="text-muted-foreground">Pause on idle</span>
+              </label>
+            </div>
           </div>
         {/if}
       </div>

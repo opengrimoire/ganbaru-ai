@@ -38,6 +38,7 @@
   }
 
   const suspendInfo = $derived(pomodoro.suspendedAway);
+  const idleInfo = $derived(pomodoro.idlePaused);
 
   function formatAwayDuration(totalSeconds: number): string {
     const hours = Math.floor(totalSeconds / 3600);
@@ -49,7 +50,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (showStopConfirm || suspendInfo) return;
+    if (showStopConfirm || suspendInfo || idleInfo) return;
 
     if (e.altKey && e.key >= "1" && e.key <= String(views.length)) {
       e.preventDefault();
@@ -97,7 +98,7 @@
   let trackedBlockSnapshot: CalendarEvent | null = null;
 
   function checkActiveBlock() {
-    if (showStopConfirm || reverting || suspendInfo) return;
+    if (showStopConfirm || reverting || suspendInfo || idleInfo) return;
 
     const activeBlock = findActiveBlock();
 
@@ -112,6 +113,7 @@
         },
         activeBlock.end,
         activeBlock.start.split(" ")[0],
+        activeBlock.pomodoroConfig?.idleTimeoutMinutes,
       );
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
@@ -233,5 +235,16 @@
     danger={false}
     onConfirm={() => pomodoro.dismissSuspend(true)}
     onCancel={() => pomodoro.dismissSuspend(false)}
+  />
+{/if}
+
+{#if idleInfo}
+  <ConfirmDialog
+    message="No activity detected for {formatAwayDuration(idleInfo.idleSeconds)}. Focus session paused."
+    confirmLabel="Resume (Enter)"
+    cancelLabel="Stop session (Esc)"
+    danger={false}
+    onConfirm={() => pomodoro.dismissIdle(true)}
+    onCancel={() => pomodoro.dismissIdle(false)}
   />
 {/if}

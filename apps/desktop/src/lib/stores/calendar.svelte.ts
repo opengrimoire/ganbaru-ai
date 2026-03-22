@@ -23,6 +23,7 @@ interface DbCalendarEvent {
   short_break_minutes: number | null;
   long_break_minutes: number | null;
   pomodoro_count: number | null;
+  idle_timeout_minutes: number | null;
 }
 
 function toCalendarDate(dbTime: string): string {
@@ -107,6 +108,7 @@ function mapRow(r: DbCalendarEvent): CalendarEvent {
       shortBreakMinutes: r.short_break_minutes!,
       longBreakMinutes: r.long_break_minutes!,
       pomodoroCount: r.pomodoro_count!,
+      idleTimeoutMinutes: r.idle_timeout_minutes,
     } : undefined,
   };
 }
@@ -129,7 +131,8 @@ export function getCalendar() {
                   ce.calendar_id, ce.color, ce.description, ce.rrule,
                   ce.notifications, ce.exceptions, ce.repeat_until,
                   pc.focus_duration_minutes, pc.short_break_minutes,
-                  pc.long_break_minutes, pc.pomodoro_count
+                  pc.long_break_minutes, pc.pomodoro_count,
+                  pc.idle_timeout_minutes
            FROM calendar_events ce
            LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
            ORDER BY ce.start_time ASC`,
@@ -176,10 +179,11 @@ export function getCalendar() {
       if (opts.pomodoroConfig) {
         await execute(
           `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
-           VALUES ($1, $2, $3, $4, $5)`,
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [id, opts.pomodoroConfig.focusDurationMinutes, opts.pomodoroConfig.shortBreakMinutes,
-           opts.pomodoroConfig.longBreakMinutes, opts.pomodoroConfig.pomodoroCount],
+           opts.pomodoroConfig.longBreakMinutes, opts.pomodoroConfig.pomodoroCount,
+           opts.pomodoroConfig.idleTimeoutMinutes],
         );
       }
       const event: CalendarEvent = {
@@ -235,12 +239,13 @@ export function getCalendar() {
       if (toUpdate.pomodoroConfig) {
         await execute(
           `INSERT OR REPLACE INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
-           VALUES ($1, $2, $3, $4, $5)`,
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [parentId, toUpdate.pomodoroConfig.focusDurationMinutes,
            toUpdate.pomodoroConfig.shortBreakMinutes,
            toUpdate.pomodoroConfig.longBreakMinutes,
-           toUpdate.pomodoroConfig.pomodoroCount],
+           toUpdate.pomodoroConfig.pomodoroCount,
+           toUpdate.pomodoroConfig.idleTimeoutMinutes],
         );
       } else {
         await execute("DELETE FROM pomodoro_configs WHERE event_id = $1", [parentId]);
@@ -309,12 +314,13 @@ export function getCalendar() {
       if (parent.pomodoroConfig) {
         await execute(
           `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
-           VALUES ($1, $2, $3, $4, $5)`,
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [newId, parent.pomodoroConfig.focusDurationMinutes,
            parent.pomodoroConfig.shortBreakMinutes,
            parent.pomodoroConfig.longBreakMinutes,
-           parent.pomodoroConfig.pomodoroCount],
+           parent.pomodoroConfig.pomodoroCount,
+           parent.pomodoroConfig.idleTimeoutMinutes],
         );
       }
 
@@ -452,10 +458,11 @@ export function getCalendar() {
       if (pomConfig) {
         await execute(
           `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count)
-           VALUES ($1, $2, $3, $4, $5)`,
+             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [newId, pomConfig.focusDurationMinutes, pomConfig.shortBreakMinutes,
-           pomConfig.longBreakMinutes, pomConfig.pomodoroCount],
+           pomConfig.longBreakMinutes, pomConfig.pomodoroCount,
+           pomConfig.idleTimeoutMinutes],
         );
       }
 
