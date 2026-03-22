@@ -45,7 +45,7 @@ apps/desktop/src/lib/
 | `utils/xp.test.ts` | XP calculation formula, focus score multiplier, rounding |
 | `components/calendar/utils.test.ts` | Date parsing/formatting round-trip, week/day helpers, minute-of-day extraction, duration calculation, grid snapping, event filtering, overlap layout algorithm, time storage round-trip |
 | `components/calendar/rrule.test.ts` | RepeatRule-to-RRULE conversion, reverse mapping, round-trip for all presets, null/unknown handling |
-| `utils/pomodoro-segments.test.ts` | Planned segment computation (cycle iteration, clipping, long break placement, cycle reset), accent band fraction mapping, focus time inheritance (shortened first focus, break-on-threshold, clipping), cycle number inheritance (cross-block propagation, long break triggering), trailing state computation, day timeline bands (single event, sequential inheritance, gap reset, containment, partial overlap, same-range tiebreak, past skipping, active event projection, focus fills from persisted/active segments, fill capping) |
+| `utils/pomodoro-segments.test.ts` | Planned segment computation (cycle iteration, clipping, long break placement, cycle reset), accent band fraction mapping, focus time inheritance (shortened first focus, break-on-threshold, clipping), cycle number inheritance (cross-block propagation, long break triggering), trailing state computation, day timeline bands (single event, sequential inheritance, gap reset, containment, partial overlap, same-range tiebreak, past skipping, active event projection, focus fills from persisted/active segments, fill capping, pause gap visualization in active/persisted focus fills) |
 
 ### Not tested (and why)
 
