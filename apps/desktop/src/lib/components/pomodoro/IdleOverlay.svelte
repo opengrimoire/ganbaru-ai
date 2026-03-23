@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
 
   let {
     idleSeconds,
@@ -30,10 +31,53 @@
     invoke("play_alert_sound").catch(() => {});
   }
 
+  let wasFullscreen = false;
+
+  async function enterFullscreen() {
+    const win = getCurrentWindow();
+    try {
+      wasFullscreen = await win.isFullscreen();
+      await win.setAlwaysOnTop(true);
+      await win.setFullscreen(true);
+      await win.setFocus();
+    } catch (e) {
+      console.warn("Failed to enter fullscreen for idle overlay:", e);
+    }
+  }
+
+  async function exitFullscreen() {
+    const win = getCurrentWindow();
+    try {
+      if (!wasFullscreen) {
+        await win.setFullscreen(false);
+      }
+      await win.setAlwaysOnTop(false);
+    } catch (e) {
+      console.warn("Failed to exit fullscreen:", e);
+    }
+  }
+
+  function handleResume() {
+    exitFullscreen().then(onResume);
+  }
+
+  function handleStop() {
+    exitFullscreen().then(onStop);
+  }
+
   onMount(() => {
     elapsed = idleSeconds;
 
-    // Play alert immediately on show
+    // Go fullscreen, always-on-top, focus the window
+    enterFullscreen();
+
+    // Fire system notification so user notices from other apps
+    invoke("show_event_notification", {
+      title: "Focus session paused",
+      body: "No activity detected. Return to resume your session.",
+    }).catch(() => {});
+
+    // Play alert immediately
     playAlert();
 
     // Repeat alert every 15 seconds
@@ -48,11 +92,11 @@
       if (e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();
-        onResume();
+        handleResume();
       } else if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        onStop();
+        handleStop();
       }
     }
     window.addEventListener("keydown", handleKeydown, true);
