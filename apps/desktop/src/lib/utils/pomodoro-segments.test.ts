@@ -8,6 +8,7 @@ const DEFAULT_CONFIG: PomodoroConfig = {
   shortBreakMinutes: 5,
   longBreakMinutes: 10,
   pomodoroCount: 4,
+  idleTimeoutMinutes: null,
 };
 
 describe("computePlannedSegments", () => {
@@ -345,6 +346,7 @@ const CREATIVE_CONFIG: PomodoroConfig = {
   shortBreakMinutes: 5,
   longBreakMinutes: 15,
   pomodoroCount: 4,
+  idleTimeoutMinutes: null,
 };
 
 /** Helper: create a TimelineEvent from hour ranges on a fixed day */

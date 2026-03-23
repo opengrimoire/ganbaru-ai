@@ -252,6 +252,7 @@
 {#if idleInfo}
   <IdleOverlay
     idleSeconds={idleInfo.idleSeconds}
+    nativeOverlay={idleInfo.nativeOverlay}
     onResume={() => pomodoro.dismissIdle(true)}
     onStop={() => { dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
   />

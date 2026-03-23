@@ -116,6 +116,7 @@ pub fn run() {
             notification::show_break_overlay,
             notification::get_idle_status,
             notification::play_alert_sound,
+            notification::show_idle_overlay,
             tray::update_tray,
             force_quit,
             reset_database,

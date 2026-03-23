@@ -5,10 +5,12 @@
 
   let {
     idleSeconds,
+    nativeOverlay = false,
     onResume,
     onStop,
   }: {
     idleSeconds: number;
+    nativeOverlay?: boolean;
     onResume: () => void;
     onStop: () => void;
   } = $props();
@@ -68,27 +70,26 @@
   onMount(() => {
     elapsed = idleSeconds;
 
-    // Go fullscreen, always-on-top, focus the window
-    enterFullscreen();
+    // When the GTK overlay is active (Linux), it handles fullscreen, sounds,
+    // notifications, and key capture. Skip those side effects here.
+    if (!nativeOverlay) {
+      enterFullscreen();
 
-    // Fire system notification so user notices from other apps
-    invoke("show_event_notification", {
-      title: "Focus session paused",
-      body: "No activity detected. Return to resume your session.",
-    }).catch(() => {});
+      invoke("show_event_notification", {
+        title: "Focus session paused",
+        body: "No activity detected. Return to resume your session.",
+      }).catch(() => {});
 
-    // Play alert immediately
-    playAlert();
+      playAlert();
+      alertIntervalId = setInterval(playAlert, 15_000);
+    }
 
-    // Repeat alert every 15 seconds
-    alertIntervalId = setInterval(playAlert, 15_000);
-
-    // Tick elapsed counter every second
     tickIntervalId = setInterval(() => {
       elapsed += 1;
     }, 1000);
 
     function handleKeydown(e: KeyboardEvent) {
+      if (nativeOverlay) return; // GTK overlay captures keys
       if (e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();

@@ -59,7 +59,7 @@ let suspendedAway = $state<{ awaySeconds: number } | null>(null);
 // Idle detection
 let idleTimeoutMs: number | null = null; // null = disabled
 let idleCheckIntervalId: ReturnType<typeof setInterval> | null = null;
-let idlePaused = $state<{ idleSeconds: number } | null>(null);
+let idlePaused = $state<{ idleSeconds: number; nativeOverlay: boolean } | null>(null);
 
 // --- Config helpers ---
 
@@ -487,6 +487,14 @@ function initListeners() {
     }
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
 
+  listen("idle-overlay-resume", () => {
+    if (idlePaused) dismissIdle(true);
+  }).catch((e) => console.warn("Failed to listen for idle-overlay-resume:", e));
+
+  listen("idle-overlay-stop", () => {
+    if (idlePaused) dismissIdle(false);
+  }).catch((e) => console.warn("Failed to listen for idle-overlay-stop:", e));
+
   listen("tray-pause-resume", () => {
     if (suspendedAway || idlePaused) return;
     if (isRunning) {
@@ -672,7 +680,15 @@ async function checkIdle() {
       isRunning = false;
       lastTickMs = null;
 
-      idlePaused = { idleSeconds };
+      // Show fullscreen idle overlay (GTK on Linux, returns false on other platforms)
+      let nativeOverlay = false;
+      try {
+        nativeOverlay = await invoke<boolean>("show_idle_overlay", { idleSeconds });
+      } catch (e) {
+        console.warn("Failed to show idle overlay:", e);
+      }
+
+      idlePaused = { idleSeconds, nativeOverlay };
       updateTray();
     }
   } catch (e) {

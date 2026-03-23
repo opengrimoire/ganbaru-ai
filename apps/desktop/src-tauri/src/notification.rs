@@ -579,6 +579,252 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
     Ok(())
 }
 
+// ── Idle overlay (Linux) ──────────────────────────────────────────
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<bool, String> {
+    app.clone().run_on_main_thread(move || {
+        use gtk::prelude::*;
+
+        let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable());
+        let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
+        let display = gdk::Display::default().unwrap();
+        let screen = display.default_screen();
+        let n_monitors = display.n_monitors();
+        let primary_idx = match display.primary_monitor() {
+            Some(primary) => (0..n_monitors)
+                .find(|&i| display.monitor(i).as_ref() == Some(&primary))
+                .unwrap_or(0),
+            None => 0,
+        };
+        let ui_margin = {
+            let geom = display.monitor(primary_idx)
+                .map(|m| m.geometry())
+                .unwrap_or(gdk::Rectangle::new(0, 0, 1920, 1080));
+            ((geom.height().min(geom.width()) as f64 * 0.03).max(16.0)) as i32
+        };
+
+        let window = gtk::Window::new(gtk::WindowType::Toplevel);
+        window.set_decorated(false);
+        window.set_keep_above(true);
+        window.set_app_paintable(true);
+        window.connect_draw(|_, cr| {
+            cr.set_source_rgb(0.0, 0.0, 0.0);
+            cr.paint().unwrap();
+            gtk::glib::Propagation::Proceed
+        });
+
+        // Title
+        let title_label = gtk::Label::new(None);
+        title_label.set_markup(
+            "<span font='Sans 13' foreground='#9CA3AF'>FOCUS SESSION PAUSED</span>"
+        );
+
+        // Timer (counts up from idle_seconds)
+        let timer_label = gtk::Label::new(None);
+        let elapsed = std::rc::Rc::new(std::cell::Cell::new(idle_seconds as u64));
+        let display_str = format_remaining(idle_seconds as u64);
+        timer_label.set_markup(&format!(
+            "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
+        ));
+
+        let idle_label = gtk::Label::new(None);
+        idle_label.set_markup(
+            "<span font='Sans 14' foreground='#9CA3AF'>idle</span>"
+        );
+
+        let timer_container = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        timer_container.set_halign(gtk::Align::Center);
+        timer_container.set_valign(gtk::Align::Center);
+        timer_container.add(&title_label);
+        timer_container.add(&timer_label);
+        timer_container.add(&idle_label);
+
+        // Hint lines (bottom center)
+        let space_hint = gtk::Label::new(None);
+        space_hint.set_markup(
+            "<span font='Sans 11' foreground='#9CA3AF'>Press <span foreground='#FFFFFF'>Space</span> to resume focus</span>"
+        );
+        let esc_hint = gtk::Label::new(None);
+        esc_hint.set_markup(
+            "<span font='Sans 11' foreground='#9CA3AF'>Press <span foreground='#FFFFFF'>Esc</span> to stop session</span>"
+        );
+
+        let keys_container = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        keys_container.set_halign(gtk::Align::Center);
+        keys_container.set_valign(gtk::Align::End);
+        keys_container.set_margin_bottom(ui_margin * 2);
+        keys_container.add(&space_hint);
+        keys_container.add(&esc_hint);
+
+        let overlay = gtk::Overlay::new();
+        let base = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        overlay.add(&base);
+        overlay.add_overlay(&timer_container);
+        overlay.add_overlay(&keys_container);
+        window.add(&overlay);
+
+        window.fullscreen_on_monitor(&screen, primary_idx);
+
+        // Secondary monitor black windows
+        let secondary_windows: std::rc::Rc<Vec<(i32, gtk::Window)>> = {
+            let mut wins = Vec::new();
+            for i in 0..n_monitors {
+                if i == primary_idx { continue; }
+                let sw = gtk::Window::new(gtk::WindowType::Toplevel);
+                sw.set_decorated(false);
+                sw.set_keep_above(true);
+                sw.set_app_paintable(true);
+                sw.connect_draw(|_, cr| {
+                    cr.set_source_rgb(0.0, 0.0, 0.0);
+                    cr.paint().unwrap();
+                    gtk::glib::Propagation::Proceed
+                });
+                sw.fullscreen_on_monitor(&screen, i);
+                wins.push((i, sw));
+            }
+            std::rc::Rc::new(wins)
+        };
+
+        // Cleanup on destroy
+        {
+            let saved = saved.clone();
+            let cookie = inhibit_cookie.clone();
+            let sec = secondary_windows.clone();
+            window.connect_destroy(move |_| {
+                for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
+                let overlay_key = saved.overlay_key.clone();
+                let dock_hotkeys = saved.dock_hotkeys.clone();
+                let disabled = saved.disabled.clone();
+                let cookie_val = cookie.get();
+                std::thread::spawn(move || {
+                    gsettings_set("org.gnome.mutter", "overlay-key", &overlay_key);
+                    gsettings_set("org.gnome.shell.extensions.dash-to-dock", "hot-keys", &dock_hotkeys);
+                    for (schema, key, val) in &disabled {
+                        gsettings_set(schema, key, val);
+                    }
+                    if let Some(c) = cookie_val {
+                        screensaver_uninhibit(c);
+                    }
+                });
+            });
+        }
+
+        // Key handler: Space = resume, Esc = stop
+        {
+            let w = window.clone();
+            let app = app.clone();
+            let sec = secondary_windows.clone();
+            window.connect_key_press_event(move |_, event| {
+                let key = event.keyval();
+                if key == gdk::keys::constants::space {
+                    let _ = app.emit("idle-overlay-resume", ());
+                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
+                    w.hide();
+                    w.close();
+                } else if key == gdk::keys::constants::Escape {
+                    let _ = app.emit("idle-overlay-stop", ());
+                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
+                    w.hide();
+                    w.close();
+                }
+                gtk::glib::Propagation::Stop
+            });
+        }
+
+        // Key handler on secondary monitors
+        for (_, sw) in secondary_windows.iter() {
+            let w = window.clone();
+            let app = app.clone();
+            let sec = secondary_windows.clone();
+            sw.connect_key_press_event(move |_, event| {
+                let key = event.keyval();
+                if key == gdk::keys::constants::space {
+                    let _ = app.emit("idle-overlay-resume", ());
+                    for (_, s) in sec.iter() { s.hide(); s.close(); }
+                    w.hide();
+                    w.close();
+                } else if key == gdk::keys::constants::Escape {
+                    let _ = app.emit("idle-overlay-stop", ());
+                    for (_, s) in sec.iter() { s.hide(); s.close(); }
+                    w.hide();
+                    w.close();
+                }
+                gtk::glib::Propagation::Stop
+            });
+        }
+
+        // Count-up timer and periodic alert sound
+        {
+            let elapsed = elapsed.clone();
+            let timer_label = timer_label.clone();
+            gtk::glib::timeout_add_seconds_local(1, move || {
+                let e = elapsed.get() + 1;
+                elapsed.set(e);
+                let display_str = format_remaining(e);
+                timer_label.set_markup(&format!(
+                    "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
+                ));
+                // Play alert every 15 seconds
+                if e % 15 == 0 {
+                    std::thread::spawn(|| {
+                        let ok = std::process::Command::new("canberra-gtk-play")
+                            .args(["--id", "bell"])
+                            .status()
+                            .map(|s| s.success())
+                            .unwrap_or(false);
+                        if !ok {
+                            let _ = std::process::Command::new("paplay")
+                                .arg("/usr/share/sounds/freedesktop/stereo/bell.oga")
+                                .status();
+                        }
+                    });
+                }
+                gtk::glib::ControlFlow::Continue
+            });
+        }
+
+        // Play alert sound immediately
+        std::thread::spawn(|| {
+            let ok = std::process::Command::new("canberra-gtk-play")
+                .args(["--id", "bell"])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !ok {
+                let _ = std::process::Command::new("paplay")
+                    .arg("/usr/share/sounds/freedesktop/stereo/bell.oga")
+                    .status();
+            }
+        });
+
+        // Send notification
+        let _ = notify_rust::Notification::new()
+            .summary("Focus session paused")
+            .body("No activity detected. Return to resume your session.")
+            .timeout(10_000)
+            .hint(notify_rust::Hint::Transient(true))
+            .hint(notify_rust::Hint::SoundName("message-new-instant".into()))
+            .show();
+
+        for (_, sw) in secondary_windows.iter() {
+            sw.show_all();
+        }
+        window.show_all();
+    })
+    .map_err(|e| e.to_string())?;
+
+    Ok(true)
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn show_idle_overlay(_app: tauri::AppHandle, _idle_seconds: u32) -> Result<bool, String> {
+    // Non-Linux: handled by the Svelte IdleOverlay component (fullscreen webview)
+    Ok(false)
+}
+
 #[cfg(target_os = "linux")]
 fn get_idle_time_ms() -> Option<u64> {
     let output = std::process::Command::new("gdbus")
