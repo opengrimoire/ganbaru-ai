@@ -1329,13 +1329,19 @@
                 {/each}
               </div>
             {/if}
-            <div class="border-t border-border/40 mt-1 pt-1.5 px-2.5">
-              <label class="flex items-center gap-2 text-[11px] cursor-pointer">
-                <input type="checkbox" checked={idleTimeoutEnabled}
-                  onchange={() => { idleTimeoutEnabled = !idleTimeoutEnabled; emitChange(); }}
-                  class="h-3 w-3 rounded accent-foreground" />
-                <span class="text-muted-foreground">Pause on idle</span>
-              </label>
+            <div class="border-t border-border/40 mt-1 pt-0.5 px-0">
+              <button
+                onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; emitChange(); }}
+                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] w-full transition-all
+                  {idleTimeoutEnabled
+                    ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                    : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+              >
+                <div class="h-3.5 w-3.5 shrink-0 rounded
+                  {idleTimeoutEnabled ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+                </div>
+                <span>Pause on idle</span>
+              </button>
             </div>
           </div>
         {/if}
