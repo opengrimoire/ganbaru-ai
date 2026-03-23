@@ -185,7 +185,7 @@
   let shortBreak = $state(5);
   let longBreak = $state(10);
   let idleTimeoutEnabled = $state(true);
-  const IDLE_TIMEOUT_DEFAULT = 3;
+  const IDLE_TIMEOUT_DEFAULT = 1;
 
   function inferPreset(f: number, s: number, l: number): PomodoroPreset {
     for (const [key, val] of Object.entries(POMO_PRESETS) as [Exclude<PomodoroPreset, "custom">, typeof POMO_PRESETS["auto"]][]) {

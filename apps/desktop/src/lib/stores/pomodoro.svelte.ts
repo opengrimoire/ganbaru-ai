@@ -38,6 +38,7 @@ let notificationShown = false;
 let phaseEndTime: number | null = null;
 let activeBlockId: string | null = null;
 let activeBlockEndMs: number | null = null;
+let dismissedBlockId: string | null = null;
 
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
@@ -148,6 +149,7 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
       shortBreakMinutes: config.shortBreakMinutes,
       longBreakMinutes: config.longBreakMinutes,
       pomodoroCount: config.cyclesBeforeLongBreak,
+      idleTimeoutMinutes: null,
     },
     remainingMinutes,
   );
@@ -601,6 +603,7 @@ function dismissSuspend(resume: boolean) {
     stopIdleChecking();
     isRunning = false;
     phaseEndTime = null;
+    dismissedBlockId = activeBlockId;
     activeBlockId = null;
     activeBlockEndMs = null;
     idleTimeoutMs = null;
@@ -742,6 +745,7 @@ function dismissIdle(resume: boolean) {
     stopOvertime();
     isRunning = false;
     phaseEndTime = null;
+    dismissedBlockId = activeBlockId;
     activeBlockId = null;
     activeBlockEndMs = null;
     lastTickMs = null;
@@ -1077,6 +1081,12 @@ export function getPomodoro() {
     },
     get activeBlockId() {
       return activeBlockId;
+    },
+    get dismissedBlockId() {
+      return dismissedBlockId;
+    },
+    set dismissedBlockId(id: string | null) {
+      dismissedBlockId = id;
     },
     get breakOvertimeSeconds() {
       return breakOvertimeSeconds;

@@ -27,7 +27,6 @@
   let showStopConfirm = $state(false);
   let savedBlockState: CalendarEvent | null = null;
   let reverting = false;
-  let dismissedBlockId: string | null = null;
 
   function navigatePrev() {
     const i = views.indexOf(nav.current);
@@ -105,11 +104,11 @@
     const activeBlock = findActiveBlock();
 
     // Clear dismissed block once its time window passes
-    if (dismissedBlockId && activeBlock?.id !== dismissedBlockId) {
-      dismissedBlockId = null;
+    if (pomodoro.dismissedBlockId && activeBlock?.id !== pomodoro.dismissedBlockId) {
+      pomodoro.dismissedBlockId = null;
     }
 
-    if (activeBlock && activeBlock.id === dismissedBlockId) {
+    if (activeBlock && activeBlock.id === pomodoro.dismissedBlockId) {
       return;
     }
 
@@ -245,7 +244,7 @@
     cancelLabel="Stop session (Esc)"
     danger={false}
     onConfirm={() => pomodoro.dismissSuspend(true)}
-    onCancel={() => { dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissSuspend(false); }}
+    onCancel={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissSuspend(false); }}
   />
 {/if}
 
@@ -254,6 +253,6 @@
     idleSeconds={idleInfo.idleSeconds}
     nativeOverlay={idleInfo.nativeOverlay}
     onResume={() => pomodoro.dismissIdle(true)}
-    onStop={() => { dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
+    onStop={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
   />
 {/if}
