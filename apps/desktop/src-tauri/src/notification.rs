@@ -589,6 +589,7 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
 
         let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable());
         let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
+        let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
         let display = gdk::Display::default().unwrap();
         let screen = display.default_screen();
         let n_monitors = display.n_monitors();
@@ -716,14 +717,17 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
             let w = window.clone();
             let app = app.clone();
             let sec = secondary_windows.clone();
+            let dismissed = dismissed.clone();
             window.connect_key_press_event(move |_, event| {
                 let key = event.keyval();
                 if key == gdk::keys::constants::space {
+                    dismissed.set(true);
                     let _ = app.emit("idle-overlay-resume", ());
                     for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
                     w.hide();
                     w.close();
                 } else if key == gdk::keys::constants::Escape {
+                    dismissed.set(true);
                     let _ = app.emit("idle-overlay-stop", ());
                     for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
                     w.hide();
@@ -738,14 +742,17 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
             let w = window.clone();
             let app = app.clone();
             let sec = secondary_windows.clone();
+            let dismissed = dismissed.clone();
             sw.connect_key_press_event(move |_, event| {
                 let key = event.keyval();
                 if key == gdk::keys::constants::space {
+                    dismissed.set(true);
                     let _ = app.emit("idle-overlay-resume", ());
                     for (_, s) in sec.iter() { s.hide(); s.close(); }
                     w.hide();
                     w.close();
                 } else if key == gdk::keys::constants::Escape {
+                    dismissed.set(true);
                     let _ = app.emit("idle-overlay-stop", ());
                     for (_, s) in sec.iter() { s.hide(); s.close(); }
                     w.hide();
@@ -759,7 +766,11 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
         {
             let elapsed = elapsed.clone();
             let timer_label = timer_label.clone();
+            let dismissed = dismissed.clone();
             gtk::glib::timeout_add_seconds_local(1, move || {
+                if dismissed.get() {
+                    return gtk::glib::ControlFlow::Break;
+                }
                 let e = elapsed.get() + 1;
                 elapsed.set(e);
                 let display_str = format_remaining(e);
