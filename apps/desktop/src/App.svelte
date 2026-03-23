@@ -76,6 +76,7 @@
   function findActiveBlock() {
     const now = new Date();
     const active = calendar.events.filter((event) => {
+      if (!event.pomodoroConfig) return false;
       const start = parseCalendarDate(event.start);
       const end = parseCalendarDate(event.end);
       return now >= start && now < end;
@@ -113,17 +114,18 @@
     }
 
     if (activeBlock) {
+      const pc = activeBlock.pomodoroConfig!;
       pomodoro.startFromBlock(
         activeBlock.id,
         {
-          focusMinutes: activeBlock.pomodoroConfig?.focusDurationMinutes ?? 40,
-          shortBreakMinutes: activeBlock.pomodoroConfig?.shortBreakMinutes ?? 5,
-          longBreakMinutes: activeBlock.pomodoroConfig?.longBreakMinutes ?? 10,
-          cyclesBeforeLongBreak: activeBlock.pomodoroConfig?.pomodoroCount ?? 4,
+          focusMinutes: pc.focusDurationMinutes,
+          shortBreakMinutes: pc.shortBreakMinutes,
+          longBreakMinutes: pc.longBreakMinutes,
+          cyclesBeforeLongBreak: pc.pomodoroCount,
         },
         activeBlock.end,
         activeBlock.start.split(" ")[0],
-        activeBlock.pomodoroConfig?.idleTimeoutMinutes,
+        pc.idleTimeoutMinutes,
       );
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
