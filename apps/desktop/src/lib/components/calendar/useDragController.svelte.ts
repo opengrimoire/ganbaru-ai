@@ -33,6 +33,7 @@ export interface DragControllerConfig {
   getColumnDate: (clientX: number) => string;
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
   onEventCreate: (start: string, end: string) => void;
+  canDrag?: (eventId: string) => boolean;
 }
 
 export function useDragController(config: DragControllerConfig) {
@@ -51,6 +52,8 @@ export function useDragController(config: DragControllerConfig) {
   // --- Existing event drag (move / resize) ---
 
   function handleDragStart(eventId: string, e: PointerEvent) {
+    if (config.canDrag && !config.canDrag(eventId)) return;
+
     const event = config.events().find((ev) => ev.id === eventId);
     if (!event) return;
 

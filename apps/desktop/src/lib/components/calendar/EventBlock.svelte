@@ -52,7 +52,7 @@
 <div
   bind:this={blockEl}
   data-event-id={positioned.event.id}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {preview ? 'event-preview' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
     height: {positioned.height}px;
@@ -61,7 +61,7 @@
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};
-
+    --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -112,13 +112,18 @@
     bottom: 0;
   }
 
-  .event-preview {
-    animation: preview-pulse 2s ease-in-out infinite;
+  .event-editing {
+    box-shadow: 0 0 7px 1px var(--glow-color);
   }
 
-  @keyframes preview-pulse {
-    0%, 100% { opacity: 0.75; }
-    50% { opacity: 1; }
+  .event-editing::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1.5px solid color-mix(in srgb, currentColor 50%, transparent);
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 3;
   }
 
 </style>

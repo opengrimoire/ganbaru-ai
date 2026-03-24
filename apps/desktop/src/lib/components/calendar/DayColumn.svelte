@@ -391,7 +391,7 @@
   {#if dragPreview}
     {@const dragColor = dragPreview.event.color ? getEventColor(dragPreview.event.color, isDark) : null}
     <div
-      class="preview-pulse pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
+      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
         top: {dragPreview.top}px;
         height: {dragPreview.height}px;
@@ -416,7 +416,7 @@
   {#if createPreview}
     <div
       data-create-preview
-      class="preview-pulse pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
+      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
         top: {createPreview.top}px;
         height: {createPreview.height}px;
@@ -457,13 +457,18 @@
 </div>
 
 <style>
-  .preview-pulse {
-    animation: preview-pulse 2s ease-in-out infinite;
+  .preview-outline {
+    position: relative;
   }
 
-  @keyframes preview-pulse {
-    0%, 100% { opacity: 0.75; }
-    50% { opacity: 1; }
+  .preview-outline::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1.5px solid currentColor;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 3;
   }
 
   .break-band-active {

@@ -294,15 +294,33 @@
   function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
+    // Already editing this exact event, nothing to do
+    if (session.state.mode === "edit" && (
+      session.state.originalEvent.id === event.id || editingId === event.id
+    )) return;
+
     const anchor: PanelAnchor = rect
       ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-    if (isRecurring(event)) {
-      session.openEdit(event, anchor, event);
-    } else {
-      session.openEdit(event, anchor);
+    const openEvent = () => {
+      if (isRecurring(event)) {
+        session.openEdit(event, anchor, event);
+      } else {
+        session.openEdit(event, anchor);
+      }
+    };
+
+    if (session.dirty) {
+      requestConfirm(
+        "Discard unsaved changes?",
+        async () => { openEvent(); },
+        { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+      );
+      return;
     }
+
+    openEvent();
   }
 
   async function handleEventUpdate(event: CalendarEvent) {
@@ -327,6 +345,24 @@
       // Resolve the original instance before drag modified its position
       const originalInstance = calendarStore.events.find((e) => e.id === event.id);
       if (!originalInstance) return;
+
+      // If session is dirty, ask to discard before switching
+      if (session.dirty) {
+        const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
+        const rect = el?.getBoundingClientRect();
+        const anchor: PanelAnchor = rect
+          ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
+          : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+        requestConfirm(
+          "Discard unsaved changes?",
+          async () => {
+            session.openEdit(event, anchor, originalInstance);
+            session.updateChanges({ start: event.start, end: event.end });
+          },
+          { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        );
+        return;
+      }
 
       // Drag on recurring without panel open -- open panel with changes
       const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);

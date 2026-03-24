@@ -24,7 +24,7 @@
   import List from "@lucide/svelte/icons/list";
   import Link from "@lucide/svelte/icons/link";
   import RemoveFormatting from "@lucide/svelte/icons/remove-formatting";
-  import AlignLeft from "@lucide/svelte/icons/align-left";
+
 
   const theme = getTheme();
 
@@ -660,9 +660,16 @@
 
   let timePickerTarget: "start" | "end" | null = $state(null);
   let timePickerEl: HTMLDivElement | undefined = $state();
+  let nearestSlot = $state("");
+
+  function computeNearestSlot(time: string) {
+    const [h, m] = (time || "0:0").split(":").map(Number);
+    nearestSlot = TIME_SLOTS[Math.min(Math.round((h * 60 + m) / 30), TIME_SLOTS.length - 1)];
+  }
 
   function openTimePicker(target: "start" | "end") {
     datepickerOpen = false;
+    computeNearestSlot(target === "start" ? startTime : endTime);
     timePickerTarget = target;
     if (timePickerTarget) {
       requestAnimationFrame(() => {
@@ -671,7 +678,7 @@
         let scrollTarget = timePickerEl.querySelector(`[data-time="${current}"]`);
         if (!scrollTarget && current) {
           const [h, m] = current.split(":").map(Number);
-          const nearestIdx = Math.min(Math.round((h * 60 + m) / 10), TIME_SLOTS.length - 1);
+          const nearestIdx = Math.min(Math.round((h * 60 + m) / 30), TIME_SLOTS.length - 1);
           scrollTarget = timePickerEl.querySelector(`[data-time="${TIME_SLOTS[nearestIdx]}"]`);
         }
         scrollTarget?.scrollIntoView({ block: "center" });
@@ -872,10 +879,10 @@
     const ph = untrack(() => panelHeight) || 520;
 
     let left: number;
-    const rightSpace = vw - _a.x - PANEL_GAP;
     const leftSpace = _a.x - _a.width - PANEL_GAP;
-    if (rightSpace >= PANEL_WIDTH) left = _a.x + PANEL_GAP;
-    else if (leftSpace >= PANEL_WIDTH) left = _a.x - _a.width - PANEL_GAP - PANEL_WIDTH;
+    const rightSpace = vw - _a.x - PANEL_GAP;
+    if (leftSpace >= PANEL_WIDTH) left = _a.x - _a.width - PANEL_GAP - PANEL_WIDTH;
+    else if (rightSpace >= PANEL_WIDTH) left = _a.x + PANEL_GAP;
     else left = Math.max(PANEL_GAP, (vw - PANEL_WIDTH) / 2);
 
     baseLeft = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, left));
@@ -945,13 +952,19 @@
 
   // ─── Build data and handlers ────────────────────────────────────
   function buildSaveData() {
-    let st = startTime;
-    let et = endTime;
-    if (et < st) [st, et] = [et, st];
+    const st = startTime;
+    const et = endTime;
+    let endDate = startDate;
+    if (et < st) {
+      // Cross-midnight: bump end date to next day
+      const [y, mo, d] = startDate.split("-").map(Number);
+      const next = new Date(y, mo - 1, d + 1);
+      endDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    }
     return {
       title: title.trim() || "Focus session",
       start: `${startDate} ${st}`,
-      end: `${startDate} ${et}`,
+      end: `${endDate} ${et}`,
       color,
       description,
       recurrence,
@@ -1033,22 +1046,21 @@
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
-      <div class="flex min-w-0 rounded-md p-0.5" style="background-color: var(--panel-contrast);">
-        {#each [["this", "This"], ["following", "Following"], ["all", "All"]] as [val, lbl]}
+      <div class="mb-1 flex min-w-0 rounded-md p-0.5" style="background-color: var(--panel-contrast);">
+        {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl]}
           <button
             onclick={() => handleScopeClick(val as RecurringScope)}
             class="flex-1 rounded px-2 py-1 text-[10px] font-medium transition-all
               {scope === val
-                ? 'text-foreground shadow-sm'
+                ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'}"
-            style="background-color: {scope === val ? 'var(--panel-bg)' : 'transparent'};"
           >{lbl}</button>
         {/each}
       </div>
     {/if}
 
     <!-- Title -->
-    <div class="flex items-center gap-2.5">
+    <div class="title-wrapper relative flex items-center gap-2.5 px-1">
       <input
         bind:this={titleInput}
         type="text"
@@ -1059,13 +1071,13 @@
         onkeydown={(e) => e.stopPropagation()}
       />
     </div>
-    <hr class="border-[#C4C7C5] dark:border-[#444746] -mt-1" />
+    <hr class="border-[#C4C7C5] dark:border-[#444746] -mt-2 mx-1" />
 
     <!-- Date + time -->
-    <div class="relative flex items-center gap-2 text-[12px]">
+    <div class="relative -mt-1 flex items-center gap-2 px-1 text-[12px]">
       <!-- Date button -->
       <button onclick={toggleDatepicker}
-        class="rounded px-1.5 py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+        class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
           {datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
         {shortDate}
       </button>
@@ -1168,18 +1180,30 @@
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-[19]" onclick={() => { timePickerTarget = null; }}></div>
-          <div bind:this={timePickerEl}
-            class="absolute left-0 top-full z-20 mt-1 max-h-[200px] w-[80px] overflow-y-auto rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
-            {#each TIME_SLOTS as slot}
-              <button onclick={() => selectTime(slot)}
-                data-time={slot}
-                class="w-full px-3 py-1.5 text-left text-[12px] transition-colors
-                  {(timePickerTarget === 'start' ? startTime : endTime) === slot
-                    ? 'bg-accent font-medium text-foreground'
-                    : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
-                {slot}
-              </button>
-            {/each}
+          {@const isEnd = timePickerTarget === 'end'}
+          {@const startMinutes = (() => { const [h, m] = (startTime || "0:0").split(":").map(Number); return h * 60 + m; })()}
+          <div class="absolute top-full z-20 mt-1 rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
+            style="left: {isEnd ? '50%' : '0'}; width: {isEnd ? '115px' : '72px'};">
+            <div bind:this={timePickerEl}
+              class="time-picker-scroll max-h-[200px] overflow-y-auto">
+              {#each TIME_SLOTS as slot}
+                {@const selected = (isEnd ? endTime : startTime) === slot}
+                {@const isNow = slot === nearestSlot}
+                {@const durMin = (() => { if (!isEnd) return -1; const [h, m] = slot.split(":").map(Number); let d = h * 60 + m - startMinutes; if (d <= 0) d += 1440; return d >= 1440 ? -1 : d; })()}
+                {@const durHrs = durMin > 0 ? durMin / 60 : 0}
+                {@const durLabel = durMin > 0 ? (durMin % 60 === 0 ? `${durHrs} ${durHrs === 1 ? 'hr' : 'hrs'}` : `${durHrs.toFixed(1)} hrs`) : ""}
+                <button onclick={() => selectTime(slot)}
+                  data-time={slot}
+                  class="flex w-full items-center px-2 py-1 text-left text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                    {selected ? 'bg-accent' : ''}"
+                  style="font-weight: {isNow ? 600 : selected ? 500 : 400}; color: {isNow || selected ? 'var(--foreground)' : 'var(--muted-foreground)'};">
+                  <span>{slot}</span>
+                  {#if durLabel}
+                    <span class="ml-1.5 text-[10px]" style="color: var(--muted-foreground); font-weight: 400;">({durLabel})</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
           </div>
         {/if}
       </div>
@@ -1188,8 +1212,8 @@
     <!-- Description -->
     {#if descOpen}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="-mt-1.5 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="flex items-center gap-0.5 border-b border-border/60 px-1.5 py-1">
+      <div class="-mt-2.5 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
+        <div class="flex items-center gap-0.5 border-b border-border/60 px-1 py-1">
           {#each [
             { icon: Bold, cmd: "bold", title: "Bold" },
             { icon: Italic, cmd: "italic", title: "Italic" },
@@ -1251,7 +1275,7 @@
         <div
           bind:this={editorEl}
           contenteditable="true"
-          class="desc-editor min-h-[60px] max-h-[120px] overflow-y-auto px-2.5 py-2 text-[12px] text-foreground outline-none"
+          class="desc-editor min-h-[60px] max-h-[120px] overflow-y-auto px-1.5 py-2 text-[12px] text-foreground outline-none"
           oninput={handleEditorInput}
           onpaste={handleEditorPaste}
           onkeydown={(e) => e.stopPropagation()}
@@ -1263,10 +1287,9 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         onclick={openDescEditor}
-        class="-mt-1.5 flex cursor-text items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
+        class="-mt-2.5 flex cursor-text items-center gap-2 rounded-lg px-1 py-1.5 text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
           {descPreview ? 'text-foreground' : 'text-muted-foreground/60'}"
       >
-        <AlignLeft size={13} class="shrink-0 text-muted-foreground/60" />
         <span class="truncate">{descPreview || "Add description"}</span>
       </div>
     {/if}
@@ -1644,7 +1667,7 @@
     </div>
 
     <!-- Colors -->
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2 px-1">
       {#each EVENT_COLOR_OPTIONS as c}
         {@const entry = getEventColor(c, theme.isDark)}
         <button onclick={() => { color = color === c ? undefined : c; emitChange(); }}
@@ -1676,6 +1699,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  .time-picker-scroll {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+  }
+
   :global(.dark) .panel-root {
     --panel-bg: #282A2C;
     --panel-contrast: #1E1F20;
@@ -1691,6 +1719,23 @@
   .num-input {
     -moz-appearance: textfield;
     appearance: textfield;
+  }
+
+  .title-wrapper::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 24px;
+    background: linear-gradient(to right, transparent, var(--panel-bg));
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .title-wrapper:not(:focus-within)::after {
+    opacity: 1;
   }
 
   .desc-editor:empty::before {

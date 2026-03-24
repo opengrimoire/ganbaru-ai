@@ -162,6 +162,7 @@
     getColumnDate,
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
+    canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
   });
 </script>
 

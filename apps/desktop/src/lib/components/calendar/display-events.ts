@@ -263,10 +263,8 @@ export function applyFollowing(
   const changesDateStr = changes.start ? String(changes.start).split(" ")[0] : instanceDateStr;
 
   for (const e of expanded) {
-    if (
-      e.id === templateId || e.recurringParentId === templateId ||
-      e.id === virtualId || e.recurringParentId === virtualId
-    ) {
+    // Only preview instances from the virtual (following) template
+    if (e.id === virtualId || e.recurringParentId === virtualId) {
       previewedIds.add(e.id);
     }
     // The editing instance from the virtual template on the target date
