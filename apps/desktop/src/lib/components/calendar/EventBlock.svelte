@@ -120,7 +120,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    border: 1.5px solid color-mix(in srgb, currentColor 50%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
@@ -129,7 +129,10 @@
   }
 
   .event-editing {
-    box-shadow: 0 0 7px 1px var(--glow-color);
+    box-shadow:
+      0 0 3px 0 var(--glow-color),
+      0 0 8px 1px var(--glow-color),
+      0 0 16px 2px color-mix(in srgb, var(--glow-color) 40%, transparent);
   }
 
   .event-editing::after {

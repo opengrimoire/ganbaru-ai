@@ -58,8 +58,9 @@
   });
 
   const visibleEvents = $derived(displayResult.events);
-  const previewedIds = $derived(displayResult.previewedIds);
-  const editingId = $derived(displayResult.editingId);
+  let suppressEditingGlow = $state(false);
+  const previewedIds = $derived(suppressEditingGlow ? new Set<string>() : displayResult.previewedIds);
+  const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
 
   // Merged event for the panel (original + changes, so panel sees drag/resize updates)
   const panelEvent = $derived.by(() => {
@@ -412,29 +413,6 @@
     session.close();
   }
 
-  function flashSavedBlock(dateStr: string) {
-    requestAnimationFrame(() => {
-      const blocks = containerEl?.querySelectorAll(`[data-event-id]`);
-      if (!blocks) return;
-      // Find blocks whose start matches the saved date
-      for (const el of blocks) {
-        const wrapper = el as HTMLElement;
-        const id = wrapper.dataset.eventId;
-        const ev = calendarStore.events.find((e) => e.id === id);
-        if (!ev || !ev.start.startsWith(dateStr)) continue;
-        wrapper.animate(
-          [
-            { boxShadow: `0 0 0 0 ${theme.isDark ? 'rgba(130, 160, 220, 0)' : 'rgba(0, 30, 80, 0)'}` },
-            { boxShadow: `0 0 8px 2px ${theme.isDark ? 'rgba(130, 160, 220, 0.35)' : 'rgba(0, 30, 80, 0.15)'}`, offset: 0.3 },
-            { boxShadow: `0 0 0 0 ${theme.isDark ? 'rgba(130, 160, 220, 0)' : 'rgba(0, 30, 80, 0)'}` },
-          ],
-          { duration: 500, easing: "ease-out" },
-        );
-        break;
-      }
-    });
-  }
-
   async function handlePanelSave(data: {
     title: string;
     start: string;
@@ -446,7 +424,6 @@
     pomodoroConfig?: PomodoroConfig;
   }, scope?: RecurringScope) {
     const s = session.state;
-    const savedDateStr = data.start.split(" ")[0];
 
     if (s.mode === "create") {
       const event = await calendarStore.addBlock({
@@ -462,6 +439,12 @@
       const isRec = isRecurring(s.originalEvent);
 
       if (isRec && scope) {
+        // Suppress both editingId and previewedIds so ALL event blocks
+        // lose the glow simultaneously via CSS transition. This prevents
+        // the glow from reappearing on recreated DOM elements after the
+        // store mutation (which runs before session.close).
+        suppressEditingGlow = true;
+
         if (scope === "this") {
           const standalone = await calendarStore.detachInstance(instanceEvent);
           const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
@@ -488,7 +471,7 @@
           }
         }
       } else {
-        // Non-recurring: update directly
+        // Non-recurring: CSS transition handles the fade naturally (same DOM element)
         const updated: CalendarEvent = { ...s.originalEvent, ...data };
         const before = calendarStore.getTemplate(s.originalEvent) ?? s.originalEvent;
         await calendarStore.updateBlock(updated);
@@ -498,7 +481,7 @@
     }
 
     session.close();
-    flashSavedBlock(savedDateStr);
+    suppressEditingGlow = false;
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {

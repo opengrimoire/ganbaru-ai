@@ -130,6 +130,13 @@
   }
 }
 
+/* Smooth theme crossfade via View Transition API */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 250ms;
+  animation-timing-function: ease;
+}
+
 /* Calendar theme variables */
 :root {
   --cal-bg: #FFFFFF;
