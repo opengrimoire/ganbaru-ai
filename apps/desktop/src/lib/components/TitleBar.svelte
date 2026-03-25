@@ -135,11 +135,14 @@
       <button
         onclick={() => nav.navigate(tab.view)}
         class={cn(
-          "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+          "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
           nav.current === tab.view
             ? "bg-background dark:bg-accent text-foreground dark:text-white"
             : "text-sidebar-foreground dark:text-white/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
+        style={nav.current === tab.view
+          ? `box-shadow: 0 0 0 1px ${theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.1)'};`
+          : ""}
         title={`${tab.label} (Alt+${i + 1})`}
       >
         <tab.icon size={14} />
@@ -255,31 +258,33 @@
   </button>
 
   <!-- Window controls -->
-  <button
-    onclick={() => win.minimize()}
-    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 dark:text-white hover:bg-sidebar-accent hover:text-sidebar-foreground"
-    title="Minimize"
-  >
-    <Minus size={14} />
-  </button>
-  <button
-    onclick={() => win.toggleMaximize()}
-    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 dark:text-white hover:bg-sidebar-accent hover:text-sidebar-foreground"
-    title={isMaximized ? "Restore" : "Maximize"}
-  >
-    {#if isMaximized}
-      <Minimize2 size={13} />
-    {:else}
-      <Square size={13} />
-    {/if}
-  </button>
-  <button
-    onclick={handleClose}
-    class="flex h-12 w-11 items-center justify-center text-sidebar-foreground/70 dark:text-white hover:bg-destructive hover:text-white"
-    title="Close"
-  >
-    <X size={14} />
-  </button>
+  <div class="flex items-center gap-0.5 pr-2">
+    <button
+      onclick={() => win.minimize()}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      title="Minimize"
+    >
+      <Minus size={14} />
+    </button>
+    <button
+      onclick={() => win.toggleMaximize()}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      title={isMaximized ? "Restore" : "Maximize"}
+    >
+      {#if isMaximized}
+        <Minimize2 size={13} />
+      {:else}
+        <Square size={13} />
+      {/if}
+    </button>
+    <button
+      onclick={handleClose}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-destructive hover:text-white"
+      title="Close"
+    >
+      <X size={14} />
+    </button>
+  </div>
 </div>
 
 {#if showResetConfirm}

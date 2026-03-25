@@ -218,7 +218,7 @@
 
 <div class="flex h-screen flex-col overflow-hidden bg-sidebar">
   <TitleBar />
-  <main class="mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-xl bg-background">
+  <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
     {#if nav.current === "calendar"}
       <CalendarView />
     {:else if nav.current === "kanban"}
@@ -258,3 +258,13 @@
     onStop={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
   />
 {/if}
+
+<style>
+  .content-panel {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 0 5px rgba(0, 0, 0, 0.06);
+  }
+
+  :global(.dark) .content-panel {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 5px rgba(0, 0, 0, 0.3);
+  }
+</style>
