@@ -412,6 +412,29 @@
     session.close();
   }
 
+  function flashSavedBlock(dateStr: string) {
+    requestAnimationFrame(() => {
+      const blocks = containerEl?.querySelectorAll(`[data-event-id]`);
+      if (!blocks) return;
+      // Find blocks whose start matches the saved date
+      for (const el of blocks) {
+        const wrapper = el as HTMLElement;
+        const id = wrapper.dataset.eventId;
+        const ev = calendarStore.events.find((e) => e.id === id);
+        if (!ev || !ev.start.startsWith(dateStr)) continue;
+        wrapper.animate(
+          [
+            { boxShadow: `0 0 0 0 ${theme.isDark ? 'rgba(130, 160, 220, 0)' : 'rgba(0, 30, 80, 0)'}` },
+            { boxShadow: `0 0 8px 2px ${theme.isDark ? 'rgba(130, 160, 220, 0.35)' : 'rgba(0, 30, 80, 0.15)'}`, offset: 0.3 },
+            { boxShadow: `0 0 0 0 ${theme.isDark ? 'rgba(130, 160, 220, 0)' : 'rgba(0, 30, 80, 0)'}` },
+          ],
+          { duration: 500, easing: "ease-out" },
+        );
+        break;
+      }
+    });
+  }
+
   async function handlePanelSave(data: {
     title: string;
     start: string;
@@ -423,6 +446,7 @@
     pomodoroConfig?: PomodoroConfig;
   }, scope?: RecurringScope) {
     const s = session.state;
+    const savedDateStr = data.start.split(" ")[0];
 
     if (s.mode === "create") {
       const event = await calendarStore.addBlock({
@@ -474,6 +498,7 @@
     }
 
     session.close();
+    flashSavedBlock(savedDateStr);
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {

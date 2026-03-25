@@ -104,6 +104,25 @@
     }
   }
 
+  let tabEls: HTMLButtonElement[] = $state([]);
+  let indicatorStyle = $state("");
+
+  function updateIndicator() {
+    const idx = tabs.findIndex((t) => t.view === nav.current);
+    const el = tabEls[idx];
+    if (!el) return;
+    const parent = el.parentElement;
+    if (!parent) return;
+    const parentRect = parent.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    indicatorStyle = `left: ${elRect.left - parentRect.left}px; width: ${elRect.width}px;`;
+  }
+
+  $effect(() => {
+    void nav.current;
+    requestAnimationFrame(updateIndicator);
+  });
+
   let tabWheelCooldown = false;
 
   function handleTabWheel(e: WheelEvent) {
@@ -130,19 +149,21 @@
   onwheel={handleTabWheel}
 >
   <!-- Navigation tabs -->
-  <div class="flex items-center gap-0.5 pl-3">
+  <div class="relative flex items-center gap-0.5 pl-3">
+    <div
+      class="tab-indicator absolute top-0 h-full rounded-md bg-background dark:bg-accent"
+      style="{indicatorStyle} box-shadow: 0 0 0 1px {theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.1)'};"
+    ></div>
     {#each tabs as tab, i}
       <button
+        bind:this={tabEls[i]}
         onclick={() => nav.navigate(tab.view)}
         class={cn(
-          "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+          "relative z-[1] flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
           nav.current === tab.view
-            ? "bg-background dark:bg-accent text-foreground dark:text-white"
+            ? "text-foreground dark:text-white"
             : "text-sidebar-foreground dark:text-white/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
-        style={nav.current === tab.view
-          ? `box-shadow: 0 0 0 1px ${theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.1)'};`
-          : ""}
         title={`${tab.label} (Alt+${i + 1})`}
       >
         <tab.icon size={14} />
@@ -306,3 +327,9 @@
     onCancel={cancelClose}
   />
 {/if}
+
+<style>
+  .tab-indicator {
+    transition: left 200ms cubic-bezier(0.16, 1, 0.3, 1), width 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+</style>

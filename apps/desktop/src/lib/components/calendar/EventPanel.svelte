@@ -4,7 +4,9 @@
     RecurrenceConfig, RecurrenceFrequency, RecurringScope, Weekday,
   } from "./types";
   import { formatRecurrenceLabel } from "./rrule";
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { slide } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
   import "@fontsource-variable/inter";
   import { EVENT_COLOR_OPTIONS, getEventColor } from "./utils";
   import { getTheme } from "$lib/stores/theme.svelte";
@@ -24,6 +26,7 @@
   import List from "@lucide/svelte/icons/list";
   import Link from "@lucide/svelte/icons/link";
   import RemoveFormatting from "@lucide/svelte/icons/remove-formatting";
+  import CircleCheck from "@lucide/svelte/icons/circle-check";
 
 
   const theme = getTheme();
@@ -705,7 +708,21 @@
   }
 
   /** Icon click: toggle the feature on/off with sensible defaults. */
-  function handleToggle(s: Section) {
+  function bounceIcon(e: MouseEvent) {
+    const btn = (e.currentTarget as HTMLElement).querySelector("svg");
+    if (!btn) return;
+    btn.animate(
+      [
+        { transform: "scale(1)" },
+        { transform: "scale(1.2)" },
+        { transform: "scale(1)" },
+      ],
+      { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+    );
+  }
+
+  function handleToggle(s: Section, e?: MouseEvent) {
+    if (e) bounceIcon(e);
     if (s === "music") return;
     const enabled = isSectionEnabled(s);
     if (enabled) {
@@ -870,6 +887,25 @@
     return () => observer.disconnect();
   });
 
+  // Entrance animation
+  onMount(() => {
+    if (!panelEl) return;
+    const el = panelEl;
+    const anchorCenterX = anchor.x - anchor.width / 2;
+    const anchorCenterY = anchor.y + anchor.height / 2;
+    const rect = el.getBoundingClientRect();
+    const originX = ((anchorCenterX - rect.left) / rect.width) * 100;
+    const originY = ((anchorCenterY - rect.top) / rect.height) * 100;
+    el.style.transformOrigin = `clamp(0%, ${originX}%, 100%) clamp(0%, ${originY}%, 100%)`;
+    el.animate(
+      [
+        { transform: "scale(0.92)", opacity: 0 },
+        { transform: "scale(1)", opacity: 1 },
+      ],
+      { duration: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+    );
+  });
+
   // Pin base position when anchor changes; read panelHeight without tracking
   // so height changes from expanding sections don't reposition the panel
   $effect(() => {
@@ -979,7 +1015,26 @@
     };
   }
 
-  function handleSave() { onSave(buildSaveData(), isRecurring ? scope : undefined); }
+  let saving = $state(false);
+
+  function handleSave() {
+    if (saving) return;
+    const data = buildSaveData();
+    const s = isRecurring ? scope : undefined;
+    if (!panelEl) { onSave(data, s); return; }
+
+    saving = true;
+
+    setTimeout(() => {
+      panelEl!.animate(
+        [
+          { transform: "scale(1)", opacity: 1 },
+          { transform: "scale(0.95)", opacity: 0 },
+        ],
+        { duration: 140, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" },
+      ).onfinish = () => onSave(data, s);
+    }, 250);
+  }
   function handleDeleteClick() { if (event && onDelete) onDelete(event.id, isRecurring ? scope : undefined); }
   function handleScopeClick(s: RecurringScope) { scope = s; onScopeChange?.(s); }
 
@@ -1212,7 +1267,7 @@
     <!-- Description -->
     {#if descOpen}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="-mt-2.5 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
+      <div transition:slide={{ duration: 180, easing: cubicOut }} class="-mt-2.5 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-center gap-0.5 border-b border-border/60 px-1 py-1">
           {#each [
             { icon: Bold, cmd: "bold", title: "Bold" },
@@ -1299,8 +1354,8 @@
 
       <!-- 1) Pomodoro -->
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="flex items-stretch">
-          <button onclick={() => handleToggle("pomodoro")}
+        <div class="section-header flex items-stretch" class:section-active={pomodoroEnabled}>
+          <button onclick={(e) => handleToggle("pomodoro", e)}
             class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
               {pomodoroEnabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
             <Timer size={14} />
@@ -1312,7 +1367,7 @@
           </button>
         </div>
         {#if openSection === "pomodoro"}
-          <div data-section="pomodoro" class="flex flex-col gap-1 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="pomodoro" class="flex flex-col gap-1 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
             {#each Object.entries(POMO_PRESETS) as [key, val]}
               <button
                 onclick={() => applyPomoPreset(key as PomodoroPreset)}
@@ -1372,8 +1427,8 @@
 
       <!-- 2) Notifications -->
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="flex items-stretch">
-          <button onclick={() => handleToggle("notifications")}
+        <div class="section-header flex items-stretch" class:section-active={notifEnabled}>
+          <button onclick={(e) => handleToggle("notifications", e)}
             class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
               {notifEnabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
             <Bell size={14} />
@@ -1385,7 +1440,7 @@
           </button>
         </div>
         {#if openSection === "notifications"}
-          <div data-section="notifications" class="flex flex-col gap-1.5 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="notifications" class="flex flex-col gap-1.5 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
             <div class="flex flex-col gap-0.5">
               {#each NOTIF_PRESETS as opt}
                 <button
@@ -1453,8 +1508,8 @@
 
       <!-- 3) Repeat -->
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="flex items-stretch">
-          <button onclick={() => handleToggle("repeat")}
+        <div class="section-header flex items-stretch" class:section-active={!!recurrence}>
+          <button onclick={(e) => handleToggle("repeat", e)}
             class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
               {recurrence ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
             <Repeat size={14} />
@@ -1466,7 +1521,7 @@
           </button>
         </div>
         {#if openSection === "repeat" && recurrence}
-          <div data-section="repeat" class="flex flex-col gap-2.5 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="repeat" class="flex flex-col gap-2.5 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
             <!-- Every N [frequency] -->
             <div class="flex items-center gap-2">
               <span class="text-[11px] text-muted-foreground">Every</span>
@@ -1660,7 +1715,7 @@
           </button>
         </div>
         {#if openSection === "music"}
-          <div data-section="music" class="border-t border-border/60 px-3 py-3 text-center text-[12px] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="border-t border-border/60 px-3 py-3 text-center text-[12px] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
         {/if}
       </div>
 
@@ -1679,12 +1734,17 @@
 
     <!-- Save -->
     <button onclick={handleSave}
-      class="w-full rounded-lg py-1.5 text-[12px] transition-all
-        {saveReady
+      class="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] transition-all
+        {saving || saveReady
           ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
           : 'text-muted-foreground cursor-default'}"
-      style="background-color: {saveReady ? '' : 'var(--panel-contrast)'};">
-      Save
+      style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
+      {#if saving}
+        <CircleCheck size={13} />
+        <span>Saved</span>
+      {:else}
+        <span>Save</span>
+      {/if}
     </button>
   </div>
 </div>
@@ -1709,6 +1769,18 @@
     --panel-contrast: #1E1F20;
     --foreground: #C4C7C5;
     --muted-foreground: #9EA1A0;
+  }
+
+  .section-header {
+    transition: background-color 180ms ease-out;
+  }
+
+  .section-active {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+
+  :global(.dark) .section-active {
+    background-color: rgba(255, 255, 255, 0.04);
   }
 
   .num-input::-webkit-inner-spin-button,

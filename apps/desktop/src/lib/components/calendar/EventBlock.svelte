@@ -112,11 +112,11 @@
     bottom: 0;
   }
 
-  .event-editing {
-    box-shadow: 0 0 7px 1px var(--glow-color);
+  .event-block-wrapper {
+    transition: box-shadow 180ms ease-out;
   }
 
-  .event-editing::after {
+  .event-block-wrapper::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -124,6 +124,16 @@
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
+    opacity: 0;
+    transition: opacity 180ms ease-out;
+  }
+
+  .event-editing {
+    box-shadow: 0 0 7px 1px var(--glow-color);
+  }
+
+  .event-editing::after {
+    opacity: 1;
   }
 
 </style>

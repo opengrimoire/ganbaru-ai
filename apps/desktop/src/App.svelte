@@ -23,7 +23,6 @@
   });
 
   const views: View[] = ["calendar", "kanban", "skill-tree"];
-
   let showStopConfirm = $state(false);
   let savedBlockState: CalendarEvent | null = null;
   let reverting = false;
