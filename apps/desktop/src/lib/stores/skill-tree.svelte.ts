@@ -6,12 +6,12 @@ interface GraphContext {
   focalNodeId: string;
 }
 
-interface VisibleNode extends SkillNode {
+export interface VisibleNode extends SkillNode {
   state: NodeState;
   depth: number;
 }
 
-interface VisibleEdge extends SkillEdge {
+export interface VisibleEdge extends SkillEdge {
   state: "locked" | "active";
 }
 

@@ -3,8 +3,6 @@
   import type { DayNameFormat } from "./utils";
   import {
     getWeekDays,
-    isToday,
-    isPastDay,
     formatDayName,
     formatDatePart,
     GUTTER_WIDTH_PER_TZ,
@@ -76,6 +74,7 @@
 
   let scrollContainer: HTMLDivElement | undefined = $state();
   let currentTimeMinute = $state(-1);
+  let todayStr = $state(formatDatePart(new Date()));
   let isScrolling = $state(false);
   let scrollDebounce: ReturnType<typeof setTimeout> | null = null;
   let wheelCooldown = false;
@@ -93,6 +92,8 @@
   function updateCurrentTime() {
     const now = new Date();
     currentTimeMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const nowStr = formatDatePart(now);
+    if (nowStr !== todayStr) todayStr = nowStr;
   }
 
   onMount(() => {
@@ -199,7 +200,7 @@
         style="grid-column: span 7; grid-template-columns: subgrid;"
       >
         {#each weekDays as day, i}
-          {@const past = isPastDay(day)}
+          {@const past = formatDatePart(day) < todayStr}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
             bind:this={headerCells[i]}
@@ -230,8 +231,8 @@
             date={day}
             {events}
             {hourHeight}
-            isToday={isToday(day)}
-            isPast={isPastDay(day)}
+            isToday={formatDatePart(day) === todayStr}
+            isPast={formatDatePart(day) < todayStr}
             {isDark}
             {currentTimeMinute}
             {editingId}

@@ -2,8 +2,6 @@
   import type { CalendarEvent } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
-    isToday,
-    isPastDay,
     formatDatePart,
     formatDayName,
     GUTTER_WIDTH_PER_TZ,
@@ -66,9 +64,10 @@
   }
 
   let currentTimeMinute = $state(-1);
+  let todayStr = $state(formatDatePart(new Date()));
 
-  const today = $derived(isToday(anchorDate));
-  const past = $derived(isPastDay(anchorDate));
+  const today = $derived(formatDatePart(anchorDate) === todayStr);
+  const past = $derived(formatDatePart(anchorDate) < todayStr);
   const dateStr = $derived(formatDatePart(anchorDate));
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
@@ -101,6 +100,8 @@
   function updateCurrentTime() {
     const now = new Date();
     currentTimeMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const nowStr = formatDatePart(now);
+    if (nowStr !== todayStr) todayStr = nowStr;
   }
 
   onMount(() => {

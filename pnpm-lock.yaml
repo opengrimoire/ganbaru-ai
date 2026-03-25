@@ -20,6 +20,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
+      '@ganbaruai/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       '@tauri-apps/api':
         specifier: ^2
         version: 2.10.1

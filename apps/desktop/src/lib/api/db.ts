@@ -17,7 +17,8 @@ export async function execute(
   bindValues?: unknown[],
 ): Promise<{ rowsAffected: number; lastInsertId: number }> {
   const database = await getDb();
-  return database.execute(query, bindValues);
+  const result = await database.execute(query, bindValues);
+  return { rowsAffected: result.rowsAffected, lastInsertId: result.lastInsertId ?? 0 };
 }
 
 export async function select<T>(
