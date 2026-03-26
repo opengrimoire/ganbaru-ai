@@ -1503,7 +1503,7 @@
     </div>
 
     <!-- All-day / Availability / Status -->
-    <div class="-mt-1 flex items-center rounded-lg px-1 text-[11px]" style="background-color: var(--panel-contrast);">
+    <div class="-mt-1 flex items-center rounded-lg px-1 text-[11px] leading-none" style="background-color: var(--panel-contrast);">
       <!-- All day -->
       <button
         onclick={() => { allDay = !allDay; if (allDay) { startTime = "00:00"; endTime = "00:00"; } emitChange(); }}
@@ -1642,7 +1642,7 @@
         <!-- Icon + content row -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-          class="flex gap-2.5 px-3 {descOpen ? 'items-start pb-2' : 'items-center py-2 cursor-text transition-colors hover:bg-black/5 dark:hover:bg-black/15'}"
+          class="flex gap-2.5 px-3 {descOpen ? 'items-start pb-2' : 'items-center py-2 leading-none cursor-text transition-colors hover:bg-black/5 dark:hover:bg-black/15'}"
           onclick={() => { if (!descOpen) openDescEditor(); }}
         >
           <AlignLeft size={13} class="shrink-0 text-foreground" style={descOpen ? 'margin-top: 5px;' : ''} />
@@ -1652,33 +1652,33 @@
               <div
                 bind:this={editorEl}
                 contenteditable="true"
-                class="desc-editor max-h-[80px] overflow-y-auto rounded bg-black/5 dark:bg-black/15 px-2 py-1.5 text-[12px] leading-[16px] text-foreground outline-none"
+                class="desc-editor max-h-[80px] overflow-y-auto rounded bg-black/5 dark:bg-black/15 px-2 py-1.5 text-[11px] leading-[15px] text-foreground outline-none"
                 oninput={handleEditorInput}
                 onpaste={handleEditorPaste}
                 onkeydown={(e) => e.stopPropagation()}
               ></div>
             {:else if descPreview}
-              <div class="desc-editor max-h-[80px] overflow-y-auto text-[12px] leading-[16px] text-foreground">{@html description}</div>
+              <div class="desc-editor max-h-[80px] overflow-y-auto text-[11px] leading-[15px] text-foreground">{@html description}</div>
             {:else}
-              <span class="text-[12px] text-muted-foreground/40">Add description</span>
+              <span class="text-[11px] text-muted-foreground/40">Add description</span>
             {/if}
           </div>
         </div>
       </div>
       <!-- Location -->
-      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[12px]">
+      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
         <MapPin size={13} class="shrink-0 text-foreground" />
         <input type="text" bind:value={location} placeholder="Add location"
           disabled={readOnly}
-          class="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground/40"
+          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
       </div>
       <!-- URL -->
-      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[12px]">
+      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
         <ExternalLink size={13} class="shrink-0 text-foreground" />
         <input type="url" bind:value={eventUrl} placeholder="Add URL"
           disabled={readOnly}
-          class="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground/40"
+          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
       </div>
     </div>
@@ -1692,12 +1692,12 @@
           <button onclick={(e) => handleToggle("pomodoro", e)}
             class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
               {pomodoroEnabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
-            <Timer size={14} />
+            <Timer size={13} />
           </button>
           <button onclick={() => handleExpand("pomodoro")}
             class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
-            <span class="text-[12px] {pomodoroEnabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
-            <span class="ml-auto truncate text-[10px] text-muted-foreground">{pomoSummary}</span>
+            <span class="translate-y-[1.13px] text-[11px] {pomodoroEnabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
+            <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{pomoSummary}</span>
           </button>
         </div>
         {#if openSection === "pomodoro"}
@@ -1765,12 +1765,12 @@
           <button onclick={(e) => handleToggle("notifications", e)}
             class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
               {notifEnabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
-            <Bell size={14} />
+            <Bell size={13} />
           </button>
           <button onclick={() => handleExpand("notifications")}
             class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
-            <span class="text-[12px] {notifEnabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
-            <span class="ml-auto truncate text-[10px] text-muted-foreground">{notifSummary}</span>
+            <span class="translate-y-[1.13px] text-[11px] {notifEnabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
+            <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{notifSummary}</span>
           </button>
         </div>
         {#if openSection === "notifications"}
@@ -1846,12 +1846,12 @@
           <button onclick={(e) => handleToggle("repeat", e)}
             class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
               {recurrence ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
-            <Repeat size={14} />
+            <Repeat size={13} />
           </button>
           <button onclick={() => handleExpand("repeat")}
             class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
-            <span class="text-[12px] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
-            <span class="ml-auto truncate text-[10px] text-muted-foreground">{recurrence ? recurrenceLabel : "None"}</span>
+            <span class="translate-y-[1.13px] text-[11px] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
+            <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{recurrence ? recurrenceLabel : "None"}</span>
           </button>
         </div>
         {#if openSection === "repeat" && recurrence}
@@ -2041,11 +2041,11 @@
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-stretch">
           <button class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15 text-muted-foreground/50">
-            <Music size={14} />
+            <Music size={13} />
           </button>
           <button onclick={() => handleExpand("music")}
             class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
-            <span class="text-[12px] text-muted-foreground">Music</span>
+            <span class="translate-y-[1.13px] text-[11px] text-muted-foreground">Music</span>
           </button>
         </div>
         {#if openSection === "music"}
