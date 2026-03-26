@@ -5,6 +5,7 @@
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
@@ -13,13 +14,27 @@
   import IdleOverlay from "$lib/components/pomodoro/IdleOverlay.svelte";
   import { onMount } from "svelte";
 
+  const appWindow = getCurrentWindow();
   const nav = getNavigation();
   const calendar = getCalendar();
   const pomodoro = getPomodoro();
 
+  let isMaximized = $state(true);
+
   onMount(() => {
     calendar.load().catch((e) => console.error("Failed to load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
+    appWindow.isMaximized().then((v) => (isMaximized = v));
+  });
+
+  $effect(() => {
+    let cleanup: (() => void) | undefined;
+    appWindow.onResized(() => {
+      appWindow.isMaximized().then((v) => (isMaximized = v));
+    }).then((unlisten) => {
+      cleanup = unlisten;
+    });
+    return () => cleanup?.();
   });
 
   const views: View[] = ["calendar", "kanban", "skill-tree"];
@@ -215,50 +230,56 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="flex h-screen flex-col overflow-hidden bg-sidebar">
-  <TitleBar />
-  <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
-    {#if nav.current === "calendar"}
-      <CalendarView />
-    {:else if nav.current === "kanban"}
-      <KanbanView />
-    {:else if nav.current === "skill-tree"}
-      <SkillTreeView />
-    {/if}
-  </main>
+<div class="h-screen w-screen" class:app-rounded={!isMaximized}>
+  <div class="flex h-full flex-col overflow-hidden bg-sidebar">
+    <TitleBar />
+    <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
+      {#if nav.current === "calendar"}
+        <CalendarView />
+      {:else if nav.current === "kanban"}
+        <KanbanView />
+      {:else if nav.current === "skill-tree"}
+        <SkillTreeView />
+      {/if}
+    </main>
+  </div>
+
+  {#if showStopConfirm}
+    <ConfirmDialog
+      message="No active session blocks right now. All focus features will stop."
+      confirmLabel="Stop session (Enter)"
+      cancelLabel="Undo changes (Esc)"
+      onConfirm={confirmStop}
+      onCancel={cancelStop}
+    />
+  {/if}
+
+  {#if suspendInfo}
+    <ConfirmDialog
+      message="You were away for {formatAwayDuration(suspendInfo.awaySeconds)}. Resume focus session?"
+      confirmLabel="Resume (Enter)"
+      cancelLabel="Stop session (Esc)"
+      danger={false}
+      onConfirm={() => pomodoro.dismissSuspend(true)}
+      onCancel={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissSuspend(false); }}
+    />
+  {/if}
+
+  {#if idleInfo}
+    <IdleOverlay
+      idleSeconds={idleInfo.idleSeconds}
+      nativeOverlay={idleInfo.nativeOverlay}
+      onResume={() => pomodoro.dismissIdle(true)}
+      onStop={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
+    />
+  {/if}
 </div>
 
-{#if showStopConfirm}
-  <ConfirmDialog
-    message="No active session blocks right now. All focus features will stop."
-    confirmLabel="Stop session (Enter)"
-    cancelLabel="Undo changes (Esc)"
-    onConfirm={confirmStop}
-    onCancel={cancelStop}
-  />
-{/if}
-
-{#if suspendInfo}
-  <ConfirmDialog
-    message="You were away for {formatAwayDuration(suspendInfo.awaySeconds)}. Resume focus session?"
-    confirmLabel="Resume (Enter)"
-    cancelLabel="Stop session (Esc)"
-    danger={false}
-    onConfirm={() => pomodoro.dismissSuspend(true)}
-    onCancel={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissSuspend(false); }}
-  />
-{/if}
-
-{#if idleInfo}
-  <IdleOverlay
-    idleSeconds={idleInfo.idleSeconds}
-    nativeOverlay={idleInfo.nativeOverlay}
-    onResume={() => pomodoro.dismissIdle(true)}
-    onStop={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
-  />
-{/if}
-
 <style>
+  .app-rounded {
+    clip-path: inset(0 round 10px);
+  }
+
   .content-panel {
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 0 5px rgba(0, 0, 0, 0.06);
   }
