@@ -381,6 +381,7 @@
         {isDark}
         editing={pos.event.id === editingId}
         preview={previewedIds?.has(pos.event.id) === true}
+        isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
         onclick={(rect) => onEventClick(pos.event, rect)}
         onpointerdown={(e) => onDragStart(pos.event.id, e)}
       />

@@ -9,6 +9,7 @@
     isDark = false,
     editing = false,
     preview = false,
+    isPast = false,
     onclick,
     onpointerdown,
   }: {
@@ -16,6 +17,7 @@
     isDark?: boolean;
     editing?: boolean;
     preview?: boolean;
+    isPast?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
@@ -61,6 +63,7 @@
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};
+    filter: {isPast && !editing && !preview ? 'brightness(0.7)' : 'none'};
     --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
   "
   onclick={handleClick}
