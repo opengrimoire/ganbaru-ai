@@ -1,6 +1,6 @@
 <script lang="ts">
   import type {
-    CalendarEvent, EventColor, PomodoroConfig,
+    CalendarEvent, EventColor, EventStatus, EventTransparency, PomodoroConfig,
     RecurrenceConfig, RecurrenceFrequency, RecurringScope, Weekday,
   } from "./types";
   import { formatRecurrenceLabel } from "./rrule";
@@ -27,6 +27,11 @@
   import Link from "@lucide/svelte/icons/link";
   import RemoveFormatting from "@lucide/svelte/icons/remove-formatting";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
+  import MapPin from "@lucide/svelte/icons/map-pin";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Sun from "@lucide/svelte/icons/sun";
+  import Eye from "@lucide/svelte/icons/eye";
+  import AlignLeft from "@lucide/svelte/icons/align-left";
 
 
   const theme = getTheme();
@@ -41,6 +46,7 @@
     event,
     anchor,
     externalDirty = false,
+    readOnly = false,
     onSave,
     onDelete,
     onClose,
@@ -53,6 +59,7 @@
     event?: CalendarEvent;
     anchor: { x: number; y: number; width: number; height: number };
     externalDirty?: boolean;
+    readOnly?: boolean;
     onSave: (data: {
       title: string;
       start: string;
@@ -62,6 +69,11 @@
       recurrence?: RecurrenceConfig;
       notifications?: number[];
       pomodoroConfig?: PomodoroConfig;
+      allDay?: boolean;
+      location?: string;
+      url?: string;
+      transparency?: EventTransparency;
+      status?: EventStatus;
     }, scope?: RecurringScope) => void;
     onDelete?: (id: string, scope?: RecurringScope) => void;
     onClose: () => void;
@@ -79,9 +91,17 @@
   let description = $state("");
   let scope: RecurringScope = $state("this");
 
+  // ─── New fields (import prep) ──────────────────────────────────
+  let allDay = $state(false);
+  let location = $state("");
+  let eventUrl = $state("");
+  let transparency: EventTransparency = $state("opaque");
+  let eventStatus: EventStatus = $state("confirmed");
+
   // ─── Description editor ─────────────────────────────────────────
   let descOpen = $state(false);
   let editorEl: HTMLDivElement | undefined = $state();
+  let descAreaEl: HTMLDivElement | undefined = $state();
 
   function openDescEditor() {
     descOpen = true;
@@ -97,6 +117,12 @@
         }
       }
     });
+  }
+
+  function handlePanelClick(e: MouseEvent) {
+    if (descOpen && descAreaEl && !descAreaEl.contains(e.target as Node)) {
+      descOpen = false;
+    }
   }
 
   function handleEditorInput() {
@@ -660,6 +686,8 @@
   function toggleDatepicker() {
     timePickerTarget = null;
     endDatepickerOpen = false;
+    showAsPicker = false;
+    statusPicker = false;
     datepickerOpen = !datepickerOpen;
     if (datepickerOpen && startDate) {
       const [y, m] = startDate.split("-").map(Number);
@@ -686,6 +714,8 @@
   function toggleEndDatepicker() {
     timePickerTarget = null;
     datepickerOpen = false;
+    showAsPicker = false;
+    statusPicker = false;
     endDatepickerOpen = !endDatepickerOpen;
     if (endDatepickerOpen && endDate) {
       const [y, m] = endDate.split("-").map(Number);
@@ -737,6 +767,8 @@
   let timePickerTarget: "start" | "end" | null = $state(null);
   let timePickerEl: HTMLDivElement | undefined = $state();
   let nearestSlot = $state("");
+  let showAsPicker = $state(false);
+  let statusPicker = $state(false);
 
   function computeNearestSlot(time: string) {
     const [h, m] = (time || "0:0").split(":").map(Number);
@@ -746,6 +778,8 @@
   function openTimePicker(target: "start" | "end") {
     datepickerOpen = false;
     endDatepickerOpen = false;
+    showAsPicker = false;
+    statusPicker = false;
     computeNearestSlot(target === "start" ? startTime : endTime);
     timePickerTarget = target;
     if (timePickerTarget) {
@@ -878,6 +912,11 @@
       color = event.color;
       description = event.description ?? "";
       recurrence = event.recurrence ? { ...event.recurrence } : undefined;
+      allDay = event.allDay ?? false;
+      location = event.location ?? "";
+      eventUrl = event.url ?? "";
+      transparency = event.transparency ?? "opaque";
+      eventStatus = event.status ?? "confirmed";
 
       const pc = event.pomodoroConfig;
       pomodoroEnabled = !!pc;
@@ -936,12 +975,19 @@
       notifEnabled = true;
       notifSelected = new Set([0]);
       customNotifs = [];
+      allDay = false;
+      location = "";
+      eventUrl = "";
+      transparency = "opaque";
+      eventStatus = "confirmed";
     }
 
-    descOpen = !!description;
+    descOpen = false;
     datepickerOpen = false;
     endDatepickerOpen = false;
     timePickerTarget = null;
+    showAsPicker = false;
+    statusPicker = false;
     hasChanges = false;
     openSection = null;
     scope = "this";
@@ -1048,6 +1094,11 @@
         pomodoroCount: 4,
         idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
+      allDay: allDay || undefined,
+      location: location || undefined,
+      url: eventUrl || undefined,
+      transparency: transparency !== "opaque" ? transparency : undefined,
+      status: eventStatus !== "confirmed" ? eventStatus : undefined,
     });
   }
 
@@ -1112,6 +1163,11 @@
         pomodoroCount: 4,
         idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
+      allDay: allDay || undefined,
+      location: location || undefined,
+      url: eventUrl || undefined,
+      transparency: transparency !== "opaque" ? transparency : undefined,
+      status: eventStatus !== "confirmed" ? eventStatus : undefined,
     };
   }
 
@@ -1160,7 +1216,7 @@
   class="panel-root rounded-xl border border-border"
   style:box-shadow="0 2px 8px rgba(0,0,0,0.3)"
   style="{panelStyle} background-color: var(--panel-bg);"
-  onclick={(e) => e.stopPropagation()}
+  onclick={(e) => { e.stopPropagation(); handlePanelClick(e); }}
   onkeydown={handleKeydown}
 >
   <!-- Drag handle bar with close button -->
@@ -1175,7 +1231,7 @@
     <div class="flex flex-1 items-center justify-center py-1.5">
       <div class="h-1 w-8 rounded-full bg-muted-foreground/40"></div>
     </div>
-    {#if mode === "edit" && onDelete && event}
+    {#if mode === "edit" && onDelete && event && !readOnly}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div onclick={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
@@ -1309,8 +1365,8 @@
 
       <div class="flex-1"></div>
 
-      <!-- Time group (absolutely centered on the panel) -->
-      <div class="absolute inset-x-0 z-[2] flex items-center justify-center gap-1 py-1 pointer-events-none">
+      <!-- Time group (absolutely centered on the panel, hidden when all-day) -->
+      <div class="absolute inset-x-0 z-[2] flex items-center justify-center gap-1 py-1 pointer-events-none" class:hidden={allDay}>
         <div class="pointer-events-auto relative flex items-center gap-1">
         <input type="text" bind:value={startTime}
           oninput={emitChange}
@@ -1446,90 +1502,186 @@
       {/if}
     </div>
 
-    <!-- Description -->
-    {#if descOpen}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div transition:slide={{ duration: 180, easing: cubicOut }} class="-mt-2.5 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="flex items-center gap-0.5 border-b border-border/60 px-1 py-1">
-          {#each [
-            { icon: Bold, cmd: "bold", title: "Bold" },
-            { icon: Italic, cmd: "italic", title: "Italic" },
-            { icon: Underline, cmd: "underline", title: "Underline" },
-          ] as btn}
-            {@const Icon = btn.icon}
-            <button
-              onmousedown={(e) => e.preventDefault()}
-              onclick={() => execFormat(btn.cmd)}
-              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
-              title={btn.title}
-            ><Icon size={13} /></button>
-          {/each}
-          <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
-          {#each [
-            { icon: ListOrdered, cmd: "insertOrderedList", title: "Numbered list" },
-            { icon: List, cmd: "insertUnorderedList", title: "Bulleted list" },
-          ] as btn}
-            {@const Icon = btn.icon}
-            <button
-              onmousedown={(e) => e.preventDefault()}
-              onclick={() => execFormat(btn.cmd)}
-              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
-              title={btn.title}
-            ><Icon size={13} /></button>
-          {/each}
-          <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
-          <button bind:this={linkBtnEl}
-            onmousedown={(e) => e.preventDefault()}
-            onclick={openLinkPopover}
-            class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
-            title="Insert link"
-          ><Link size={13} /></button>
-          {#if linkPopoverOpen}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0 z-[60]" onclick={() => { linkPopoverOpen = false; }}></div>
-            <div class="fixed z-[61] flex items-center gap-1.5 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
-              use:positionLinkPopover>
-              <input bind:this={linkInputEl}
-                type="text" bind:value={linkUrl} placeholder="https://..."
-                onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { linkPopoverOpen = false; } }}
-                class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none placeholder:text-muted-foreground"
-              />
-              <button onclick={applyLink}
-                class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">
-                Apply
-              </button>
-            </div>
-          {/if}
-          <button
-            onmousedown={(e) => e.preventDefault()}
-            onclick={() => execFormat("removeFormat")}
-            class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
-            title="Remove formatting"
-          ><RemoveFormatting size={13} /></button>
-        </div>
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          bind:this={editorEl}
-          contenteditable="true"
-          class="desc-editor min-h-[60px] max-h-[120px] overflow-y-auto px-1.5 py-2 text-[12px] text-foreground outline-none"
-          oninput={handleEditorInput}
-          onpaste={handleEditorPaste}
-          onkeydown={(e) => e.stopPropagation()}
-          onblur={() => { if (!linkPopoverOpen && !description.replace(/<[^>]*>/g, "").trim()) descOpen = false; }}
-        ></div>
-      </div>
-    {:else}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        onclick={openDescEditor}
-        class="-mt-2.5 flex cursor-text items-center gap-2 rounded-lg px-1 py-1.5 text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
-          {descPreview ? 'text-foreground' : 'text-muted-foreground/60'}"
+    <!-- All-day / Availability / Status -->
+    <div class="-mt-1 flex items-center rounded-lg px-1 text-[11px]" style="background-color: var(--panel-contrast);">
+      <!-- All day -->
+      <button
+        onclick={() => { allDay = !allDay; if (allDay) { startTime = "00:00"; endTime = "00:00"; } emitChange(); }}
+        disabled={readOnly}
+        class="flex items-center gap-1.5 rounded-md px-2.5 py-2 transition-colors
+          {allDay ? 'bg-black/5 dark:bg-black/15 text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
       >
-        <span class="truncate">{descPreview || "Add description"}</span>
+        <Sun size={13} class="shrink-0" />
+        <span>All day</span>
+      </button>
+
+
+      <!-- Show as -->
+      <div class="relative">
+        <button
+          onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+          disabled={readOnly}
+          class="flex items-center gap-1.5 rounded-md px-2.5 py-2 transition-colors hover:bg-black/5 dark:hover:bg-black/15
+            {showAsPicker ? 'text-foreground' : 'text-muted-foreground'}"
+          title="Show as"
+        >
+          <Eye size={13} class="shrink-0" />
+          <span class="text-foreground">{transparency === "transparent" ? "Free" : "Busy"}</span>
+        </button>
+        {#if showAsPicker}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="fixed inset-0 z-[19]" onclick={() => { showAsPicker = false; }}></div>
+          <div class="absolute left-0 top-full z-20 mt-1 w-24 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
+            {#each (["opaque", "transparent"] as const) as t}
+              <button
+                onclick={() => { transparency = t; showAsPicker = false; emitChange(); }}
+                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                  {transparency === t ? 'text-foreground font-medium' : 'text-muted-foreground'}"
+              >{t === "opaque" ? "Busy" : "Free"}</button>
+            {/each}
+          </div>
+        {/if}
       </div>
-    {/if}
+
+
+      <!-- Status -->
+      <div class="relative">
+        <button
+          onclick={() => { statusPicker = !statusPicker; showAsPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+          disabled={readOnly}
+          class="flex items-center gap-1.5 rounded-md px-2.5 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+            {statusPicker ? 'text-foreground' : 'text-muted-foreground'}"
+          title="Status"
+        >
+          <CircleCheck size={13} class="shrink-0" />
+          <span class="text-foreground">{eventStatus}</span>
+        </button>
+        {#if statusPicker}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="fixed inset-0 z-[19]" onclick={() => { statusPicker = false; }}></div>
+          <div class="absolute left-0 top-full z-20 mt-1 w-28 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
+            {#each (["confirmed", "tentative", "cancelled"] as const) as s}
+              <button
+                onclick={() => { eventStatus = s; statusPicker = false; emitChange(); }}
+                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                  {eventStatus === s ? 'text-foreground font-medium' : 'text-muted-foreground'}"
+              >{s}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Description / Location / URL -->
+    <div class="-mt-1 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
+      <!-- Description -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div bind:this={descAreaEl}>
+        {#if descOpen}
+          <!-- Toolbar (aligned with icon via same px-3) -->
+          <div in:slide={{ duration: 150, easing: cubicOut }} class="flex items-center gap-0.5 pb-1 pr-3 pt-2" style="padding-left: 35px;">
+            {#each [
+              { icon: Bold, cmd: "bold", title: "Bold" },
+              { icon: Italic, cmd: "italic", title: "Italic" },
+              { icon: Underline, cmd: "underline", title: "Underline" },
+            ] as btn}
+              {@const Icon = btn.icon}
+              <button
+                onmousedown={(e) => e.preventDefault()}
+                onclick={() => execFormat(btn.cmd)}
+                class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+                title={btn.title}
+              ><Icon size={13} /></button>
+            {/each}
+            <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
+            {#each [
+              { icon: ListOrdered, cmd: "insertOrderedList", title: "Numbered list" },
+              { icon: List, cmd: "insertUnorderedList", title: "Bulleted list" },
+            ] as btn}
+              {@const Icon = btn.icon}
+              <button
+                onmousedown={(e) => e.preventDefault()}
+                onclick={() => execFormat(btn.cmd)}
+                class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+                title={btn.title}
+              ><Icon size={13} /></button>
+            {/each}
+            <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
+            <button bind:this={linkBtnEl}
+              onmousedown={(e) => e.preventDefault()}
+              onclick={openLinkPopover}
+              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+              title="Insert link"
+            ><Link size={13} /></button>
+            {#if linkPopoverOpen}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <div class="fixed inset-0 z-[60]" onclick={() => { linkPopoverOpen = false; }}></div>
+              <div class="fixed z-[61] flex items-center gap-1.5 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
+                use:positionLinkPopover>
+                <input bind:this={linkInputEl}
+                  type="text" bind:value={linkUrl} placeholder="https://..."
+                  onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { linkPopoverOpen = false; } }}
+                  class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none placeholder:text-muted-foreground"
+                />
+                <button onclick={applyLink}
+                  class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">
+                  Apply
+                </button>
+              </div>
+            {/if}
+            <button
+              onmousedown={(e) => e.preventDefault()}
+              onclick={() => execFormat("removeFormat")}
+              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+              title="Remove formatting"
+            ><RemoveFormatting size={13} /></button>
+          </div>
+        {/if}
+        <!-- Icon + content row -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+          class="flex gap-2.5 px-3 {descOpen ? 'items-start pb-2' : 'items-center py-2 cursor-text transition-colors hover:bg-black/5 dark:hover:bg-black/15'}"
+          onclick={() => { if (!descOpen) openDescEditor(); }}
+        >
+          <AlignLeft size={13} class="shrink-0 text-foreground" style={descOpen ? 'margin-top: 5px;' : ''} />
+          <div class="min-w-0 flex-1">
+            {#if descOpen}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                bind:this={editorEl}
+                contenteditable="true"
+                class="desc-editor max-h-[80px] overflow-y-auto rounded bg-black/5 dark:bg-black/15 px-2 py-1.5 text-[12px] leading-[16px] text-foreground outline-none"
+                oninput={handleEditorInput}
+                onpaste={handleEditorPaste}
+                onkeydown={(e) => e.stopPropagation()}
+              ></div>
+            {:else if descPreview}
+              <div class="desc-editor max-h-[80px] overflow-y-auto text-[12px] leading-[16px] text-foreground">{@html description}</div>
+            {:else}
+              <span class="text-[12px] text-muted-foreground/40">Add description</span>
+            {/if}
+          </div>
+        </div>
+      </div>
+      <!-- Location -->
+      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[12px]">
+        <MapPin size={13} class="shrink-0 text-foreground" />
+        <input type="text" bind:value={location} placeholder="Add location"
+          disabled={readOnly}
+          class="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground/40"
+          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
+      </div>
+      <!-- URL -->
+      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[12px]">
+        <ExternalLink size={13} class="shrink-0 text-foreground" />
+        <input type="url" bind:value={eventUrl} placeholder="Add URL"
+          disabled={readOnly}
+          class="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground/40"
+          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
+      </div>
+    </div>
 
     <!-- ═══════════ Feature sections (vertical) ═══════════ -->
     <div class="flex flex-col gap-1.5">
@@ -1915,19 +2067,26 @@
     </div>
 
     <!-- Save -->
-    <button onclick={handleSave}
-      class="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] transition-all
-        {saving || saveReady
-          ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
-          : 'text-muted-foreground cursor-default'}"
-      style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
-      {#if saving}
-        <CircleCheck size={13} />
-        <span>Saved</span>
-      {:else}
-        <span>Save</span>
-      {/if}
-    </button>
+    {#if readOnly}
+      <div class="flex w-full items-center justify-center rounded-lg py-1.5 text-[11px] text-muted-foreground/60"
+        style="background-color: var(--panel-contrast);">
+        Read-only
+      </div>
+    {:else}
+      <button onclick={handleSave}
+        class="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] transition-all
+          {saving || saveReady
+            ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
+            : 'text-muted-foreground cursor-default'}"
+        style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
+        {#if saving}
+          <CircleCheck size={13} />
+          <span>Saved</span>
+        {:else}
+          <span>Save</span>
+        {/if}
+      </button>
+    {/if}
   </div>
 </div>
 

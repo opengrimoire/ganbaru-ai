@@ -181,5 +181,32 @@ pub fn migrations() -> Vec<Migration> {
             INSERT OR IGNORE INTO streaks (id) VALUES ('current');
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 2,
+        description: "ics import fields",
+        sql: "
+            ALTER TABLE calendar_events ADD COLUMN all_day INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE calendar_events ADD COLUMN location TEXT NOT NULL DEFAULT '';
+            ALTER TABLE calendar_events ADD COLUMN url TEXT NOT NULL DEFAULT '';
+            ALTER TABLE calendar_events ADD COLUMN transparency TEXT NOT NULL DEFAULT 'opaque';
+            ALTER TABLE calendar_events ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed';
+
+            CREATE TABLE IF NOT EXISTS calendars (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                color TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'local',
+                visible INTEGER NOT NULL DEFAULT 1,
+                read_only INTEGER NOT NULL DEFAULT 0,
+                source_url TEXT,
+                last_synced TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT OR IGNORE INTO calendars (id, name, color, source)
+                VALUES ('local', 'GanbaruAI', '', 'local');
+        ",
+        kind: MigrationKind::Up,
     }]
 }

@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { CalendarEvent, CalendarViewMode, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
+  import type { CalendarEvent, CalendarViewMode, EventColor, EventStatus, EventTransparency, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
   import { addDays, getLocalTimezone } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
+  import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { onMount } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
@@ -22,28 +23,20 @@
   } from "./display-events";
 
   const calendarStore = getCalendar();
+  const calendarsStore = getCalendars();
   const theme = getTheme();
 
   let viewMode: CalendarViewMode = $state("week");
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
 
-  // Calendar account visibility
-  let enabledAccounts = $state(new Set(["ganbaruai"]));
-
-  function toggleAccount(id: string) {
-    const next = new Set(enabledAccounts);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    enabledAccounts = next;
-  }
-
   // --- Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.) ---
   const session = createEditSession();
 
   // --- Display events (pure overlay, no store mutation) ---
   const displayResult = $derived.by(() => {
-    const storeEvents = enabledAccounts.has("ganbaruai") ? calendarStore.events : [];
+    const visIds = calendarsStore.visibleIds;
+    const storeEvents = calendarStore.events.filter((e) => visIds.has(e.calendarId));
     const s = session.state;
     if (s.mode === "closed") return closedDisplay(storeEvents);
     if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes);
@@ -422,6 +415,11 @@
     recurrence?: RecurrenceConfig;
     notifications?: number[];
     pomodoroConfig?: PomodoroConfig;
+    allDay?: boolean;
+    location?: string;
+    url?: string;
+    transparency?: EventTransparency;
+    status?: EventStatus;
   }, scope?: RecurringScope) {
     const s = session.state;
 
@@ -431,6 +429,8 @@
         color: data.color, description: data.description,
         recurrence: data.recurrence, notifications: data.notifications,
         pomodoroConfig: data.pomodoroConfig,
+        allDay: data.allDay, location: data.location, url: data.url,
+        transparency: data.transparency, status: data.status,
       });
       pushUndo({ type: "add", event: { ...event } });
       redoStack = [];
@@ -540,11 +540,9 @@
   <CalendarHeader
     {anchorDate}
     {viewMode}
-    {enabledAccounts}
     onNavigate={navigate}
     onViewChange={changeView}
     onDaySelect={(date) => { anchorDate = date; }}
-    onAccountToggle={toggleAccount}
   />
 
   <div class="min-w-0 flex-1 overflow-hidden" style="background-color: var(--cal-bg);">
@@ -627,6 +625,7 @@
         event={panelEvent}
         anchor={session.state.anchor}
         externalDirty={session.dirty}
+        readOnly={calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
         onSave={handlePanelSave}
         onDelete={handleDelete}
         onChange={handlePanelChange}

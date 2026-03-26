@@ -1,5 +1,5 @@
 import { execute, select } from "$lib/api/db";
-import type { CalendarEvent, EventColor, PomodoroConfig, RecurrenceConfig } from "$lib/components/calendar/types";
+import type { CalendarEvent, EventColor, EventStatus, EventTransparency, PomodoroConfig, RecurrenceConfig } from "$lib/components/calendar/types";
 import { recurrenceToRrule, rruleToRecurrence } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
 
@@ -18,6 +18,11 @@ interface DbCalendarEvent {
   notifications: string | null;
   exceptions: string | null;
   repeat_until: string | null;
+  all_day: number;
+  location: string;
+  url: string;
+  transparency: string;
+  status: string;
   // LEFT JOIN pomodoro_configs
   focus_duration_minutes: number | null;
   short_break_minutes: number | null;
@@ -103,6 +108,11 @@ function mapRow(r: DbCalendarEvent): CalendarEvent {
       ? JSON.parse(r.notifications) as number[]
       : undefined,
     exceptions: r.exceptions ? JSON.parse(r.exceptions) as string[] : undefined,
+    allDay: r.all_day === 1 ? true : undefined,
+    location: r.location || undefined,
+    url: r.url || undefined,
+    transparency: r.transparency === "transparent" ? "transparent" as EventTransparency : undefined,
+    status: r.status !== "confirmed" ? r.status as EventStatus : undefined,
     pomodoroConfig: r.focus_duration_minutes != null ? {
       focusDurationMinutes: r.focus_duration_minutes,
       shortBreakMinutes: r.short_break_minutes!,
@@ -130,6 +140,7 @@ export function getCalendar() {
           `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
                   ce.calendar_id, ce.color, ce.description, ce.rrule,
                   ce.notifications, ce.exceptions, ce.repeat_until,
+                  ce.all_day, ce.location, ce.url, ce.transparency, ce.status,
                   pc.focus_duration_minutes, pc.short_break_minutes,
                   pc.long_break_minutes, pc.pomodoro_count,
                   pc.idle_timeout_minutes
@@ -152,15 +163,22 @@ export function getCalendar() {
       start: string;
       end: string;
       id?: string;
+      calendarId?: string;
       color?: EventColor;
       description?: string;
       recurrence?: RecurrenceConfig;
       notifications?: number[];
       pomodoroConfig?: PomodoroConfig;
+      allDay?: boolean;
+      location?: string;
+      url?: string;
+      transparency?: EventTransparency;
+      status?: EventStatus;
     }): Promise<CalendarEvent> {
       const id = opts.id ?? crypto.randomUUID();
       const now = nowLocal();
       const timezone = localTimezone();
+      const calendarId = opts.calendarId ?? "local";
       const rrule = opts.recurrence ? recurrenceToRrule(opts.recurrence) : null;
       const repeatUntil = opts.recurrence?.end.type === "until"
         ? opts.recurrence.end.date : null;
@@ -170,11 +188,15 @@ export function getCalendar() {
         `INSERT INTO calendar_events
            (id, title, start_time, end_time, timezone, calendar_id,
             color, description, rrule, notifications, repeat_until,
+            all_day, location, url, transparency, status,
             created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
         [id, opts.title, toDbTime(opts.start), toDbTime(opts.end),
-         timezone, "local", opts.color ?? null, opts.description ?? "",
-         rrule, notifJson, repeatUntil, now, now],
+         timezone, calendarId, opts.color ?? null, opts.description ?? "",
+         rrule, notifJson, repeatUntil,
+         opts.allDay ? 1 : 0, opts.location ?? "", opts.url ?? "",
+         opts.transparency ?? "opaque", opts.status ?? "confirmed",
+         now, now],
       );
       if (opts.pomodoroConfig) {
         await execute(
@@ -188,10 +210,12 @@ export function getCalendar() {
       }
       const event: CalendarEvent = {
         id, title: opts.title, start: opts.start, end: opts.end,
-        timezone, calendarId: "local",
+        timezone, calendarId,
         color: opts.color, description: opts.description,
         recurrence: opts.recurrence, notifications: opts.notifications,
         pomodoroConfig: opts.pomodoroConfig,
+        allDay: opts.allDay, location: opts.location, url: opts.url,
+        transparency: opts.transparency, status: opts.status,
       };
       rawBlocks = [...rawBlocks, event];
       reexpand();
@@ -221,8 +245,11 @@ export function getCalendar() {
          SET title = $1, start_time = $2, end_time = $3,
              color = $4, description = $5,
              rrule = $6, notifications = $7,
-             repeat_until = $8, updated_at = $9
-         WHERE id = $10`,
+             repeat_until = $8,
+             all_day = $9, location = $10, url = $11,
+             transparency = $12, status = $13,
+             updated_at = $14
+         WHERE id = $15`,
         [
           toUpdate.title,
           toDbTime(String(toUpdate.start)),
@@ -232,6 +259,11 @@ export function getCalendar() {
           rrule,
           notifJson,
           repeatUntil,
+          toUpdate.allDay ? 1 : 0,
+          toUpdate.location ?? "",
+          toUpdate.url ?? "",
+          toUpdate.transparency ?? "opaque",
+          toUpdate.status ?? "confirmed",
           now,
           parentId,
         ],
@@ -299,8 +331,10 @@ export function getCalendar() {
       await execute(
         `INSERT INTO calendar_events
            (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, notifications, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            color, description, notifications,
+            all_day, location, url, transparency, status,
+            created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
         [
           newId, instanceEvent.title,
           toDbTime(instanceEvent.start), toDbTime(instanceEvent.end),
@@ -308,6 +342,11 @@ export function getCalendar() {
           instanceEvent.color ?? null,
           instanceEvent.description ?? "",
           notifJson,
+          parent.allDay ? 1 : 0,
+          parent.location ?? "",
+          parent.url ?? "",
+          parent.transparency ?? "opaque",
+          parent.status ?? "confirmed",
           now, now,
         ],
       );
@@ -439,8 +478,10 @@ export function getCalendar() {
       await execute(
         `INSERT INTO calendar_events
            (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, rrule, notifications, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            color, description, rrule, notifications,
+            all_day, location, url, transparency, status,
+            created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
         [
           newId, merged.title ?? parent.title,
           toDbTime(newStart),
@@ -450,6 +491,11 @@ export function getCalendar() {
           merged.description ?? "",
           rrule,
           splitNotifJson,
+          merged.allDay ? 1 : 0,
+          merged.location ?? "",
+          merged.url ?? "",
+          merged.transparency ?? "opaque",
+          merged.status ?? "confirmed",
           now, now,
         ],
       );

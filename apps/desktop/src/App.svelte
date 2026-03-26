@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getNavigation, type View } from "$lib/stores/navigation.svelte";
   import { getCalendar } from "$lib/stores/calendar.svelte";
+  import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
@@ -17,11 +18,13 @@
   const appWindow = getCurrentWindow();
   const nav = getNavigation();
   const calendar = getCalendar();
+  const calendars = getCalendars();
   const pomodoro = getPomodoro();
 
   let isMaximized = $state(true);
 
   onMount(() => {
+    calendars.load().catch((e) => console.error("Failed to load calendars:", e));
     calendar.load().catch((e) => console.error("Failed to load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));

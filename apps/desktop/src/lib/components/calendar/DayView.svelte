@@ -4,6 +4,8 @@
   import {
     formatDatePart,
     formatDayName,
+    allDayEventsForDay,
+    getEventColor,
     GUTTER_WIDTH_PER_TZ,
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
@@ -69,6 +71,8 @@
   const today = $derived(formatDatePart(anchorDate) === todayStr);
   const past = $derived(formatDatePart(anchorDate) < todayStr);
   const dateStr = $derived(formatDatePart(anchorDate));
+  const allDayEvents = $derived(allDayEventsForDay(events, anchorDate));
+  const timedEvents = $derived(events.filter((e) => !e.allDay));
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) 1fr`,
@@ -195,12 +199,41 @@
       </div>
     </div>
 
+    <!-- All-day banner -->
+    {#if allDayEvents.length > 0}
+      <div
+        class="sticky z-[47] grid border-b border-[var(--cal-gridline)]"
+        style="
+          top: var(--cal-header-row-h);
+          grid-column: 1 / -1;
+          grid-template-columns: subgrid;
+          background-color: var(--cal-header-bg);
+        "
+      >
+        <div style="grid-column: span {tzCount};"></div>
+        <div class="flex flex-col gap-0.5 px-1 py-1">
+          {#each allDayEvents as event}
+            {@const colors = getEventColor(event.color, isDark)}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="cursor-pointer truncate rounded px-1.5 text-[10px] leading-[20px]"
+              style="background-color: {colors.bg}; color: {colors.text};"
+              onclick={(e) => { e.stopPropagation(); onEventClick(event, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
+            >
+              {event.title}
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <!-- Body row -->
     <TimeGutter {hourHeight} {timezones} {anchorDate} {tzCount} />
     <div class="min-w-0" style="border-left: 1px solid var(--cal-gridline);">
       <DayColumn
         date={anchorDate}
-        {events}
+        events={timedEvents}
         {hourHeight}
         isToday={today}
         isPast={past}

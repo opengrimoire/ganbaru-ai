@@ -13,6 +13,9 @@ import {
   snapToGrid,
   clampMinute,
   eventsForDay,
+  allDayEventsForDay,
+  allDayEventsForWeek,
+  layoutAllDayEventsForWeek,
   layoutEventsForDay,
   effectiveMinuteRange,
   minuteOffsetToDateStr,
@@ -392,5 +395,142 @@ describe("calendar store time conversion round-trip", () => {
     const isoString = "2026-03-13T19:30:00.000Z";
     const loaded = isoString.substring(0, 16).replace("T", " ");
     expect(loaded).toBe("2026-03-13 19:30");
+  });
+});
+
+// --- All-day event helpers ---
+
+describe("eventsForDay excludes all-day events", () => {
+  it("filters out all-day events", () => {
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "Timed", start: "2026-03-13 09:00", end: "2026-03-13 10:00" }),
+      evt({ id: "2", title: "All day", start: "2026-03-13 00:00", end: "2026-03-13 00:00", allDay: true }),
+    ];
+    const result = eventsForDay(events, new Date(2026, 2, 13));
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+});
+
+describe("allDayEventsForDay", () => {
+  const events: CalendarEvent[] = [
+    evt({ id: "1", title: "Timed", start: "2026-03-13 09:00", end: "2026-03-13 10:00" }),
+    evt({ id: "2", title: "All day", start: "2026-03-13 00:00", end: "2026-03-13 00:00", allDay: true }),
+    evt({ id: "3", title: "Multi day", start: "2026-03-12 00:00", end: "2026-03-14 00:00", allDay: true }),
+  ];
+
+  it("returns only all-day events for the given date", () => {
+    const result = allDayEventsForDay(events, new Date(2026, 2, 13));
+    expect(result).toHaveLength(2);
+    expect(result.map((e) => e.id).sort()).toEqual(["2", "3"]);
+  });
+
+  it("does not return timed events", () => {
+    const result = allDayEventsForDay(events, new Date(2026, 2, 13));
+    expect(result.every((e) => e.allDay)).toBe(true);
+  });
+
+  it("returns empty for days without all-day events", () => {
+    const result = allDayEventsForDay(events, new Date(2026, 2, 15));
+    expect(result).toHaveLength(0);
+  });
+
+  it("handles multi-day all-day events on intermediate days", () => {
+    const result = allDayEventsForDay(events, new Date(2026, 2, 12));
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("3");
+  });
+});
+
+describe("allDayEventsForWeek", () => {
+  const weekDays = [
+    new Date(2026, 2, 9), new Date(2026, 2, 10), new Date(2026, 2, 11),
+    new Date(2026, 2, 12), new Date(2026, 2, 13), new Date(2026, 2, 14),
+    new Date(2026, 2, 15),
+  ];
+
+  const events: CalendarEvent[] = [
+    evt({ id: "1", title: "In week", start: "2026-03-11 00:00", end: "2026-03-11 00:00", allDay: true }),
+    evt({ id: "2", title: "Before week", start: "2026-03-08 00:00", end: "2026-03-08 00:00", allDay: true }),
+    evt({ id: "3", title: "Spanning", start: "2026-03-08 00:00", end: "2026-03-10 00:00", allDay: true }),
+    evt({ id: "4", title: "Timed", start: "2026-03-11 09:00", end: "2026-03-11 10:00" }),
+  ];
+
+  it("returns all-day events overlapping the week", () => {
+    const result = allDayEventsForWeek(events, weekDays);
+    expect(result.map((e) => e.id).sort()).toEqual(["1", "3"]);
+  });
+
+  it("excludes events entirely before or after the week", () => {
+    const result = allDayEventsForWeek(events, weekDays);
+    expect(result.find((e) => e.id === "2")).toBeUndefined();
+  });
+
+  it("excludes timed events", () => {
+    const result = allDayEventsForWeek(events, weekDays);
+    expect(result.find((e) => e.id === "4")).toBeUndefined();
+  });
+});
+
+describe("layoutAllDayEventsForWeek", () => {
+  const weekDays = [
+    new Date(2026, 2, 9), new Date(2026, 2, 10), new Date(2026, 2, 11),
+    new Date(2026, 2, 12), new Date(2026, 2, 13), new Date(2026, 2, 14),
+    new Date(2026, 2, 15),
+  ];
+
+  it("places a single-day event in row 0 with span 1", () => {
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-11 00:00", end: "2026-03-11 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, weekDays);
+    expect(result).toHaveLength(1);
+    expect(result[0].row).toBe(0);
+    expect(result[0].startCol).toBe(2); // Wed = index 2
+    expect(result[0].spanCols).toBe(1);
+  });
+
+  it("spans a multi-day event across correct columns", () => {
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-10 00:00", end: "2026-03-12 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, weekDays);
+    expect(result).toHaveLength(1);
+    expect(result[0].startCol).toBe(1); // Tue
+    expect(result[0].spanCols).toBe(3); // Tue-Wed-Thu
+  });
+
+  it("stacks overlapping events in separate rows", () => {
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-11 00:00", end: "2026-03-13 00:00", allDay: true }),
+      evt({ id: "2", title: "B", start: "2026-03-12 00:00", end: "2026-03-12 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, weekDays);
+    expect(result).toHaveLength(2);
+    const rows = result.map((r) => r.row).sort();
+    expect(rows).toEqual([0, 1]);
+  });
+
+  it("clips events that extend beyond the week", () => {
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-07 00:00", end: "2026-03-11 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, weekDays);
+    expect(result).toHaveLength(1);
+    expect(result[0].startCol).toBe(0); // Clipped to Mon
+    expect(result[0].spanCols).toBe(3); // Mon-Tue-Wed
+  });
+
+  it("excludes events entirely outside the week", () => {
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-01 00:00", end: "2026-03-05 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, weekDays);
+    expect(result).toHaveLength(0);
+  });
+
+  it("returns empty for no events", () => {
+    const result = layoutAllDayEventsForWeek([], weekDays);
+    expect(result).toHaveLength(0);
   });
 });

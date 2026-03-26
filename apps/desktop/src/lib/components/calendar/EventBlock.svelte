@@ -34,6 +34,9 @@
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
   const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
   const hasNotification = $derived(positioned.event.notifications && positioned.event.notifications.length > 0);
+  const isFree = $derived(positioned.event.transparency === "transparent");
+  const isTentative = $derived(positioned.event.status === "tentative");
+  const isCancelled = $derived(positioned.event.status === "cancelled");
 
   function handlePointerDown(e: PointerEvent) {
     e.stopPropagation();
@@ -64,6 +67,7 @@
     cursor: grab;
     z-index: {editing ? 45 : 1};
     filter: {isPast && !editing && !preview ? 'brightness(0.7)' : 'none'};
+    opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
     --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
   "
   onclick={handleClick}
@@ -73,7 +77,7 @@
   <div class="resize-handle-top" onpointerdown={handlePointerDown}></div>
 
   <!-- Content -->
-  <div class="relative min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};">
+  <div class="relative min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
     {#if hasRepeat || hasNotification}
       <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
         {#if hasRepeat}
@@ -84,11 +88,14 @@
         {/if}
       </div>
     {/if}
-    <div class="truncate font-medium" class:pr-5={hasRepeat || hasNotification}>
+    <div class="truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
       {positioned.event.title}
     </div>
     {#if positioned.height > 28}
       <div class="truncate opacity-80">{startTime} - {endTime}</div>
+    {/if}
+    {#if positioned.height > 44 && positioned.event.location}
+      <div class="truncate text-[9px] opacity-60">{positioned.event.location}</div>
     {/if}
   </div>
 

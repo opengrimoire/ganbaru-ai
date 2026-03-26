@@ -8,18 +8,16 @@
     isSameDay,
     isPastDay,
   } from "./utils";
+  import { getCalendars } from "$lib/stores/calendars.svelte";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
 
+  const calendarsStore = getCalendars();
+
   // Calendar account selector state
   let showAccountPicker = $state(false);
-
-  // Mock calendar accounts
-  const calendarAccounts = [
-    { id: "ganbaruai", label: "GanbaruAI" },
-  ];
 
   // Picker drill-down: days (default) -> months -> years
   type PickerMode = "days" | "months" | "years";
@@ -38,19 +36,15 @@
   let {
     anchorDate,
     viewMode,
-    enabledAccounts,
     onNavigate,
     onViewChange,
     onDaySelect,
-    onAccountToggle,
   }: {
     anchorDate: Date;
     viewMode: CalendarViewMode;
-    enabledAccounts: Set<string>;
     onNavigate: (direction: "today" | "back" | "forward") => void;
     onViewChange: (mode: CalendarViewMode) => void;
     onDaySelect: (date: Date) => void;
-    onAccountToggle: (id: string) => void;
   } = $props();
 
   const viewOptions: { mode: CalendarViewMode; label: string }[] = [
@@ -301,10 +295,10 @@
       <div class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
       <div class="absolute bottom-full left-0 z-50 mb-1 w-full rounded-md border border-border bg-card p-2.5 shadow-lg">
         <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
-        {#each calendarAccounts as account}
-          {@const checked = enabledAccounts.has(account.id)}
+        {#each calendarsStore.list as cal}
+          {@const checked = cal.visible}
           <button
-            onclick={() => onAccountToggle(account.id)}
+            onclick={() => calendarsStore.toggleVisibility(cal.id)}
             class="flex w-full cursor-pointer items-center gap-2 rounded px-1.5 py-1.5 hover:bg-accent"
           >
             <span
@@ -314,7 +308,10 @@
                 <Check size={12} class="text-primary-foreground" />
               {/if}
             </span>
-            <span class="truncate text-sm text-foreground">{account.label}</span>
+            <span class="truncate text-sm text-foreground">{cal.name}</span>
+            {#if cal.readOnly}
+              <span class="ml-auto text-[9px] text-muted-foreground/60">read-only</span>
+            {/if}
           </button>
         {/each}
         <div class="my-1.5 border-t border-border"></div>

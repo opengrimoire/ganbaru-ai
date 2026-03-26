@@ -5,6 +5,9 @@
     getWeekDays,
     formatDayName,
     formatDatePart,
+    getEventColor,
+    allDayEventsForWeek,
+    layoutAllDayEventsForWeek,
     GUTTER_WIDTH_PER_TZ,
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
@@ -50,6 +53,9 @@
   } = $props();
 
   const weekDays = $derived(getWeekDays(anchorDate));
+  const allDayPositioned = $derived(layoutAllDayEventsForWeek(events, weekDays));
+  const allDayMaxRow = $derived(allDayPositioned.length > 0 ? Math.max(...allDayPositioned.map((p) => p.row)) + 1 : 0);
+  const timedEvents = $derived(events.filter((e) => !e.allDay));
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) repeat(7, 1fr)`,
@@ -217,6 +223,50 @@
       </div>
     </div>
 
+    <!-- All-day banner -->
+    {#if allDayMaxRow > 0}
+      <div
+        class="sticky z-[47] grid border-b border-[var(--cal-gridline)]"
+        style="
+          top: var(--cal-header-row-h);
+          grid-column: 1 / -1;
+          grid-template-columns: subgrid;
+          background-color: var(--cal-header-bg);
+        "
+      >
+        <!-- Gutter spacer -->
+        <div style="grid-column: span {tzCount};"></div>
+        <!-- Event grid -->
+        <div
+          class="relative grid"
+          style="
+            grid-column: span 7;
+            grid-template-columns: subgrid;
+            grid-template-rows: repeat({allDayMaxRow}, 22px);
+            padding: 2px 0;
+          "
+        >
+          {#each allDayPositioned as pos}
+            {@const colors = getEventColor(pos.event.color, isDark)}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="mx-0.5 cursor-pointer truncate rounded px-1.5 text-[10px] leading-[20px]"
+              style="
+                grid-column: {pos.startCol + 1} / span {pos.spanCols};
+                grid-row: {pos.row + 1};
+                background-color: {colors.bg};
+                color: {colors.text};
+              "
+              onclick={(e) => { e.stopPropagation(); onEventClick(pos.event, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
+            >
+              {pos.event.title}
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <!-- Body: one cell per timezone + 7 day columns -->
     <TimeGutter {hourHeight} {timezones} {anchorDate} tzCount={tzCount} />
 
@@ -229,7 +279,7 @@
         <div class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">
           <DayColumn
             date={day}
-            {events}
+            events={timedEvents}
             {hourHeight}
             isToday={formatDatePart(day) === todayStr}
             isPast={formatDatePart(day) < todayStr}

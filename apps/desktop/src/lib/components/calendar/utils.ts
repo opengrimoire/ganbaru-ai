@@ -1,6 +1,7 @@
 import type {
   CalendarEvent,
   EventColor,
+  PositionedAllDayEvent,
   PositionedEvent,
 } from "./types";
 
@@ -416,7 +417,94 @@ export function eventsForDay(
   const nextDateStr = formatDatePart(addDays(date, 1));
   const dayStart = `${dateStr} 00:00`;
   const dayEnd = `${nextDateStr} 00:00`;
-  return events.filter((e) => e.start < dayEnd && e.end > dayStart);
+  return events.filter((e) => !e.allDay && e.start < dayEnd && e.end > dayStart);
+}
+
+export function allDayEventsForDay(
+  events: CalendarEvent[],
+  date: Date,
+): CalendarEvent[] {
+  const dateStr = formatDatePart(date);
+  return events.filter((e) => {
+    if (!e.allDay) return false;
+    const startDate = e.start.split(" ")[0];
+    const endDate = e.end.split(" ")[0];
+    return startDate <= dateStr && endDate >= dateStr;
+  });
+}
+
+export function allDayEventsForWeek(
+  events: CalendarEvent[],
+  weekDays: Date[],
+): CalendarEvent[] {
+  if (weekDays.length === 0) return [];
+  const weekStart = formatDatePart(weekDays[0]);
+  const weekEnd = formatDatePart(weekDays[weekDays.length - 1]);
+  return events.filter((e) => {
+    if (!e.allDay) return false;
+    const startDate = e.start.split(" ")[0];
+    const endDate = e.end.split(" ")[0];
+    return startDate <= weekEnd && endDate >= weekStart;
+  });
+}
+
+export function layoutAllDayEventsForWeek(
+  events: CalendarEvent[],
+  weekDays: Date[],
+): PositionedAllDayEvent[] {
+  const allDay = allDayEventsForWeek(events, weekDays);
+  if (allDay.length === 0 || weekDays.length === 0) return [];
+
+  const weekStart = formatDatePart(weekDays[0]);
+  const weekEnd = formatDatePart(weekDays[weekDays.length - 1]);
+  const dayStrs = weekDays.map(formatDatePart);
+
+  // Sort by duration descending (longer events first), then start ascending
+  const sorted = [...allDay].sort((a, b) => {
+    const aStart = a.start.split(" ")[0];
+    const bStart = b.start.split(" ")[0];
+    const aEnd = a.end.split(" ")[0];
+    const bEnd = b.end.split(" ")[0];
+    const aDur = dayStrs.filter((d) => d >= aStart && d <= aEnd).length;
+    const bDur = dayStrs.filter((d) => d >= bStart && d <= bEnd).length;
+    if (bDur !== aDur) return bDur - aDur;
+    return aStart < bStart ? -1 : aStart > bStart ? 1 : 0;
+  });
+
+  // rows[row][col] = true if occupied
+  const rows: boolean[][] = [];
+  const result: PositionedAllDayEvent[] = [];
+
+  for (const event of sorted) {
+    const startDate = event.start.split(" ")[0];
+    const endDate = event.end.split(" ")[0];
+    const clippedStart = startDate < weekStart ? weekStart : startDate;
+    const clippedEnd = endDate > weekEnd ? weekEnd : endDate;
+
+    const startCol = dayStrs.indexOf(clippedStart);
+    const endCol = dayStrs.indexOf(clippedEnd);
+    if (startCol < 0 || endCol < 0) continue;
+    const spanCols = endCol - startCol + 1;
+
+    // Find lowest row with no overlap
+    let row = 0;
+    outer: while (true) {
+      if (!rows[row]) rows[row] = new Array(weekDays.length).fill(false);
+      for (let c = startCol; c <= endCol; c++) {
+        if (rows[row][c]) { row++; continue outer; }
+      }
+      break;
+    }
+
+    // Mark occupied
+    for (let c = startCol; c <= endCol; c++) {
+      rows[row][c] = true;
+    }
+
+    result.push({ event, row, startCol, spanCols });
+  }
+
+  return result;
 }
 
 // --- Overlap layout algorithm ---

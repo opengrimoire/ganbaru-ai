@@ -55,7 +55,7 @@ export function useDragController(config: DragControllerConfig) {
     if (config.canDrag && !config.canDrag(eventId)) return;
 
     const event = config.events().find((ev) => ev.id === eventId);
-    if (!event) return;
+    if (!event || event.allDay) return;
 
     const dateStr = event.start.split(" ")[0];
     const startMin = minuteOfDay(event.start);

@@ -57,6 +57,9 @@ export interface PomodoroConfig {
   idleTimeoutMinutes: number | null;
 }
 
+export type EventTransparency = "opaque" | "transparent";
+export type EventStatus = "confirmed" | "tentative" | "cancelled";
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -74,6 +77,29 @@ export interface CalendarEvent {
   exceptions?: string[];
   /** Set on virtual recurring instances; points to the DB-backed template event. */
   recurringParentId?: string;
+  allDay?: boolean;
+  location?: string;
+  url?: string;
+  transparency?: EventTransparency;
+  status?: EventStatus;
+}
+
+export interface Calendar {
+  id: string;
+  name: string;
+  color: string;
+  source: string;
+  visible: boolean;
+  readOnly: boolean;
+  sourceUrl?: string;
+  lastSynced?: string;
+}
+
+export interface PositionedAllDayEvent {
+  event: CalendarEvent;
+  row: number;
+  startCol: number;
+  spanCols: number;
 }
 
 export interface PositionedEvent {
