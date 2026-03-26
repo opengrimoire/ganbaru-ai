@@ -1229,91 +1229,89 @@
     <hr class="border-[#C4C7C5] dark:border-[#444746] -mt-2 mx-1" />
 
     <!-- Date + time -->
-    <div class="relative -mt-1 flex items-center gap-2 px-1 text-[12px]">
-      <!-- Date button -->
-      <button onclick={toggleDatepicker}
-        class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-          {datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
-        {shortDate}
-      </button>
+    <div class="relative -mt-1 flex items-center px-1 text-[12px]">
+      <!-- Start date (left) -->
+      <div class="relative z-[1] shrink-0">
+        <button onclick={toggleDatepicker}
+          class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+            {datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+          {shortDate}
+        </button>
 
-      <!-- Floating date picker -->
-      {#if datepickerOpen}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="fixed inset-0 z-[19]" onclick={() => { datepickerOpen = false; }}></div>
-        <div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
-          <!-- Header — clickable drill-down -->
+        <!-- Floating start date picker -->
+        {#if datepickerOpen}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="mb-1 flex items-center justify-center" onwheel={handleDpWheel}>
-            <button onclick={handleDpHeaderClick}
-              class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+          <div class="fixed inset-0 z-[19]" onclick={() => { datepickerOpen = false; }}></div>
+          <div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="mb-1 flex items-center justify-center" onwheel={handleDpWheel}>
+              <button onclick={handleDpHeaderClick}
+                class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+                {#if dpPickerMode === "days"}
+                  {dpMonthLabel}
+                {:else}
+                  {dpYear}
+                {/if}
+              </button>
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div onwheel={handleDpWheel}>
               {#if dpPickerMode === "days"}
-                {dpMonthLabel}
+                <div class="grid grid-cols-7 gap-x-0 text-center">
+                  {#each dpDayLetters as letter}
+                    <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
+                  {/each}
+                </div>
+                <div class="grid grid-cols-7 gap-x-0 text-center">
+                  {#each dpDays as day}
+                    {@const now = new Date()}
+                    {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
+                    <button onclick={() => selectDpDay(day)}
+                      class="flex h-6 w-full items-center justify-center rounded-sm text-[12px] hover:bg-black/5 dark:hover:bg-black/15"
+                      style={day.selected
+                        ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+                        : day.today
+                          ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
+                          : !day.currentMonth
+                            ? "opacity: 0.25;"
+                            : past
+                              ? "opacity: 0.45; color: var(--foreground);"
+                              : "color: var(--foreground);"}
+                    >{day.day}</button>
+                  {/each}
+                </div>
+              {:else if dpPickerMode === "months"}
+                <div class="grid grid-cols-3 gap-1 py-1">
+                  {#each dpShortMonths as name, i}
+                    <button onclick={() => selectDpMonth(i)}
+                      class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
+                        {i + 1 === dpMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                      {name}
+                    </button>
+                  {/each}
+                </div>
               {:else}
-                {dpYear}
+                <div class="grid grid-cols-3 gap-1 py-1">
+                  {#each dpYearPageYears as year}
+                    <button onclick={() => selectDpYear(year)}
+                      class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
+                        {year === dpYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                      {year}
+                    </button>
+                  {/each}
+                </div>
               {/if}
-            </button>
+            </div>
           </div>
+        {/if}
+      </div>
 
-          <!-- Grid — scrollable -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div onwheel={handleDpWheel}>
-            {#if dpPickerMode === "days"}
-              <!-- Day letters -->
-              <div class="grid grid-cols-7 gap-x-0 text-center">
-                {#each dpDayLetters as letter}
-                  <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
-                {/each}
-              </div>
-              <!-- Date grid -->
-              <div class="grid grid-cols-7 gap-x-0 text-center">
-                {#each dpDays as day}
-                  {@const now = new Date()}
-                  {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
-                  <button onclick={() => selectDpDay(day)}
-                    class="flex h-6 w-full items-center justify-center rounded-sm text-[12px] hover:bg-black/5 dark:hover:bg-black/15"
-                    style={day.selected
-                      ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-                      : day.today
-                        ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
-                        : !day.currentMonth
-                          ? "opacity: 0.25;"
-                          : past
-                            ? "opacity: 0.45; color: var(--foreground);"
-                            : "color: var(--foreground);"}
-                  >{day.day}</button>
-                {/each}
-              </div>
+      <div class="flex-1"></div>
 
-            {:else if dpPickerMode === "months"}
-              <div class="grid grid-cols-3 gap-1 py-1">
-                {#each dpShortMonths as name, i}
-                  <button onclick={() => selectDpMonth(i)}
-                    class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
-                      {i + 1 === dpMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
-                    {name}
-                  </button>
-                {/each}
-              </div>
-
-            {:else}
-              <div class="grid grid-cols-3 gap-1 py-1">
-                {#each dpYearPageYears as year}
-                  <button onclick={() => selectDpYear(year)}
-                    class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
-                      {year === dpYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
-                    {year}
-                  </button>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/if}
-
-      <!-- Time area -->
-      <div class="relative flex items-center gap-1 px-1.5 py-1">
+      <!-- Time group (absolutely centered on the panel) -->
+      <div class="absolute inset-x-0 z-[2] flex items-center justify-center gap-1 py-1 pointer-events-none">
+        <div class="pointer-events-auto relative flex items-center gap-1">
         <input type="text" bind:value={startTime}
           oninput={emitChange}
           onclick={() => openTimePicker("start")}
@@ -1329,87 +1327,6 @@
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
             {timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => e.stopPropagation()} />
-
-        <!-- End date (shown when cross-midnight) -->
-        {#if isCrossMidnight}
-          <button onclick={toggleEndDatepicker}
-            class="rounded px-1 py-0.5 text-[11px] transition-colors text-muted-foreground
-              {endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
-            {shortEndDate}
-          </button>
-        {/if}
-
-        <!-- Floating end date picker -->
-        {#if endDatepickerOpen}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-[19]" onclick={() => { endDatepickerOpen = false; }}></div>
-          <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="mb-1 flex items-center justify-center" onwheel={handleEdpWheel}>
-              <button onclick={handleEdpHeaderClick}
-                class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
-                {#if edpPickerMode === "days"}
-                  {edpMonthLabel}
-                {:else}
-                  {edpYear}
-                {/if}
-              </button>
-            </div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div onwheel={handleEdpWheel}>
-              {#if edpPickerMode === "days"}
-                <div class="grid grid-cols-7 gap-x-0 text-center">
-                  {#each dpDayLetters as letter}
-                    <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
-                  {/each}
-                </div>
-                <div class="grid grid-cols-7 gap-x-0 text-center">
-                  {#each edpDays as day}
-                    {@const beforeStart = day.dateStr < startDate}
-                    {@const now = new Date()}
-                    {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
-                    <button onclick={() => selectEdpDay(day)}
-                      class="flex h-6 w-full items-center justify-center rounded-sm text-[12px]
-                        {beforeStart ? 'cursor-not-allowed' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-                      style={day.selected
-                        ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-                        : day.today
-                          ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
-                          : beforeStart
-                            ? "opacity: 0.2;"
-                            : !day.currentMonth
-                              ? "opacity: 0.25;"
-                              : past
-                                ? "opacity: 0.45; color: var(--foreground);"
-                                : "color: var(--foreground);"}
-                    >{day.day}</button>
-                  {/each}
-                </div>
-              {:else if edpPickerMode === "months"}
-                <div class="grid grid-cols-3 gap-1 py-1">
-                  {#each dpShortMonths as name, i}
-                    <button onclick={() => { edpMonth = i + 1; edpPickerMode = "days"; }}
-                      class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
-                        {i + 1 === edpMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
-                      {name}
-                    </button>
-                  {/each}
-                </div>
-              {:else}
-                <div class="grid grid-cols-3 gap-1 py-1">
-                  {#each edpYearPageYears as year}
-                    <button onclick={() => { edpYear = year; edpPickerMode = "months"; }}
-                      class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
-                        {year === edpYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
-                      {year}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          </div>
-        {/if}
 
         <!-- Floating time picker -->
         {#if timePickerTarget}
@@ -1442,7 +1359,91 @@
             </div>
           </div>
         {/if}
+        </div>
       </div>
+
+      <!-- End date (right, shown when cross-midnight) -->
+      {#if isCrossMidnight}
+        <div class="relative z-[1] shrink-0">
+          <button onclick={toggleEndDatepicker}
+            class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+              {endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+            {shortEndDate}
+          </button>
+
+          <!-- Floating end date picker -->
+          {#if endDatepickerOpen}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="fixed inset-0 z-[19]" onclick={() => { endDatepickerOpen = false; }}></div>
+            <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="mb-1 flex items-center justify-center" onwheel={handleEdpWheel}>
+                <button onclick={handleEdpHeaderClick}
+                  class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+                  {#if edpPickerMode === "days"}
+                    {edpMonthLabel}
+                  {:else}
+                    {edpYear}
+                  {/if}
+                </button>
+              </div>
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div onwheel={handleEdpWheel}>
+                {#if edpPickerMode === "days"}
+                  <div class="grid grid-cols-7 gap-x-0 text-center">
+                    {#each dpDayLetters as letter}
+                      <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
+                    {/each}
+                  </div>
+                  <div class="grid grid-cols-7 gap-x-0 text-center">
+                    {#each edpDays as day}
+                      {@const beforeStart = day.dateStr < startDate}
+                      {@const now = new Date()}
+                      {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
+                      <button onclick={() => selectEdpDay(day)}
+                        class="flex h-6 w-full items-center justify-center rounded-sm text-[12px]
+                          {beforeStart ? 'cursor-not-allowed' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+                        style={day.selected
+                          ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+                          : day.today
+                            ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
+                            : beforeStart
+                              ? "opacity: 0.2;"
+                              : !day.currentMonth
+                                ? "opacity: 0.25;"
+                                : past
+                                  ? "opacity: 0.45; color: var(--foreground);"
+                                  : "color: var(--foreground);"}
+                      >{day.day}</button>
+                    {/each}
+                  </div>
+                {:else if edpPickerMode === "months"}
+                  <div class="grid grid-cols-3 gap-1 py-1">
+                    {#each dpShortMonths as name, i}
+                      <button onclick={() => { edpMonth = i + 1; edpPickerMode = "days"; }}
+                        class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
+                          {i + 1 === edpMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                        {name}
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="grid grid-cols-3 gap-1 py-1">
+                    {#each edpYearPageYears as year}
+                      <button onclick={() => { edpYear = year; edpPickerMode = "months"; }}
+                        class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
+                          {year === edpYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                        {year}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <!-- Description -->
