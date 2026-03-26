@@ -40,11 +40,17 @@ export function buildCreateDisplay(
     };
   }
 
+  // Use changes.end if available (panel provides correct cross-midnight end date),
+  // otherwise fall back to the drag preview's same-day end
+  const endStr = changes.end
+    ? String(changes.end)
+    : `${preview.dateStr} ${fmtMin(preview.endMinute)}`;
+
   const template: CalendarEvent = {
     id: PENDING_CREATE_ID,
     title: preview.title ?? changes.title ?? "",
-    start: `${preview.dateStr} ${fmtMin(preview.startMinute)}`,
-    end: `${preview.dateStr} ${fmtMin(preview.endMinute)}`,
+    start: changes.start ? String(changes.start) : `${preview.dateStr} ${fmtMin(preview.startMinute)}`,
+    end: endStr,
     timezone: "",
     calendarId: "ganbaruai",
     color: preview.color ?? changes.color,
@@ -235,10 +241,10 @@ export function applyFollowing(
   const virtualId = `__vf__${templateId}`;
   const newStart = changes.start
     ? String(changes.start)
-    : `${instanceDateStr} ${instanceEvent.start.split(" ")[1]}`;
+    : instanceEvent.start;
   const newEnd = changes.end
     ? String(changes.end)
-    : `${instanceDateStr} ${instanceEvent.end.split(" ")[1]}`;
+    : instanceEvent.end;
   const newRecurrence: RecurrenceConfig | undefined = template.recurrence
     ? { ...template.recurrence, end: { type: "never" } }
     : undefined;

@@ -74,6 +74,7 @@
   let startTime = $state("");
   let endTime = $state("");
   let startDate = $state("");
+  let endDate = $state("");
   let color: EventColor | undefined = $state(undefined);
   let description = $state("");
   let scope: RecurringScope = $state("this");
@@ -593,6 +594,19 @@
   const dpDays = $derived.by(() => buildCalendarGrid(dpYear, dpMonth, startDate));
 
   function selectDpDay(day: CalDay) {
+    // Shift endDate by the same delta to preserve event duration
+    if (startDate && endDate) {
+      const [oy, om, od] = startDate.split("-").map(Number);
+      const [ey, em, ed] = endDate.split("-").map(Number);
+      const oldStart = new Date(oy, om - 1, od);
+      const oldEnd = new Date(ey, em - 1, ed);
+      const daySpan = Math.round((oldEnd.getTime() - oldStart.getTime()) / 86400000);
+      const [ny, nm, nd] = day.dateStr.split("-").map(Number);
+      const newEnd = new Date(ny, nm - 1, nd + daySpan);
+      endDate = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, "0")}-${String(newEnd.getDate()).padStart(2, "0")}`;
+    } else {
+      endDate = day.dateStr;
+    }
     startDate = day.dateStr;
     const [y, m] = day.dateStr.split("-").map(Number);
     dpYear = y;
@@ -645,6 +659,7 @@
 
   function toggleDatepicker() {
     timePickerTarget = null;
+    endDatepickerOpen = false;
     datepickerOpen = !datepickerOpen;
     if (datepickerOpen && startDate) {
       const [y, m] = startDate.split("-").map(Number);
@@ -652,6 +667,64 @@
       dpMonth = m;
       dpPickerMode = "days";
     }
+  }
+
+  // ─── End date picker ─────────────────────────────────────────
+  let endDatepickerOpen = $state(false);
+  let edpYear = $state(new Date().getFullYear());
+  let edpMonth = $state(new Date().getMonth() + 1);
+  let edpPickerMode: DpPickerMode = $state("days");
+  let edpYearPageStart = $state(new Date().getFullYear() - 4);
+  let edpWheelCooldown = false;
+
+  const edpMonthLabel = $derived(
+    new Date(edpYear, edpMonth - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+  );
+  const edpYearPageYears = $derived(Array.from({ length: 12 }, (_, i) => edpYearPageStart + i));
+  const edpDays = $derived.by(() => buildCalendarGrid(edpYear, edpMonth, endDate));
+
+  function toggleEndDatepicker() {
+    timePickerTarget = null;
+    datepickerOpen = false;
+    endDatepickerOpen = !endDatepickerOpen;
+    if (endDatepickerOpen && endDate) {
+      const [y, m] = endDate.split("-").map(Number);
+      edpYear = y;
+      edpMonth = m;
+      edpPickerMode = "days";
+    }
+  }
+
+  function selectEdpDay(day: CalDay) {
+    // Don't allow end date before start date
+    if (day.dateStr < startDate) return;
+    endDate = day.dateStr;
+    const [y, m] = day.dateStr.split("-").map(Number);
+    edpYear = y;
+    edpMonth = m;
+    edpPickerMode = "days";
+    endDatepickerOpen = false;
+    emitChange();
+  }
+
+  function handleEdpHeaderClick() {
+    if (edpPickerMode === "days") edpPickerMode = "months";
+    else if (edpPickerMode === "months") { edpYearPageStart = edpYear - 4; edpPickerMode = "years"; }
+    else edpPickerMode = "days";
+  }
+
+  function handleEdpWheel(e: WheelEvent) {
+    e.preventDefault();
+    if (edpWheelCooldown) return;
+    if (Math.abs(e.deltaY) < 5) return;
+    edpWheelCooldown = true;
+    const delta = e.deltaY > 0 ? 1 : -1;
+    if (edpPickerMode === "days") {
+      if (delta > 0) { if (edpMonth === 12) { edpMonth = 1; edpYear++; } else edpMonth++; }
+      else { if (edpMonth === 1) { edpMonth = 12; edpYear--; } else edpMonth--; }
+    } else if (edpPickerMode === "months") edpYear += delta;
+    else edpYearPageStart += delta * 12;
+    setTimeout(() => { edpWheelCooldown = false; }, 300);
   }
 
   // ─── Time picker ─────────────────────────────────────────────
@@ -672,6 +745,7 @@
 
   function openTimePicker(target: "start" | "end") {
     datepickerOpen = false;
+    endDatepickerOpen = false;
     computeNearestSlot(target === "start" ? startTime : endTime);
     timePickerTarget = target;
     if (timePickerTarget) {
@@ -690,10 +764,27 @@
   }
 
   function selectTime(time: string) {
-    if (timePickerTarget === "start") startTime = time;
-    else if (timePickerTarget === "end") endTime = time;
+    if (timePickerTarget === "start") {
+      startTime = time;
+      syncEndDateFromTimes();
+    } else if (timePickerTarget === "end") {
+      endTime = time;
+      syncEndDateFromTimes();
+    }
     timePickerTarget = null;
     emitChange();
+  }
+
+  /** When times change, set endDate = startDate + 1 day if end < start, else same day. */
+  function syncEndDateFromTimes() {
+    if (!startDate) return;
+    if (endTime < startTime) {
+      const [y, m, d] = startDate.split("-").map(Number);
+      const next = new Date(y, m - 1, d + 1);
+      endDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    } else {
+      endDate = startDate;
+    }
   }
 
   // ─── Tab system ─────────────────────────────────────────────────
@@ -782,6 +873,7 @@
       title = event.title;
       startDate = event.start.split(" ")[0] ?? "";
       startTime = event.start.split(" ")[1] ?? "";
+      endDate = event.end.split(" ")[0] ?? "";
       endTime = event.end.split(" ")[1] ?? "";
       color = event.color;
       description = event.description ?? "";
@@ -832,6 +924,7 @@
       title = "";
       startDate = (start ?? "").split(" ")[0] ?? "";
       startTime = (start ?? "").split(" ")[1] ?? "";
+      endDate = (end ?? "").split(" ")[0] ?? "";
       endTime = (end ?? "").split(" ")[1] ?? "";
       color = undefined;
       description = "";
@@ -847,6 +940,7 @@
 
     descOpen = !!description;
     datepickerOpen = false;
+    endDatepickerOpen = false;
     timePickerTarget = null;
     hasChanges = false;
     openSection = null;
@@ -862,10 +956,12 @@
     if (mode === "edit" && event) {
       startDate = event.start.split(" ")[0] ?? "";
       startTime = event.start.split(" ")[1] ?? "";
+      endDate = event.end.split(" ")[0] ?? "";
       endTime = event.end.split(" ")[1] ?? "";
     } else if (mode === "create") {
       startDate = (start ?? "").split(" ")[0] ?? "";
       startTime = (start ?? "").split(" ")[1] ?? "";
+      endDate = (end ?? "").split(" ")[0] ?? "";
       endTime = (end ?? "").split(" ")[1] ?? "";
     }
   });
@@ -933,10 +1029,14 @@
   // ─── Emit changes ───────────────────────────────────────────────
   function emitChange() {
     hasChanges = true;
+    // Auto-adjust endDate when times are manually typed
+    if (startDate && startTime && endTime && endDate === startDate && endTime < startTime) {
+      syncEndDateFromTimes();
+    }
     onChange?.({
       title: title.trim(),
       start: `${startDate} ${startTime}`,
-      end: `${startDate} ${endTime}`,
+      end: `${endDate} ${endTime}`,
       color,
       description,
       recurrence,
@@ -986,21 +1086,21 @@
     return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   });
 
+  const isCrossMidnight = $derived(endDate !== "" && endDate !== startDate);
+
+  const shortEndDate = $derived.by(() => {
+    if (!endDate || !isCrossMidnight) return "";
+    const [y, m, d] = endDate.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  });
+
   // ─── Build data and handlers ────────────────────────────────────
   function buildSaveData() {
-    const st = startTime;
-    const et = endTime;
-    let endDate = startDate;
-    if (et < st) {
-      // Cross-midnight: bump end date to next day
-      const [y, mo, d] = startDate.split("-").map(Number);
-      const next = new Date(y, mo - 1, d + 1);
-      endDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
-    }
     return {
       title: title.trim() || "Focus session",
-      start: `${startDate} ${st}`,
-      end: `${endDate} ${et}`,
+      start: `${startDate} ${startTime}`,
+      end: `${endDate} ${endTime}`,
       color,
       description,
       recurrence,
@@ -1229,6 +1329,87 @@
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
             {timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => e.stopPropagation()} />
+
+        <!-- End date (shown when cross-midnight) -->
+        {#if isCrossMidnight}
+          <button onclick={toggleEndDatepicker}
+            class="rounded px-1 py-0.5 text-[11px] transition-colors text-muted-foreground
+              {endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+            {shortEndDate}
+          </button>
+        {/if}
+
+        <!-- Floating end date picker -->
+        {#if endDatepickerOpen}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="fixed inset-0 z-[19]" onclick={() => { endDatepickerOpen = false; }}></div>
+          <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="mb-1 flex items-center justify-center" onwheel={handleEdpWheel}>
+              <button onclick={handleEdpHeaderClick}
+                class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+                {#if edpPickerMode === "days"}
+                  {edpMonthLabel}
+                {:else}
+                  {edpYear}
+                {/if}
+              </button>
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div onwheel={handleEdpWheel}>
+              {#if edpPickerMode === "days"}
+                <div class="grid grid-cols-7 gap-x-0 text-center">
+                  {#each dpDayLetters as letter}
+                    <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
+                  {/each}
+                </div>
+                <div class="grid grid-cols-7 gap-x-0 text-center">
+                  {#each edpDays as day}
+                    {@const beforeStart = day.dateStr < startDate}
+                    {@const now = new Date()}
+                    {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
+                    <button onclick={() => selectEdpDay(day)}
+                      class="flex h-6 w-full items-center justify-center rounded-sm text-[12px]
+                        {beforeStart ? 'cursor-not-allowed' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+                      style={day.selected
+                        ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+                        : day.today
+                          ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
+                          : beforeStart
+                            ? "opacity: 0.2;"
+                            : !day.currentMonth
+                              ? "opacity: 0.25;"
+                              : past
+                                ? "opacity: 0.45; color: var(--foreground);"
+                                : "color: var(--foreground);"}
+                    >{day.day}</button>
+                  {/each}
+                </div>
+              {:else if edpPickerMode === "months"}
+                <div class="grid grid-cols-3 gap-1 py-1">
+                  {#each dpShortMonths as name, i}
+                    <button onclick={() => { edpMonth = i + 1; edpPickerMode = "days"; }}
+                      class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
+                        {i + 1 === edpMonth ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                      {name}
+                    </button>
+                  {/each}
+                </div>
+              {:else}
+                <div class="grid grid-cols-3 gap-1 py-1">
+                  {#each edpYearPageYears as year}
+                    <button onclick={() => { edpYear = year; edpPickerMode = "months"; }}
+                      class="rounded-sm py-2 text-center text-[12px] font-medium hover:bg-black/5 dark:hover:bg-black/15
+                        {year === edpYear ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+                      {year}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
 
         <!-- Floating time picker -->
         {#if timePickerTarget}

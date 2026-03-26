@@ -231,4 +231,62 @@ describe("applyFollowing", () => {
     expect(editingEvent).toBeDefined();
     expect(editingEvent!.start.split(" ")[0]).toBe("2026-03-20");
   });
+
+  it("preserves event times with empty changes", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2026-03-20");
+    const events = [template, inst20];
+
+    const result = applyFollowing(
+      [template], events, template.id, inst20,
+      {},
+    );
+
+    const virtualInstances = result.events.filter((e) =>
+      e.recurringParentId?.startsWith("__vf__") || e.id.startsWith("__vf__"),
+    );
+    expect(virtualInstances.length).toBeGreaterThan(0);
+    for (const vi of virtualInstances) {
+      expect(vi.start.split(" ")[1]).toBe("09:00");
+      expect(vi.end.split(" ")[1]).toBe("09:30");
+    }
+  });
+
+  it("preserves cross-midnight end date with empty changes", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-03-15 22:00",
+      end: "2026-03-16 07:00",
+    });
+    const inst20 = {
+      ...template,
+      id: `${template.id}::2026-03-20`,
+      start: "2026-03-20 22:00",
+      end: "2026-03-21 07:00",
+      recurringParentId: template.id,
+    };
+    const events = [template, inst20];
+
+    const result = applyFollowing(
+      [template], events, template.id, inst20,
+      {},
+    );
+
+    const virtualTemplate = result.events.find((e) => e.id === `__vf__${template.id}`);
+    expect(virtualTemplate).toBeDefined();
+    expect(virtualTemplate!.start).toBe("2026-03-20 22:00");
+    expect(virtualTemplate!.end).toBe("2026-03-21 07:00");
+
+    // Check expanded instances also preserve cross-midnight
+    const virtualInstances = result.events.filter((e) =>
+      e.recurringParentId === `__vf__${template.id}`,
+    );
+    for (const vi of virtualInstances) {
+      expect(vi.start.split(" ")[1]).toBe("22:00");
+      expect(vi.end.split(" ")[1]).toBe("07:00");
+      // End date should be day after start date
+      const startDate = vi.start.split(" ")[0];
+      const endDate = vi.end.split(" ")[0];
+      expect(endDate).not.toBe(startDate);
+    }
+  });
 });
