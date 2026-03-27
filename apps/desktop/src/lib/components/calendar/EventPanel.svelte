@@ -39,6 +39,7 @@
 
   const PANEL_WIDTH = 320;
   const PANEL_GAP = 8;
+  const TITLE_BAR_HEIGHT = 40;
 
   let {
     mode,
@@ -787,6 +788,7 @@
   let nearestSlot = $state("");
   let showAsPicker = $state(false);
   let statusPicker = $state(false);
+  let colorPickerOpen = $state(false);
 
   function computeNearestSlot(time: string) {
     const [h, m] = (time || "0:0").split(":").map(Number);
@@ -890,12 +892,30 @@
       recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
       emitChange();
     }
-    openSection = openSection === s ? null : s;
-    if (openSection) {
-      requestAnimationFrame(() => {
-        const el = panelEl?.querySelector(`[data-section="${openSection}"]`);
-        el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      });
+    const opening = openSection !== s;
+    openSection = opening ? s : null;
+    if (opening && panelEl) {
+      // Decide pinning direction only when opening
+      const rect = panelEl.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const roomBelow = vh - PANEL_GAP - rect.bottom;
+      const roomAbove = rect.top - minTop;
+      // Pin bottom when there's less room below, so panel expands upward
+      if (roomBelow < roomAbove) {
+        pinnedBottom = rect.bottom;
+        pinnedDragY = dragOffset.y;
+      } else {
+        pinnedBottom = 0;
+      }
+    } else if (!opening && pinnedBottom > 0) {
+      // Closing: keep the same pinning from open, release after animation.
+      // Bake the rendered position into baseTop so rawTop matches after clearing.
+      setTimeout(() => {
+        if (pinnedBottom > 0 && panelEl) {
+          baseTop = panelEl.getBoundingClientRect().top - dragOffset.y;
+        }
+        pinnedBottom = 0;
+      }, 200);
     }
   }
 
@@ -903,6 +923,8 @@
   let titleInput: HTMLInputElement | undefined = $state();
   let panelEl: HTMLDivElement | undefined = $state();
   let panelHeight = $state(0);
+  let pinnedBottom = $state(0);
+  let pinnedDragY = 0;
   let dragOffset = $state({ x: 0, y: 0 });
   let isDragging = $state(false);
   let userDragged = false;
@@ -1007,6 +1029,7 @@
     timePickerTarget = null;
     showAsPicker = false;
     statusPicker = false;
+    colorPickerOpen = false;
     hasChanges = false;
     openSection = null;
     scope = "this";
@@ -1086,7 +1109,7 @@
     else left = Math.max(PANEL_GAP, (vw - PANEL_WIDTH) / 2);
 
     baseLeft = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, left));
-    baseTop = Math.max(PANEL_GAP, Math.min(vh - ph - PANEL_GAP, _a.y));
+    baseTop = Math.max(minTop, Math.min(vh - ph - PANEL_GAP, _a.y));
     dragOffset = { x: 0, y: 0 };
   });
 
@@ -1129,24 +1152,37 @@
   });
 
   // ─── Panel position ─────────────────────────────────────────────
-  // Uses pinned baseTop/baseLeft so expanding sections grow downward
-  // without shifting the top. When the bottom would exceed the viewport,
-  // the top nudges upward by exactly the overflow — switching to purely
-  // upward growth. No scroll; Save button stays visible.
+  // When a section is expanded, the panel's bottom edge is pinned at
+  // its pre-expansion position so it only grows upward. Otherwise the
+  // top is pinned and the panel grows downward, nudging up only if
+  // it would overflow the viewport.
+  const minTop = TITLE_BAR_HEIGHT + PANEL_GAP;
+
   const panelStyle = $derived.by(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const ph = panelHeight || 520;
 
-    let left = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, baseLeft + dragOffset.x));
-    let top = Math.max(PANEL_GAP, baseTop + dragOffset.y);
+    const left = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, baseLeft + dragOffset.x));
+    const rawTop = Math.max(minTop, baseTop + dragOffset.y);
 
-    const overflow = top + ph + PANEL_GAP - vh;
-    if (overflow > 0) {
-      top = Math.max(PANEL_GAP, top - overflow);
+    if (pinnedBottom > 0) {
+      // Section expanding: use CSS bottom to pin the bottom edge perfectly.
+      // The browser keeps it fixed frame-by-frame without JS timing issues.
+      const dragDelta = dragOffset.y - pinnedDragY;
+      const bottomCss = Math.max(PANEL_GAP, Math.round(vh - pinnedBottom - dragDelta));
+      const maxH = Math.round(pinnedBottom + dragDelta - minTop);
+      return `position:fixed; left:${Math.round(left)}px; bottom:${bottomCss}px; max-height:${maxH}px; width:${PANEL_WIDTH}px; z-index:50;`;
     }
 
-    return `position:fixed; left:${left}px; top:${top}px; width:${PANEL_WIDTH}px; z-index:50;`;
+    // Normal: pin top, nudge up if overflowing bottom
+    let top = rawTop;
+    const overflow = top + ph + PANEL_GAP - vh;
+    if (overflow > 0) {
+      top = Math.max(minTop, top - overflow);
+    }
+
+    return `position:fixed; left:${Math.round(left)}px; top:${Math.round(top)}px; width:${PANEL_WIDTH}px; z-index:50;`;
   });
 
   const colorEntry = $derived(getEventColor(color, theme.isDark));
@@ -1235,7 +1271,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={panelEl}
-  class="panel-root rounded-xl border border-border"
+  class="panel-root flex flex-col rounded-xl border border-border"
   style:box-shadow="0 2px 8px rgba(0,0,0,0.3)"
   style="{panelStyle} background-color: var(--panel-bg);"
   onclick={(e) => { e.stopPropagation(); handlePanelClick(e); }}
@@ -1275,7 +1311,8 @@
     </div>
   </div>
 
-  <div class="flex flex-col gap-3 p-3.5">
+  <!-- Fixed top: title + date -->
+  <div class="shrink-0 flex flex-col gap-3 px-3.5 pt-3.5">
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
@@ -1292,17 +1329,40 @@
       </div>
     {/if}
 
-    <!-- Title -->
-    <div class="title-wrapper relative flex items-center gap-2.5 px-1">
-      <input
-        bind:this={titleInput}
-        type="text"
-        bind:value={title}
-        placeholder="Session title..."
-        class="min-w-0 flex-1 bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-[#444746] dark:placeholder:text-[#C4C7C5]"
-        oninput={emitChange}
-        onkeydown={(e) => e.stopPropagation()}
-      />
+    <!-- Title + color circle -->
+    <div class="flex items-center gap-2 px-1">
+      <div class="title-wrapper relative min-w-0 flex-1">
+        <input
+          bind:this={titleInput}
+          type="text"
+          bind:value={title}
+          placeholder="Session title..."
+          class="w-full bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-[#444746] dark:placeholder:text-[#C4C7C5]"
+          oninput={emitChange}
+          onkeydown={(e) => e.stopPropagation()}
+        />
+      </div>
+      <div class="relative flex items-center">
+        <button
+          onclick={() => { colorPickerOpen = !colorPickerOpen; }}
+          class="h-[14px] w-[14px] shrink-0 rounded-full transition-transform hover:scale-110"
+          style="background-color: {colorEntry.accent};"
+          title="Event color"
+        ></button>
+        {#if colorPickerOpen}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div class="fixed inset-0 z-[60]" onclick={() => { colorPickerOpen = false; }}></div>
+          <div class="absolute right-0 top-full z-[61] mt-0.5 flex flex-wrap gap-2 rounded-lg bg-popover p-2.5 shadow-lg ring-1 ring-border/60" style="width: 220px;">
+            {#each EVENT_COLOR_OPTIONS as c}
+              {@const entry = getEventColor(c, theme.isDark)}
+              <button onclick={() => { color = color === c ? undefined : c; emitChange(); colorPickerOpen = false; }}
+                class="h-[18px] w-[18px] rounded-full transition-transform hover:scale-110"
+                style="background-color:{entry.accent}; {color === c ? `box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px ${entry.accent}; transform: scale(1.15);` : ''}"
+                title={c}></button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
     <hr class="border-[#C4C7C5] dark:border-[#444746] -mt-2 mx-1" />
 
@@ -1523,6 +1583,11 @@
         </div>
       {/if}
     </div>
+  </div>
+
+  <!-- Middle: all-day, description, location, URL (hidden when a section is expanded) -->
+  {#if !openSection}
+  <div transition:slide={{ duration: 180, easing: cubicOut }} class="flex flex-col gap-3 px-3.5 py-1.5">
 
     <!-- All-day / Availability / Status -->
     <div class="-mt-1 flex items-center rounded-lg px-1 text-[11px] leading-none" style="background-color: var(--panel-contrast);">
@@ -1709,9 +1774,11 @@
           oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
       </div>
     </div>
+  </div>
+  {/if}
 
-    <!-- ═══════════ Feature sections (vertical) ═══════════ -->
-    <div class="flex flex-col gap-1.5">
+  <!-- Fixed bottom: feature sections (always visible) -->
+  <div class="shrink-0 flex flex-col gap-1.5 px-3.5 py-1.5">
 
       <!-- 1) Pomodoro -->
       <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
@@ -2079,21 +2146,10 @@
           <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="border-t border-border/60 px-3 py-3 text-center text-[12px] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
         {/if}
       </div>
+  </div>
 
-    </div>
-
-    <!-- Colors -->
-    <div class="flex flex-wrap items-center gap-2 px-1">
-      {#each EVENT_COLOR_OPTIONS as c}
-        {@const entry = getEventColor(c, theme.isDark)}
-        <button onclick={() => { color = color === c ? undefined : c; emitChange(); }}
-          class="h-[18px] w-[18px] shrink-0 rounded-full transition-all hover:scale-110"
-          style="background:{entry.accent}; {color === c ? `box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px ${entry.accent}; transform: scale(1.15);` : ''}"
-          title={c}></button>
-      {/each}
-    </div>
-
-    <!-- Save -->
+  <!-- Save (pinned outside scroll) -->
+  <div class="shrink-0 px-3.5 pb-3.5 pt-1.5" style="background-color: var(--panel-bg);">
     {#if readOnly}
       <div class="flex w-full items-center justify-center rounded-lg py-1.5 text-[11px] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">

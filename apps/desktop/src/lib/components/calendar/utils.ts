@@ -686,7 +686,7 @@ export function getEventColor(
   color: EventColor | undefined,
   isDark: boolean,
 ): ColorEntry {
-  const key = color ?? "sky";
+  const key = color ?? "slate";
   return isDark ? DARK_COLORS[key] : LIGHT_COLORS[key];
 }
 
