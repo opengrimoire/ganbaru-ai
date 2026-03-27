@@ -905,6 +905,7 @@
   let panelHeight = $state(0);
   let dragOffset = $state({ x: 0, y: 0 });
   let isDragging = $state(false);
+  let userDragged = false;
   let dragStart = { x: 0, y: 0 };
   let baseLeft = $state(0);
   let baseTop = $state(0);
@@ -1010,6 +1011,7 @@
     openSection = null;
     scope = "this";
     dragOffset = { x: 0, y: 0 };
+    userDragged = false;
   });
 
   // Sync date/time from event prop when block is dragged/resized externally.
@@ -1067,9 +1069,11 @@
   });
 
   // Pin base position when anchor changes; read panelHeight without tracking
-  // so height changes from expanding sections don't reposition the panel
+  // so height changes from expanding sections don't reposition the panel.
+  // Skip repositioning if the user has manually dragged the panel.
   $effect(() => {
     const _a = anchor;
+    if (userDragged) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const ph = untrack(() => panelHeight) || 520;
@@ -1218,7 +1222,7 @@
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function handleDragMove(e: PointerEvent) { if (isDragging) dragOffset = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }; }
-  function handleDragEnd() { isDragging = false; }
+  function handleDragEnd() { isDragging = false; userDragged = true; }
 
   function handleKeydown(e: KeyboardEvent) {
     // Let the description editor handle its own shortcuts (Ctrl+Z, etc.)
