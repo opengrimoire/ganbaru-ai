@@ -32,6 +32,7 @@
   import Sun from "@lucide/svelte/icons/sun";
   import Eye from "@lucide/svelte/icons/eye";
   import AlignLeft from "@lucide/svelte/icons/align-left";
+  import Check from "@lucide/svelte/icons/check";
 
 
   const theme = getTheme();
@@ -119,9 +120,19 @@
     });
   }
 
+  let descClosing = $state(false);
+
+  function closeDescEditor() {
+    if (!descOpen || descClosing) return;
+    descClosing = true;
+    descOpen = false;
+    // Keep element in DOM during toolbar slide-out, then release
+    setTimeout(() => { descClosing = false; }, 250);
+  }
+
   function handlePanelClick(e: MouseEvent) {
     if (descOpen && descAreaEl && !descAreaEl.contains(e.target as Node)) {
-      descOpen = false;
+      closeDescEditor();
     }
   }
 
@@ -203,6 +214,13 @@
 
   // ─── Pomodoro ───────────────────────────────────────────────────
   type PomodoroPreset = "auto" | "deep" | "creative" | "extended" | "custom";
+  // Sync description HTML into the persistent editor element when not actively editing
+  $effect(() => {
+    if (!descOpen && !descClosing && editorEl) {
+      editorEl.innerHTML = description;
+    }
+  });
+
   const POMO_PRESETS: Record<Exclude<PomodoroPreset, "custom">, { focus: number; short: number; long: number; label: string; desc: string }> = {
     auto: { focus: 40, short: 5, long: 10, label: "Automatic", desc: "Default" },
     deep: { focus: 40, short: 5, long: 10, label: "Deep focus", desc: "F 40 / SB 5 / LB 10" },
@@ -1580,8 +1598,8 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div bind:this={descAreaEl}>
         {#if descOpen}
-          <!-- Toolbar (aligned with icon via same px-3) -->
-          <div in:slide={{ duration: 150, easing: cubicOut }} class="flex items-center gap-0.5 pb-1 pr-3 pt-2" style="padding-left: 35px;">
+          <!-- Toolbar (aligned with editor text via padding-left) -->
+          <div transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1 pr-3" style="padding-left: 35px;">
             {#each [
               { icon: Bold, cmd: "bold", title: "Bold" },
               { icon: Italic, cmd: "italic", title: "Italic" },
@@ -1637,28 +1655,33 @@
               class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
               title="Remove formatting"
             ><RemoveFormatting size={13} /></button>
+            <button
+              onmousedown={(e) => e.preventDefault()}
+              onclick={closeDescEditor}
+              class="ml-auto flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+              title="Done"
+            ><Check size={13} /></button>
           </div>
         {/if}
         <!-- Icon + content row -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-          class="flex gap-2.5 px-3 {descOpen ? 'items-start pb-2' : 'items-center py-2 leading-none cursor-text transition-colors hover:bg-black/5 dark:hover:bg-black/15'}"
-          onclick={() => { if (!descOpen) openDescEditor(); }}
+          class="flex items-center gap-2.5 px-3 pb-2 leading-none {!descOpen && !descClosing ? 'cursor-text pt-2' : 'pt-0'}"
+          onclick={() => { if (!descOpen && !descClosing) openDescEditor(); }}
         >
-          <AlignLeft size={13} class="shrink-0 text-foreground" style={descOpen ? 'margin-top: 5px;' : ''} />
+          <AlignLeft size={13} class="shrink-0 text-foreground" />
           <div class="min-w-0 flex-1">
-            {#if descOpen}
+            {#if descOpen || descClosing || descPreview}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
                 bind:this={editorEl}
-                contenteditable="true"
-                class="desc-editor max-h-[80px] overflow-y-auto rounded bg-black/5 dark:bg-black/15 px-2 py-1.5 text-[11px] leading-[15px] text-foreground outline-none"
+                contenteditable={descOpen && !descClosing}
+                class="desc-editor desc-content max-h-[80px] overflow-y-auto text-[11px] leading-[15px] text-foreground outline-none"
+                class:desc-editing={descOpen && !descClosing}
                 oninput={handleEditorInput}
                 onpaste={handleEditorPaste}
-                onkeydown={(e) => e.stopPropagation()}
+                onkeydown={(e) => { if (descOpen) e.stopPropagation(); }}
               ></div>
-            {:else if descPreview}
-              <div class="desc-editor max-h-[80px] overflow-y-auto text-[11px] leading-[15px] text-foreground">{@html description}</div>
             {:else}
               <span class="text-[11px] text-muted-foreground/40">Add description</span>
             {/if}
@@ -2149,6 +2172,23 @@
 
   .title-wrapper:not(:focus-within)::after {
     opacity: 1;
+  }
+
+  .desc-content {
+    transition: background-color 250ms ease-out, padding 250ms ease-out, border-radius 250ms ease-out;
+    padding: 0;
+    background-color: transparent;
+    border-radius: 0;
+  }
+
+  .desc-editing {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 6px 8px;
+    border-radius: 4px;
+  }
+
+  :global(.dark) .desc-editing {
+    background-color: rgba(0, 0, 0, 0.15);
   }
 
   .desc-editor:empty::before {
