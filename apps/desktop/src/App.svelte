@@ -3,6 +3,7 @@
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { getZoom } from "$lib/stores/zoom.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { invoke } from "@tauri-apps/api/core";
@@ -20,6 +21,7 @@
   const calendar = getCalendar();
   const calendars = getCalendars();
   const pomodoro = getPomodoro();
+  const zoom = getZoom();
 
   let isMaximized = $state(true);
 
@@ -68,6 +70,22 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.ctrlKey && (e.key === "=" || e.key === "+")) {
+      e.preventDefault();
+      zoom.zoomIn();
+      return;
+    }
+    if (e.ctrlKey && e.key === "-") {
+      e.preventDefault();
+      zoom.zoomOut();
+      return;
+    }
+    if (e.ctrlKey && e.key === "0") {
+      e.preventDefault();
+      zoom.reset();
+      return;
+    }
+
     if (showStopConfirm || suspendInfo || idleInfo) return;
 
     if (e.altKey && e.key >= "1" && e.key <= String(views.length)) {
