@@ -1666,7 +1666,7 @@
         <!-- Icon + content row -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-          class="flex items-center gap-2.5 px-3 pb-2 leading-none {!descOpen && !descClosing ? 'cursor-text pt-2' : 'pt-0'}"
+          class="flex items-center gap-2.5 px-3 pb-2 leading-none transition-[padding-top] duration-250 ease-out {descOpen ? 'pt-0' : 'pt-2'} {!descOpen && !descClosing ? 'cursor-text' : ''}"
           onclick={() => { if (!descOpen && !descClosing) openDescEditor(); }}
         >
           <AlignLeft size={13} class="shrink-0 text-foreground" />
