@@ -23,11 +23,12 @@ function loadSavedZoom(): number {
   return clamp(parsed);
 }
 
-let level = $state<number>(loadSavedZoom());
+const initialZoom = loadSavedZoom();
+let level = $state<number>(initialZoom);
 
 // Apply zoom at module load so there's no flash of default zoom
-if (level !== DEFAULT_ZOOM) {
-  getCurrentWebviewWindow().setZoom(level);
+if (initialZoom !== DEFAULT_ZOOM) {
+  getCurrentWebviewWindow().setZoom(initialZoom);
 }
 
 function persist() {

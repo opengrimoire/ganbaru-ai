@@ -15,19 +15,16 @@
 
   type PickerMode = "days" | "months" | "years";
 
-  let year = $state(0);
-  let month = $state(1);
-  let pickerMode: PickerMode = $state("days");
-  let yearPageStart = $state(0);
-  let wheelCooldown = false;
+  // svelte-ignore state_referenced_locally -- component remounts per use, initial-only capture is correct
+  const initParts = selectedDate ? selectedDate.split("-").map(Number) : [];
+  const initYear = initParts[0] || new Date().getFullYear();
+  const initMonth = initParts[1] || new Date().getMonth() + 1;
 
-  // Initialize from selectedDate
-  {
-    const parts = selectedDate ? selectedDate.split("-").map(Number) : [];
-    year = parts[0] || new Date().getFullYear();
-    month = parts[1] || new Date().getMonth() + 1;
-    yearPageStart = year - 4;
-  }
+  let year = $state(initYear);
+  let month = $state(initMonth);
+  let pickerMode: PickerMode = $state("days");
+  let yearPageStart = $state(initYear - 4);
+  let wheelCooldown = false;
 
   const monthLabel = $derived(
     new Date(year, month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" }),
