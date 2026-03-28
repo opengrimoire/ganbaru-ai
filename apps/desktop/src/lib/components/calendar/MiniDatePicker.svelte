@@ -138,8 +138,8 @@
     <div class="grid grid-cols-3 gap-1 py-1">
       {#each SHORT_MONTHS as name, i}
         <button onclick={() => selectMonth(i)}
-          class="rounded-sm py-2 text-center {textSize} font-medium hover:bg-black/5 dark:hover:bg-black/15
-            {i + 1 === month ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+          class="rounded-sm py-2 text-center {textSize} font-medium
+            {i + 1 === month ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
           {name}
         </button>
       {/each}
@@ -148,8 +148,8 @@
     <div class="grid grid-cols-3 gap-1 py-1">
       {#each yearPageYears as y}
         <button onclick={() => selectYear(y)}
-          class="rounded-sm py-2 text-center {textSize} font-medium hover:bg-black/5 dark:hover:bg-black/15
-            {y === year ? 'bg-primary text-primary-foreground' : 'text-foreground'}">
+          class="rounded-sm py-2 text-center {textSize} font-medium
+            {y === year ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
           {y}
         </button>
       {/each}

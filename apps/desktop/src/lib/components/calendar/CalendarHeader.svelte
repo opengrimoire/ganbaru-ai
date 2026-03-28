@@ -232,9 +232,9 @@
           {@const isAnchor = pickerYear === anchorDate.getFullYear() && i === anchorDate.getMonth()}
           <button
             onclick={() => selectMonth(i)}
-            class="rounded-sm py-2.5 text-center text-sm font-medium hover:bg-accent {isAnchor
-              ? 'bg-primary text-primary-foreground'
-              : 'text-foreground'}"
+            class="rounded-sm py-2.5 text-center text-sm font-medium {isAnchor
+              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+              : 'text-foreground hover:bg-accent'}"
           >
             {name}
           </button>
@@ -248,9 +248,9 @@
           {@const isAnchor = year === anchorDate.getFullYear()}
           <button
             onclick={() => selectYear(year)}
-            class="rounded-sm py-2.5 text-center text-sm font-medium hover:bg-accent {isAnchor
-              ? 'bg-primary text-primary-foreground'
-              : 'text-foreground'}"
+            class="rounded-sm py-2.5 text-center text-sm font-medium {isAnchor
+              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+              : 'text-foreground hover:bg-accent'}"
           >
             {year}
           </button>

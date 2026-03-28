@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { createSmoothScroll } from "./utils";
+
   let {
     currentTime,
     isEnd = false,
@@ -18,6 +20,7 @@
   });
 
   let scrollEl: HTMLDivElement | undefined = $state();
+  const onWheel = createSmoothScroll(() => scrollEl, 0.4, 0.075);
 
   const nearestSlot = $derived.by(() => {
     const [h, m] = (currentTime || "0:0").split(":").map(Number);
@@ -52,7 +55,8 @@
   }
 </script>
 
-<div bind:this={scrollEl} class="time-picker-scroll max-h-[200px] overflow-y-auto">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div bind:this={scrollEl} onwheel={onWheel} class="time-picker-scroll max-h-[200px] overflow-y-auto">
   {#each TIME_SLOTS as slot}
     {@const selected = currentTime === slot}
     {@const isNow = slot === nearestSlot}
