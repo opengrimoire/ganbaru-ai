@@ -31,6 +31,11 @@ apps/desktop/src/lib/
     utils.test.ts      ← test
     rrule.ts           ← source
     rrule.test.ts      ← test
+    recurrence.ts      ← source
+    recurrence.test.ts ← test
+  stores/
+    map-row.ts         ← source
+    map-row.test.ts    ← test
   utils/
     pomodoro-segments.ts      ← source
     pomodoro-segments.test.ts ← test
@@ -44,7 +49,9 @@ apps/desktop/src/lib/
 |---|---|
 | `utils/xp.test.ts` | XP calculation formula, focus score multiplier, rounding |
 | `components/calendar/utils.test.ts` | Date parsing/formatting round-trip, week/day helpers, minute-of-day extraction, duration calculation, grid snapping, event filtering, overlap layout algorithm, time storage round-trip |
-| `components/calendar/rrule.test.ts` | RepeatRule-to-RRULE conversion, reverse mapping, round-trip for all presets, null/unknown handling |
+| `components/calendar/rrule.test.ts` | RRULE serialization/parsing (simple + BY* rules: ordinal BYDAY, BYMONTHDAY, BYMONTH, BYSETPOS, BYYEARDAY, BYWEEKNO, WKST, UNTIL with datetime), preset round-trips, recurrenceToPreset null cases, formatRecurrenceLabel for all patterns |
+| `components/calendar/recurrence.test.ts` | Recurrence expansion (daily/weekly/monthly/yearly, ordinal BYDAY, BYMONTHDAY with short months, UNTIL with datetime, exceptions, overrides, RDATE dedup/exceptions, backward compat), findOrdinalWeekday, parseYMD/fmtYMD |
+| `stores/map-row.test.ts` | DB row to CalendarEvent mapping (basic fields, default-to-undefined, JSON deserialization for categories/geo/rdate/extendedProperties/organizer, malformed JSON handling, pomodoro config, color, status, transparency, visibility, all-day, guest permissions default/non-default mapping) |
 | `utils/pomodoro-segments.test.ts` | Planned segment computation (cycle iteration, clipping, long break placement, cycle reset), accent band fraction mapping, focus time inheritance (shortened first focus, break-on-threshold, clipping), cycle number inheritance (cross-block propagation, long break triggering), trailing state computation, day timeline bands (single event, sequential inheritance, gap reset, containment, partial overlap, same-range tiebreak, past skipping, active event projection, focus fills from persisted/active segments, fill capping, pause gap visualization in active/persisted focus fills) |
 
 ### Not tested (and why)

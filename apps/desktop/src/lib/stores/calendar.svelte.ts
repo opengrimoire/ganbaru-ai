@@ -1,43 +1,17 @@
 import { execute, select } from "$lib/api/db";
-import type { CalendarEvent, EventColor, EventStatus, EventTransparency, PomodoroConfig, RecurrenceConfig } from "$lib/components/calendar/types";
-import { recurrenceToRrule, rruleToRecurrence } from "$lib/components/calendar/rrule";
+import type {
+  CalendarEvent, EventAlarm, EventAttendee, EventColor, EventOverride,
+  EventOrganizer, EventStatus, EventTransparency, EventVisibility,
+  GeoCoordinates, GuestPermissions, PomodoroConfig, RecurrenceConfig,
+} from "$lib/components/calendar/types";
+import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
+import {
+  mapRow, mapAttendee, mapAlarm, mapOverride, toDbTime,
+  type DbCalendarEvent, type DbAttendee, type DbAlarm, type DbOverride,
+} from "./map-row";
 
 export { expandRecurring, parseYMD, fmtYMD };
-
-interface DbCalendarEvent {
-  id: string;
-  title: string;
-  start_time: string;
-  end_time: string;
-  timezone: string;
-  calendar_id: string;
-  color: string | null;
-  description: string;
-  rrule: string | null;
-  notifications: string | null;
-  exceptions: string | null;
-  repeat_until: string | null;
-  all_day: number;
-  location: string;
-  url: string;
-  transparency: string;
-  status: string;
-  // LEFT JOIN pomodoro_configs
-  focus_duration_minutes: number | null;
-  short_break_minutes: number | null;
-  long_break_minutes: number | null;
-  pomodoro_count: number | null;
-  idle_timeout_minutes: number | null;
-}
-
-function toCalendarDate(dbTime: string): string {
-  return dbTime.substring(0, 16).replace("T", " ");
-}
-
-function toDbTime(calendarDate: string): string {
-  return calendarDate + ":00";
-}
 
 function nowLocal(): string {
   const d = new Date();
@@ -93,34 +67,64 @@ function mergeIntoTemplate(template: CalendarEvent, changes: CalendarEvent): Cal
   };
 }
 
-function mapRow(r: DbCalendarEvent): CalendarEvent {
-  return {
-    id: r.id,
-    title: r.title,
-    start: toCalendarDate(r.start_time),
-    end: toCalendarDate(r.end_time),
-    timezone: r.timezone,
-    calendarId: r.calendar_id,
-    color: (r.color as EventColor) ?? undefined,
-    description: r.description || undefined,
-    recurrence: r.rrule ? rruleToRecurrence(r.rrule, r.repeat_until ?? undefined) : undefined,
-    notifications: r.notifications
-      ? JSON.parse(r.notifications) as number[]
-      : undefined,
-    exceptions: r.exceptions ? JSON.parse(r.exceptions) as string[] : undefined,
-    allDay: r.all_day === 1 ? true : undefined,
-    location: r.location || undefined,
-    url: r.url || undefined,
-    transparency: r.transparency === "transparent" ? "transparent" as EventTransparency : undefined,
-    status: r.status !== "confirmed" ? r.status as EventStatus : undefined,
-    pomodoroConfig: r.focus_duration_minutes != null ? {
-      focusDurationMinutes: r.focus_duration_minutes,
-      shortBreakMinutes: r.short_break_minutes!,
-      longBreakMinutes: r.long_break_minutes!,
-      pomodoroCount: r.pomodoro_count!,
-      idleTimeoutMinutes: r.idle_timeout_minutes,
-    } : undefined,
-  };
+/**
+ * Replace all attendees for an event (delete + insert).
+ */
+async function saveAttendees(eventId: string, attendees: EventAttendee[]): Promise<void> {
+  await execute("DELETE FROM calendar_event_attendees WHERE event_id = $1", [eventId]);
+  for (let i = 0; i < attendees.length; i++) {
+    const att = attendees[i];
+    await execute(
+      `INSERT INTO calendar_event_attendees (id, event_id, name, email, role, status, rsvp, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [att.id, eventId, att.name ?? null, att.email, att.role, att.status, att.rsvp ? 1 : 0, i],
+    );
+  }
+}
+
+async function loadAttendees(eventIds: string[]): Promise<Map<string, EventAttendee[]>> {
+  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+  const rows = await select<DbAttendee>(
+    `SELECT * FROM calendar_event_attendees WHERE event_id IN (${placeholders}) ORDER BY sort_order ASC`,
+    eventIds,
+  );
+  const map = new Map<string, EventAttendee[]>();
+  for (const r of rows) {
+    const list = map.get(r.event_id) ?? [];
+    list.push(mapAttendee(r));
+    map.set(r.event_id, list);
+  }
+  return map;
+}
+
+async function loadAlarms(eventIds: string[]): Promise<Map<string, EventAlarm[]>> {
+  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+  const rows = await select<DbAlarm>(
+    `SELECT * FROM calendar_event_alarms WHERE event_id IN (${placeholders}) ORDER BY sort_order ASC`,
+    eventIds,
+  );
+  const map = new Map<string, EventAlarm[]>();
+  for (const r of rows) {
+    const list = map.get(r.event_id) ?? [];
+    list.push(mapAlarm(r));
+    map.set(r.event_id, list);
+  }
+  return map;
+}
+
+async function loadOverrides(eventIds: string[]): Promise<Map<string, EventOverride[]>> {
+  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+  const rows = await select<DbOverride>(
+    `SELECT * FROM calendar_event_overrides WHERE parent_event_id IN (${placeholders})`,
+    eventIds,
+  );
+  const map = new Map<string, EventOverride[]>();
+  for (const r of rows) {
+    const list = map.get(r.parent_event_id) ?? [];
+    list.push(mapOverride(r));
+    map.set(r.parent_event_id, list);
+  }
+  return map;
 }
 
 export function getCalendar() {
@@ -141,6 +145,11 @@ export function getCalendar() {
                   ce.calendar_id, ce.color, ce.description, ce.rrule,
                   ce.notifications, ce.exceptions, ce.repeat_until,
                   ce.all_day, ce.location, ce.url, ce.transparency, ce.status,
+                  ce.source_uid, ce.visibility, ce.priority, ce.categories,
+                  ce.geo, ce.sequence, ce.rdate, ce.extended_properties,
+                  ce.organizer,
+                  ce.guest_can_modify, ce.guest_can_invite_others,
+                  ce.guest_can_see_other_guests,
                   pc.focus_duration_minutes, pc.short_break_minutes,
                   pc.long_break_minutes, pc.pomodoro_count,
                   pc.idle_timeout_minutes
@@ -149,7 +158,27 @@ export function getCalendar() {
            ORDER BY ce.start_time ASC`,
         );
         console.log(`[calendar] loaded ${rows.length} blocks from DB`, rows);
-        rawBlocks = rows.map(mapRow);
+        const mapped = rows.map(mapRow);
+
+        // Load related tables and merge into events
+        if (mapped.length > 0) {
+          const ids = mapped.map((e) => e.id);
+          const [attendeeMap, alarmMap, overrideMap] = await Promise.all([
+            loadAttendees(ids),
+            loadAlarms(ids),
+            loadOverrides(ids),
+          ]);
+          for (const evt of mapped) {
+            const att = attendeeMap.get(evt.id);
+            if (att?.length) evt.attendees = att;
+            const alm = alarmMap.get(evt.id);
+            if (alm?.length) evt.alarms = alm;
+            const ovr = overrideMap.get(evt.id);
+            if (ovr?.length) evt.overrides = ovr;
+          }
+        }
+
+        rawBlocks = mapped;
         reexpand();
         console.log(`[calendar] blocks set, count: ${blocks.length} (${rawBlocks.length} templates)`);
       } catch (e) {
@@ -174,6 +203,17 @@ export function getCalendar() {
       url?: string;
       transparency?: EventTransparency;
       status?: EventStatus;
+      sourceUid?: string;
+      visibility?: EventVisibility;
+      priority?: number;
+      categories?: string[];
+      geo?: GeoCoordinates;
+      sequence?: number;
+      rdate?: string[];
+      extendedProperties?: Record<string, string>;
+      organizer?: EventOrganizer;
+      attendees?: EventAttendee[];
+      guestPermissions?: GuestPermissions;
     }): Promise<CalendarEvent> {
       const id = opts.id ?? crypto.randomUUID();
       const now = nowLocal();
@@ -189,13 +229,30 @@ export function getCalendar() {
            (id, title, start_time, end_time, timezone, calendar_id,
             color, description, rrule, notifications, repeat_until,
             all_day, location, url, transparency, status,
+            source_uid, visibility, priority, categories, geo,
+            sequence, rdate, extended_properties, organizer,
+            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
             created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                 $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+                 $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
         [id, opts.title, toDbTime(opts.start), toDbTime(opts.end),
          timezone, calendarId, opts.color ?? null, opts.description ?? "",
          rrule, notifJson, repeatUntil,
          opts.allDay ? 1 : 0, opts.location ?? "", opts.url ?? "",
          opts.transparency ?? "opaque", opts.status ?? "confirmed",
+         opts.sourceUid ?? null,
+         opts.visibility ?? "public",
+         opts.priority ?? null,
+         opts.categories ? JSON.stringify(opts.categories) : null,
+         opts.geo ? JSON.stringify(opts.geo) : null,
+         opts.sequence ?? 0,
+         opts.rdate ? JSON.stringify(opts.rdate) : null,
+         opts.extendedProperties ? JSON.stringify(opts.extendedProperties) : null,
+         opts.organizer ? JSON.stringify(opts.organizer) : null,
+         opts.guestPermissions?.canModify ? 1 : 0,
+         opts.guestPermissions?.canInviteOthers === false ? 0 : 1,
+         opts.guestPermissions?.canSeeOtherGuests === false ? 0 : 1,
          now, now],
       );
       if (opts.pomodoroConfig) {
@@ -208,6 +265,9 @@ export function getCalendar() {
            opts.pomodoroConfig.idleTimeoutMinutes],
         );
       }
+      if (opts.attendees && opts.attendees.length > 0) {
+        await saveAttendees(id, opts.attendees);
+      }
       const event: CalendarEvent = {
         id, title: opts.title, start: opts.start, end: opts.end,
         timezone, calendarId,
@@ -216,6 +276,13 @@ export function getCalendar() {
         pomodoroConfig: opts.pomodoroConfig,
         allDay: opts.allDay, location: opts.location, url: opts.url,
         transparency: opts.transparency, status: opts.status,
+        sourceUid: opts.sourceUid, visibility: opts.visibility,
+        priority: opts.priority, categories: opts.categories,
+        geo: opts.geo, sequence: opts.sequence,
+        rdate: opts.rdate, extendedProperties: opts.extendedProperties,
+        organizer: opts.organizer,
+        attendees: opts.attendees,
+        guestPermissions: opts.guestPermissions,
       };
       rawBlocks = [...rawBlocks, event];
       reexpand();
@@ -240,6 +307,7 @@ export function getCalendar() {
         ? toUpdate.recurrence.end.date : null;
       const notifJson = toUpdate.notifications && toUpdate.notifications.length > 0
         ? JSON.stringify(toUpdate.notifications) : null;
+      const gp = toUpdate.guestPermissions;
       await execute(
         `UPDATE calendar_events
          SET title = $1, start_time = $2, end_time = $3,
@@ -248,8 +316,14 @@ export function getCalendar() {
              repeat_until = $8,
              all_day = $9, location = $10, url = $11,
              transparency = $12, status = $13,
-             updated_at = $14
-         WHERE id = $15`,
+             visibility = $14, priority = $15,
+             categories = $16, geo = $17,
+             sequence = $18, rdate = $19,
+             extended_properties = $20, organizer = $21,
+             guest_can_modify = $22, guest_can_invite_others = $23,
+             guest_can_see_other_guests = $24,
+             updated_at = $25
+         WHERE id = $26`,
         [
           toUpdate.title,
           toDbTime(String(toUpdate.start)),
@@ -264,10 +338,23 @@ export function getCalendar() {
           toUpdate.url ?? "",
           toUpdate.transparency ?? "opaque",
           toUpdate.status ?? "confirmed",
+          toUpdate.visibility ?? "public",
+          toUpdate.priority ?? null,
+          toUpdate.categories ? JSON.stringify(toUpdate.categories) : null,
+          toUpdate.geo ? JSON.stringify(toUpdate.geo) : null,
+          toUpdate.sequence ?? 0,
+          toUpdate.rdate ? JSON.stringify(toUpdate.rdate) : null,
+          toUpdate.extendedProperties ? JSON.stringify(toUpdate.extendedProperties) : null,
+          toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null,
+          gp?.canModify ? 1 : 0,
+          gp?.canInviteOthers === false ? 0 : 1,
+          gp?.canSeeOtherGuests === false ? 0 : 1,
           now,
           parentId,
         ],
       );
+      // Sync attendees
+      await saveAttendees(parentId, toUpdate.attendees ?? []);
       if (toUpdate.pomodoroConfig) {
         await execute(
           `INSERT OR REPLACE INTO pomodoro_configs
@@ -328,13 +415,18 @@ export function getCalendar() {
       const timezone = parent.timezone || localTimezone();
       const notifJson = parent.notifications && parent.notifications.length > 0
         ? JSON.stringify(parent.notifications) : null;
+      const gpD = parent.guestPermissions;
       await execute(
         `INSERT INTO calendar_events
            (id, title, start_time, end_time, timezone, calendar_id,
             color, description, notifications,
             all_day, location, url, transparency, status,
+            visibility, priority, categories, geo,
+            sequence, extended_properties, organizer,
+            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
             created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                 $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
         [
           newId, instanceEvent.title,
           toDbTime(instanceEvent.start), toDbTime(instanceEvent.end),
@@ -347,6 +439,16 @@ export function getCalendar() {
           parent.url ?? "",
           parent.transparency ?? "opaque",
           parent.status ?? "confirmed",
+          parent.visibility ?? "public",
+          parent.priority ?? null,
+          parent.categories ? JSON.stringify(parent.categories) : null,
+          parent.geo ? JSON.stringify(parent.geo) : null,
+          parent.sequence ?? 0,
+          parent.extendedProperties ? JSON.stringify(parent.extendedProperties) : null,
+          parent.organizer ? JSON.stringify(parent.organizer) : null,
+          gpD?.canModify ? 1 : 0,
+          gpD?.canInviteOthers === false ? 0 : 1,
+          gpD?.canSeeOtherGuests === false ? 0 : 1,
           now, now,
         ],
       );
@@ -363,6 +465,12 @@ export function getCalendar() {
         );
       }
 
+      // Copy attendees from parent
+      if (parent.attendees && parent.attendees.length > 0) {
+        const cloned = parent.attendees.map((a) => ({ ...a, id: crypto.randomUUID() }));
+        await saveAttendees(newId, cloned);
+      }
+
       // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
@@ -376,6 +484,8 @@ export function getCalendar() {
         recurringParentId: undefined,
         exceptions: undefined,
         pomodoroConfig: parent.pomodoroConfig,
+        attendees: parent.attendees,
+        guestPermissions: parent.guestPermissions,
       };
       rawBlocks = [...rawBlocks, standalone];
       reexpand();
@@ -475,13 +585,18 @@ export function getCalendar() {
 
       const splitNotifJson = merged.notifications && merged.notifications.length > 0
         ? JSON.stringify(merged.notifications) : null;
+      const gpS = parent.guestPermissions;
       await execute(
         `INSERT INTO calendar_events
            (id, title, start_time, end_time, timezone, calendar_id,
             color, description, rrule, notifications,
             all_day, location, url, transparency, status,
+            visibility, priority, categories, geo,
+            sequence, extended_properties, organizer,
+            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
             created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
         [
           newId, merged.title ?? parent.title,
           toDbTime(newStart),
@@ -496,6 +611,16 @@ export function getCalendar() {
           merged.url ?? "",
           merged.transparency ?? "opaque",
           merged.status ?? "confirmed",
+          parent.visibility ?? "public",
+          parent.priority ?? null,
+          parent.categories ? JSON.stringify(parent.categories) : null,
+          parent.geo ? JSON.stringify(parent.geo) : null,
+          parent.sequence ?? 0,
+          parent.extendedProperties ? JSON.stringify(parent.extendedProperties) : null,
+          parent.organizer ? JSON.stringify(parent.organizer) : null,
+          gpS?.canModify ? 1 : 0,
+          gpS?.canInviteOthers === false ? 0 : 1,
+          gpS?.canSeeOtherGuests === false ? 0 : 1,
           now, now,
         ],
       );
@@ -512,6 +637,12 @@ export function getCalendar() {
         );
       }
 
+      // Copy attendees from parent
+      if (parent.attendees && parent.attendees.length > 0) {
+        const cloned = parent.attendees.map((a) => ({ ...a, id: crypto.randomUUID() }));
+        await saveAttendees(newId, cloned);
+      }
+
       // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, recurrence: cappedRecurrence } : b,
@@ -526,6 +657,8 @@ export function getCalendar() {
         recurringParentId: undefined,
         exceptions: undefined,
         pomodoroConfig: pomConfig,
+        attendees: parent.attendees,
+        guestPermissions: parent.guestPermissions,
       };
       rawBlocks = [...rawBlocks, newTemplate];
       reexpand();

@@ -1,14 +1,15 @@
 <script lang="ts">
   import type {
-    CalendarEvent, EventColor, EventStatus, EventTransparency, PomodoroConfig,
-    RecurrenceConfig, RecurrenceFrequency, RecurringScope, Weekday,
+    CalendarEvent, EventColor, EventStatus, EventTransparency, EventVisibility,
+    EventAttendee, EventOrganizer, GeoCoordinates, GuestPermissions,
+    PomodoroConfig, RecurrenceConfig, RecurrenceFrequency, RecurringScope, Weekday,
   } from "./types";
   import { formatRecurrenceLabel } from "./rrule";
   import { onMount, untrack } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import "@fontsource-variable/inter";
-  import { EVENT_COLOR_OPTIONS, getEventColor } from "./utils";
+  import { EVENT_COLOR_OPTIONS, getEventColor, createSmoothScroll } from "./utils";
   import { getTheme } from "$lib/stores/theme.svelte";
   import X from "@lucide/svelte/icons/x";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -33,6 +34,14 @@
   import Eye from "@lucide/svelte/icons/eye";
   import AlignLeft from "@lucide/svelte/icons/align-left";
   import Check from "@lucide/svelte/icons/check";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Lock from "@lucide/svelte/icons/lock";
+  import Users from "@lucide/svelte/icons/users";
+  import Flag from "@lucide/svelte/icons/flag";
+  import Minus from "@lucide/svelte/icons/minus";
+  import CircleHelp from "@lucide/svelte/icons/circle-help";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
 
 
   const theme = getTheme();
@@ -76,6 +85,9 @@
       url?: string;
       transparency?: EventTransparency;
       status?: EventStatus;
+      visibility?: EventVisibility;
+      attendees?: EventAttendee[];
+      guestPermissions?: GuestPermissions;
     }, scope?: RecurringScope) => void;
     onDelete?: (id: string, scope?: RecurringScope) => void;
     onClose: () => void;
@@ -99,6 +111,75 @@
   let eventUrl = $state("");
   let transparency: EventTransparency = $state("opaque");
   let eventStatus: EventStatus = $state("confirmed");
+  let visibility: EventVisibility = $state("public");
+
+  // ─── Attendees ─────────────────────────────────────────────────
+  let attendees: EventAttendee[] = $state([]);
+  let attendeeInput = $state("");
+
+  function addAttendee() {
+    const email = attendeeInput.trim();
+    if (!email || attendees.some((a) => a.email === email)) return;
+    attendees = [...attendees, {
+      id: crypto.randomUUID(),
+      email,
+      role: "req-participant",
+      status: "needs-action",
+      rsvp: true,
+    }];
+    attendeeInput = "";
+    emitChange();
+  }
+
+  function removeAttendee(id: string) {
+    attendees = attendees.filter((a) => a.id !== id);
+    emitChange();
+  }
+
+  function toggleAttendeeOptional(id: string) {
+    attendees = attendees.map((a) =>
+      a.id === id
+        ? { ...a, role: a.role === "opt-participant" ? "req-participant" : "opt-participant" }
+        : a,
+    );
+    emitChange();
+  }
+
+  function setAttendeeStatus(id: string, status: EventAttendee["status"]) {
+    attendees = attendees.map((a) => a.id === id ? { ...a, status } : a);
+    emitChange();
+  }
+
+  // ─── Guest permissions ──────────────────────────────────────────
+  let guestCanModify = $state(false);
+  let guestCanInviteOthers = $state(true);
+  let guestCanSeeOtherGuests = $state(true);
+
+  // ─── Attendee scroll fade ─────────────────────────────────────
+  let attendeeScrollEl: HTMLDivElement | undefined = $state(undefined);
+  let attFadeTop = $state(false);
+  let attFadeBottom = $state(false);
+
+  function updateAttendeeFade() {
+    const el = attendeeScrollEl;
+    if (!el) { attFadeTop = false; attFadeBottom = false; return; }
+    attFadeTop = el.scrollTop > 2;
+    attFadeBottom = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
+  }
+
+  function observeAttendeeResize(node: HTMLElement) {
+    const ro = new ResizeObserver(() => updateAttendeeFade());
+    ro.observe(node);
+    return { destroy: () => ro.disconnect() };
+  }
+
+  const onAttendeeWheel = createSmoothScroll(() => attendeeScrollEl, 0.4, 0.075);
+
+
+  // ─── Read-only imported fields ────────────────────────────────────
+  let organizer: EventOrganizer | undefined = $state(undefined);
+  let geo: GeoCoordinates | undefined = $state(undefined);
+  let rdate: string[] | undefined = $state(undefined);
 
   // ─── Description editor ─────────────────────────────────────────
   let descOpen = $state(false);
@@ -398,13 +479,61 @@
     return WEEKDAY_MAP[new Date(y, m - 1, d).getDay()];
   }
 
+  function getEventDayOfMonth(): number {
+    return parseInt(startDate.split("-")[2], 10);
+  }
+
+  function getEventOrdinalWeekday(): { ordinal: number; day: Weekday; label: string } {
+    const [y, m, d] = startDate.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const weekday = WEEKDAY_MAP[date.getDay()];
+    const ordinal = Math.ceil(d / 7);
+    const dayLabel = ALL_WEEKDAYS.find((w) => w.value === weekday)?.label ?? weekday;
+    const ordSuffix = ordinal === 1 ? "1st" : ordinal === 2 ? "2nd" : ordinal === 3 ? "3rd" : `${ordinal}th`;
+    return { ordinal, day: weekday, label: `${ordSuffix} ${dayLabel}` };
+  }
+
+  // Monthly repeat mode: "day" (BYMONTHDAY) vs "ordinal" (ordinal BYDAY)
+  type MonthlyMode = "day" | "ordinal";
+  const monthlyMode = $derived.by((): MonthlyMode => {
+    if (recurrence?.ordinalWeekdays && recurrence.ordinalWeekdays.length > 0) return "ordinal";
+    return "day";
+  });
+
+  function setMonthlyMode(mode: MonthlyMode) {
+    if (!recurrence || recurrence.frequency !== "monthly") return;
+    if (mode === "day") {
+      recurrence = {
+        ...recurrence,
+        ordinalWeekdays: undefined,
+        byMonthDay: [getEventDayOfMonth()],
+      };
+    } else {
+      const ow = getEventOrdinalWeekday();
+      recurrence = {
+        ...recurrence,
+        byMonthDay: undefined,
+        ordinalWeekdays: [{ day: ow.day, ordinal: ow.ordinal }],
+      };
+    }
+    emitChange();
+  }
+
   function updateRecFrequency(freq: RecurrenceFrequency) {
     if (!recurrence) return;
     let weekdays = freq === "weekly" ? recurrence.weekdays : undefined;
     if (freq === "weekly" && (!weekdays || weekdays.length === 0)) {
       weekdays = [getEventWeekday()];
     }
-    recurrence = { ...recurrence, frequency: freq, weekdays };
+    // Clear monthly/yearly-specific fields when switching frequency
+    recurrence = {
+      ...recurrence,
+      frequency: freq,
+      weekdays,
+      ordinalWeekdays: undefined,
+      byMonthDay: undefined,
+      byMonth: undefined,
+    };
     emitChange();
   }
 
@@ -788,7 +917,9 @@
   let nearestSlot = $state("");
   let showAsPicker = $state(false);
   let statusPicker = $state(false);
+  let visibilityPicker = $state(false);
   let colorPickerOpen = $state(false);
+  let attendeesExpanded = $state(false);
 
   function computeNearestSlot(time: string) {
     const [h, m] = (time || "0:0").split(":").map(Number);
@@ -958,6 +1089,15 @@
       eventUrl = event.url ?? "";
       transparency = event.transparency ?? "opaque";
       eventStatus = event.status ?? "confirmed";
+      visibility = event.visibility ?? "public";
+      organizer = event.organizer;
+      attendees = event.attendees ?? [];
+      attendeeInput = "";
+      guestCanModify = event.guestPermissions?.canModify ?? false;
+      guestCanInviteOthers = event.guestPermissions?.canInviteOthers ?? true;
+      guestCanSeeOtherGuests = event.guestPermissions?.canSeeOtherGuests ?? true;
+      geo = event.geo;
+      rdate = event.rdate;
 
       const pc = event.pomodoroConfig;
       pomodoroEnabled = !!pc;
@@ -1144,6 +1284,8 @@
       url: eventUrl || undefined,
       transparency: transparency !== "opaque" ? transparency : undefined,
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
+      visibility: visibility !== "public" ? visibility : undefined,
+      attendees: attendees.length > 0 ? attendees : undefined,
     });
   }
 
@@ -1206,6 +1348,7 @@
 
   // ─── Build data and handlers ────────────────────────────────────
   function buildSaveData() {
+    const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
     return {
       title: title.trim() || "Focus session",
       start: `${startDate} ${startTime}`,
@@ -1226,6 +1369,13 @@
       url: eventUrl || undefined,
       transparency: transparency !== "opaque" ? transparency : undefined,
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
+      visibility: visibility !== "public" ? visibility : undefined,
+      attendees: attendees.length > 0 ? attendees : undefined,
+      guestPermissions: hasNonDefaultPerms ? {
+        canModify: guestCanModify,
+        canInviteOthers: guestCanInviteOthers,
+        canSeeOtherGuests: guestCanSeeOtherGuests,
+      } : undefined,
     };
   }
 
@@ -1606,7 +1756,7 @@
       <!-- Show as -->
       <div class="relative">
         <button
-          onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+          onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
           class="flex items-center gap-1.5 rounded-md px-2.5 py-2 transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {showAsPicker ? 'text-foreground' : 'text-muted-foreground'}"
@@ -1635,7 +1785,7 @@
       <!-- Status -->
       <div class="relative">
         <button
-          onclick={() => { statusPicker = !statusPicker; showAsPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+          onclick={() => { statusPicker = !statusPicker; showAsPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
           class="flex items-center gap-1.5 rounded-md px-2.5 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {statusPicker ? 'text-foreground' : 'text-muted-foreground'}"
@@ -1659,15 +1809,198 @@
           </div>
         {/if}
       </div>
+
+      <!-- Visibility -->
+      <div class="relative">
+        <button
+          onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+          disabled={readOnly}
+          class="flex items-center gap-1.5 rounded-md px-2.5 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+            {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
+          title="Visibility"
+        >
+          {#if visibility === "public"}
+            <Shield size={13} class="shrink-0" />
+          {:else}
+            <Lock size={13} class="shrink-0" />
+          {/if}
+          <span class="{visibility !== 'public' ? 'text-foreground' : ''}">{visibility}</span>
+        </button>
+        {#if visibilityPicker}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="fixed inset-0 z-[19]" onclick={() => { visibilityPicker = false; }}></div>
+          <div class="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
+            {#each (["public", "private", "confidential"] as const) as v}
+              <button
+                onclick={() => { visibility = v; visibilityPicker = false; emitChange(); }}
+                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                  {visibility === v ? 'text-foreground font-medium' : 'text-muted-foreground'}"
+              >{v}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
 
-    <!-- Description / Location / URL -->
+    <!-- Attendees / URL / Location / Description -->
     <div class="-mt-1 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
+      <!-- Attendees -->
+      <div class="border-t border-border/40">
+        <button onclick={() => { attendeesExpanded = !attendeesExpanded; }}
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-[11px] leading-none transition-colors hover:bg-black/5 dark:hover:bg-black/15">
+          <Users size={13} class="shrink-0 text-foreground" />
+          {#if attendees.length === 0}
+            <span class="min-w-0 flex-1 truncate text-left text-muted-foreground/40">Add attendees</span>
+          {:else}
+            {@const nAcc = attendees.filter((a) => a.status === "accepted").length}
+            {@const nPen = attendees.filter((a) => a.status === "needs-action").length}
+            {@const nTen = attendees.filter((a) => a.status === "tentative").length}
+            {@const nDec = attendees.filter((a) => a.status === "declined").length}
+            {@const statParts = [
+              nAcc > 0 ? { n: nAcc, bg: "bg-emerald-500", Icon: Check } : null,
+              nPen > 0 ? { n: nPen, bg: "bg-muted-foreground/30", Icon: Minus } : null,
+              nTen > 0 ? { n: nTen, bg: "bg-amber-500", Icon: CircleHelp } : null,
+              nDec > 0 ? { n: nDec, bg: "bg-red-500", Icon: X } : null,
+            ].filter((p): p is { n: number; bg: string; Icon: typeof Check } => p !== null)}
+            <span class="text-muted-foreground">{attendees.length} attendee{attendees.length !== 1 ? "s" : ""}</span>
+            {#if statParts.length > 0}
+              <span class="flex items-center gap-0 text-[10px] text-muted-foreground/60">
+                <span>(</span>
+                {#each statParts as part, i}
+                  {#if i > 0}<span class="mx-0.5">,</span>{/if}
+                  <span class="flex items-center gap-px">
+                    <span>{part.n}</span>
+                    <span class="flex h-2.5 w-2.5 items-center justify-center rounded-[2px] {part.bg}"><part.Icon size={7} strokeWidth={3} class="block text-white" /></span>
+                  </span>
+                {/each}
+                <span>)</span>
+              </span>
+            {/if}
+          {/if}
+        </button>
+        {#if attendeesExpanded}
+          <div transition:slide={{ duration: 180, easing: cubicOut }} class="flex flex-col px-3 pb-2">
+            <!-- Guest permissions -->
+            {#if !readOnly && attendees.length > 0}
+              <div class="flex items-center gap-2 border-b border-border/40 pb-1.5 mb-1">
+                <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Guests can:</span>
+                {#each [
+                  { icon: Pencil, label: "Edit", title: "Modify event", get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; emitChange(); } },
+                  { icon: UserPlus, label: "Invite", title: "Invite others", get: () => guestCanInviteOthers, set: (v: boolean) => { guestCanInviteOthers = v; emitChange(); } },
+                  { icon: Eye, label: "See guests", title: "See guest list", get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; emitChange(); } },
+                ] as perm}
+                  <button onclick={() => perm.set(!perm.get())} title={perm.title}
+                    class="flex items-center gap-1 rounded px-1 py-0.5 transition-colors active:scale-95
+                      {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
+                    <perm.icon size={11} strokeWidth={2} />
+                    <span class="text-[9px]">{perm.label}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+            <!-- Attendee list (scrollable after 3) -->
+            <!-- svelte-ignore binding_property_non_reactive -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div bind:this={attendeeScrollEl} onscroll={updateAttendeeFade} onwheel={onAttendeeWheel}
+              use:observeAttendeeResize
+              class="relative max-h-[72px] overflow-y-auto scrollbar-thin pr-3"
+              style:mask-image={attFadeTop && attFadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : attFadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : attFadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}
+              style:-webkit-mask-image={attFadeTop && attFadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : attFadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : attFadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}>
+            {#if organizer}
+              <div class="flex items-center gap-2 py-0.5 text-[11px]">
+                <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-emerald-500"><Check size={10} strokeWidth={2.5} class="block text-white" /></span>
+                <span class="min-w-0 flex-1 truncate text-foreground">{organizer.name ?? organizer.email}</span>
+                <span class="shrink-0 text-[10px] text-muted-foreground/60">organizer</span>
+              </div>
+            {/if}
+            {#each attendees as att (att.id)}
+              {@const sqBg = att.status === "accepted" ? "bg-emerald-500" : att.status === "tentative" ? "bg-amber-500" : att.status === "declined" ? "bg-red-500" : "bg-muted-foreground/30"}
+              {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
+              {@const statusLabel = att.status === "needs-action" ? "pending" : att.status}
+              <div class="flex items-center gap-2 py-0.5 text-[11px]">
+                {#if !readOnly}
+                  <button
+                    onclick={() => {
+                      const cycle: EventAttendee["status"][] = ["needs-action", "accepted", "tentative", "declined"];
+                      const idx = cycle.indexOf(att.status);
+                      setAttendeeStatus(att.id, cycle[(idx + 1) % cycle.length]);
+                    }}
+                    class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg} active:scale-75 transition-transform">
+                    <StatusIcon size={10} strokeWidth={2.5} class="block text-white" />
+                  </button>
+                {:else}
+                  <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}">
+                    <StatusIcon size={10} strokeWidth={2.5} class="block text-white" />
+                  </span>
+                {/if}
+                <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>
+                {#if att.role === "opt-participant"}
+                  <span class="shrink-0 text-[10px] text-muted-foreground/60 italic">(optional)</span>
+                {/if}
+                {#if !readOnly}
+                  <div class="flex shrink-0 items-center gap-0.5">
+                    <button onclick={() => toggleAttendeeOptional(att.id)}
+                      class="rounded p-0.5 transition-colors
+                        {att.role === 'opt-participant' ? 'text-muted-foreground/40' : 'text-foreground'}
+                        hover:text-foreground">
+                      <Flag size={11} />
+                    </button>
+                    <button onclick={() => removeAttendee(att.id)}
+                      class="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground">
+                      <X size={11} />
+                    </button>
+                  </div>
+                {:else}
+                  <span class="shrink-0 text-[10px] text-muted-foreground/60">{statusLabel}</span>
+                {/if}
+              </div>
+            {/each}
+            </div>
+            {#if !readOnly}
+              <div class="flex items-center gap-2 py-1">
+                <span class="h-3.5 w-3.5 shrink-0"></span>
+                <input type="email" bind:value={attendeeInput}
+                  placeholder="Add email..."
+                  class="min-w-0 flex-1 bg-transparent text-[11px] leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
+                  onkeydown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === "Enter") { e.preventDefault(); addAttendee(); }
+                  }} />
+                {#if attendeeInput.trim()}
+                  <button onclick={addAttendee}
+                    class="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground">
+                    <Plus size={11} />
+                  </button>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+      <!-- URL -->
+      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
+        <ExternalLink size={13} class="shrink-0 text-foreground" />
+        <input type="url" bind:value={eventUrl} placeholder="Add URL"
+          disabled={readOnly}
+          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
+          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
+      </div>
+      <!-- Location -->
+      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
+        <MapPin size={13} class="shrink-0 text-foreground" />
+        <input type="text" bind:value={location} placeholder="Add location"
+          disabled={readOnly}
+          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
+          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
+        {#if geo}
+          <span class="shrink-0 text-[10px] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
+        {/if}
+      </div>
       <!-- Description -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div bind:this={descAreaEl}>
+      <div bind:this={descAreaEl} class="border-t border-border/40">
         {#if descOpen}
-          <!-- Toolbar (aligned with editor text via padding-left) -->
           <div transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1 pr-3" style="padding-left: 35px;">
             {#each [
               { icon: Bold, cmd: "bold", title: "Bold" },
@@ -1732,7 +2065,6 @@
             ><Check size={13} /></button>
           </div>
         {/if}
-        <!-- Icon + content row -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
           class="flex items-center gap-2.5 px-3 pb-2 leading-none transition-[padding-top] duration-250 ease-out {descOpen ? 'pt-0' : 'pt-2'} {!descOpen && !descClosing ? 'cursor-text' : ''}"
@@ -1756,22 +2088,6 @@
             {/if}
           </div>
         </div>
-      </div>
-      <!-- Location -->
-      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
-        <MapPin size={13} class="shrink-0 text-foreground" />
-        <input type="text" bind:value={location} placeholder="Add location"
-          disabled={readOnly}
-          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
-      </div>
-      <!-- URL -->
-      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
-        <ExternalLink size={13} class="shrink-0 text-foreground" />
-        <input type="url" bind:value={eventUrl} placeholder="Add URL"
-          disabled={readOnly}
-          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
       </div>
     </div>
   </div>
@@ -1987,6 +2303,35 @@
               </div>
             {/if}
 
+            <!-- Monthly sub-options -->
+            {#if recFrequency === "monthly"}
+              <div class="flex flex-col gap-1.5">
+                <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Repeat on</span>
+                <div class="flex gap-1.5">
+                  <button onclick={() => setMonthlyMode("day")}
+                    class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
+                      {monthlyMode === 'day'
+                        ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                        : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
+                    <div class="h-3.5 w-3.5 shrink-0 rounded-full
+                      {monthlyMode === 'day' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+                    </div>
+                    <span>Day {getEventDayOfMonth()}</span>
+                  </button>
+                  <button onclick={() => setMonthlyMode("ordinal")}
+                    class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
+                      {monthlyMode === 'ordinal'
+                        ? 'bg-black/5 dark:bg-black/15 text-foreground'
+                        : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
+                    <div class="h-3.5 w-3.5 shrink-0 rounded-full
+                      {monthlyMode === 'ordinal' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+                    </div>
+                    <span>{getEventOrdinalWeekday().label}</span>
+                  </button>
+                </div>
+              </div>
+            {/if}
+
             <!-- Ends -->
             <div class="flex flex-col gap-1.5">
               <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Ends</span>
@@ -2127,6 +2472,11 @@
               </div>
             </div>
 
+            <!-- RDATE indicator -->
+            {#if rdate && rdate.length > 0}
+              <span class="text-[10px] italic text-muted-foreground">+ {rdate.length} additional date{rdate.length > 1 ? "s" : ""}</span>
+            {/if}
+
           </div>
         {/if}
       </div>
@@ -2186,6 +2536,10 @@
   .time-picker-scroll {
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
     mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
   }
 
   :global(.dark) .panel-root {

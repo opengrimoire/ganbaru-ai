@@ -696,3 +696,37 @@ export const EVENT_COLOR_OPTIONS: EventColor[] = [
   "sky", "azure", "indigo", "violet", "purple",
   "orchid", "rose", "blush", "slate", "sage",
 ];
+
+/**
+ * Smooth-scroll wheel handler for Linux/discrete-tick environments.
+ * Intercepts wheel events and lerps scrollTop toward a target position.
+ */
+export function createSmoothScroll(
+  getEl: () => HTMLElement | undefined,
+  damping = 0.6,
+  ease = 0.15,
+): (e: WheelEvent) => void {
+  let target = -1;
+  let running = false;
+
+  function tick() {
+    const el = getEl();
+    if (!el) { running = false; return; }
+    const diff = target - el.scrollTop;
+    if (Math.abs(diff) < 0.5) { running = false; return; }
+    const step = diff * ease;
+    el.scrollTop += Math.abs(step) < 1 ? Math.sign(diff) : step;
+    requestAnimationFrame(tick);
+  }
+
+  return (e: WheelEvent) => {
+    const el = getEl();
+    if (!el) return;
+    e.preventDefault();
+    if (target < 0 || !running) target = el.scrollTop;
+    const max = el.scrollHeight - el.clientHeight;
+    target = Math.max(0, Math.min(max, target + e.deltaY * damping));
+    if (!running) { running = true; requestAnimationFrame(tick); }
+  };
+}
+

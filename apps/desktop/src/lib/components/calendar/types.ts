@@ -31,10 +31,31 @@ export type RecurrenceEnd =
   | { type: "until"; date: string }
   | { type: "count"; count: number };
 
+export interface OrdinalWeekday {
+  day: Weekday;
+  /** e.g. 2 = "2nd", -1 = "last". Omit for simple weekday membership. */
+  ordinal?: number;
+}
+
 export interface RecurrenceConfig {
   frequency: RecurrenceFrequency;
   interval: number;
+  /** Simple BYDAY weekdays for weekly recurrence (backward compat). */
   weekdays?: Weekday[];
+  /** BYDAY with ordinal prefixes (2TU, -1FR) for monthly/yearly. */
+  ordinalWeekdays?: OrdinalWeekday[];
+  /** BYMONTHDAY: day-of-month numbers (1-31, negative for end-of-month). */
+  byMonthDay?: number[];
+  /** BYMONTH: month numbers (1-12). */
+  byMonth?: number[];
+  /** BYSETPOS: position indices into the expanded candidate set. */
+  bySetPos?: number[];
+  /** BYYEARDAY: day-of-year numbers (1-366). */
+  byYearDay?: number[];
+  /** BYWEEKNO: ISO week numbers (1-53). */
+  byWeekNo?: number[];
+  /** WKST: which day starts the week (default MO per RFC 5545). */
+  wkst?: Weekday;
   end: RecurrenceEnd;
 }
 
@@ -59,6 +80,79 @@ export interface PomodoroConfig {
 
 export type EventTransparency = "opaque" | "transparent";
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
+export type EventVisibility = "public" | "private" | "confidential";
+
+// --- Attendee types (RFC 5545 ATTENDEE/ORGANIZER) ---
+
+export type AttendeeRole = "chair" | "req-participant" | "opt-participant" | "non-participant";
+export type AttendeeStatus = "needs-action" | "accepted" | "declined" | "tentative" | "delegated";
+
+export interface EventAttendee {
+  id: string;
+  name?: string;
+  email: string;
+  role: AttendeeRole;
+  status: AttendeeStatus;
+  rsvp: boolean;
+}
+
+export interface EventOrganizer {
+  name?: string;
+  email: string;
+}
+
+// --- Alarm types (RFC 5545 VALARM) ---
+
+export type AlarmAction = "display" | "audio" | "email";
+
+export interface EventAlarm {
+  id: string;
+  action: AlarmAction;
+  triggerType: "relative" | "absolute";
+  /** Duration string for relative ("-PT15M") or ISO datetime for absolute. */
+  triggerValue: string;
+  description?: string;
+}
+
+// --- Geo coordinates (RFC 5545 GEO) ---
+
+export interface GeoCoordinates {
+  lat: number;
+  lng: number;
+}
+
+// --- Per-instance override (RFC 5545 RECURRENCE-ID) ---
+
+export interface EventOverride {
+  id: string;
+  parentEventId: string;
+  /** Original DTSTART of the overridden instance (ISO datetime). */
+  recurrenceId: string;
+  title?: string;
+  start?: string;
+  end?: string;
+  description?: string;
+  location?: string;
+  url?: string;
+  color?: EventColor;
+  status?: EventStatus;
+  transparency?: EventTransparency;
+  visibility?: EventVisibility;
+  extendedProperties?: Record<string, string>;
+}
+
+// --- Guest permissions (Google Calendar X-properties) ---
+
+export interface GuestPermissions {
+  /** Whether guests can modify the event (X-GOOGLE-GUEST-CAN-MODIFY). */
+  canModify: boolean;
+  /** Whether guests can invite others (X-GOOGLE-GUEST-CAN-INVITE-OTHERS). */
+  canInviteOthers: boolean;
+  /** Whether guests can see the attendee list (X-GOOGLE-GUEST-CAN-SEE-OTHER-GUESTS). */
+  canSeeOtherGuests: boolean;
+}
+
+// --- Main event interface ---
 
 export interface CalendarEvent {
   id: string;
@@ -82,6 +176,32 @@ export interface CalendarEvent {
   url?: string;
   transparency?: EventTransparency;
   status?: EventStatus;
+  /** Original UID from imported .ics file, used for deduplication. */
+  sourceUid?: string;
+  /** RFC 5545 CLASS: controls visibility to other users. */
+  visibility?: EventVisibility;
+  /** RFC 5545 PRIORITY: 0 (undefined) to 9 (lowest). 1 = highest. */
+  priority?: number;
+  /** RFC 5545 CATEGORIES: tags/labels for the event. */
+  categories?: string[];
+  /** RFC 5545 GEO: latitude and longitude. */
+  geo?: GeoCoordinates;
+  /** RFC 5545 SEQUENCE: revision counter for change tracking. */
+  sequence?: number;
+  /** RFC 5545 RDATE: additional recurrence dates beyond the RRULE pattern. */
+  rdate?: string[];
+  /** Arbitrary extended properties (X-* from iCalendar). */
+  extendedProperties?: Record<string, string>;
+  /** RFC 5545 ORGANIZER: who created/owns the event. */
+  organizer?: EventOrganizer;
+  /** RFC 5545 ATTENDEE: participants and their RSVP status. */
+  attendees?: EventAttendee[];
+  /** RFC 5545 VALARM: rich alarm definitions (from imports). */
+  alarms?: EventAlarm[];
+  /** Per-instance overrides for recurring events (RECURRENCE-ID). */
+  overrides?: EventOverride[];
+  /** Guest permission flags (Google Calendar X-properties). */
+  guestPermissions?: GuestPermissions;
 }
 
 export interface Calendar {

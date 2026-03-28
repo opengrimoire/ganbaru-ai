@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { CalendarEvent, CalendarViewMode, EventColor, EventStatus, EventTransparency, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
+  import type {
+    CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventStatus,
+    EventTransparency, EventVisibility, GuestPermissions,
+    PomodoroConfig, RecurrenceConfig, RecurringScope,
+  } from "./types";
   import { addDays, getLocalTimezone } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
@@ -420,6 +424,9 @@
     url?: string;
     transparency?: EventTransparency;
     status?: EventStatus;
+    visibility?: EventVisibility;
+    attendees?: EventAttendee[];
+    guestPermissions?: GuestPermissions;
   }, scope?: RecurringScope) {
     const s = session.state;
 
@@ -431,6 +438,8 @@
         pomodoroConfig: data.pomodoroConfig,
         allDay: data.allDay, location: data.location, url: data.url,
         transparency: data.transparency, status: data.status,
+        visibility: data.visibility, attendees: data.attendees,
+        guestPermissions: data.guestPermissions,
       });
       pushUndo({ type: "add", event: { ...event } });
       redoStack = [];

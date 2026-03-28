@@ -9,6 +9,7 @@
     allDayEventsForWeek,
     layoutAllDayEventsForWeek,
     GUTTER_WIDTH_PER_TZ,
+    createSmoothScroll,
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
@@ -85,6 +86,7 @@
   let scrollDebounce: ReturnType<typeof setTimeout> | null = null;
   let wheelCooldown = false;
   let ready = $state(false);
+  const onWheel = createSmoothScroll(() => scrollContainer);
 
   function handleHeaderWheel(e: WheelEvent) {
     e.preventDefault();
@@ -173,8 +175,10 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={scrollContainer}
+  onwheel={onWheel}
   class="h-full overflow-y-auto overflow-x-hidden"
   style="background-color: var(--cal-bg); visibility: {ready ? 'visible' : 'hidden'};"
 >

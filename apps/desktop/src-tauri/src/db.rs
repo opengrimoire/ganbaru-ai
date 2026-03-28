@@ -208,5 +208,101 @@ pub fn migrations() -> Vec<Migration> {
                 VALUES ('local', 'GanbaruAI', '', 'local');
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 3,
+        description: "icalendar import readiness",
+        sql: "
+            -- dedup key for imported events (RFC 5545 UID)
+            ALTER TABLE calendar_events ADD COLUMN source_uid TEXT;
+
+            -- visibility (CLASS property: public/private/confidential)
+            ALTER TABLE calendar_events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public';
+
+            -- priority (0-9, RFC 5545 PRIORITY)
+            ALTER TABLE calendar_events ADD COLUMN priority INTEGER;
+
+            -- categories/tags (JSON array of strings)
+            ALTER TABLE calendar_events ADD COLUMN categories TEXT;
+
+            -- geo coordinates (JSON: {\"lat\": number, \"lng\": number})
+            ALTER TABLE calendar_events ADD COLUMN geo TEXT;
+
+            -- sequence number for change tracking
+            ALTER TABLE calendar_events ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0;
+
+            -- RDATE values (JSON array of ISO date/datetime strings)
+            ALTER TABLE calendar_events ADD COLUMN rdate TEXT;
+
+            -- generic X-properties storage (JSON object)
+            ALTER TABLE calendar_events ADD COLUMN extended_properties TEXT;
+
+            -- organizer (JSON: {\"name\": string|null, \"email\": string})
+            ALTER TABLE calendar_events ADD COLUMN organizer TEXT;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_calendar_events_source_uid
+                ON calendar_events(calendar_id, source_uid);
+
+            -- per-instance overrides for recurring events (RECURRENCE-ID)
+            CREATE TABLE IF NOT EXISTS calendar_event_overrides (
+                id TEXT PRIMARY KEY,
+                parent_event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                recurrence_id TEXT NOT NULL,
+                title TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                description TEXT,
+                location TEXT,
+                url TEXT,
+                color TEXT,
+                status TEXT,
+                transparency TEXT,
+                visibility TEXT,
+                extended_properties TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_overrides_parent_recid
+                ON calendar_event_overrides(parent_event_id, recurrence_id);
+
+            -- attendees (one row per attendee per event)
+            CREATE TABLE IF NOT EXISTS calendar_event_attendees (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                name TEXT,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'req-participant',
+                status TEXT NOT NULL DEFAULT 'needs-action',
+                rsvp INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_attendees_event
+                ON calendar_event_attendees(event_id);
+
+            -- rich alarms (supplements existing notifications JSON column)
+            CREATE TABLE IF NOT EXISTS calendar_event_alarms (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                action TEXT NOT NULL DEFAULT 'display',
+                trigger_type TEXT NOT NULL DEFAULT 'relative',
+                trigger_value TEXT NOT NULL,
+                description TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_alarms_event
+                ON calendar_event_alarms(event_id);
+        ",
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 4,
+        description: "guest permissions",
+        sql: "
+            -- Google Calendar guest permission flags
+            ALTER TABLE calendar_events ADD COLUMN guest_can_modify INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE calendar_events ADD COLUMN guest_can_invite_others INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE calendar_events ADD COLUMN guest_can_see_other_guests INTEGER NOT NULL DEFAULT 1;
+        ",
+        kind: MigrationKind::Up,
     }]
 }
