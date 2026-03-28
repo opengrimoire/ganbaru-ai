@@ -25,11 +25,11 @@
     onchange: () => void;
   } = $props();
 
-  const FREQ_OPTIONS: { value: RecurrenceFrequency; singular: string; plural: string }[] = [
-    { value: "daily", singular: "day", plural: "days" },
-    { value: "weekly", singular: "week", plural: "weeks" },
-    { value: "monthly", singular: "month", plural: "months" },
-    { value: "yearly", singular: "year", plural: "years" },
+  const FREQ_OPTIONS: { value: RecurrenceFrequency; label: string }[] = [
+    { value: "daily", label: "days" },
+    { value: "weekly", label: "weeks" },
+    { value: "monthly", label: "months" },
+    { value: "yearly", label: "years" },
   ];
 
   const ALL_WEEKDAYS: { value: Weekday; label: string }[] = [
@@ -217,7 +217,7 @@
                 {recFrequency === opt.value
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
-            >{opt.plural}</button>
+            >{opt.label}</button>
           {/each}
         </div>
       </div>
@@ -285,8 +285,7 @@
 
         <div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("until")}
-            class="flex w-12 items-center gap-2 transition-all
-              {recEndType === 'until' ? 'text-foreground' : 'text-foreground'}">
+            class="flex w-12 items-center gap-2 text-foreground transition-all">
             <div class="h-3.5 w-3.5 shrink-0 rounded-full
               {recEndType === 'until' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
             </div>
@@ -317,8 +316,7 @@
 
         <div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("count")}
-            class="flex w-12 items-center gap-2 transition-all
-              {recEndType === 'count' ? 'text-foreground' : 'text-foreground'}">
+            class="flex w-12 items-center gap-2 text-foreground transition-all">
             <div class="h-3.5 w-3.5 shrink-0 rounded-full
               {recEndType === 'count' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
             </div>

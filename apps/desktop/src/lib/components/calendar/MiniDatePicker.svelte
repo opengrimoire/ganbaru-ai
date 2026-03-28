@@ -36,6 +36,10 @@
   const days = $derived.by(() => buildCalendarGrid(year, month, selectedDate));
 
   const textSize = $derived(small ? "text-[11px]" : "text-[12px]");
+  const todayStr = $derived.by(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
 
   function prevMonth() {
     if (month === 1) { month = 12; year--; }
@@ -115,8 +119,7 @@
     <div class="grid grid-cols-7 gap-x-0 text-center">
       {#each days as day}
         {@const belowMin = !!minDate && day.dateStr < minDate}
-        {@const now = new Date()}
-        {@const past = day.currentMonth && day.dateStr < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`}
+        {@const past = day.currentMonth && day.dateStr < todayStr}
         <button onclick={() => selectDay(day)}
           class="flex h-6 w-full items-center justify-center rounded-sm {textSize}
             {belowMin ? 'cursor-not-allowed' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
