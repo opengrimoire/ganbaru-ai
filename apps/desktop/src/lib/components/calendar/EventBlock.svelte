@@ -60,7 +60,7 @@
   class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
-    height: {positioned.height}px;
+    height: {positioned.height - 2}px;
     left: {positioned.left}%;
     width: {positioned.width}%;
     color: {activeColors.text};

@@ -60,6 +60,7 @@
 
   function handleHeaderWheel(e: WheelEvent) {
     e.preventDefault();
+    e.stopPropagation();
     if (!onWheelNavigate || wheelCooldown) return;
     if (Math.abs(e.deltaY) < 5) return;
     wheelCooldown = true;
