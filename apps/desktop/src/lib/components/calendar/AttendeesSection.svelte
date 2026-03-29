@@ -34,6 +34,12 @@
 
   let expanded = $state(false);
   let attendeeInput = $state("");
+  let sectionEl: HTMLDivElement | undefined = $state(undefined);
+
+  function close() {
+    expanded = false;
+    attendeeInput = "";
+  }
 
   function addAttendee() {
     const email = attendeeInput.trim();
@@ -68,6 +74,18 @@
     onchange();
   }
 
+  // ─── Close on click outside (capture phase, same as DescriptionEditor) ──
+  $effect(() => {
+    if (!expanded) return;
+    function handleCapture(e: MouseEvent) {
+      if (sectionEl && !sectionEl.contains(e.target as Node)) {
+        close();
+      }
+    }
+    document.addEventListener("click", handleCapture, true);
+    return () => document.removeEventListener("click", handleCapture, true);
+  });
+
   // ─── Scroll fade ────────────────────────────────────────────────
   let scrollEl: HTMLDivElement | undefined = $state(undefined);
   let fadeTop = $state(false);
@@ -89,9 +107,13 @@
   const onWheel = createSmoothScroll(() => scrollEl, 0.4, 0.075);
 </script>
 
-<div class="border-t border-border/40">
-  <button onclick={() => { expanded = !expanded; }}
-    class="flex w-full items-center gap-2.5 px-3 py-2 text-[11px] leading-none transition-colors hover:bg-black/5 dark:hover:bg-black/15">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div bind:this={sectionEl} class="border-t border-border/40">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div onclick={() => { if (expanded) close(); else expanded = true; }}
+    class="flex w-full items-center gap-2.5 px-3 py-2 text-[11px] leading-none transition-colors cursor-default
+      {expanded ? '' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
     <Users size={13} class="shrink-0 text-foreground" />
     {#if attendees.length === 0}
       <span class="min-w-0 flex-1 truncate text-left text-muted-foreground/40">Add attendees</span>
@@ -121,9 +143,17 @@
         </span>
       {/if}
     {/if}
-  </button>
+    {#if expanded}
+      <button
+        onclick={(e) => { e.stopPropagation(); close(); }}
+        class="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+        title="Done">
+        <Check size={12} />
+      </button>
+    {/if}
+  </div>
   {#if expanded}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} class="flex flex-col px-3 pb-2">
+    <div transition:slide={{ duration: 250, easing: cubicOut }} class="flex flex-col px-3 pb-2">
       <!-- Guest permissions -->
       {#if !readOnly && attendees.length > 0}
         <div class="flex items-center gap-2 border-b border-border/40 pb-1.5 mb-1">
@@ -184,13 +214,12 @@
           {#if !readOnly}
             <div class="flex shrink-0 items-center gap-0.5">
               <button onclick={() => toggleAttendeeOptional(att.id)}
-                class="rounded p-0.5 transition-colors
-                  {att.role === 'opt-participant' ? 'text-muted-foreground/40' : 'text-foreground'}
-                  hover:text-foreground">
+                class="rounded p-0.5 transition-all active:scale-75
+                  {att.role === 'opt-participant' ? 'text-muted-foreground/40' : 'text-foreground'}">
                 <Flag size={11} />
               </button>
               <button onclick={() => removeAttendee(att.id)}
-                class="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground">
+                class="rounded p-0.5 text-muted-foreground transition-all active:scale-75 hover:text-destructive">
                 <X size={11} />
               </button>
             </div>

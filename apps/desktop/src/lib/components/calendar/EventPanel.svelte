@@ -805,30 +805,30 @@
   {#if !openSection}
   <div transition:slide={{ duration: 180, easing: cubicOut }} class="flex flex-col gap-3 px-3.5 py-1.5">
 
-    <!-- All-day / Availability / Status -->
-    <div class="-mt-1 flex items-center rounded-lg px-1 text-[11px] leading-none" style="background-color: var(--panel-contrast);">
+    <!-- All-day / Availability / Status / Visibility -->
+    <div class="-mt-1 flex items-center rounded-lg px-0.5 text-[10px] leading-none" style="background-color: var(--panel-contrast);">
       <!-- All day -->
       <button
         onclick={() => { allDay = !allDay; if (allDay) { startTime = "00:00"; endTime = "00:00"; } emitChange(); }}
         disabled={readOnly}
-        class="flex items-center gap-1.5 rounded-md px-2.5 py-2 transition-colors
+        class="flex items-center gap-1 rounded-md px-2 py-2 transition-colors
           {allDay ? 'bg-black/5 dark:bg-black/15 text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+        title="All day"
       >
-        <Sun size={13} class="shrink-0" />
+        <Sun size={12} class="shrink-0" />
         <span>All day</span>
       </button>
-
 
       <!-- Show as -->
       <div class="relative">
         <button
           onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1.5 rounded-md px-2.5 py-2 transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-md px-2 py-2 transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {showAsPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Show as"
         >
-          <Eye size={13} class="shrink-0" />
+          <Eye size={12} class="shrink-0" />
           <span class="text-foreground">{transparency === "transparent" ? "Free" : "Busy"}</span>
         </button>
         {#if showAsPicker}
@@ -847,17 +847,16 @@
         {/if}
       </div>
 
-
       <!-- Status -->
       <div class="relative">
         <button
           onclick={() => { statusPicker = !statusPicker; showAsPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1.5 rounded-md px-2.5 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-md px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {statusPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Status"
         >
-          <CircleCheck size={13} class="shrink-0" />
+          <CircleCheck size={12} class="shrink-0" />
           <span class="text-foreground">{eventStatus}</span>
         </button>
         {#if statusPicker}
@@ -881,14 +880,14 @@
         <button
           onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1.5 rounded-md px-2.5 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-md px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Visibility"
         >
           {#if visibility === "public"}
-            <Shield size={13} class="shrink-0" />
+            <Shield size={12} class="shrink-0" />
           {:else}
-            <Lock size={13} class="shrink-0" />
+            <Lock size={12} class="shrink-0" />
           {/if}
           <span class="{visibility !== 'public' ? 'text-foreground' : ''}">{visibility}</span>
         </button>
