@@ -298,14 +298,13 @@
 
 <style>
   .app-rounded {
-    clip-path: inset(0 round 10px);
+    border-radius: 10px;
+    overflow: hidden;
   }
 
   .content-panel {
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 0 5px rgba(0, 0, 0, 0.06);
   }
 
   :global(.dark) .content-panel {
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 5px rgba(0, 0, 0, 0.3);
   }
 </style>

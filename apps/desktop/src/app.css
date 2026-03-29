@@ -8,24 +8,24 @@
   --radius: 0.5rem;
 
   /* Content area */
-  --background: #F8FAFD;
+  --background: #F4F4F7;
   --foreground: #141420;
   --card: #FFFFFF;
   --card-foreground: #141420;
   --popover: #FFFFFF;
   --popover-foreground: #141420;
-  --primary: #4A7CC9;
-  --primary-foreground: #F4F7FC;
-  --secondary: #CADAEF;
+  --primary: #404048;
+  --primary-foreground: #F4F4F7;
+  --secondary: #E2E2E7;
   --secondary-foreground: #141420;
-  --muted: #CADAEF;
-  --muted-foreground: #3D4A60;
-  --accent: #D5E2F2;
+  --muted: #E2E2E7;
+  --muted-foreground: #646470;
+  --accent: #E8E8ED;
   --accent-foreground: #141420;
   --destructive: #D93B3B;
-  --border: rgba(0, 30, 80, 0.12);
-  --input: rgba(0, 30, 80, 0.10);
-  --ring: #7BA3D4;
+  --border: rgba(0, 0, 20, 0.10);
+  --input: rgba(0, 0, 20, 0.08);
+  --ring: #8C8C98;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.65 0.15 280);
@@ -33,14 +33,14 @@
   --chart-5: oklch(0.65 0.18 25);
 
   /* Frame / contour (titlebar) */
-  --sidebar: #AED3FF;
+  --sidebar: #DCDCE2;
   --sidebar-foreground: #141420;
-  --sidebar-primary: #2C5AA0;
-  --sidebar-primary-foreground: #F4F7FC;
-  --sidebar-accent: #9AC5F5;
+  --sidebar-primary: #404048;
+  --sidebar-primary-foreground: #F4F4F7;
+  --sidebar-accent: #CFCFD6;
   --sidebar-accent-foreground: #141420;
-  --sidebar-border: rgba(0, 40, 100, 0.10);
-  --sidebar-ring: #7BA3D4;
+  --sidebar-border: rgba(0, 0, 20, 0.08);
+  --sidebar-ring: #8C8C98;
 }
 
 .dark {
@@ -141,13 +141,13 @@
 /* Calendar theme variables */
 :root {
   --cal-bg: #FFFFFF;
-  --cal-header-bg: #F8FAFD;
-  --cal-gridline: #DDE3EA;
-  --cal-today-circle: #1A56DB;
+  --cal-header-bg: #F4F4F7;
+  --cal-gridline: #DDDDE3;
+  --cal-today-circle: #38383F;
   --cal-today-circle-text: #FFFFFF;
-  --cal-time-label: #3D4A60;
+  --cal-time-label: #646470;
   --cal-current-time: #EA4335;
-  --cal-hover: rgba(0, 30, 80, 0.04);
+  --cal-hover: rgba(0, 0, 20, 0.04);
   --cal-past-overlay: rgba(0, 0, 0, 0.04);
   --cal-timeline-rail: rgba(0, 0, 0, 0.1);
   --cal-timeline-break: #6B7280;
