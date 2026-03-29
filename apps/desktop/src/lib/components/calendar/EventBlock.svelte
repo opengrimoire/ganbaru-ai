@@ -57,7 +57,7 @@
 <div
   bind:this={blockEl}
   data-event-id={positioned.event.id}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
     height: {positioned.height}px;
@@ -66,7 +66,7 @@
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};
-    filter: {isPast && !editing && !preview ? 'brightness(0.7)' : 'none'};
+    filter: {isPast && !editing && !preview ? (isDark ? 'brightness(0.7)' : 'saturate(0.8)') : 'none'};
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
     --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
   "
@@ -147,6 +147,16 @@
 
   .event-editing::after {
     opacity: 1;
+  }
+
+  .past-light::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
   }
 
 </style>
