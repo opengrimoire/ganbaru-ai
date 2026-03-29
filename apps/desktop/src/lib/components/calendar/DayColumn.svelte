@@ -196,6 +196,8 @@
   let snapLineY: number | null = $state(null);
   let snapTimeLabel: string = $state("");
   let columnEl: HTMLDivElement | undefined = $state();
+  let scrollParent: HTMLElement | null = null;
+  let stickyBottom = $state(0);
 
   // Clear snap line when scrolling or dragging starts (prevents stale flash)
   $effect(() => {
@@ -220,6 +222,18 @@
     };
   });
 
+  function updateStickyBottom() {
+    if (!columnEl) return;
+    if (!scrollParent) scrollParent = columnEl.closest('.hide-scrollbar') as HTMLElement | null;
+    if (scrollParent) {
+      let bottom = scrollParent.getBoundingClientRect().top;
+      for (const h of scrollParent.querySelectorAll(':scope .sticky')) {
+        bottom = Math.max(bottom, h.getBoundingClientRect().bottom);
+      }
+      stickyBottom = bottom;
+    }
+  }
+
   const effectiveSnapY = $derived(
     snapOverrideMinute != null
       ? minuteToTop(snapOverrideMinute, hourHeight)
@@ -230,6 +244,19 @@
       ? `${String(Math.floor(snapOverrideMinute / 60)).padStart(2, "0")}:${String(snapOverrideMinute % 60).padStart(2, "0")}`
       : snapTimeLabel,
   );
+
+  // Keep stickyBottom fresh when snap override changes (drag/resize)
+  $effect(() => {
+    if (snapOverrideMinute != null) updateStickyBottom();
+  });
+
+  // Flip label below line when it would be hidden behind the sticky header
+  const snapLabelBelow = $derived.by(() => {
+    if (effectiveSnapY === null || !columnEl) return false;
+    const colRect = columnEl.getBoundingClientRect();
+    const lineViewportY = colRect.top + effectiveSnapY;
+    return lineViewportY < stickyBottom + 18;
+  });
 
   function handleSlotPointerDown(e: PointerEvent, hour: number) {
     if (e.button !== 0) return;
@@ -267,6 +294,7 @@
     }
 
     snapLineY = minuteToTop(snapped, hourHeight);
+    updateStickyBottom();
     const h = String(Math.floor(snapped / 60)).padStart(2, "0");
     const m = String(snapped % 60).padStart(2, "0");
     snapTimeLabel = `${h}:${m}`;
@@ -445,13 +473,14 @@
 
   <!-- Snap position indicator line with time label — always on top -->
   {#if effectiveSnapY !== null && !hideSnapLine && !isScrolling}
+    {@const atBottom = effectiveSnapY >= totalHeight - 2}
     <div
       class="pointer-events-none absolute left-0 right-0"
-      style="top: {effectiveSnapY}px; z-index: 47;"
+      style="top: {atBottom ? effectiveSnapY - 2 : effectiveSnapY}px; z-index: 47;"
     >
       <div class="relative">
         <span
-          class="absolute bottom-0 left-0 rounded-t px-1.5 py-[1px] text-[10px] font-medium leading-tight"
+          class="absolute left-0 px-1.5 py-[1px] text-[10px] font-medium leading-tight {snapLabelBelow ? 'top-0 rounded-b' : 'bottom-0 rounded-t'}"
           style="background-color: var(--cal-current-time); color: white;"
         >{effectiveSnapLabel}</span>
         <div
