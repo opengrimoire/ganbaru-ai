@@ -86,8 +86,6 @@
   let scrollContainer: HTMLDivElement | undefined = $state();
   let currentTimeMinute = $state(-1);
   let todayStr = $state(formatDatePart(new Date()));
-  let isScrolling = $state(false);
-  let scrollDebounce: ReturnType<typeof setTimeout> | null = null;
   let wheelCooldown = false;
   let ready = $state(false);
 
@@ -142,16 +140,9 @@
   });
 
   function handleScroll() {
-    if (!scrollContainer) return;
-
-    isScrolling = true;
-    if (scrollDebounce) clearTimeout(scrollDebounce);
-    scrollDebounce = setTimeout(() => { isScrolling = false; }, 150);
-
-    if (onScrollChange) {
-      const minute = (scrollContainer.scrollTop / hourHeight) * 60;
-      onScrollChange(Math.round(minute));
-    }
+    if (!scrollContainer || !onScrollChange) return;
+    const minute = (scrollContainer.scrollTop / hourHeight) * 60;
+    onScrollChange(Math.round(minute));
   }
 
   // Column date resolution for cross-column move drag
@@ -305,7 +296,6 @@
               draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
               dragPreview={drag.getDragPreviewForDate(dateStr)}
               createPreview={drag.getCreatePreviewForDate(dateStr)}
-              {isScrolling}
               hideSnapLine={drag.getHideSnapLine(dateStr)}
               snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
               onEventClick={onEventClick}

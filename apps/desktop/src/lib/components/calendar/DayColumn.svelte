@@ -28,7 +28,6 @@
     dragPreview = null,
     createPreview = null,
     hideSnapLine = false,
-    isScrolling = false,
     snapOverrideMinute = null,
     onEventClick,
     onDragStart,
@@ -49,7 +48,6 @@
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
     hideSnapLine?: boolean;
-    isScrolling?: boolean;
     snapOverrideMinute?: number | null;
     draggingEventId?: string;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
@@ -198,27 +196,39 @@
   let columnEl: HTMLDivElement | undefined = $state();
   let scrollParent: HTMLElement | null = null;
   let stickyBottom = $state(0);
+  let lastClientY: number | null = $state(null);
 
-  // Clear snap line when scrolling or dragging starts (prevents stale flash)
+  // Clear snap line when dragging starts (prevents stale flash)
   $effect(() => {
-    if (isScrolling || hideSnapLine) {
+    if (hideSnapLine) {
       snapLineY = null;
+      lastClientY = null;
     }
   });
 
   onMount(() => {
     function clearSnap() {
       snapLineY = null;
+      lastClientY = null;
     }
     window.addEventListener("blur", clearSnap);
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) snapLineY = null;
+      if (document.hidden) clearSnap();
     });
     // Clear snap line when break overlay closes (GTK overlay steals WebView focus)
     document.addEventListener("ganbaruai-clear-snap", clearSnap);
+
+    // Track scroll so snap line follows the mouse during scroll
+    const sp = columnEl?.closest('.hide-scrollbar') as HTMLElement | null;
+    if (sp) {
+      scrollParent = sp;
+      sp.addEventListener('scroll', handleParentScroll);
+    }
+
     return () => {
       window.removeEventListener("blur", clearSnap);
       document.removeEventListener("ganbaruai-clear-snap", clearSnap);
+      sp?.removeEventListener('scroll', handleParentScroll);
     };
   });
 
@@ -268,39 +278,56 @@
     onCreateStart(dateStr, minute, e);
   }
 
-  function handleColumnMouseMove(e: MouseEvent) {
-    if (!columnEl || hideSnapLine) return;
+  function updateSnapFromClientY(clientY: number, snap: boolean) {
+    if (!columnEl) return;
     const rect = columnEl.getBoundingClientRect();
-    const offsetY = e.clientY - rect.top;
+    const offsetY = clientY - rect.top;
     const rawMinute = (offsetY / hourHeight) * 60;
     let snapped = clampMinute(snapToGrid(rawMinute));
 
-    // Snap to block edges when cursor is near them
-    for (const pos of positioned) {
-      const blockTop = pos.top;
-      const blockBottom = pos.top + pos.height;
-      const cursorY = offsetY;
+    if (snap) {
+      // Snap to block edges when cursor is near them
+      for (const pos of positioned) {
+        const blockTop = pos.top;
+        const blockBottom = pos.top + pos.height;
 
-      if (Math.abs(cursorY - blockTop) < 8) {
-        const { startMinute } = effectiveMinuteRange(pos.event, dateStr);
-        snapped = startMinute;
-        break;
+        if (Math.abs(offsetY - blockTop) < 8) {
+          const { startMinute } = effectiveMinuteRange(pos.event, dateStr);
+          snapped = startMinute;
+          break;
+        }
+        if (Math.abs(offsetY - blockBottom) < 8) {
+          const { endMinute } = effectiveMinuteRange(pos.event, dateStr);
+          snapped = endMinute;
+          break;
+        }
       }
-      if (Math.abs(cursorY - blockBottom) < 8) {
-        const { endMinute } = effectiveMinuteRange(pos.event, dateStr);
-        snapped = endMinute;
-        break;
-      }
+      snapLineY = minuteToTop(snapped, hourHeight);
+    } else {
+      // During scroll: track raw pixel position for smooth movement
+      const clamped = clampMinute(Math.round(rawMinute));
+      snapLineY = (clamped / 60) * hourHeight;
     }
 
-    snapLineY = minuteToTop(snapped, hourHeight);
     updateStickyBottom();
     const h = String(Math.floor(snapped / 60)).padStart(2, "0");
     const m = String(snapped % 60).padStart(2, "0");
     snapTimeLabel = `${h}:${m}`;
   }
 
+  function handleParentScroll() {
+    if (lastClientY === null || !columnEl || hideSnapLine) return;
+    updateSnapFromClientY(lastClientY, false);
+  }
+
+  function handleColumnMouseMove(e: MouseEvent) {
+    if (!columnEl || hideSnapLine) return;
+    lastClientY = e.clientY;
+    updateSnapFromClientY(e.clientY, true);
+  }
+
   function handleColumnMouseLeave() {
+    lastClientY = null;
     snapLineY = null;
   }
 </script>
@@ -472,7 +499,7 @@
   {/if}
 
   <!-- Snap position indicator line with time label — always on top -->
-  {#if effectiveSnapY !== null && !hideSnapLine && !isScrolling}
+  {#if effectiveSnapY !== null && !hideSnapLine}
     {@const atBottom = effectiveSnapY >= totalHeight - 2}
     <div
       class="pointer-events-none absolute left-0 right-0"
