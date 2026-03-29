@@ -78,9 +78,11 @@ export function useDragController(config: DragControllerConfig) {
     if (blockEl) {
       const rect = blockEl.getBoundingClientRect();
       const relY = e.clientY - rect.top;
-      if (relY <= 6) {
+      const clippedTop = blockEl.hasAttribute("data-clipped-top");
+      const clippedBottom = blockEl.hasAttribute("data-clipped-bottom");
+      if (relY <= 6 && !clippedTop) {
         dragState.type = "resize-top";
-      } else if (relY >= rect.height - 6) {
+      } else if (relY >= rect.height - 6 && !clippedBottom) {
         dragState.type = "resize-bottom";
       }
     }

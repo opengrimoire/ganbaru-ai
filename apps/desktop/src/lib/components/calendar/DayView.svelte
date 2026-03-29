@@ -12,6 +12,7 @@
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
+  import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import { useDragController } from "./useDragController.svelte";
   import { onMount } from "svelte";
 
@@ -56,6 +57,11 @@
   let scrollDebounce: ReturnType<typeof setTimeout> | null = null;
   let wheelCooldown = false;
   let ready = $state(false);
+  let stickyHeaderHeight = $state(0);
+  let stickyAllDayHeight = $state(0);
+  const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayHeight);
+
+  $effect(() => { if (allDayEvents.length === 0) stickyAllDayHeight = 0; });
   const onWheel = createSmoothScroll(() => scrollContainer);
 
   function handleHeaderWheel(e: WheelEvent) {
@@ -165,97 +171,113 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  bind:this={scrollContainer}
-  onwheel={onWheel}
-  class="h-full overflow-y-auto overflow-x-hidden"
-  style="background-color: var(--cal-bg); visibility: {ready ? 'visible' : 'hidden'};"
->
-  <div class="grid" style="grid-template-columns: {gridCols};">
-    <!-- Sticky header row -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="sticky top-0 z-[48] grid"
-      onwheel={handleHeaderWheel}
-      style="
-        grid-column: 1 / -1;
-        grid-template-columns: subgrid;
-        height: var(--cal-header-row-h);
-        background-color: var(--cal-header-bg);
-      "
-    >
-      <TimezoneSelector
-        {timezones}
-        {tzCount}
-        onAdd={(tz) => onAddTimezone?.(tz)}
-        onRemove={(i) => onRemoveTimezone?.(i)}
-      />
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="flex h-full flex-col" style="visibility: {ready ? 'visible' : 'hidden'};">
+<div class="flex min-h-0 flex-1">
+  <div
+    bind:this={scrollContainer}
+    onwheel={onWheel}
+    class="hide-scrollbar min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+    style="background-color: var(--cal-bg);"
+  >
+    <div class="grid" style="grid-template-columns: {gridCols};">
+      <!-- Sticky header row -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        bind:this={headerCell}
-        class="flex cursor-pointer items-center px-4 hover:bg-accent/50"
-        onclick={() => onDayHeaderClick?.()}
-        role="button"
-        tabindex="-1"
-      >
-        <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
-          {dayLabel}
-        </span>
-      </div>
-    </div>
-
-    <!-- All-day banner -->
-    {#if allDayEvents.length > 0}
-      <div
-        class="sticky z-[47] grid border-b border-[var(--cal-gridline)]"
+        bind:clientHeight={stickyHeaderHeight}
+        class="sticky top-0 z-[48] grid"
+        onwheel={handleHeaderWheel}
         style="
-          top: var(--cal-header-row-h);
           grid-column: 1 / -1;
           grid-template-columns: subgrid;
+          height: var(--cal-header-row-h);
           background-color: var(--cal-header-bg);
         "
       >
-        <div style="grid-column: span {tzCount};"></div>
-        <div class="flex flex-col gap-0.5 px-1 py-1">
-          {#each allDayEvents as event}
-            {@const colors = getEventColor(event.color, isDark)}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="cursor-pointer truncate rounded px-1.5 text-[10px] leading-[20px]"
-              style="background-color: {colors.bg}; color: {colors.text};"
-              onclick={(e) => { e.stopPropagation(); onEventClick(event, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
-            >
-              {event.title}
-            </div>
-          {/each}
+        <TimezoneSelector
+          {timezones}
+          {tzCount}
+          onAdd={(tz) => onAddTimezone?.(tz)}
+          onRemove={(i) => onRemoveTimezone?.(i)}
+        />
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+          bind:this={headerCell}
+          class="flex cursor-pointer items-center px-4 hover:bg-accent/50"
+          onclick={() => onDayHeaderClick?.()}
+          role="button"
+          tabindex="-1"
+        >
+          <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+            {dayLabel}
+          </span>
         </div>
       </div>
-    {/if}
 
-    <!-- Body row -->
-    <TimeGutter {hourHeight} {timezones} {anchorDate} {tzCount} />
-    <div class="min-w-0" style="border-left: 1px solid var(--cal-gridline);">
-      <DayColumn
-        date={anchorDate}
-        events={timedEvents}
-        {hourHeight}
-        isToday={today}
-        isPast={past}
-        {isDark}
-        {currentTimeMinute}
-        {editingId}
-        {previewedIds}
-        draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
-        dragPreview={drag.getDragPreviewForDate(dateStr)}
-        createPreview={drag.getCreatePreviewForDate(dateStr)}
-        {isScrolling}
-        hideSnapLine={drag.getHideSnapLine(dateStr)}
-        snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
-        onEventClick={onEventClick}
-        onDragStart={drag.handleDragStart}
-        onCreateStart={drag.handleCreateStart}
-      />
+      <!-- All-day banner -->
+      {#if allDayEvents.length > 0}
+        <div
+          bind:clientHeight={stickyAllDayHeight}
+          class="sticky z-[47] grid border-b border-[var(--cal-gridline)]"
+          style="
+            top: var(--cal-header-row-h);
+            grid-column: 1 / -1;
+            grid-template-columns: subgrid;
+            background-color: var(--cal-header-bg);
+          "
+        >
+          <div style="grid-column: span {tzCount};"></div>
+          <div class="flex flex-col gap-0.5 px-1 py-1">
+            {#each allDayEvents as event}
+              {@const colors = getEventColor(event.color, isDark)}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="cursor-pointer truncate rounded px-1.5 text-[10px] leading-[20px]"
+                style="background-color: {colors.bg}; color: {colors.text};"
+                onclick={(e) => { e.stopPropagation(); onEventClick(event, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
+              >
+                {event.title}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Body row -->
+      <TimeGutter {hourHeight} {timezones} {anchorDate} {tzCount} />
+      <div class="min-w-0" style="border-left: 1px solid var(--cal-gridline);">
+        <DayColumn
+          date={anchorDate}
+          events={timedEvents}
+          {hourHeight}
+          isToday={today}
+          isPast={past}
+          {isDark}
+          {currentTimeMinute}
+          {editingId}
+          {previewedIds}
+          draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
+          dragPreview={drag.getDragPreviewForDate(dateStr)}
+          createPreview={drag.getCreatePreviewForDate(dateStr)}
+          {isScrolling}
+          hideSnapLine={drag.getHideSnapLine(dateStr)}
+          snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
+          onEventClick={onEventClick}
+          onDragStart={drag.handleDragStart}
+          onCreateStart={drag.handleCreateStart}
+        />
+      </div>
     </div>
   </div>
+
+  <!-- Custom scrollbar gutter -->
+  <div class="flex flex-col" style="width: 12px;">
+    <div style="height: {gutterTopHeight}px; background-color: var(--cal-header-bg);"></div>
+    <div class="relative flex-1" style="background-color: var(--background);">
+      <CalendarScrollbar {scrollContainer} />
+    </div>
+  </div>
+</div>
+<!-- Bottom bar -->
+<div style="height: 12px; background-color: var(--background);"></div>
 </div>

@@ -57,10 +57,12 @@
 <div
   bind:this={blockEl}
   data-event-id={positioned.event.id}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  data-clipped-top={positioned.isClippedTop || undefined}
+  data-clipped-bottom={positioned.isClippedBottom || undefined}
+  class="event-block-wrapper absolute flex text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
-    height: {positioned.height - 2}px;
+    height: {positioned.height - (positioned.isClippedBottom ? 0 : 2)}px;
     left: {positioned.left}%;
     width: {positioned.width}%;
     color: {activeColors.text};
@@ -73,11 +75,13 @@
   onclick={handleClick}
   onpointerdown={handlePointerDown}
 >
-  <!-- Resize handle: top -->
-  <div class="resize-handle-top" onpointerdown={handlePointerDown}></div>
+  <!-- Resize handle: top (hidden on clipped edge) -->
+  {#if !positioned.isClippedTop}
+    <div class="resize-handle-top" onpointerdown={handlePointerDown}></div>
+  {/if}
 
   <!-- Content -->
-  <div class="relative min-w-0 flex-1 px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
+  <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
     {#if hasRepeat || hasNotification}
       <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
         {#if hasRepeat}
@@ -99,8 +103,10 @@
     {/if}
   </div>
 
-  <!-- Resize handle: bottom -->
-  <div class="resize-handle-bottom" onpointerdown={handlePointerDown}></div>
+  <!-- Resize handle: bottom (hidden on clipped edge) -->
+  {#if !positioned.isClippedBottom}
+    <div class="resize-handle-bottom" onpointerdown={handlePointerDown}></div>
+  {/if}
 </div>
 
 <style>
@@ -109,17 +115,17 @@
     position: absolute;
     left: 0;
     right: 0;
-    height: 6px;
+    height: 11px;
     cursor: ns-resize;
     z-index: 2;
   }
 
   .resize-handle-top {
-    top: 0;
+    top: -5px;
   }
 
   .resize-handle-bottom {
-    bottom: 0;
+    bottom: -5px;
   }
 
   .event-block-wrapper {

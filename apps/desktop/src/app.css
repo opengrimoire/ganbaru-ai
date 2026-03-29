@@ -169,3 +169,11 @@
   --cal-timeline-break: #9CA3AF;
   --cal-timeline-focus: #4ADE80;
 }
+
+/* Hide native scrollbar (custom scrollbar replaces it) */
+.hide-scrollbar {
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

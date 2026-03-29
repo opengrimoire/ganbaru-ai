@@ -302,14 +302,18 @@
 
   <!-- Gridlines (offset only where a rail segment covers that specific line) -->
   {#each hours as hour}
-    <div
-      class="pointer-events-none absolute right-0"
-      style="left: {isMinuteInRail((hour + 1) * 60) ? railWidth + 4 : 0}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
-    ></div>
-    <div
-      class="pointer-events-none absolute right-0"
-      style="left: {isMinuteInRail(hour * 60 + 30) ? railWidth + 4 : 0}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
-    ></div>
+    {#if hour < 23}
+      <div
+        class="pointer-events-none absolute right-0"
+        style="left: {isMinuteInRail((hour + 1) * 60) ? railWidth + 4 : 0}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
+      ></div>
+    {/if}
+    {#if hour > 0}
+      <div
+        class="pointer-events-none absolute right-0"
+        style="left: {isMinuteInRail(hour * 60 + 30) ? railWidth + 4 : 0}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
+      ></div>
+    {/if}
   {/each}
 
   <!-- Past time dimming overlay (full width, behind rail and content) -->
