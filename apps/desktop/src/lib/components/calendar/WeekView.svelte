@@ -316,6 +316,4 @@
     </div>
   </div>
 </div>
-<!-- Bottom bar -->
-<div style="height: 12px; background-color: var(--background);"></div>
 </div>
