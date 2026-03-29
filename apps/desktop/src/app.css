@@ -131,8 +131,13 @@
   }
 }
 
-/* Smooth theme crossfade via View Transition API */
-::view-transition-old(root),
+/* Smooth theme crossfade via View Transition API.
+   Old snapshot stays fully opaque so the window never becomes
+   transparent to the desktop during the transition. */
+::view-transition-old(root) {
+  animation: none;
+}
+
 ::view-transition-new(root) {
   animation-duration: 250ms;
   animation-timing-function: ease;
