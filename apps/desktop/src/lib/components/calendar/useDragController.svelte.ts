@@ -124,9 +124,24 @@ export function useDragController(config: DragControllerConfig) {
       targetDate = formatDatePart(originDate);
 
       const dur = dragState.originEndMinute - dragState.originStartMinute;
-      newStart = snapToGrid(dragState.originStartMinute + deltaMinutes);
-      newStart = Math.max(0, Math.min(1430, newStart));
-      newEnd = newStart + dur; // may exceed 1440 — cross-midnight
+      let rawStart = snapToGrid(dragState.originStartMinute + deltaMinutes);
+
+      // Shift target day when event fully crosses midnight vertically
+      while (rawStart >= 1440) {
+        rawStart -= 1440;
+        const td = parseCalendarDate(`${targetDate} 00:00`);
+        td.setDate(td.getDate() + 1);
+        targetDate = formatDatePart(td);
+      }
+      while (rawStart + dur <= 0) {
+        rawStart += 1440;
+        const td = parseCalendarDate(`${targetDate} 00:00`);
+        td.setDate(td.getDate() - 1);
+        targetDate = formatDatePart(td);
+      }
+
+      newStart = Math.min(1430, rawStart);
+      newEnd = newStart + dur; // may exceed 1440 or start < 0 -- cross-midnight
     } else if (dragState.type === "resize-top") {
       newStart = snapToGrid(dragState.originStartMinute + deltaMinutes);
       newStart = Math.max(0, newStart);
