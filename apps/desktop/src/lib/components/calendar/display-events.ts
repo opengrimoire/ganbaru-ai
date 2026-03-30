@@ -42,9 +42,12 @@ export function buildCreateDisplay(
 
   // Use changes.end if available (panel provides correct cross-midnight end date),
   // otherwise fall back to the drag preview's same-day end
+  const isAllDay = preview.allDay || changes.allDay;
   const endStr = changes.end
     ? String(changes.end)
-    : `${preview.dateStr} ${fmtMin(preview.endMinute)}`;
+    : isAllDay && preview.endDateStr
+      ? `${preview.endDateStr} 00:00`
+      : `${preview.dateStr} ${fmtMin(preview.endMinute)}`;
 
   const template: CalendarEvent = {
     id: PENDING_CREATE_ID,
@@ -55,6 +58,7 @@ export function buildCreateDisplay(
     calendarId: "ganbaruai",
     color: preview.color ?? changes.color,
     recurrence: preview.recurrence ?? changes.recurrence,
+    allDay: isAllDay || undefined,
   };
 
   const expanded = template.recurrence ? expandRecurring([template]) : [template];

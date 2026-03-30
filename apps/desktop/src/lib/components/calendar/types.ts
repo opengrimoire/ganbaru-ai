@@ -222,6 +222,16 @@ export interface PositionedAllDayEvent {
   spanCols: number;
 }
 
+export interface AllDayDragState {
+  eventId: string;
+  type: "move" | "resize-start" | "resize-end";
+  originStartCol: number;
+  originSpanCols: number;
+  pointerStartX: number;
+  pointerStartY: number;
+  columnBounds: DOMRect[];
+}
+
 export interface PositionedEvent {
   event: CalendarEvent;
   top: number;

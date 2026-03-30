@@ -420,6 +420,14 @@ export function eventsForDay(
   return events.filter((e) => !e.allDay && e.start < dayEnd && e.end > dayStart);
 }
 
+/** All events (all-day first, then timed) for a given day. Used by MonthView. */
+export function allEventsForDay(
+  events: CalendarEvent[],
+  date: Date,
+): CalendarEvent[] {
+  return [...allDayEventsForDay(events, date), ...eventsForDay(events, date)];
+}
+
 export function allDayEventsForDay(
   events: CalendarEvent[],
   date: Date,

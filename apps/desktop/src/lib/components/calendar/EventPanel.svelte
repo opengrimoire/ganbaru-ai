@@ -45,6 +45,7 @@
     end,
     event,
     anchor,
+    initialAllDay = false,
     externalDirty = false,
     readOnly = false,
     onSave,
@@ -58,6 +59,7 @@
     end?: string;
     event?: CalendarEvent;
     anchor: { x: number; y: number; width: number; height: number };
+    initialAllDay?: boolean;
     externalDirty?: boolean;
     readOnly?: boolean;
     onSave: (data: {
@@ -96,6 +98,8 @@
 
   // ─── New fields (import prep) ──────────────────────────────────
   let allDay = $state(false);
+  let stashedStartTime = "";
+  let stashedEndTime = "";
   let location = $state("");
   let eventUrl = $state("");
   let transparency: EventTransparency = $state("opaque");
@@ -321,6 +325,8 @@
       description = event.description ?? "";
       recurrence = event.recurrence ? { ...event.recurrence } : undefined;
       allDay = event.allDay ?? false;
+      stashedStartTime = "";
+      stashedEndTime = "";
       location = event.location ?? "";
       eventUrl = event.url ?? "";
       transparency = event.transparency ?? "opaque";
@@ -388,7 +394,9 @@
       notifEnabled = true;
       notifSelected = new Set([0]);
       customNotifs = [];
-      allDay = false;
+      allDay = initialAllDay;
+      stashedStartTime = "";
+      stashedEndTime = "";
       location = "";
       eventUrl = "";
       transparency = "opaque";
@@ -809,7 +817,34 @@
     <div class="-mt-1 flex items-center rounded-lg px-0.5 text-[10px] leading-none" style="background-color: var(--panel-contrast);">
       <!-- All day -->
       <button
-        onclick={() => { allDay = !allDay; if (allDay) { startTime = "00:00"; endTime = "00:00"; } emitChange(); }}
+        onclick={() => {
+          allDay = !allDay;
+          if (allDay) {
+            stashedStartTime = startTime;
+            stashedEndTime = endTime;
+            startTime = "00:00";
+            endTime = "00:00";
+          } else if (stashedStartTime && stashedStartTime !== "00:00") {
+            startTime = stashedStartTime;
+            endTime = stashedEndTime;
+            stashedStartTime = "";
+            stashedEndTime = "";
+            syncEndDateFromTimes();
+          } else {
+            const now = new Date();
+            const m = Math.ceil(now.getMinutes() / 15) * 15;
+            now.setMinutes(m, 0, 0);
+            const hh = String(now.getHours()).padStart(2, "0");
+            const mm = String(now.getMinutes()).padStart(2, "0");
+            startTime = `${hh}:${mm}`;
+            const end = new Date(now.getTime() + 3600000);
+            endTime = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+            stashedStartTime = "";
+            stashedEndTime = "";
+            syncEndDateFromTimes();
+          }
+          emitChange();
+        }}
         disabled={readOnly}
         class="flex items-center gap-1 rounded-md px-2 py-2 transition-colors
           {allDay ? 'bg-black/5 dark:bg-black/15 text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5 dark:hover:bg-black/15'}"

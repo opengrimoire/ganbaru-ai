@@ -279,14 +279,14 @@
     viewMode = mode;
   }
 
-  function handleEventCreate(start: string, end: string) {
+  function handleEventCreate(start: string, end: string, allDay?: boolean) {
     const previewEl = containerEl?.querySelector("[data-create-preview]");
     const rect = previewEl?.getBoundingClientRect();
     const anchor: PanelAnchor = rect
       ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-    session.openCreate(start, end, anchor);
+    session.openCreate(start, end, anchor, allDay);
   }
 
   function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
@@ -624,6 +624,7 @@
         start={session.state.start}
         end={session.state.end}
         anchor={session.state.anchor}
+        initialAllDay={!!session.changes.allDay}
         onSave={handlePanelSave}
         onChange={handlePanelChange}
         onClose={handlePanelClose}

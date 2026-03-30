@@ -23,12 +23,7 @@
   } = $props();
 
   const colors = $derived(getEventColor(positioned.event.color, isDark));
-  const neutralColors = $derived(isDark
-    ? { bg: "#2A2A2C", text: "#CACACA" }
-    : { bg: "#E8E8E8", text: "#666666" },
-  );
-  // Preview with no color selected: neutral gray; preview with color: event color; saved: event color
-  const activeColors = $derived(preview && !positioned.event.color ? neutralColors : colors);
+  const activeColors = $derived(colors);
 
   const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
@@ -93,7 +88,7 @@
       </div>
     {/if}
     <div class="truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
-      {positioned.event.title}
+      {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
     </div>
     {#if positioned.height > 28}
       <div class="truncate opacity-80">{startTime} - {endTime}</div>

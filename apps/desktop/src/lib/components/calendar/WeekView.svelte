@@ -5,8 +5,6 @@
     getWeekDays,
     formatDayName,
     formatDatePart,
-    getEventColor,
-    allDayEventsForWeek,
     layoutAllDayEventsForWeek,
     GUTTER_WIDTH_PER_TZ,
     createSmoothScroll,
@@ -15,7 +13,9 @@
   import DayColumn from "./DayColumn.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
+  import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
+  import { useAllDayDragController } from "./useAllDayDragController.svelte";
   import { onMount } from "svelte";
 
   let {
@@ -43,7 +43,7 @@
     timezones?: string[];
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
-    onEventCreate: (start: string, end: string) => void;
+    onEventCreate: (start: string, end: string, allDay?: boolean) => void;
     editingId?: string;
     previewedIds?: Set<string>;
     initialScrollMinute?: number;
@@ -66,7 +66,8 @@
   let headerCells: HTMLElement[] = $state([]);
   let dayFormat: DayNameFormat = $state("short");
   let stickyHeaderHeight = $state(0);
-  let stickyAllDayHeight = $state(0);
+  // Computed from grid: repeat(N, 22px) 6px + padding 2px*2
+  const stickyAllDayHeight = $derived(allDayMaxRow > 0 ? Math.max(1, allDayMaxRow) * 22 + 10 : 0);
   const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayHeight);
 
   $effect(() => {
@@ -89,7 +90,7 @@
   let wheelCooldown = false;
   let ready = $state(false);
 
-  $effect(() => { if (allDayMaxRow === 0) stickyAllDayHeight = 0; });
+  // stickyAllDayHeight is tracked via bind:clientHeight on the always-visible all-day banner
   const onWheel = createSmoothScroll(() => scrollContainer);
 
   function handleHeaderWheel(e: WheelEvent) {
@@ -171,6 +172,26 @@
     onEventCreate: (s, e) => onEventCreate(s, e),
     canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
   });
+
+  // All-day column bounds from header cells
+  let allDayGridEl: HTMLDivElement | undefined = $state();
+
+  function getAllDayColumnBounds(): DOMRect[] {
+    if (!allDayGridEl) return [];
+    const cells = allDayGridEl.querySelectorAll<HTMLElement>(".allday-col-target");
+    return Array.from(cells, (c) => c.getBoundingClientRect());
+  }
+
+  const allDayDrag = useAllDayDragController({
+    events: () => events,
+    weekDays: () => weekDays,
+    getColumnBounds: getAllDayColumnBounds,
+    onEventUpdate: (e) => onEventUpdate(e),
+    canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
+  });
+
+  const allDayEffectiveRows = $derived(Math.max(1, allDayMaxRow));
+
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -190,7 +211,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         bind:clientHeight={stickyHeaderHeight}
-        class="sticky top-0 z-[48] grid"
+        class="sticky top-0 z-[48] grid {allDayMaxRow === 0 ? 'border-b border-[var(--cal-gridline)]' : ''}"
         onwheel={handleHeaderWheel}
         style="
           grid-column: 1 / -1;
@@ -215,62 +236,109 @@
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <div
               bind:this={headerCells[i]}
-              class="flex cursor-pointer items-center justify-center hover:bg-accent/50"
-              onclick={() => onDayHeaderClick?.(day)}
-              role="button"
-              tabindex="-1"
+              class="relative flex flex-col"
             >
-              <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
-                {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}
-              </span>
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <div
+                class="flex flex-1 cursor-pointer items-center justify-center hover:bg-accent/50"
+                onclick={() => onDayHeaderClick?.(day)}
+                role="button"
+                tabindex="-1"
+              >
+                <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+                  {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}
+                </span>
+              </div>
+              {#if allDayMaxRow === 0}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <div
+                  class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
+                  style="height: 6px;"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    const dateStr = formatDatePart(day);
+                    onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+                  }}
+                ></div>
+              {/if}
             </div>
           {/each}
         </div>
       </div>
 
-      <!-- All-day banner -->
       {#if allDayMaxRow > 0}
+      <!-- All-day banner -->
+      <div
+        class="sticky z-[49] grid border-b border-[var(--cal-gridline)]"
+        style="
+          top: var(--cal-header-row-h);
+          grid-column: 1 / -1;
+          grid-template-columns: subgrid;
+          background-color: var(--cal-header-bg);
+        "
+      >
+        <!-- Gutter spacer -->
+        <div style="grid-column: span {tzCount};"></div>
+        <!-- Event grid -->
         <div
-          bind:clientHeight={stickyAllDayHeight}
-          class="sticky z-[47] grid border-b border-[var(--cal-gridline)]"
+          bind:this={allDayGridEl}
+          class="relative grid"
           style="
-            top: var(--cal-header-row-h);
-            grid-column: 1 / -1;
+            grid-column: span 7;
             grid-template-columns: subgrid;
-            background-color: var(--cal-header-bg);
+            grid-template-rows: repeat({allDayEffectiveRows}, 22px) 6px;
+            padding: 2px 0;
           "
         >
-          <!-- Gutter spacer -->
-          <div style="grid-column: span {tzCount};"></div>
-          <!-- Event grid -->
-          <div
-            class="relative grid"
-            style="
-              grid-column: span 7;
-              grid-template-columns: subgrid;
-              grid-template-rows: repeat({allDayMaxRow}, 22px);
-              padding: 2px 0;
-            "
-          >
-            {#each allDayPositioned as pos}
-              {@const colors = getEventColor(pos.event.color, isDark)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="mx-0.5 cursor-pointer truncate rounded px-1.5 text-[10px] leading-[20px]"
-                style="
-                  grid-column: {pos.startCol + 1} / span {pos.spanCols};
-                  grid-row: {pos.row + 1};
-                  background-color: {colors.bg};
-                  color: {colors.text};
-                "
-                onclick={(e) => { e.stopPropagation(); onEventClick(pos.event, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
-              >
-                {pos.event.title}
+          <!-- Thin click-to-create strip + column measurement targets -->
+          {#each weekDays as day, i}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div
+              class="allday-col-target cursor-pointer"
+              style="grid-column: {i + 1}; grid-row: 1 / -1; z-index: 0;"
+              onclick={(e) => {
+                e.stopPropagation();
+                const dateStr = formatDatePart(day);
+                onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+              }}
+            ></div>
+          {/each}
+
+          <!-- Positioned all-day events -->
+          {#each allDayPositioned as pos (pos.event.id)}
+            {@const endDateStr = pos.event.end.split(" ")[0]}
+            {#if pos.event.id !== allDayDrag.draggingEventId}
+              <div style="grid-column: {pos.startCol + 1} / span {pos.spanCols}; grid-row: {pos.row + 1}; z-index: 2; min-width: 0;">
+                <AllDayEventChip
+                  event={pos.event}
+                  {isDark}
+                  editing={editingId === pos.event.id}
+                  preview={previewedIds?.has(pos.event.id) ?? false}
+                  isPast={endDateStr < todayStr}
+                  onclick={(rect) => onEventClick(pos.event, rect)}
+                  onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
+                />
               </div>
-            {/each}
-          </div>
+            {/if}
+          {/each}
+
+          <!-- Drag preview -->
+          {#if allDayDrag.allDayDragPreview}
+            {@const dp = allDayDrag.allDayDragPreview}
+            <div style="grid-column: {dp.startCol + 1} / span {dp.spanCols}; grid-row: 1; z-index: 10; opacity: 0.8; pointer-events: none; min-width: 0;">
+              <AllDayEventChip
+                event={dp.event}
+                {isDark}
+                preview={true}
+                onclick={() => {}}
+              />
+            </div>
+          {/if}
+
         </div>
+      </div>
       {/if}
 
       <!-- Body: one cell per timezone + 7 day columns -->

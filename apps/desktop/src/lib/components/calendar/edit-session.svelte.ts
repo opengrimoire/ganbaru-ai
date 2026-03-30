@@ -20,6 +20,8 @@ export interface CreatePreview {
   title?: string;
   color?: EventColor;
   recurrence?: RecurrenceConfig;
+  allDay?: boolean;
+  endDateStr?: string;
 }
 
 export function createEditSession() {
@@ -55,16 +57,23 @@ export function createEditSession() {
       createPreview = null;
     },
 
-    openCreate(start: string, end: string, anchor: PanelAnchor) {
+    openCreate(start: string, end: string, anchor: PanelAnchor, allDay?: boolean) {
       state = { mode: "create", start, end, anchor };
-      changes = {};
+      changes = allDay ? { allDay: true } : {};
       scope = "this";
       dirty = false;
 
       const dateStr = start.split(" ")[0];
+      const endDateStr = end.split(" ")[0];
       const [sh, sm] = (start.split(" ")[1] ?? "0:0").split(":").map(Number);
       const [eh, em] = (end.split(" ")[1] ?? "0:0").split(":").map(Number);
-      createPreview = { dateStr, startMinute: sh * 60 + sm, endMinute: eh * 60 + em };
+      createPreview = {
+        dateStr,
+        startMinute: sh * 60 + sm,
+        endMinute: eh * 60 + em,
+        allDay,
+        endDateStr: allDay ? endDateStr : undefined,
+      };
     },
 
     updateChanges(data: Partial<CalendarEvent>) {

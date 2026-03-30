@@ -5,7 +5,6 @@
     formatDatePart,
     formatDayName,
     allDayEventsForDay,
-    getEventColor,
     GUTTER_WIDTH_PER_TZ,
     createSmoothScroll,
   } from "./utils";
@@ -13,6 +12,7 @@
   import DayColumn from "./DayColumn.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
+  import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
   import { onMount } from "svelte";
 
@@ -41,7 +41,7 @@
     timezones?: string[];
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
-    onEventCreate: (start: string, end: string) => void;
+    onEventCreate: (start: string, end: string, allDay?: boolean) => void;
     editingId?: string;
     previewedIds?: Set<string>;
     initialScrollMinute?: number;
@@ -56,10 +56,6 @@
   let wheelCooldown = false;
   let ready = $state(false);
   let stickyHeaderHeight = $state(0);
-  let stickyAllDayHeight = $state(0);
-  const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayHeight);
-
-  $effect(() => { if (allDayEvents.length === 0) stickyAllDayHeight = 0; });
   const onWheel = createSmoothScroll(() => scrollContainer);
 
   function handleHeaderWheel(e: WheelEvent) {
@@ -79,6 +75,9 @@
   const past = $derived(formatDatePart(anchorDate) < todayStr);
   const dateStr = $derived(formatDatePart(anchorDate));
   const allDayEvents = $derived(allDayEventsForDay(events, anchorDate));
+  // Computed from flex: N chips at 22px + 6px strip + py-1 padding (8px)
+  const stickyAllDayHeight = $derived(allDayEvents.length > 0 ? allDayEvents.length * 22 + 14 : 0);
+  const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayHeight);
   const timedEvents = $derived(events.filter((e) => !e.allDay));
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
@@ -101,6 +100,7 @@
     observer.observe(el);
     return () => observer.disconnect();
   });
+
 
   const dayLabel = $derived.by(() => {
     const name = formatDayName(anchorDate, dayFormat);
@@ -175,7 +175,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         bind:clientHeight={stickyHeaderHeight}
-        class="sticky top-0 z-[48] grid"
+        class="sticky top-0 z-[48] grid {allDayEvents.length === 0 ? 'border-b border-[var(--cal-gridline)]' : ''}"
         onwheel={handleHeaderWheel}
         style="
           grid-column: 1 / -1;
@@ -193,45 +193,70 @@
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
           bind:this={headerCell}
-          class="flex cursor-pointer items-center px-4 hover:bg-accent/50"
-          onclick={() => onDayHeaderClick?.()}
-          role="button"
-          tabindex="-1"
+          class="relative flex flex-col"
         >
-          <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
-            {dayLabel}
-          </span>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div
+            class="flex flex-1 cursor-pointer items-center px-4 hover:bg-accent/50"
+            onclick={() => onDayHeaderClick?.()}
+            role="button"
+            tabindex="-1"
+          >
+            <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+              {dayLabel}
+            </span>
+          </div>
+          {#if allDayEvents.length === 0}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div
+              class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
+              style="height: 6px;"
+              onclick={(e) => {
+                e.stopPropagation();
+                onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+              }}
+            ></div>
+          {/if}
         </div>
       </div>
 
-      <!-- All-day banner -->
       {#if allDayEvents.length > 0}
-        <div
-          bind:clientHeight={stickyAllDayHeight}
-          class="sticky z-[47] grid border-b border-[var(--cal-gridline)]"
-          style="
-            top: var(--cal-header-row-h);
-            grid-column: 1 / -1;
-            grid-template-columns: subgrid;
-            background-color: var(--cal-header-bg);
-          "
-        >
-          <div style="grid-column: span {tzCount};"></div>
-          <div class="flex flex-col gap-0.5 px-1 py-1">
-            {#each allDayEvents as event}
-              {@const colors = getEventColor(event.color, isDark)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="cursor-pointer truncate rounded px-1.5 text-[10px] leading-[20px]"
-                style="background-color: {colors.bg}; color: {colors.text};"
-                onclick={(e) => { e.stopPropagation(); onEventClick(event, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
-              >
-                {event.title}
-              </div>
-            {/each}
-          </div>
+      <!-- All-day banner -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        class="sticky z-[49] grid border-b border-[var(--cal-gridline)]"
+        style="
+          top: var(--cal-header-row-h);
+          grid-column: 1 / -1;
+          grid-template-columns: subgrid;
+          background-color: var(--cal-header-bg);
+        "
+      >
+        <div style="grid-column: span {tzCount};"></div>
+        <div class="flex min-w-0 flex-col px-1 py-1">
+          {#each allDayEvents as evt (evt.id)}
+            <AllDayEventChip
+              event={evt}
+              {isDark}
+              editing={editingId === evt.id}
+              preview={previewedIds?.has(evt.id) ?? false}
+              isPast={past}
+              onclick={(rect) => onEventClick(evt, rect)}
+            />
+          {/each}
+          <!-- Thin click-to-create strip -->
+          <div
+            class="cursor-pointer transition-colors hover:bg-accent/50"
+            style="height: 6px;"
+            onclick={(e) => {
+              e.stopPropagation();
+              onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+            }}
+          ></div>
         </div>
+      </div>
       {/if}
 
       <!-- Body row -->

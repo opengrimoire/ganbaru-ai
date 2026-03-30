@@ -461,11 +461,11 @@
         height: {dragPreview.height}px;
         left: 0;
         width: 92%;
-        color: {dragColor?.text ?? (isDark ? '#CACACA' : '#666666')};
+        color: {dragColor?.text ?? getEventColor(undefined, isDark).text};
         z-index: 46;
       "
     >
-      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragColor?.bg ?? (isDark ? '#2A2A2C' : '#E8E8E8')};">
+      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragColor?.bg ?? getEventColor(undefined, isDark).bg};">
         <div class="truncate font-medium">{dragPreview.event.title}</div>
         {#if dragPreview.height > 28}
           {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
@@ -486,11 +486,11 @@
         height: {createPreview.height}px;
         left: 0;
         width: 92%;
-        color: {isDark ? '#CACACA' : '#666666'};
+        color: {getEventColor(undefined, isDark).text};
         z-index: 10;
       "
     >
-      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {isDark ? '#2A2A2C' : '#E8E8E8'};">
+      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {getEventColor(undefined, isDark).bg};">
         <div class="truncate font-medium">
           {createPreview.event.title || "Focus session"}
         </div>

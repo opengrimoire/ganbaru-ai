@@ -4,7 +4,7 @@
   import {
     getMonthGrid,
     isPastDay,
-    eventsForDay,
+    allEventsForDay,
     getEventColor,
     formatDayName,
   } from "./utils";
@@ -105,7 +105,7 @@
           {@const past = isPastDay(day)}
           {@const active = inMonth && !past}
           {@const textOpacity = !inMonth ? 0.25 : 1}
-          {@const dayEvts = eventsForDay(events, day)}
+          {@const dayEvts = allEventsForDay(events, day)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
