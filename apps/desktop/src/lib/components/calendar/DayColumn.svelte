@@ -466,7 +466,9 @@
       "
     >
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragColor?.bg ?? getEventColor(undefined, isDark).bg};">
-        <div class="truncate font-medium">{dragPreview.event.title}</div>
+        <div class="truncate font-medium">
+          {#if dragPreview.event.title}{dragPreview.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+        </div>
         {#if dragPreview.height > 28}
           {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
           {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
@@ -492,8 +494,13 @@
     >
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {getEventColor(undefined, isDark).bg};">
         <div class="truncate font-medium">
-          {createPreview.event.title || "Focus session"}
+          {#if createPreview.event.title}{createPreview.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
         </div>
+        {#if createPreview.height > 28}
+          {@const st = createPreview.event.start.split(" ")[1] ?? ""}
+          {@const et = createPreview.event.end.split(" ")[1] ?? ""}
+          <div class="truncate opacity-80">{st} - {et}</div>
+        {/if}
       </div>
     </div>
   {/if}

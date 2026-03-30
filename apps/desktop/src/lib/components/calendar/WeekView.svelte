@@ -349,7 +349,7 @@
                 margin: 1px 0;
               "
             >
-              {dp.event.title || '(No title)'}
+              {#if dp.event.title}{dp.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
             </div>
           {/if}
 

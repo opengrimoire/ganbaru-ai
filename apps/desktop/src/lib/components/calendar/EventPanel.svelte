@@ -579,7 +579,7 @@
   function buildSaveData() {
     const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
     return {
-      title: title.trim() || "Focus session",
+      title: title.trim(),
       start: `${startDate} ${startTime}`,
       end: `${endDate} ${endTime}`,
       color,
