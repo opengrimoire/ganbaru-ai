@@ -227,9 +227,11 @@ export interface AllDayDragState {
   type: "move" | "resize-start" | "resize-end";
   originStartCol: number;
   originSpanCols: number;
+  originRow: number;
   pointerStartX: number;
   pointerStartY: number;
   columnBounds: DOMRect[];
+  gridTop: number;
 }
 
 export interface PositionedEvent {

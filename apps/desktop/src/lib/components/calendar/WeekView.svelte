@@ -6,6 +6,7 @@
     formatDayName,
     formatDatePart,
     layoutAllDayEventsForWeek,
+    getEventColor,
     GUTTER_WIDTH_PER_TZ,
     createSmoothScroll,
   } from "./utils";
@@ -186,11 +187,18 @@
     events: () => events,
     weekDays: () => weekDays,
     getColumnBounds: getAllDayColumnBounds,
+    getGridRect: () => allDayGridEl?.getBoundingClientRect() ?? null,
+    getPositionedEvents: () => allDayPositioned,
     onEventUpdate: (e) => onEventUpdate(e),
     canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
   });
 
-  const allDayEffectiveRows = $derived(Math.max(1, allDayMaxRow));
+  const allDayEffectiveRows = $derived.by(() => {
+    const base = Math.max(1, allDayMaxRow);
+    const dp = allDayDrag.allDayDragPreview;
+    if (!dp) return base;
+    return Math.max(base, dp.row + 1);
+  });
 
 </script>
 
@@ -317,7 +325,7 @@
                   editing={editingId === pos.event.id}
                   preview={previewedIds?.has(pos.event.id) ?? false}
                   isPast={endDateStr < todayStr}
-                  onclick={(rect) => onEventClick(pos.event, rect)}
+                  onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
                   onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
                 />
               </div>
@@ -327,13 +335,21 @@
           <!-- Drag preview -->
           {#if allDayDrag.allDayDragPreview}
             {@const dp = allDayDrag.allDayDragPreview}
-            <div style="grid-column: {dp.startCol + 1} / span {dp.spanCols}; grid-row: 1; z-index: 10; opacity: 0.8; pointer-events: none; min-width: 0;">
-              <AllDayEventChip
-                event={dp.event}
-                {isDark}
-                preview={true}
-                onclick={() => {}}
-              />
+            {@const dpColor = getEventColor(dp.event.color, isDark)}
+            <div
+              class="allday-drag-preview pointer-events-none select-none truncate rounded px-1.5 text-[10px] leading-[20px]"
+              style="
+                grid-column: {dp.startCol + 1} / span {dp.spanCols};
+                grid-row: {dp.row + 1};
+                z-index: 10;
+                min-width: 0;
+                background-color: {dpColor.bg};
+                color: {dpColor.text};
+                opacity: 0.8;
+                margin: 1px 0;
+              "
+            >
+              {dp.event.title || '(No title)'}
             </div>
           {/if}
 
@@ -385,3 +401,19 @@
   </div>
 </div>
 </div>
+
+<style>
+  .allday-drag-preview {
+    position: relative;
+  }
+
+  .allday-drag-preview::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1.5px solid currentColor;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 3;
+  }
+</style>

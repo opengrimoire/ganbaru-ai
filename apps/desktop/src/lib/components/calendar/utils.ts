@@ -467,7 +467,8 @@ export function layoutAllDayEventsForWeek(
   const weekEnd = formatDatePart(weekDays[weekDays.length - 1]);
   const dayStrs = weekDays.map(formatDatePart);
 
-  // Sort by duration descending (longer events first), then start ascending
+  // Sort by duration descending (longer events first), then start ascending,
+  // then user-defined sort order (for vertical reordering of same-day events)
   const sorted = [...allDay].sort((a, b) => {
     const aStart = a.start.split(" ")[0];
     const bStart = b.start.split(" ")[0];
@@ -476,7 +477,10 @@ export function layoutAllDayEventsForWeek(
     const aDur = dayStrs.filter((d) => d >= aStart && d <= aEnd).length;
     const bDur = dayStrs.filter((d) => d >= bStart && d <= bEnd).length;
     if (bDur !== aDur) return bDur - aDur;
-    return aStart < bStart ? -1 : aStart > bStart ? 1 : 0;
+    if (aStart !== bStart) return aStart < bStart ? -1 : 1;
+    const aOrder = parseInt(a.extendedProperties?.allDaySortOrder ?? "0");
+    const bOrder = parseInt(b.extendedProperties?.allDaySortOrder ?? "0");
+    return aOrder - bOrder;
   });
 
   // rows[row][col] = true if occupied
