@@ -606,9 +606,9 @@
           { transform: "scale(1)", opacity: 1 },
           { transform: "scale(0.95)", opacity: 0 },
         ],
-        { duration: 140, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" },
+        { duration: 80, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" },
       ).onfinish = () => onSave(data, s);
-    }, 250);
+    }, 200);
   }
   function handleDeleteClick() { if (event && onDelete) onDelete(event.id, isRecurring ? scope : undefined); }
   function handleScopeClick(s: RecurringScope) { scope = s; onScopeChange?.(s); }

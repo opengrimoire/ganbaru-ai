@@ -293,10 +293,13 @@
   function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
-    // Already editing this exact event, nothing to do
+    // Already editing this exact event — toggle panel closed if clean
     if (session.state.mode === "edit" && (
       session.state.originalEvent.id === event.id || editingId === event.id
-    )) return;
+    )) {
+      handlePanelClose();
+      return;
+    }
 
     const anchor: PanelAnchor = rect
       ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
@@ -630,6 +633,13 @@
         return;
       }
       handlePanelClose();
+    }} onwheel={(e) => {
+      // Let scroll pass through to the calendar underneath
+      const el = e.currentTarget as HTMLElement;
+      el.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      el.style.pointerEvents = '';
+      under?.dispatchEvent(new WheelEvent('wheel', e));
     }}></div>
     {#if session.state.mode === "create"}
       <EventPanel
