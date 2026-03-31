@@ -593,7 +593,7 @@
   let saving = $state(false);
 
   function handleSave() {
-    if (saving) return;
+    if (saving || !saveReady) return;
     const data = buildSaveData();
     const s = isRecurring ? scope : undefined;
     if (!panelEl) { onSave(data, s); return; }
@@ -1016,7 +1016,7 @@
         class="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] transition-all
           {saving || saveReady
             ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
-            : 'text-muted-foreground cursor-default'}"
+            : 'text-muted-foreground cursor-not-allowed'}"
         style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
         {#if saving}
           <CircleCheck size={13} />

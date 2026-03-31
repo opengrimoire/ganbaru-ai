@@ -618,7 +618,19 @@
   {#if session.state.mode === "create" || session.state.mode === "edit"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="fixed inset-0 z-40" onclick={handlePanelClose}></div>
+    <div class="fixed inset-0 z-40" onclick={(e) => {
+      // Peek under the backdrop to check if an event block was clicked
+      const el = e.currentTarget as HTMLElement;
+      el.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      el.style.pointerEvents = '';
+      const eventEl = under?.closest('[data-event-id]');
+      if (eventEl) {
+        (eventEl as HTMLElement).click();
+        return;
+      }
+      handlePanelClose();
+    }}></div>
     {#if session.state.mode === "create"}
       <EventPanel
         mode="create"
