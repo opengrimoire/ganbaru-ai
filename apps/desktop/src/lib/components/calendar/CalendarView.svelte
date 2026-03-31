@@ -8,6 +8,7 @@
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
   import WeekView from "./WeekView.svelte";
@@ -28,6 +29,7 @@
 
   const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
+  const calZoom = getCalendarZoom();
   const theme = getTheme();
 
   let viewMode: CalendarViewMode = $state("week");

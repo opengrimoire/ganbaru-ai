@@ -2,12 +2,10 @@
   import { getHourInTimezone } from "./utils";
 
   let {
-    hourHeight = 48,
     timezones = [] as string[],
     anchorDate = new Date(),
     tzCount = 1,
   }: {
-    hourHeight?: number;
     timezones?: string[];
     anchorDate?: Date;
     tzCount?: number;
@@ -28,7 +26,7 @@
       {#each hours as hour}
         <div
           class="relative flex items-start justify-center"
-          style="height: {hourHeight}px;"
+          style="height: calc(var(--hour-h) * 1px);"
         >
           {#if hour > 0}
             <span

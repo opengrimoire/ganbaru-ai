@@ -8,19 +8,18 @@
     parseCalendarDate,
     snapToGrid,
     clampMinute,
-    minuteToTop,
     getEventColor,
   } from "./utils";
   import { computeDayTimelineBands } from "$lib/utils/pomodoro-segments";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { select } from "$lib/api/db";
   import EventBlock from "./EventBlock.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
 
   let {
     date,
     events,
-    hourHeight = 48,
     isToday = false,
     isPast = false,
     isDark = false,
@@ -38,7 +37,6 @@
   }: {
     date: Date;
     events: CalendarEvent[];
-    hourHeight?: number;
     isToday?: boolean;
     isPast?: boolean;
     isDark?: boolean;
@@ -55,11 +53,9 @@
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
   } = $props();
 
-  const pastOverlayHeight = $derived.by(() => {
-    if (isPast) return 24 * hourHeight;
-    if (isToday && currentTimeMinute >= 0) {
-      return (currentTimeMinute / 60) * hourHeight;
-    }
+  const pastOverlayMinutes = $derived.by(() => {
+    if (isPast) return 1440;
+    if (isToday && currentTimeMinute >= 0) return currentTimeMinute;
     return 0;
   });
 
@@ -67,12 +63,11 @@
 
   const dateStr = $derived(formatDatePart(date));
   const dayEvents = $derived(eventsForDay(events, date));
-  const positioned = $derived(layoutEventsForDay(dayEvents, hourHeight, dateStr));
-
-  const totalHeight = $derived(24 * hourHeight);
+  const positioned = $derived(layoutEventsForDay(dayEvents, dateStr));
 
   // Centralized pomodoro timeline
   const pomodoro = getPomodoro();
+  const calZoom = getCalendarZoom();
   const railWidth = 6;
 
   // One rail segment per contiguous group of pomodoro events (merge overlapping/adjacent)
@@ -107,6 +102,17 @@
   function isMinuteInRail(minute: number): boolean {
     return railSegments.some(seg => seg.start <= minute && seg.end >= minute);
   }
+
+  const subHourOffsets = $derived.by(() => {
+    const gm = calZoom.gridMinutes;
+    const spacing = (gm / 60) * calZoom.hourHeight;
+    if (spacing < 8) return [];
+    const offsets: number[] = [];
+    for (let m = gm; m < 60; m += gm) {
+      offsets.push(m);
+    }
+    return offsets;
+  });
 
   // Load persisted segments from DB for all pomodoro events on this day
   interface DbSegmentRow {
@@ -209,8 +215,9 @@
     }, dayStartMs, nowMs, persistedSegmentsMap);
   });
 
-  let snapLineY: number | null = $state(null);
+  let snapMinute: number | null = $state(null);
   let snapTimeLabel: string = $state("");
+  const snapLineY = $derived(snapMinute !== null ? (snapMinute / 60) * calZoom.hourHeight : null);
   let columnEl: HTMLDivElement | undefined = $state();
   let scrollParent: HTMLElement | null = null;
   let stickyBottom = $state(0);
@@ -219,14 +226,14 @@
   // Clear snap line when dragging starts (prevents stale flash)
   $effect(() => {
     if (hideSnapLine) {
-      snapLineY = null;
+      snapMinute = null;
       lastClientY = null;
     }
   });
 
   onMount(() => {
     function clearSnap() {
-      snapLineY = null;
+      snapMinute = null;
       lastClientY = null;
     }
     window.addEventListener("blur", clearSnap);
@@ -264,7 +271,7 @@
 
   const effectiveSnapY = $derived(
     snapOverrideMinute != null
-      ? minuteToTop(snapOverrideMinute, hourHeight)
+      ? (snapOverrideMinute / 60) * calZoom.hourHeight
       : snapLineY,
   );
   const effectiveSnapLabel = $derived(
@@ -291,27 +298,27 @@
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     const offsetY = e.clientY - rect.top;
-    const minuteWithinHour = snapToGrid((offsetY / hourHeight) * 60);
+    const minuteWithinHour = snapToGrid((offsetY / calZoom.hourHeight) * 60, calZoom.gridMinutes);
     const minute = clampMinute(hour * 60 + minuteWithinHour);
     onCreateStart(dateStr, minute, e);
   }
 
   function updateSnapFromClientY(clientY: number, snap: boolean) {
     if (!columnEl) return;
+    const hh = calZoom.hourHeight;
     const rect = columnEl.getBoundingClientRect();
     const offsetY = clientY - rect.top;
-    const rawMinute = (offsetY / hourHeight) * 60;
-    let snapped = clampMinute(snapToGrid(rawMinute));
+    const rawMinute = (offsetY / hh) * 60;
+    let snapped = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
     if (snap) {
       // Snap to block edges when cursor is near them
       for (const pos of positioned) {
-        const blockTop = pos.top;
-        const blockBottom = pos.top + pos.height;
+        const blockTop = (pos.startMinute / 60) * hh;
+        const blockBottom = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
 
         if (Math.abs(offsetY - blockTop) < 8) {
-          const { startMinute } = effectiveMinuteRange(pos.event, dateStr);
-          snapped = startMinute;
+          snapped = pos.startMinute;
           break;
         }
         if (Math.abs(offsetY - blockBottom) < 8) {
@@ -320,11 +327,10 @@
           break;
         }
       }
-      snapLineY = minuteToTop(snapped, hourHeight);
+      snapMinute = snapped;
     } else {
-      // During scroll: track raw pixel position for smooth movement
       const clamped = clampMinute(Math.round(rawMinute));
-      snapLineY = (clamped / 60) * hourHeight;
+      snapMinute = clamped;
     }
 
     updateStickyBottom();
@@ -335,18 +341,24 @@
 
   function handleParentScroll() {
     if (lastClientY === null || !columnEl || hideSnapLine) return;
+    // During zoom animation, snapLineY auto-tracks via $derived; skip recalculation
+    if (calZoom.isAnimating) return;
     updateSnapFromClientY(lastClientY, false);
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
     if (!columnEl || hideSnapLine) return;
+    if (calZoom.isAnimating) {
+      snapMinute = null;
+      return;
+    }
     lastClientY = e.clientY;
     updateSnapFromClientY(e.clientY, true);
   }
 
   function handleColumnMouseLeave() {
     lastClientY = null;
-    snapLineY = null;
+    snapMinute = null;
   }
 </script>
 
@@ -354,14 +366,13 @@
 <div
   data-day-column
   class="relative min-w-0"
-  style="height: {totalHeight}px;"
+  style="height: calc(24 * var(--hour-h) * 1px);"
 >
   <!-- Current time indicator (outside overflow-hidden so the circle can bleed left) -->
   {#if isToday && currentTimeMinute >= 0}
-    {@const timeTop = (currentTimeMinute / 60) * hourHeight}
     <div
       class="pointer-events-none absolute left-0 right-0"
-      style="top: {timeTop}px; z-index: 46;"
+      style="top: calc({currentTimeMinute} / 60 * var(--hour-h) * 1px); z-index: 46;"
     >
       <div
         class="h-2.5 w-2.5 shrink-0 rounded-full absolute"
@@ -379,22 +390,22 @@
     {#if hour < 23}
       <div
         class="pointer-events-none absolute right-0"
-        style="left: {isMinuteInRail((hour + 1) * 60) ? railWidth + 4 : 0}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
+        style="left: {isMinuteInRail((hour + 1) * 60) ? railWidth + 4 : 0}px; top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px); border-bottom: 1px solid var(--cal-gridline);"
       ></div>
     {/if}
-    {#if hour > 0}
+    {#each subHourOffsets as subMinute}
       <div
         class="pointer-events-none absolute right-0"
-        style="left: {isMinuteInRail(hour * 60 + 30) ? railWidth + 4 : 0}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
+        style="left: {isMinuteInRail(hour * 60 + subMinute) ? railWidth + 4 : 0}px; top: calc({hour * 60 + subMinute} / 60 * var(--hour-h) * 1px); height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
       ></div>
-    {/if}
+    {/each}
   {/each}
 
   <!-- Past time dimming overlay (full width, behind rail and content) -->
-  {#if pastOverlayHeight > 0}
+  {#if pastOverlayMinutes > 0}
     <div
       class="pointer-events-none absolute left-0 right-0 top-0 z-[1]"
-      style="height: {pastOverlayHeight}px; background-color: var(--cal-past-overlay);"
+      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay);"
     ></div>
   {/if}
 
@@ -405,8 +416,8 @@
       style="
         left: 2px;
         width: {railWidth}px;
-        top: {(seg.start / 60) * hourHeight}px;
-        height: {((seg.end - seg.start) / 60) * hourHeight}px;
+        top: calc({seg.start} / 60 * var(--hour-h) * 1px);
+        height: calc({seg.end - seg.start} / 60 * var(--hour-h) * 1px);
         background-color: var(--cal-timeline-rail);
         border-radius: 3px;
       "
@@ -450,7 +461,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="absolute w-full cursor-crosshair"
-      style="top: {hour * hourHeight}px; height: {hourHeight}px;"
+      style="top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px);"
       onpointerdown={(e) => handleSlotPointerDown(e, hour)}
     ></div>
   {/each}
@@ -473,11 +484,12 @@
   <!-- Drag preview (replaces the original block at the target position) -->
   {#if dragPreview}
     {@const dragColor = dragPreview.event.color ? getEventColor(dragPreview.event.color, isDark) : null}
+    {@const dragH = (dragPreview.durationMinutes / 60) * calZoom.hourHeight}
     <div
       class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
-        top: {dragPreview.top}px;
-        height: {dragPreview.height}px;
+        top: calc({dragPreview.startMinute} / 60 * var(--hour-h) * 1px);
+        height: calc({dragPreview.durationMinutes} / 60 * var(--hour-h) * 1px);
         left: 0;
         width: 92%;
         color: {dragColor?.text ?? getEventColor(undefined, isDark).text};
@@ -488,7 +500,7 @@
         <div class="truncate font-medium">
           {#if dragPreview.event.title}{dragPreview.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
         </div>
-        {#if dragPreview.height > 28}
+        {#if dragH > 28}
           {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
           {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
           <div class="truncate opacity-80">{st} - {et}</div>
@@ -500,12 +512,13 @@
   <!-- Create preview (new block being drawn) -->
   {#if createPreview}
     {@const glowColor = isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'}
+    {@const createH = (createPreview.durationMinutes / 60) * calZoom.hourHeight}
     <div
       data-create-preview
       class="preview-glow pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
-        top: {createPreview.top}px;
-        height: {createPreview.height}px;
+        top: calc({createPreview.startMinute} / 60 * var(--hour-h) * 1px);
+        height: calc({createPreview.durationMinutes} / 60 * var(--hour-h) * 1px);
         left: 0;
         width: 92%;
         color: {getEventColor(undefined, isDark).text};
@@ -518,7 +531,7 @@
         <div class="truncate font-medium">
           {#if createPreview.event.title}{createPreview.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
         </div>
-        {#if createPreview.height > 28}
+        {#if createH > 28}
           {@const st = createPreview.event.start.split(" ")[1] ?? ""}
           {@const et = createPreview.event.end.split(" ")[1] ?? ""}
           <div class="truncate opacity-80">{st} - {et}</div>
@@ -529,10 +542,11 @@
 
   <!-- Snap position indicator line with time label — always on top -->
   {#if effectiveSnapY !== null && !hideSnapLine}
-    {@const atBottom = effectiveSnapY >= totalHeight - 2}
+    {@const effectiveMin = snapOverrideMinute ?? snapMinute ?? 0}
+    {@const atBottom = effectiveMin >= 1440 - (2 / calZoom.hourHeight * 60)}
     <div
       class="pointer-events-none absolute left-0 right-0"
-      style="top: {atBottom ? effectiveSnapY - 2 : effectiveSnapY}px; z-index: 47;"
+      style="top: calc({effectiveMin} / 60 * var(--hour-h) * 1px - {atBottom ? 2 : 0}px); z-index: 47;"
     >
       <div class="relative">
         <span

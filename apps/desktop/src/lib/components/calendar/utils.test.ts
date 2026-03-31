@@ -312,7 +312,7 @@ describe("layoutEventsForDay", () => {
     const events: CalendarEvent[] = [
       evt({ id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 10:00" }),
     ];
-    const layout = layoutEventsForDay(events, 48, "2026-03-13");
+    const layout = layoutEventsForDay(events, "2026-03-13");
     expect(layout).toHaveLength(1);
     expect(layout[0].left).toBe(0);
     expect(layout[0].width).toBe(92);
@@ -325,7 +325,7 @@ describe("layoutEventsForDay", () => {
       evt({ id: "1", title: "A", start: "2026-03-13 09:00", end: "2026-03-13 11:00" }),
       evt({ id: "2", title: "B", start: "2026-03-13 10:00", end: "2026-03-13 12:00" }),
     ];
-    const layout = layoutEventsForDay(events, 48, "2026-03-13");
+    const layout = layoutEventsForDay(events, "2026-03-13");
     expect(layout).toHaveLength(2);
     expect(layout[0].totalColumns).toBe(2);
     expect(layout[1].totalColumns).toBe(2);
@@ -334,18 +334,18 @@ describe("layoutEventsForDay", () => {
   });
 
   it("returns empty array for no events", () => {
-    expect(layoutEventsForDay([], 48, "2026-03-13")).toEqual([]);
+    expect(layoutEventsForDay([], "2026-03-13")).toEqual([]);
   });
 
   it("positions cross-midnight event on start day from start to bottom", () => {
     const events: CalendarEvent[] = [
       evt({ id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" }),
     ];
-    const layout = layoutEventsForDay(events, 60, "2026-03-13");
+    const layout = layoutEventsForDay(events, "2026-03-13");
     expect(layout).toHaveLength(1);
-    expect(layout[0].top).toBe((1320 / 60) * 60); // 22:00 = minute 1320
-    // Height covers 22:00 to 24:00 = 120 minutes
-    expect(layout[0].height).toBe((120 / 60) * 60);
+    expect(layout[0].startMinute).toBe(1320); // 22:00 = minute 1320
+    // Duration covers 22:00 to 24:00 = 120 minutes
+    expect(layout[0].durationMinutes).toBe(120);
     expect(layout[0].isClippedTop).toBe(false);
     expect(layout[0].isClippedBottom).toBe(true);
   });
@@ -354,11 +354,11 @@ describe("layoutEventsForDay", () => {
     const events: CalendarEvent[] = [
       evt({ id: "1", title: "Night", start: "2026-03-13 22:00", end: "2026-03-14 02:00" }),
     ];
-    const layout = layoutEventsForDay(events, 60, "2026-03-14");
+    const layout = layoutEventsForDay(events, "2026-03-14");
     expect(layout).toHaveLength(1);
-    expect(layout[0].top).toBe(0);
-    // Height covers 00:00 to 02:00 = 120 minutes
-    expect(layout[0].height).toBe((120 / 60) * 60);
+    expect(layout[0].startMinute).toBe(0);
+    // Duration covers 00:00 to 02:00 = 120 minutes
+    expect(layout[0].durationMinutes).toBe(120);
     expect(layout[0].isClippedTop).toBe(true);
     expect(layout[0].isClippedBottom).toBe(false);
   });

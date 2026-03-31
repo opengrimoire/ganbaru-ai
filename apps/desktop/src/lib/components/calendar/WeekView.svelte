@@ -17,12 +17,12 @@
   import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
   import { useAllDayDragController } from "./useAllDayDragController.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
 
   let {
     anchorDate,
     events,
-    hourHeight = 67,
     isDark = false,
     timezones = [] as string[],
     onEventClick,
@@ -39,7 +39,6 @@
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
-    hourHeight?: number;
     isDark?: boolean;
     timezones?: string[];
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
@@ -92,9 +91,32 @@
   let ready = $state(false);
 
   // stickyAllDayHeight is tracked via bind:clientHeight on the always-visible all-day banner
-  const onWheel = createSmoothScroll(() => scrollContainer);
+  const calZoom = getCalendarZoom();
+  const smoothScroll = createSmoothScroll(() => scrollContainer);
+
+  function onWheel(e: WheelEvent) {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      if (!calZoom.isAnimating && scrollContainer) {
+        smoothScroll.cancel();
+        const rect = scrollContainer.getBoundingClientRect();
+        calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);
+      }
+      return;
+    }
+    smoothScroll(e);
+  }
 
   function handleHeaderWheel(e: WheelEvent) {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      if (!calZoom.isAnimating && scrollContainer) {
+        smoothScroll.cancel();
+        const rect = scrollContainer.getBoundingClientRect();
+        calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);
+      }
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     if (!onWheelNavigate || wheelCooldown) return;
@@ -111,6 +133,13 @@
     if (nowStr !== todayStr) todayStr = nowStr;
   }
 
+  // Sync --hour-h CSS property via setProperty so Svelte's template never
+  // owns it. This prevents re-renders (from scroll events, etc.) from
+  // overwriting the imperative value set during zoom.
+  $effect(() => {
+    scrollContainer?.style.setProperty("--hour-h", String(calZoom.hourHeight));
+  });
+
   onMount(() => {
     updateCurrentTime();
     const interval = setInterval(updateCurrentTime, 1000);
@@ -122,12 +151,16 @@
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     if (scrollContainer) {
+      // Set --hour-h before any scroll/layout so the initial paint is correct
+      scrollContainer.style.setProperty("--hour-h", String(calZoom.hourHeight));
+
+      const hh = calZoom.hourHeight;
       if (initialScrollMinute >= 0) {
-        scrollContainer.scrollTop = (initialScrollMinute / 60) * hourHeight;
+        scrollContainer.scrollTop = (initialScrollMinute / 60) * hh;
       } else {
         const now = new Date();
         const targetHour = Math.max(0, now.getHours() - 2);
-        scrollContainer.scrollTop = targetHour * hourHeight;
+        scrollContainer.scrollTop = targetHour * hh;
       }
 
       scrollContainer.addEventListener("scroll", handleScroll);
@@ -142,8 +175,8 @@
   });
 
   function handleScroll() {
-    if (!scrollContainer || !onScrollChange) return;
-    const minute = (scrollContainer.scrollTop / hourHeight) * 60;
+    if (!scrollContainer || !onScrollChange || calZoom.isAnimating) return;
+    const minute = (scrollContainer.scrollTop / calZoom.hourHeight) * 60;
     onScrollChange(Math.round(minute));
   }
 
@@ -167,7 +200,7 @@
 
   const drag = useDragController({
     events: () => events,
-    hourHeight: () => hourHeight,
+    hourHeight: () => calZoom.hourHeight,
     getColumnDate,
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
@@ -358,7 +391,7 @@
       {/if}
 
       <!-- Body: one cell per timezone + 7 day columns -->
-      <TimeGutter {hourHeight} {timezones} {anchorDate} tzCount={tzCount} />
+      <TimeGutter {timezones} {anchorDate} tzCount={tzCount} />
 
       <div
         class="grid"
@@ -370,7 +403,6 @@
             <DayColumn
               date={day}
               events={timedEvents}
-              {hourHeight}
               isToday={formatDatePart(day) === todayStr}
               isPast={formatDatePart(day) < todayStr}
               {isDark}

@@ -59,5 +59,9 @@ export function getZoom() {
       persist();
       applyZoom();
     },
+    /** Re-assert the current zoom level (counteracts external zoom changes). */
+    reapply() {
+      applyZoom();
+    },
   };
 }

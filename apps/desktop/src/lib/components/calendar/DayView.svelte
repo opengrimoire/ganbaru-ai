@@ -14,12 +14,12 @@
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
 
   let {
     anchorDate,
     events,
-    hourHeight = 67,
     isDark = false,
     timezones = [] as string[],
     onEventClick,
@@ -36,7 +36,6 @@
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
-    hourHeight?: number;
     isDark?: boolean;
     timezones?: string[];
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
@@ -56,9 +55,34 @@
   let wheelCooldown = false;
   let ready = $state(false);
   let stickyHeaderHeight = $state(0);
-  const onWheel = createSmoothScroll(() => scrollContainer);
+  const calZoom = getCalendarZoom();
+  const smoothScroll = createSmoothScroll(() => scrollContainer);
+
+  function onWheel(e: WheelEvent) {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      // Only compute rect and call zoom when the gate is open (first event).
+      // Subsequent events in the gesture just preventDefault -- nothing else.
+      if (!calZoom.isAnimating && scrollContainer) {
+        smoothScroll.cancel();
+        const rect = scrollContainer.getBoundingClientRect();
+        calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);
+      }
+      return;
+    }
+    smoothScroll(e);
+  }
 
   function handleHeaderWheel(e: WheelEvent) {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      if (!calZoom.isAnimating && scrollContainer) {
+        smoothScroll.cancel();
+        const rect = scrollContainer.getBoundingClientRect();
+        calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);
+      }
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     if (!onWheelNavigate || wheelCooldown) return;
@@ -115,6 +139,13 @@
     if (nowStr !== todayStr) todayStr = nowStr;
   }
 
+  // Sync --hour-h CSS property via setProperty so Svelte's template never
+  // owns it. This prevents re-renders (from scroll events, etc.) from
+  // overwriting the imperative value set during zoom.
+  $effect(() => {
+    scrollContainer?.style.setProperty("--hour-h", String(calZoom.hourHeight));
+  });
+
   onMount(() => {
     updateCurrentTime();
     const interval = setInterval(updateCurrentTime, 1000);
@@ -126,12 +157,16 @@
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     if (scrollContainer) {
+      // Set --hour-h before any scroll/layout so the initial paint is correct
+      scrollContainer.style.setProperty("--hour-h", String(calZoom.hourHeight));
+
+      const hh = calZoom.hourHeight;
       if (initialScrollMinute >= 0) {
-        scrollContainer.scrollTop = (initialScrollMinute / 60) * hourHeight;
+        scrollContainer.scrollTop = (initialScrollMinute / 60) * hh;
       } else {
         const now = new Date();
         const targetHour = Math.max(0, now.getHours() - 2);
-        scrollContainer.scrollTop = targetHour * hourHeight;
+        scrollContainer.scrollTop = targetHour * hh;
       }
 
       scrollContainer.addEventListener("scroll", handleScroll);
@@ -146,14 +181,14 @@
   });
 
   function handleScroll() {
-    if (!scrollContainer || !onScrollChange) return;
-    const minute = (scrollContainer.scrollTop / hourHeight) * 60;
+    if (!scrollContainer || !onScrollChange || calZoom.isAnimating) return;
+    const minute = (scrollContainer.scrollTop / calZoom.hourHeight) * 60;
     onScrollChange(Math.round(minute));
   }
 
   const drag = useDragController({
     events: () => events,
-    hourHeight: () => hourHeight,
+    hourHeight: () => calZoom.hourHeight,
     getColumnDate: () => dateStr,
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
@@ -260,12 +295,11 @@
       {/if}
 
       <!-- Body row -->
-      <TimeGutter {hourHeight} {timezones} {anchorDate} {tzCount} />
+      <TimeGutter {timezones} {anchorDate} {tzCount} />
       <div class="min-w-0" style="border-left: 1px solid var(--cal-gridline);">
         <DayColumn
           date={anchorDate}
           events={timedEvents}
-          {hourHeight}
           isToday={today}
           isPast={past}
           {isDark}

@@ -1,7 +1,6 @@
 import type { CalendarEvent, DragState, EventColor, PositionedEvent } from "./types";
 import {
   minuteOfDay,
-  minuteToTop,
   snapToGrid,
   clampMinute,
   formatDatePart,
@@ -9,6 +8,7 @@ import {
   minuteOffsetToDateStr,
   parseCalendarDate,
 } from "./utils";
+import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
 
 let cursorStyle: HTMLStyleElement | null = null;
 
@@ -37,6 +37,7 @@ export interface DragControllerConfig {
 }
 
 export function useDragController(config: DragControllerConfig) {
+  const calZoom = getCalendarZoom();
   let dragState = $state<DragState | null>(null);
   let dragPreviewDate = $state<string | null>(null);
   let dragPreview = $state<PositionedEvent | null>(null);
@@ -105,7 +106,7 @@ export function useDragController(config: DragControllerConfig) {
 
     const hourHeight = config.hourHeight();
     const deltaY = e.clientY - dragState.pointerStartY;
-    const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60);
+    const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60, calZoom.gridMinutes);
 
     let newStart: number;
     let newEnd: number;
@@ -124,7 +125,7 @@ export function useDragController(config: DragControllerConfig) {
       targetDate = formatDatePart(originDate);
 
       const dur = dragState.originEndMinute - dragState.originStartMinute;
-      let rawStart = snapToGrid(dragState.originStartMinute + deltaMinutes);
+      let rawStart = snapToGrid(dragState.originStartMinute + deltaMinutes, calZoom.gridMinutes);
 
       // Shift target day when event fully crosses midnight vertically
       while (rawStart >= 1440) {
@@ -143,7 +144,7 @@ export function useDragController(config: DragControllerConfig) {
       newStart = Math.min(1430, rawStart);
       newEnd = newStart + dur; // may exceed 1440 or start < 0 -- cross-midnight
     } else if (dragState.type === "resize-top") {
-      newStart = snapToGrid(dragState.originStartMinute + deltaMinutes);
+      newStart = snapToGrid(dragState.originStartMinute + deltaMinutes, calZoom.gridMinutes);
       newStart = Math.max(0, newStart);
       newEnd = dragState.originEndMinute;
       if (newStart >= newEnd) newStart = newEnd - 10;
@@ -151,7 +152,7 @@ export function useDragController(config: DragControllerConfig) {
     } else {
       // resize-bottom: allow crossing midnight
       newStart = dragState.originStartMinute;
-      newEnd = snapToGrid(dragState.originEndMinute + deltaMinutes);
+      newEnd = snapToGrid(dragState.originEndMinute + deltaMinutes, calZoom.gridMinutes);
       if (newEnd <= newStart) newEnd = newStart + 10;
       if (newEnd - newStart < 10) newEnd = newStart + 10;
     }
@@ -166,10 +167,8 @@ export function useDragController(config: DragControllerConfig) {
     const startStr = minuteOffsetToDateStr(targetDate, newStart);
     const endStr = minuteOffsetToDateStr(targetDate, newEnd);
 
-    // Visual metrics for the primary (start) day column
+    // Minute-based metrics for the primary (start) day column
     const visibleEnd = Math.min(newEnd, 1440);
-    const top = minuteToTop(newStart, hourHeight);
-    const height = ((visibleEnd - newStart) / 60) * hourHeight;
 
     dragPreviewDate = targetDate;
     dragPreview = {
@@ -178,8 +177,8 @@ export function useDragController(config: DragControllerConfig) {
         start: startStr,
         end: endStr,
       },
-      top,
-      height,
+      startMinute: newStart,
+      durationMinutes: visibleEnd - newStart,
       left: 0,
       width: 100,
       column: 0,
@@ -225,7 +224,7 @@ export function useDragController(config: DragControllerConfig) {
     const hourHeight = config.hourHeight();
     const rect = createState.columnEl.getBoundingClientRect();
     const offsetY = e.clientY - rect.top;
-    const cursorMinute = clampMinute(snapToGrid((offsetY / hourHeight) * 60));
+    const cursorMinute = clampMinute(snapToGrid((offsetY / hourHeight) * 60, calZoom.gridMinutes));
 
     const anchor = createState.anchorMinute;
     let startMinute = Math.min(anchor, cursorMinute);
@@ -260,7 +259,6 @@ export function useDragController(config: DragControllerConfig) {
     title?: string,
     color?: EventColor,
   ): PositionedEvent {
-    const hourHeight = config.hourHeight();
     const sh = String(Math.floor(startMinute / 60)).padStart(2, "0");
     const sm = String(startMinute % 60).padStart(2, "0");
     const eh = String(Math.floor(Math.min(endMinute, 1440) / 60)).padStart(2, "0");
@@ -276,8 +274,8 @@ export function useDragController(config: DragControllerConfig) {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         calendarId: "default",
       },
-      top: minuteToTop(startMinute, hourHeight),
-      height: ((endMinute - startMinute) / 60) * hourHeight,
+      startMinute,
+      durationMinutes: endMinute - startMinute,
       left: 0,
       width: 100,
       column: 0,
@@ -298,15 +296,13 @@ export function useDragController(config: DragControllerConfig) {
       return dateStr === previewStartDate ? dragPreview : null;
     }
 
-    const hourHeight = config.hourHeight();
-
     // Start day — show from event start to bottom of day
     if (dateStr === previewStartDate) {
       const startMin = minuteOfDay(dragPreview.event.start);
       return {
         ...dragPreview,
-        top: minuteToTop(startMin, hourHeight),
-        height: ((1440 - startMin) / 60) * hourHeight,
+        startMinute: startMin,
+        durationMinutes: 1440 - startMin,
       };
     }
 
@@ -316,8 +312,8 @@ export function useDragController(config: DragControllerConfig) {
       if (endMin <= 0) return null;
       return {
         ...dragPreview,
-        top: 0,
-        height: (endMin / 60) * hourHeight,
+        startMinute: 0,
+        durationMinutes: endMin,
       };
     }
 

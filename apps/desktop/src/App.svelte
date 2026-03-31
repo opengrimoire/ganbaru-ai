@@ -30,6 +30,11 @@
     calendar.load().catch((e) => console.error("Failed to load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));
+
+    // Prevent default Ctrl+scroll behavior (used for calendar zoom)
+    const blockCtrlWheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    document.addEventListener("wheel", blockCtrlWheel, { passive: false, capture: true });
+    return () => document.removeEventListener("wheel", blockCtrlWheel, { capture: true });
   });
 
   $effect(() => {

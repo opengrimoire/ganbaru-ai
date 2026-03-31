@@ -236,8 +236,8 @@ export interface AllDayDragState {
 
 export interface PositionedEvent {
   event: CalendarEvent;
-  top: number;
-  height: number;
+  startMinute: number; // minutes since midnight
+  durationMinutes: number; // length in minutes (clamped to MIN_EVENT_HEIGHT equivalent)
   left: number; // percentage 0-100
   width: number; // percentage 0-100
   column: number;

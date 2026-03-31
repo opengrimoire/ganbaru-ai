@@ -1,8 +1,11 @@
 <script lang="ts">
   import type { PositionedEvent } from "./types";
   import { getEventColor } from "./utils";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
+
+  const calZoom = getCalendarZoom();
 
   let {
     positioned,
@@ -61,8 +64,8 @@
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
-    top: {positioned.top}px;
-    height: {positioned.height - (positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2)}px;
+    top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
+    height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
     left: {positioned.left}%;
     width: {positioned.totalColumns > 1 ? `calc(${positioned.width}% - 2px)` : `${positioned.width}%`};
     color: {activeColors.text};
@@ -95,10 +98,10 @@
     <div class="truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
       {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
     </div>
-    {#if positioned.height > 28}
+    {#if (positioned.durationMinutes / 60) * calZoom.hourHeight > 28}
       <div class="truncate opacity-80">{startTime} - {endTime}</div>
     {/if}
-    {#if positioned.height > 44 && positioned.event.location}
+    {#if (positioned.durationMinutes / 60) * calZoom.hourHeight > 44 && positioned.event.location}
       <div class="truncate text-[9px] opacity-60">{positioned.event.location}</div>
     {/if}
   </div>

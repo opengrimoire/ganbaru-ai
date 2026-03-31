@@ -527,9 +527,11 @@ interface EventWithRange {
   endMinute: number;
 }
 
+/** Minimum event duration in minutes that maps to MIN_EVENT_HEIGHT at default zoom. */
+const MIN_EVENT_MINUTES = (MIN_EVENT_HEIGHT / 67) * 60;
+
 export function layoutEventsForDay(
   events: CalendarEvent[],
-  hourHeight: number,
   dateStr?: string,
 ): PositionedEvent[] {
   if (events.length === 0) return [];
@@ -606,10 +608,7 @@ export function layoutEventsForDay(
 
     for (let colIdx = 0; colIdx < columns.length; colIdx++) {
       for (const item of columns[colIdx]) {
-        const top = minuteToTop(item.startMinute, hourHeight);
         const dur = item.endMinute - item.startMinute;
-        const rawHeight = (dur / 60) * hourHeight;
-        const height = Math.max(rawHeight, MIN_EVENT_HEIGHT);
         const left = (colIdx / totalColumns) * usable;
         const width = (1 / totalColumns) * usable;
 
@@ -624,8 +623,8 @@ export function layoutEventsForDay(
 
         result.push({
           event: item.event,
-          top,
-          height,
+          startMinute: item.startMinute,
+          durationMinutes: Math.max(dur, MIN_EVENT_MINUTES),
           left,
           width,
           column: colIdx,
@@ -717,15 +716,21 @@ export const EVENT_COLOR_OPTIONS: EventColor[] = [
  * Smooth-scroll wheel handler for Linux/discrete-tick environments.
  * Intercepts wheel events and lerps scrollTop toward a target position.
  */
+interface SmoothScrollFn {
+  (e: WheelEvent): void;
+  cancel(): void;
+}
+
 export function createSmoothScroll(
   getEl: () => HTMLElement | undefined,
   damping = 0.6,
   ease = 0.15,
-): (e: WheelEvent) => void {
+): SmoothScrollFn {
   let target = -1;
   let running = false;
 
   function tick() {
+    if (!running) return;
     const el = getEl();
     if (!el) { running = false; return; }
     const diff = target - el.scrollTop;
@@ -735,7 +740,7 @@ export function createSmoothScroll(
     requestAnimationFrame(tick);
   }
 
-  return (e: WheelEvent) => {
+  const fn = ((e: WheelEvent) => {
     const el = getEl();
     if (!el) return;
     e.preventDefault();
@@ -743,6 +748,13 @@ export function createSmoothScroll(
     const max = el.scrollHeight - el.clientHeight;
     target = Math.max(0, Math.min(max, target + e.deltaY * damping));
     if (!running) { running = true; requestAnimationFrame(tick); }
+  }) as SmoothScrollFn;
+
+  fn.cancel = () => {
+    running = false;
+    target = -1;
   };
+
+  return fn;
 }
 
