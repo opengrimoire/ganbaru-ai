@@ -103,6 +103,11 @@
     return merged;
   });
 
+  /** Does the grid line at `minute` fall within any rail segment? */
+  function isMinuteInRail(minute: number): boolean {
+    return railSegments.some(seg => seg.start <= minute && seg.end >= minute);
+  }
+
   // Load persisted segments from DB for all pomodoro events on this day
   interface DbSegmentRow {
     id: string;
@@ -369,18 +374,18 @@
     </div>
   {/if}
 
-  <!-- Gridlines (always offset to reserve rail space) -->
+  <!-- Gridlines (offset only where a rail segment covers that line) -->
   {#each hours as hour}
     {#if hour < 23}
       <div
         class="pointer-events-none absolute right-0"
-        style="left: {railWidth + 4}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
+        style="left: {isMinuteInRail((hour + 1) * 60) ? railWidth + 4 : 0}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
       ></div>
     {/if}
     {#if hour > 0}
       <div
         class="pointer-events-none absolute right-0"
-        style="left: {railWidth + 4}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
+        style="left: {isMinuteInRail(hour * 60 + 30) ? railWidth + 4 : 0}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
       ></div>
     {/if}
   {/each}
