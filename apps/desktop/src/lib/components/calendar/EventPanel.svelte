@@ -443,24 +443,6 @@
     return () => observer.disconnect();
   });
 
-  // Entrance animation
-  onMount(() => {
-    if (!panelEl) return;
-    const el = panelEl;
-    const anchorCenterX = anchor.x - anchor.width / 2;
-    const anchorCenterY = anchor.y + anchor.height / 2;
-    const rect = el.getBoundingClientRect();
-    const originX = ((anchorCenterX - rect.left) / rect.width) * 100;
-    const originY = ((anchorCenterY - rect.top) / rect.height) * 100;
-    el.style.transformOrigin = `clamp(0%, ${originX}%, 100%) clamp(0%, ${originY}%, 100%)`;
-    el.animate(
-      [
-        { transform: "scale(0.92)", opacity: 0 },
-        { transform: "scale(1)", opacity: 1 },
-      ],
-      { duration: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
-    );
-  });
 
   // Pin base position when anchor changes; read panelHeight without tracking
   // so height changes from expanding sections don't reposition the panel.
