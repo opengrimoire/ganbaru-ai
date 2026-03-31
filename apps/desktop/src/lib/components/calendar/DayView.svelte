@@ -95,12 +95,26 @@
   let currentTimeMinute = $state(-1);
   let todayStr = $state(formatDatePart(new Date()));
 
+  const ALL_DAY_ROW_H = 21;
+  const ALL_DAY_GAP = 1;
+  const ALL_DAY_MAX_VISIBLE = 2;
+
   const today = $derived(formatDatePart(anchorDate) === todayStr);
   const past = $derived(formatDatePart(anchorDate) < todayStr);
   const dateStr = $derived(formatDatePart(anchorDate));
   const allDayEvents = $derived(allDayEventsForDay(events, anchorDate));
-  // Computed from flex: N chips at 22px + 6px strip + py-1 padding (8px)
-  const stickyAllDayHeight = $derived(allDayEvents.length > 0 ? allDayEvents.length * 22 + 14 : 0);
+
+  let allDayExpanded = $state(false);
+  const allDayCollapsible = $derived(allDayEvents.length > ALL_DAY_MAX_VISIBLE);
+  const allDayVisibleCount = $derived(allDayExpanded || !allDayCollapsible ? allDayEvents.length : ALL_DAY_MAX_VISIBLE);
+  const allDayDisplayRows = $derived(allDayCollapsible && !allDayExpanded ? allDayVisibleCount + 1 : allDayVisibleCount);
+
+  // Reset expanded state on day change
+  $effect(() => { void anchorDate; allDayExpanded = false; });
+
+  const stickyAllDayHeight = $derived(allDayEvents.length > 0
+    ? allDayDisplayRows * ALL_DAY_ROW_H + (allDayDisplayRows - 1) * ALL_DAY_GAP + 4 + 6
+    : 0);
   const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayHeight);
   const timedEvents = $derived(events.filter((e) => !e.allDay));
   const tzCount = $derived(Math.max(1, timezones.length));
@@ -271,8 +285,8 @@
         "
       >
         <div style="grid-column: span {tzCount};"></div>
-        <div class="flex min-w-0 flex-col px-1 py-1">
-          {#each allDayEvents as evt (evt.id)}
+        <div class="flex min-w-0 flex-col px-1" style="padding-top: 2px; padding-bottom: 2px; gap: {ALL_DAY_GAP}px;">
+          {#each allDayEvents.slice(0, allDayVisibleCount) as evt (evt.id)}
             <AllDayEventChip
               event={evt}
               {isDark}
@@ -282,6 +296,15 @@
               onclick={(rect) => onEventClick(evt, rect)}
             />
           {/each}
+          {#if allDayCollapsible && !allDayExpanded}
+            <button
+              class="flex items-center px-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+              style="height: {ALL_DAY_ROW_H}px;"
+              onclick={(e) => { e.stopPropagation(); allDayExpanded = true; }}
+            >
+              +{allDayEvents.length - ALL_DAY_MAX_VISIBLE} more
+            </button>
+          {/if}
           <!-- Thin click-to-create strip -->
           <div
             class="cursor-pointer transition-colors hover:bg-accent/50"

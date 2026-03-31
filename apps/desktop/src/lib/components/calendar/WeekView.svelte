@@ -54,6 +54,11 @@
     onDayHeaderClick?: (date: Date) => void;
   } = $props();
 
+  const ALL_DAY_ROW_H = 21;
+  const ALL_DAY_GAP = 1;
+  const ALL_DAY_PAD = 2;
+  const ALL_DAY_MAX_VISIBLE = 2;
+
   const weekDays = $derived(getWeekDays(anchorDate));
   const allDayPositioned = $derived(layoutAllDayEventsForWeek(events, weekDays));
   const allDayMaxRow = $derived(allDayPositioned.length > 0 ? Math.max(...allDayPositioned.map((p) => p.row)) + 1 : 0);
@@ -63,11 +68,21 @@
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) repeat(7, 1fr)`,
   );
 
+  let allDayExpanded = $state(false);
+  const allDayCollapsible = $derived(allDayMaxRow > ALL_DAY_MAX_VISIBLE);
+  const allDayVisibleRows = $derived(allDayExpanded || !allDayCollapsible ? allDayMaxRow : ALL_DAY_MAX_VISIBLE);
+  // +1 row for the "+N more" button when collapsed
+  const allDayGridRows = $derived(allDayCollapsible && !allDayExpanded ? allDayVisibleRows + 1 : allDayVisibleRows);
+
+  // Reset expanded state on week change
+  $effect(() => { void anchorDate; allDayExpanded = false; });
+
   let headerCells: HTMLElement[] = $state([]);
   let dayFormat: DayNameFormat = $state("short");
   let stickyHeaderHeight = $state(0);
-  // Computed from grid: repeat(N, 22px) 6px + padding 2px*2
-  const stickyAllDayHeight = $derived(allDayMaxRow > 0 ? Math.max(1, allDayMaxRow) * 22 + 10 : 0);
+  const stickyAllDayHeight = $derived(allDayMaxRow > 0
+    ? allDayGridRows * ALL_DAY_ROW_H + (allDayGridRows - 1) * ALL_DAY_GAP + ALL_DAY_PAD * 2 + 6
+    : 0);
   const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayHeight);
 
   $effect(() => {
@@ -226,10 +241,24 @@
   });
 
   const allDayEffectiveRows = $derived.by(() => {
-    const base = Math.max(1, allDayMaxRow);
+    const base = Math.max(1, allDayGridRows);
     const dp = allDayDrag.allDayDragPreview;
     if (!dp) return base;
     return Math.max(base, dp.row + 1);
+  });
+
+  // Per-column count of hidden events when collapsed
+  const allDayOverflowPerCol = $derived.by(() => {
+    if (!allDayCollapsible || allDayExpanded) return new Array(7).fill(0) as number[];
+    const counts = new Array(7).fill(0) as number[];
+    for (const pos of allDayPositioned) {
+      if (pos.row >= ALL_DAY_MAX_VISIBLE) {
+        for (let c = pos.startCol; c < pos.startCol + pos.spanCols; c++) {
+          counts[c]++;
+        }
+      }
+    }
+    return counts;
   });
 
 </script>
@@ -328,8 +357,9 @@
           style="
             grid-column: span 7;
             grid-template-columns: subgrid;
-            grid-template-rows: repeat({allDayEffectiveRows}, 22px) 6px;
-            padding: 2px 0;
+            grid-template-rows: repeat({allDayEffectiveRows}, {ALL_DAY_ROW_H}px) 6px;
+            padding: {ALL_DAY_PAD}px 0;
+            gap: {ALL_DAY_GAP}px 0;
           "
         >
           <!-- Thin click-to-create strip + column measurement targets -->
@@ -347,11 +377,11 @@
             ></div>
           {/each}
 
-          <!-- Positioned all-day events -->
+          <!-- Positioned all-day events (only visible rows) -->
           {#each allDayPositioned as pos (pos.event.id)}
             {@const endDateStr = pos.event.end.split(" ")[0]}
-            {#if pos.event.id !== allDayDrag.draggingEventId}
-              <div style="grid-column: {pos.startCol + 1} / span {pos.spanCols}; grid-row: {pos.row + 1}; z-index: 2; min-width: 0;">
+            {#if pos.event.id !== allDayDrag.draggingEventId && (allDayExpanded || pos.row < ALL_DAY_MAX_VISIBLE || !allDayCollapsible)}
+              <div class="flex items-center px-0.5" style="grid-column: {pos.startCol + 1} / span {pos.spanCols}; grid-row: {pos.row + 1}; z-index: 2; min-width: 0;">
                 <AllDayEventChip
                   event={pos.event}
                   {isDark}
@@ -365,24 +395,46 @@
             {/if}
           {/each}
 
+          <!-- "+N more" per column when collapsed -->
+          {#if allDayCollapsible && !allDayExpanded}
+            {#each allDayOverflowPerCol as count, i}
+              {#if count > 0}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <div
+                  class="z-[3] flex cursor-pointer items-center px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                  style="grid-column: {i + 1}; grid-row: {ALL_DAY_MAX_VISIBLE + 1};"
+                  onclick={(e) => { e.stopPropagation(); allDayExpanded = true; }}
+                >
+                  +{count} more
+                </div>
+              {/if}
+            {/each}
+          {/if}
+
           <!-- Drag preview -->
           {#if allDayDrag.allDayDragPreview}
             {@const dp = allDayDrag.allDayDragPreview}
             {@const dpColor = getEventColor(dp.event.color, isDark)}
             <div
-              class="allday-drag-preview pointer-events-none select-none truncate rounded px-1.5 text-[10px] leading-[20px]"
+              class="allday-drag-preview pointer-events-none flex items-center px-0.5"
               style="
                 grid-column: {dp.startCol + 1} / span {dp.spanCols};
                 grid-row: {dp.row + 1};
                 z-index: 10;
                 min-width: 0;
+              "
+            >
+            <div
+              class="min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]"
+              style="
                 background-color: {dpColor.bg};
                 color: {dpColor.text};
                 opacity: 0.8;
-                margin: 1px 0;
               "
             >
               {#if dp.event.title}{dp.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+            </div>
             </div>
           {/if}
 

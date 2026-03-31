@@ -50,7 +50,7 @@
 <div
   bind:this={chipEl}
   data-event-id={event.id}
-  class="allday-chip relative my-px select-none truncate rounded px-1.5 text-[10px] leading-[20px]
+  class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]
     {editing || preview ? 'chip-editing' : ''}
     {isPast && !editing && !preview && !isDark ? 'chip-past-light' : ''}"
   style="
@@ -101,13 +101,12 @@
 
   .chip-editing {
     box-shadow:
-      0 0 3px 0 var(--glow-color),
-      0 0 8px 1px var(--glow-color),
-      0 0 16px 2px color-mix(in srgb, var(--glow-color) 40%, transparent);
+      0 0 2px 0 var(--glow-color),
+      0 0 5px 0 color-mix(in srgb, var(--glow-color) 50%, transparent);
   }
 
   .chip-editing::after {
-    opacity: 1;
+    opacity: 0.7;
   }
 
   .chip-past-light::before {
