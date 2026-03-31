@@ -26,14 +26,7 @@ export function getTheme() {
     },
     toggle() {
       current = current === "dark" ? "light" : "dark";
-      const apply = () => {
-        document.documentElement.classList.toggle("dark", current === "dark");
-      };
-      if (document.startViewTransition) {
-        document.startViewTransition(apply);
-      } else {
-        apply();
-      }
+      document.documentElement.classList.toggle("dark", current === "dark");
       localStorage.setItem(STORAGE_KEY, current);
     },
   };

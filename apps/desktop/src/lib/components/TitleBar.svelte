@@ -180,103 +180,106 @@
     <span class="mr-2 text-[11px] tabular-nums text-sidebar-foreground/40">{memoryMb} MB</span>
   {/if}
 
-  <!-- Pomodoro progress ring with dropdown -->
-  <div class="relative mr-1">
-    <button
-      onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
-      class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
-      title={pomodoro.isRunning ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
-    >
-      <svg viewBox="0 0 20 20" class="h-4 w-4">
-        <circle
-          cx="10"
-          cy="10"
-          r="8"
-          fill="none"
-          stroke-width="2.5"
-          class={isActive ? "stroke-foreground/20 dark:stroke-white/20" : "stroke-foreground/15 dark:stroke-white/15"}
-        />
-        {#if isActive}
+  <!-- Utility buttons -->
+  <div class="flex items-center gap-0.5">
+    <!-- Pomodoro progress ring with dropdown -->
+    <div class="relative">
+      <button
+        onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
+        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
+        title={pomodoro.isRunning ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
+      >
+        <svg viewBox="0 0 20 20" class="h-4 w-4">
           <circle
             cx="10"
             cy="10"
             r="8"
             fill="none"
             stroke-width="2.5"
-            stroke-dasharray={`${((100 - progressPercent()) / 100) * 50.27} 50.27`}
-            stroke-linecap="round"
-            class="stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center"
+            class={isActive ? "stroke-foreground/20 dark:stroke-white/20" : "stroke-foreground/15 dark:stroke-white/15"}
           />
-        {/if}
-      </svg>
-    </button>
-    {#if showPomodoroMenu}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="fixed inset-0 z-40"
-        onclick={() => { showPomodoroMenu = false; }}
-        onkeydown={(e) => { if (e.key === "Escape") showPomodoroMenu = false; }}
-      ></div>
-      <div class="absolute right-0 top-9 z-50 min-w-36 rounded-lg border border-border bg-popover py-1 shadow-lg">
-        {#if isActive}
-          <div class="px-3 py-1.5 text-xs text-muted-foreground">
-            {pomodoro.formattedTime} left
-          </div>
-          <div class="my-1 h-px bg-border"></div>
-          {#if pomodoro.isRunning}
-            <button
-              onclick={() => { pomodoro.pause(); showPomodoroMenu = false; }}
-              class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-            >Pause</button>
-          {:else}
-            <button
-              onclick={() => { pomodoro.start(); showPomodoroMenu = false; }}
-              class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-            >Resume</button>
+          {#if isActive}
+            <circle
+              cx="10"
+              cy="10"
+              r="8"
+              fill="none"
+              stroke-width="2.5"
+              stroke-dasharray={`${((100 - progressPercent()) / 100) * 50.27} 50.27`}
+              stroke-linecap="round"
+              class="stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center"
+            />
           {/if}
-          <button
-            onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
-            class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-          >Skip</button>
-        {:else}
-          <div class="px-3 py-1.5 text-xs text-muted-foreground">
-            No active session
-          </div>
-        {/if}
-      </div>
-    {/if}
+        </svg>
+      </button>
+      {#if showPomodoroMenu}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="fixed inset-0 z-40"
+          onclick={() => { showPomodoroMenu = false; }}
+          onkeydown={(e) => { if (e.key === "Escape") showPomodoroMenu = false; }}
+        ></div>
+        <div class="absolute right-0 top-9 z-50 min-w-36 rounded-lg border border-border bg-popover py-1 shadow-lg">
+          {#if isActive}
+            <div class="px-3 py-1.5 text-xs text-muted-foreground">
+              {pomodoro.formattedTime} left
+            </div>
+            <div class="my-1 h-px bg-border"></div>
+            {#if pomodoro.isRunning}
+              <button
+                onclick={() => { pomodoro.pause(); showPomodoroMenu = false; }}
+                class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+              >Pause</button>
+            {:else}
+              <button
+                onclick={() => { pomodoro.start(); showPomodoroMenu = false; }}
+                class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+              >Resume</button>
+            {/if}
+            <button
+              onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
+              class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+            >Skip</button>
+          {:else}
+            <div class="px-3 py-1.5 text-xs text-muted-foreground">
+              No active session
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Theme toggle -->
+    <button
+      onclick={() => theme.toggle()}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      title={theme.isDark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {#if theme.isDark}
+        <Sun size={14} />
+      {:else}
+        <Moon size={14} />
+      {/if}
+    </button>
+
+    <!-- TODO: implement help panel -->
+    <button
+      onclick={() => {}}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      title="Help"
+    >
+      <CircleHelp size={14} />
+    </button>
+
+    <!-- Provisional: reset database -->
+    <button
+      onclick={() => { showResetConfirm = true; }}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      title="Reset database"
+    >
+      <Settings size={14} />
+    </button>
   </div>
-
-  <!-- Theme toggle -->
-  <button
-    onclick={() => theme.toggle()}
-    class="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-    title={theme.isDark ? "Switch to light mode" : "Switch to dark mode"}
-  >
-    {#if theme.isDark}
-      <Sun size={14} />
-    {:else}
-      <Moon size={14} />
-    {/if}
-  </button>
-
-  <!-- TODO: implement help panel -->
-  <button
-    onclick={() => {}}
-    class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-    title="Help"
-  >
-    <CircleHelp size={14} />
-  </button>
-
-  <!-- Provisional: reset database -->
-  <button
-    onclick={() => { showResetConfirm = true; }}
-    class="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-    title="Reset database"
-  >
-    <Settings size={14} />
-  </button>
 
   <!-- Window controls -->
   <div class="flex items-center gap-0.5 pr-2">
