@@ -122,7 +122,7 @@
             {/if}
 
             <span
-              class="relative z-[2] mb-0.5 flex h-6 w-6 items-center justify-center self-center text-xs"
+              class="relative z-[2] mb-px flex h-6 w-6 items-center justify-center self-center text-xs"
               style="color: {active ? 'var(--foreground)' : 'var(--muted-foreground)'}; opacity: {textOpacity};"
             >
               {day.getDate()}
@@ -136,7 +136,7 @@
                 style="background-color: {getEventColor(evt.color, isDark).bg}; color: {getEventColor(evt.color, isDark).text}; opacity: {past ? 0.45 : textOpacity};"
                 onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
               >
-                <span class="truncate">{evt.title}</span>
+                <span class="truncate">{#if evt.title}{evt.title}{:else}<span class="opacity-50">(No title)</span>{/if}</span>
               </div>
             {/each}
 

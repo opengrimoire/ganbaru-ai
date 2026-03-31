@@ -425,7 +425,14 @@ export function allEventsForDay(
   events: CalendarEvent[],
   date: Date,
 ): CalendarEvent[] {
-  return [...allDayEventsForDay(events, date), ...eventsForDay(events, date)];
+  const allDay = allDayEventsForDay(events, date).sort((a, b) => {
+    const aTitle = (a.title || "").toLowerCase();
+    const bTitle = (b.title || "").toLowerCase();
+    if (aTitle !== bTitle) return aTitle < bTitle ? -1 : 1;
+    return a.start.localeCompare(b.start);
+  });
+  const timed = eventsForDay(events, date).sort((a, b) => a.start.localeCompare(b.start));
+  return [...allDay, ...timed];
 }
 
 export function allDayEventsForDay(
@@ -438,6 +445,11 @@ export function allDayEventsForDay(
     const startDate = e.start.split(" ")[0];
     const endDate = e.end.split(" ")[0];
     return startDate <= dateStr && endDate >= dateStr;
+  }).sort((a, b) => {
+    const aTitle = (a.title || "").toLowerCase();
+    const bTitle = (b.title || "").toLowerCase();
+    if (aTitle !== bTitle) return aTitle < bTitle ? -1 : 1;
+    return a.start.localeCompare(b.start);
   });
 }
 
@@ -467,20 +479,12 @@ export function layoutAllDayEventsForWeek(
   const weekEnd = formatDatePart(weekDays[weekDays.length - 1]);
   const dayStrs = weekDays.map(formatDatePart);
 
-  // Sort by duration descending (longer events first), then start ascending,
-  // then user-defined sort order (for vertical reordering of same-day events)
+  // Sort alphabetically by title, then by start date as tiebreaker
   const sorted = [...allDay].sort((a, b) => {
-    const aStart = a.start.split(" ")[0];
-    const bStart = b.start.split(" ")[0];
-    const aEnd = a.end.split(" ")[0];
-    const bEnd = b.end.split(" ")[0];
-    const aDur = dayStrs.filter((d) => d >= aStart && d <= aEnd).length;
-    const bDur = dayStrs.filter((d) => d >= bStart && d <= bEnd).length;
-    if (bDur !== aDur) return bDur - aDur;
-    if (aStart !== bStart) return aStart < bStart ? -1 : 1;
-    const aOrder = parseInt(a.extendedProperties?.allDaySortOrder ?? "0");
-    const bOrder = parseInt(b.extendedProperties?.allDaySortOrder ?? "0");
-    return aOrder - bOrder;
+    const aTitle = (a.title || "").toLowerCase();
+    const bTitle = (b.title || "").toLowerCase();
+    if (aTitle !== bTitle) return aTitle < bTitle ? -1 : 1;
+    return a.start.localeCompare(b.start);
   });
 
   // rows[row][col] = true if occupied

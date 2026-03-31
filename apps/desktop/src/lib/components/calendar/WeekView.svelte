@@ -220,7 +220,6 @@
     events: () => events,
     weekDays: () => weekDays,
     getColumnBounds: getAllDayColumnBounds,
-    getGridRect: () => allDayGridEl?.getBoundingClientRect() ?? null,
     getPositionedEvents: () => allDayPositioned,
     onEventUpdate: (e) => onEventUpdate(e),
     canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
@@ -312,6 +311,7 @@
       <!-- All-day banner -->
       <div
         class="sticky z-[49] grid border-b border-[var(--cal-gridline)]"
+        onwheel={handleHeaderWheel}
         style="
           top: var(--cal-header-row-h);
           grid-column: 1 / -1;

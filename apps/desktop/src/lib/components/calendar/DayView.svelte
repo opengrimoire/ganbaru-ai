@@ -262,6 +262,7 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
         class="sticky z-[49] grid border-b border-[var(--cal-gridline)]"
+        onwheel={handleHeaderWheel}
         style="
           top: var(--cal-header-row-h);
           grid-column: 1 / -1;

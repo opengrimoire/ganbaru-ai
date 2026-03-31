@@ -23,14 +23,10 @@ function unlockCursor() {
 
 const CLICK_THRESHOLD = 5;
 const EDGE_ZONE = 8;
-const ROW_HEIGHT = 22;
-const GRID_PAD_TOP = 2;
-
 export interface AllDayDragControllerConfig {
   events: () => CalendarEvent[];
   weekDays: () => Date[];
   getColumnBounds: () => DOMRect[];
-  getGridRect: () => DOMRect | null;
   getPositionedEvents: () => PositionedAllDayEvent[];
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
   canDrag?: (eventId: string) => boolean;
@@ -57,24 +53,6 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
     return formatDatePart(days[Math.max(0, Math.min(col, days.length - 1))]);
   }
 
-  function rowFromY(clientY: number, gridTop: number, maxRow: number): number {
-    const raw = Math.floor((clientY - gridTop - GRID_PAD_TOP) / ROW_HEIGHT);
-    return Math.max(0, Math.min(raw, maxRow));
-  }
-
-  /** Count events (excluding dragId) that overlap with a given column range. */
-  function countOverlapping(startCol: number, spanCols: number, dragId: string): number {
-    const positioned = config.getPositionedEvents();
-    let count = 0;
-    for (const pos of positioned) {
-      if (pos.event.id === dragId) continue;
-      const posEnd = pos.startCol + pos.spanCols;
-      const rangeEnd = startCol + spanCols;
-      if (pos.startCol < rangeEnd && posEnd > startCol) count++;
-    }
-    return count;
-  }
-
   // --- Existing event drag (move / resize) ---
 
   function handleDragStart(eventId: string, e: PointerEvent) {
@@ -85,9 +63,6 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
 
     const bounds = config.getColumnBounds();
     if (bounds.length === 0) return;
-
-    const gridRect = config.getGridRect();
-    const gridTop = gridRect?.top ?? 0;
 
     const days = config.weekDays();
     const dayStrs = days.map((d) => formatDatePart(d));
@@ -130,7 +105,6 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       pointerStartX: e.clientX,
       pointerStartY: e.clientY,
       columnBounds: bounds,
-      gridTop,
     };
 
     draggingEventId = null; // not committed to drag yet (click threshold)
@@ -180,16 +154,9 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       newSpanCols = Math.min(newEndCol - newStartCol + 1, maxCol - newStartCol);
     }
 
-    // Compute target row for move drags
-    let targetRow = dragState.originRow;
-    if (dragState.type === "move") {
-      const maxRow = countOverlapping(newStartCol, newSpanCols, dragState.eventId);
-      targetRow = rowFromY(e.clientY, dragState.gridTop, maxRow);
-    }
-
     allDayDragPreview = {
       event,
-      row: targetRow,
+      row: dragState.originRow,
       startCol: newStartCol,
       spanCols: newSpanCols,
     };
@@ -220,10 +187,9 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
     }
 
     const colsChanged = preview.startCol !== state.originStartCol || preview.spanCols !== state.originSpanCols;
-    const rowChanged = preview.row !== state.originRow;
 
     // Check if position actually changed
-    if (!colsChanged && !rowChanged) {
+    if (!colsChanged) {
       dragState = null;
       allDayDragPreview = null;
       draggingEventId = null;
@@ -248,53 +214,9 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       });
     }
 
-    // Handle row reorder (vertical swap)
-    if (rowChanged && !colsChanged) {
-      await reorderEvents(event, state, preview.row);
-    }
-
     dragState = null;
     allDayDragPreview = null;
     draggingEventId = null;
-  }
-
-  /** Reorder events by updating sort orders so the dragged event lands at targetRow. */
-  async function reorderEvents(
-    draggedEvent: CalendarEvent,
-    state: AllDayDragState,
-    targetRow: number,
-  ) {
-    const positioned = config.getPositionedEvents();
-    const startCol = state.originStartCol;
-    const endCol = startCol + state.originSpanCols;
-
-    // Collect all events that overlap with the dragged event's columns, sorted by row
-    const overlapping = positioned
-      .filter((p) => {
-        const pEnd = p.startCol + p.spanCols;
-        return p.startCol < endCol && pEnd > startCol;
-      })
-      .sort((a, b) => a.row - b.row);
-
-    // Build ordered list: remove dragged event, insert at target position
-    const ordered = overlapping
-      .filter((p) => p.event.id !== draggedEvent.id)
-      .map((p) => p.event);
-
-    const insertAt = Math.min(targetRow, ordered.length);
-    ordered.splice(insertAt, 0, draggedEvent);
-
-    // Assign new sort orders and update changed events
-    for (let i = 0; i < ordered.length; i++) {
-      const ev = ordered[i];
-      const currentOrder = parseInt(ev.extendedProperties?.allDaySortOrder ?? "0");
-      if (currentOrder !== i) {
-        await config.onEventUpdate({
-          ...ev,
-          extendedProperties: { ...ev.extendedProperties, allDaySortOrder: String(i) },
-        });
-      }
-    }
   }
 
   return {

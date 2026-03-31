@@ -267,7 +267,9 @@
       anchorDate = addDays(anchorDate, delta);
     } else {
       const d = new Date(anchorDate);
-      d.setMonth(d.getMonth() + delta);
+      const targetMonth = d.getMonth() + delta;
+      d.setDate(1);
+      d.setMonth(targetMonth);
       anchorDate = d;
     }
   }

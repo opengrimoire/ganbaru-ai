@@ -231,7 +231,6 @@ export interface AllDayDragState {
   pointerStartX: number;
   pointerStartY: number;
   columnBounds: DOMRect[];
-  gridTop: number;
 }
 
 export interface PositionedEvent {
