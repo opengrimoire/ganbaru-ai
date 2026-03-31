@@ -573,6 +573,9 @@ export function layoutEventsForDay(
   }
   if (currentGroup.length > 0) groups.push(currentGroup);
 
+  // Build set of all start minutes for adjacency detection
+  const startMinutes = new Set(sorted.map((item) => item.startMinute));
+
   // Assign columns within each group
   const result: PositionedEvent[] = [];
 
@@ -629,6 +632,7 @@ export function layoutEventsForDay(
           totalColumns,
           isClippedTop,
           isClippedBottom,
+          hasEventBelow: startMinutes.has(item.endMinute),
         });
       }
     }

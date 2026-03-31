@@ -42,7 +42,12 @@
 
   function handleClick(e: MouseEvent) {
     e.stopPropagation();
-    const rect = blockEl?.getBoundingClientRect();
+    const eventRect = blockEl?.getBoundingClientRect();
+    const colRect = blockEl?.closest("[data-day-column]")?.getBoundingClientRect();
+    // Use column boundaries for horizontal positioning so the panel clears the rail
+    const rect = eventRect && colRect
+      ? new DOMRect(colRect.x, eventRect.y, colRect.width, eventRect.height)
+      : eventRect;
     onclick(rect);
   }
 </script>
@@ -54,12 +59,12 @@
   data-event-id={positioned.event.id}
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
-  class="event-block-wrapper absolute flex text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: {positioned.top}px;
-    height: {positioned.height - (positioned.isClippedBottom ? 0 : 2)}px;
+    height: {positioned.height - (positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2)}px;
     left: {positioned.left}%;
-    width: {positioned.width}%;
+    width: {positioned.totalColumns > 1 ? `calc(${positioned.width}% - 2px)` : `${positioned.width}%`};
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};

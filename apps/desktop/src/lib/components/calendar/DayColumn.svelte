@@ -79,8 +79,14 @@
   const railSegments = $derived.by(() => {
     const ranges: { start: number; end: number }[] = [];
     for (const p of positioned) {
+      if (draggingEventId && p.event.id === draggingEventId) continue;
       if (!p.event.pomodoroConfig) continue;
       const { startMinute, endMinute } = effectiveMinuteRange(p.event, dateStr);
+      ranges.push({ start: startMinute, end: endMinute });
+    }
+    // Include drag preview if it has pomodoro config
+    if (dragPreview?.event.pomodoroConfig) {
+      const { startMinute, endMinute } = effectiveMinuteRange(dragPreview.event, dateStr);
       ranges.push({ start: startMinute, end: endMinute });
     }
     if (ranges.length === 0) return [];
@@ -96,11 +102,6 @@
     }
     return merged;
   });
-
-  /** Does the grid line at `minute` fall within any rail segment? */
-  function isMinuteInRail(minute: number): boolean {
-    return railSegments.some(seg => seg.start <= minute && seg.end >= minute);
-  }
 
   // Load persisted segments from DB for all pomodoro events on this day
   interface DbSegmentRow {
@@ -122,7 +123,7 @@
 
   $effect(() => {
     const eventIds = positioned
-      .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId)
+      .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId && p.event.id !== draggingEventId)
       .map((p) => p.event.id);
     if (eventIds.length === 0) {
       persistedSegmentsMap = new Map();
@@ -170,7 +171,7 @@
     const nowMs = Date.now();
 
     const pomodoroEvents = positioned
-      .filter((p) => p.event.pomodoroConfig)
+      .filter((p) => p.event.pomodoroConfig && !(draggingEventId && p.event.id === draggingEventId))
       .map((p) => {
         const { startMinute, endMinute } = effectiveMinuteRange(p.event, dateStr);
         return {
@@ -182,6 +183,18 @@
           endMinute,
         };
       });
+    // Include drag preview for rail band previsualization
+    if (dragPreview?.event.pomodoroConfig) {
+      const { startMinute, endMinute } = effectiveMinuteRange(dragPreview.event, dateStr);
+      pomodoroEvents.push({
+        id: dragPreview.event.id,
+        config: dragPreview.event.pomodoroConfig,
+        startMs: parseCalendarDate(dragPreview.event.start).getTime(),
+        endMs: parseCalendarDate(dragPreview.event.end).getTime(),
+        startMinute,
+        endMinute,
+      });
+    }
 
     return computeDayTimelineBands(pomodoroEvents, {
       activeBlockId: pomodoro.activeBlockId,
@@ -334,6 +347,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  data-day-column
   class="relative min-w-0"
   style="height: {totalHeight}px;"
 >
@@ -355,18 +369,18 @@
     </div>
   {/if}
 
-  <!-- Gridlines (offset only where a rail segment covers that specific line) -->
+  <!-- Gridlines (always offset to reserve rail space) -->
   {#each hours as hour}
     {#if hour < 23}
       <div
         class="pointer-events-none absolute right-0"
-        style="left: {isMinuteInRail((hour + 1) * 60) ? railWidth + 4 : 0}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
+        style="left: {railWidth + 4}px; top: {hour * hourHeight}px; height: {hourHeight}px; border-bottom: 1px solid var(--cal-gridline);"
       ></div>
     {/if}
     {#if hour > 0}
       <div
         class="pointer-events-none absolute right-0"
-        style="left: {isMinuteInRail(hour * 60 + 30) ? railWidth + 4 : 0}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
+        style="left: {railWidth + 4}px; top: {hour * hourHeight + hourHeight / 2}px; height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
       ></div>
     {/if}
   {/each}
@@ -422,7 +436,7 @@
   <div
     bind:this={columnEl}
     class="absolute top-0 right-0 bottom-0 overflow-hidden"
-    style="left: {railSegments.length > 0 ? railWidth + 4 : 0}px;"
+    style="left: {railWidth + 4}px;"
     onmousemove={handleColumnMouseMove}
     onmouseleave={handleColumnMouseLeave}
   >

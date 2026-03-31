@@ -244,6 +244,7 @@ export interface PositionedEvent {
   totalColumns: number;
   isClippedTop?: boolean; // event continues from previous day
   isClippedBottom?: boolean; // event continues into next day
+  hasEventBelow?: boolean; // another event starts right when this one ends
 }
 
 // --- Pomodoro segment types ---

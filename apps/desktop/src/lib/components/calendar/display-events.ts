@@ -58,6 +58,7 @@ export function buildCreateDisplay(
     calendarId: "ganbaruai",
     color: preview.color ?? changes.color,
     recurrence: preview.recurrence ?? changes.recurrence,
+    pomodoroConfig: changes.pomodoroConfig,
     allDay: isAllDay || undefined,
   };
 

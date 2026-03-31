@@ -1,4 +1,4 @@
-import type { CalendarEvent, EventColor, RecurrenceConfig, RecurringScope } from "./types";
+import type { CalendarEvent, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
 
 export type PanelAnchor = { x: number; y: number; width: number; height: number };
 
@@ -59,7 +59,16 @@ export function createEditSession() {
 
     openCreate(start: string, end: string, anchor: PanelAnchor, allDay?: boolean) {
       state = { mode: "create", start, end, anchor };
-      changes = allDay ? { allDay: true } : {};
+      const defaultPomodoro: PomodoroConfig = {
+        focusDurationMinutes: 40,
+        shortBreakMinutes: 5,
+        longBreakMinutes: 10,
+        pomodoroCount: 4,
+        idleTimeoutMinutes: 1,
+      };
+      changes = allDay
+        ? { allDay: true }
+        : { pomodoroConfig: defaultPomodoro };
       scope = "this";
       dirty = false;
 
