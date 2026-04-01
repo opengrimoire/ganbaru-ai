@@ -6,11 +6,13 @@ GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first producti
 
 - **PRODUCT_SPEC.md**: full product specification (what the app does and why)
 - **TECH_STACK.md**: complete technical stack and architecture (how it's built)
-- **PROGRESS.md**: always read at the start of every session to know current state
+- **PROGRESS.md**: current state of the project
 - **ROADMAP.md**: phased development plan
 - **TESTING.md**: test setup, conventions, and what is covered
 
 ## Workspace structure
+
+> This tree shows both existing and planned directories. Items marked with (planned) do not exist yet. Update this tree whenever directories are created, renamed, or removed.
 
 ```
 ganbaruai/
@@ -23,30 +25,28 @@ ganbaruai/
 │   │   │   │   │   ├── calendar/         ← calendar wrappers, session block rendering
 │   │   │   │   │   ├── kanban/           ← board columns, task cards, drag-and-drop
 │   │   │   │   │   ├── pomodoro/         ← timer display, break screen, XP results
-│   │   │   │   │   ├── notes/            ← Tiptap editor wrapper, slash commands
 │   │   │   │   │   ├── skill-tree/       ← SVG + Svelte center-snap tree, node components
-│   │   │   │   │   ├── diary/            ← morning/evening entry forms
-│   │   │   │   │   ├── music/            ← player controls, playlist management
-│   │   │   │   │   ├── visual-novel/     ← NPC dialogue, conversation state machine
-│   │   │   │   │   ├── edge-panel/       ← panel layout, quick-access widgets
-│   │   │   │   │   ├── environment/      ← work environment config UI
-│   │   │   │   │   ├── contracts/        ← contract creation, tracking, proof UI
-│   │   │   │   │   ├── project/          ← project management quest chain phases
-│   │   │   │   │   ├── capsules/         ← Skill Capsule reveal animations
+│   │   │   │   │   ├── notes/            ← (planned) Tiptap editor wrapper, slash commands
+│   │   │   │   │   ├── diary/            ← (planned) morning/evening entry forms
+│   │   │   │   │   ├── music/            ← (planned) player controls, playlist management
+│   │   │   │   │   ├── visual-novel/     ← (planned) NPC dialogue, conversation state machine
+│   │   │   │   │   ├── edge-panel/       ← (planned) panel layout, quick-access widgets
+│   │   │   │   │   ├── environment/      ← (planned) work environment config UI
+│   │   │   │   │   ├── contracts/        ← (planned) contract creation, tracking, proof UI
+│   │   │   │   │   ├── project/          ← (planned) project management quest chain phases
+│   │   │   │   │   ├── capsules/         ← (planned) Skill Capsule reveal animations
 │   │   │   │   │   └── ui/              ← shadcn-svelte generated components
+│   │   │   │   ├── data/                ← static data (skill tree JSON, schema, adapter)
+│   │   │   │   ├── hooks/               ← reusable Svelte hooks
 │   │   │   │   ├── stores/              ← Svelte runes ($state), global app state
 │   │   │   │   ├── api/                ← typed wrappers around Tauri invoke() calls
 │   │   │   │   ├── utils/               ← shared helpers, XP formulas, formatters
 │   │   │   │   └── types/               ← frontend-specific TypeScript types
-│   │   │   ├── windows/                 ← entry points for each Tauri window
-│   │   │   │   ├── main/               ← main app window
-│   │   │   │   ├── edge-panel/         ← edge panel window
-│   │   │   │   ├── break-overlay/      ← fullscreen break screen window
-│   │   │   │   └── notification/       ← notification popup window
+│   │   │   ├── windows/                 ← (planned) entry points for each Tauri window
 │   │   │   ├── app.html                 ← HTML shell
 │   │   │   ├── app.css                  ← global styles, RPG theme variables
 │   │   │   └── app.d.ts                 ← global type declarations
-│   │   ├── static/                      ← static assets (fonts, icons, NPC sprites)
+│   │   ├── static/                      ← static assets (fonts, icons, sounds)
 │   │   ├── src-tauri/                   ← Rust backend
 │   │   │   ├── src/
 │   │   │   │   ├── main.rs              ← shared entry point
@@ -54,6 +54,7 @@ ganbaruai/
 │   │   │   │   └── mobile.rs            ← mobile-specific Rust logic
 │   │   │   ├── gen/                     ← auto-generated mobile projects
 │   │   │   ├── capabilities/            ← permission declarations (desktop/mobile)
+│   │   │   ├── icons/                   ← app icons
 │   │   │   ├── tauri.conf.json          ← Tauri config
 │   │   │   └── Cargo.toml
 │   │   ├── package.json
@@ -61,23 +62,17 @@ ganbaruai/
 │   │   ├── vite.config.ts
 │   │   └── tsconfig.json
 │   │
-│   └── server/                          ← Hocuspocus sync server (self-hostable)
-│       ├── src/
-│       └── package.json
+│   └── server/                          ← (planned) Hocuspocus sync server (self-hostable)
 │
-├── plugins/
+├── plugins/                             ← (planned)
 │   └── media-player/                    ← LGPL 2.1 Tauri plugin (Rust crate + npm)
-│       ├── src/                         ← Rust source (ffmpeg-next, Symphonia)
-│       ├── guest-js/                    ← TypeScript bindings for the frontend
-│       ├── Cargo.toml
-│       └── package.json
 │
 ├── packages/
 │   └── shared-types/                    ← TypeScript types shared across workspaces
 │       ├── src/
 │       └── package.json
 │
-├── extensions/
+├── extensions/                          ← (planned)
 │   ├── chrome/                          ← Chrome extension (manifest v3)
 │   └── firefox/                         ← Firefox extension
 │
@@ -97,10 +92,22 @@ ganbaruai/
 - **Database:** SQLite via tauri-plugin-sql
 - **Note format:** markdown files on disk (Tiptap editor)
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
-- **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted)
+- **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
 ## Rules
 
+- Read PROGRESS.md at the start of every conversation to understand what has been done and what is in progress.
 - After every session where files are created, modified, or deleted, update PROGRESS.md before finishing.
 - When adding or modifying pure functions (utils, helpers, formulas), write or update unit tests. Tests live next to the source with `.test.ts` suffix. Run `pnpm test` from `apps/desktop/` to verify. Update TESTING.md if new test categories are added.
+- Do not use em dashes or double dashes in markdown, code comments, or commit messages. Restructure sentences using periods, commas, colons, semicolons, or parentheses instead.
+- This project is entirely donation-funded (GitHub Sponsors). Users never pay for a service and should never depend on infrastructure we host or maintain. Any feature involving external services (sync, backups, AI, integrations) must be designed so the user provisions and hosts it themselves. Prioritize ease of setup: provide step-by-step guides accessible to non-technical users, support multiple provider options (or the most common ones), and ask me for clarification on which providers to target if not already specified in the roadmap.
+- Keep the workspace structure in this file up to date. When directories are created, renamed, or removed, update the tree and remove or add the (planned) marker as needed.
+- When stuck on a framework-specific issue that you cannot resolve confidently from training knowledge, search the official documentation before attempting workarounds or guessing. Primary sources:
+  - Tauri v2: v2.tauri.app
+  - Svelte 5: svelte.dev/docs
+  - shadcn-svelte: next.shadcn-svelte.com
+  - Bits UI: bits-ui.com
+  - Tailwind CSS v4: tailwindcss.com/docs
+  - Tiptap: tiptap.dev/docs
+  - If the official docs are not enough, fall back to general web searches (GitHub issues, Stack Overflow, etc.).
