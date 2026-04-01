@@ -220,6 +220,186 @@ Module-level `$state` objects exposed through getter functions (e.g. `getPomodor
 
 ---
 
+## Data architecture: documents vs structured data
+
+GanbaruAI has two fundamentally different categories of data, and each uses the storage format that fits it. Mixing them up (e.g., storing calendar events as markdown, or storing notes in SQLite) would compromise both.
+
+### Documents: markdown on disk, SQLite indexes
+
+Notes, diary entries, and project documentation are markdown files stored in the vault directory. SQLite stores metadata (title, tags, backlinks, mood/energy fields for diary) for fast queries, but the `.md` file is always the source of truth for content.
+
+Why markdown for documents:
+
+- Human-readable. Users can open their notes in Obsidian, VS Code, or any text editor.
+- Git-friendly. Diffs are meaningful, merges are possible, history is inspectable.
+- Portable. No lock-in. If the user stops using GanbaruAI, their writing is intact.
+- AI-agent-friendly. Any AI coding agent can read and write markdown natively, with no tools or plugins required.
+
+Why NOT SQLite for document content: binary format that can't be diffed, can't be opened in external editors, creates lock-in, and makes the vault opaque.
+
+### Structured data: SQLite as source of truth
+
+Everything with fields, relationships, and query requirements lives in SQLite. This includes:
+
+- **Calendar events** with start/end times, recurrence rules, pomodoro config, music playlist, color, project ID, workspace association, attendees, alarms, and overrides.
+- **Kanban tasks** with status, priority, column position, estimated/actual pomodoro counts, linked calendar events, and project ID.
+- **Workspace configurations** defining which browser tabs to open, which terminal to activate, which apps to launch/close, which blocker ruleset to apply, and which project context to load.
+- **Pomodoro sessions and segments** with timestamps, phase, duration, pause log, idle events, and XP computation.
+- **Gamification state**: XP ledger, skill tree node unlock status and decay, streaks, contracts, badges, Skill Capsule inventory, pity counters, daily caps.
+- **Project definitions** linking all of the above: a project references its kanban board, its calendar events, its workspace config, its notes directory, and its NPC quest chain progress.
+
+Why SQLite for structured data:
+
+- **Relational queries.** "Show all in-progress tasks for project X that have calendar events this week" is a JOIN, not a file-tree traversal.
+- **Foreign keys.** A calendar event references a project, a pomodoro config, and a workspace. These relationships are enforced at the schema level.
+- **Atomic updates.** Moving a task between columns, updating a recurring event series, or computing XP are transactions that either fully succeed or fully roll back.
+- **Fast reads.** Querying today's calendar events or filtering tasks by status is O(index-lookup), not O(parse-every-file).
+- **Concurrent access.** The Tauri frontend, background Rust processes (idle detection, file watcher), and the CLI can all query SQLite safely.
+
+### Why NOT markdown (or JSON, or YAML) for structured data
+
+Storing a calendar event as a markdown file would mean:
+
+- **Parsing overhead.** Every query ("what events are today?") requires reading and parsing every event file, extracting YAML frontmatter, and filtering in application code. SQLite does this in microseconds via indexes.
+- **No relationships.** A calendar event that references a project, links to kanban tasks, and carries a pomodoro config would need to store IDs as text and resolve them manually. There are no foreign keys, no referential integrity, and no cascading deletes.
+- **No atomic updates.** Updating a recurring event series (50+ instances) means writing 50+ files. If the process crashes mid-write, the data is inconsistent. SQLite handles this as a single transaction.
+- **No concurrent access.** If the Tauri app and a CLI tool both try to update the same event file simultaneously, one overwrites the other. SQLite handles concurrent writers safely.
+- **Query complexity.** "Show all tasks in project X that are in-progress and have a pomodoro session this week" would require reading every task file, every event file, and every session file, parsing each, joining in application code, and filtering. This is a single SQL query with JOINs.
+
+JSON or YAML files have the same fundamental problems. They are slightly more structured than markdown but still lack relationships, transactions, concurrent access, and indexed queries.
+
+A separate SQLite database per project was also rejected: it fragments data, makes cross-project queries impossible (e.g., "show all my events today across all projects"), and complicates backups.
+
+---
+
+## CLI for agent integration
+
+### Why a CLI instead of MCP
+
+All of GanbaruAI's data operations are local: reading SQLite, writing SQLite, reading/writing vault files. For local operations, a CLI is strictly simpler than MCP:
+
+- **No running server.** MCP requires a persistent process listening for connections. A CLI starts, runs the query, returns the result, and exits.
+- **Zero setup.** Claude Code agents call CLI tools via Bash natively. No plugin installation, no MCP configuration, no `.mcp.json` files.
+- **Universal.** The CLI works with any AI agent (Claude Code, Cursor, Copilot), any script, any automation. MCP is specific to MCP-compatible clients.
+- **No protocol overhead.** MCP adds JSON-RPC framing, capability negotiation, and connection lifecycle management. A CLI call is `ganbaruai task list`, output to stdout.
+
+MCP becomes the right choice later for features that require persistent connections: pushing real-time notifications to agents ("your calendar event starts in 5 minutes"), streaming progress updates, or bidirectional communication between the running Tauri app and an agent session. That is a post-MVP concern. For all CRUD operations and queries, the CLI is the primary interface.
+
+### CLI design
+
+The `ganbaruai` CLI is a Rust binary that links directly to the same SQLite access layer used by the Tauri app. It reads the vault path from the app's config and operates on the same database. Output defaults to human-readable text; `--json` flag returns structured JSON for programmatic consumption by agents.
+
+```bash
+# Project management
+ganbaruai project list
+ganbaruai project info ganbaruai
+ganbaruai project create "my-app" --repo /path/to/repo
+
+# Tasks / Kanban
+ganbaruai task list --project ganbaruai --status in-progress
+ganbaruai task add "Implement auth module" --project ganbaruai --priority high
+ganbaruai task move 42 --column in-progress
+ganbaruai task done 42
+ganbaruai task list --project ganbaruai --json  # structured output for agents
+
+# Calendar
+ganbaruai calendar today
+ganbaruai calendar week
+ganbaruai calendar add "Deep work: auth" --start "2026-04-02 10:00" --duration 2h \
+  --project ganbaruai --pomodoro deep --color indigo
+ganbaruai calendar next
+
+# Workspace
+ganbaruai workspace list
+ganbaruai workspace activate ganbaruai-dev
+ganbaruai workspace current
+
+# Pomodoro
+ganbaruai pomodoro status
+ganbaruai pomodoro start --task 42
+
+# Skill tree
+ganbaruai skills list --branch programming
+ganbaruai skills status
+
+# Export project state as markdown (for the project's git repo)
+ganbaruai export progress --project ganbaruai
+ganbaruai export kanban --project ganbaruai
+
+# Import markdown changes back into the database
+ganbaruai import progress PROGRESS.md --project ganbaruai
+```
+
+### Markdown export for software project repositories
+
+When a user manages a software project with GanbaruAI, the structured data (tasks, calendar events, workspace configs) lives in GanbaruAI's vault SQLite. But the project's git repository also needs project context for:
+
+- **Collaborators who don't use GanbaruAI.** They read PROGRESS.md to understand what's happening.
+- **AI agents without the CLI installed.** They read markdown natively without any tooling.
+- **Code review context.** A PR description can reference task numbers from the exported kanban.
+- **Onboarding.** New contributors read the project state to orient themselves.
+
+The CLI exports project state as markdown into the repository:
+
+```bash
+# Generate PROGRESS.md from GanbaruAI's database
+ganbaruai export progress --project ganbaruai > PROGRESS.md
+
+# Generate a kanban snapshot
+ganbaruai export kanban --project ganbaruai > KANBAN.md
+```
+
+Example output of `ganbaruai export progress`:
+
+```markdown
+# Progress: GanbaruAI
+
+## Current phase
+Phase 2: notes and diary
+
+## Active work
+- (branch: feat/tiptap-editor) Tiptap integration, markdown storage [task #42]
+- (branch: feat/diary-forms) Morning/evening diary entry forms [task #45]
+
+## Kanban: in progress
+- #42: Tiptap rich text editor [high] (assigned calendar: Mon/Wed 10:00-12:00)
+- #45: Diary entry forms [medium]
+
+## Kanban: to do
+- #48: Bidirectional backlink index
+- #49: Note search and filtering
+
+## What exists
+Phase 1 complete: calendar, kanban, pomodoro, skill tree, XP pipeline (279 tests)
+```
+
+**This export is a view of the database, not the source of truth.** The flow is:
+
+1. User manages tasks and events in GanbaruAI's UI (or via CLI). SQLite stores the data.
+2. `ganbaruai export` writes the current state as markdown to the project repo.
+3. Collaborators and agents read the markdown. It is always up to date because the export runs on commit (via a git hook) or on demand.
+4. If an agent edits the markdown directly (e.g., marks a task done in PROGRESS.md), the CLI can import those changes back: `ganbaruai import progress PROGRESS.md --project ganbaruai`.
+
+This is the same model as GitHub: the issue database is the source of truth, but issues are viewable as markdown and editable via API. The markdown is portable and useful on its own, but it is derived from the structured data.
+
+### The virtuous cycle: GanbaruAI developing itself
+
+GanbaruAI's own development follows this exact workflow across four stages:
+
+**Stage 1 (now, pre-CLI):** PROGRESS.md, ROADMAP.md, and CLAUDE.md are hand-maintained markdown files in the repo. Claude Code agents read and write them directly. This works because markdown is the universal baseline that requires no tooling.
+
+**Stage 2 (CLI exists):** GanbaruAI's project management data moves into its own database. The CLI exports PROGRESS.md to the repo automatically (via git hook or CI). Agents can use either the CLI for structured queries (`ganbaruai task list --json`) or read the exported markdown for simple context.
+
+**Stage 3 (full UI):** Development sessions are calendar events with pomodoro configs and workspace settings. Starting a "GanbaruAI dev" calendar event auto-opens VS Code at the project root, switches the terminal, loads project notes, and activates the right blocker rules. The kanban tracks features and bugs across phases. Each PR links to a task.
+
+**Stage 4 (agent integration, post-MVP):** Agents query the database via CLI before starting work, create calendar events for their planned work sessions, update task status as they complete items, and export progress to the repo on commit. The developer reviews agent work from the calendar and kanban views in GanbaruAI's UI, not by reading raw git logs.
+
+The feedback loop: every workflow friction discovered while building GanbaruAI with GanbaruAI becomes a feature improvement. The tool's own development is the primary test case for its project management system, its agent integration, and its markdown export format.
+
+This means the markdown format used during early development (the current PROGRESS.md, ROADMAP.md) is not throwaway scaffolding. It is the v1 of the export format that the CLI will produce. The structure evolves, but the concept stays: markdown as the portable, universal project state representation that works with and without GanbaruAI.
+
+---
+
 ## OS-level features (Rust crates)
 
 ### `sysinfo`
@@ -435,9 +615,13 @@ All AI features are opt-in and BYOK (bring your own key). The app is fully funct
 
 Drasil (the primary NPC) as a conversational AI assistant for natural language calendar management and mood-aware motivation. The Dwarf's chatbot for market research and idea validation during project planning phases. Content-specific procrastination detection (analyzing page content, not just URLs, for smarter blocking on platforms like YouTube). Small local LLM models for diary language analysis (detecting goal-setting, reflection quality, mood patterns) without requiring API calls.
 
-### MCP (Model Context Protocol)
+### CLI (primary agent interface)
 
-The app will expose its data (calendar, tasks, notes, skill tree) via MCP, allowing external AI tools to interact with GanbaruAI's systems. Conversely, GanbaruAI can consume external MCP servers for integrations (email, external calendars, etc.). This is architecturally planned but not part of the initial build.
+A `ganbaruai` CLI exposes all structured data (calendar, tasks, workspace, pomodoro, skill tree) to AI agents, scripts, and automation. Agents call it via Bash with no setup. This is the primary integration path for agent workflows; MCP is reserved for real-time features that require persistent connections. See the "CLI for agent integration" section above for full details and examples.
+
+### MCP (post-MVP, real-time features only)
+
+MCP is planned for features that require persistent bidirectional connections: pushing real-time notifications to agents, streaming progress updates, and live communication between the running Tauri app and an agent session. For all CRUD operations and queries, the CLI is preferred. GanbaruAI can also consume external MCP servers for integrations (email, external calendars, etc.).
 
 ---
 
@@ -487,5 +671,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Visual novel layer        | Custom Svelte components                             | JSON-driven dialogue state machine, NPC interactions in project management         |
 | Mobile alarm              | iOS `UNNotificationRequest` / Android `AlarmManager` | Sleep alarm triggering diary flows and morning routines                            |
 | Mobile app blocking       | iOS Screen Time API / Android UsageStatsManager      | App-level blocking during focus times within platform sandbox constraints          |
+| Agent integration (CRUD)  | `ganbaruai` CLI (Rust)                               | Direct SQLite access, no server, works with any agent/script                       |
+| Agent integration (live)  | MCP (post-MVP)                                       | Real-time notifications and streaming, persistent connections                      |
 | Backend language          | Rust                                                 | Required by Tauri, OS-level APIs, media engine                                     |
 | Frontend language         | TypeScript                                           | Type safety across interconnected state                                            |

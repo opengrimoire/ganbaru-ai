@@ -89,8 +89,8 @@ ganbaruai/
 - **Frontend:** plain Svelte 5 with runes (not SvelteKit)
 - **Desktop/mobile shell:** Tauri v2
 - **License:** AGPL 3.0 for the app, LGPL 2.1 for the media player plugin
-- **Database:** SQLite via tauri-plugin-sql
-- **Note format:** markdown files on disk (Tiptap editor)
+- **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, kanban tasks, workspace configs, pomodoro sessions, XP, skill tree, gamification state) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
+- **Agent integration:** a `ganbaruai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and GanbaruAI's data. Agents call it via Bash. MCP is reserved for post-MVP real-time features only. The CLI can export project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)

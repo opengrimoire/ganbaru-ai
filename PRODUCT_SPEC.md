@@ -639,6 +639,17 @@ Each project phase generates Kanban tasks. The project's Kanban board is the liv
 
 NPCs appear contextually during guided project phases. The Fairy during brainstorming. The Dwarf during idea forging and specification. Drasil during planning and execution.
 
+### Project management → Software repositories
+
+When a project is a software repository, GanbaruAI bridges its internal data with the repo's own documentation:
+
+- **Calendar events** for the project carry pomodoro presets, music, blocker rules, and workspace settings. Starting a calendar event for "Project X" auto-opens the right browser tabs, switches the terminal to the project directory, loads the project's notes, and activates the project's kanban board.
+- **Kanban tasks** are the live task layer. The kanban tab auto-switches based on the active calendar event's project. Agents and collaborators see the same tasks.
+- **The `ganbaruai` CLI** exports project state as markdown into the git repository (PROGRESS.md, KANBAN.md). This makes project context available to collaborators who don't use GanbaruAI and to AI agents that read the repo natively. The export is a view of the database, not the source of truth. Changes made to the exported markdown (by agents or humans) can be imported back.
+- **AI agents** interact with GanbaruAI via the CLI: querying tasks, creating calendar events, updating progress. This works with any agent (Claude Code, Cursor, etc.) via standard Bash calls, with no MCP server or plugin required.
+
+The data split: documents (notes, diary, project docs) are markdown files on disk. Structured data (events, tasks, workspace configs, gamification state) is SQLite. The CLI bridges the two worlds. See TECH_STACK.md for the full technical rationale.
+
 ---
 
 ## Mobile experience

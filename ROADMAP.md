@@ -313,51 +313,56 @@ Opt-in AI features and protocol integrations. All BYOK, no data leaves the devic
 
 Every system from the product spec is accounted for:
 
-| System | Phase |
-|---|---|
-| Calendar (session blocks) | 1 |
-| Kanban (personal) | 1 |
-| Kanban (project, requirement version control) | 9 |
-| Pomodoro timer | 1 |
-| Note-taking (Tiptap, markdown, backlinks) | 2 |
-| Daily diary (morning/evening) | 3 |
-| Sleep alarm (mobile) | 11 |
-| Music player (local + YouTube) | 8 |
-| Procrastination stopper (desktop/browser) | 4 |
-| Procrastination stopper (mobile/app-level) | 11 |
-| Work environment management | 4 |
-| Edge panel | 4 |
-| Will system, Focus | 1 (simplified), 5 (full) |
-| Will system, Clarity | 3 (basic), 5 (full) |
-| Will system, Intensity | 5 |
-| Will system, Execution | 3 (basic), 5 (full) |
-| Consistency tracking | 3 |
-| Streaks and multipliers | 3 |
-| XP formula (compound, anti-grinding) | 1 (basic), 5 (full) |
+
+| System                                                  | Phase                                |
+| ------------------------------------------------------- | ------------------------------------ |
+| Calendar (session blocks)                               | 1                                    |
+| Kanban (personal)                                       | 1                                    |
+| Kanban (project, requirement version control)           | 9                                    |
+| Pomodoro timer                                          | 1                                    |
+| Note-taking (Tiptap, markdown, backlinks)               | 2                                    |
+| Daily diary (morning/evening)                           | 3                                    |
+| Sleep alarm (mobile)                                    | 11                                   |
+| Music player (local + YouTube)                          | 8                                    |
+| Procrastination stopper (desktop/browser)               | 4                                    |
+| Procrastination stopper (mobile/app-level)              | 11                                   |
+| Work environment management                             | 4                                    |
+| Edge panel                                              | 4                                    |
+| Will system, Focus                                      | 1 (simplified), 5 (full)             |
+| Will system, Clarity                                    | 3 (basic), 5 (full)                  |
+| Will system, Intensity                                  | 5                                    |
+| Will system, Execution                                  | 3 (basic), 5 (full)                  |
+| Consistency tracking                                    | 3                                    |
+| Streaks and multipliers                                 | 3                                    |
+| XP formula (compound, anti-grinding)                    | 1 (basic), 5 (full)                  |
 | Skill tree (center-snap nav, sub-layers, visual states) | 1 (core), 6 (rewards, decay, polish) |
-| Tier upgrade system | 6 |
-| Badges | 6 |
-| Skill Capsules (gacha) | 6 |
-| Profile sharing | 6 |
-| Endowed progress effect | 6 |
-| Contract system | 7 |
-| Deep layers / deep branches | 7 |
-| Project management quest chain | 9 |
-| NPC characters (Fairy, Dwarf, Drasil) | 9 |
-| Visual novel presentation | 9 |
-| Methodology templates | 9 |
-| Calendar date cascade | 9 |
-| Report generation (markdown + PDF) | 9 |
-| Sync (Yjs + Hocuspocus) | 10 |
-| E2E encryption | 10 |
-| Collaborative workspaces | 10 |
-| Browser extension (Chrome) | 4 |
-| Browser extension (Firefox) | 12 |
-| Multi-window (break overlay, notification) | 4 |
-| Desktop activity monitoring | 5 |
-| Mobile (Tauri v2, iOS/Android) | 11 |
-| AI: Drasil conversational AI | 12 (post-MVP) |
-| AI: Dwarf chatbot | 12 (post-MVP) |
-| AI: content-specific blocking | 12 (post-MVP) |
-| AI: local LLM diary analysis | 12 (post-MVP) |
-| MCP server/client | 12 (post-MVP) |
+| Tier upgrade system                                     | 6                                    |
+| Badges                                                  | 6                                    |
+| Skill Capsules (gacha)                                  | 6                                    |
+| Profile sharing                                         | 6                                    |
+| Endowed progress effect                                 | 6                                    |
+| Contract system                                         | 7                                    |
+| Deep layers / deep branches                             | 7                                    |
+| Project management quest chain                          | 9                                    |
+| NPC characters (Fairy, Dwarf, Drasil)                   | 9                                    |
+| Visual novel presentation                               | 9                                    |
+| Methodology templates                                   | 9                                    |
+| Calendar date cascade                                   | 9                                    |
+| Report generation (markdown + PDF)                      | 9                                    |
+| Sync (Yjs + Hocuspocus)                                 | 10                                   |
+| E2E encryption                                          | 10                                   |
+| Collaborative workspaces                                | 10                                   |
+| Browser extension (Chrome)                              | 4                                    |
+| Browser extension (Firefox)                             | 12                                   |
+| Multi-window (break overlay, notification)              | 4                                    |
+| Desktop activity monitoring                             | 5                                    |
+| Mobile (Tauri v2, iOS/Android)                          | 11                                   |
+| AI: Drasil conversational AI                            | 12 (post-MVP)                        |
+| AI: Dwarf chatbot                                       | 12 (post-MVP)                        |
+| AI: content-specific blocking                           | 12 (post-MVP)                        |
+| AI: local LLM diary analysis                            | 12 (post-MVP)                        |
+| CLI for agent integration                               | 9                                    |
+| Markdown export/import for project repos                | 9                                    |
+| MCP server/client (real-time features)                  | 12 (post-MVP)                        |
+
+
