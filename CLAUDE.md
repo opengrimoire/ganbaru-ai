@@ -98,7 +98,11 @@ ganbaruai/
 ## Rules
 
 - Read PROGRESS.md at the start of every conversation to understand what has been done and what is in progress.
-- After every session where files are created, modified, or deleted, update PROGRESS.md before finishing.
+- After every session where files are created, modified, or deleted, update PROGRESS.md before finishing. PROGRESS.md is a current-state board, not a history log (git has the history). Maintenance rules:
+  - When something is completed, move it from "Active work" to "What exists" as a brief line.
+  - When a full phase is complete, collapse its "What exists" items into a single summary line and start the next phase.
+  - When starting a new feature branch, add it to "Active work" with the branch name and scope.
+  - "Blocked / needs decision" tracks anything that cannot proceed without input.
 - When adding or modifying pure functions (utils, helpers, formulas), write or update unit tests. Tests live next to the source with `.test.ts` suffix. Run `pnpm test` from `apps/desktop/` to verify. Update TESTING.md if new test categories are added.
 - Do not use em dashes or double dashes in markdown, code comments, or commit messages. Restructure sentences using periods, commas, colons, semicolons, or parentheses instead.
 - This project is entirely donation-funded (GitHub Sponsors). Users never pay for a service and should never depend on infrastructure we host or maintain. Any feature involving external services (sync, backups, AI, integrations) must be designed so the user provisions and hosts it themselves. Prioritize ease of setup: provide step-by-step guides accessible to non-technical users, support multiple provider options (or the most common ones), and ask me for clarification on which providers to target if not already specified in the roadmap.
