@@ -55,7 +55,7 @@
 
   const isOnToday = $derived(isToday(anchorDate));
 
-  // Mini calendar state — independent month navigation
+  // Mini calendar state (independent month navigation)
   let miniDate = $state(new Date());
 
   // Sync mini calendar when anchorDate changes month
@@ -76,7 +76,7 @@
 
   // Reset picker to days when anchorDate changes (navigation or selection),
   // unless the change came from scrolling within the picker itself.
-  let skipPickerReset = false; // plain variable, not $state — avoids re-triggering the effect
+  let skipPickerReset = false; // plain variable, not $state. Avoids re-triggering the effect.
   $effect(() => {
     anchorDate;
     if (skipPickerReset) {
@@ -165,7 +165,7 @@
   class="flex w-60 shrink-0 flex-col"
   style="background-color: var(--cal-header-bg);"
 >
-  <!-- Month/year label — aligned with sticky day-header row -->
+  <!-- Month/year label, aligned with sticky day-header row -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="flex shrink-0 items-center justify-center px-3"

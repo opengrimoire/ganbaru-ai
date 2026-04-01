@@ -599,7 +599,7 @@
     </div>
   {/if}
 
-  <!-- Snap position indicator line with time label — always on top -->
+  <!-- Snap position indicator line with time label, always on top -->
   {#if effectiveSnapY !== null && !hideSnapLine}
     {@const effectiveMin = snapOverrideMinute ?? snapMinute ?? 0}
     {@const atBottom = effectiveMin >= 1440 - (2 / calZoom.hourHeight * 60)}

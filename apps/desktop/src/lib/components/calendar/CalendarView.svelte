@@ -297,7 +297,7 @@
   function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
-    // Already editing this exact event — toggle panel closed if clean
+    // Already editing this exact event. Toggle panel closed if clean.
     if (session.state.mode === "edit" && (
       session.state.originalEvent.id === event.id || editingId === event.id
     )) {

@@ -186,7 +186,7 @@ function buildRootGraph(data: JsonTreeData): SkillGraph {
 
     branchRootIds.push(branchRoot.id);
 
-    // Branch root node (level 1) — gateway, auto-unlocked
+    // Branch root node (level 1), gateway, auto-unlocked
     nodes.push({
       id: branchRoot.id,
       label: branch.name,

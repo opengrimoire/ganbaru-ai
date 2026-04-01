@@ -155,8 +155,8 @@ pub fn update_tray(
     let time_str = format_tray_time(remaining_seconds);
     let status_text = format!("{time_str} left");
 
-    // Tooltip — always update
-    tray.set_tooltip(Some(&format!("GanbaruAI — {phase_label} {time_str}")))
+    // Tooltip: always update
+    tray.set_tooltip(Some(&format!("GanbaruAI - {phase_label} {time_str}")))
         .map_err(|e| e.to_string())?;
 
     // Update status item text every tick (lightweight string update)

@@ -18,7 +18,7 @@ export interface VisibleEdge extends SkillEdge {
 /** Persisted unlock states: graphId:nodeId -> NodeState */
 let nodeStates = $state<Record<string, NodeState>>({});
 
-/** Navigation stack — top is current context */
+/** Navigation stack. The top entry is the current context. */
 let graphStack = $state<GraphContext[]>([{ graphId: "root", focalNodeId: rootGraph.nodes[0].id }]);
 
 /** Skill points available to spend */

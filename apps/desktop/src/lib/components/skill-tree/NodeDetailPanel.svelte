@@ -63,7 +63,7 @@
       {/if}
     {:else}
       <div class="node-detail-panel__status node-detail-panel__status--locked">
-        Locked — unlock prerequisites first
+        Locked: unlock prerequisites first
       </div>
     {/if}
   </div>

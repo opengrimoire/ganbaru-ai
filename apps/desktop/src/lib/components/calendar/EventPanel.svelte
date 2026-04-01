@@ -416,7 +416,7 @@
   });
 
   // Sync date/time from event prop when block is dragged/resized externally.
-  // Only updates time fields — not title/description/etc. which the user may
+  // Only updates time fields, not title/description/etc. which the user may
   // have edited in the panel. Doesn't trigger hasChanges since the drag already
   // committed the time change to the DB.
   $effect(() => {

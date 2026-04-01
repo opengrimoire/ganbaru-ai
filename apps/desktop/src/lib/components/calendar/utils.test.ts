@@ -234,7 +234,7 @@ describe("eventsForDay", () => {
     const crossEvents: CalendarEvent[] = [
       evt({ id: "1", title: "Until midnight", start: "2026-03-13 22:00", end: "2026-03-14 00:00" }),
     ];
-    // Ends at midnight of Mar 14 — should NOT appear on Mar 14
+    // Ends at midnight of Mar 14, so it should NOT appear on Mar 14
     expect(eventsForDay(crossEvents, new Date(2026, 2, 13))).toHaveLength(1);
     expect(eventsForDay(crossEvents, new Date(2026, 2, 14))).toHaveLength(0);
   });

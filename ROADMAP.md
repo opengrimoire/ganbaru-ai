@@ -1,10 +1,10 @@
 # Roadmap
 
-Phased development plan for GanbaruAI. Each phase produces a working, testable increment. Phases are sequential — each builds on prior phases.
+Phased development plan for GanbaruAI. Each phase produces a working, testable increment. Phases are sequential; each builds on prior phases.
 
 ---
 
-## Phase 1 — Core loop
+## Phase 1: core loop
 
 The minimum viable cycle: plan sessions, focus with a timer, earn XP, see progress.
 
@@ -29,7 +29,7 @@ The minimum viable cycle: plan sessions, focus with a timer, earn XP, see progre
 
 ---
 
-## Phase 2 — Notes and vault
+## Phase 2: notes and vault
 
 The local-first knowledge layer. Users can take notes linked to their tasks and projects.
 
@@ -52,7 +52,7 @@ The local-first knowledge layer. Users can take notes linked to their tasks and 
 
 ---
 
-## Phase 3 — Diary, streaks, and consistency
+## Phase 3: diary, streaks, and consistency
 
 Daily touchpoints and engagement mechanics that make the app habit-forming.
 
@@ -75,7 +75,7 @@ Daily touchpoints and engagement mechanics that make the app habit-forming.
 
 ---
 
-## Phase 4 — Desktop experience
+## Phase 4: desktop experience
 
 Multi-window desktop features that make GanbaruAI an always-present productivity companion.
 
@@ -98,7 +98,7 @@ Multi-window desktop features that make GanbaruAI an always-present productivity
 
 ---
 
-## Phase 5 — Full Will system and XP formula
+## Phase 5: full Will system and XP formula
 
 Complete the experience measurement engine with all four Will categories and anti-grinding mechanics.
 
@@ -123,7 +123,7 @@ Complete the experience measurement engine with all four Will categories and ant
 
 ---
 
-## Phase 6 — Skill tree rewards and polish
+## Phase 6: skill tree rewards and polish
 
 Expand the skill tree with reward mechanics, skill decay visualization, and full integration with the XP pipeline.
 
@@ -151,14 +151,14 @@ Expand the skill tree with reward mechanics, skill decay visualization, and full
 
 ---
 
-## Phase 7 — Contract system
+## Phase 7: contract system
 
 Self-imposed productivity conditions with real stakes, inspired by Nen restrictions and binding vows.
 
 **Includes:**
 
 - Contract creation UI: condition builder, duration (1 day to 3 months), auto-renewal option, benefit/penalty configuration
-- Auto-tracked conditions: Pomodoro counts, task completions, streak requirements, session block adherence — verified against SQLite data
+- Auto-tracked conditions: Pomodoro counts, task completions, streak requirements, session block adherence, all verified against SQLite data
 - Real-life conditions: proof attachment support (photos), frequency and duration configuration, mandatory proof for penalty completion
 - Penalty/reward mechanics: passive XP boost on related branches, active XP boost on specific tasks, 2x accumulated XP subtraction on failure, 0.01x XP multiplier until penalty completed, level demotion on exclusive branches (1x contract boost XP), badge/personalization removal on failure, 2x duration lockout if penalty refused
 - Corruption visual effects on failed skill tree branches (CSS-driven visual degradation)
@@ -177,7 +177,7 @@ Self-imposed productivity conditions with real stakes, inspired by Nen restricti
 
 ---
 
-## Phase 8 — Music player
+## Phase 8: music player
 
 Local-first media playback integrated into the productivity workflow, licensed separately as LGPL 2.1.
 
@@ -194,7 +194,7 @@ Local-first media playback integrated into the productivity workflow, licensed s
 
 **Depends on:** phase 1 (calendar session blocks for playlist assignment, SQLite), phase 4 (edge panel for controls, work environments for playlist association)
 
-**Out of scope:** Spotify (explicitly not supported — documented in project), collaborative playlists, AI music recommendations, video display in main app window (audio-focused initially)
+**Out of scope:** Spotify (explicitly not supported, as documented in project), collaborative playlists, AI music recommendations, video display in main app window (audio-focused initially)
 
 **Complexity:** medium
 
@@ -202,7 +202,7 @@ Local-first media playback integrated into the productivity workflow, licensed s
 
 ---
 
-## Phase 9 — Project management framework
+## Phase 9: project management framework
 
 The quest chain structure that makes GanbaruAI a ClickUp/Jira/Asana alternative wrapped in RPG narrative.
 
@@ -210,9 +210,9 @@ The quest chain structure that makes GanbaruAI a ClickUp/Jira/Asana alternative 
 
 - Quest chain structure: Genesis (brainstorming), Forging the idea (evaluation), The journey ahead (planning → MVP → execution → post-execution) with all subphases (3.1.1 through 3.4.4)
 - Visual novel presentation: custom Svelte components, JSON-driven dialogue state machine, character sprites and background illustrations loaded from vault assets, CSS transitions between dialogue states, interactive form fields within dialogue
-- NPC characters: Fairy (Sparkweaver) for brainstorming, Dwarf (Bearer of Great Promise) for idea evaluation, Drasil (The Eternal Wayfinder) for planning and execution — each with distinct personality and guidance style
+- NPC characters: Fairy (Sparkweaver) for brainstorming, Dwarf (Bearer of Great Promise) for idea evaluation, Drasil (The Eternal Wayfinder) for planning and execution, each with distinct personality and guidance style
 - Phase templates: all planning subtemplates (deep brainstorming, market analysis, competitor research, specification, resources, review), MVP subtemplates (PoC, MVP, funding), execution subtemplates (alpha, beta, launch, polish), post-execution subtemplates
-- Actionable methodology templates: reverse brainstorming, value proposition canvas, business model canvas, SWOT analysis, market research frameworks — structured forms, not static documents
+- Actionable methodology templates: reverse brainstorming, value proposition canvas, business model canvas, SWOT analysis, market research frameworks. These are structured forms, not static documents
 - Project Kanban boards: per-project boards within the quest chain, linked to project phases
 - Requirement version control: timestamped diffs on every task change (what, when, who, why, downstream impact), immutable history, searchable and filterable, exportable
 - Calendar date cascade: inserting or extending session blocks shifts downstream blocks, dependency graph propagation, conflict highlighting
@@ -230,7 +230,7 @@ The quest chain structure that makes GanbaruAI a ClickUp/Jira/Asana alternative 
 
 ---
 
-## Phase 10 — Sync and collaboration
+## Phase 10: sync and collaboration
 
 Multi-device sync and real-time collaboration via CRDTs and E2E encryption.
 
@@ -240,7 +240,7 @@ Multi-device sync and real-time collaboration via CRDTs and E2E encryption.
 - Tiptap collaboration: @tiptap/extension-collaboration for real-time note co-editing, @tiptap/extension-collaboration-cursor for live cursor positions and selections
 - Hocuspocus server: apps/server package, persistent document state, presence and awareness, authentication and authorization hooks for workspace access control, self-hostable
 - E2E encryption: libsodium / @noble/ciphers, client-side key derivation, personal vault (single key per vault), collaborative workspace (workspace key encrypted per-member), server stores only ciphertext
-- Three sync tiers: free local-only (scheduled encrypted export to user-specified path), paid hosted (your Hocuspocus instance, automatic cloud backup), self-hosted (user's own server)
+- Two sync tiers: local-only (scheduled encrypted export to user-specified path), self-hosted (user's own Hocuspocus server with guided setup, automatic cloud backup)
 - Multi-device sync: desktop-to-desktop, desktop-to-mobile (mobile in phase 11)
 - Collaborative workspaces: shared documents, live presence, access control
 - Local backup: scheduled encrypted zip export of vault folder
@@ -255,7 +255,7 @@ Multi-device sync and real-time collaboration via CRDTs and E2E encryption.
 
 ---
 
-## Phase 11 — Mobile
+## Phase 11: mobile
 
 Tauri v2 mobile builds delivering a focused subset of the desktop experience.
 
@@ -266,7 +266,7 @@ Tauri v2 mobile builds delivering a focused subset of the desktop experience.
 - Sleep alarm: iOS UNNotificationRequest with alarm-style scheduling, Android AlarmManager with SCHEDULE_EXACT_ALARM permission
 - Alarm-to-diary flow: morning alarm dismissal triggers morning diary, morning playlist starts; setting evening alarm triggers evening diary
 - Sleep duration tracking: alarm-set to dismissal time, feeds into sleep quality suggestions
-- App-level procrastination blocking: iOS Screen Time API (Family Controls framework), Android UsageStatsManager — graceful degradation when permissions unavailable
+- App-level procrastination blocking: iOS Screen Time API (Family Controls framework), Android UsageStatsManager, with graceful degradation when permissions unavailable
 - Mobile Pomodoro: notification-based breaks (no fullscreen overlay), timer continues in background
 - Mobile calendar and notes: full editing capability, synced via phase 10
 - Mobile skill tree: pinch-to-zoom container, node details in bottom sheets
@@ -275,7 +275,7 @@ Tauri v2 mobile builds delivering a focused subset of the desktop experience.
 
 **Depends on:** phase 10 (sync for multi-device), phase 3 (diary system), phase 8 (music for alarm playlists), phase 6 (skill tree for mobile view)
 
-**Out of scope:** work environment management, edge panel, fullscreen break overlay, browser extension, desktop activity monitoring — all blocked by mobile OS sandboxing
+**Out of scope:** work environment management, edge panel, fullscreen break overlay, browser extension, desktop activity monitoring. All of these are blocked by mobile OS sandboxing
 
 **Complexity:** large
 
@@ -283,7 +283,7 @@ Tauri v2 mobile builds delivering a focused subset of the desktop experience.
 
 ---
 
-## Phase 12 — AI and MCP (post-MVP)
+## Phase 12: AI and MCP (post-MVP)
 
 Opt-in AI features and protocol integrations. All BYOK, no data leaves the device without consent.
 
@@ -327,10 +327,10 @@ Every system from the product spec is accounted for:
 | Procrastination stopper (mobile/app-level) | 11 |
 | Work environment management | 4 |
 | Edge panel | 4 |
-| Will system — Focus | 1 (simplified), 5 (full) |
-| Will system — Clarity | 3 (basic), 5 (full) |
-| Will system — Intensity | 5 |
-| Will system — Execution | 3 (basic), 5 (full) |
+| Will system, Focus | 1 (simplified), 5 (full) |
+| Will system, Clarity | 3 (basic), 5 (full) |
+| Will system, Intensity | 5 |
+| Will system, Execution | 3 (basic), 5 (full) |
 | Consistency tracking | 3 |
 | Streaks and multipliers | 3 |
 | XP formula (compound, anti-grinding) | 1 (basic), 5 (full) |
@@ -356,8 +356,8 @@ Every system from the product spec is accounted for:
 | Multi-window (break overlay, notification) | 4 |
 | Desktop activity monitoring | 5 |
 | Mobile (Tauri v2, iOS/Android) | 11 |
-| AI — Drasil conversational AI | 12 (post-MVP) |
-| AI — Dwarf chatbot | 12 (post-MVP) |
-| AI — content-specific blocking | 12 (post-MVP) |
-| AI — local LLM diary analysis | 12 (post-MVP) |
+| AI: Drasil conversational AI | 12 (post-MVP) |
+| AI: Dwarf chatbot | 12 (post-MVP) |
+| AI: content-specific blocking | 12 (post-MVP) |
+| AI: local LLM diary analysis | 12 (post-MVP) |
 | MCP server/client | 12 (post-MVP) |

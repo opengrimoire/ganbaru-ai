@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 1 — Core loop
+Phase 1: Core loop
 
 ## Status
 
@@ -10,7 +10,7 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 
 ## Completed
 
-- Phase 0: created CLAUDE.md, ROADMAP.md, PROGRESS.md, DECISIONS.md
+- Phase 0: created CLAUDE.md, ROADMAP.md, PROGRESS.md
 - Phase 0: designed 12-phase roadmap covering all product spec systems, verified coverage
 - Phase 1: monorepo scaffold (Turborepo + pnpm workspaces + Cargo workspace)
 - Phase 1: Tauri v2 + Svelte 5 + Vite app (plain Svelte, not SvelteKit)
@@ -21,7 +21,7 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 - Phase 1: app shell with sidebar navigation (calendar, kanban, pomodoro, skill-tree views)
 - Phase 1: Pomodoro timer (focus/short_break/long_break phases, cycle tracking, start/pause/reset/skip)
 - Phase 1: Kanban board with CRUD (backlog/todo/in_progress/done columns, task creation, move between columns, delete, priority badges)
-- Phase 1: calendar view (custom Google Calendar-style component, week/day/month views, session block CRUD, drag-and-drop move/resize, current-time indicator, SQLite-backed — replaced schedule-x library)
+- Phase 1: calendar view (custom Google Calendar-style component, week/day/month views, session block CRUD, drag-and-drop move/resize, current-time indicator, SQLite-backed, replacing schedule-x library)
 - Phase 1: skill tree view (SVG + Svelte center-snap navigation, neighborhood culling, sub-layer navigation, keyboard nav, locked/available/unlocked visual states, node detail panel, removed D3.js dependency)
 - Phase 1: skill tree data (153-node temporal tree from JSON, 7 branches with radial tree layout adapter, cluster sub-graphs, auto-focus, always-visible detail panel)
 - Phase 1: XP pipeline (Pomodoro → pomodoro_sessions + xp_entries in SQLite, +XP toast on completion)
@@ -42,7 +42,7 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 
 ## Next up
 
-Phase 2 — Notes and Diary:
+Phase 2: Notes and Diary:
 - Tiptap rich text editor integration (markdown storage)
 - Morning and evening diary entry forms
 - Note creation, editing, and linking
@@ -55,7 +55,7 @@ Phase 2 — Notes and Diary:
 | 2026-03-09 | Created tracking documents and 12-phase roadmap. Phase 1 complete: monorepo scaffold, Tauri+Svelte, SQLite, app shell, Pomodoro timer, Kanban board, calendar with session blocks, XP pipeline. Custom title bar + Notion-like theme. Skill tree rewritten: replaced D3.js force graph with SVG + Svelte center-snap navigation (Shield Hero style), neighborhood culling, sub-layer navigation, authored graph data, keyboard controls, visual states. Updated PRODUCT_SPEC, TECH_STACK, ROADMAP, DECISIONS, CLAUDE.md. Integrated 153-node temporal skill tree JSON (7 branches, radial layout adapter, cluster sub-graphs). Fixed: center-snap positioning, kanban/calendar scroll, auto-focus, always-visible detail panel, simplified keyboard nav. |
 | 2026-03-11 | UI overhaul: replaced sidebar with tab navigation, contour layout, dual light/dark theme with custom colors. Fixed Ctrl+Shift+Tab (WebKitGTK e.code workaround). |
 | 2026-03-12 | Replaced schedule-x calendar library with custom Google Calendar-style component: week/day/month views, event overlap layout, pointer-based drag-and-drop, current-time indicator, half-hour dashed gridlines, 8-color event palette. Undo/redo (Ctrl+Z/Y) with confirmation dialogs. Clickable day headers, Alt+arrow view history, arrow key navigation. Header drill-down picker, help/settings buttons, calendar account selector. Mini calendar scroll navigation, month view past-day styling. Scrollable top bar for tab switching. |
-| 2026-03-13 | Pomodoro: added native pre-break notification (notify-rust, action buttons, transient, sound), fullscreen break overlay (GTK, countdown timer, space x3 dismiss, Esc x3 skip, 30s inactivity re-show via GNOME IdleMonitor). Keyboard shortcut blocking during overlay via gsettings (Super, Alt, dash-to-dock hotkeys). System tray progress ring with pause/skip controls. Close confirmation dialog. Theme persistence. Pomodoro tab removed — timer now auto-starts from active calendar session blocks. |
+| 2026-03-13 | Pomodoro: added native pre-break notification (notify-rust, action buttons, transient, sound), fullscreen break overlay (GTK, countdown timer, space x3 dismiss, Esc x3 skip, 30s inactivity re-show via GNOME IdleMonitor). Keyboard shortcut blocking during overlay via gsettings (Super, Alt, dash-to-dock hotkeys). System tray progress ring with pause/skip controls. Close confirmation dialog. Theme persistence. Pomodoro tab removed; timer now auto-starts from active calendar session blocks. |
 | 2026-03-14 | Calendar: drag-to-create blocks (click+drag with 10-min grid snap), snap indicator line with time label, resize flip (drag past opposite edge), block hover highlight. Extracted shared drag controller (useDragController.svelte.ts) for WeekView/DayView. Fixed calendar time storage (local time, no UTC conversion). Scroll position preserved across view switches. Break overlay focus handling. Added vitest with 38 unit tests. Provisional DB reset button. Close shortcut Ctrl+Shift+W. Hour height 1.4x. RAM usage in title bar (dev monitoring). Resolved all Svelte a11y warnings. Fixed sub-pixel gridline/text rendering, gridline color artifact during drag, global cursor lock during drag. |
 | 2026-03-15 | Pomodoro: removed "work 3 more minutes" from break screen, notification changed to "Focus session ending in 1 minute" with one-time +3min extension (removed skip-break option). Break overlay changed to black background with white text. RAM usage now includes WebKitGTK child processes. Reset button now deletes database file and restarts app. Fixed DB connection race condition and silent load failures. Focus duration default set to 40 minutes. |
 | 2026-03-16 | Calendar: replaced CreateDialog/EventDetail with floating EventPanel (inline edit with color picker, description, pomodoro settings). Added repeat rule (daily/weekdays/weekly/monthly/yearly) and notification scheduling (native OS notifications via notify-rust, 30s polling). DB migration v2 (color, description columns), v3 (exceptions, repeat_until). Recurring events: virtual instance expansion, Google Calendar-style scope dialog (this/following/all) for save/delete/drag. Detach instance, split series, add exception store methods. Live preview for non-recurring edits only. Neutral create preview (no default blue). Fixed Svelte 5 reactivity issue with plain let vs $state for onChange tracking. DB migration v4: renamed session_blocks to calendar_events, added timezone/calendar_id columns, renamed repeat_rule to rrule (iCal-style), extracted pomodoro config into normalized pomodoro_configs table, recreated skill branch junction table, added indexes on start_time/end_time/calendar_id. Refactored CalendarEvent type (PomodoroConfig nested object, timezone/calendarId fields). Added rrule.ts conversion functions with tests. Refactored calendar store addBlock from 8 positional args to options object. Updated EventPanel, CalendarView, App.svelte for new schema. Fixed recurring event duplication bug: expandRecurring now skips templates whose start date is past repeat_until (caused ghost events when splitting at first instance). Scope-first recurring event editing: replaced post-save scope dialog with segmented scope selector (this/following/all) at top of EventPanel. Live preview now works for recurring events under all scopes via store-level snapshot/restore system (saveSnapshot, restoreSnapshot, previewRecurring). Switching scope re-previews in real-time. Drag-only scope dialog remains for drag operations. Custom recurrence system: replaced simple RepeatRule presets with RecurrenceConfig (frequency, interval, weekdays, end conditions: never/until/count). Full rrule.ts rewrite with bidirectional iCal RRULE conversion, preset detection, label formatting. Store updated: advanceDate handles intervals and BYDAY weekday sets, expandRecurring supports COUNT. EventPanel redesigned with toggle group sections: Pomodoro (preset radio buttons: auto/deep/creative/extended/custom), Notifications (multi-select presets + 2 custom slots), Repeat (interval/freq/weekday picker/end conditions), Music (placeholder). DB migration v5: notification_minutes column replaced with notifications TEXT (JSON array) for multi-notification support. Draggable EventPanel via pointer capture on accent bar. |

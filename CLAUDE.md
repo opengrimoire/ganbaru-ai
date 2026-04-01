@@ -4,12 +4,11 @@ GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first producti
 
 ## Essential reading
 
-- **PRODUCT_SPEC.md** — full product specification (what the app does and why)
-- **TECH_STACK.md** — complete technical stack and architecture (how it's built)
-- **PROGRESS.md** — always read at the start of every session to know current state
-- **ROADMAP.md** — phased development plan
-- **DECISIONS.md** — implementation decisions log
-- **TESTING.md** — test setup, conventions, and what is covered
+- **PRODUCT_SPEC.md**: full product specification (what the app does and why)
+- **TECH_STACK.md**: complete technical stack and architecture (how it's built)
+- **PROGRESS.md**: always read at the start of every session to know current state
+- **ROADMAP.md**: phased development plan
+- **TESTING.md**: test setup, conventions, and what is covered
 
 ## Workspace structure
 
@@ -35,7 +34,7 @@ ganbaruai/
 │   │   │   │   │   ├── project/          ← project management quest chain phases
 │   │   │   │   │   ├── capsules/         ← Skill Capsule reveal animations
 │   │   │   │   │   └── ui/              ← shadcn-svelte generated components
-│   │   │   │   ├── stores/              ← Svelte runes ($state) — global app state
+│   │   │   │   ├── stores/              ← Svelte runes ($state), global app state
 │   │   │   │   ├── api/                ← typed wrappers around Tauri invoke() calls
 │   │   │   │   ├── utils/               ← shared helpers, XP formulas, formatters
 │   │   │   │   └── types/               ← frontend-specific TypeScript types
@@ -92,12 +91,12 @@ ganbaruai/
 
 - **Package manager:** pnpm
 - **Monorepo orchestration:** Turborepo on top of pnpm workspaces
-- **Frontend:** plain Svelte 5 with runes — not SvelteKit
+- **Frontend:** plain Svelte 5 with runes (not SvelteKit)
 - **Desktop/mobile shell:** Tauri v2
 - **License:** AGPL 3.0 for the app, LGPL 2.1 for the media player plugin
 - **Database:** SQLite via tauri-plugin-sql
 - **Note format:** markdown files on disk (Tiptap editor)
-- **State management:** Svelte 5 runes ($state, $derived, $effect) — no external state manager
+- **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
