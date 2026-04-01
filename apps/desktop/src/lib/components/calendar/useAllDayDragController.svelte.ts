@@ -42,9 +42,10 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
 
   function columnFromX(clientX: number, bounds: DOMRect[]): number {
     for (let i = 0; i < bounds.length; i++) {
-      const mid = bounds[i].left + bounds[i].width / 2;
-      if (clientX < mid) return i;
+      if (clientX >= bounds[i].left && clientX < bounds[i].left + bounds[i].width) return i;
     }
+    // Clamp to nearest edge
+    if (bounds.length > 0 && clientX < bounds[0].left) return 0;
     return bounds.length - 1;
   }
 

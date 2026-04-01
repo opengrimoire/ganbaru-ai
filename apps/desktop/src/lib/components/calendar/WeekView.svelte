@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent } from "./types";
+  import type { CalendarEvent, PositionedAllDayEvent } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
     getWeekDays,
@@ -19,6 +19,8 @@
   import { useAllDayDragController } from "./useAllDayDragController.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
+  import Repeat from "@lucide/svelte/icons/repeat";
+  import Bell from "@lucide/svelte/icons/bell";
 
   let {
     anchorDate,
@@ -60,7 +62,37 @@
   const ALL_DAY_MAX_VISIBLE = 2;
 
   const weekDays = $derived(getWeekDays(anchorDate));
-  const allDayPositioned = $derived(layoutAllDayEventsForWeek(events, weekDays));
+
+  // Structurally memoize all-day layout: when the grid positions haven't changed
+  // (same event IDs at same row/col/span), reuse the previous position objects so
+  // the {#each} block skips re-evaluation of unchanged items. This prevents the
+  // sticky CSS Grid banner from relayouting on every edit-session state change.
+  let _prevAllDay: PositionedAllDayEvent[] = [];
+  const allDayPositioned = $derived.by(() => {
+    const next = layoutAllDayEventsForWeek(events, weekDays);
+    if (next.length !== _prevAllDay.length) { _prevAllDay = next; return next; }
+    let layoutSame = true;
+    for (let i = 0; i < next.length; i++) {
+      const n = next[i], p = _prevAllDay[i];
+      if (n.event.id !== p.event.id || n.row !== p.row || n.startCol !== p.startCol || n.spanCols !== p.spanCols) {
+        layoutSame = false;
+        break;
+      }
+    }
+    if (!layoutSame) { _prevAllDay = next; return next; }
+    // Layout is identical. Reuse prev position objects for items whose event
+    // reference hasn't changed; only create new objects for changed events.
+    let anyEventChanged = false;
+    for (let i = 0; i < next.length; i++) {
+      if (_prevAllDay[i].event !== next[i].event) { anyEventChanged = true; break; }
+    }
+    if (!anyEventChanged) return _prevAllDay;
+    const stable = next.map((n, i) =>
+      _prevAllDay[i].event === n.event ? _prevAllDay[i] : n,
+    );
+    _prevAllDay = stable;
+    return stable;
+  });
   const allDayMaxRow = $derived(allDayPositioned.length > 0 ? Math.max(...allDayPositioned.map((p) => p.row)) + 1 : 0);
   const timedEvents = $derived(events.filter((e) => !e.allDay));
   const tzCount = $derived(Math.max(1, timezones.length));
@@ -378,22 +410,33 @@
             ></div>
           {/each}
 
-          <!-- Positioned all-day events (only visible rows) -->
+          <!-- Positioned all-day events: absolutely positioned to avoid
+               CSS Grid relayout when chip classes change (glow on select). -->
           {#each allDayPositioned as pos (pos.event.id)}
             {@const endDateStr = pos.event.end.split(" ")[0]}
-            {#if pos.event.id !== allDayDrag.draggingEventId && (allDayExpanded || pos.row < ALL_DAY_MAX_VISIBLE || !allDayCollapsible)}
-              <div class="flex items-center px-0.5" style="grid-column: {pos.startCol + 1} / span {pos.spanCols}; grid-row: {pos.row + 1}; z-index: 2; min-width: 0;">
-                <AllDayEventChip
-                  event={pos.event}
-                  {isDark}
-                  editing={editingId === pos.event.id}
-                  preview={previewedIds?.has(pos.event.id) ?? false}
-                  isPast={endDateStr < todayStr}
-                  onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
-                  onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
-                />
-              </div>
-            {/if}
+            {@const visible = pos.event.id !== allDayDrag.draggingEventId && (allDayExpanded || pos.row < ALL_DAY_MAX_VISIBLE || !allDayCollapsible)}
+            <div
+              class="absolute flex items-center px-0.5"
+              style="
+                left: {(pos.startCol / 7) * 100}%;
+                width: {(pos.spanCols / 7) * 100}%;
+                top: {ALL_DAY_PAD + pos.row * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
+                height: {ALL_DAY_ROW_H}px;
+                z-index: 2;
+                min-width: 0;
+                {visible ? '' : 'display: none;'}
+              "
+            >
+              <AllDayEventChip
+                event={pos.event}
+                {isDark}
+                editing={editingId === pos.event.id}
+                preview={previewedIds?.has(pos.event.id) ?? false}
+                isPast={endDateStr < todayStr}
+                onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
+                onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
+              />
+            </div>
           {/each}
 
           <!-- "+N more" per column when collapsed -->
@@ -403,8 +446,13 @@
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <div
-                  class="z-[3] flex cursor-pointer items-center px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                  style="grid-column: {i + 1}; grid-row: {ALL_DAY_MAX_VISIBLE + 1};"
+                  class="absolute z-[3] flex cursor-pointer items-center px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                  style="
+                    left: {(i / 7) * 100}%;
+                    width: {(1 / 7) * 100}%;
+                    top: {ALL_DAY_PAD + ALL_DAY_MAX_VISIBLE * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
+                    height: {ALL_DAY_ROW_H}px;
+                  "
                   onclick={(e) => { e.stopPropagation(); allDayExpanded = true; }}
                 >
                   +{count} more
@@ -417,24 +465,40 @@
           {#if allDayDrag.allDayDragPreview}
             {@const dp = allDayDrag.allDayDragPreview}
             {@const dpColor = getEventColor(dp.event.color, isDark)}
+            {@const dpHasRepeat = !!dp.event.recurrence || !!dp.event.recurringParentId}
+            {@const dpHasNotification = !!dp.event.notifications?.length}
             <div
-              class="allday-drag-preview pointer-events-none flex items-center px-0.5"
+              class="pointer-events-none absolute flex items-center px-0.5"
               style="
-                grid-column: {dp.startCol + 1} / span {dp.spanCols};
-                grid-row: {dp.row + 1};
+                left: {(dp.startCol / 7) * 100}%;
+                width: {(dp.spanCols / 7) * 100}%;
+                top: {ALL_DAY_PAD + dp.row * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
+                height: {ALL_DAY_ROW_H}px;
                 z-index: 10;
                 min-width: 0;
               "
             >
             <div
-              class="min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]"
+              class="allday-drag-preview min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]"
               style="
                 background-color: {dpColor.bg};
                 color: {dpColor.text};
                 opacity: 0.8;
               "
             >
-              {#if dp.event.title}{dp.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+              {#if dpHasRepeat || dpHasNotification}
+                <span class="absolute right-1 top-[3px] flex items-center gap-0.5">
+                  {#if dpHasRepeat}
+                    <Repeat size={8} class="shrink-0 opacity-70" />
+                  {/if}
+                  {#if dpHasNotification}
+                    <Bell size={8} class="shrink-0 opacity-70" />
+                  {/if}
+                </span>
+              {/if}
+              <span class="truncate" class:pr-5={dpHasRepeat || dpHasNotification}>
+                {#if dp.event.title}{dp.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+              </span>
             </div>
             </div>
           {/if}

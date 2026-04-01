@@ -1010,6 +1010,7 @@ function advancePhase() {
         activateSegment(breakIdx);
       }
 
+      invoke("play_alert_sound").catch(() => {});
       showBreakOverlay(remainingSeconds);
     } else {
       phase = "short_break";
@@ -1023,6 +1024,7 @@ function advancePhase() {
         activateSegment(breakIdx);
       }
 
+      invoke("play_alert_sound").catch(() => {});
       showBreakOverlay(remainingSeconds);
     }
   } else {
