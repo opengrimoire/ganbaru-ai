@@ -34,6 +34,7 @@ Building the core plan-focus-earn-see cycle. Monorepo scaffold, app shell, Pomod
 - Pomodoro: suspend/wake detection, pause gap visualization, orphan cleanup, idle detection with forced-interaction overlay
 - Calendar: Ctrl+scroll zoom (discrete levels 30-200px, animated transitions, adaptive snap grid, scroll position preservation)
 - Calendar: drag/create interactions (layout-aware previews, scroll-aware dragging, auto-scroll at edges)
+- Calendar: event panel polish (dot-grid drag handle, refined icon sizing/alignment, overflow-hidden rounded corners)
 
 ## Blocked / needs decision
 

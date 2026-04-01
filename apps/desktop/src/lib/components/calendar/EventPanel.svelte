@@ -630,7 +630,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={panelEl}
-  class="panel-root flex flex-col rounded-xl border border-border"
+  class="panel-root flex flex-col rounded-xl border border-border overflow-hidden"
   style:box-shadow="0 2px 8px rgba(0,0,0,0.3)"
   style="{panelStyle} background-color: var(--panel-bg);"
   onclick={(e) => e.stopPropagation()}
@@ -639,23 +639,30 @@
   <!-- Drag handle bar with close button -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="sticky top-0 z-10 flex items-center rounded-t-xl border-b border-border/60 px-1.5 cursor-grab active:cursor-grabbing"
+    class="sticky top-0 z-10 flex items-center rounded-t-xl border-b border-border/60 pl-3.5 pr-1.5 cursor-grab active:cursor-grabbing"
     style="background-color: var(--panel-contrast);"
     onpointerdown={handleDragStart}
     onpointermove={handleDragMove}
     onpointerup={handleDragEnd}
   >
     <div class="flex flex-1 items-center justify-center py-1.5">
-      <div class="h-1 w-8 rounded-full bg-muted-foreground/40"></div>
+      <div class="flex gap-[3px]">
+        {#each { length: 5 } as _}
+          <div class="flex flex-col gap-[3px]">
+            <div class="size-[3px] rounded-full bg-muted-foreground/70"></div>
+            <div class="size-[3px] rounded-full bg-muted-foreground/70"></div>
+          </div>
+        {/each}
+      </div>
     </div>
     {#if mode === "edit" && onDelete && event && !readOnly}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div onclick={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
         <button onclick={handleDeleteClick}
-          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          class="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-destructive [&>svg]:block"
           title="Delete">
-          <Trash2 size={13} />
+          <Trash2 class="-translate-y-[0.1px]" size={11} strokeWidth={1.8} />
         </button>
       </div>
     {/if}
@@ -663,15 +670,15 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div onclick={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
       <button onclick={onClose}
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+        class="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground [&>svg]:block"
         title="Close">
-        <X size={13} />
+        <X class="translate-y-[0.05px]" size={13} strokeWidth={2.1} />
       </button>
     </div>
   </div>
 
   <!-- Fixed top: title + date -->
-  <div class="shrink-0 flex flex-col gap-3 px-3.5 pt-3.5">
+  <div class="shrink-0 flex flex-col gap-3 px-3.5 pt-2.5">
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
