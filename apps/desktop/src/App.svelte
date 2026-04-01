@@ -306,10 +306,4 @@
     border-radius: 10px;
     overflow: hidden;
   }
-
-  .content-panel {
-  }
-
-  :global(.dark) .content-panel {
-  }
 </style>

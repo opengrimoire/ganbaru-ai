@@ -204,6 +204,7 @@
     events: () => events,
     hourHeight: () => calZoom.hourHeight,
     getColumnDate: () => dateStr,
+    getScrollContainer: () => scrollContainer ?? null,
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
     canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,

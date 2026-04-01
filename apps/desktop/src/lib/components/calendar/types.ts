@@ -299,6 +299,7 @@ export interface DragState {
   originEndMinute: number; // offset from originDate midnight, can be >1440
   pointerStartY: number;
   pointerStartX: number;
+  scrollTopAtStart: number; // scroll container scrollTop when drag began
   columnWidth: number;
   startColumnIndex: number;
 }

@@ -132,7 +132,7 @@
   }
 
   .event-block-wrapper {
-    transition: box-shadow 180ms ease-out;
+    transition: box-shadow 180ms ease-out, left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
   }
 
   .event-block-wrapper::after {

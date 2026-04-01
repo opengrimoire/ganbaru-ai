@@ -16,6 +16,8 @@
   import EventBlock from "./EventBlock.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
+  import Repeat from "@lucide/svelte/icons/repeat";
+  import Bell from "@lucide/svelte/icons/bell";
 
   let {
     date,
@@ -64,6 +66,48 @@
   const dateStr = $derived(formatDatePart(date));
   const dayEvents = $derived(eventsForDay(events, date));
   const positioned = $derived(layoutEventsForDay(dayEvents, dateStr));
+
+  // Layout-aware preview: include drag/create preview in layout computation
+  // so overlapping events shift in real time to show the final result.
+  const previewEvent = $derived(dragPreview?.event ?? createPreview?.event ?? null);
+
+  const layoutWithPreview = $derived.by(() => {
+    if (!previewEvent && !draggingEventId) {
+      return { items: positioned, preview: null as PositionedEvent | null };
+    }
+
+    // Always exclude the dragged event (it may have moved to another day)
+    const baseEvents = draggingEventId
+      ? dayEvents.filter(e => e.id !== draggingEventId)
+      : dayEvents;
+
+    const eventsForLayout = previewEvent
+      ? [...baseEvents, previewEvent]
+      : baseEvents;
+
+    const all = layoutEventsForDay(eventsForLayout, dateStr);
+
+    if (!previewEvent) {
+      return { items: all, preview: null as PositionedEvent | null };
+    }
+
+    const previewId = previewEvent.id;
+    const items: PositionedEvent[] = [];
+    let preview: PositionedEvent | null = null;
+
+    for (const p of all) {
+      if (p.event.id === previewId) {
+        preview = p;
+      } else {
+        items.push(p);
+      }
+    }
+
+    return { items, preview };
+  });
+
+  const effectivePositioned = $derived(layoutWithPreview.items);
+  const layoutedPreview = $derived(layoutWithPreview.preview);
 
   // Centralized pomodoro timeline
   const pomodoro = getPomodoro();
@@ -313,7 +357,7 @@
 
     if (snap) {
       // Snap to block edges when cursor is near them
-      for (const pos of positioned) {
+      for (const pos of effectivePositioned) {
         const blockTop = (pos.startMinute / 60) * hh;
         const blockBottom = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
 
@@ -460,44 +504,55 @@
   {#each hours as hour}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="absolute w-full cursor-crosshair"
+      class="absolute w-full {draggingEventId ? 'pointer-events-none' : 'cursor-crosshair'}"
       style="top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px);"
       onpointerdown={(e) => handleSlotPointerDown(e, hour)}
     ></div>
   {/each}
 
-  <!-- Events (hide the one being dragged — the drag preview replaces it) -->
-  {#each positioned as pos (pos.event.id)}
-    {#if pos.event.id !== draggingEventId}
-      <EventBlock
-        positioned={pos}
-        {isDark}
-        editing={pos.event.id === editingId}
-        preview={previewedIds?.has(pos.event.id) === true}
-        isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
-        onclick={(rect) => onEventClick(pos.event, rect)}
-        onpointerdown={(e) => onDragStart(pos.event.id, e)}
-      />
-    {/if}
+  <!-- Events (use layout-aware positions that account for drag/create preview) -->
+  {#each effectivePositioned as pos (pos.event.id)}
+    <EventBlock
+      positioned={pos}
+      {isDark}
+      editing={pos.event.id === editingId}
+      preview={previewedIds?.has(pos.event.id) === true}
+      isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
+      onclick={(rect) => onEventClick(pos.event, rect)}
+      onpointerdown={(e) => onDragStart(pos.event.id, e)}
+    />
   {/each}
 
-  <!-- Drag preview (replaces the original block at the target position) -->
-  {#if dragPreview}
+  <!-- Drag preview (replaces the original block at the target position, layout-aware) -->
+  {#if dragPreview && layoutedPreview}
+    {@const lp = layoutedPreview}
     {@const dragColor = dragPreview.event.color ? getEventColor(dragPreview.event.color, isDark) : null}
-    {@const dragH = (dragPreview.durationMinutes / 60) * calZoom.hourHeight}
+    {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
+    {@const dragHasRepeat = !!dragPreview.event.recurrence || !!dragPreview.event.recurringParentId}
+    {@const dragHasNotification = !!dragPreview.event.notifications?.length}
     <div
       class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
-        top: calc({dragPreview.startMinute} / 60 * var(--hour-h) * 1px);
-        height: calc({dragPreview.durationMinutes} / 60 * var(--hour-h) * 1px);
-        left: 0;
-        width: 92%;
+        top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
+        height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
+        left: {lp.left}%;
+        width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
         color: {dragColor?.text ?? getEventColor(undefined, isDark).text};
         z-index: 46;
       "
     >
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragColor?.bg ?? getEventColor(undefined, isDark).bg};">
-        <div class="truncate font-medium">
+        {#if dragHasRepeat || dragHasNotification}
+          <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
+            {#if dragHasRepeat}
+              <Repeat size={8} class="shrink-0 opacity-70" />
+            {/if}
+            {#if dragHasNotification}
+              <Bell size={8} class="shrink-0 opacity-70" />
+            {/if}
+          </div>
+        {/if}
+        <div class="truncate font-medium" class:pr-5={dragHasRepeat || dragHasNotification}>
           {#if dragPreview.event.title}{dragPreview.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
         </div>
         {#if dragH > 28}
@@ -505,22 +560,26 @@
           {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
           <div class="truncate opacity-80">{st} - {et}</div>
         {/if}
+        {#if dragH > 44 && dragPreview.event.location}
+          <div class="truncate text-[9px] opacity-60">{dragPreview.event.location}</div>
+        {/if}
       </div>
     </div>
   {/if}
 
-  <!-- Create preview (new block being drawn) -->
-  {#if createPreview}
+  <!-- Create preview (new block being drawn, layout-aware) -->
+  {#if createPreview && layoutedPreview}
+    {@const lp = layoutedPreview}
     {@const glowColor = isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'}
-    {@const createH = (createPreview.durationMinutes / 60) * calZoom.hourHeight}
+    {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     <div
       data-create-preview
       class="preview-glow pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
-        top: calc({createPreview.startMinute} / 60 * var(--hour-h) * 1px);
-        height: calc({createPreview.durationMinutes} / 60 * var(--hour-h) * 1px);
-        left: 0;
-        width: 92%;
+        top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
+        height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
+        left: {lp.left}%;
+        width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
         color: {getEventColor(undefined, isDark).text};
         z-index: 10;
         --glow-color: {glowColor};
@@ -567,6 +626,7 @@
 <style>
   .preview-outline {
     position: relative;
+    transition: left 120ms ease-out, width 120ms ease-out;
   }
 
   .preview-outline::after {
@@ -581,6 +641,7 @@
 
   .preview-glow {
     position: relative;
+    transition: left 120ms ease-out, width 120ms ease-out;
   }
 
   .preview-glow::after {

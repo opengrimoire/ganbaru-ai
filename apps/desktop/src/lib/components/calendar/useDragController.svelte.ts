@@ -27,10 +27,15 @@ function unlockCursor() {
   document.body.style.cursor = "";
 }
 
+// --- Auto-scroll constants ---
+const AUTO_SCROLL_ZONE = 48; // px from edge to start scrolling
+const AUTO_SCROLL_MAX_SPEED = 12; // px per frame at the very edge
+
 export interface DragControllerConfig {
   events: () => CalendarEvent[];
   hourHeight: () => number;
   getColumnDate: (clientX: number) => string;
+  getScrollContainer: () => HTMLElement | null;
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
   onEventCreate: (start: string, end: string) => void;
   canDrag?: (eventId: string) => boolean;
@@ -50,6 +55,71 @@ export function useDragController(config: DragControllerConfig) {
   let createPreviewDate = $state<string | null>(null);
   let createPreview = $state<PositionedEvent | null>(null);
 
+  // Track latest pointer position for scroll-triggered updates and auto-scroll
+  let lastPointerEvent: PointerEvent | null = null;
+  let autoScrollRaf = 0;
+
+  // --- Auto-scroll ---
+
+  function getScrollEdgeSpeed(container: HTMLElement, clientY: number): number {
+    const rect = container.getBoundingClientRect();
+    // Find the bottom of any sticky header inside the container
+    let topEdge = rect.top;
+    for (const el of container.querySelectorAll(":scope > .sticky, :scope > div > .sticky")) {
+      const h = el as HTMLElement;
+      if (h.offsetHeight > 0) {
+        topEdge = Math.max(topEdge, h.getBoundingClientRect().bottom);
+      }
+    }
+    const distFromTop = clientY - topEdge;
+    const distFromBottom = rect.bottom - clientY;
+
+    if (distFromTop < AUTO_SCROLL_ZONE && distFromTop < distFromBottom) {
+      // Scroll up: speed increases as pointer gets closer to edge
+      return -AUTO_SCROLL_MAX_SPEED * (1 - distFromTop / AUTO_SCROLL_ZONE);
+    }
+    if (distFromBottom < AUTO_SCROLL_ZONE && distFromBottom < distFromTop) {
+      // Scroll down
+      return AUTO_SCROLL_MAX_SPEED * (1 - distFromBottom / AUTO_SCROLL_ZONE);
+    }
+    return 0;
+  }
+
+  function autoScrollLoop() {
+    autoScrollRaf = 0;
+    const container = config.getScrollContainer();
+    if (!container || (!dragState && !createState) || !lastPointerEvent) return;
+
+    const speed = getScrollEdgeSpeed(container, lastPointerEvent.clientY);
+    if (speed !== 0) {
+      container.scrollTop += speed;
+      // Re-run the move handler so the preview tracks the new scroll position
+      if (dragState) updateDragPreview();
+      if (createState) updateCreatePreview();
+    }
+    autoScrollRaf = requestAnimationFrame(autoScrollLoop);
+  }
+
+  function startAutoScroll() {
+    if (!autoScrollRaf) autoScrollRaf = requestAnimationFrame(autoScrollLoop);
+  }
+
+  function stopAutoScroll() {
+    if (autoScrollRaf) {
+      cancelAnimationFrame(autoScrollRaf);
+      autoScrollRaf = 0;
+    }
+  }
+
+  // --- Scroll-aware delta ---
+
+  function scrollAwareDeltaY(clientY: number): number {
+    if (!dragState) return 0;
+    const container = config.getScrollContainer();
+    const scrollDelta = container ? container.scrollTop - dragState.scrollTopAtStart : 0;
+    return (clientY - dragState.pointerStartY) + scrollDelta;
+  }
+
   // --- Existing event drag (move / resize) ---
 
   function handleDragStart(eventId: string, e: PointerEvent) {
@@ -61,6 +131,7 @@ export function useDragController(config: DragControllerConfig) {
     const dateStr = event.start.split(" ")[0];
     const startMin = minuteOfDay(event.start);
     const dur = durationMinutes(event.start, event.end);
+    const container = config.getScrollContainer();
 
     dragState = {
       eventId,
@@ -71,6 +142,7 @@ export function useDragController(config: DragControllerConfig) {
       originEndMinute: startMin + dur,
       pointerStartY: e.clientY,
       pointerStartX: e.clientX,
+      scrollTopAtStart: container ? container.scrollTop : 0,
       columnWidth: 0,
       startColumnIndex: 0,
     };
@@ -94,18 +166,21 @@ export function useDragController(config: DragControllerConfig) {
       lockCursor("grabbing");
     }
 
+    lastPointerEvent = e;
     window.addEventListener("pointermove", handleDragMove);
     window.addEventListener("pointerup", handleDragEnd);
+    startAutoScroll();
   }
 
-  function handleDragMove(e: PointerEvent) {
-    if (!dragState) return;
+  function updateDragPreview() {
+    if (!dragState || !lastPointerEvent) return;
 
     const event = config.events().find((ev) => ev.id === dragState!.eventId);
     if (!event) return;
 
+    const e = lastPointerEvent;
     const hourHeight = config.hourHeight();
-    const deltaY = e.clientY - dragState.pointerStartY;
+    const deltaY = scrollAwareDeltaY(e.clientY);
     const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60, calZoom.gridMinutes);
 
     let newStart: number;
@@ -186,10 +261,18 @@ export function useDragController(config: DragControllerConfig) {
     };
   }
 
+  function handleDragMove(e: PointerEvent) {
+    if (!dragState) return;
+    lastPointerEvent = e;
+    updateDragPreview();
+  }
+
   async function handleDragEnd() {
     window.removeEventListener("pointermove", handleDragMove);
     window.removeEventListener("pointerup", handleDragEnd);
+    stopAutoScroll();
     unlockCursor();
+    lastPointerEvent = null;
 
     if (dragPreview) {
       await config.onEventUpdate(dragPreview.event);
@@ -203,6 +286,8 @@ export function useDragController(config: DragControllerConfig) {
   // --- Create-by-drag ---
 
   function handleCreateStart(dateStr: string, minute: number, e: PointerEvent) {
+    if (dragState) return; // don't start create while an event drag is active
+
     const columnEl = (e.target as HTMLElement).closest(
       '[style*="border-left"]',
     ) as HTMLElement;
@@ -213,17 +298,19 @@ export function useDragController(config: DragControllerConfig) {
     createPreviewDate = dateStr;
     createPreview = buildPreview(dateStr, minute, endMinute);
 
+    lastPointerEvent = e;
     lockCursor("crosshair");
     window.addEventListener("pointermove", handleCreateMove);
     window.addEventListener("pointerup", handleCreateEnd);
+    startAutoScroll();
   }
 
-  function handleCreateMove(e: PointerEvent) {
-    if (!createState) return;
+  function updateCreatePreview() {
+    if (!createState || !lastPointerEvent) return;
 
     const hourHeight = config.hourHeight();
     const rect = createState.columnEl.getBoundingClientRect();
-    const offsetY = e.clientY - rect.top;
+    const offsetY = lastPointerEvent.clientY - rect.top;
     const cursorMinute = clampMinute(snapToGrid((offsetY / hourHeight) * 60, calZoom.gridMinutes));
 
     const anchor = createState.anchorMinute;
@@ -238,10 +325,18 @@ export function useDragController(config: DragControllerConfig) {
     );
   }
 
+  function handleCreateMove(e: PointerEvent) {
+    if (!createState) return;
+    lastPointerEvent = e;
+    updateCreatePreview();
+  }
+
   function handleCreateEnd() {
     window.removeEventListener("pointermove", handleCreateMove);
     window.removeEventListener("pointerup", handleCreateEnd);
+    stopAutoScroll();
     unlockCursor();
+    lastPointerEvent = null;
 
     if (createPreview) {
       config.onEventCreate(createPreview.event.start, createPreview.event.end);
@@ -291,12 +386,12 @@ export function useDragController(config: DragControllerConfig) {
     const previewStartDate = dragPreview.event.start.split(" ")[0];
     const previewEndDate = dragPreview.event.end.split(" ")[0];
 
-    // Single-day event — return preview as-is for its date
+    // Single-day event -- return preview as-is for its date
     if (previewStartDate === previewEndDate) {
       return dateStr === previewStartDate ? dragPreview : null;
     }
 
-    // Start day — show from event start to bottom of day
+    // Start day -- show from event start to bottom of day
     if (dateStr === previewStartDate) {
       const startMin = minuteOfDay(dragPreview.event.start);
       return {
@@ -306,7 +401,7 @@ export function useDragController(config: DragControllerConfig) {
       };
     }
 
-    // End day — show from top to event end
+    // End day -- show from top to event end
     if (dateStr === previewEndDate) {
       const endMin = minuteOfDay(dragPreview.event.end);
       if (endMin <= 0) return null;
@@ -358,13 +453,13 @@ export function useDragController(config: DragControllerConfig) {
 
     // resize-bottom: snap line tracks the end handle
     if (previewStartDate === previewEndDate) {
-      // Same day — show snap on that day
+      // Same day -- show snap on that day
       return dateStr === previewStartDate
         ? minuteOfDay(dragPreview.event.end)
         : null;
     }
 
-    // Cross-midnight — show snap on the end day only
+    // Cross-midnight -- show snap on the end day only
     if (dateStr === previewEndDate) {
       return minuteOfDay(dragPreview.event.end);
     }
