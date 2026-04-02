@@ -15,7 +15,7 @@ importers:
         specifier: ^5.8.0
         version: 5.9.3
 
-  apps/desktop:
+  apps/client:
     dependencies:
       '@fontsource-variable/inter':
         specifier: ^5.2.8

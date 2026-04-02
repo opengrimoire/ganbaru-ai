@@ -25,3 +25,12 @@ Thumbs.db
 
 # logs
 *.log
+
+# SQLite runtime files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# test coverage
+coverage/

@@ -72,7 +72,7 @@ The package manager. Chosen over npm and yarn for strict dependency isolation (n
 
 The monorepo task runner. Sits on top of pnpm workspaces and handles build orchestration, task dependency resolution, and local/remote build caching across all packages. When iterating on the Svelte frontend without touching the media player package, Turborepo skips the media player build entirely via cache. Task dependencies are declared in `turbo.json`. For example, the Tauri app's `build` task depends on the media player npm package being built first, and Turborepo ensures the correct execution order and parallelization.
 
-Turborepo does not replace Tauri's build pipeline; it invokes `tauri build`/`tauri dev` as a task. The cargo workspace and pnpm workspace coexist at the repo root: Turborepo orchestrates JS/TS tasks across pnpm workspace members, while Cargo handles Rust builds. The Tauri CLI invokes cargo for `apps/desktop/src-tauri`, and the media player plugin is a cargo workspace member that Tauri resolves as a dependency at build time.
+Turborepo does not replace Tauri's build pipeline; it invokes `tauri build`/`tauri dev` as a task. The cargo workspace and pnpm workspace coexist at the repo root: Turborepo orchestrates JS/TS tasks across pnpm workspace members, while Cargo handles Rust builds. The Tauri CLI invokes cargo for `apps/client/src-tauri`, and the media player plugin is a cargo workspace member that Tauri resolves as a dependency at build time.
 
 ---
 

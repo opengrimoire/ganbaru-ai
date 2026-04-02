@@ -3,13 +3,13 @@
 ## Setup
 
 - **Framework:** vitest (v4+)
-- **Config:** `apps/desktop/vitest.config.ts`
-- **Path alias:** `$lib` resolves to `apps/desktop/src/lib`
+- **Config:** `apps/client/vitest.config.ts`
+- **Path alias:** `$lib` resolves to `apps/client/src/lib`
 
 ## Running tests
 
 ```bash
-# From apps/desktop/
+# From apps/client/
 pnpm test          # single run
 pnpm test:watch    # watch mode
 
@@ -22,7 +22,7 @@ pnpm turbo test
 Tests live next to the code they test, using the `.test.ts` suffix:
 
 ```
-apps/desktop/src/lib/
+apps/client/src/lib/
   components/calendar/
     utils.ts           ← source
     utils.test.ts      ← test
@@ -60,7 +60,7 @@ apps/desktop/src/lib/
 
 1. Create a `.test.ts` file next to the source file
 2. Import from `vitest`: `import { describe, it, expect } from "vitest"`
-3. Run `pnpm test` from `apps/desktop/`
+3. Run `pnpm test` from `apps/client/`
 
 Pure functions are the best candidates. If a function depends on Tauri IPC or DOM, either extract the pure logic into a separate function or skip it.
 
