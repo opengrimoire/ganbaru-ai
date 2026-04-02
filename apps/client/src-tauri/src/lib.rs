@@ -43,10 +43,27 @@ fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
 fn get_memory_usage_mb() -> f64 {
     #[cfg(target_os = "linux")]
     {
-        fn read_rss_kb(pid: &str) -> f64 {
+        fn read_pss_kb(pid: &str) -> f64 {
+            // smaps_rollup gives PSS (Proportional Set Size): private memory
+            // plus a fair share of shared memory. Avoids double-counting shared
+            // libraries across processes.
+            let path = format!("/proc/{pid}/smaps_rollup");
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                for line in content.lines() {
+                    if let Some(val) = line.strip_prefix("Pss:") {
+                        return val
+                            .trim()
+                            .trim_end_matches(" kB")
+                            .trim()
+                            .parse::<f64>()
+                            .unwrap_or(0.0);
+                    }
+                }
+            }
+            // Fallback to VmRSS if smaps_rollup is unavailable
             let path = format!("/proc/{pid}/status");
-            if let Ok(status) = std::fs::read_to_string(path) {
-                for line in status.lines() {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                for line in content.lines() {
                     if let Some(val) = line.strip_prefix("VmRSS:") {
                         return val
                             .trim()
@@ -61,7 +78,7 @@ fn get_memory_usage_mb() -> f64 {
         }
 
         let my_pid = std::process::id();
-        let mut total_kb = read_rss_kb(&my_pid.to_string());
+        let mut total_kb = read_pss_kb(&my_pid.to_string());
 
         // Walk /proc to find child processes (WebKitWebProcess, WebKitNetworkProcess, etc.)
         if let Ok(entries) = std::fs::read_dir("/proc") {
@@ -83,7 +100,7 @@ fn get_memory_usage_mb() -> f64 {
                         // fields[0] = state, fields[1] = ppid
                         if let Some(ppid) = fields.get(1) {
                             if *ppid == my_pid.to_string() {
-                                total_kb += read_rss_kb(&name_str);
+                                total_kb += read_pss_kb(&name_str);
                             }
                         }
                     }
