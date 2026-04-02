@@ -5,36 +5,6 @@ pub fn migrations() -> Vec<Migration> {
         version: 1,
         description: "initial schema",
         sql: "
-            -- skill tree branches
-            CREATE TABLE IF NOT EXISTS skill_branches (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                color TEXT NOT NULL DEFAULT '#6366f1',
-                parent_branch_id TEXT REFERENCES skill_branches(id),
-                depth INTEGER NOT NULL DEFAULT 0
-            );
-
-            -- skill tree nodes
-            CREATE TABLE IF NOT EXISTS skill_nodes (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                node_type TEXT NOT NULL DEFAULT 'basic' CHECK(node_type IN ('basic', 'notable', 'keystone')),
-                branch_id TEXT NOT NULL REFERENCES skill_branches(id),
-                level INTEGER NOT NULL DEFAULT 0,
-                current_xp INTEGER NOT NULL DEFAULT 0,
-                required_xp INTEGER NOT NULL DEFAULT 100,
-                unlocked INTEGER NOT NULL DEFAULT 0,
-                last_practiced_at TEXT
-            );
-
-            -- skill node parent relationships (DAG)
-            CREATE TABLE IF NOT EXISTS skill_node_parents (
-                node_id TEXT NOT NULL REFERENCES skill_nodes(id),
-                parent_id TEXT NOT NULL REFERENCES skill_nodes(id),
-                PRIMARY KEY (node_id, parent_id)
-            );
-
             -- kanban tasks
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
@@ -47,13 +17,6 @@ pub fn migrations() -> Vec<Migration> {
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-
-            -- task to skill branch mapping
-            CREATE TABLE IF NOT EXISTS task_skill_branches (
-                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-                branch_id TEXT NOT NULL REFERENCES skill_branches(id),
-                PRIMARY KEY (task_id, branch_id)
             );
 
             -- task tags
@@ -116,13 +79,6 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_event ON pomodoro_segments(event_id, event_date);
             CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_run ON pomodoro_segments(run_id);
 
-            -- calendar event to skill branch mapping
-            CREATE TABLE IF NOT EXISTS calendar_event_skill_branches (
-                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
-                branch_id TEXT NOT NULL REFERENCES skill_branches(id),
-                PRIMARY KEY (event_id, branch_id)
-            );
-
             -- pomodoro sessions (completed focus periods)
             CREATE TABLE IF NOT EXISTS pomodoro_sessions (
                 id TEXT PRIMARY KEY,
@@ -136,49 +92,6 @@ pub fn migrations() -> Vec<Migration> {
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
-            -- xp ledger
-            CREATE TABLE IF NOT EXISTS xp_entries (
-                id TEXT PRIMARY KEY,
-                task_id TEXT REFERENCES tasks(id),
-                pomodoro_session_id TEXT REFERENCES pomodoro_sessions(id),
-                activity_xp REAL NOT NULL DEFAULT 0,
-                focus_xp REAL NOT NULL DEFAULT 0,
-                clarity_xp REAL NOT NULL DEFAULT 0,
-                intensity_xp REAL NOT NULL DEFAULT 0,
-                execution_xp REAL NOT NULL DEFAULT 0,
-                total_xp REAL NOT NULL DEFAULT 0,
-                streak_multiplier REAL NOT NULL DEFAULT 1.0,
-                timestamp TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-
-            -- xp to branch distribution
-            CREATE TABLE IF NOT EXISTS xp_branch_distribution (
-                xp_entry_id TEXT NOT NULL REFERENCES xp_entries(id) ON DELETE CASCADE,
-                branch_id TEXT NOT NULL REFERENCES skill_branches(id),
-                xp_amount REAL NOT NULL DEFAULT 0,
-                PRIMARY KEY (xp_entry_id, branch_id)
-            );
-
-            -- streaks
-            CREATE TABLE IF NOT EXISTS streaks (
-                id TEXT PRIMARY KEY DEFAULT 'current',
-                current_count INTEGER NOT NULL DEFAULT 0,
-                longest_count INTEGER NOT NULL DEFAULT 0,
-                last_active_date TEXT,
-                freeze_available INTEGER NOT NULL DEFAULT 0,
-                freeze_used INTEGER NOT NULL DEFAULT 0
-            );
-
-            -- daily xp caps tracking
-            CREATE TABLE IF NOT EXISTS daily_xp_caps (
-                date TEXT NOT NULL,
-                branch_id TEXT NOT NULL REFERENCES skill_branches(id),
-                xp_earned REAL NOT NULL DEFAULT 0,
-                PRIMARY KEY (date, branch_id)
-            );
-
-            -- insert initial streak record
-            INSERT OR IGNORE INTO streaks (id) VALUES ('current');
         ",
         kind: MigrationKind::Up,
     },

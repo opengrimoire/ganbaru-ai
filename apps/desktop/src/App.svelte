@@ -11,7 +11,6 @@
   import TitleBar from "$lib/components/TitleBar.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
-  import SkillTreeView from "$lib/components/skill-tree/SkillTreeView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import IdleOverlay from "$lib/components/pomodoro/IdleOverlay.svelte";
   import { onMount } from "svelte";
@@ -47,7 +46,7 @@
     return () => cleanup?.();
   });
 
-  const views: View[] = ["calendar", "kanban", "skill-tree"];
+  const views: View[] = ["calendar", "kanban"];
   let showStopConfirm = $state(false);
   let savedBlockState: CalendarEvent | null = null;
   let reverting = false;
@@ -264,8 +263,6 @@
         <CalendarView />
       {:else if nav.current === "kanban"}
         <KanbanView />
-      {:else if nav.current === "skill-tree"}
-        <SkillTreeView />
       {/if}
     </main>
   </div>

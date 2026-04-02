@@ -1,4 +1,4 @@
-export type View = "calendar" | "kanban" | "skill-tree";
+export type View = "calendar" | "kanban";
 
 let currentView = $state<View>("calendar");
 

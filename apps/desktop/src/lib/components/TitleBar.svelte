@@ -7,7 +7,6 @@
   import { cn } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
-  import TreePine from "@lucide/svelte/icons/tree-pine";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
@@ -60,7 +59,6 @@
   const tabs: { view: View; label: string; icon: typeof CalendarDays }[] = [
     { view: "calendar", label: "Calendar", icon: CalendarDays },
     { view: "kanban", label: "Kanban", icon: LayoutList },
-    { view: "skill-tree", label: "Skill tree", icon: TreePine },
   ];
 
   let memoryMb = $state(0);

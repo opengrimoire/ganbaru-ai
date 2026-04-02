@@ -1,7 +1,6 @@
 import type { PomodoroPhase } from "@ganbaruai/shared-types";
 import type { PersistedSegment, SegmentPhase } from "$lib/components/calendar/types";
 import { execute } from "$lib/api/db";
-import { calculateActivityXp } from "$lib/utils/xp";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -31,7 +30,6 @@ let config = $state<PomodoroConfig>({ ...DEFAULT_CONFIG });
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let completedPomodoros = $state(0);
 let sessionStartTime: string | null = null;
-let lastXp = $state<number | null>(null);
 let skipNextBreak = false;
 let listenersInitialized = false;
 let notificationShown = false;
@@ -786,23 +784,12 @@ async function saveCompletedSession(
   endTime: string,
 ): Promise<void> {
   const sessionId = crypto.randomUUID();
-  const xpId = crypto.randomUUID();
-  const xp = calculateActivityXp(config.focusMinutes);
 
   await execute(
     `INSERT INTO pomodoro_sessions (id, start_time, end_time, completed, focus_score, created_at)
      VALUES ($1, $2, $3, 1, 1.0, $4)`,
     [sessionId, startTime, endTime, endTime],
   );
-
-  await execute(
-    `INSERT INTO xp_entries
-       (id, pomodoro_session_id, activity_xp, total_xp, streak_multiplier, timestamp)
-     VALUES ($1, $2, $3, $4, 1.0, $5)`,
-    [xpId, sessionId, xp, xp, endTime],
-  );
-
-  lastXp = xp;
 }
 
 // --- Timer ---
@@ -1067,9 +1054,6 @@ export function getPomodoro() {
     get completedPomodoros() {
       return completedPomodoros;
     },
-    get lastXp() {
-      return lastXp;
-    },
     get totalSecondsForPhase() {
       if (phase === "focus") return config.focusMinutes * TIME_MULTIPLIER;
       if (phase === "short_break")
@@ -1107,9 +1091,6 @@ export function getPomodoro() {
     },
     dismissIdle(resume: boolean) {
       dismissIdle(resume);
-    },
-    clearLastXp() {
-      lastXp = null;
     },
     startFromBlock(
       blockId: string,
