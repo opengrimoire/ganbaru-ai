@@ -34,3 +34,6 @@ Thumbs.db
 
 # test coverage
 coverage/
+
+# local scripts
+scripts/
