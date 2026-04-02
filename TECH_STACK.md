@@ -2,7 +2,7 @@
 
 ## Overview
 
-A cross-platform productivity app for desktop and mobile built around a gamified calendar, Kanban board, Pomodoro system, Notion-like note-taking (stored as markdown), real-life skill tree, daily diary, sleep alarm, work environment management, website/app blocking, music player, project management framework with NPC-guided workflows, and collaborative workspaces. All of this is wrapped in an adventure RPG aesthetic with a structurally integrated experience system. Designed as a local-first, privacy-respecting alternative to Notion, ClickUp, and Asana, with an optional paid sync subscription as the primary monetization model alongside donations.
+A cross-platform productivity app for desktop and mobile built around a calendar, Kanban board, Pomodoro system, Notion-like note-taking (stored as markdown), daily diary, sleep alarm, work environment management, website/app blocking, music player, project management framework, and collaborative workspaces. Designed as a local-first, privacy-respecting alternative to Notion, ClickUp, and Asana. A gamification layer (skill tree, XP, contracts, NPC-guided workflows) is planned for later phases.
 
 Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v2) is a first-class secondary target sharing the same codebase but offering a focused subset of features.
 
@@ -12,17 +12,17 @@ Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v
 
 ### Rust
 
-The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, the media player engine (FFmpeg decoding via `ffmpeg-next`), and desktop activity monitoring for the Will system (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
+The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, the media player engine (FFmpeg decoding via `ffmpeg-next`), and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
 
 On mobile, Rust still runs as the Tauri core but OS-level features like process management, global mouse events, and desktop activity monitoring are unavailable or sandboxed. The mobile Rust layer focuses on file system access, SQLite, the Yjs persistence layer, and audio playback.
 
 ### TypeScript
 
-Used throughout the Svelte frontend. Provides type safety across the heavily interconnected state of the app: calendar triggering environment switches, Pomodoro triggering overlays, XP calculations flowing through the Will system and skill tree, Yjs document updates propagating across the editor and sync layer simultaneously.
+Used throughout the Svelte frontend. Provides type safety across the heavily interconnected state of the app: calendar triggering environment switches, Pomodoro triggering overlays, Yjs document updates propagating across the editor and sync layer simultaneously.
 
 ### HTML / CSS
 
-Standard web rendering inside the Tauri webview. CSS handles a significant part of the ambient UI: backdrop blur, transitions on the edge panel and overlays, fullscreen break screen aesthetics, the Notion-like editor layout, RPG-style XP screens and battle results displays, visual novel dialogue presentation, skill tree node styling and decay visual effects, and Skill Capsule reveal animations.
+Standard web rendering inside the Tauri webview. CSS handles a significant part of the ambient UI: backdrop blur, transitions on the edge panel and overlays, fullscreen break screen aesthetics, the Notion-like editor layout, visual novel dialogue presentation (planned).
 
 ---
 
@@ -43,9 +43,9 @@ Key Tauri v2 capabilities used in this project:
 - **`tauri-plugin-sql`**. SQLite access from the frontend via Tauri commands.
 - **File system plugin.** Reading and writing markdown files and vault assets to disk.
 
-**Desktop-only features** (not available on mobile due to OS sandboxing): process management, native messaging, global mouse position polling, always-on-top multi-window, edge panel, work environment switching, fullscreen break overlay, desktop activity monitoring for Will system.
+**Desktop-only features** (not available on mobile due to OS sandboxing): process management, native messaging, global mouse position polling, always-on-top multi-window, edge panel, work environment switching, fullscreen break overlay, desktop activity monitoring.
 
-**Mobile** shares the note editor, calendar view and editing, Pomodoro timer, daily diary, sleep alarm, skill tree viewing, app-level procrastination blocking (within platform constraints), and sync layer. The experience is a focused subset of the desktop app, not a separate product.
+**Mobile** shares the note editor, calendar view and editing, Pomodoro timer, daily diary, sleep alarm, app-level procrastination blocking (within platform constraints), and sync layer. The experience is a focused subset of the desktop app, not a separate product.
 
 ---
 
@@ -92,7 +92,7 @@ The headless primitive layer under shadcn-svelte. Used directly when shadcn-svel
 
 ### Calendar widget
 
-The calendar and scheduler component. Handles day/week/month views, drag-and-drop event creation and resizing, overlapping event layout, and multi-day event spanning (the parts that would take months to build correctly from scratch). Has a native Svelte adapter and supports injecting custom Svelte components for event rendering, which is how the calendar integrates with the rest of the app's state. Calendar events ("session blocks") carry references to Pomodoro counts,s work environment configs, skill tree branch tags, and playlist assignments.
+The calendar and scheduler component. Handles day/week/month views, drag-and-drop event creation and resizing, overlapping event layout, and multi-day event spanning (the parts that would take months to build correctly from scratch). Has a native Svelte adapter and supports injecting custom Svelte components for event rendering, which is how the calendar integrates with the rest of the app's state. Calendar events ("session blocks") carry references to Pomodoro counts,s work environment configs, and playlist assignments.
 
 ### svelte-dnd-action
 
@@ -173,36 +173,7 @@ The user runs their own Hocuspocus server. The app points to their server URL. R
 
 ### Vault structure on disk
 
-Everything the app produces or manages lives in one folder called the vault: notes, diary entries, calendar data, project files, gamification state, assets, and configuration. This makes backup and sync trivially the same operation regardless of data type.
-
-> **Note:** this structure represents the intended layout. It should be updated as the project evolves. New data types, renamed directories, or restructured storage should be reflected here so this remains a reliable reference.
-
-```
-vault/
-  notes/
-    daily/                ← daily notes (markdown)
-    projects/             ← per-project notes and working documents (markdown)
-  diary/
-    morning/              ← dated morning diary entries (markdown, indexed fields in SQLite)
-    evening/              ← dated evening diary entries (markdown, indexed fields in SQLite)
-  calendar/               ← calendar event data (session blocks, schedule state)
-  projects/
-    {project-id}/         ← per-project file attachments (reference docs, research PDFs, competitor screenshots)
-  contracts/
-    proofs/               ← contract proof attachments (photos for real-life conditions/penalties)
-  reports/                ← generated project status reports (markdown, PDF)
-  assets/                 ← app assets (fonts, icons, NPC character sprites, backgrounds, UI themes)
-  templates/              ← project management phase templates, methodology templates (SWOT, BMC, etc.)
-  config.json             ← user settings, work environment definitions, blocker rulesets
-  .yjs/                   ← Yjs document state cache (binary, not human-readable)
-  app.db                  ← SQLite index (metadata, search, tags, backlinks, XP ledger, Will metrics,
-                             skill tree state, contracts, badges, Skill Capsules, streaks, playlist
-                             definitions, requirement version diffs, diary indexed fields)
-```
-
-**Music files are not stored in the vault.** Local audio files remain wherever the user keeps them on their filesystem. The vault only stores playlist definitions (track paths, ordering, environment associations) in SQLite. This avoids bloating the vault with potentially gigabytes of audio data. If a user syncs across devices, playlists sync but the audio files themselves must exist on each device independently.
-
-**Backups are not stored in the vault.** Scheduled encrypted exports (zip of the vault folder) are written to a user-specified path outside the vault.
+See the vault directory tree in CLAUDE.md for the canonical layout. Everything the app produces or manages lives in one folder called the vault, making backup and sync the same operation regardless of data type.
 
 ---
 
@@ -210,13 +181,13 @@ vault/
 
 ### SQLite (via `tauri-plugin-sql`)
 
-Local database for all structured data in the app. This includes: metadata and search indexes for notes, tags, and bidirectional backlinks between notes; calendar event indexes and session block configurations; Kanban task state, priority tiers, estimated vs. actual Pomodoro counts, and task-to-session-block links; work environment configs and blocker rulesets; Pomodoro session history with per-session Will metrics (Focus, Clarity, Intensity, Execution scores); XP ledger and skill tree node state (actual levels, displayed levels with decay, unlock status); streak tracking and freeze state; Contract definitions, progress, and penalty state; badge and Skill Capsule inventories; requirement version diffs (timestamped changes to task descriptions, scope, and acceptance criteria within the project management framework); diary entry indexes (the entries themselves are markdown files, but mood, energy, sleep quality fields are indexed for trend analysis); and app settings.
+Local database for all structured data in the app. This includes: metadata and search indexes for notes, tags, and bidirectional backlinks between notes; calendar event indexes and session block configurations; Kanban task state, priority tiers, estimated vs. actual Pomodoro counts, and task-to-session-block links; work environment configs and blocker rulesets; Pomodoro session history; requirement version diffs (timestamped changes to task descriptions, scope, and acceptance criteria within the project management framework); diary entry indexes (the entries themselves are markdown files, but mood, energy, sleep quality fields are indexed for trend analysis); and app settings.
 
-SQLite is never the source of truth for note or diary content; that lives in `.md` files. SQLite is the fast query layer over the vault and the primary store for all gamification and productivity metrics.
+SQLite is never the source of truth for note or diary content; that lives in `.md` files. SQLite is the fast query layer over the vault and the primary store for all productivity metrics.
 
 ### Svelte runes (in-memory state)
 
-Module-level `$state` objects exposed through getter functions (e.g. `getPomodoro()`, `getKanban()`, `getNavigation()`) manage live app state: current Pomodoro phase and timer, active work environment, which overlay is visible (break screen, XP summary, Skill Capsule reveal), current Will metrics accumulating during a focus session, skill tree viewport and zoom level, active Contract progress, current collaborative session, and presence data. The getter pattern keeps the API surface clean and encapsulates mutations. No external state manager or Svelte stores (`writable`/`readable`) needed; runes handle it natively.
+Module-level `$state` objects exposed through getter functions (e.g. `getPomodoro()`, `getKanban()`, `getNavigation()`) manage live app state: current Pomodoro phase and timer, active work environment, which overlay is visible (break screen), current collaborative session, and presence data. The getter pattern keeps the API surface clean and encapsulates mutations. No external state manager or Svelte stores (`writable`/`readable`) needed; runes handle it natively.
 
 ---
 
@@ -245,14 +216,13 @@ Everything with fields, relationships, and query requirements lives in SQLite. T
 - **Kanban tasks** with status, priority, column position, estimated/actual pomodoro counts, linked calendar events, and project ID.
 - **Workspace configurations** defining which browser tabs to open, which terminal to activate, which apps to launch/close, which blocker ruleset to apply, and which project context to load.
 - **Pomodoro sessions and segments** with timestamps, phase, duration, pause log, idle events, and XP computation.
-- **Gamification state**: XP ledger, skill tree node unlock status and decay, streaks, contracts, badges, Skill Capsule inventory, pity counters, daily caps.
-- **Project definitions** linking all of the above: a project references its kanban board, its calendar events, its workspace config, its notes directory, and its NPC quest chain progress.
+- **Project definitions** linking all of the above: a project references its kanban board, its calendar events, its workspace config, and its notes directory.
 
 Why SQLite for structured data:
 
 - **Relational queries.** "Show all in-progress tasks for project X that have calendar events this week" is a JOIN, not a file-tree traversal.
 - **Foreign keys.** A calendar event references a project, a pomodoro config, and a workspace. These relationships are enforced at the schema level.
-- **Atomic updates.** Moving a task between columns, updating a recurring event series, or computing XP are transactions that either fully succeed or fully roll back.
+- **Atomic updates.** Moving a task between columns or updating a recurring event series are transactions that either fully succeed or fully roll back.
 - **Fast reads.** Querying today's calendar events or filtering tasks by status is O(index-lookup), not O(parse-every-file).
 - **Concurrent access.** The Tauri frontend, background Rust processes (idle detection, file watcher), and the CLI can all query SQLite safely.
 
@@ -318,10 +288,6 @@ ganbaruai workspace current
 ganbaruai pomodoro status
 ganbaruai pomodoro start --task 42
 
-# Skill tree
-ganbaruai skills list --branch programming
-ganbaruai skills status
-
 # Export project state as markdown (for the project's git repo)
 ganbaruai export progress --project ganbaruai
 ganbaruai export kanban --project ganbaruai
@@ -370,7 +336,7 @@ Phase 2: notes and diary
 - #49: Note search and filtering
 
 ## What exists
-Phase 1 complete: calendar, kanban, pomodoro, skill tree, XP pipeline (279 tests)
+Phase 1 complete: calendar, kanban, pomodoro (279 tests)
 ```
 
 **This export is a view of the database, not the source of truth.** The flow is:
@@ -437,7 +403,7 @@ Installed once during onboarding. Responsibilities:
 - Open and close specific tabs as part of work environment switching.
 - Content-specific blocking where possible. For example, blocking unrelated YouTube videos while allowing task-relevant content via keyword/channel matching logic. More sophisticated content analysis is planned for the AI layer (post-MVP).
 
-The custom block page is a minimal, fully designed HTML page served by the extension, not the default browser block UI. Every blocker trigger event during a Pomodoro focus period is logged as Will Focus data (successful block without bypass = positive Focus XP, attempted bypass = negative Focus XP).
+The custom block page is a minimal, fully designed HTML page served by the extension, not the default browser block UI. Blocker trigger events during Pomodoro focus periods are logged for productivity analytics.
 
 ### Native Messaging API
 
@@ -491,93 +457,14 @@ All implemented as secondary Tauri windows for fully custom UI rather than OS no
 | Pomodoro completion notification | Small frameless always-on-top window at bottom-right corner, auto-dismissed after N seconds                                                                             |
 | Fullscreen break screen          | Fullscreen frameless always-on-top window covering the taskbar, semi-transparent dark overlay + looping video background, custom Svelte UI with break timer and options |
 | Edge panel                       | Narrow always-on-top window anchored to the right screen edge, shown/hidden based on global cursor position polled from Rust                                            |
-| XP battle results screen         | Displayed during Pomodoro breaks and end-of-session-block summaries. RPG-style XP breakdown, Will category scores, streak status, Skill Capsule drops                  |
+| Session summary screen           | Displayed during Pomodoro breaks with session completion stats                                                                                                          |
 
 
 ---
 
-## Skill tree visualization
+## Gamification, skill tree, and NPC layer (deferred)
 
-An RPG-style, cinematic skill tree rendered as SVG within Svelte components. The reference aesthetic is The Rising of the Shield Hero's skill tree: dark background, glowing nodes, discrete center-focused navigation, animated transitions. The tree serves dual purposes: gamification feedback (unlocking skills as the user grows) and personal/professional growth visualization.
-
-### SVG + Svelte components (not D3.js, not Canvas)
-
-D3.js was evaluated and rejected. Its force-directed layout is designed for data visualization, not game-like navigation. It produces unpredictable positions, jittery physics, and defaults to free pan/zoom which fights the intended UX. Canvas was rejected because it loses the Svelte component model and requires manual hit detection.
-
-Instead, nodes are pure Svelte components rendering SVG `<g>` elements (not `<foreignObject>`, which has WebKitGTK rendering quirks). Each node reacts to state changes via Svelte runes. CSS handles all visual states (locked/available/unlocked glows, opacity, filters). Browser hit-testing is free.
-
-### Center-snap navigation
-
-The core interaction contract: **the world moves, the camera does not.** Selecting a node animates the entire graph so that node lands at the viewport center. Navigation is discrete; the user moves one step at a time through the graph via arrow keys or click. No free pan, no free zoom during normal navigation. Users navigate and unlock; they never reposition nodes.
-
-The animation uses a spring (via `svelte/motion`) on the root SVG `<g>` element's `translate` transform. When the focused node changes, the offset is recalculated to center the target node, and the spring interpolates the transition.
-
-Keyboard controls: arrow keys traverse edges to adjacent nodes, Enter/Space opens detail or confirms unlock, Escape exits a sub-layer.
-
-### Neighborhood culling
-
-Instead of virtualizing by viewport rectangle, cull by **graph distance from the focal node**:
-
-- Depth 0 (focal node): render fully, centered
-- Depth 1 (direct neighbors): render fully
-- Depth 2 (neighbors of neighbors): render at reduced opacity/scale
-- Depth 3+: do not render; optionally show a faint indicator
-
-This caps the rendered node count at roughly 15-40 nodes regardless of total tree size. The visible set is a `$derived` computation from BFS on the adjacency list, recomputed only when the focused node changes. SVG filter friction starts around 300-500 nodes; neighborhood culling ensures we never approach that.
-
-### Layered sub-graphs
-
-A node can contain its own skill graph. The top layer shows broad categories (Mind, Body, Craft, Social, Creative), and navigating into a node enters its sub-tree. A navigation stack tracks the current graph context. Going back pops the stack. The renderer always reads from the top of the stack. This is the same mental model as zones in a game.
-
-### Authored graph data
-
-The graph structure is curated static data (TypeScript constants), not user-generated or computed. Node positions are hand-authored within each sub-graph. Only node unlock states are user-specific and persisted to SQLite. The graph definition lives in the codebase and is versioned with the app.
-
-### Visual states
-
-Each node gets a data attribute reflecting its state. All visual differences are CSS-only:
-
-- **Locked**: low opacity, grayscale filter, no interaction
-- **Available**: medium opacity, colored glow (`drop-shadow`), cursor pointer
-- **Unlocked**: full opacity, bright glow, increased brightness
-
-Edge lines change stroke based on whether the source node is unlocked. Depth-based fading is a CSS variable injected per node.
-
-### Capacity
-
-The tree supports 200+ total nodes across 5-8 first-level branches with arbitrary depth via sub-graphs. Three node visual tiers (basic, notable, keystone) are distinguished by size and glow intensity. Cross-branch connections are rendered as edges that cross sub-graph boundaries or as bridge nodes visible in multiple layers.
-
----
-
-## Visual novel and NPC layer
-
-NPC interactions in the project management quest chain and onboarding are presented in visual novel style: a background illustration, a character sprite, dialogue text, and interactive options (buttons/form fields).
-
-### Implementation
-
-Built as custom Svelte components, not a third-party visual novel engine. The dialogue system is a state machine driven by JSON-defined conversation trees. Each conversation node contains: the NPC identifier (Fairy, Dwarf, or Drasil), dialogue text, available user responses or form fields, and transition conditions to the next node.
-
-Character sprites and backgrounds are static illustrated assets loaded from the vault's asset directory. Transitions between dialogue states use CSS animations. The visual novel presentation is used exclusively in guided workflows (project management phases, onboarding, tutorial moments) and does not appear in utility interfaces like the Calendar, Kanban, or edge panel.
-
-The Dwarf NPC includes an embedded chatbot interface (powered by the AI layer when available via BYOK) for research discussions during the idea evaluation phase. Drasil is architecturally planned to become the conversational AI assistant in post-MVP development.
-
----
-
-## Gamification data layer
-
-The experience system (Will, Contracts, Consistency, Streaks, skill tree, Skill Capsules, badges) generates and consumes a significant volume of structured data. All gamification data lives in SQLite alongside the productivity metadata.
-
-### Data stored per Pomodoro session
-
-Start/end timestamps, task ID, project ID, app-switch count, active creation time vs. passive time, distraction events (blocker triggers, extended breaks), Will scores for all four categories (Focus, Clarity, Intensity, Execution), composite focus quality score, and the final computed Session XP.
-
-### Persistent gamification state
-
-Skill tree node unlock status and XP per node, displayed level with decay calculation (`displayed_level = actual_level × e^(-0.03 × days_since_practice)`), tier progression, active and historical Contract state (conditions, duration, penalties, proof attachments), streak count and freeze status, badge inventory, Skill Capsule inventory and pity counters, daily XP caps and diversity bonus tracking, and the user's rolling 30-day output averages per task type (used for Will Intensity personal baseline calibration).
-
-### Anti-grinding enforcement
-
-The XP formula's anti-grinding mechanics (daily caps, logarithmic time conversion, novelty weighting, diversity bonus, competency gates) are enforced at the SQLite query layer. XP is computed and validated against these rules before being committed, not just displayed differently in the UI.
+The skill tree visualization, visual novel NPC interactions, Will system, contracts, badges, Skill Capsules, streaks, and XP formula are all planned for later phases. Full specifications remain in PRODUCT_SPEC.md. No gamification code exists in the current codebase.
 
 ---
 
@@ -585,9 +472,9 @@ The XP formula's anti-grinding mechanics (daily caps, logarithmic time conversio
 
 Tauri v2 has official iOS and Android support. The mobile app shares the Svelte frontend, Tiptap editor, Yjs sync layer, and SQLite database with the desktop app. It is not a separate product; it is the same app with a mobile-appropriate layout and a focused subset of features.
 
-Features available on mobile: note editor, calendar view and editing, Pomodoro timer (with notification-based breaks instead of fullscreen overlay), daily diary (morning and evening entries), sleep alarm (triggers diary flows and morning playlist), skill tree viewing, procrastination stopper (app-level blocking during scheduled focus times and mornings), collaborative workspaces, sync.
+Features available on mobile: note editor, calendar view and editing, Pomodoro timer (with notification-based breaks instead of fullscreen overlay), daily diary (morning and evening entries), sleep alarm (triggers diary flows and morning playlist), procrastination stopper (app-level blocking during scheduled focus times and mornings), collaborative workspaces, sync.
 
-Features unavailable on mobile due to OS sandboxing: work environment switching (opening/closing desktop apps, arranging browser tabs), edge panel, fullscreen break overlay, always-on-top windows, desktop activity monitoring for Will system metrics.
+Features unavailable on mobile due to OS sandboxing: work environment switching (opening/closing desktop apps, arranging browser tabs), edge panel, fullscreen break overlay, always-on-top windows, desktop activity monitoring.
 
 ### Sleep alarm
 
@@ -607,21 +494,118 @@ The project management framework generates automatic status reports from Kanban 
 
 ---
 
-## AI and MCP integration (post-MVP)
+## AI integration architecture
 
-All AI features are opt-in and BYOK (bring your own key). The app is fully functional without any AI layer. No API calls leave the device without explicit user consent.
+All AI features are opt-in and BYOK. The app is fully functional without any AI layer. No API calls leave the device without explicit user consent. Three distinct integration paths serve different user profiles.
 
-### Planned AI capabilities
+### Integrated terminal (developer path)
 
-Drasil (the primary NPC) as a conversational AI assistant for natural language calendar management and mood-aware motivation. The Dwarf's chatbot for market research and idea validation during project planning phases. Content-specific procrastination detection (analyzing page content, not just URLs, for smarter blocking on platforms like YouTube). Small local LLM models for diary language analysis (detecting goal-setting, reflection quality, mood patterns) without requiring API calls.
+An xterm.js terminal emulator embedded in the Tauri webview. Runs Claude Code (or any CLI-based AI agent) with full capabilities: file editing, bash execution, sub-agents. This is the power-user path for developers.
 
-### CLI (primary agent interface)
+xterm.js is the same terminal emulator used by VS Code. It handles color, Unicode, resize, selection, and all standard terminal behavior. The user installs Claude Code themselves and provides their own API key. GanbaruAI provides a specialized terminal that is context-aware, not a redistribution of Claude Code.
 
-A `ganbaruai` CLI exposes all structured data (calendar, tasks, workspace, pomodoro, skill tree) to AI agents, scripts, and automation. Agents call it via Bash with no setup. This is the primary integration path for agent workflows; MCP is reserved for real-time features that require persistent connections. See the "CLI for agent integration" section above for full details and examples.
+**Context injection via CLI flags (not CLAUDE.md).** Per-task context is injected at launch time using Claude Code's `--append-system-prompt` flag. CLAUDE.md stays as project-level conventions (loaded automatically by Claude Code). Task-specific context comes from GanbaruAI:
 
-### MCP (post-MVP, real-time features only)
+```bash
+# User clicks "Start" on kanban task #42. GanbaruAI assembles context and launches:
+claude "Start implementing this task" \
+  --append-system-prompt "You are working on task #42: Implement auth module.
+Project: GanbaruAI. Branch: feat/auth. Priority: high.
+Related calendar event: tomorrow 10:00-12:00, pomodoro deep-work preset.
+Current kanban column: in_progress.
+Recent progress: completed task #40 (database schema), task #41 (API routes).
+Related notes: /notes/projects/ganbaruai/auth-design.md"
 
-MCP is planned for features that require persistent bidirectional connections: pushing real-time notifications to agents, streaming progress updates, and live communication between the running Tauri app and an agent session. For all CRUD operations and queries, the CLI is preferred. GanbaruAI can also consume external MCP servers for integrations (email, external calendars, etc.).
+# Background agent for delegated work (headless, non-interactive):
+claude --bare -p "Research OAuth2 best practices for Tauri desktop apps" \
+  --append-system-prompt "$(ganbaruai project context ganbaruai --json)" \
+  --output-format json \
+  --allowedTools "Bash,Read,Grep"
+
+# Workflow-specific system prompt (brainstorming phase):
+claude --append-system-prompt "You are helping the user brainstorm ideas for
+a new project. Guide them through structured prompts: write ideas, evaluate
+against criteria, combine or discard. Use web search to validate ideas.
+Write results to the project's notes directory."
+```
+
+Key Claude Code flags for programmatic control:
+
+| Flag | Purpose |
+|---|---|
+| `--append-system-prompt` | Inject task/project context alongside CLAUDE.md rules |
+| `--system-prompt` | Replace the entire system prompt (for fully controlled agents) |
+| `-p` / `--print` | Non-interactive headless mode for background agents |
+| `--bare` | Skip auto-discovery, no hooks/skills/plugins, deterministic behavior |
+| `--agents` | Define custom sub-agent types with restricted tools |
+| `--allowedTools` | Restrict which tools an agent can use |
+| `--output-format json` | Structured output for programmatic handling |
+| `--resume` | Resume a previous session by ID |
+
+### Session management
+
+Per-project conversation threads stored in SQLite. The calendar drives automatic session switching.
+
+When a calendar event starts (e.g., "Project X: auth module"), GanbaruAI:
+1. Saves the current AI session (session ID, conversation state)
+2. Checks if a previous session exists for the new event's project
+3. Resumes the previous session (`--resume <session_id>`) or starts a new one with project context
+4. Injects the current task context via `--append-system-prompt`
+
+The user sees one AI panel that automatically carries the right conversation for whatever they're working on. Switching between four different projects in a week means four persistent conversation threads, each resuming exactly where the user left off.
+
+Manual override is always available: the user can stay in the current conversation, switch manually, or start a fresh session.
+
+### BYOK chat widget (general user path)
+
+A chat interface inside GanbaruAI's UI for users who don't use Claude Code. Same session management (calendar-driven switching, per-project threads) but with a web-based chat widget instead of a terminal.
+
+Three LLM provider categories, covering ~95% of users:
+
+- **Anthropic API** (Claude models). Direct API integration using the Messages API.
+- **OpenAI-compatible API** (GPT-4, Groq, Together, Mistral API, and any provider implementing the OpenAI chat completions format). A single integration covers dozens of providers.
+- **Ollama** (local models via localhost REST API). Runs Llama, Mistral, Gemma, and other open models entirely on the user's machine. No API key needed, no data leaves the device.
+
+Context injection works the same way as the terminal path: GanbaruAI assembles project/task context and sends it as the system prompt in API calls. The chat widget can read/write GanbaruAI data via internal Tauri commands but cannot edit arbitrary files or run bash commands.
+
+BYOK configuration UI: API key management (stored locally, never transmitted except to the configured provider), model selection, provider setup with guided instructions, and consent controls for what context is sent to the LLM.
+
+### Workflow phase prompts
+
+Each project management phase has a structured system prompt that adapts the AI's behavior without requiring specialized agents. One general agent per project carries context across phases:
+
+- **Brainstorming:** "Guide the user through structured ideation. Help them generate ideas, evaluate against criteria, combine or discard. Research existing solutions."
+- **Idea evaluation:** "Help evaluate this idea against Want/Can/Need criteria. Research competitors, market size, and feasibility. Fill the market analysis template."
+- **Planning:** "Help create a detailed specification. Break down into phases, estimate resources, identify risks, define milestones."
+- **Execution:** "Assist with implementation. Review progress against the plan, suggest next steps, help resolve blockers."
+
+These prompts are appended to the base system prompt when the user enters a project management phase. They work with both the terminal and the BYOK chat widget.
+
+### Background agents
+
+Headless agents for delegated or parallel work. The user can delegate a kanban task to a background agent instead of working on it interactively.
+
+- Terminal path: `claude --bare -p "task" --output-format json` runs as a separate process
+- BYOK path: direct LLM API calls from the Rust backend
+- Results appear as notifications, update kanban tasks directly, or create PRs
+- Multiple background agents can run in parallel, each with isolated context via flags
+
+### CLI as the live data bridge
+
+The `ganbaruai` CLI (detailed in the "CLI for agent integration" section above) serves as the bridge between AI agents and GanbaruAI's data. Inside the integrated terminal, Claude Code calls `ganbaruai task list`, `ganbaruai calendar today`, etc. to query live data. Background agents use the CLI for structured queries (`--json` output). The CLI is also available to any external script or automation.
+
+### MCP (external access only)
+
+MCP is reserved for a single use case: letting external AI clients that don't run locally access GanbaruAI's data. This includes ChatGPT plugins, Claude web, a teammate's AI assistant, or any MCP-compatible client that connects remotely.
+
+MCP is not used for:
+- How Claude Code interacts with GanbaruAI (that's the CLI)
+- How the integrated terminal works (that's direct process spawning)
+- How the BYOK chat widget works (that's direct API calls)
+
+MCP adds value when: a user wants their ChatGPT session to see their GanbaruAI calendar, or a teammate's agent needs to query project tasks without having the CLI installed locally. This is a post-MVP feature.
+
+GanbaruAI can also consume external MCP servers for integrations (email, external calendars, etc.) when those integrations require real-time bidirectional connections.
 
 ---
 
@@ -656,22 +640,23 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Collaboration cursors     | `@tiptap/extension-collaboration-cursor`             | Live presence in shared workspaces                                                 |
 | Sync server               | Hocuspocus                                           | Yjs server with persistence, presence, and auth hooks                              |
 | Encryption                | libsodium / `@noble/ciphers`                         | E2E encryption, server sees only ciphertext                                        |
-| Local DB                  | SQLite via `tauri-plugin-sql`                        | Metadata, search, tags, XP, Will metrics, contracts, streaks, requirement diffs    |
-| Skill tree rendering      | SVG + Svelte components                              | Center-snap navigation, neighborhood culling, CSS-driven visual states            |
+| Local DB                  | SQLite via `tauri-plugin-sql`                        | Metadata, search, tags, pomodoro sessions, requirement diffs    |
 | Media engine (video)      | `ffmpeg-next`                                        | FFmpeg Rust bindings for full audio/video format support                           |
 | Media engine (audio-only) | Symphonia (optional)                                 | Pure-Rust audio decoding, lighter than FFmpeg for playlist-only use                |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |
-| File watching             | `notify`                                             | Cross-platform file system events for Will Intensity tracking and vault reindexing |
+| File watching             | `notify`                                             | Cross-platform file system events for vault reindexing |
 | Process control           | `sysinfo` + `std::process`                           | App blocking and environment switching                                             |
-| Activity monitoring       | Win32 / X11 / `rdev`                                 | Active window tracking, idle detection, app-switch counting for Will system        |
+| Activity monitoring       | Win32 / X11 / `rdev`                                 | Active window tracking, idle detection, app-switch counting        |
 | Mouse tracking            | `rdev` / Win32 / X11                                 | Edge panel trigger                                                                 |
 | Browser bridge            | Native Messaging + Chrome/Firefox extension          | Website blocking and tab environment switching                                     |
 | PDF generation            | Typst                                                | Rust-native typesetting, structured data → high-quality PDF reports                |
 | PDF reading               | `pdfium-render`                                      | Google PDFium Rust bindings for text extraction and page rendering                 |
-| Visual novel layer        | Custom Svelte components                             | JSON-driven dialogue state machine, NPC interactions in project management         |
+| Visual novel layer (deferred) | Custom Svelte components                         | JSON-driven dialogue state machine, NPC interactions in project management         |
+| Integrated terminal       | xterm.js                                             | Embedded terminal for Claude Code, context injection, session management           |
+| BYOK chat widget          | Anthropic / OpenAI-compatible / Ollama APIs          | In-app AI chat for non-developer users, same session management as terminal        |
 | Mobile alarm              | iOS `UNNotificationRequest` / Android `AlarmManager` | Sleep alarm triggering diary flows and morning routines                            |
 | Mobile app blocking       | iOS Screen Time API / Android UsageStatsManager      | App-level blocking during focus times within platform sandbox constraints          |
 | Agent integration (CRUD)  | `ganbaruai` CLI (Rust)                               | Direct SQLite access, no server, works with any agent/script                       |
-| Agent integration (live)  | MCP (post-MVP)                                       | Real-time notifications and streaming, persistent connections                      |
+| Agent integration (external) | MCP (post-MVP)                                    | External AI clients accessing GanbaruAI data remotely                              |
 | Backend language          | Rust                                                 | Required by Tauri, OS-level APIs, media engine                                     |
 | Frontend language         | TypeScript                                           | Type safety across interconnected state                                            |

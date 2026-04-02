@@ -23,9 +23,6 @@ Tests live next to the code they test, using the `.test.ts` suffix:
 
 ```
 apps/desktop/src/lib/
-  utils/
-    xp.ts              ← source
-    xp.test.ts         ← test
   components/calendar/
     utils.ts           ← source
     utils.test.ts      ← test
@@ -47,7 +44,6 @@ apps/desktop/src/lib/
 
 | File | What it covers |
 |---|---|
-| `utils/xp.test.ts` | XP calculation formula, focus score multiplier, rounding |
 | `components/calendar/utils.test.ts` | Date parsing/formatting round-trip, week/day helpers, minute-of-day extraction, duration calculation, grid snapping, event filtering, overlap layout algorithm, time storage round-trip |
 | `components/calendar/rrule.test.ts` | RRULE serialization/parsing (simple + BY* rules: ordinal BYDAY, BYMONTHDAY, BYMONTH, BYSETPOS, BYYEARDAY, BYWEEKNO, WKST, UNTIL with datetime), preset round-trips, recurrenceToPreset null cases, formatRecurrenceLabel for all patterns |
 | `components/calendar/recurrence.test.ts` | Recurrence expansion (daily/weekly/monthly/yearly, ordinal BYDAY, BYMONTHDAY with short months, UNTIL with datetime, exceptions, overrides, RDATE dedup/exceptions, backward compat), findOrdinalWeekday, parseYMD/fmtYMD |

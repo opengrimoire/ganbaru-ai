@@ -6,11 +6,11 @@ This document describes every system in GanbaruAI, how each system works interna
 
 ## App identity
 
-GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first productivity app for desktop and mobile. It unifies a gamified calendar, Kanban board, Pomodoro system, note-taking, real-life skill tree, sleep alarm, daily diary, procrastination stopper, music player, work environment management, and project management into one interconnected experience wrapped in an adventure RPG aesthetic.
+GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first productivity app for desktop and mobile. It unifies a calendar, Kanban board, Pomodoro system, note-taking, sleep alarm, daily diary, procrastination stopper, music player, work environment management, and project management into one interconnected experience.
 
 Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v2) is a first-class secondary target that shares the same codebase but offers a focused subset of features.
 
-The RPG layer is not cosmetic. It is structurally integrated: the experience system (Will, Contracts, Consistency, Streaks) measures real productivity signals, the skill tree reflects genuine personal and professional development, NPCs guide users through actionable frameworks, and the visual presentation follows a visual novel style at key interaction points.
+A gamification layer (skill tree, XP system, Will system, contracts, NPC-guided workflows) is planned for later phases. When implemented, these features will measure real productivity signals, reflect genuine personal and professional development, and guide users through actionable frameworks.
 
 Monetization: donations only via GitHub Sponsors. Sync is self-hosted by the user (with guided setup for cloud providers or local servers). BYOK for any AI features. No ads, no subscriptions, ever.
 
@@ -22,7 +22,7 @@ Monetization: donations only via GitHub Sponsors. Sync is self-hosted by the use
 
 The calendar is the central planning hub. When users plan their week, they are not just scheduling time; they are configuring their entire working environment for each block.
 
-Each calendar event (called a "session block") contains: the task or project it belongs to, the number of Pomodoro cycles allocated, the work environment configuration (which apps to open, which browser tabs, which music playlist, which blocker rules), and which skill tree branches it contributes XP to.
+Each calendar event (called a "session block") contains: the task or project it belongs to, the number of Pomodoro cycles allocated, the work environment configuration (which apps to open, which browser tabs, which music playlist, which blocker rules), and the associated project.
 
 The calendar supports day, week, and month views with drag-and-drop event creation and resizing. Overlapping events are displayed with proper layout.
 
@@ -36,13 +36,11 @@ Calendar data is stored in SQLite for fast querying and indexed alongside Kanban
 
 The Kanban board is the task management layer. It operates at two levels:
 
-**Personal Kanban:** the user's own tasks organized by status (backlog, to do, in progress, done, or custom columns). Tasks have priority levels (easy, medium, hard, epic), estimated Pomodoro count, actual Pomodoro count, due dates, tags, and links to notes and calendar session blocks. When using custom columns, the user designates which column(s) count as "completion columns" for XP purposes. This is necessary because the XP system needs to know when a task is considered done, regardless of how many intermediate columns (QA, review, etc.) exist between "in progress" and the final state.
+**Personal Kanban:** the user's own tasks organized by status (backlog, to do, in progress, done, or custom columns). Tasks have priority levels (easy, medium, hard, epic), estimated Pomodoro count, actual Pomodoro count, due dates, tags, and links to notes and calendar session blocks.
 
 **Project Kanban:** within the project management system (see "Project management framework" section), each project has its own Kanban board. Tasks here also carry requirement version history: every change to a task's description, acceptance criteria, or scope creates a timestamped diff recording what changed, when, who requested it, and why. This is the version-controlled requirement system.
 
 Tasks can be linked to calendar session blocks. When a task is marked as done, the associated session block's completion status updates. When a task's scope changes and its estimated Pomodoro count increases, the calendar can automatically suggest rescheduling downstream blocks.
-
-Task completion feeds into the XP system. Each completed task generates XP proportional to its difficulty tier: easy = 10, medium = 25, hard = 50, epic = 100. Minimum time thresholds prevent gaming (a "hard" task completed in 2 minutes does not award full XP).
 
 ### Pomodoro system
 
@@ -50,11 +48,11 @@ The Pomodoro timer is the heartbeat of the app. Every productivity signal flows 
 
 **Session structure:** a standard Pomodoro cycle is 25 minutes of focus followed by a 5-minute break. Every 4 cycles, a longer break (15-30 minutes) occurs. These defaults are configurable. Sessions are grouped into session blocks defined in the calendar.
 
-**During a focus period:** the procrastination stopper is active, the work environment is enforced, screen activity is monitored for Will system metrics (app switches, active tool use, idle time), and the music player continues the focus playlist.
+**During a focus period:** the procrastination stopper is active, the work environment is enforced, screen activity is monitored for productivity analytics (app switches, active tool use, idle time), and the music player continues the focus playlist.
 
-**During a break:** the break screen appears fullscreen (desktop only, covering the taskbar and acting as a custom screen saver). The break screen shows: a countdown timer, the XP earned during the completed focus period (displayed as an RPG-style "battle results" screen), Will metrics for the session, streak status, an option to extend the break (with Will Focus penalty), and the break playlist. On mobile, the break is a notification-based timer without the fullscreen overlay.
+**During a break:** the break screen appears fullscreen (desktop only, covering the taskbar and acting as a custom screen saver). The break screen shows: a countdown timer, session completion stats, an option to extend the break, and the break playlist. On mobile, the break is a notification-based timer without the fullscreen overlay.
 
-**When all Pomodoros in a session block complete:** a fullscreen XP summary screen appears showing total XP earned across all focus periods in that block, Will category breakdowns, any level-ups or skill tree progress, and Skill Capsule drops if earned. The user interacts briefly (reviewing progress, allocating points if applicable), then the system transitions to the next session block's environment automatically.
+**When all Pomodoros in a session block complete:** the system transitions to the next session block's environment automatically.
 
 **Pomodoro data captured per session:** start/end timestamps, task ID, project ID, app-switch count, active creation time vs. passive time, distraction events (blocker triggers, extended breaks), focus quality score (composite of the above). All stored in SQLite.
 
@@ -62,7 +60,7 @@ The Pomodoro timer is the heartbeat of the app. Every productivity signal flows 
 
 A Notion-like block-based editor powered by Tiptap. Supports slash commands, drag-to-reorder blocks, rich formatting, and markdown serialization. Notes are stored as `.md` files on disk, and the user owns their files.
 
-Notes link bidirectionally to tasks, projects, calendar events, and diary entries via backlinks tracked in SQLite. Cross-referencing notes generates Will Clarity XP (the Zettelkasten principle: connecting ideas demonstrates mental organization).
+Notes link bidirectionally to tasks, projects, calendar events, and diary entries via backlinks tracked in SQLite. Cross-referencing notes via backlinks supports the Zettelkasten principle of connecting ideas for better mental organization.
 
 The note editor supports real-time collaboration via Yjs when the sync/collaboration layer is active (self-hosted). Collaborative cursors show live presence.
 
@@ -74,7 +72,7 @@ The diary creates two daily touchpoints: morning and evening, tied to the sleep 
 
 **Evening diary (bedtime ritual):** triggered when the user sets their alarm for the next day. Fields: what went well (short text), what didn't go well (short text), optional longer free-form reflection, next-day priority (typed or selected from backlog).
 
-**Diary data feeds into the XP system:** morning goal-setting contributes to Will Clarity XP (evidence of preparation). Evening reflection contributes to Will Execution XP (evidence of adaptive learning). Mood and energy data over time create personal baselines for the AI layer (understanding the user's patterns).
+Mood and energy data over time create personal baselines for the AI layer (understanding the user's patterns).
 
 Diary entries are stored as dated markdown files in the vault and indexed in SQLite.
 
@@ -84,7 +82,7 @@ An intelligent alarm system specific to the mobile app. It serves three purposes
 
 **Morning:** the alarm rings, the user dismisses it, and the morning diary screen appears immediately. The morning media player playlist starts (configurable: calm music, a podcast, white noise, etc.). The procrastination stopper activates according to the user's configured morning rules (e.g., social media blocked until the first session block starts).
 
-**Evening:** when the user sets tomorrow's alarm, the evening diary screen appears. After completing it, the app can optionally show a summary of the day's XP and skill tree progress as a wind-down review.
+**Evening:** when the user sets tomorrow's alarm, the evening diary screen appears. After completing it, the app can optionally show a summary of the day's productivity as a wind-down review.
 
 The alarm system knows sleep duration (time from setting alarm to dismissal), which feeds into sleep quality suggestions in the morning diary and can influence the AI layer's understanding of the user's energy patterns.
 
@@ -100,7 +98,7 @@ A local-first media player (LGPL 2.1, FFmpeg via `ffmpeg-next` for the Rust back
 
 **Playlists are tied to work environments.** When the user plans their calendar, they assign a playlist to each session block (or to the work environment template that the session block uses). When the session block activates, the playlist starts automatically. When a break starts, the playlist can switch to a break playlist. When the morning alarm dismisses, the morning playlist starts.
 
-The music player is accessible from the edge panel for quick controls (play/pause, skip, volume) without leaving the current context. There is no gamification in the music system currently.
+The music player is accessible from the edge panel for quick controls (play/pause, skip, volume) without leaving the current context.
 
 ### Procrastination stopper
 
@@ -112,7 +110,7 @@ Two implementations depending on platform:
 
 **The block page is minimal:** it simply states the site/app is blocked. No gamification elements appear on the block page itself, as that would make it a distraction. Motivation quotes and current stats may be added in the long term but are not a priority.
 
-**Blocker data feeds into Will Focus XP:** every time the blocker fires and the user does not attempt to bypass it, positive Focus XP accrues. Attempted bypasses or disabling the blocker during a focus period generates negative Focus XP. The blocker is a primary data source for the Will system.
+Blocker trigger events are logged for productivity analytics.
 
 ### Work environment management (desktop only)
 
@@ -133,289 +131,47 @@ This eliminates the daily friction of manually arranging your workspace. The use
 
 A narrow, auto-hiding panel anchored to the right edge of the screen. Appears on hover (global mouse position tracked via Rust using `rdev` or platform-specific APIs). Similar to Ubuntu's dock but vertical and on the right side.
 
-Contains: quick-access icons for main modules (Calendar, Kanban, Notes, Skill Tree, Music, Settings), the current Pomodoro timer countdown as a small circular progress indicator, the active work environment name, quick-add for new Kanban tasks, task completion checkboxes for current session's tasks, music controls (play/pause, skip, volume), and streak counter.
+Contains: quick-access icons for main modules (Calendar, Kanban, Notes, Music, Settings), the current Pomodoro timer countdown as a small circular progress indicator, the active work environment name, quick-add for new Kanban tasks, task completion checkboxes for current session's tasks, and music controls (play/pause, skip, volume).
 
 Design principle: minimize clicks. Every action reachable from the edge panel should require the fewest possible interactions. The panel is designed for glanceable information and single-click actions without switching away from the user's current work.
 
+### Integrated AI panel
+
+The AI panel is GanbaruAI's conversational interface for working with AI assistants. It appears as a panel in the app, supporting two modes: an embedded terminal running Claude Code (developer path) and a chat widget connecting to BYOK LLM providers (general user path). All AI features are opt-in. The app is fully functional without any AI.
+
+**One conversation per project, calendar-driven switching.** Each project has its own persistent conversation thread stored in SQLite. When a calendar event starts, the AI panel automatically saves the current conversation and resumes (or starts) the conversation for the new event's project. A developer working on four different projects in a week has four conversation threads, each resuming exactly where they left off. Manual override is always available.
+
+**Context injection from app state.** When a session starts or switches, GanbaruAI assembles context from the active project, current kanban tasks, recent progress, calendar events, and related notes. For the terminal, context is injected via `--append-system-prompt` flags at launch. For the chat widget, context is sent as the system prompt in API calls. CLAUDE.md stays as project-level conventions; per-task context comes from GanbaruAI dynamically.
+
+**Kanban task activation.** Clicking "Start" on a kanban task injects that task's details (title, description, priority, branch, related calendar events, related notes) into the current AI conversation. The agent immediately knows what the user is working on without any explanation needed.
+
+**Developer path (Claude Code terminal):** an xterm.js terminal emulator running Claude Code with full capabilities (file editing, bash, sub-agents). The user installs Claude Code themselves and provides their own API key. GanbaruAI provides context injection, session management, and workflow prompt buttons. Background agents run as headless processes (`claude --bare -p "task" --output-format json`) for delegated or parallel work.
+
+**General user path (BYOK chat widget):** a chat interface connecting to the user's chosen LLM provider. Three provider categories cover ~95% of users: Anthropic API (Claude), OpenAI-compatible API (GPT-4, Groq, Together, Mistral, and any provider using the chat completions format), and Ollama for local models (Llama, Mistral, Gemma, running entirely on the user's machine with no API key needed). The chat widget can read/write GanbaruAI data but cannot edit arbitrary files or run bash commands.
+
+**Workflow phase prompts.** Each project management phase has a structured system prompt that adapts the AI's behavior: brainstorming mode guides structured ideation, evaluation mode helps assess ideas against Want/Can/Need criteria, planning mode assists with specifications and resource estimation, execution mode helps with implementation and blockers. These prompts work with both the terminal and the chat widget. One general agent per project carries context across all phases.
+
+**Prompt buttons.** The UI shows contextual action buttons alongside the AI panel: "Plan this sprint", "Research competitors", "Create calendar events for these tasks". Each button inserts a structured prompt into the terminal input or chat widget. The user can review, edit, or execute immediately.
+
 ---
 
-## The experience and gamification system
+## Gamification system (deferred)
+
+The following features are planned for later development phases. Full specifications are preserved here for reference.
 
 ### Overview
 
-The experience system measures real productivity through automated data collection, not self-reporting. It has four pillars: Consistency, Streaks, Will, and Contracts. XP earned across all pillars feeds into the skill tree and tier progression.
-
-The XP display follows RPG conventions: after each Pomodoro focus period, the break screen shows a "battle results" style summary. After completing all Pomodoros in a session block, a fullscreen XP summary appears. This is the primary moment where the user interacts with the gamification layer.
-
-### XP curve
-
-XP requirements follow a quadratic curve: `XP_required = (level / x)²`. Calibrated so that level 1→2 takes approximately one productive day (~200 XP earned) and level 49→50 takes roughly two weeks of sustained focused work.
-
-### Consistency
-
-Measures whether the user follows through on their planned schedule. XP is awarded for completing planned session blocks as scheduled, completing Pomodoro cycles without early termination, and following through on calendar commitments. Penalization occurs for skipping planned sessions, abandoning Pomodoro cycles mid-focus, and repeatedly rescheduling without completing.
-
-### Streaks
-
-Tracks consecutive days of productive activity. Multipliers follow Duolingo's proven model: 1.1× at 3 days, 1.2× at 7 days, 1.3× at 14 days, 1.5× at 30 days. One free streak freeze per 7-day streak (the user can miss one day without breaking the streak). Streaks increase commitment measurably, and users with 7-day streaks are significantly more likely to remain engaged long-term.
-
-### Will system
-
-Inspired by Hunter × Hunter's Nen system and Eternally Regressing Knight's Will. The Will system measures the quality of work, not just the quantity. It has four categories:
-
-#### Will Focus (inspired by Ten)
-
-The user's proof of maintaining an unbroken protective barrier against distraction, covering both voluntary (extending breaks, ignoring the timer, choosing to browse) and involuntary triggers (accidental app-switching, mindless browsing).
-
-**Data sources:**
-- Procrastination stopper: did it trigger? How often? Did the user attempt to bypass it?
-- App-switch frequency during Pomodoro sessions (tracked by the desktop activity monitor).
-- Break timer adherence: did the user return on time or extend the break?
-- Screen activity during focus blocks: active tool use vs. passive browsing.
-
-**Core metric:** distraction events per focus session. Zero distraction events = perfect Focus score for that session. Each distraction event reduces the Focus score proportionally.
-
-**XP award:** base Focus XP per completed Pomodoro, multiplied by the Focus score (0.0 to 1.0). A perfectly focused session earns full Focus XP. A session with 5 app switches earns reduced Focus XP. A session where the blocker was disabled earns zero Focus XP.
-
-#### Will Clarity (inspired by Zetsu)
-
-The user's proof of mental preparation: having studied their tasks, prepared their environment, and being ready to act without fumbling. Zetsu in Nen is about suppressing output to heighten perception. The productivity equivalent is reducing mental noise to maximize awareness of what needs to be done.
-
-**Data sources:**
-- Time between Pomodoro start and first meaningful action (was the task pre-selected before the session, or did the user spend 3 minutes figuring out what to do?).
-- Whether the Kanban task was pre-assigned to the session block in the calendar.
-- Whether notes or reference materials were opened before the timer started vs. scrambled for during.
-- Morning diary completion (goal-setting language indicates preparation).
-- Note cross-referencing (creating backlinks between notes demonstrates organized thinking).
-- Context-switch cost: if someone starts a Pomodoro, opens three different apps looking for their place, then finally settles, that indicates low Clarity.
-
-**Core metric:** preparation quality score, composite of the above signals. High Clarity = the user starts working immediately because they prepared their environment and knew what to do.
-
-**XP award:** base Clarity XP per session, multiplied by the preparation quality score.
-
-#### Will Intensity (inspired by Ren)
-
-The user's proof of sustained high-output work within a session. Ren in Nen is about projecting maximum power outward. The productivity equivalent is output density: how much meaningful work was produced per unit of time.
-
-**Data sources:**
-- Task type-specific output metrics: for coding (file saves, commits, lines changed), for writing (word count delta), for design (export events), for general tasks (Kanban cards moved to done). These are tracked via OS-level observation. File system watchers (Rust `notify` crate) detect saves in the user's configured project directories, and git CLI commands count commits and line diffs. No IDE-specific integrations or plugins are required.
-- Pomodoro completion rate within a session block (completing all planned Pomodoros = high intensity).
-- Task difficulty tier vs. completion time (completing a "hard" task efficiently = high intensity).
-
-**Core metric:** output density relative to the user's own rolling average. This is personal-baseline calibration; what counts as "intense" for a student writing an essay differs from a developer shipping features. The system compares today's output to the user's past 30-day average for the same task type.
-
-**XP award:** base Intensity XP per session, multiplied by the relative output density (capped at 2.0× to prevent outlier sessions from dominating).
-
-#### Will Execution (inspired by Hatsu)
-
-The user's proof of adaptive problem-solving: handling interruptions, unexpected blockers, and shifting priorities without losing momentum. Hatsu in Nen is about personal expression and unique ability. The productivity equivalent is how the user responds to chaos.
-
-**Data sources:**
-- Recovery time after disruptions: if the procrastination stopper fires mid-session and the user recovers within 30 seconds vs. 5 minutes.
-- Calendar event interruptions: if an unplanned event interrupts a focus block, how quickly does the user resume?
-- Kanban re-prioritization: if the user re-orders tasks mid-day and still completes the adjusted plan.
-- Evening diary reflection: content about what went wrong and how it was handled contributes to Execution XP.
-- A brief self-assessment during the Pomodoro break screen (2-3 quick taps, not a form): "Did anything unexpected come up? How did you handle it?" This hybrid approach supplements automated signals for a category that is inherently harder to track automatically.
-
-**Core metric:** disruption recovery quality. High Execution = the user absorbs disruptions and adapts without derailing their session.
-
-**XP award:** base Execution XP per session, multiplied by the recovery quality score. Sessions with no disruptions earn a baseline Execution score (not zero, because absence of disruption is not the same as poor execution).
-
-#### Will XP penalization
-
-Will XP is penalized for: disabling the procrastination stopper during focus time (Focus penalty), starting a Pomodoro with no task selected and no preparation (Clarity penalty), abandoning sessions significantly below personal output averages without cause (Intensity penalty), and failing to recover from disruptions within a reasonable window (Execution penalty).
-
-Penalties are subtractive from the session's Will XP, never punitive enough to make total session XP negative. The goal is to reduce the reward, not to punish.
-
-### Contract system
-
-Inspired by Hunter × Hunter's Nen curses and Jujutsu Kaisen's binding vows. Contracts are self-imposed productivity conditions with real stakes, both in-app and optional non-harmful real-life consequences.
-
-**Rules:**
-
-1. Only available for advanced players (minimum tier/level threshold to unlock).
-2. Self-imposed conditions with in-app benefits/penalties and optional non-harmful real-life benefits/penalties.
-3. Conditions can be automatically tracked by the app (e.g., "complete 4 Pomodoros daily for 30 days") or real-life conditions requiring proof attachment (e.g., "run 3 times per week" with photo proof).
-4. There is always an in-app penalty for failure. If the user selects real-life penalties, they must establish frequency (one-time, daily, etc.) and duration (up to 3 months), each requiring proof.
-5. Non-harmful real-life benefits and penalties scale with how much the user values discipline on the contract's objective. The user self-determines the severity.
-6. Duration: 1 day to 3 months. Can be set to auto-renew (only if selected at creation).
-7. The more restrictive and broad the conditions and penalties, the higher the benefit multiplier.
-8. Maximum 5 active contracts simultaneously.
-
-**Benefits of an active contract:**
-
-1. Passive XP boost on related projects (all XP earned in the contract's domain is multiplied).
-2. Active XP boost on specific tasks related to the contract's condition.
-3. Exclusive reward system elements: unique badges, exclusive skill tree layers/branches, personalization options only obtainable through contracts.
-4. The extra productivity generated by the condition itself (the real benefit).
-5. Whatever non-harmful real-life benefits the user defined for themselves.
-
-**Penalties for contract failure:**
-
-1. 2× the accumulated XP given by the contract's boost is subtracted. A passive ×0.01 XP multiplier applies to the contract's domain until the user completes any self-imposed real-life penalty.
-2. Level demotion on exclusive skill tree layers/branches equal to the XP they gained from the contract's boost (1×). A UI "corruption" visual effect is applied to the affected branches.
-3. Removal of exclusive badges and personalization options earned through the contract.
-4. The user must attach proof of completing their self-imposed real-life penalty (if any).
-5. The user cannot create new contracts until completing the penalty, or for 2× the contract's duration if they refuse or fail to complete the penalty on time.
-
-The Contract system creates a powerful psychological loop: the higher the stakes the user sets, the greater the reward, but also the greater the consequence of failure. This mirrors the Nen restriction/covenant system where power scales with sacrifice. The corruption visual effect on failed branches is particularly impactful because it makes failure visible in the skill tree, creating a stronger loss-aversion signal than numbers alone.
-
----
-
-## The reward system
-
-### Skill tree
-
-Inspired by The Rising of the Shield Hero's skill tree system and informed by research into Path of Exile's passive tree, Final Fantasy X's Sphere Grid, and Maker Skill Trees. The reference aesthetic is Shield Hero's skill tree: dark background, glowing circular nodes with icons, a center-focused node, animated transitions between nodes, and a detail panel showing unlock information.
-
-**Architecture:** a directed acyclic graph (DAG) with **layered sub-graphs**. The top layer shows broad life/work categories as navigable nodes. Entering a node reveals its own sub-graph with more specific skills. This creates a "generalist but deep" structure, broad at the surface and specialized within.
-
-**Navigation model (the core UX contract):**
-
-- **The world moves, the camera does not.** Selecting a node animates the entire graph so that node lands at the center of the viewport. The user never drags or pans; the graph repositions itself.
-- **Navigation is discrete.** Arrow keys or click traverse edges one step at a time. No free pan, no free zoom during normal navigation.
-- **No drag-and-drop.** Users navigate and unlock; they never reposition nodes.
-- **Depth is bounded per view.** From any focal node, only adjacent neighbors (depth 1) and their neighbors (depth 2) are rendered. Depth 3+ nodes are hidden. This caps the visible set at ~15-40 nodes regardless of total tree size.
-
-**Structure:**
-
-- **Root graph (5-8 nodes):** broad life/work domains. Examples: Mind, Body, Craft, Social, Creative. Each is a navigable node containing its own sub-graph.
-- **Sub-graphs within each domain:** subcategories. Craft might contain Programming, Writing, Design. Mind might contain Focus, Memory, Learning.
-- **Further depth via nested sub-graphs:** Programming might contain Rust, TypeScript, Python. Arbitrary nesting depth, though 3-4 levels is practical.
-- **Target: 200+ total nodes across all layers.** At any single focal point, the user sees only 3-5 adjacent choices.
-
-**Node types (three-tier hierarchy from Path of Exile):**
-
-1. **Basic nodes** (small, subtle glow): the connective tissue. Represent small improvements or subskills. Low cost to unlock.
-2. **Notable nodes** (medium, named, brighter glow): landmarks. Represent meaningful competencies. Higher cost, may require multiple basic prerequisites.
-3. **Keystone nodes** (large, intense glow): transformative. Represent mastery-level achievements. Very high cost, and may require prerequisites from 2+ sub-graphs.
-
-**Node states:**
-
-- **Locked:** all prerequisites not yet met. Visually dimmed, grayscale, non-interactive.
-- **Available:** all prerequisites unlocked. Glowing border, interactive. User can spend skill points to unlock.
-- **Unlocked:** purchased by the user. Full brightness, colored glow.
-
-There is no reverse transition in normal play. If respec is supported, it is a separate operation.
-
-**Skill points:** XP earned through productivity (Pomodoro sessions, task completions, streak maintenance) converts to spendable skill points. The user chooses which available nodes to unlock. This gives agency: the user decides their growth path, not the system.
-
-**Cross-disciplinary connections (four mechanisms):**
-
-1. **Bridge nodes:** sit at the boundary between two sub-graphs, with prerequisite paths from both. Example: "Technical Writing" bridges Craft/Programming and Craft/Writing.
-2. **Multi-parent nodes:** require prerequisites from 2+ sub-graphs. Example: "Public Speaking" requires nodes from Social/Communication and Creative/Performance.
-3. **Synergy bonuses:** hidden nodes that appear when related skills across sub-graphs are both completed.
-4. **Tag system:** skills carry labels (Communication, Leadership, Analytical, Creative) that can be filtered to reveal cross-branch connections.
-
-**Neighborhood culling (critical for performance and UX):**
-
-The visible node set is computed by BFS from the focal node, not by viewport intersection. Depth 0 renders fully centered, depth 1 renders fully, depth 2 renders at reduced opacity, depth 3+ is hidden. This is a `$derived` rune that recomputes only when the focal node changes. Total tree size is irrelevant to render performance.
-
-On mobile: the same neighborhood culling applies. Node details appear in bottom sheets instead of side panels.
-
-**Center-snap animation:**
-
-When the focused node changes, the entire graph translates via a spring animation so the new focal node lands at the viewport center. The spring uses `svelte/motion` for the elastic, game-like feel. Only one animated value (the `<g>` container's translate offset) drives all movement.
-
-**How the skill tree connects to productivity data:**
-
-- Calendar session blocks are tagged to skill tree sub-graphs. Completing a session block generates skill points.
-- Kanban task completion generates skill points proportional to difficulty tier.
-- Pomodoro sessions generate skill points in the sub-graphs associated with the current task.
-- Note-taking and cross-referencing generates Clarity XP which converts to skill points.
-- Contract bonuses apply multipliers to skill point earnings in specific sub-graphs.
-- The skill tree is the primary visual representation of long-term growth. It reflects genuine accumulated effort verified by automated tracking.
-
-**Skill decay (based on spaced repetition science):**
-
-Skills visibly decline without practice: `displayed_level = actual_level * e^(-0.03 * days_since_practice)`. After 7 days: ~81% retention (barely noticeable). After 14 days: ~66% (visible decline). After 30 days: ~41% (significant). One Pomodoro in the relevant domain restores the displayed level. The actual earned level is preserved, so returning after a break is cheap, but prolonged absence is visible.
-
-**Deep layers and deep branches:**
-
-Deep layers are additional depth tiers gated behind tier upgrades and/or Contract achievements. Deep branches are entirely new sub-graphs that only appear after specific Contract completions. Both serve as exclusive content that rewards commitment, visible as "locked" indicators that incentivize progression.
-
-**Authored graph data:**
-
-The graph structure is curated static data (TypeScript constants or JSON), not user-generated. Node positions within each sub-graph are hand-authored. Only node unlock states and skill point balance are user-specific and persisted to SQLite. The graph definition is versioned with the app.
-
-### Tier upgrade system
-
-Tiers represent the user's overall progression level across the entire app, separate from individual skill tree branch levels. Tier upgrades unlock: access to tier-locked deep branches and deep layers in the skill tree, new customization options, the Contract system (for advanced tiers), and personal satisfaction as a measure of overall growth.
-
-### Badges
-
-Achievement markers earned through specific accomplishments: completing a Contract, reaching a milestone in a skill tree branch, maintaining a streak for a threshold duration, completing a project through the full lifecycle, and other notable events. Badges are displayed on the user's profile and serve as completionist incentives.
-
-### Profile sharing
-
-Users can share their skill tree, tier, badges, and streak information. This serves as social proof and enables comparison/inspiration within collaborative teams. Profile sharing is opt-in.
-
-### Skill capsules
-
-A gacha-inspired reward mechanic adapted ethically for productivity. Completing practice sessions earns capsules containing randomized cosmetic rewards:
-
-- Common: 60% drop rate
-- Rare: 25% drop rate
-- Epic: 10% drop rate
-- Legendary: 5% drop rate
-
-Guaranteed rare+ every 10 capsules. Guaranteed epic+ every 50 capsules (pity system). Full animated reveal sequence with escalating visual effects for higher rarities. No real money is involved; capsules are earned purely through practice. Contents are cosmetic only: profile decorations, skill tree visual themes, avatar accessories, UI color schemes.
-
-### Endowed progress effect
-
-New users start with their skill tree partially illuminated. Based on onboarding questions (profession, interests, experience level), foundational skills are pre-populated as "already begun." This leverages the endowed progress effect: showing partial progress significantly increases completion rates compared to starting from zero.
-
----
-
-## Anti-grinding mechanics
-
-The experience system must resist gaming. Five mechanisms prevent XP accumulation without genuine productivity:
-
-1. **Daily XP cap per skill area:** 200 XP per branch per day, after which the rate drops to 25%. This encourages breadth (working across multiple domains) rather than grinding one branch.
-
-2. **Logarithmic time-to-XP conversion:** `XP = base_rate × ln(1 + minutes) / ln(1 + 25)`. The first hour of focused work earns full XP. The fourth+ consecutive hour in the same branch earns only ~40%. This prevents marathon grinding sessions from dominating.
-
-3. **Novelty weighting:** first attempts at new task types earn 2× XP. The bonus diminishes to 1× after 5 similar repetitions. This rewards exploration and learning new skills.
-
-4. **Diversity bonus:** `1.0 + 0.05 × distinct_skills_practiced_today` (max 1.3×). Practicing across 6 different skill areas in one day earns a 1.3× multiplier on all XP. This incentivizes a balanced approach.
-
-5. **Competency gates:** at certain skill tree thresholds, the user must demonstrate output or pass a skill check to level up, not just log time. For automated task types, this could be verified output (e.g., a completed project phase). For others, it could be a self-assessment validated by the system's data (e.g., "you claim you've mastered this, but your Intensity scores in this branch have been declining").
-
-**The cardinal rule:** every gamifiable metric must pass this test: "Could a user maximize this metric without being more productive?" If yes, do not gamify it. Never award XP for task creation, app opening, or raw time logged.
-
----
-
-## XP formula
-
-Total session XP has two components: activity XP (the compound formula below) and Will category XP (awarded separately per session for each of the four Will categories as described in their individual sections).
-
-### Activity XP (compound formula)
-
-```
-Activity_XP = Σ(base_XP × category_weight × focus_quality × streak_multiplier) × diversity_bonus × min(1.0, actual_output / expected_output) × contract_multiplier - distraction_penalty
-```
-
-Where:
-- `base_XP` = base XP for the completed activity (Pomodoro = 25, task completion = 10/25/50/100 by tier, journal = 15, etc.)
-- `category_weight` = 1.5 for active creation, 1.0 for standard work, 0.8 for admin
-- `focus_quality` = Will Focus score (0.0 to 1.0). This is the only Will category that directly scales activity XP.
-- `streak_multiplier` = streak bonus (1.0 to 1.5)
-- `diversity_bonus` = skill diversity multiplier (1.0 to 1.3)
-- `actual_output / expected_output` = personal baseline ratio (capped at 1.0; output above baseline does not inflate activity XP, and it is rewarded separately through Will Intensity XP)
-- `contract_multiplier` = active Contract boost (1.0 if no contract)
-- `distraction_penalty` = XP subtracted for distraction events during the session
-
-### Will category XP (per session)
-
-Each Will category awards its own XP independently: Focus (base × focus score, 0.0-1.0), Clarity (base × preparation quality score), Intensity (base × relative output density, capped at 2.0×), Execution (base × disruption recovery quality). These are separate line items that do not multiply against the activity XP formula above.
-
-### Total session XP
-
-```
-Session_XP = Activity_XP + Focus_XP + Clarity_XP + Intensity_XP + Execution_XP
-```
-
-All XP flows to the skill tree branches tagged on the current session block.
+The gamification layer measures real productivity through automated data collection with four pillars: Consistency, Streaks, Will (Focus, Clarity, Intensity, Execution), and Contracts. XP feeds into a skill tree that visualizes personal and professional growth.
+
+When implemented, these features will include:
+
+- **Skill tree:** an RPG-style directed acyclic graph with layered sub-graphs, center-snap navigation, neighborhood culling, and three node tiers (basic, notable, keystone). Skill decay based on spaced repetition science.
+- **Will system:** four categories measuring Focus (distraction resistance), Clarity (preparation quality), Intensity (output density), and Execution (disruption recovery). All data-driven from automated tracking.
+- **Contract system:** self-imposed productivity conditions with real stakes. Inspired by Hunter x Hunter's Nen restrictions. Duration 1 day to 3 months, max 5 active simultaneously.
+- **Anti-grinding mechanics:** daily XP caps, logarithmic time conversion, novelty weighting, diversity bonus, competency gates.
+- **Badges, Skill Capsules, and tier progression:** achievement markers, gacha-inspired cosmetic rewards (no real money), and overall progression gating.
+- **NPC-guided workflows:** the Fairy (brainstorming), the Dwarf (idea evaluation), and Drasil (planning and execution) as visual novel characters guiding the project management quest chain.
+- **Endowed progress effect:** onboarding pre-populates foundational skills based on user profile.
 
 ---
 
@@ -503,23 +259,9 @@ The system can generate project status reports automatically from: Kanban board 
 
 ---
 
-## NPC characters and narrative layer
+## NPC characters and narrative layer (deferred)
 
-### Visual novel presentation
-
-NPCs appear in visual novel style: a background illustration with the character, dialogue text, and interactive options. This presentation is used in guided workflows (project management, onboarding, key tutorial moments) but does not appear in utility interfaces (Calendar, Kanban, edge panel).
-
-### Current NPCs
-
-**The Fairy (Sparkweaver):** guides brainstorming and ideation phases. Appears during Genesis. Encouraging, creative, focused on possibility.
-
-**The Dwarf (Bearer of Great Promise):** guides idea evaluation and project management. Appears during Forging the Idea and throughout the planning templates. Practical, thorough, focused on quality and realistic assessment. Has an integrated chatbot for research discussions (AI-powered when available).
-
-**Drasil (High Elf, The Eternal Wayfinder):** guides long-term planning, execution, and the overarching journey. The primary NPC for the project lifecycle quest chain. Wise, patient, focused on the big picture. In the future, Drasil becomes the conversational AI assistant for the app, managing calendar changes via natural language, understanding the user's mood and patterns from diary data, and providing personalized motivation.
-
-### Onboarding
-
-A short story-lore onboarding introduces the user to the world and their relationship with the NPCs. The user learns why they are working with Drasil, why the Fairy helps with ideas, and how the Dwarf forges plans. This onboarding is brief (2-3 minutes maximum) and leads directly into the first practical interaction with the app (setting up the first calendar session, creating the first task).
+Three NPCs are planned as an aesthetic layer on top of the project management workflows: the Fairy (Sparkweaver) for brainstorming, the Dwarf (Bearer of Great Promise) for idea evaluation, and Drasil (The Eternal Wayfinder) for planning and execution. They appear in visual novel style during guided workflows. The NPC layer is purely visual; all project management functionality works without it. The AI assistance for these workflows is provided by the integrated AI panel (terminal or BYOK chat), not by the NPCs themselves.
 
 ---
 
@@ -539,25 +281,13 @@ Each session block contains a Pomodoro count. When the session block activates, 
 
 Session blocks reference Kanban tasks. The edge panel updates to show the relevant tasks for the current session block. When tasks are completed, the session block's progress updates. When task scope changes affect time estimates, the calendar suggests rescheduling downstream blocks.
 
-### Calendar → Skill tree
-
-Session blocks are tagged to skill tree branches. All XP earned during a session block flows to the tagged branches.
-
 ### Calendar → Music
 
 Session blocks reference playlists. When the block activates, the assigned playlist starts. Break playlists start when the Pomodoro timer enters break phase.
 
-### Pomodoro → Will system
-
-Every Pomodoro focus period generates data for all four Will categories: Focus (distraction events), Clarity (preparation quality), Intensity (output density), Execution (disruption recovery). The break screen displays Will metrics and XP earned.
-
 ### Pomodoro → Procrastination stopper
 
-During focus periods, the stopper is active with the current session block's blocker rules. During breaks, the stopper may relax rules (configurable per environment). Blocker trigger events during focus periods are logged as Will Focus data.
-
-### Pomodoro → Skill tree (XP screen)
-
-After completing all Pomodoros in a session block, the fullscreen XP summary appears showing skill tree progress. This is the primary skill tree interaction moment: the user sees branches grow, levels advance, and any new nodes unlocked.
+During focus periods, the stopper is active with the current session block's blocker rules. During breaks, the stopper may relax rules (configurable per environment). Blocker trigger events during focus periods are logged for productivity analytics.
 
 ### Pomodoro → Music
 
@@ -567,29 +297,17 @@ The music player switches between focus and break playlists based on the Pomodor
 
 Task scheduling creates calendar session blocks. Task scope changes trigger calendar cascade recalculation. Task dependencies inform the cascade's dependency graph.
 
-### Kanban → Skill tree
-
-Task completion generates XP for the branches the task is tagged to. XP amount scales with task difficulty tier.
-
 ### Kanban → Project management
 
 Project Kanban boards are the task layer of the project management framework. Requirement changes on tasks are version-controlled.
-
-### Notes → Skill tree
-
-Cross-referencing notes (creating backlinks between related notes) generates Will Clarity XP distributed across the branches the notes are tagged to.
 
 ### Notes → Project management
 
 Notes can be linked to project phases, tasks, and research. Project templates generate notes for each phase that serve as working documents.
 
-### Daily diary → Will system
+### Daily diary → AI panel
 
-Morning entries contribute to Will Clarity XP (preparation/goal-setting). Evening entries contribute to Will Execution XP (reflection/adaptive learning).
-
-### Daily diary → AI layer (future)
-
-Mood and energy data from diary entries create personal baselines for the conversational AI (Drasil). Over time, Drasil can understand the user's patterns and provide context-aware motivation and schedule suggestions.
+Mood and energy data from diary entries create personal baselines. Over time, the AI can understand the user's patterns and provide context-aware motivation and schedule suggestions via the integrated AI panel.
 
 ### Sleep alarm → Daily diary
 
@@ -603,22 +321,6 @@ The morning alarm dismissal starts the morning playlist. This can be a gentle wa
 
 Morning blocker rules activate immediately upon alarm dismissal. If the user configured "no social media until first session block," the stopper enforces it from the moment they wake up.
 
-### Procrastination stopper → Will system
-
-Blocker trigger events (and the user's response to them) are the primary data source for Will Focus. Successful blocking without bypass = positive Focus XP. Attempted bypass = negative Focus XP.
-
-### Contracts → Skill tree
-
-Active Contracts provide XP multipliers to specific branches. Failed Contracts cause level demotion and visual corruption on affected branches. Completed Contracts unlock exclusive deep layers and deep branches.
-
-### Contracts → Badges
-
-Contract completion awards exclusive badges. Contract failure removes them.
-
-### Skill capsules → Pomodoro
-
-Capsules are earned through completing practice sessions (Pomodoro focus periods). The capsule drop animation appears on the XP screen during breaks or end-of-session-block summaries.
-
 ### Work environment → Procrastination stopper
 
 Each work environment template includes its own blocker ruleset. Switching environments (manually or via calendar) updates the active blocker rules.
@@ -626,6 +328,30 @@ Each work environment template includes its own blocker ruleset. Switching envir
 ### Work environment → Edge panel
 
 The edge panel displays context relevant to the current work environment: the right Kanban tasks, the right quick-access shortcuts, the current environment name.
+
+### Calendar → AI panel
+
+When a calendar event starts, the AI panel saves the current conversation and resumes the conversation thread for the new event's project. The AI automatically has context about what the user is working on, what tasks are active, and where they left off.
+
+### Kanban → AI panel
+
+Clicking "Start" on a kanban task injects the task's context into the current AI conversation. The AI knows the task details, related calendar events, and project context without the user needing to explain.
+
+### AI panel → Kanban
+
+The AI can update kanban tasks via the CLI: moving tasks between columns, updating descriptions, marking tasks as done. Background agents can work on delegated tasks and update the kanban when finished.
+
+### AI panel → Calendar
+
+The AI can create and modify calendar events via the CLI: scheduling work sessions, adjusting event durations, and suggesting rescheduling when task scope changes.
+
+### AI panel → Notes
+
+The AI can read and write project notes. In the terminal path, Claude Code edits markdown files directly. In the BYOK chat path, the AI can read notes for context and suggest content.
+
+### AI panel → Project management
+
+Workflow phase prompts adapt the AI's behavior to the current project phase. The AI assists with brainstorming, evaluation, planning, and execution using structured system prompts. Project templates and methodology forms are enhanced by AI suggestions.
 
 ### Project management → Calendar
 
@@ -635,9 +361,9 @@ Starting a project quest chain creates a dedicated work environment and suggests
 
 Each project phase generates Kanban tasks. The project's Kanban board is the living task layer of the quest chain.
 
-### Project management → NPC layer
+### Project management → NPC layer (deferred)
 
-NPCs appear contextually during guided project phases. The Fairy during brainstorming. The Dwarf during idea forging and specification. Drasil during planning and execution.
+When the NPC visual layer is implemented, NPCs appear contextually during guided project phases as an aesthetic wrapper over the workflow phase prompts.
 
 ### Project management → Software repositories
 
@@ -648,45 +374,44 @@ When a project is a software repository, GanbaruAI bridges its internal data wit
 - **The `ganbaruai` CLI** exports project state as markdown into the git repository (PROGRESS.md, KANBAN.md). This makes project context available to collaborators who don't use GanbaruAI and to AI agents that read the repo natively. The export is a view of the database, not the source of truth. Changes made to the exported markdown (by agents or humans) can be imported back.
 - **AI agents** interact with GanbaruAI via the CLI: querying tasks, creating calendar events, updating progress. This works with any agent (Claude Code, Cursor, etc.) via standard Bash calls, with no MCP server or plugin required.
 
-The data split: documents (notes, diary, project docs) are markdown files on disk. Structured data (events, tasks, workspace configs, gamification state) is SQLite. The CLI bridges the two worlds. See TECH_STACK.md for the full technical rationale.
+The data split: documents (notes, diary, project docs) are markdown files on disk. Structured data (events, tasks, workspace configs) is SQLite. The CLI bridges the two worlds. See TECH_STACK.md for the full technical rationale.
 
 ---
 
 ## Mobile experience
 
-Mobile is a focused subset: note editor, calendar view and editing, Pomodoro timer, daily diary, sleep alarm, procrastination stopper (app-level blocking), skill tree viewing, sync.
+Mobile is a focused subset: note editor, calendar view and editing, Pomodoro timer, daily diary, sleep alarm, procrastination stopper (app-level blocking), BYOK AI chat, sync.
 
 Mobile does not include: work environment management, edge panel, fullscreen break overlay, browser extension, always-on-top windows. These features require desktop OS-level access that mobile sandboxing prohibits.
 
-The mobile app's primary roles are: anti-procrastination enforcement (app blocking during scheduled focus times and mornings), calendar/notes access and editing when away from the desktop, the sleep alarm and diary cycle, Pomodoro timing with notification-based breaks, and viewing skill tree progress. The mobile app also serves as the device that reminds you to return to your desktop. Calendar notifications for upcoming session blocks function as calls to action.
+The mobile app's primary roles are: anti-procrastination enforcement (app blocking during scheduled focus times and mornings), calendar/notes access and editing when away from the desktop, the sleep alarm and diary cycle, and Pomodoro timing with notification-based breaks. The mobile app also serves as the device that reminds you to return to your desktop. Calendar notifications for upcoming session blocks function as calls to action.
 
 ---
 
-## AI and MCP roadmap (post-MVP)
+## Advanced AI features (post-MVP)
 
-These features are not part of the initial build but are architecturally planned for:
+The integrated AI panel (terminal and BYOK chat) provides the foundation. These additional features build on it:
 
-**Drasil as conversational AI assistant:** natural language interaction for calendar management ("move my 3pm session to tomorrow"), mood-aware motivation based on diary patterns, schedule suggestions based on energy/productivity patterns, and project guidance during quest chain phases.
+**Natural language calendar management:** "move my 3pm session to tomorrow", "schedule a 2-hour deep work block for project X on Wednesday". The AI modifies calendar events via the CLI.
 
-**AI-powered research:** within the project management framework, the Dwarf's chatbot assists with market research, competitor analysis, and idea validation using web search and document analysis.
+**Mood-aware motivation:** using diary mood/energy baselines, the AI adapts its communication style and suggests schedule adjustments on low-energy days.
 
-**Content-specific procrastination detection:** the LLM layer analyzes page content (not just URLs) to determine if browsing is task-relevant, enabling smarter blocking on platforms like YouTube.
+**Content-specific procrastination detection:** the LLM analyzes page content (not just URLs) to determine if browsing is task-relevant, enabling smarter blocking on platforms like YouTube.
 
-**Small local LLM models:** for diary language analysis (detecting goal-setting, reflection, mood indicators) without requiring API calls. Falls back to LLM API (BYOK) if local models are insufficient.
+**Local LLM diary analysis:** small local models (via Ollama) analyze diary language for goal-setting patterns, reflection quality, and mood trends without any API calls or data leaving the device.
 
-**MCP integration:** the app exposes its data (calendar, tasks, notes, skill tree) via MCP, allowing external AI tools to interact with GanbaruAI's systems. Conversely, GanbaruAI can consume external MCP servers for integrations (email, external calendars, etc.).
-
-All AI features are opt-in and BYOK. The app is fully functional without any AI layer. Users who want AI features provide their own API key, so there are no bill surprises and no data leaving the device without explicit consent.
+**MCP for external access:** exposes GanbaruAI's data (calendar, tasks, notes) to external AI clients (ChatGPT, Claude web, teammate's agents) that don't run locally. Also consumes external MCP servers for integrations (email, external calendars). MCP is not used for internal agent interaction; that's handled by the CLI and direct process spawning.
 
 ---
 
 ## Design principles summary
 
 1. **Local-first:** the app works fully offline. Sync is additive, never required.
-2. **Automated measurement:** XP comes from real tracked behavior, not self-reporting. If the app cannot verify it, it does not award XP.
+2. **Automated measurement:** productivity metrics come from real tracked behavior, not self-reporting.
 3. **Interconnection over isolation:** every module feeds data to and receives data from other modules. The value of the app comes from the connections, not any single feature.
 4. **Progressive disclosure:** new users see a guided, constrained experience. Complexity reveals itself as confidence grows.
-5. **RPG as structure, not decoration:** the gamification layer (Will, Contracts, skill tree, NPCs) is structurally integrated into how the app measures and motivates productivity. It is not a skin on a to-do list.
-6. **Minimal friction:** the edge panel, automatic environment switching, calendar-driven automation, and 10-second diary entries all serve the same goal: reducing the number of decisions and clicks required to stay productive.
-7. **Ethical engagement:** gacha-inspired mechanics (Skill Capsules) use earned currency only, never real money. Loss aversion (skill decay, Contract penalties) is visible but not punitive. The test: does the user feel better about themselves after each session?
-8. **Privacy-first:** E2E encryption for sync, local storage as default, BYOK for AI, no ads, no tracking beyond what the user explicitly configures for their own productivity measurement.
+5. **Gamification as structure (planned):** the gamification layer (Will, Contracts, skill tree, NPCs) is designed to be structurally integrated into how the app measures and motivates productivity, not as a skin on a to-do list.
+6. **AI as infrastructure, not afterthought:** the integrated AI panel is a core module, not a post-MVP add-on. Calendar-driven session switching, context injection, and workflow phase prompts make AI assistance seamless. The terminal and BYOK chat are two interfaces to the same session management architecture.
+7. **Minimal friction:** the edge panel, automatic environment switching, calendar-driven automation, and 10-second diary entries all serve the same goal: reducing the number of decisions and clicks required to stay productive.
+8. **Ethical engagement (planned):** gacha-inspired mechanics (Skill Capsules) will use earned currency only, never real money. Loss aversion (skill decay, Contract penalties) will be visible but not punitive.
+9. **Privacy-first:** E2E encryption for sync, local storage as default, BYOK for AI, no ads, no tracking beyond what the user explicitly configures for their own productivity measurement.

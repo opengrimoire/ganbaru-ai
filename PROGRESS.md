@@ -33,9 +33,7 @@ Phase 2: notes and diary
 - Tauri v2 + Svelte 5 + Vite app shell with tab navigation
 - shadcn-svelte + Tailwind CSS v4, custom neutral gray theme (dark + light), custom title bar
 - shared-types package
-- SQLite schema with migrations (calendar_events, pomodoro_sessions, xp_entries, skill_nodes, streaks, attendees, alarms, overrides)
-- Calendar: custom Google Calendar-style component (week/day/month views, drag-and-drop create/move/resize, recurring events with full RFC 5545 RRULE support, all-day events, iCalendar field parity, edit session overlay model, EventPanel with 8 extracted sub-components, 279 unit tests)
+- SQLite schema with migrations (calendar_events, pomodoro_sessions, pomodoro_configs, pomodoro_segments, tasks, calendars, attendees, alarms, overrides)
+- Calendar: custom Google Calendar-style component (week/day/month views, drag-and-drop create/move/resize, recurring events with full RFC 5545 RRULE support, all-day events, iCalendar field parity, edit session overlay model, EventPanel with 8 extracted sub-components, 275 unit tests)
 - Kanban board (backlog/todo/in_progress/done columns, CRUD, move between columns, priority badges)
 - Pomodoro timer (focus/break phases, cycle tracking, segment lifecycle, timeline rail visualization, idle detection, suspend/wake handling)
-- Skill tree (SVG + Svelte center-snap navigation, neighborhood culling, sub-layer navigation, keyboard nav, 153-node temporal tree from JSON, 7 branches)
-- XP pipeline (Pomodoro -> pomodoro_sessions + xp_entries in SQLite, +XP toast)
