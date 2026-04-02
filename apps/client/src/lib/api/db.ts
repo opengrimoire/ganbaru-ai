@@ -4,7 +4,8 @@ let dbPromise: Promise<Database> | null = null;
 
 export async function getDb(): Promise<Database> {
   if (!dbPromise) {
-    dbPromise = Database.load("sqlite:ganbaruai.db");
+    const dbName = import.meta.env.DEV ? "sqlite:ganbaruai-dev.db" : "sqlite:ganbaruai.db";
+    dbPromise = Database.load(dbName);
     dbPromise.catch(() => {
       dbPromise = null;
     });

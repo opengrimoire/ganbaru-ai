@@ -15,7 +15,12 @@ fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
         .path()
         .app_config_dir()
         .map_err(|e| e.to_string())?;
-    db_path.push("ganbaruai.db");
+    let db_file = if cfg!(debug_assertions) {
+        "ganbaruai-dev.db"
+    } else {
+        "ganbaruai.db"
+    };
+    db_path.push(db_file);
 
     for suffix in &["", "-wal", "-shm"] {
         let mut path = db_path.clone();
@@ -58,13 +63,7 @@ fn get_memory_usage_mb() -> f64 {
         let my_pid = std::process::id();
         let mut total_kb = read_rss_kb(&my_pid.to_string());
 
-        // Sum RSS of all child processes (WebKitWebProcess, WebKitNetworkProcess, etc.)
-        let task_dir = format!("/proc/{my_pid}/task");
-        if let Ok(tasks) = std::fs::read_dir(&task_dir) {
-            // Collect thread IDs to find child processes via /proc/*/stat ppid
-            let _ = tasks;
-        }
-        // Walk /proc to find children by matching ppid
+        // Walk /proc to find child processes (WebKitWebProcess, WebKitNetworkProcess, etc.)
         if let Ok(entries) = std::fs::read_dir("/proc") {
             for entry in entries.flatten() {
                 let name = entry.file_name();
@@ -94,7 +93,73 @@ fn get_memory_usage_mb() -> f64 {
 
         total_kb / 1024.0
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        use std::mem;
+        use winapi::um::handleapi::CloseHandle;
+        use winapi::um::processthreadsapi::OpenProcess;
+        use winapi::um::psapi::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+        use winapi::um::tlhelp32::{
+            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            TH32CS_SNAPPROCESS,
+        };
+        use winapi::um::winnt::{PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
+
+        unsafe {
+            let my_pid = std::process::id();
+
+            // Snapshot all processes to build the tree
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snapshot.is_null() {
+                return 0.0;
+            }
+
+            let mut processes: Vec<(u32, u32)> = Vec::new();
+            let mut entry: PROCESSENTRY32W = mem::zeroed();
+            entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
+
+            if Process32FirstW(snapshot, &mut entry) != 0 {
+                loop {
+                    processes.push((entry.th32ProcessID, entry.th32ParentProcessID));
+                    if Process32NextW(snapshot, &mut entry) == 0 {
+                        break;
+                    }
+                }
+            }
+            CloseHandle(snapshot);
+
+            // Recursively collect all descendant PIDs (handles WebView2 grandchildren)
+            let mut pids = vec![my_pid];
+            let mut i = 0;
+            while i < pids.len() {
+                let parent = pids[i];
+                for &(pid, ppid) in &processes {
+                    if ppid == parent && !pids.contains(&pid) {
+                        pids.push(pid);
+                    }
+                }
+                i += 1;
+            }
+
+            // Sum WorkingSetSize for all collected PIDs
+            let mut total_bytes: usize = 0;
+            for &pid in &pids {
+                let handle =
+                    OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
+                if !handle.is_null() {
+                    let mut pmc: PROCESS_MEMORY_COUNTERS = mem::zeroed();
+                    pmc.cb = mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+                    if GetProcessMemoryInfo(handle, &mut pmc, pmc.cb) != 0 {
+                        total_bytes += pmc.WorkingSetSize;
+                    }
+                    CloseHandle(handle);
+                }
+            }
+
+            total_bytes as f64 / (1024.0 * 1024.0)
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         0.0
     }
@@ -105,11 +170,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(
+        .plugin({
+            let db_name = if cfg!(debug_assertions) {
+                "sqlite:ganbaruai-dev.db"
+            } else {
+                "sqlite:ganbaruai.db"
+            };
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:ganbaruai.db", db::migrations())
-                .build(),
-        )
+                .add_migrations(db_name, db::migrations())
+                .build()
+        })
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
             notification::show_event_notification,
