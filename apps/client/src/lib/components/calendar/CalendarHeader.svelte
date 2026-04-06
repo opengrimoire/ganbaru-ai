@@ -9,15 +9,20 @@
     isPastDay,
   } from "./utils";
   import { getCalendars } from "$lib/stores/calendars.svelte";
-  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
+  import Layers from "@lucide/svelte/icons/layers";
 
   const calendarsStore = getCalendars();
 
   // Calendar account selector state
   let showAccountPicker = $state(false);
+
+  // Mini calendar popover state
+  let showMiniCalendar = $state(false);
 
   // Picker drill-down: days (default) -> months -> years
   type PickerMode = "days" | "months" | "years";
@@ -76,7 +81,7 @@
 
   // Reset picker to days when anchorDate changes (navigation or selection),
   // unless the change came from scrolling within the picker itself.
-  let skipPickerReset = false; // plain variable, not $state. Avoids re-triggering the effect.
+  let skipPickerReset = false;
   $effect(() => {
     anchorDate;
     if (skipPickerReset) {
@@ -87,6 +92,11 @@
   });
 
   function handleHeaderClick() {
+    if (!showMiniCalendar) {
+      showMiniCalendar = true;
+      return;
+    }
+    // Drill-down within the open popover
     if (pickerMode === "days") {
       pickerYear = anchorDate.getFullYear();
       pickerMode = "months";
@@ -98,9 +108,15 @@
     }
   }
 
+  function closeMiniCalendar() {
+    showMiniCalendar = false;
+    pickerMode = "days";
+  }
+
   function selectMonth(monthIndex: number) {
     const d = new Date(pickerYear, monthIndex, 1);
     onDaySelect(d);
+    closeMiniCalendar();
   }
 
   function selectYear(year: number) {
@@ -117,7 +133,7 @@
 
   const dayLetters = ["M", "T", "W", "T", "F", "S", "S"];
 
-  // Wheel navigation on mini calendar
+  // Wheel navigation on mini calendar popover
   let wheelCooldown = false;
 
   function handlePickerWheel(e: WheelEvent) {
@@ -129,7 +145,14 @@
     const delta = e.deltaY > 0 ? 1 : -1;
 
     if (pickerMode === "days") {
-      onNavigate(delta > 0 ? "forward" : "back");
+      if (showMiniCalendar) {
+        // Browse months inside the popover without changing main view
+        const d = new Date(miniDate);
+        d.setMonth(d.getMonth() + delta);
+        miniDate = d;
+      } else {
+        onNavigate(delta > 0 ? "forward" : "back");
+      }
     } else if (pickerMode === "months") {
       const d = new Date(anchorDate);
       d.setMonth(d.getMonth() + delta);
@@ -158,109 +181,185 @@
 
   function selectDay(date: Date) {
     onDaySelect(date);
+    closeMiniCalendar();
   }
 </script>
 
+<!-- Toolbar row -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="flex w-60 shrink-0 flex-col"
-  style="background-color: var(--cal-header-bg);"
+  class="flex shrink-0 items-center gap-1 px-3"
+  style="height: var(--cal-header-row-h); background-color: var(--cal-header-bg); border-bottom: 1px solid var(--sidebar);"
+  onwheel={handlePickerWheel}
 >
-  <!-- Month/year label, aligned with sticky day-header row -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="flex shrink-0 items-center justify-center px-3"
-    style="height: var(--cal-header-row-h);"
-    onwheel={handlePickerWheel}
+  <!-- Back arrow -->
+  <button
+    onclick={() => onNavigate("back")}
+    class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    title="Previous"
   >
+    <ChevronLeft size={14} />
+  </button>
+
+  <!-- Month/year label with mini calendar popover -->
+  <div class="relative">
     <button
       onclick={handleHeaderClick}
-      class="rounded-md px-2 py-0.5 text-lg leading-none font-semibold text-foreground hover:bg-accent"
+      class="flex h-7 items-center rounded-md px-1.5 text-sm font-semibold leading-none text-foreground transition-colors {showMiniCalendar ? 'bg-accent' : 'hover:bg-accent'}"
     >
-      {#if pickerMode === "days"}
+      {#if pickerMode === "days" || !showMiniCalendar}
         {formatMonthYear(anchorDate)}
       {:else}
         {pickerYear}
       {/if}
     </button>
-  </div>
 
-  <!-- Mini calendar / month picker / year picker -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="mx-3 mt-0 mb-1.5" onwheel={handlePickerWheel}>
-    {#if pickerMode === "days"}
-      <!-- Day letters -->
-      <div class="grid grid-cols-7 gap-x-0 text-center">
-        {#each dayLetters as letter}
-          <span class="py-1 text-xs text-muted-foreground">{letter}</span>
-        {/each}
-      </div>
-
-      <!-- Date grid -->
-      {#each miniWeeks as week}
-        <div class="grid grid-cols-7 gap-x-0 text-center">
-          {#each week as day}
-            {@const inMonth = day.getMonth() === miniMonth}
-            {@const today = isToday(day)}
-            {@const selected = viewMode === "day" && isSameDay(day, anchorDate)}
-            {@const inWeek = viewMode === "week" && isInAnchorWeek(day)}
-            {@const past = isPastDay(day)}
+    {#if showMiniCalendar}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="fixed inset-0 z-40" onclick={closeMiniCalendar}></div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card p-2.5 shadow-lg"
+        onwheel={handlePickerWheel}
+      >
+        {#if pickerMode === "days"}
+          <!-- Popover header with month navigation -->
+          <div class="mb-1 flex items-center justify-between">
             <button
-              onclick={() => selectDay(day)}
-              class="flex h-6 w-full items-center justify-center rounded-sm text-xs hover:bg-accent"
-              style={today
-                ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
-                : selected
-                  ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-                  : inWeek
-                    ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
-                    : !inMonth
-                      ? "opacity: 0.25;"
-                      : past
-                        ? "opacity: 0.45; color: var(--foreground);"
-                        : "color: var(--foreground);"}
+              onclick={miniPrev}
+              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              {day.getDate()}
+              <ChevronLeft size={14} />
             </button>
+            <button
+              onclick={() => { pickerYear = miniYear; pickerMode = "months"; }}
+              class="rounded-md px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-accent"
+            >
+              {miniLabel}
+            </button>
+            <button
+              onclick={miniNext}
+              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+
+          <!-- Day letters -->
+          <div class="grid grid-cols-7 gap-x-0 text-center">
+            {#each dayLetters as letter}
+              <span class="py-1 text-xs text-muted-foreground">{letter}</span>
+            {/each}
+          </div>
+
+          <!-- Date grid -->
+          {#each miniWeeks as week}
+            <div class="grid grid-cols-7 gap-x-0 text-center">
+              {#each week as day}
+                {@const inMonth = day.getMonth() === miniMonth}
+                {@const today = isToday(day)}
+                {@const selected = viewMode === "day" && isSameDay(day, anchorDate)}
+                {@const inWeek = viewMode === "week" && isInAnchorWeek(day)}
+                {@const past = isPastDay(day)}
+                <button
+                  onclick={() => selectDay(day)}
+                  class="flex h-6 w-full items-center justify-center rounded-sm text-xs hover:bg-accent"
+                  style={today
+                    ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
+                    : selected
+                      ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+                      : inWeek
+                        ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
+                        : !inMonth
+                          ? "opacity: 0.25;"
+                          : past
+                            ? "opacity: 0.45; color: var(--foreground);"
+                            : "color: var(--foreground);"}
+                >
+                  {day.getDate()}
+                </button>
+              {/each}
+            </div>
           {/each}
-        </div>
-      {/each}
 
-    {:else if pickerMode === "months"}
-      <!-- Month grid (4 rows x 3 cols) -->
-      <div class="grid grid-cols-3 gap-1 py-1">
-        {#each shortMonths as name, i}
-          {@const isAnchor = pickerYear === anchorDate.getFullYear() && i === anchorDate.getMonth()}
-          <button
-            onclick={() => selectMonth(i)}
-            class="rounded-sm py-2.5 text-center text-sm font-medium {isAnchor
-              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : 'text-foreground hover:bg-accent'}"
-          >
-            {name}
-          </button>
-        {/each}
-      </div>
+        {:else if pickerMode === "months"}
+          <!-- Month grid header -->
+          <div class="mb-1 flex items-center justify-center">
+            <button
+              onclick={() => { yearPageStart = pickerYear - 4; pickerMode = "years"; }}
+              class="rounded-md px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-accent"
+            >
+              {pickerYear}
+            </button>
+          </div>
+          <!-- Month grid (4 rows x 3 cols) -->
+          <div class="grid grid-cols-3 gap-1 py-1">
+            {#each shortMonths as name, i}
+              {@const isAnchor = pickerYear === anchorDate.getFullYear() && i === anchorDate.getMonth()}
+              <button
+                onclick={() => selectMonth(i)}
+                class="rounded-sm py-2 text-center text-xs font-medium {isAnchor
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'text-foreground hover:bg-accent'}"
+              >
+                {name}
+              </button>
+            {/each}
+          </div>
 
-    {:else}
-      <!-- Year grid (4 rows x 3 cols, scrollable by page) -->
-      <div class="grid grid-cols-3 gap-1 py-1">
-        {#each yearPageYears as year}
-          {@const isAnchor = year === anchorDate.getFullYear()}
-          <button
-            onclick={() => selectYear(year)}
-            class="rounded-sm py-2.5 text-center text-sm font-medium {isAnchor
-              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : 'text-foreground hover:bg-accent'}"
-          >
-            {year}
-          </button>
-        {/each}
+        {:else}
+          <!-- Year grid header -->
+          <div class="mb-1 flex items-center justify-between">
+            <button
+              onclick={() => { yearPageStart -= 12; }}
+              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span class="text-xs font-semibold text-foreground">
+              {yearPageStart} - {yearPageStart + 11}
+            </span>
+            <button
+              onclick={() => { yearPageStart += 12; }}
+              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <!-- Year grid (4 rows x 3 cols) -->
+          <div class="grid grid-cols-3 gap-1 py-1">
+            {#each yearPageYears as year}
+              {@const isAnchor = year === anchorDate.getFullYear()}
+              <button
+                onclick={() => selectYear(year)}
+                class="rounded-sm py-2 text-center text-xs font-medium {isAnchor
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'text-foreground hover:bg-accent'}"
+              >
+                {year}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
 
-  <!-- View selector + today -->
-  <div class="mx-3 mt-1 mb-3 flex items-center gap-0.5">
+  <!-- Forward arrow -->
+  <button
+    onclick={() => onNavigate("forward")}
+    class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    title="Next"
+  >
+    <ChevronRight size={14} />
+  </button>
+
+  <!-- Spacer -->
+  <div class="flex-1"></div>
+
+  <!-- View selector -->
+  <div class="flex items-center gap-0.5">
     {#each viewOptions as opt}
       <button
         onclick={() => onViewChange(opt.mode)}
@@ -271,29 +370,35 @@
         {opt.label}
       </button>
     {/each}
-    <div class="flex-1"></div>
-    <button
-      onclick={() => onNavigate("today")}
-      disabled={isOnToday}
-      class="flex h-6 w-6 items-center justify-center rounded-md transition-colors {isOnToday
-        ? 'text-muted-foreground/30 cursor-default'
-        : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-      title="Go to today"
-    >
-      <RotateCcw size={13} />
-    </button>
   </div>
 
-  <!-- Spacer -->
-  <div class="flex-1"></div>
+  <!-- Today button -->
+  <button
+    onclick={() => onNavigate("today")}
+    disabled={isOnToday}
+    class="ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors {isOnToday
+      ? 'text-muted-foreground/30 cursor-default'
+      : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+    title="Go to today"
+  >
+    <RotateCcw size={13} />
+  </button>
 
   <!-- Calendar account picker -->
-  <div class="relative mx-2 mb-2">
+  <div class="relative ml-1">
+    <button
+      onclick={() => { showAccountPicker = !showAccountPicker; }}
+      class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      title="Calendars"
+    >
+      <Layers size={14} />
+    </button>
+
     {#if showAccountPicker}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
-      <div class="absolute bottom-full left-0 z-50 mb-1 w-full rounded-md border border-border bg-card p-2.5 shadow-lg">
+      <div class="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card p-2.5 shadow-lg">
         <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
         {#each calendarsStore.list as cal}
           {@const checked = cal.visible}
@@ -315,7 +420,6 @@
           </button>
         {/each}
         <div class="my-1.5 border-t border-border"></div>
-        <!-- TODO: implement account sync flow -->
         <button
           onclick={() => {}}
           class="flex w-full items-center gap-2 rounded px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -325,14 +429,5 @@
         </button>
       </div>
     {/if}
-
-    <button
-      onclick={() => (showAccountPicker = !showAccountPicker)}
-      class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    >
-      <span class="h-3 w-3 shrink-0 rounded-full bg-primary"></span>
-      <span class="flex-1 truncate">My calendars</span>
-      <ChevronUp size={14} class={showAccountPicker ? "" : "rotate-180"} />
-    </button>
   </div>
 </div>

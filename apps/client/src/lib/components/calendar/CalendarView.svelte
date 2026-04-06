@@ -856,7 +856,7 @@
   }
 </script>
 
-<div bind:this={containerEl} class="relative flex h-full select-none overflow-hidden rounded-tl-lg">
+<div bind:this={containerEl} class="relative flex h-full flex-col select-none overflow-hidden">
   <CalendarHeader
     {anchorDate}
     {viewMode}

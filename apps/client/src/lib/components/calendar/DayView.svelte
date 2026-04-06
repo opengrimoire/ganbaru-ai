@@ -75,6 +75,12 @@
     smoothScroll(e);
   }
 
+  function blockWheel(node: HTMLElement) {
+    const handler = (e: WheelEvent) => { e.preventDefault(); e.stopPropagation(); };
+    node.addEventListener("wheel", handler, { passive: false });
+    return { destroy() { node.removeEventListener("wheel", handler); } };
+  }
+
   function handleHeaderWheel(e: WheelEvent) {
     if (e.ctrlKey) {
       e.preventDefault();
@@ -236,7 +242,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         bind:clientHeight={stickyHeaderHeight}
-        class="sticky top-0 z-[48] grid {allDayEvents.length === 0 ? 'border-b border-[var(--cal-gridline)]' : ''}"
+        class="sticky top-0 z-[48] grid {allDayEvents.length === 0 ? 'border-b border-[var(--sidebar)]' : ''}"
         onwheel={handleHeaderWheel}
         style="
           grid-column: 1 / -1;
@@ -284,11 +290,9 @@
 
       {#if allDayEvents.length > 0}
       <!-- All-day banner -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
-        class="sticky z-[49] grid border-b border-[var(--cal-gridline)]"
-        onwheel={handleHeaderWheel}
+        class="sticky z-[49] grid border-b border-[var(--sidebar)]"
+        use:blockWheel
         style="
           top: var(--cal-header-row-h);
           grid-column: 1 / -1;
@@ -318,6 +322,8 @@
             </button>
           {/if}
           <!-- Thin click-to-create strip -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="cursor-pointer transition-colors hover:bg-accent/50"
             style="height: 6px;"
