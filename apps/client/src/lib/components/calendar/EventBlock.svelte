@@ -35,6 +35,7 @@
   const isFree = $derived(positioned.event.transparency === "transparent");
   const isTentative = $derived(positioned.event.status === "tentative");
   const isCancelled = $derived(positioned.event.status === "cancelled");
+  const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
   function handlePointerDown(e: PointerEvent) {
     e.stopPropagation();
@@ -62,6 +63,7 @@
   data-event-id={positioned.event.id}
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
+  title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
   class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
@@ -85,7 +87,7 @@
 
   <!-- Content -->
   <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
-    {#if hasRepeat || hasNotification}
+    {#if blockPixelHeight > 16 && (hasRepeat || hasNotification)}
       <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
         {#if hasRepeat}
           <Repeat size={8} class="shrink-0 opacity-70" />
@@ -95,13 +97,15 @@
         {/if}
       </div>
     {/if}
-    <div class="truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
-      {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
-    </div>
-    {#if (positioned.durationMinutes / 60) * calZoom.hourHeight > 28}
+    {#if blockPixelHeight > 14}
+      <div class="truncate font-medium" class:pr-5={(hasRepeat || hasNotification) && blockPixelHeight > 16} style={isCancelled ? 'text-decoration: line-through;' : ''}>
+        {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+      </div>
+    {/if}
+    {#if blockPixelHeight > 28}
       <div class="truncate opacity-80">{startTime} - {endTime}</div>
     {/if}
-    {#if (positioned.durationMinutes / 60) * calZoom.hourHeight > 44 && positioned.event.location}
+    {#if blockPixelHeight > 44 && positioned.event.location}
       <div class="truncate text-[9px] opacity-60">{positioned.event.location}</div>
     {/if}
   </div>

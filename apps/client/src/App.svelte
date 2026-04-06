@@ -23,12 +23,16 @@
   const zoom = getZoom();
 
   let isMaximized = $state(true);
+  let startupMs = $state<number | null>(null);
 
   onMount(() => {
     calendars.load().catch((e) => console.error("Failed to load calendars:", e));
     calendar.load().catch((e) => console.error("Failed to load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));
+    invoke<number>("get_startup_elapsed_ms").then((ms) => {
+      startupMs = ms;
+    });
 
     // Prevent default Ctrl+scroll behavior (used for calendar zoom)
     const blockCtrlWheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
@@ -153,6 +157,7 @@
     }
 
     if (activeBlock) {
+      if (pomodoro.blockExpired) pomodoro.clearBlockExpired();
       const pc = activeBlock.pomodoroConfig!;
       pomodoro.startFromBlock(
         activeBlock.id,
@@ -167,9 +172,24 @@
         pc.idleTimeoutMinutes,
       );
       trackedBlockSnapshot = { ...activeBlock };
+    } else if (pomodoro.activeBlockId && pomodoro.blockExpired) {
+      // Block naturally ended, no successor: stop silently (no dialog)
+      pomodoro.clearBlockExpired();
+      trackedBlockSnapshot = null;
+      pomodoro.stopSession();
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
-      savedBlockState = trackedBlockSnapshot;
-      showStopConfirm = true;
+      // Block moved/deleted by user: offer revert dialog (or stop if deleted)
+      const parentId = pomodoro.activeBlockId.includes("::")
+        ? pomodoro.activeBlockId.split("::")[0]
+        : pomodoro.activeBlockId;
+      const blockExists = calendar.rawBlocks.some((b) => b.id === parentId);
+      if (blockExists) {
+        savedBlockState = trackedBlockSnapshot;
+        showStopConfirm = true;
+      } else {
+        trackedBlockSnapshot = null;
+        pomodoro.stopSession();
+      }
     } else if (pomodoro.activeBlockId) {
       pomodoro.stopSession();
     }
@@ -196,9 +216,10 @@
     });
   }
 
-  // React to calendar event changes immediately
+  // React to calendar event changes and block expiry immediately
   $effect(() => {
     const _events = calendar.events;
+    const _expired = pomodoro.blockExpired;
     checkActiveBlock();
   });
 
@@ -257,7 +278,7 @@
 
 <div class="h-screen w-screen" class:app-rounded={!isMaximized}>
   <div class="flex h-full flex-col overflow-hidden bg-sidebar">
-    <TitleBar />
+    <TitleBar {startupMs} />
     <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />

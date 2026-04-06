@@ -5,7 +5,7 @@ import type {
   PositionedEvent,
 } from "./types";
 
-const MIN_EVENT_HEIGHT = 12;
+const MIN_EVENT_HEIGHT = 4;
 
 // --- Date parsing and formatting ---
 

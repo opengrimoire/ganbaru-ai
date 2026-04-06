@@ -184,5 +184,11 @@ pub fn migrations() -> Vec<Migration> {
             );
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 2,
+        description: "add event_id to pomodoro_sessions",
+        sql: "ALTER TABLE pomodoro_sessions ADD COLUMN event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL;",
+        kind: MigrationKind::Up,
     }]
 }

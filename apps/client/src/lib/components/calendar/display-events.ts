@@ -82,6 +82,7 @@ export function computeEditDisplay(
   session: { originalEvent: CalendarEvent; instanceEvent: CalendarEvent; templateId: string },
   changes: Partial<CalendarEvent>,
   scope: RecurringScope,
+  activeDate?: string,
 ): DisplayResult {
   const { originalEvent, instanceEvent, templateId } = session;
   const isRecurring = !!originalEvent.recurringParentId || !!originalEvent.recurrence;
@@ -94,7 +95,7 @@ export function computeEditDisplay(
     case "this":
       return applyThis(storeEvents, originalEvent, instanceEvent, changes);
     case "all":
-      return applyAll(rawBlocks, storeEvents, templateId, instanceEvent, changes);
+      return applyAll(rawBlocks, storeEvents, templateId, instanceEvent, changes, activeDate);
     case "following":
       return applyFollowing(rawBlocks, storeEvents, templateId, instanceEvent, changes);
   }
@@ -140,8 +141,9 @@ export function applyThis(
 }
 
 /**
- * "All" scope: patch the template and re-expand the whole series.
- * The instance's day delta is applied to the template's start/end dates.
+ * "All" scope: patch the template and re-expand, but keep past instances
+ * frozen at their original positions. Only today and future instances show
+ * the preview changes, matching the save behavior (which splits at today).
  */
 export function applyAll(
   rawBlocks: CalendarEvent[],
@@ -149,20 +151,25 @@ export function applyAll(
   templateId: string,
   instanceEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
+  activeDate?: string,
 ): DisplayResult {
   const template = rawBlocks.find((b) => b.id === templateId);
   if (!template) return closedDisplay(storeEvents);
+
+  const todayStr = fmtYMD(new Date());
+  const templateStartDate = template.start.split(" ")[0];
+  const hasPast = templateStartDate < todayStr;
 
   // Compute day delta between instance date and changes date
   const instanceDateStr = instanceEvent.start.split(" ")[0];
   const changesDateStr = changes.start ? String(changes.start).split(" ")[0] : instanceDateStr;
   const deltaDays = dateDiffDays(instanceDateStr, changesDateStr);
 
-  // Compute new template dates
-  const templateStartDate = template.start.split(" ")[0];
-  const templateEndDate = template.end.split(" ")[0];
+  // Compute new template dates (derive end date from changes day span to handle cross-midnight)
   const newStartDate = deltaDays !== 0 ? shiftDateStr(templateStartDate, deltaDays) : templateStartDate;
-  const newEndDate = deltaDays !== 0 ? shiftDateStr(templateEndDate, deltaDays) : templateEndDate;
+  const changesEndDateStr = changes.end ? String(changes.end).split(" ")[0] : changesDateStr;
+  const changesDaySpan = dateDiffDays(changesDateStr, changesEndDateStr);
+  const newEndDate = shiftDateStr(newStartDate, changesDaySpan);
   const newStartTime = changes.start ? String(changes.start).split(" ")[1] : template.start.split(" ")[1];
   const newEndTime = changes.end ? String(changes.end).split(" ")[1] : template.end.split(" ")[1];
 
@@ -180,30 +187,112 @@ export function applyAll(
   const patchedRaw = rawBlocks.map((b) => b.id === templateId ? patched : b);
   const expanded = expandRecurring(patchedRaw);
 
-  // Collect all IDs from this series
+  // Separate series instances by past vs. today+future
+  const belongsToSeries = (e: CalendarEvent) =>
+    e.id === templateId || e.recurringParentId === templateId;
+
+  const otherEvents = storeEvents.filter((e) => !belongsToSeries(e));
+
+  let seriesEvents: CalendarEvent[];
   const previewedIds = new Set<string>();
   let editingId: string | undefined;
-  for (const e of expanded) {
-    if (e.id === templateId || e.recurringParentId === templateId) {
-      previewedIds.add(e.id);
-      // The editing instance is the one on the changes date
-      const eDate = e.start.split(" ")[0];
-      if (eDate === changesDateStr) {
-        editingId = e.id;
+
+  if (hasPast) {
+    // Keep past instances from storeEvents (original positions),
+    // use patched future instances from re-expansion
+    const pastFromStore = storeEvents.filter(
+      (e) => belongsToSeries(e) && e.start.split(" ")[0] < todayStr,
+    );
+
+    // Active session today: hybrid if new time covers "now", cap at now otherwise
+    const activeDayEvents: CalendarEvent[] = [];
+
+    if (activeDate && activeDate >= todayStr) {
+      const todayOriginal = storeEvents.find(
+        (e) => belongsToSeries(e) && e.start.split(" ")[0] === activeDate,
+      );
+      if (todayOriginal) {
+        const newSTime = changes.start ? String(changes.start).split(" ")[1] : todayOriginal.start.split(" ")[1];
+        const newETime = changes.end ? String(changes.end).split(" ")[1] : todayOriginal.end.split(" ")[1];
+        let endDateForActive = activeDate;
+        if (changes.start && changes.end) {
+          const span = dateDiffDays(String(changes.start).split(" ")[0], String(changes.end).split(" ")[0]);
+          if (span !== 0) endDateForActive = shiftDateStr(activeDate, span);
+        }
+
+        const now = new Date();
+        const nowTime = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+        const newStartOnToday = `${activeDate} ${newSTime}`;
+        const newEndOnToday = `${endDateForActive} ${newETime}`;
+        const nowStr = `${activeDate} ${nowTime}`;
+
+        // Does the new schedule still cover "now"?
+        if (nowStr >= newStartOnToday && nowStr < newEndOnToday) {
+          // Hybrid: original start + new end (clamped to at least now)
+          const hybridEnd = newEndOnToday > nowStr ? newEndOnToday : nowStr;
+          const hybrid: CalendarEvent = {
+            ...todayOriginal,
+            ...changes,
+            id: todayOriginal.id,
+            start: todayOriginal.start,
+            end: hybridEnd,
+          };
+          activeDayEvents.push(hybrid);
+          previewedIds.add(hybrid.id);
+          if (activeDate === changesDateStr) editingId = hybrid.id;
+        } else {
+          // New time doesn't cover now: cap block at current time
+          const capped: CalendarEvent = {
+            ...todayOriginal,
+            id: todayOriginal.id,
+            start: todayOriginal.start,
+            end: nowStr,
+          };
+          activeDayEvents.push(capped);
+          previewedIds.add(capped.id);
+
+          // Show a preview block at the new time if it has a future portion.
+          // Built manually with a distinct ID so it doesn't collide with the capped block.
+          if (nowStr < newEndOnToday) {
+            const newBlock: CalendarEvent = {
+              ...todayOriginal,
+              ...changes,
+              id: `${todayOriginal.id}::preview`,
+              start: newStartOnToday,
+              end: newEndOnToday,
+              recurringParentId: undefined,
+              recurrence: undefined,
+            };
+            activeDayEvents.push(newBlock);
+            previewedIds.add(newBlock.id);
+          }
+        }
       }
     }
-  }
-  // Fallback: if no instance lands on the exact date, use template
-  if (!editingId) editingId = templateId;
 
-  // Replace all events from this template with re-expanded versions,
-  // keep events from other templates unchanged
-  const otherEvents = storeEvents.filter((e) =>
-    e.id !== templateId && e.recurringParentId !== templateId,
-  );
-  const seriesEvents = expanded.filter((e) =>
-    e.id === templateId || e.recurringParentId === templateId,
-  );
+    // Future instances: fully patched from re-expansion (always exclude active date,
+    // which is handled above via activeDayEvents)
+    const futureFromExpanded = expanded.filter(
+      (e) => belongsToSeries(e)
+        && e.start.split(" ")[0] >= todayStr
+        && (!activeDate || e.start.split(" ")[0] !== activeDate),
+    );
+    seriesEvents = [...pastFromStore, ...activeDayEvents, ...futureFromExpanded];
+
+    for (const e of futureFromExpanded) {
+      previewedIds.add(e.id);
+      if (e.start.split(" ")[0] === changesDateStr) editingId = e.id;
+    }
+  } else {
+    // No past instances: preview everything
+    seriesEvents = expanded.filter(belongsToSeries);
+    for (const e of seriesEvents) {
+      previewedIds.add(e.id);
+      if (e.start.split(" ")[0] === changesDateStr) editingId = e.id;
+    }
+  }
+
+  if (!editingId) editingId = templateId;
 
   return {
     events: [...otherEvents, ...seriesEvents],

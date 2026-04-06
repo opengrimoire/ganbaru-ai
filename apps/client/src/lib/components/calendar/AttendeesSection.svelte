@@ -111,9 +111,9 @@
 <div bind:this={sectionEl} class="border-t border-border/40">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div onclick={() => { if (expanded) close(); else expanded = true; }}
+  <div onclick={() => { if (readOnly) return; if (expanded) close(); else expanded = true; }}
     class="flex w-full items-center gap-2.5 px-3 py-2 text-[11px] leading-none transition-colors cursor-default
-      {expanded ? '' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+      {readOnly || expanded ? '' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
     <Users size={13} class="shrink-0 text-foreground" />
     {#if attendees.length === 0}
       <span class="min-w-0 flex-1 truncate text-left text-muted-foreground/40">Add attendees</span>

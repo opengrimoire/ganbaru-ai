@@ -151,13 +151,28 @@ describe("applyThis", () => {
 });
 
 describe("applyAll", () => {
+  // Use future dates so no instances are frozen by the past-protection logic
+  function makeFutureTemplate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 5);
+    const base = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return makeRecurringTemplate({ start: `${base} 09:00`, end: `${base} 09:30` });
+  }
+
+  function futureDate(daysFromNow: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromNow);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   it("patches all instances via re-expansion", () => {
-    const template = makeRecurringTemplate();
-    const inst20 = makeInstance(template, "2026-03-20");
-    const events = [template, inst20];
+    const template = makeFutureTemplate();
+    const instDate = futureDate(10);
+    const inst = makeInstance(template, instDate);
+    const events = [template, inst];
 
     const result = applyAll(
-      [template], events, template.id, inst20,
+      [template], events, template.id, inst,
       { title: "All changed" },
     );
 
@@ -170,19 +185,59 @@ describe("applyAll", () => {
   });
 
   it("shifts template dates by day delta", () => {
-    const template = makeRecurringTemplate();
-    const inst20 = makeInstance(template, "2026-03-20");
-    const events = [template, inst20];
+    const template = makeFutureTemplate();
+    const instDate = futureDate(10);
+    const shiftedDate = futureDate(12);
+    const inst = makeInstance(template, instDate);
+    const events = [template, inst];
 
     const result = applyAll(
-      [template], events, template.id, inst20,
-      { start: "2026-03-22 09:00", end: "2026-03-22 09:30" },
+      [template], events, template.id, inst,
+      { start: `${shiftedDate} 09:00`, end: `${shiftedDate} 09:30` },
     );
 
-    // Template should have shifted by +2 days (20 -> 22)
+    // Template should have shifted by +2 days
     const tmpl = result.events.find((e) => e.id === template.id)!;
-    expect(tmpl.start).toBe("2026-03-17 09:00"); // 15 + 2 = 17
-    expect(tmpl.end).toBe("2026-03-17 09:30");
+    const templateStartDate = template.start.split(" ")[0];
+    const expected = shiftDateStr(templateStartDate, 2);
+    expect(tmpl.start).toBe(`${expected} 09:00`);
+    expect(tmpl.end).toBe(`${expected} 09:30`);
+  });
+
+  it("freezes past instances and only previews future ones", () => {
+    // Template starts in the past with daily recurrence
+    const template = makeRecurringTemplate({
+      start: "2026-01-01 09:00",
+      end: "2026-01-01 09:30",
+    });
+    const pastDate = "2026-01-10";
+    const futDate = futureDate(10);
+    const pastInst = makeInstance(template, pastDate);
+    const futInst = makeInstance(template, futDate);
+    const events = [template, pastInst, futInst];
+
+    const result = applyAll(
+      [template], events, template.id, futInst,
+      { title: "Changed" },
+    );
+
+    // Past instance should keep its original title
+    const pastEvt = result.events.find((e) => e.id === pastInst.id);
+    expect(pastEvt).toBeDefined();
+    expect(pastEvt!.title).toBe("Daily standup");
+
+    // Past instance should NOT be in previewedIds
+    expect(result.previewedIds.has(pastInst.id)).toBe(false);
+
+    // Future instances should have the new title
+    const futEvts = result.events.filter(
+      (e) => (e.recurringParentId === template.id || e.id === template.id)
+        && e.start.split(" ")[0] >= futDate.slice(0, 10),
+    );
+    expect(futEvts.length).toBeGreaterThan(0);
+    for (const e of futEvts) {
+      expect(e.title).toBe("Changed");
+    }
   });
 });
 

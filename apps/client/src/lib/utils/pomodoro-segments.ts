@@ -417,7 +417,6 @@ function projectActiveSegments(
     const plannedDurMs = new Date(seg.plannedEnd).getTime() - new Date(seg.plannedStart).getTime();
 
     if (seg.status === "completed" || seg.status === "skipped" || seg.status === "interrupted") {
-      if (seg.status === "skipped") continue;
       const startMs = new Date(seg.actualStart ?? seg.plannedStart).getTime();
       const endMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
       if (seg.phase === "focus") {
@@ -477,7 +476,7 @@ function projectPersistedSegments(
 ): TimelineBand[] {
   const bands: TimelineBand[] = [];
   for (const seg of segments) {
-    if (seg.status === "skipped" || seg.status === "planned") continue;
+    if (seg.status === "planned") continue;
     if (!seg.actualStart) continue;
     const startMs = new Date(seg.actualStart).getTime();
     const endMs = seg.actualEnd ? new Date(seg.actualEnd).getTime() : startMs;
@@ -493,6 +492,39 @@ function projectPersistedSegments(
     }
   }
   return bands;
+}
+
+/**
+ * Compute the focus score for a completed session.
+ *
+ * Parameters
+ * ----------
+ * startMs : number
+ *     Session start timestamp (ms).
+ * endMs : number
+ *     Session end timestamp (ms).
+ * pauseLog : PauseInterval[]
+ *     Array of [pauseStart, resumeOrNull] intervals.
+ *
+ * Returns
+ * -------
+ * number
+ *     Ratio of actual focus time to total elapsed time (0.0 to 1.0).
+ */
+export function computeFocusScore(
+  startMs: number,
+  endMs: number,
+  pauseLog: PauseInterval[],
+): number {
+  const totalMs = endMs - startMs;
+  if (totalMs <= 0) return 1.0;
+  let pauseMs = 0;
+  for (const [pStart, pEnd] of pauseLog) {
+    const ps = new Date(pStart).getTime();
+    const pe = pEnd ? new Date(pEnd).getTime() : endMs;
+    pauseMs += Math.max(0, Math.min(pe, endMs) - Math.max(ps, startMs));
+  }
+  return Math.round(Math.max(0, (totalMs - pauseMs) / totalMs) * 100) / 100;
 }
 
 export function segmentsToAccentBands(

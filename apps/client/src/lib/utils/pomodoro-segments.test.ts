@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computePlannedSegments, segmentsToAccentBands, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands } from "./pomodoro-segments";
+import { computePlannedSegments, segmentsToAccentBands, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands, computeFocusScore } from "./pomodoro-segments";
 import type { PomodoroConfig } from "$lib/components/calendar/types";
 import type { TimelineEvent, ActivePomodoroState } from "./pomodoro-segments";
 
@@ -870,5 +870,69 @@ describe("computeDayTimelineBands", () => {
     expect(focusBands[1].topMinute).toBe(505);
     // The actual_end is 8:40, so second band: 8:25-8:40 = 15 min
     expect(focusBands[1].heightMinutes).toBe(15);
+  });
+});
+
+describe("computeFocusScore", () => {
+  it("returns 1.0 with no pauses", () => {
+    const start = new Date("2024-01-15T10:00:00Z").getTime();
+    const end = new Date("2024-01-15T10:40:00Z").getTime();
+    expect(computeFocusScore(start, end, [])).toBe(1.0);
+  });
+
+  it("returns correct ratio with a single pause", () => {
+    const start = new Date("2024-01-15T10:00:00Z").getTime();
+    const end = new Date("2024-01-15T10:40:00Z").getTime();
+    // 10 minute pause out of 40 minutes = 30/40 = 0.75
+    const pauseLog: [string, string | null][] = [
+      ["2024-01-15T10:10:00Z", "2024-01-15T10:20:00Z"],
+    ];
+    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
+  });
+
+  it("sums multiple pauses correctly", () => {
+    const start = new Date("2024-01-15T10:00:00Z").getTime();
+    const end = new Date("2024-01-15T10:40:00Z").getTime();
+    // Two 5-minute pauses = 10 min pause, 30/40 = 0.75
+    const pauseLog: [string, string | null][] = [
+      ["2024-01-15T10:05:00Z", "2024-01-15T10:10:00Z"],
+      ["2024-01-15T10:25:00Z", "2024-01-15T10:30:00Z"],
+    ];
+    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
+  });
+
+  it("clamps pause extending past end", () => {
+    const start = new Date("2024-01-15T10:00:00Z").getTime();
+    const end = new Date("2024-01-15T10:40:00Z").getTime();
+    // Pause from 10:30 to 11:00, but session ends at 10:40
+    // Effective pause = 10 min, score = 30/40 = 0.75
+    const pauseLog: [string, string | null][] = [
+      ["2024-01-15T10:30:00Z", "2024-01-15T11:00:00Z"],
+    ];
+    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
+  });
+
+  it("handles open-ended pause (null resume) clamped to end", () => {
+    const start = new Date("2024-01-15T10:00:00Z").getTime();
+    const end = new Date("2024-01-15T10:40:00Z").getTime();
+    // Open pause from 10:30 to null, clamped to end = 10 min
+    const pauseLog: [string, string | null][] = [
+      ["2024-01-15T10:30:00Z", null],
+    ];
+    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
+  });
+
+  it("returns 1.0 for zero duration", () => {
+    const t = new Date("2024-01-15T10:00:00Z").getTime();
+    expect(computeFocusScore(t, t, [])).toBe(1.0);
+  });
+
+  it("returns 0.0 when entire session is paused", () => {
+    const start = new Date("2024-01-15T10:00:00Z").getTime();
+    const end = new Date("2024-01-15T10:40:00Z").getTime();
+    const pauseLog: [string, string | null][] = [
+      ["2024-01-15T10:00:00Z", "2024-01-15T10:40:00Z"],
+    ];
+    expect(computeFocusScore(start, end, pauseLog)).toBe(0.0);
   });
 });

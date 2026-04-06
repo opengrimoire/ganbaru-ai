@@ -11,6 +11,7 @@
     getEventColor,
   } from "./utils";
   import { computeDayTimelineBands } from "$lib/utils/pomodoro-segments";
+  import { PENDING_CREATE_ID } from "./display-events";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { select } from "$lib/api/db";
   import EventBlock from "./EventBlock.svelte";
@@ -177,6 +178,7 @@
   let persistedSegmentsMap = $state(new Map<string, PersistedSegment[]>());
 
   $effect(() => {
+    void pomodoro.segmentVersion; // re-fetch when segments are written to DB
     const eventIds = positioned
       .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId && p.event.id !== draggingEventId)
       .map((p) => p.event.id);
@@ -225,16 +227,27 @@
     const dayStartMs = dayMidnight.getTime();
     const nowMs = Date.now();
 
+    const nowMinuteOfDay = (nowMs - dayStartMs) / 60000;
     const pomodoroEvents = positioned
       .filter((p) => p.event.pomodoroConfig && !(draggingEventId && p.event.id === draggingEventId))
       .map((p) => {
         const { startMinute, endMinute } = effectiveMinuteRange(p.event, dateStr);
+        let evStartMs = parseCalendarDate(p.event.start).getTime();
+        let evStartMinute = startMinute;
+
+        // Create preview (including expanded recurring instances): focus will start
+        // at save time (now), not event start. Clamp to now so break marks match.
+        if (p.event.id.startsWith(PENDING_CREATE_ID) && evStartMs < nowMs) {
+          evStartMs = nowMs;
+          evStartMinute = Math.max(startMinute, nowMinuteOfDay);
+        }
+
         return {
           id: p.event.id,
           config: p.event.pomodoroConfig!,
-          startMs: parseCalendarDate(p.event.start).getTime(),
+          startMs: evStartMs,
           endMs: parseCalendarDate(p.event.end).getTime(),
-          startMinute,
+          startMinute: evStartMinute,
           endMinute,
         };
       });
@@ -474,19 +487,19 @@
             top: {((band.topMinute - seg.start) / (seg.end - seg.start)) * 100}%;
             height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0.5)}%;
             background-color: var(--cal-timeline-focus);
-            opacity: {band.status === 'active' ? 0.85 : 0.7};
+            opacity: 0.85;
           "
         ></div>
       {/each}
       <!-- Break bands (on top of focus fills) -->
-      {#each timelineBands.filter(b => b.phase !== "focus" && b.status !== "skipped" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band}
+      {#each timelineBands.filter(b => b.phase !== "focus" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band}
         <div
           class="absolute left-0 right-0 {band.status === 'active' ? 'break-band-active' : ''}"
           style="
             top: {((band.topMinute - seg.start) / (seg.end - seg.start)) * 100}%;
             height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0.5)}%;
             background-color: var(--cal-timeline-break);
-            opacity: {band.status === 'planned' ? 0.6 : band.status === 'completed' ? 0.35 : 0.9};
+            opacity: {band.status === 'planned' ? 0.6 : band.status === 'skipped' ? 0.3 : band.status === 'completed' ? 0.35 : 0.9};
           "
         ></div>
       {/each}

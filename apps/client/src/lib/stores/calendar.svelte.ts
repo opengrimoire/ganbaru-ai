@@ -28,13 +28,48 @@ function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/**
+ * Detect whether changes affect event timing or pomodoro structure
+ * (which would invalidate existing pomodoro segments) vs. purely cosmetic fields.
+ */
+function hasStructuralChanges(
+  template: CalendarEvent,
+  changes: Partial<CalendarEvent>,
+): boolean {
+  if (changes.start) {
+    const oldTime = template.start.split(" ")[1];
+    const newTime = String(changes.start).split(" ")[1];
+    if (oldTime !== newTime) return true;
+  }
+  if (changes.end) {
+    const oldTime = template.end.split(" ")[1];
+    const newTime = String(changes.end).split(" ")[1];
+    if (oldTime !== newTime) return true;
+  }
+  if (changes.pomodoroConfig !== undefined) {
+    const oldCfg = template.pomodoroConfig;
+    const newCfg = changes.pomodoroConfig;
+    if (!oldCfg && newCfg) return true;
+    if (oldCfg && !newCfg) return true;
+    if (oldCfg && newCfg) {
+      if (oldCfg.focusDurationMinutes !== newCfg.focusDurationMinutes) return true;
+      if (oldCfg.shortBreakMinutes !== newCfg.shortBreakMinutes) return true;
+      if (oldCfg.longBreakMinutes !== newCfg.longBreakMinutes) return true;
+      if (oldCfg.pomodoroCount !== newCfg.pomodoroCount) return true;
+    }
+  }
+  return false;
+}
+
 // --- Store ---
 
 /** DB-backed template events (no virtual instances). */
 let rawBlocks = $state<CalendarEvent[]>([]);
 /** Expanded events including virtual recurring instances. */
 let blocks = $state<CalendarEvent[]>([]);
+let batchDepth = 0;
 function reexpand() {
+  if (batchDepth > 0) return;
   blocks = expandRecurring(rawBlocks);
 }
 
@@ -128,7 +163,7 @@ async function loadOverrides(eventIds: string[]): Promise<Map<string, EventOverr
 }
 
 export function getCalendar() {
-  return {
+  const store = {
     get events(): CalendarEvent[] {
       return blocks;
     },
@@ -136,6 +171,10 @@ export function getCalendar() {
     get rawBlocks(): CalendarEvent[] {
       return rawBlocks;
     },
+
+    /** Suppress reexpand() during multi-step mutations. */
+    beginBatch() { batchDepth++; },
+    endBatch() { if (--batchDepth <= 0) { batchDepth = 0; reexpand(); } },
 
     async load() {
       console.log("[calendar] load() called");
@@ -471,6 +510,14 @@ export function getCalendar() {
         await saveAttendees(newId, cloned);
       }
 
+      // Migrate pomodoro segments from parent template to the new standalone event
+      // Segments may be stored with event_id = parentId or event_id = parentId::date
+      await execute(
+        `UPDATE pomodoro_segments SET event_id = $1
+         WHERE event_id IN ($2, $2 || '::' || $3) AND event_date = $3`,
+        [newId, parentId, instanceDate],
+      );
+
       // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
@@ -670,5 +717,77 @@ export function getCalendar() {
       rawBlocks = [];
       blocks = [];
     },
+
+    /**
+     * Check whether a specific recurring instance date has completed progress segments.
+     */
+    async hasProgressSegments(templateId: string, date: string): Promise<boolean> {
+      const rows = await select<{ cnt: number }>(
+        `SELECT COUNT(*) as cnt FROM pomodoro_segments
+         WHERE event_id IN ($1, $1 || '::' || $2) AND event_date = $2
+           AND status IN ('completed', 'interrupted', 'skipped')
+           AND actual_start IS NOT NULL`,
+        [templateId, date],
+      );
+      return rows.length > 0 && rows[0].cnt > 0;
+    },
+
+    /**
+     * Check whether changes to a recurring template affect structural fields
+     * (times, pomodoro config) vs. purely cosmetic fields (title, color, etc.).
+     */
+    hasStructuralChanges(template: CalendarEvent, changes: Partial<CalendarEvent>): boolean {
+      return hasStructuralChanges(template, changes);
+    },
+
+    /**
+     * Protect historical pomodoro progress by detaching past recurring instances
+     * that have completed segments into standalone events before modifying the template.
+     *
+     * Returns the list of dates that were detached.
+     */
+    async protectHistoricalSegments(
+      templateId: string,
+      cutoffDate: string,
+      excludeDate?: string,
+    ): Promise<string[]> {
+      const rows = await select<{ event_date: string }>(
+        `SELECT DISTINCT event_date FROM pomodoro_segments
+         WHERE (event_id = $1 OR event_id = $1 || '::' || event_date)
+           AND event_date < $2
+           AND status IN ('completed', 'interrupted', 'skipped')
+           AND actual_start IS NOT NULL`,
+        [templateId, cutoffDate],
+      );
+
+      const datesToProtect = rows
+        .map((r) => r.event_date)
+        .filter((d) => d !== excludeDate);
+
+      if (datesToProtect.length === 0) return [];
+
+      const parent = rawBlocks.find((b) => b.id === templateId);
+      if (!parent) return [];
+
+      const detachedDates: string[] = [];
+      for (const date of datesToProtect) {
+        const startTime = parent.start.split(" ")[1];
+        const endTime = parent.end.split(" ")[1];
+        const virtualInstance: CalendarEvent = {
+          ...parent,
+          id: `${templateId}::${date}`,
+          start: `${date} ${startTime}`,
+          end: `${date} ${endTime}`,
+          recurringParentId: templateId,
+          recurrence: undefined,
+          exceptions: undefined,
+        };
+        await store.detachInstance(virtualInstance);
+        detachedDates.push(date);
+      }
+
+      return detachedDates;
+    },
   };
+  return store;
 }

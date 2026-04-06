@@ -39,6 +39,10 @@ export interface DragControllerConfig {
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
   onEventCreate: (start: string, end: string) => void;
   canDrag?: (eventId: string) => boolean;
+  /** Returns true if event has completed progress and should not be moved or resized. */
+  isEventLocked?: (eventId: string) => boolean;
+  /** The currently active pomodoro block ID (only resize-bottom is allowed). */
+  activeBlockId?: () => string | null;
 }
 
 export function useDragController(config: DragControllerConfig) {
@@ -51,6 +55,7 @@ export function useDragController(config: DragControllerConfig) {
     dateStr: string;
     anchorMinute: number;
     columnEl: HTMLElement;
+    didDrag: boolean;
   } | null>(null);
   let createPreviewDate = $state<string | null>(null);
   let createPreview = $state<PositionedEvent | null>(null);
@@ -160,6 +165,21 @@ export function useDragController(config: DragControllerConfig) {
       }
     }
 
+    // Active block: only allow resize-bottom (extend/shrink future end)
+    const activeId = config.activeBlockId?.();
+    if (activeId && eventId === activeId) {
+      if (dragState.type !== "resize-bottom") {
+        dragState = null;
+        return;
+      }
+    }
+
+    // Locked events (past with completed progress): no drag/resize at all
+    if (config.isEventLocked?.(eventId)) {
+      dragState = null;
+      return;
+    }
+
     if (dragState.type === "resize-top" || dragState.type === "resize-bottom") {
       lockCursor("ns-resize");
     } else {
@@ -219,17 +239,47 @@ export function useDragController(config: DragControllerConfig) {
       newStart = Math.min(1430, rawStart);
       newEnd = newStart + dur; // may exceed 1440 or start < 0 -- cross-midnight
     } else if (dragState.type === "resize-top") {
-      newStart = snapToGrid(dragState.originStartMinute + deltaMinutes, calZoom.gridMinutes);
-      newStart = Math.max(0, newStart);
-      newEnd = dragState.originEndMinute;
-      if (newStart >= newEnd) newStart = newEnd - 10;
-      if (newEnd - newStart < 10) newEnd = newStart + 10;
+      const minSize = calZoom.gridMinutes;
+      const anchor = dragState.originEndMinute;
+      let raw = snapToGrid(dragState.originStartMinute + deltaMinutes, minSize);
+      raw = Math.max(0, raw);
+      if (raw < anchor) {
+        newStart = raw;
+        newEnd = anchor;
+        if (newEnd - newStart < minSize) newStart = newEnd - minSize;
+      } else {
+        // Flipped: top handle crossed below bottom
+        newStart = anchor;
+        newEnd = raw;
+        if (newEnd - newStart < minSize) newEnd = newStart + minSize;
+      }
     } else {
-      // resize-bottom: allow crossing midnight
+      // resize-bottom (supports crossover and crossing midnight)
+      const minSize = calZoom.gridMinutes;
+      const anchor = dragState.originStartMinute;
+      let raw = snapToGrid(dragState.originEndMinute + deltaMinutes, minSize);
+      if (raw > anchor) {
+        newStart = anchor;
+        newEnd = raw;
+        if (newEnd - newStart < minSize) newEnd = newStart + minSize;
+      } else {
+        // Flipped: bottom handle crossed above top
+        raw = Math.max(0, raw);
+        newStart = raw;
+        newEnd = anchor;
+        if (newEnd - newStart < minSize) newStart = newEnd - minSize;
+      }
+    }
+
+    // Active block: start is sacred, only future end can change
+    const activeResize = config.activeBlockId?.();
+    if (activeResize && dragState.eventId === activeResize) {
       newStart = dragState.originStartMinute;
-      newEnd = snapToGrid(dragState.originEndMinute + deltaMinutes, calZoom.gridMinutes);
-      if (newEnd <= newStart) newEnd = newStart + 10;
-      if (newEnd - newStart < 10) newEnd = newStart + 10;
+      const now = new Date();
+      const nowMinute = now.getHours() * 60 + now.getMinutes();
+      const snap = calZoom.gridMinutes;
+      const minEnd = snapToGrid(nowMinute, snap) + snap;
+      if (newEnd < minEnd) newEnd = minEnd;
     }
 
     // During resize, if end reaches midnight, snap to at least 00:30 next day
@@ -293,8 +343,9 @@ export function useDragController(config: DragControllerConfig) {
     ) as HTMLElement;
     if (!columnEl) return;
 
-    createState = { dateStr, anchorMinute: minute, columnEl };
-    const endMinute = Math.min(minute + 10, 1440);
+    createState = { dateStr, anchorMinute: minute, columnEl, didDrag: false };
+    const snap = calZoom.gridMinutes;
+    const endMinute = Math.min(minute + snap, 1440);
     createPreviewDate = dateStr;
     createPreview = buildPreview(dateStr, minute, endMinute);
 
@@ -316,7 +367,9 @@ export function useDragController(config: DragControllerConfig) {
     const anchor = createState.anchorMinute;
     let startMinute = Math.min(anchor, cursorMinute);
     let endMinute = Math.max(anchor, cursorMinute);
-    if (endMinute - startMinute < 10) endMinute = startMinute + 10;
+    const snap = calZoom.gridMinutes;
+    if (endMinute - startMinute < snap) endMinute = startMinute + snap;
+    createState.didDrag = true;
 
     createPreview = buildPreview(
       createState.dateStr,
@@ -338,7 +391,13 @@ export function useDragController(config: DragControllerConfig) {
     unlockCursor();
     lastPointerEvent = null;
 
-    if (createPreview) {
+    if (createPreview && createState) {
+      // Click without drag: use 30-minute default duration
+      if (!createState.didDrag) {
+        const anchor = createState.anchorMinute;
+        const endMinute = clampMinute(Math.min(anchor + 30, 1440));
+        createPreview = buildPreview(createState.dateStr, anchor, endMinute);
+      }
       config.onEventCreate(createPreview.event.start, createPreview.event.end);
     }
 

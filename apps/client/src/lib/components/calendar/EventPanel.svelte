@@ -171,6 +171,7 @@
   }
 
   function toggleDatepicker() {
+    if (readOnly) return;
     timePickerTarget = null;
     endDatepickerOpen = false;
     showAsPicker = false;
@@ -179,6 +180,7 @@
   }
 
   function toggleEndDatepicker() {
+    if (readOnly) return;
     timePickerTarget = null;
     datepickerOpen = false;
     showAsPicker = false;
@@ -194,6 +196,7 @@
 
 
   function openTimePicker(target: "start" | "end") {
+    if (readOnly) return;
     datepickerOpen = false;
     endDatepickerOpen = false;
     showAsPicker = false;
@@ -238,6 +241,7 @@
 
 
   function handleToggle(s: Section, e?: MouseEvent) {
+    if (readOnly) return;
     if (e) bounceIcon(e);
     if (s === "music") return;
     const enabled = isSectionEnabled(s);
@@ -258,6 +262,7 @@
 
   /** Label click: expand/collapse the details panel. */
   function handleExpand(s: Section) {
+    if (readOnly) return;
     // Auto-activate repeat when expanding for the first time
     if (s === "repeat" && !recurrence && openSection !== s) {
       recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
@@ -551,7 +556,7 @@
   const isCrossMidnight = $derived(endDate !== "" && endDate !== startDate);
 
   const shortEndDate = $derived.by(() => {
-    if (!endDate || !isCrossMidnight) return "";
+    if (!endDate) return "";
     const [y, m, d] = endDate.split("-").map(Number);
     const dt = new Date(y, m - 1, d);
     return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -631,6 +636,7 @@
 <div
   bind:this={panelEl}
   class="panel-root flex flex-col rounded-xl border border-border overflow-hidden"
+  data-readonly={readOnly || undefined}
   style:box-shadow="0 2px 8px rgba(0,0,0,0.3)"
   style="{panelStyle} background-color: var(--panel-bg);"
   onclick={(e) => e.stopPropagation()}
@@ -670,7 +676,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div onclick={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
       <button onclick={onClose}
-        class="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground [&>svg]:block"
+        class="panel-chrome flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground [&>svg]:block"
         title="Close">
         <X class="translate-y-[0.05px]" size={13} strokeWidth={2.1} />
       </button>
@@ -703,12 +709,15 @@
           type="text"
           bind:value={title}
           placeholder="Session title..."
+          disabled={readOnly}
           class="w-full bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-[#444746] dark:placeholder:text-[#C4C7C5]"
           oninput={emitChange}
           onkeydown={(e) => e.stopPropagation()}
         />
       </div>
-      <ColorPicker {color} isDark={theme.isDark} onselect={(c) => { color = c; emitChange(); }} />
+      {#if !readOnly}
+        <ColorPicker {color} isDark={theme.isDark} onselect={(c) => { color = c; emitChange(); }} />
+      {/if}
     </div>
     <hr class="border-[#C4C7C5] dark:border-[#444746] -mt-2 mx-1" />
 
@@ -718,7 +727,7 @@
       <div class="relative z-[1] shrink-0">
         <button onclick={toggleDatepicker}
           class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-            {datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+            {readOnly ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
         </button>
 
@@ -743,17 +752,19 @@
         <input type="text" bind:value={startTime}
           oninput={emitChange}
           onclick={() => openTimePicker("start")}
+          disabled={readOnly}
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-            {timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+            {readOnly ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => e.stopPropagation()} />
         <span class="text-muted-foreground/60">&ndash;</span>
         <input type="text" bind:value={endTime}
           oninput={emitChange}
           onclick={() => openTimePicker("end")}
+          disabled={readOnly}
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-            {timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+            {readOnly ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => e.stopPropagation()} />
 
         <!-- Floating time picker -->
@@ -775,26 +786,24 @@
         </div>
       </div>
 
-      <!-- End date (right, shown when cross-midnight) -->
-      {#if isCrossMidnight}
-        <div class="relative z-[1] shrink-0">
-          <button onclick={toggleEndDatepicker}
-            class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
-              {endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
-            {shortEndDate}
-          </button>
+      <!-- End date (right) -->
+      <div class="relative z-[1] shrink-0">
+        <button onclick={toggleEndDatepicker}
+          class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+            {readOnly ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+          {shortEndDate}
+        </button>
 
-          <!-- Floating end date picker -->
-          {#if endDatepickerOpen}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0 z-[19]" onclick={() => { endDatepickerOpen = false; }}></div>
-            <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
-              <MiniDatePicker selectedDate={endDate} minDate={startDate} onselect={selectEdpDay} />
-            </div>
-          {/if}
-        </div>
-      {/if}
+        <!-- Floating end date picker -->
+        {#if endDatepickerOpen}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="fixed inset-0 z-[19]" onclick={() => { endDatepickerOpen = false; }}></div>
+          <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
+            <MiniDatePicker selectedDate={endDate} minDate={startDate} onselect={selectEdpDay} />
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -956,7 +965,7 @@
         {/if}
       </div>
       <!-- Description -->
-      <DescriptionEditor {description} onchange={(html) => { description = html; emitChange(); }} />
+      <DescriptionEditor {description} {readOnly} onchange={(html) => { description = html; emitChange(); }} />
     </div>
   </div>
   {/if}
@@ -1068,6 +1077,14 @@
 
   .title-wrapper:not(:focus-within)::after {
     opacity: 1;
+  }
+
+  /* Kill all interactivity below the drag-handle bar when readOnly */
+  .panel-root[data-readonly] :global(button:not(.panel-chrome)),
+  .panel-root[data-readonly] :global(input),
+  .panel-root[data-readonly] :global([contenteditable]) {
+    pointer-events: none !important;
+    cursor: default !important;
   }
 
 </style>

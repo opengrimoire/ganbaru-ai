@@ -13,9 +13,11 @@
 
   let {
     description,
+    readOnly = false,
     onchange,
   }: {
     description: string;
+    readOnly?: boolean;
     onchange: (html: string) => void;
   } = $props();
 
@@ -25,6 +27,7 @@
   let descAreaEl: HTMLDivElement | undefined = $state();
 
   function openDescEditor() {
+    if (readOnly) return;
     descOpen = true;
     requestAnimationFrame(() => {
       if (editorEl) {
@@ -218,7 +221,7 @@
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    class="flex items-center gap-2.5 px-3 pb-2 leading-none transition-[padding-top] duration-250 ease-out {descOpen ? 'pt-0' : 'pt-2'} {!descOpen && !descClosing ? 'cursor-text' : ''}"
+    class="flex items-center gap-2.5 px-3 pb-2 leading-none transition-[padding-top] duration-250 ease-out {descOpen ? 'pt-0' : 'pt-2'} {!descOpen && !descClosing && !readOnly ? 'cursor-text' : ''}"
     onclick={() => { if (!descOpen && !descClosing) openDescEditor(); }}
   >
     <AlignLeft size={13} class="shrink-0 text-foreground" />
@@ -227,7 +230,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           bind:this={editorEl}
-          contenteditable={descOpen && !descClosing}
+          contenteditable={descOpen && !descClosing && !readOnly}
           class="desc-editor desc-content max-h-[80px] overflow-y-auto text-[11px] leading-[15px] text-foreground outline-none"
           class:desc-editing={descOpen && !descClosing}
           oninput={handleEditorInput}

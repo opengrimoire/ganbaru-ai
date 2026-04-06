@@ -7,6 +7,11 @@
   import { cn } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
+  import CircleGauge from "@lucide/svelte/icons/circle-gauge";
+  import Pin from "@lucide/svelte/icons/pin";
+  import PinOff from "@lucide/svelte/icons/pin-off";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Check from "@lucide/svelte/icons/check";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
@@ -17,6 +22,18 @@
   import X from "@lucide/svelte/icons/x";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
+  interface ProcessMemory {
+    name: string;
+    mb: number;
+  }
+  interface MemoryReport {
+    processes: ProcessMemory[];
+    total_mb: number;
+    platform: string;
+  }
+
+  let { startupMs = null }: { startupMs: number | null } = $props();
+
   const win = getCurrentWindow();
   const nav = getNavigation();
   const pomodoro = getPomodoro();
@@ -26,6 +43,10 @@
   let showCloseConfirm = $state(false);
   let showPomodoroMenu = $state(false);
   let showResetConfirm = $state(false);
+  let showPerfMenu = $state(false);
+  let perfPinned = $state(false);
+  let perfLive = $state(false);
+  let copied = $state(false);
 
   async function confirmReset() {
     showResetConfirm = false;
@@ -61,18 +82,60 @@
     { view: "kanban", label: "Kanban", icon: LayoutList },
   ];
 
-  let memoryMb = $state(0);
+  let liveReport = $state<MemoryReport | null>(null);
+  let snapshotReport = $state<MemoryReport | null>(null);
+  let snapshotReady = $state(false);
+
+  const displayReport = $derived(perfLive ? liveReport : snapshotReport);
 
   $effect(() => {
-    function updateMemory() {
-      invoke("get_memory_usage_mb").then((mb) => {
-        memoryMb = Math.round(mb as number);
+    function update() {
+      invoke<MemoryReport>("get_memory_report").then((r) => {
+        liveReport = r;
       });
     }
-    updateMemory();
-    const id = setInterval(updateMemory, 5000);
+    update();
+    const id = setInterval(update, 5000);
     return () => clearInterval(id);
   });
+
+  let snapshotCountdown = $state(10);
+
+  $effect(() => {
+    const tick = setInterval(() => {
+      if (snapshotCountdown > 0) snapshotCountdown--;
+    }, 1000);
+    const timer = setTimeout(() => {
+      invoke<MemoryReport>("get_memory_report").then((r) => {
+        snapshotReport = r;
+        snapshotReady = true;
+      });
+    }, 10000);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(timer);
+    };
+  });
+
+  function copyPerformanceData() {
+    const report = displayReport;
+    if (!report) return;
+    const mode = perfLive ? "Live" : "Snapshot (10s)";
+    const lines = [`Performance ${mode} (${report.platform})`];
+    lines.push("");
+    lines.push("RAM by process:");
+    for (const p of report.processes) {
+      lines.push(`  ${p.name}: ${p.mb.toFixed(1)} MB`);
+    }
+    lines.push(`  Total PSS: ${Math.round(report.total_mb)} MB`);
+    if (startupMs !== null) {
+      lines.push("");
+      lines.push(`Launch time: ${startupMs} ms`);
+    }
+    navigator.clipboard.writeText(lines.join("\n"));
+    copied = true;
+    setTimeout(() => { copied = false; }, 2000);
+  }
 
   $effect(() => {
     win.isMaximized().then((v) => (isMaximized = v));
@@ -173,11 +236,6 @@
   <!-- Draggable spacer -->
   <div class="flex-1"></div>
 
-  <!-- RAM usage (dev) -->
-  {#if memoryMb > 0}
-    <span class="mr-2 text-[11px] tabular-nums text-sidebar-foreground/40">{memoryMb} MB</span>
-  {/if}
-
   <!-- Utility buttons -->
   <div class="flex items-center gap-0.5">
     <!-- Pomodoro progress ring with dropdown -->
@@ -259,6 +317,102 @@
         <Moon size={14} />
       {/if}
     </button>
+
+    <!-- Performance monitor -->
+    <div class="relative">
+      <button
+        onclick={() => { showPerfMenu = !showPerfMenu; }}
+        class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        title={liveReport ? `${Math.round(liveReport.total_mb)} MB (PSS)` : "Performance"}
+      >
+        <CircleGauge size={14} />
+      </button>
+      {#if showPerfMenu}
+        {#if !perfPinned}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="fixed inset-0 z-40"
+            onclick={() => { showPerfMenu = false; }}
+            onkeydown={(e) => { if (e.key === "Escape") showPerfMenu = false; }}
+          ></div>
+        {/if}
+        <div class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 shadow-lg">
+          <!-- RAM toggle + pin -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-[10px] uppercase tracking-wider">
+              <button
+                onclick={() => { perfLive = false; }}
+                class={cn(
+                  "transition-colors",
+                  !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
+                )}
+              >RAM SNAPSHOT</button>
+              <span class="text-muted-foreground/30">|</span>
+              <button
+                onclick={() => { perfLive = true; }}
+                class={cn(
+                  "transition-colors",
+                  perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
+                )}
+              >LIVE RAM</button>
+            </div>
+            <button
+              onclick={() => { perfPinned = !perfPinned; }}
+              class={cn(
+                "flex h-5 w-5 items-center justify-center rounded transition-colors",
+                perfPinned ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground",
+              )}
+              title={perfPinned ? "Unpin" : "Pin"}
+            >
+              {#if perfPinned}
+                <Pin size={11} />
+              {:else}
+                <PinOff size={11} />
+              {/if}
+            </button>
+          </div>
+          <!-- RAM data -->
+          {#if !perfLive && !snapshotReady}
+            <div class="mt-2 text-xs text-muted-foreground">Snapshot in {snapshotCountdown}s...</div>
+          {:else if displayReport && displayReport.processes.length > 0}
+            <div class="mt-2 space-y-1.5">
+              {#each displayReport.processes as proc}
+                <div class="flex items-baseline justify-between">
+                  <span class="text-xs text-muted-foreground">{proc.name}</span>
+                  <span class="text-[11px] tabular-nums text-foreground">{proc.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+                </div>
+              {/each}
+              <div class="flex items-baseline justify-between">
+                <span class="text-xs text-muted-foreground">Total</span>
+                <span class="text-[11px] tabular-nums text-foreground">{displayReport.total_mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+              </div>
+            </div>
+          {/if}
+          <!-- Launch time -->
+          {#if startupMs !== null}
+            <div class="mx-0 my-3 h-px bg-border"></div>
+            <div class="flex items-baseline justify-between">
+              <span class="text-[10px] uppercase tracking-wider text-foreground">Launch time</span>
+              <span class="text-[11px] tabular-nums text-foreground">{startupMs.toLocaleString("en")} ms</span>
+            </div>
+          {/if}
+          <!-- Copy -->
+          <div class="mx-0 my-3 h-px bg-border"></div>
+          <button
+            onclick={copyPerformanceData}
+            class="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {#if copied}
+              <Check size={12} />
+              Copied
+            {:else}
+              <Copy size={12} />
+              Copy all
+            {/if}
+          </button>
+        </div>
+      {/if}
+    </div>
 
     <!-- TODO: implement help panel -->
     <button

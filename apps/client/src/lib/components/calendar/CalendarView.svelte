@@ -4,9 +4,10 @@
     EventTransparency, EventVisibility, GuestPermissions,
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
-  import { addDays, getLocalTimezone } from "./utils";
+  import { addDays, getLocalTimezone, parseCalendarDate, formatDatePart } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
+  import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
@@ -29,6 +30,7 @@
 
   const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
+  const pomodoro = getPomodoro();
   const calZoom = getCalendarZoom();
   const theme = getTheme();
 
@@ -47,12 +49,19 @@
     if (s.mode === "closed") return closedDisplay(storeEvents);
     if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes);
     // mode === "edit": dispatch by scope
+    // Compute active date for hybrid preview (active session keeps original start)
+    let activeDate: string | undefined;
+    if (pomodoro.activeBlockId && s.templateId) {
+      const parts = pomodoro.activeBlockId.split("::");
+      if (parts[0] === s.templateId) activeDate = parts[1];
+    }
     return computeEditDisplay(
       calendarStore.rawBlocks,
       storeEvents,
       { originalEvent: s.originalEvent, instanceEvent: s.instanceEvent, templateId: s.templateId },
       session.changes,
       session.scope,
+      activeDate,
     );
   });
 
@@ -70,9 +79,90 @@
     return undefined;
   });
 
+  // Past pomodoro events are read-only (completed work is sacred)
+  const isEditingLocked = $derived.by(() => {
+    const s = session.state;
+    if (s.mode !== "edit") return false;
+    const ev = s.originalEvent;
+    if (!ev.pomodoroConfig) return false;
+    if (ev.id === pomodoro.activeBlockId) return false;
+    return parseCalendarDate(ev.end).getTime() < Date.now();
+  });
+
   function isRecurring(event: CalendarEvent): boolean {
     return !!event.recurringParentId || !!event.recurrence;
   }
+
+  /** Would this delete stop the active pomodoro session? */
+  function wouldDeleteActiveSession(scope?: RecurringScope): boolean {
+    if (!pomodoro.activeBlockId || session.state.mode !== "edit") return false;
+    const activeId = pomodoro.activeBlockId;
+    const eventId = session.state.instanceEvent.id;
+
+    // Non-recurring or "this" delete of the active block
+    if (!scope || scope === "this") return eventId === activeId;
+
+    // "Following" delete: stops if active block is at or after the split point
+    if (scope === "following") {
+      const activeRoot = activeId.includes("::") ? activeId.split("::")[0] : activeId;
+      const inst = session.state.instanceEvent;
+      const targetRoot = (inst.recurringParentId ?? inst.id).split("::")[0];
+      if (activeRoot !== targetRoot) return false;
+      const instanceDate = inst.start.split(" ")[0];
+      const activeDate = activeId.includes("::") ? activeId.split("::")[1] : formatDatePart(new Date());
+      return instanceDate <= activeDate;
+    }
+
+    // "All" delete: current code preserves active block via splitDate shift
+    return false;
+  }
+
+  /** Would this save displace the active block out of the current time window? */
+  function wouldSaveStopSession(data: { start: string; end: string }, scope?: RecurringScope): boolean {
+    if (!pomodoro.activeBlockId || session.state.mode !== "edit") return false;
+    // "Following" splits from next day, preserving the active block
+    if (scope === "following") return false;
+
+    const s = session.state;
+    const activeId = pomodoro.activeBlockId;
+
+    // "All events" scope: check if the new time window still covers "now" on today
+    if (scope === "all") {
+      const templateId = (s.instanceEvent.recurringParentId ?? s.instanceEvent.id).split("::")[0];
+      const activeRoot = activeId.includes("::") ? activeId.split("::")[0] : activeId;
+      if (activeRoot !== templateId) return false;
+
+      const todayStr = formatDatePart(new Date());
+      const activeDate = activeId.includes("::") ? activeId.split("::")[1] : null;
+      if (activeDate !== todayStr) return false;
+
+      // Compute the new time window projected onto today
+      const newStartTime = data.start.split(" ")[1];
+      const newEndTime = data.end.split(" ")[1];
+      const dataStartDate = data.start.split(" ")[0];
+      const dataEndDate = data.end.split(" ")[0];
+      const endDaySpan = dateDiffDays(dataStartDate, dataEndDate);
+      const endDateForToday = endDaySpan !== 0 ? shiftDateStr(todayStr, endDaySpan) : todayStr;
+
+      const now = new Date();
+      const newStartMs = parseCalendarDate(`${todayStr} ${newStartTime}`).getTime();
+      const newEndMs = parseCalendarDate(`${endDateForToday} ${newEndTime}`).getTime();
+
+      // Session continues only if the new time window covers right now
+      return !(now.getTime() >= newStartMs && now.getTime() < newEndMs);
+    }
+
+    // Direct edit of active block (non-recurring or "this")
+    if (s.instanceEvent.id !== activeId) return false;
+    const now = new Date();
+    const newStart = parseCalendarDate(data.start);
+    const newEnd = parseCalendarDate(data.end);
+    return !(now >= newStart && now < newEnd);
+  }
+
+  // Flag: the user confirmed the session stop but the actual stopSession() call
+  // must happen AFTER the save (the hybrid logic needs activeBlockId intact)
+  let sessionStopPending = false;
 
   // View history for Alt+Left/Right navigation (capped at 50)
   const VIEW_HISTORY_LIMIT = 50;
@@ -436,6 +526,20 @@
     attendees?: EventAttendee[];
     guestPermissions?: GuestPermissions;
   }, scope?: RecurringScope) {
+    // Gate: confirm before stopping the active pomodoro session.
+    // stopSession() is deferred to AFTER the save so the hybrid logic still sees activeBlockId.
+    if (!sessionStopPending && wouldSaveStopSession(data, scope)) {
+      requestConfirm(
+        "This will stop the current focus session.",
+        async () => {
+          sessionStopPending = true;
+          await handlePanelSave(data, scope);
+        },
+        { yesLabel: "Stop and save (Enter)", noLabel: "Keep editing (Esc)" },
+      );
+      return;
+    }
+
     const s = session.state;
 
     if (s.mode === "create") {
@@ -467,24 +571,183 @@
           const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
           await calendarStore.updateBlock(updated);
         } else if (scope === "following") {
-          await calendarStore.splitSeries(instanceEvent, data);
+          const instanceDate = instanceEvent.start.split(" ")[0];
+          const templateId = instanceEvent.recurringParentId ?? instanceEvent.id;
+
+          // If this is the active session's date, don't detach it; split from tomorrow
+          const isActiveDate = pomodoro.activeBlockId?.startsWith(templateId + "::" + instanceDate);
+          if (isActiveDate) {
+            const nextDate = shiftDateStr(instanceDate, 1);
+            const startTime = instanceEvent.start.split(" ")[1];
+            const endTime = instanceEvent.end.split(" ")[1];
+            const nextDayInstance: CalendarEvent = {
+              ...instanceEvent,
+              id: `${templateId}::${nextDate}`,
+              start: `${nextDate} ${startTime}`,
+              end: `${nextDate} ${endTime}`,
+            };
+            await calendarStore.splitSeries(nextDayInstance, data);
+          } else {
+            const hasProgress = await calendarStore.hasProgressSegments(templateId, instanceDate);
+            if (hasProgress) {
+              // Instance date has progress: detach it first, then split from next day
+              await calendarStore.detachInstance(instanceEvent);
+              const nextDate = shiftDateStr(instanceDate, 1);
+              const startTime = instanceEvent.start.split(" ")[1];
+              const endTime = instanceEvent.end.split(" ")[1];
+              const nextDayInstance: CalendarEvent = {
+                ...instanceEvent,
+                id: `${templateId}::${nextDate}`,
+                start: `${nextDate} ${startTime}`,
+                end: `${nextDate} ${endTime}`,
+              };
+              await calendarStore.splitSeries(nextDayInstance, data);
+            } else {
+              await calendarStore.splitSeries(instanceEvent, data);
+            }
+          }
         } else {
-          // "all": shift template dates by day delta
+          // "all": past instances are immutable, only change today and forward
           const template = calendarStore.getTemplate(instanceEvent);
           if (template) {
-            const instanceDateStr = instanceEvent.start.split(" ")[0];
-            const changesDateStr = data.start.split(" ")[0];
-            const delta = dateDiffDays(instanceDateStr, changesDateStr);
             const templateStartDate = template.start.split(" ")[0];
-            const templateEndDate = template.end.split(" ")[0];
-            const newStartDate = delta !== 0 ? shiftDateStr(templateStartDate, delta) : templateStartDate;
-            const newEndDate = delta !== 0 ? shiftDateStr(templateEndDate, delta) : templateEndDate;
-            const updated: CalendarEvent = {
-              ...template, ...data,
-              start: `${newStartDate} ${data.start.split(" ")[1]}`,
-              end: `${newEndDate} ${data.end.split(" ")[1]}`,
-            };
-            await calendarStore.updateBlock(updated);
+            const todayStr = formatDatePart(new Date());
+
+            // Detect active session on this series today
+            let activeOnToday = false;
+            if (pomodoro.activeBlockId) {
+              const parts = pomodoro.activeBlockId.split("::");
+              if (parts[0] === template.id && parts[1] === todayStr) {
+                activeOnToday = true;
+              }
+            }
+
+            // Determine split date based on session state:
+            // - Hybrid (session continues): split from tomorrow, today keeps extended block
+            // - Stop (new time doesn't cover now): split from today if new time has
+            //   a future portion, otherwise from tomorrow (skip past-only today block)
+            let splitDate: string;
+            if (activeOnToday) {
+              if (sessionStopPending) {
+                const newEndTime = data.end.split(" ")[1];
+                const dsd = data.start.split(" ")[0];
+                const ded = data.end.split(" ")[0];
+                const edSpan = dateDiffDays(dsd, ded);
+                const endDateToday = edSpan !== 0 ? shiftDateStr(todayStr, edSpan) : todayStr;
+                const newEndMs = parseCalendarDate(`${endDateToday} ${newEndTime}`).getTime();
+                splitDate = Date.now() < newEndMs ? todayStr : shiftDateStr(todayStr, 1);
+              } else {
+                splitDate = shiftDateStr(todayStr, 1);
+              }
+            } else {
+              splitDate = todayStr;
+            }
+
+            // Always split when stopping the active session (even if template started today)
+            const shouldSplit = templateStartDate < splitDate
+              || (sessionStopPending && activeOnToday && splitDate === todayStr);
+
+            if (shouldSplit) {
+              // Batch all mutations so only one reexpand fires at the end
+              calendarStore.beginBatch();
+              try {
+                if (activeOnToday) {
+                  const originalStartTime = template.start.split(" ")[1];
+
+                  if (sessionStopPending) {
+                    // Session will stop: cap standalone at current time
+                    const now = new Date();
+                    const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                    const todayInstance: CalendarEvent = {
+                      ...template,
+                      id: `${template.id}::${todayStr}`,
+                      start: `${todayStr} ${originalStartTime}`,
+                      end: `${todayStr} ${nowTime}`,
+                      recurringParentId: template.id,
+                      recurrence: undefined,
+                      exceptions: undefined,
+                    };
+                    await calendarStore.detachInstance(todayInstance);
+                  } else {
+                    // Hybrid: original start + new end, clamped to at least current time
+                    const newEndTime = data.end.split(" ")[1];
+                    const dataStartDate = data.start.split(" ")[0];
+                    const dataEndDate = data.end.split(" ")[0];
+                    const endDaySpan = dateDiffDays(dataStartDate, dataEndDate);
+                    const hybridEndDate = endDaySpan !== 0 ? shiftDateStr(todayStr, endDaySpan) : todayStr;
+
+                    const todayInstance: CalendarEvent = {
+                      ...template,
+                      id: `${template.id}::${todayStr}`,
+                      start: `${todayStr} ${originalStartTime}`,
+                      end: `${todayStr} ${template.end.split(" ")[1]}`,
+                      recurringParentId: template.id,
+                      recurrence: undefined,
+                      exceptions: undefined,
+                    };
+                    const standalone = await calendarStore.detachInstance(todayInstance);
+
+                    const now = new Date();
+                    const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                    const proposedEnd = `${hybridEndDate} ${newEndTime}`;
+                    const nowEnd = `${todayStr} ${nowTime}`;
+                    const hybridEnd = proposedEnd > nowEnd ? proposedEnd : nowEnd;
+
+                    const hybridUpdate: CalendarEvent = {
+                      ...standalone, ...data,
+                      start: `${todayStr} ${originalStartTime}`,
+                      end: hybridEnd,
+                      recurrence: undefined,
+                    };
+                    await calendarStore.updateBlock(hybridUpdate);
+
+                    // Transfer the pomodoro session to the new standalone ID so
+                    // checkActiveBlock finds it without triggering a session transition
+                    pomodoro.transferBlockId(standalone.id, hybridEnd);
+                  }
+                }
+
+                // Split from splitDate: cap old template, create new template for future
+                const templateTime = template.start.split(" ")[1];
+                const templateEndTime = template.end.split(" ")[1];
+                const virtualInstance: CalendarEvent = {
+                  ...template,
+                  id: `${template.id}::${splitDate}`,
+                  start: `${splitDate} ${templateTime}`,
+                  end: `${splitDate} ${templateEndTime}`,
+                  recurringParentId: template.id,
+                  recurrence: undefined,
+                  exceptions: undefined,
+                };
+                const dataStartDate = data.start.split(" ")[0];
+                const dataEndDate = data.end.split(" ")[0];
+                const daySpan = dateDiffDays(dataStartDate, dataEndDate);
+                const newEndDate = daySpan !== 0 ? shiftDateStr(splitDate, daySpan) : splitDate;
+                const adjustedData = {
+                  ...data,
+                  start: `${splitDate} ${data.start.split(" ")[1]}`,
+                  end: `${newEndDate} ${data.end.split(" ")[1]}`,
+                };
+                await calendarStore.splitSeries(virtualInstance, adjustedData);
+              } finally {
+                calendarStore.endBatch();
+              }
+            } else {
+              // No past instances: update template directly
+              const instanceDateStr = instanceEvent.start.split(" ")[0];
+              const changesDateStr = data.start.split(" ")[0];
+              const delta = dateDiffDays(instanceDateStr, changesDateStr);
+              const newStartDate = delta !== 0 ? shiftDateStr(templateStartDate, delta) : templateStartDate;
+              const dataEndDate = data.end.split(" ")[0];
+              const daySpan = dateDiffDays(changesDateStr, dataEndDate);
+              const newEndDate = shiftDateStr(newStartDate, daySpan);
+              const updated: CalendarEvent = {
+                ...template, ...data,
+                start: `${newStartDate} ${data.start.split(" ")[1]}`,
+                end: `${newEndDate} ${data.end.split(" ")[1]}`,
+              };
+              await calendarStore.updateBlock(updated);
+            }
           }
         }
       } else {
@@ -497,11 +760,29 @@
       }
     }
 
+    // Stop session after all mutations complete (hybrid logic needs activeBlockId intact)
+    if (sessionStopPending) {
+      pomodoro.stopSession();
+      sessionStopPending = false;
+    }
     session.close();
     suppressEditingGlow = false;
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {
+    // Gate: confirm before stopping the active pomodoro session
+    if (!sessionStopPending && wouldDeleteActiveSession(scope)) {
+      requestConfirm(
+        "This will stop the current focus session.",
+        async () => {
+          sessionStopPending = true;
+          await handleDelete(id, scope);
+        },
+        { yesLabel: "Stop and delete (Enter)", noLabel: "Keep editing (Esc)" },
+      );
+      return;
+    }
+
     const s = session.state;
 
     if (scope && s.mode === "edit") {
@@ -515,12 +796,30 @@
         const dayBefore = shiftDateStr(instanceDate, -1);
         await calendarStore.setRepeatUntil(parentId, dayBefore);
       } else {
+        // "all" delete: past instances are immutable
         const template = calendarStore.getTemplate(instanceEvent);
-        if (template) {
-          pushUndo({ type: "delete", event: { ...template } });
-          redoStack = [];
+        const templateStartDate = template?.start.split(" ")[0];
+
+        let splitDate = formatDatePart(new Date());
+        if (template && pomodoro.activeBlockId) {
+          const parts = pomodoro.activeBlockId.split("::");
+          if (parts[0] === template.id && parts[1] === splitDate) {
+            splitDate = shiftDateStr(splitDate, 1);
+          }
         }
-        await calendarStore.deleteBlock(parentId);
+
+        if (templateStartDate && templateStartDate < splitDate) {
+          // Series has past instances: cap at splitDate, keep past frozen
+          const dayBefore = shiftDateStr(splitDate, -1);
+          await calendarStore.setRepeatUntil(parentId, dayBefore);
+        } else {
+          // No past instances: delete the whole series
+          if (template) {
+            pushUndo({ type: "delete", event: { ...template } });
+            redoStack = [];
+          }
+          await calendarStore.deleteBlock(parentId);
+        }
       }
     } else {
       // Non-recurring: delete directly
@@ -532,6 +831,10 @@
       }
     }
 
+    if (sessionStopPending) {
+      pomodoro.stopSession();
+      sessionStopPending = false;
+    }
     session.close();
   }
 
@@ -662,7 +965,7 @@
         event={panelEvent}
         anchor={session.state.anchor}
         externalDirty={session.dirty}
-        readOnly={calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
+        readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
         onSave={handlePanelSave}
         onDelete={handleDelete}
         onChange={handlePanelChange}

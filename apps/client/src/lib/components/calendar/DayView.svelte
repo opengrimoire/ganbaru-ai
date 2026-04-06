@@ -5,6 +5,7 @@
     formatDatePart,
     formatDayName,
     allDayEventsForDay,
+    parseCalendarDate,
     GUTTER_WIDTH_PER_TZ,
     createSmoothScroll,
   } from "./utils";
@@ -15,6 +16,7 @@
   import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { onMount } from "svelte";
 
   let {
@@ -200,6 +202,8 @@
     onScrollChange(Math.round(minute));
   }
 
+  const pomodoroStore = getPomodoro();
+
   const drag = useDragController({
     events: () => events,
     hourHeight: () => calZoom.hourHeight,
@@ -208,6 +212,13 @@
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
     canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
+    activeBlockId: () => pomodoroStore.activeBlockId,
+    isEventLocked: (id) => {
+      const ev = events.find((e) => e.id === id);
+      if (!ev || !ev.pomodoroConfig) return false;
+      if (id === pomodoroStore.activeBlockId) return false;
+      return parseCalendarDate(ev.end).getTime() < Date.now();
+    },
   });
 </script>
 
