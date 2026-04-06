@@ -285,11 +285,15 @@ export function computeDayTimelineBands(
       const remainingDuration = ev.endMinute - plannedStartMinute;
 
       if (remainingDuration > 0) {
-        // If we're starting partway through, adjust inheritance for elapsed time
+        // If starting partway through and the event had actual work, adjust
+        // inheritance for elapsed time. Without persisted segments no focus
+        // actually ran, so breaks compute fresh from now (avoids a flash
+        // between event creation and session start).
         let adjustedFocus = inheritedFocus;
         let adjustedCycle = inheritedCycle;
         const elapsedSinceEffective = plannedStartMinute - effectiveStart;
-        if (elapsedSinceEffective > 0) {
+        const hasPersistedWork = evPersistedSegs && evPersistedSegs.length > 0;
+        if (elapsedSinceEffective > 0 && hasPersistedWork) {
           const elapsedSegments = computePlannedSegments(ev.config, elapsedSinceEffective, inheritedFocus, inheritedCycle);
           adjustedFocus = computeTrailingFocusMinutes(elapsedSegments);
           adjustedCycle = computeTrailingCycleNumber(elapsedSegments);
