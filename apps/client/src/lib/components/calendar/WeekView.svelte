@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, PositionedAllDayEvent } from "./types";
+  import type { CalendarEvent, PositionedAllDayEvent, SnapLineState } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
     getWeekDays,
@@ -312,6 +312,25 @@
     return counts;
   });
 
+  // Unified snap line: one element that slides between columns
+  let snapCol = $state(-1);
+  let snapData = $state<SnapLineState | null>(null);
+  let snapHideTimer = 0;
+
+  function handleSnapChange(colIndex: number, state: SnapLineState | null) {
+    if (state) {
+      clearTimeout(snapHideTimer);
+      snapCol = colIndex;
+      snapData = state;
+    } else {
+      // Brief delay to bridge column-to-column transitions without flicker
+      snapHideTimer = window.setTimeout(() => {
+        snapData = null;
+        snapCol = -1;
+      }, 60);
+    }
+  }
+
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -530,10 +549,10 @@
       <TimeGutter {timezones} {anchorDate} tzCount={tzCount} />
 
       <div
-        class="grid"
+        class="relative grid"
         style="grid-column: span 7; grid-template-columns: subgrid;"
       >
-        {#each weekDays as day}
+        {#each weekDays as day, i}
           {@const dateStr = formatDatePart(day)}
           <div class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">
             <DayColumn
@@ -553,9 +572,41 @@
               onEventClick={onEventClick}
               onDragStart={drag.handleDragStart}
               onCreateStart={drag.handleCreateStart}
+              onSnapChange={(state) => handleSnapChange(i, state)}
             />
           </div>
         {/each}
+
+        <!-- Unified snap line: single element that slides between columns -->
+        {#if snapData !== null && snapCol >= 0}
+          {@const s = snapData}
+          <div
+            class="pointer-events-none absolute"
+            style="
+              left: calc({snapCol} / 7 * 100%);
+              width: calc(100% / 7);
+              top: calc({s.minute} / 60 * var(--hour-h) * 1px - {s.atBottom ? 2.3 : 1.3}px);
+              z-index: 47;
+              transition: left 100ms ease-out;
+            "
+          >
+            <div
+              class="absolute top-0 bottom-0"
+              style="left: {1 + s.leftInsetPx}px; right: 0; transition: left 100ms ease-out;"
+            >
+              <div class="relative" style="margin-left: {s.blockLeft}%; width: {s.blockMultiCol ? `calc(${s.blockWidth}% - 2px)` : `${s.blockWidth}%`}; transition: margin-left 100ms ease-out, width 100ms ease-out;">
+                <span
+                  class="absolute left-0 flex h-[16px] items-center justify-center px-1.5 text-[10px] leading-none font-semibold {s.labelBelow ? 'top-[2.3px]' : 'bottom-0'}"
+                  style="background-color: var(--cal-snap-label); color: white; border-radius: {s.labelBelow ? '0 0 2px 2px' : '2px 2px 0 0'};"
+                ><span style="margin-left: -0.5px;">{s.label}</span></span>
+                <div
+                  class="h-[2.3px]"
+                  style="background-color: var(--cal-snap-label);"
+                ></div>
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
   </div>

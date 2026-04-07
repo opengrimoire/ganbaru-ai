@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, PositionedEvent, PersistedSegment } from "./types";
+  import type { CalendarEvent, PositionedEvent, PersistedSegment, SnapLineState } from "./types";
   import {
     eventsForDay,
     layoutEventsForDay,
@@ -34,6 +34,7 @@
     onEventClick,
     onDragStart,
     onCreateStart,
+    onSnapChange,
     editingId,
     previewedIds,
     draggingEventId,
@@ -54,6 +55,7 @@
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
+    onSnapChange?: (state: SnapLineState | null) => void;
   } = $props();
 
   const pastOverlayMinutes = $derived.by(() => {
@@ -366,6 +368,25 @@
     const colRect = columnEl.getBoundingClientRect();
     const lineViewportY = colRect.top + effectiveSnapY;
     return lineViewportY < stickyBottom + 18;
+  });
+
+  // Report snap state to parent when onSnapChange is provided
+  $effect(() => {
+    if (!onSnapChange) return;
+    if (snapVisible) {
+      onSnapChange({
+        minute: snapEffectiveMin,
+        label: effectiveSnapLabel,
+        labelBelow: snapLabelBelow,
+        atBottom: snapAtBottom,
+        leftInsetPx: snapToBlock ? railWidth + 4 : 0,
+        blockLeft: snapBlockLeft,
+        blockWidth: snapBlockWidth,
+        blockMultiCol: snapBlockMultiCol,
+      });
+    } else {
+      onSnapChange(null);
+    }
   });
 
   function getExternalResizeThreshold(hourHeight: number): number {
@@ -716,12 +737,13 @@
 
   </div>
 
-  <!-- Snap position indicator line with time label, always on top -->
+  <!-- Snap position indicator line with time label (only rendered when parent does not handle it) -->
+  {#if !onSnapChange}
   <div
     class="pointer-events-none absolute right-0"
-    style="left: {snapToBlock ? railWidth + 4 : 0}px; top: calc({snapEffectiveMin} / 60 * var(--hour-h) * 1px - {snapAtBottom ? 2.3 : 1.3}px); z-index: 47; opacity: {snapVisible ? 1 : 0}; transition: left 150ms ease-out, opacity 100ms;"
+    style="left: {snapToBlock ? railWidth + 4 : 0}px; top: calc({snapEffectiveMin} / 60 * var(--hour-h) * 1px - {snapAtBottom ? 2.3 : 1.3}px); z-index: 47; {snapVisible ? '' : 'display: none;'}"
   >
-    <div class="relative" style="margin-left: {snapBlockLeft}%; width: {snapBlockMultiCol ? `calc(${snapBlockWidth}% - 2px)` : `${snapBlockWidth}%`}; transition: margin-left 150ms ease-out, width 150ms ease-out;">
+    <div class="relative" style="margin-left: {snapBlockLeft}%; width: {snapBlockMultiCol ? `calc(${snapBlockWidth}% - 2px)` : `${snapBlockWidth}%`};">
       <span
         class="absolute left-0 flex h-[16px] items-center justify-center px-1.5 text-[10px] leading-none font-semibold {snapLabelBelow ? 'top-[2.3px]' : 'bottom-0'}"
         style="background-color: var(--cal-snap-label); color: white; border-radius: {snapLabelBelow ? '0 0 2px 2px' : '2px 2px 0 0'};"
@@ -732,6 +754,7 @@
       ></div>
     </div>
   </div>
+  {/if}
 </div>
 
 <style>
