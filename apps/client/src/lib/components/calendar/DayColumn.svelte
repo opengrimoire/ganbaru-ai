@@ -280,20 +280,45 @@
   let columnEl: HTMLDivElement | undefined = $state();
   let scrollParent: HTMLElement | null = null;
   let stickyBottom = $state(0);
+  let lastClientX: number | null = $state(null);
   let lastClientY: number | null = $state(null);
   let scrollSnapTimer = 0;
 
-  // Clear snap line when dragging starts (prevents stale flash)
+  // Clear snap position when dragging starts (keeps mouse coords for restore)
   $effect(() => {
     if (hideSnapLine) {
       snapMinute = null;
-      lastClientY = null;
     }
   });
+
+  // Restore snap position and re-check proximity when drag/create ends
+  $effect(() => {
+    if (hideSnapLine) return;
+    if (lastClientY === null || !columnEl || calZoom.isAnimating) return;
+    updateSnapFromClientY(lastClientY, true);
+    recheckProximity();
+  });
+
+  // Re-check proximity when block layout changes (e.g. new block saved)
+  $effect(() => {
+    void effectivePositioned;
+    if (hideSnapLine || lastClientX === null || lastClientY === null || !columnEl) return;
+    recheckProximity();
+  });
+
+  function recheckProximity() {
+    if (!columnEl || lastClientX === null || lastClientY === null) return;
+    const colRect = columnEl.getBoundingClientRect();
+    const colOffsetX = lastClientX - colRect.left;
+    const colOffsetY = lastClientY - colRect.top;
+    const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
+    hoverResizeBlockId = nearby?.eventId ?? null;
+  }
 
   onMount(() => {
     function clearSnap() {
       snapMinute = null;
+      lastClientX = null;
       lastClientY = null;
     }
     window.addEventListener("blur", clearSnap);
@@ -389,14 +414,14 @@
     }
   });
 
-  function getExternalResizeThreshold(hourHeight: number): number {
+  function getResizeThreshold(hourHeight: number): number {
     // Linear interpolation: 3px at 30px/hour to 12px at 200px/hour
     return Math.round(3 + ((hourHeight - 30) / (200 - 30)) * 9);
   }
 
   function findNearbyBlockEdge(offsetX: number, offsetY: number, colWidth: number): { eventId: string; edge: "resize-top" | "resize-bottom" } | null {
     const hh = calZoom.hourHeight;
-    const threshold = getExternalResizeThreshold(hh);
+    const threshold = getResizeThreshold(hh);
     let best: { eventId: string; edge: "resize-top" | "resize-bottom"; dist: number } | null = null;
 
     for (const pos of effectivePositioned) {
@@ -408,17 +433,18 @@
       const blockTopY = (pos.startMinute / 60) * hh;
       const blockBottomY = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
 
+      // Check proximity from both sides of each edge (outside and inside the block)
       if (!pos.isClippedTop) {
-        const dist = blockTopY - offsetY;
-        if (dist > 0 && dist <= threshold && (!best || dist < best.dist)) {
-          best = { eventId: pos.event.id, edge: "resize-top", dist };
+        const absDist = Math.abs(offsetY - blockTopY);
+        if (absDist <= threshold && (!best || absDist < best.dist)) {
+          best = { eventId: pos.event.id, edge: "resize-top", dist: absDist };
         }
       }
 
       if (!pos.isClippedBottom) {
-        const dist = offsetY - blockBottomY;
-        if (dist > 0 && dist <= threshold && (!best || dist < best.dist)) {
-          best = { eventId: pos.event.id, edge: "resize-bottom", dist };
+        const absDist = Math.abs(offsetY - blockBottomY);
+        if (absDist <= threshold && (!best || absDist < best.dist)) {
+          best = { eventId: pos.event.id, edge: "resize-bottom", dist: absDist };
         }
       }
     }
@@ -497,31 +523,36 @@
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
-    if (!columnEl || hideSnapLine) return;
-    if (calZoom.isAnimating) {
-      snapMinute = null;
-      return;
-    }
-    lastClientY = e.clientY;
-    updateSnapFromClientY(e.clientY, true);
+    if (!columnEl) return;
 
-    // Detect resize handle hover via event delegation
+    // Always track mouse position and proximity (even during drag/create)
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
+
     const target = e.target as HTMLElement;
     const resizeHandle = target.closest('.resize-handle-top, .resize-handle-bottom');
     if (resizeHandle) {
       const blockWrapper = resizeHandle.closest('[data-event-id]');
       hoverResizeBlockId = blockWrapper?.getAttribute('data-event-id') ?? null;
     } else {
-      // Check proximity zone for external resize cursor feedback
       const colRect = columnEl.getBoundingClientRect();
       const colOffsetX = e.clientX - colRect.left;
       const colOffsetY = e.clientY - colRect.top;
       const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
       hoverResizeBlockId = nearby?.eventId ?? null;
     }
+
+    // Only update snap position when not hidden by drag/create
+    if (hideSnapLine) return;
+    if (calZoom.isAnimating) {
+      snapMinute = null;
+      return;
+    }
+    updateSnapFromClientY(e.clientY, true);
   }
 
   function handleColumnMouseLeave() {
+    lastClientX = null;
     lastClientY = null;
     snapMinute = null;
     hoverResizeBlockId = null;
