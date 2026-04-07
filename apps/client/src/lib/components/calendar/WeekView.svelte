@@ -114,10 +114,9 @@
   let headerCells: HTMLElement[] = $state([]);
   let dayFormat: DayNameFormat = $state("short");
   let stickyHeaderHeight = $state(0);
-  const stickyAllDayHeight = $derived(allDayMaxRow > 0
-    ? allDayGridRows * ALL_DAY_ROW_H + (allDayGridRows - 1) * ALL_DAY_GAP + ALL_DAY_PAD * 2 + 6
-    : 0);
-  const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayHeight);
+  let stickyAllDayBannerHeight = $state(0);
+  $effect(() => { if (allDayMaxRow === 0) stickyAllDayBannerHeight = 0; });
+  const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayBannerHeight);
 
   $effect(() => {
     const el = headerCells[0];
@@ -139,7 +138,7 @@
   let wheelCooldown = false;
   let ready = $state(false);
 
-  // stickyAllDayHeight is tracked via bind:clientHeight on the always-visible all-day banner
+  // stickyAllDayBannerHeight is measured via bind:offsetHeight on the all-day banner
   const calZoom = getCalendarZoom();
   const smoothScroll = createSmoothScroll(() => scrollContainer);
 
@@ -172,6 +171,7 @@
       }
       return;
     }
+    smoothScroll.cancel();
     e.preventDefault();
     e.stopPropagation();
     if (!onWheelNavigate || wheelCooldown) return;
@@ -219,6 +219,7 @@
       }
 
       scrollContainer.addEventListener("scroll", handleScroll);
+      scrollContainer.addEventListener("cancel-smooth-scroll", () => smoothScroll.cancel());
       ready = true;
     }
 
@@ -315,11 +316,11 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex h-full flex-col" style="visibility: {ready ? 'visible' : 'hidden'};">
-<div class="flex min-h-0 flex-1">
+<div class="relative min-h-0 flex-1">
   <div
     bind:this={scrollContainer}
     onwheel={onWheel}
-    class="hide-scrollbar min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+    class="hide-scrollbar absolute inset-0 overflow-y-auto overflow-x-hidden"
     style="background-color: var(--cal-bg);"
   >
     <div
@@ -329,7 +330,7 @@
       <!-- Sticky header row -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        bind:clientHeight={stickyHeaderHeight}
+        bind:offsetHeight={stickyHeaderHeight}
         class="sticky top-0 z-[48] grid {allDayMaxRow === 0 ? 'border-b border-[var(--sidebar)]' : ''}"
         onwheel={handleHeaderWheel}
         style="
@@ -389,6 +390,7 @@
       {#if allDayMaxRow > 0}
       <!-- All-day banner -->
       <div
+        bind:offsetHeight={stickyAllDayBannerHeight}
         class="sticky z-[49] grid border-b border-[var(--sidebar)]"
         use:blockWheel
         style="
@@ -557,14 +559,7 @@
       </div>
     </div>
   </div>
-
-  <!-- Custom scrollbar gutter -->
-  <div class="flex flex-col" style="width: 12px;">
-    <div style="height: {gutterTopHeight}px; background-color: var(--cal-header-bg);"></div>
-    <div class="relative flex-1" style="background-color: var(--background);">
-      <CalendarScrollbar {scrollContainer} />
-    </div>
-  </div>
+  <CalendarScrollbar {scrollContainer} stickyTop={gutterTopHeight} />
 </div>
 </div>
 

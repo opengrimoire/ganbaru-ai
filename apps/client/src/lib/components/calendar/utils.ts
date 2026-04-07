@@ -607,7 +607,7 @@ export function layoutEventsForDay(
     }
 
     const totalColumns = columns.length;
-    const RIGHT_GUTTER_PCT = 8;
+    const RIGHT_GUTTER_PCT = 12;
     const usable = 100 - RIGHT_GUTTER_PCT;
 
     for (let colIdx = 0; colIdx < columns.length; colIdx++) {
@@ -727,20 +727,28 @@ interface SmoothScrollFn {
 
 export function createSmoothScroll(
   getEl: () => HTMLElement | undefined,
-  damping = 0.6,
-  ease = 0.15,
+  gain = 3,
+  friction = 6,
 ): SmoothScrollFn {
-  let target = -1;
+  let velocity = 0;
   let running = false;
+  let prev = 0;
 
-  function tick() {
+  function tick(ts: number) {
     if (!running) return;
     const el = getEl();
     if (!el) { running = false; return; }
-    const diff = target - el.scrollTop;
-    if (Math.abs(diff) < 0.5) { running = false; return; }
-    const step = diff * ease;
-    el.scrollTop += Math.abs(step) < 1 ? Math.sign(diff) : step;
+    if (!prev) { prev = ts; requestAnimationFrame(tick); return; }
+    const dt = (ts - prev) / 1000;
+    prev = ts;
+    velocity *= Math.exp(-friction * dt);
+    if (Math.abs(velocity) < 10) {
+      velocity = 0;
+      running = false;
+      return;
+    }
+    const max = el.scrollHeight - el.clientHeight;
+    el.scrollTop = Math.max(0, Math.min(max, Math.round(el.scrollTop + velocity * dt)));
     requestAnimationFrame(tick);
   }
 
@@ -748,15 +756,14 @@ export function createSmoothScroll(
     const el = getEl();
     if (!el) return;
     e.preventDefault();
-    if (target < 0 || !running) target = el.scrollTop;
-    const max = el.scrollHeight - el.clientHeight;
-    target = Math.max(0, Math.min(max, target + e.deltaY * damping));
-    if (!running) { running = true; requestAnimationFrame(tick); }
+    velocity += e.deltaY * gain;
+    if (!running) { running = true; prev = 0; requestAnimationFrame(tick); }
   }) as SmoothScrollFn;
 
   fn.cancel = () => {
     running = false;
-    target = -1;
+    velocity = 0;
+    prev = 0;
   };
 
   return fn;

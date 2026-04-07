@@ -1,8 +1,10 @@
 <script lang="ts">
   let {
     scrollContainer,
+    stickyTop = 0,
   }: {
     scrollContainer: HTMLElement | undefined;
+    stickyTop?: number;
   } = $props();
 
   let trackEl: HTMLDivElement | undefined = $state();
@@ -49,10 +51,15 @@
     e.preventDefault();
     const rect = trackEl.getBoundingClientRect();
     const clickY = e.clientY - rect.top;
-    const trackH = trackEl.clientHeight;
-    const scrollRange = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-    const targetRatio = (clickY - thumbHeight / 2) / (trackH - thumbHeight);
-    scrollContainer.scrollTop = Math.max(0, Math.min(scrollRange, targetRatio * scrollRange));
+    const onThumb = clickY >= thumbTop && clickY <= thumbTop + thumbHeight;
+
+    if (!onThumb) {
+      const trackH = trackEl.clientHeight;
+      const scrollRange = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      const targetRatio = (clickY - thumbHeight / 2) / (trackH - thumbHeight);
+      scrollContainer.scrollTop = Math.max(0, Math.min(scrollRange, targetRatio * scrollRange));
+    }
+
     dragging = true;
     dragStartY = e.clientY;
     dragStartScrollTop = scrollContainer.scrollTop;
@@ -74,10 +81,12 @@
   }
 </script>
 
+<!-- Absolute overlay: positioned outside scroll container so it never scrolls -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={trackEl}
-  class="absolute inset-0"
+  class="pointer-events-auto absolute right-0 z-50"
+  style="top: {stickyTop}px; bottom: 0; width: 8px;"
   onpointerdown={handleTrackPointerDown}
   onpointermove={handlePointerMove}
   onpointerup={handlePointerUp}

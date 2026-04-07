@@ -279,6 +279,7 @@
   let scrollParent: HTMLElement | null = null;
   let stickyBottom = $state(0);
   let lastClientY: number | null = $state(null);
+  let scrollSnapTimer = 0;
 
   // Clear snap line when dragging starts (prevents stale flash)
   $effect(() => {
@@ -336,6 +337,22 @@
       ? `${String(Math.floor(snapOverrideMinute / 60)).padStart(2, "0")}:${String(snapOverrideMinute % 60).padStart(2, "0")}`
       : snapTimeLabel,
   );
+  const snapVisible = $derived(effectiveSnapY !== null && !hideSnapLine);
+  const snapEffectiveMin = $derived(snapOverrideMinute ?? snapMinute ?? 0);
+  const snapAtBottom = $derived(snapEffectiveMin >= 1440 - (2 / calZoom.hourHeight * 60));
+
+  // Snap line matches block bounds during create/drag or resize-handle hover
+  let hoverResizeBlockId: string | null = $state(null);
+  const hoverResizeLayout = $derived(
+    hoverResizeBlockId ? effectivePositioned.find(p => p.event.id === hoverResizeBlockId) ?? null : null,
+  );
+  const activeBlockLayout = $derived(
+    (layoutedPreview && (createPreview || dragPreview)) ? layoutedPreview : hoverResizeLayout,
+  );
+  const snapToBlock = $derived(!!activeBlockLayout);
+  const snapBlockLeft = $derived(snapToBlock ? activeBlockLayout!.left : 0);
+  const snapBlockWidth = $derived(snapToBlock ? activeBlockLayout!.width : 100);
+  const snapBlockMultiCol = $derived(snapToBlock && activeBlockLayout!.totalColumns > 1);
 
   // Keep stickyBottom fresh when snap override changes (drag/resize)
   $effect(() => {
@@ -401,6 +418,10 @@
     // During zoom animation, snapLineY auto-tracks via $derived; skip recalculation
     if (calZoom.isAnimating) return;
     updateSnapFromClientY(lastClientY, false);
+    clearTimeout(scrollSnapTimer);
+    scrollSnapTimer = window.setTimeout(() => {
+      if (lastClientY !== null) updateSnapFromClientY(lastClientY, true);
+    }, 60);
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
@@ -411,19 +432,46 @@
     }
     lastClientY = e.clientY;
     updateSnapFromClientY(e.clientY, true);
+
+    // Detect resize handle hover via event delegation
+    const target = e.target as HTMLElement;
+    const resizeHandle = target.closest('.resize-handle-top, .resize-handle-bottom');
+    if (resizeHandle) {
+      const blockEl = resizeHandle.closest('[data-event-id]');
+      hoverResizeBlockId = blockEl?.getAttribute('data-event-id') ?? null;
+    } else {
+      hoverResizeBlockId = null;
+    }
   }
 
   function handleColumnMouseLeave() {
     lastClientY = null;
     snapMinute = null;
+    hoverResizeBlockId = null;
+  }
+
+  function handleRailAreaPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || !columnEl || draggingEventId) return;
+    const colRect = columnEl.getBoundingClientRect();
+    // Only handle clicks in the rail zone (left of columnEl)
+    if (e.clientX >= colRect.left) return;
+    const hh = calZoom.hourHeight;
+    const offsetY = e.clientY - colRect.top;
+    const rawMinute = (offsetY / hh) * 60;
+    if (isMinuteInRail(rawMinute)) return;
+    const minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
+    onCreateStart(dateStr, minute, e);
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative min-w-0"
+  class="relative min-w-0 cursor-crosshair"
   style="height: calc(24 * var(--hour-h) * 1px);"
+  onmousemove={handleColumnMouseMove}
+  onmouseleave={handleColumnMouseLeave}
+  onpointerdown={handleRailAreaPointerDown}
 >
   <!-- Current time indicator (outside overflow-hidden so the circle can bleed left) -->
   {#if isToday && currentTimeMinute >= 0}
@@ -510,8 +558,6 @@
     bind:this={columnEl}
     class="absolute top-0 right-0 bottom-0 overflow-hidden"
     style="left: {railWidth + 4}px;"
-    onmousemove={handleColumnMouseMove}
-    onmouseleave={handleColumnMouseLeave}
   >
   <!-- Hour cells (click targets only, gridlines are in outer container) -->
   {#each hours as hour}
@@ -612,27 +658,23 @@
     </div>
   {/if}
 
-  <!-- Snap position indicator line with time label, always on top -->
-  {#if effectiveSnapY !== null && !hideSnapLine}
-    {@const effectiveMin = snapOverrideMinute ?? snapMinute ?? 0}
-    {@const atBottom = effectiveMin >= 1440 - (2 / calZoom.hourHeight * 60)}
-    <div
-      class="pointer-events-none absolute left-0 right-0"
-      style="top: calc({effectiveMin} / 60 * var(--hour-h) * 1px - {atBottom ? 2 : 0}px); z-index: 47;"
-    >
-      <div class="relative">
-        <span
-          class="absolute left-0 px-1.5 py-[1px] text-[10px] font-medium leading-tight {snapLabelBelow ? 'top-0 rounded-b' : 'bottom-0 rounded-t'}"
-          style="background-color: var(--cal-current-time); color: white;"
-        >{effectiveSnapLabel}</span>
-        <div
-          class="h-[2px] w-full"
-          style="background-color: var(--cal-current-time); opacity: 0.5;"
-        ></div>
-      </div>
-    </div>
-  {/if}
+  </div>
 
+  <!-- Snap position indicator line with time label, always on top -->
+  <div
+    class="pointer-events-none absolute right-0"
+    style="left: {snapToBlock ? railWidth + 4 : 0}px; top: calc({snapEffectiveMin} / 60 * var(--hour-h) * 1px - {snapAtBottom ? 2.3 : 1.3}px); z-index: 47; opacity: {snapVisible ? 1 : 0}; transition: left 150ms ease-out, opacity 100ms;"
+  >
+    <div class="relative" style="margin-left: {snapBlockLeft}%; width: {snapBlockMultiCol ? `calc(${snapBlockWidth}% - 2px)` : `${snapBlockWidth}%`}; transition: margin-left 150ms ease-out, width 150ms ease-out;">
+      <span
+        class="absolute left-0 flex h-[16px] items-center justify-center px-1.5 text-[10px] leading-none font-semibold {snapLabelBelow ? 'top-[2.3px]' : 'bottom-0'}"
+        style="background-color: var(--cal-snap-label); color: white; border-radius: {snapLabelBelow ? '0 0 2px 2px' : '2px 2px 0 0'};"
+      ><span style="margin-left: -0.5px;">{effectiveSnapLabel}</span></span>
+      <div
+        class="h-[2.3px]"
+        style="background-color: var(--cal-snap-label);"
+      ></div>
+    </div>
   </div>
 </div>
 

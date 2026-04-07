@@ -308,6 +308,37 @@
 
   // Shared scroll position (preserved across view switches)
   let scrollMinute = $state(-1);
+  let viewWrapperEl: HTMLDivElement | undefined = $state();
+
+  // rAF-based arrow key scrolling for day/week views
+  const SCROLL_PX_PER_SEC = 600;
+  let arrowScrollDir = 0;
+  let arrowScrollRaf = 0;
+  let arrowScrollPrev = 0;
+
+  function arrowScrollStep(ts: number) {
+    if (arrowScrollDir === 0) return;
+    if (!arrowScrollPrev) arrowScrollPrev = ts;
+    const dt = ts - arrowScrollPrev;
+    arrowScrollPrev = ts;
+    const el = viewWrapperEl?.querySelector(".hide-scrollbar");
+    if (el) el.scrollTop += arrowScrollDir * SCROLL_PX_PER_SEC * (dt / 1000);
+    arrowScrollRaf = requestAnimationFrame(arrowScrollStep);
+  }
+
+  function startArrowScroll(dir: -1 | 1) {
+    if (arrowScrollDir === dir) return;
+    arrowScrollDir = dir;
+    arrowScrollPrev = 0;
+    const el = viewWrapperEl?.querySelector(".hide-scrollbar");
+    el?.dispatchEvent(new CustomEvent("cancel-smooth-scroll"));
+    if (!arrowScrollRaf) arrowScrollRaf = requestAnimationFrame(arrowScrollStep);
+  }
+
+  function stopArrowScroll() {
+    arrowScrollDir = 0;
+    if (arrowScrollRaf) { cancelAnimationFrame(arrowScrollRaf); arrowScrollRaf = 0; }
+  }
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
@@ -330,17 +361,38 @@
         e.preventDefault();
         handlePanelClose();
       } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
-        if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        if (e.key === "ArrowLeft") {
           e.preventDefault();
           navigate("back");
-        } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        } else if (e.key === "ArrowRight") {
           e.preventDefault();
           navigate("forward");
+        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          if (viewMode === "month") {
+            navigate(e.key === "ArrowUp" ? "back" : "forward");
+          } else {
+            startArrowScroll(e.key === "ArrowUp" ? -1 : 1);
+          }
         }
       }
     }
+
+    function handleKeyup(e: KeyboardEvent) {
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && arrowScrollDir !== 0) {
+        stopArrowScroll();
+      }
+    }
+
     window.addEventListener("keydown", handleKeydown);
-    return () => window.removeEventListener("keydown", handleKeydown);
+    window.addEventListener("keyup", handleKeyup);
+    window.addEventListener("blur", stopArrowScroll);
+    return () => {
+      stopArrowScroll();
+      window.removeEventListener("keydown", handleKeydown);
+      window.removeEventListener("keyup", handleKeyup);
+      window.removeEventListener("blur", stopArrowScroll);
+    };
   });
 
   function navigate(direction: "today" | "back" | "forward") {
@@ -865,7 +917,7 @@
     onDaySelect={(date) => { anchorDate = date; }}
   />
 
-  <div class="min-w-0 flex-1 overflow-hidden" style="background-color: var(--cal-bg);">
+  <div bind:this={viewWrapperEl} class="min-w-0 flex-1 overflow-hidden" style="background-color: var(--cal-bg);">
     {#if viewMode === "week"}
       <WeekView
         {anchorDate}

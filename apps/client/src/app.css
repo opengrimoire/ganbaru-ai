@@ -140,6 +140,7 @@
   --cal-today-circle-text: #FFFFFF;
   --cal-time-label: #646470;
   --cal-current-time: #EA4335;
+  --cal-snap-label: #B83A3A;
   --cal-hover: rgba(0, 0, 20, 0.04);
   --cal-past-overlay: rgba(0, 0, 0, 0.04);
   --cal-timeline-rail: rgba(0, 0, 0, 0.1);
@@ -156,6 +157,7 @@
   --cal-today-circle-text: #0A1929;
   --cal-time-label: #9494A0;
   --cal-current-time: #EA4335;
+  --cal-snap-label: #B83A3A;
   --cal-hover: rgba(255, 255, 255, 0.04);
   --cal-past-overlay: rgba(0, 0, 0, 0.15);
   --cal-timeline-rail: rgba(255, 255, 255, 0.1);

@@ -483,8 +483,15 @@ export function useDragController(config: DragControllerConfig) {
     if (dragState?.type === "move") return true;
     // During create-by-drag, only show snap on the column being drawn on
     if (createState) return createPreviewDate !== dateStr;
-    // During resize, hide hover snap on columns without an active snap override
-    if (dragState) return getSnapOverrideMinute(dateStr) === null;
+    // During resize, hide snap on columns without an active snap override,
+    // but keep it visible on the origin column before the first move
+    if (dragState) {
+      const override = getSnapOverrideMinute(dateStr);
+      if (override !== null) return false;
+      // Before first move (no preview yet), keep snap visible on origin column
+      if (!dragPreview && dragState.originDate === dateStr) return false;
+      return true;
+    }
     return false;
   }
 
