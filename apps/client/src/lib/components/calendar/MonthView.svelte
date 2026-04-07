@@ -96,12 +96,12 @@
   <!-- Week rows -->
   <div class="grid min-h-0 flex-1 overflow-x-hidden" style="grid-template-rows: repeat({weeks.length}, minmax(0, 1fr));"
   >
-    {#each weeks as week}
+    {#each weeks as week, wi}
       <div
         class="grid grid-cols-7"
-        style="border-bottom: 1px solid var(--cal-gridline);"
+        style="{wi < weeks.length - 1 ? `border-bottom: 1px solid var(--cal-gridline);` : ''}"
       >
-        {#each week as day}
+        {#each week as day, di}
           {@const inMonth = day.getMonth() === currentMonth}
           {@const past = isPastDay(day)}
           {@const active = inMonth && !past}
@@ -111,7 +111,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="relative flex min-h-0 cursor-pointer flex-col overflow-hidden p-1"
-            style="border-right: 1px solid var(--cal-gridline);"
+            style="{di < 6 ? `border-right: 1px solid var(--cal-gridline);` : ''}"
             onclick={() => onDayClick(day)}
           >
             <!-- Past day overlay (all past days, including previous/next month) -->
