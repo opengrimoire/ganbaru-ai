@@ -127,7 +127,7 @@ export function useDragController(config: DragControllerConfig) {
 
   // --- Existing event drag (move / resize) ---
 
-  function handleDragStart(eventId: string, e: PointerEvent) {
+  function handleDragStart(eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") {
     if (config.canDrag && !config.canDrag(eventId)) return;
 
     const event = config.events().find((ev) => ev.id === eventId);
@@ -152,16 +152,20 @@ export function useDragController(config: DragControllerConfig) {
       startColumnIndex: 0,
     };
 
-    const blockEl = (e.target as HTMLElement).closest(".event-block-wrapper");
-    if (blockEl) {
-      const rect = blockEl.getBoundingClientRect();
-      const relY = e.clientY - rect.top;
-      const clippedTop = blockEl.hasAttribute("data-clipped-top");
-      const clippedBottom = blockEl.hasAttribute("data-clipped-bottom");
-      if (relY <= 6 && !clippedTop) {
-        dragState.type = "resize-top";
-      } else if (relY >= rect.height - 6 && !clippedBottom) {
-        dragState.type = "resize-bottom";
+    if (forceEdge) {
+      dragState.type = forceEdge;
+    } else {
+      const blockEl = (e.target as HTMLElement).closest(".event-block-wrapper");
+      if (blockEl) {
+        const rect = blockEl.getBoundingClientRect();
+        const relY = e.clientY - rect.top;
+        const clippedTop = blockEl.hasAttribute("data-clipped-top");
+        const clippedBottom = blockEl.hasAttribute("data-clipped-bottom");
+        if (relY <= 6 && !clippedTop) {
+          dragState.type = "resize-top";
+        } else if (relY >= rect.height - 6 && !clippedBottom) {
+          dragState.type = "resize-bottom";
+        }
       }
     }
 

@@ -52,7 +52,7 @@
     snapOverrideMinute?: number | null;
     draggingEventId?: string;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
-    onDragStart: (eventId: string, e: PointerEvent) => void;
+    onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
   } = $props();
 
@@ -343,6 +343,7 @@
 
   // Snap line matches block bounds during create/drag or resize-handle hover
   let hoverResizeBlockId: string | null = $state(null);
+  const proximityResize = $derived(hoverResizeBlockId !== null);
   const hoverResizeLayout = $derived(
     hoverResizeBlockId ? effectivePositioned.find(p => p.event.id === hoverResizeBlockId) ?? null : null,
   );
@@ -367,8 +368,58 @@
     return lineViewportY < stickyBottom + 18;
   });
 
+  function getExternalResizeThreshold(hourHeight: number): number {
+    // Linear interpolation: 3px at 30px/hour to 12px at 200px/hour
+    return Math.round(3 + ((hourHeight - 30) / (200 - 30)) * 9);
+  }
+
+  function findNearbyBlockEdge(offsetX: number, offsetY: number, colWidth: number): { eventId: string; edge: "resize-top" | "resize-bottom" } | null {
+    const hh = calZoom.hourHeight;
+    const threshold = getExternalResizeThreshold(hh);
+    let best: { eventId: string; edge: "resize-top" | "resize-bottom"; dist: number } | null = null;
+
+    for (const pos of effectivePositioned) {
+      // Skip blocks whose horizontal range doesn't contain the cursor
+      const blockLeftPx = (pos.left / 100) * colWidth;
+      const blockRightPx = ((pos.left + pos.width) / 100) * colWidth - (pos.totalColumns > 1 ? 2 : 0);
+      if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
+
+      const blockTopY = (pos.startMinute / 60) * hh;
+      const blockBottomY = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
+
+      if (!pos.isClippedTop) {
+        const dist = blockTopY - offsetY;
+        if (dist > 0 && dist <= threshold && (!best || dist < best.dist)) {
+          best = { eventId: pos.event.id, edge: "resize-top", dist };
+        }
+      }
+
+      if (!pos.isClippedBottom) {
+        const dist = offsetY - blockBottomY;
+        if (dist > 0 && dist <= threshold && (!best || dist < best.dist)) {
+          best = { eventId: pos.event.id, edge: "resize-bottom", dist };
+        }
+      }
+    }
+
+    return best ? { eventId: best.eventId, edge: best.edge } : null;
+  }
+
   function handleSlotPointerDown(e: PointerEvent, hour: number) {
     if (e.button !== 0) return;
+
+    // Check proximity to existing block edges before creating
+    if (columnEl) {
+      const colRect = columnEl.getBoundingClientRect();
+      const colOffsetX = e.clientX - colRect.left;
+      const colOffsetY = e.clientY - colRect.top;
+      const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
+      if (nearby) {
+        onDragStart(nearby.eventId, e, nearby.edge);
+        return;
+      }
+    }
+
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     const offsetY = e.clientY - rect.top;
@@ -437,10 +488,15 @@
     const target = e.target as HTMLElement;
     const resizeHandle = target.closest('.resize-handle-top, .resize-handle-bottom');
     if (resizeHandle) {
-      const blockEl = resizeHandle.closest('[data-event-id]');
-      hoverResizeBlockId = blockEl?.getAttribute('data-event-id') ?? null;
+      const blockWrapper = resizeHandle.closest('[data-event-id]');
+      hoverResizeBlockId = blockWrapper?.getAttribute('data-event-id') ?? null;
     } else {
-      hoverResizeBlockId = null;
+      // Check proximity zone for external resize cursor feedback
+      const colRect = columnEl.getBoundingClientRect();
+      const colOffsetX = e.clientX - colRect.left;
+      const colOffsetY = e.clientY - colRect.top;
+      const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
+      hoverResizeBlockId = nearby?.eventId ?? null;
     }
   }
 
@@ -467,7 +523,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative min-w-0 cursor-crosshair"
+  class="relative min-w-0 {proximityResize ? 'cursor-ns-resize' : 'cursor-crosshair'}"
   style="height: calc(24 * var(--hour-h) * 1px); contain: layout style;"
   onmousemove={handleColumnMouseMove}
   onmouseleave={handleColumnMouseLeave}
@@ -563,7 +619,7 @@
   {#each hours as hour}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="absolute w-full {draggingEventId ? 'pointer-events-none' : 'cursor-crosshair'}"
+      class="absolute w-full {draggingEventId ? 'pointer-events-none' : proximityResize ? 'cursor-ns-resize' : 'cursor-crosshair'}"
       style="top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px);"
       onpointerdown={(e) => handleSlotPointerDown(e, hour)}
     ></div>
