@@ -95,7 +95,7 @@
   }
 
   const summary = $derived.by(() => {
-    if (!enabled) return "None";
+    if (!enabled) return "";
     const all: number[] = [...selected];
     for (const cn of customNotifs) all.push(cn.amount * cn.unit);
     if (all.length === 0) return "None";
@@ -107,32 +107,29 @@
   });
 </script>
 
-<div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-  <div class="section-header flex items-stretch" class:section-active={enabled}>
+<div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+  <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
-      class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
-        {enabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
+      class="flex w-9 shrink-0 items-center justify-center transition-colors
+        {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
       <Bell size={13} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
+      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors">
       <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
     </button>
   </div>
   {#if expanded}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="notifications" class="flex flex-col gap-1.5 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
+    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="notifications" class="flex flex-col gap-1.5 p-2.5" style="background-color: var(--panel-bg);">
       <div class="flex flex-col gap-0.5">
         {#each NOTIF_PRESETS as opt}
           <button
             onclick={() => toggleNotif(opt.value)}
-            class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-all
-              {selected.has(opt.value)
-                ? 'bg-black/5 dark:bg-black/15 text-foreground'
-                : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+            class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] text-foreground"
           >
-            <div class="h-3.5 w-3.5 shrink-0 rounded
-              {selected.has(opt.value) ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+            <div class="size-[11px] shrink-0
+              {selected.has(opt.value) ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
             </div>
             <span>{opt.label}</span>
           </button>
@@ -179,7 +176,7 @@
       {/each}
       {#if customNotifs.length < 2}
         <button onclick={addCustomNotif}
-          class="flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+          class="flex items-center gap-1 self-start rounded-none px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15">
           <Plus size={12} /> <span>Custom</span>
         </button>
       {/if}
@@ -190,12 +187,6 @@
 <style>
   .section-header {
     transition: background-color 180ms ease-out;
-  }
-  .section-active {
-    background-color: rgba(0, 0, 0, 0.03);
-  }
-  :global(.dark) .section-active {
-    background-color: rgba(0, 0, 0, 0.08);
   }
   .num-input {
     -moz-appearance: textfield;

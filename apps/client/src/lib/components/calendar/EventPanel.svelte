@@ -18,7 +18,7 @@
   import { cubicOut } from "svelte/easing";
   import "@fontsource-variable/inter";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import X from "@lucide/svelte/icons/x";
+
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Music from "@lucide/svelte/icons/music";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
@@ -635,60 +635,32 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={panelEl}
-  class="panel-root flex flex-col rounded-xl border border-border overflow-hidden"
+  class="panel-root flex flex-col"
   data-readonly={readOnly || undefined}
-  style:box-shadow="0 2px 8px rgba(0,0,0,0.3)"
-  style="{panelStyle} background-color: var(--panel-bg);"
+  style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {panelStyle} background-color: var(--panel-bg);"
   onclick={(e) => e.stopPropagation()}
   onkeydown={handleKeydown}
 >
   <!-- Drag handle bar with close button -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="sticky top-0 z-10 flex items-center rounded-t-xl border-b border-border/60 pl-3.5 pr-1.5 cursor-grab active:cursor-grabbing"
-    style="background-color: var(--panel-contrast);"
+    class="sticky top-0 z-10 flex items-center pl-3.5 pr-1.5 cursor-grab active:cursor-grabbing"
+    style="background-color: var(--sidebar);"
     onpointerdown={handleDragStart}
     onpointermove={handleDragMove}
     onpointerup={handleDragEnd}
   >
-    <div class="flex flex-1 items-center justify-center py-1.5">
-      <div class="flex gap-[3px]">
-        {#each { length: 5 } as _}
-          <div class="flex flex-col gap-[3px]">
-            <div class="size-[3px] rounded-full bg-muted-foreground/70"></div>
-            <div class="size-[3px] rounded-full bg-muted-foreground/70"></div>
-          </div>
-        {/each}
-      </div>
-    </div>
-    {#if mode === "edit" && onDelete && event && !readOnly}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div onclick={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
-        <button onclick={handleDeleteClick}
-          class="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-destructive [&>svg]:block"
-          title="Delete">
-          <Trash2 class="-translate-y-[0.1px]" size={11} strokeWidth={1.8} />
-        </button>
-      </div>
-    {/if}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div onclick={(e) => e.stopPropagation()} onpointerdown={(e) => e.stopPropagation()}>
-      <button onclick={onClose}
-        class="panel-chrome flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground [&>svg]:block"
-        title="Close">
-        <X class="translate-y-[0.05px]" size={13} strokeWidth={2.1} />
-      </button>
+    <div class="flex flex-1 items-center justify-center py-2.5">
+      <div class="h-[1.5px] w-8 bg-muted-foreground/50"></div>
     </div>
   </div>
 
   <!-- Fixed top: title + date -->
-  <div class="shrink-0 flex flex-col gap-3 px-3.5 pt-2.5">
+  <div class="shrink-0 flex flex-col gap-2.5 px-3.5 pt-2.5">
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
-      <div class="mb-1 flex min-w-0 rounded-md p-0.5" style="background-color: var(--panel-contrast);">
+      <div class="flex min-w-0 rounded-none p-0.5" style="background-color: var(--panel-contrast);">
         {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl]}
           <button
             onclick={() => handleScopeClick(val as RecurringScope)}
@@ -812,7 +784,7 @@
   <div transition:slide={{ duration: 180, easing: cubicOut }} class="flex flex-col gap-3 px-3.5 py-1.5">
 
     <!-- All-day / Availability / Status / Visibility -->
-    <div class="-mt-1 flex items-center rounded-lg px-0.5 text-[10px] leading-none" style="background-color: var(--panel-contrast);">
+    <div class="-mt-1 flex items-center rounded-none px-0.5 text-[10px] leading-none" style="background-color: var(--panel-contrast);">
       <!-- All day -->
       <button
         onclick={() => {
@@ -844,7 +816,7 @@
           emitChange();
         }}
         disabled={readOnly}
-        class="flex items-center gap-1 rounded-md px-2 py-2 transition-colors
+        class="flex items-center gap-1 rounded-none px-2 py-2 transition-colors
           {allDay ? 'bg-black/5 dark:bg-black/15 text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
         title="All day"
       >
@@ -857,7 +829,7 @@
         <button
           onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1 rounded-md px-2 py-2 transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-none px-2 py-2 transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {showAsPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Show as"
         >
@@ -885,7 +857,7 @@
         <button
           onclick={() => { statusPicker = !statusPicker; showAsPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1 rounded-md px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-none px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {statusPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Status"
         >
@@ -913,7 +885,7 @@
         <button
           onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1 rounded-md px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-none px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
             {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Visibility"
         >
@@ -942,7 +914,7 @@
     </div>
 
     <!-- Attendees / URL / Location / Description -->
-    <div class="-mt-1 flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
+    <div class="-mt-1 flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
       <!-- Attendees -->
       <AttendeesSection bind:attendees bind:guestCanModify bind:guestCanInviteOthers bind:guestCanSeeOtherGuests {organizer} {readOnly} onchange={emitChange} />
       <!-- URL -->
@@ -1004,18 +976,18 @@
         onchange={emitChange} />
 
       <!-- 4) Music -->
-      <div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
+      <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-stretch">
-          <button class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15 text-muted-foreground/50">
+          <button class="flex w-9 shrink-0 items-center justify-center text-muted-foreground/50">
             <Music size={13} />
           </button>
           <button onclick={() => handleExpand("music")}
-            class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
+            class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors">
             <span class="translate-y-[1.13px] text-[11px] text-muted-foreground">Music</span>
           </button>
         </div>
         {#if openSection === "music"}
-          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="border-t border-border/60 px-3 py-3 text-center text-[12px] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3 py-3 text-center text-[12px] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
         {/if}
       </div>
   </div>
@@ -1023,24 +995,33 @@
   <!-- Save (pinned outside scroll) -->
   <div class="shrink-0 px-3.5 pb-3.5 pt-1.5" style="background-color: var(--panel-bg);">
     {#if readOnly}
-      <div class="flex w-full items-center justify-center rounded-lg py-1.5 text-[11px] text-muted-foreground/60"
+      <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[11px] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
         Read-only
       </div>
     {:else}
-      <button onclick={handleSave}
-        class="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] transition-all
-          {saving || saveReady
-            ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
-            : 'text-muted-foreground cursor-not-allowed'}"
-        style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
-        {#if saving}
-          <CircleCheck size={13} />
-          <span>Saved</span>
-        {:else}
-          <span>Save</span>
+      <div class="flex">
+        {#if mode === "edit" && onDelete && event}
+          <button onclick={handleDeleteClick}
+            class="flex w-9 shrink-0 items-center justify-center bg-black/[0.06] dark:bg-black/[0.30] text-foreground transition-colors hover:text-destructive"
+            title="Delete">
+            <Trash2 size={13} strokeWidth={1.8} />
+          </button>
         {/if}
-      </button>
+        <button onclick={handleSave}
+          class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] transition-all
+            {saving || saveReady
+              ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
+              : 'text-muted-foreground cursor-not-allowed'}"
+          style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
+          {#if saving}
+            <CircleCheck size={13} />
+            <span>Saved</span>
+          {:else}
+            <span>Save</span>
+          {/if}
+        </button>
+      </div>
     {/if}
   </div>
 </div>
@@ -1049,6 +1030,8 @@
   .panel-root {
     --panel-bg: #F0F4F9;
     --panel-contrast: #E8EDF5;
+    --panel-edge: rgba(0, 0, 0, 0.30);
+    --panel-shadow: rgba(0, 0, 0, 0.12);
     font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
@@ -1056,8 +1039,10 @@
   }
 
   :global(.dark) .panel-root {
-    --panel-bg: #282A2C;
-    --panel-contrast: #1E1F20;
+    --panel-bg: #2A2B2E;
+    --panel-contrast: #222325;
+    --panel-edge: rgba(0, 0, 0, 0.55);
+    --panel-shadow: rgba(0, 0, 0, 0.40);
     --foreground: #C4C7C5;
     --muted-foreground: #9EA1A0;
   }

@@ -187,36 +187,36 @@
   }
 </script>
 
-<div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-  <div class="section-header flex items-stretch" class:section-active={!!recurrence}>
+<div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+  <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
-      class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
-        {recurrence ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
+      class="flex w-9 shrink-0 items-center justify-center transition-colors
+        {recurrence ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
       <Repeat size={13} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
+      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors">
       <span class="translate-y-[1.13px] text-[11px] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
-      <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{recurrence ? label : "None"}</span>
+      <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{recurrence ? label : ""}</span>
     </button>
   </div>
   {#if expanded && recurrence}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="repeat" class="flex flex-col gap-2.5 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
+    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="repeat" class="flex flex-col gap-2.5 p-2.5" style="background-color: var(--panel-bg);">
       <!-- Every N [frequency] -->
       <div class="flex items-center gap-2">
         <span class="text-[11px] text-muted-foreground">Every</span>
         <input type="number" value={recInterval}
           oninput={(e) => updateInterval(parseInt(e.currentTarget.value, 10) || 1)}
           min={1} max={99}
-          class="num-input w-10 rounded-md bg-black/5 dark:bg-black/15 px-1 py-1 text-center text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
+          class="num-input w-10 rounded-none bg-black/5 dark:bg-black/15 px-1 py-1 text-center text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
           onkeydown={(e) => e.stopPropagation()} />
         <div class="flex gap-1">
           {#each FREQ_OPTIONS as opt}
             <button onclick={() => updateFrequency(opt.value)}
-              class="rounded-md px-2 py-1 text-[11px] transition-all
+              class="rounded-none px-2 py-1 text-[11px] transition-all
                 {recFrequency === opt.value
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+                  : 'text-muted-foreground'}"
             >{opt.label}</button>
           {/each}
         </div>
@@ -229,10 +229,10 @@
           <div class="grid grid-cols-7 gap-1">
             {#each ALL_WEEKDAYS as wd}
               <button onclick={() => toggleWeekday(wd.value)}
-                class="flex h-7 items-center justify-center rounded-md text-[10px] transition-all
+                class="flex h-7 items-center justify-center rounded-none text-[10px] transition-all
                   {recWeekdays.has(wd.value)
                     ? 'bg-black/5 dark:bg-black/15 text-foreground'
-                    : 'bg-black/[0.02] dark:bg-black/[0.06] text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+                    : 'bg-black/[0.02] dark:bg-black/[0.06] text-muted-foreground'}"
               >{wd.label}</button>
             {/each}
           </div>
@@ -245,22 +245,22 @@
           <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Repeat on</span>
           <div class="flex gap-1.5">
             <button onclick={() => setMonthlyMode("day")}
-              class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
+              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px] transition-all
                 {monthlyMode === 'day'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
-                  : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
-              <div class="h-3.5 w-3.5 shrink-0 rounded-full
-                {monthlyMode === 'day' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+                  : 'text-foreground'}">
+              <div class="size-[11px] shrink-0 rounded-full
+                {monthlyMode === 'day' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
               </div>
               <span>Day {getEventDayOfMonth()}</span>
             </button>
             <button onclick={() => setMonthlyMode("ordinal")}
-              class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
+              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px] transition-all
                 {monthlyMode === 'ordinal'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
-                  : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
-              <div class="h-3.5 w-3.5 shrink-0 rounded-full
-                {monthlyMode === 'ordinal' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+                  : 'text-foreground'}">
+              <div class="size-[11px] shrink-0 rounded-full
+                {monthlyMode === 'ordinal' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
               </div>
               <span>{getEventOrdinalWeekday().label}</span>
             </button>
@@ -273,21 +273,18 @@
         <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Ends</span>
 
         <button onclick={() => updateEndType("never")}
-          class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-all
-            {recEndType === 'never'
-              ? 'bg-black/5 dark:bg-black/15 text-foreground'
-              : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
-          <div class="h-3.5 w-3.5 shrink-0 rounded-full
-            {recEndType === 'never' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+          class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px] text-foreground">
+          <div class="size-[11px] shrink-0 rounded-full
+            {recEndType === 'never' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
           </div>
           <span>Never</span>
         </button>
 
-        <div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]">
+        <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("until")}
             class="flex w-12 items-center gap-2 text-foreground transition-all">
-            <div class="h-3.5 w-3.5 shrink-0 rounded-full
-              {recEndType === 'until' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+            <div class="size-[11px] shrink-0 rounded-full
+              {recEndType === 'until' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
             </div>
             <span>On</span>
           </button>
@@ -314,11 +311,11 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px]">
+        <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("count")}
             class="flex w-12 items-center gap-2 text-foreground transition-all">
-            <div class="h-3.5 w-3.5 shrink-0 rounded-full
-              {recEndType === 'count' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+            <div class="size-[11px] shrink-0 rounded-full
+              {recEndType === 'count' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
             </div>
             <span>After</span>
           </button>
@@ -346,12 +343,6 @@
 <style>
   .section-header {
     transition: background-color 180ms ease-out;
-  }
-  .section-active {
-    background-color: rgba(0, 0, 0, 0.03);
-  }
-  :global(.dark) .section-active {
-    background-color: rgba(0, 0, 0, 0.08);
   }
   .num-input {
     -moz-appearance: textfield;

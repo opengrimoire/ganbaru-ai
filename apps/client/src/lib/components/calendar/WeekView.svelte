@@ -316,7 +316,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex h-full flex-col" style="visibility: {ready ? 'visible' : 'hidden'};">
-<div class="relative min-h-0 flex-1">
+<div class="relative min-h-0 flex-1" style="background-color: var(--cal-header-bg);">
   <div
     bind:this={scrollContainer}
     onwheel={onWheel}

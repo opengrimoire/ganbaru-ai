@@ -49,34 +49,34 @@
   }
 
   const summary = $derived.by(() => {
-    if (!enabled) return "None";
+    if (!enabled) return "";
     if (preset === "custom") return `Custom (${focusDuration}/${shortBreak}/${longBreak})`;
     return POMO_PRESETS[preset]?.label ?? "Custom";
   });
 </script>
 
-<div class="flex flex-col rounded-lg overflow-hidden" style="background-color: var(--panel-contrast);">
-  <div class="section-header flex items-stretch" class:section-active={enabled}>
+<div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+  <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(e); }}
-      class="flex w-9 shrink-0 items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-black/15
-        {enabled ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}">
+      class="flex w-9 shrink-0 items-center justify-center transition-colors
+        {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
       <Timer size={13} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/15">
+      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors">
       <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
     </button>
   </div>
   {#if expanded}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="pomodoro" class="flex flex-col gap-1 border-t border-border/60 p-2.5" style="background-color: var(--panel-bg);">
+    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="pomodoro" class="flex flex-col gap-1 p-2.5" style="background-color: var(--panel-bg);">
       {#each Object.entries(POMO_PRESETS) as [key, val]}
         <button
           onclick={() => applyPreset(key as PomodoroPreset)}
-          class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] transition-all
+          class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px] transition-all
             {preset === key
               ? 'bg-black/5 dark:bg-black/15 text-foreground'
-              : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+              : 'text-foreground'}"
         >
           <span>{val.label}</span>
           <span class="ml-auto text-[10px] {preset === key ? 'text-muted-foreground' : 'text-muted-foreground'}">{val.desc}</span>
@@ -84,10 +84,10 @@
       {/each}
       <button
         onclick={() => applyPreset("custom")}
-        class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[11px] transition-all
+        class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px] transition-all
           {preset === 'custom'
             ? 'bg-black/5 dark:bg-black/15 text-foreground'
-            : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+            : 'text-foreground'}"
       >
         <span>Custom</span>
       </button>
@@ -112,15 +112,12 @@
       <div class="border-t border-border/40 mt-1 pt-0.5 px-0">
         <button
           onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; onchange(); }}
-          class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] w-full transition-all
-            {idleTimeoutEnabled
-              ? 'bg-black/5 dark:bg-black/15 text-foreground'
-              : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+          class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] w-full text-foreground"
         >
-          <div class="h-3.5 w-3.5 shrink-0 rounded
-            {idleTimeoutEnabled ? 'bg-[#6B6F6E] dark:bg-foreground' : 'ring-1 ring-inset ring-border'}">
+          <div class="size-[11px] shrink-0
+            {idleTimeoutEnabled ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
           </div>
-          <span>Pause on idle</span>
+          <span>Pause on inactivity</span>
         </button>
       </div>
     </div>
@@ -130,12 +127,6 @@
 <style>
   .section-header {
     transition: background-color 180ms ease-out;
-  }
-  .section-active {
-    background-color: rgba(0, 0, 0, 0.03);
-  }
-  :global(.dark) .section-active {
-    background-color: rgba(0, 0, 0, 0.08);
   }
   .num-input {
     -moz-appearance: textfield;
