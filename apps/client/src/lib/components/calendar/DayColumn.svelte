@@ -468,7 +468,7 @@
 <div
   data-day-column
   class="relative min-w-0 cursor-crosshair"
-  style="height: calc(24 * var(--hour-h) * 1px);"
+  style="height: calc(24 * var(--hour-h) * 1px); contain: layout style;"
   onmousemove={handleColumnMouseMove}
   onmouseleave={handleColumnMouseLeave}
   onpointerdown={handleRailAreaPointerDown}
@@ -510,7 +510,7 @@
   {#if pastOverlayMinutes > 0}
     <div
       class="pointer-events-none absolute left-0 right-0 top-0 z-[1]"
-      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay);"
+      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay); will-change: transform;"
     ></div>
   {/if}
 
