@@ -1,0 +1,1030 @@
+<script lang="ts">
+  import type {
+    CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventStatus,
+    EventTransparency, EventVisibility, GuestPermissions,
+    PomodoroConfig, RecurrenceConfig, RecurringScope,
+  } from "./types";
+  import { addDays, getLocalTimezone, parseCalendarDate, formatDatePart } from "./utils";
+  import { getCalendar } from "$lib/stores/calendar.svelte";
+  import { getCalendars } from "$lib/stores/calendars.svelte";
+  import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { getTheme } from "$lib/stores/theme.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { onMount } from "svelte";
+  import CalendarHeader from "./CalendarHeader.svelte";
+  import WeekView from "./WeekView.svelte";
+  import DayView from "./DayView.svelte";
+  import MonthView from "./MonthView.svelte";
+  import EventPanel from "./EventPanel.svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import { createEditSession } from "./edit-session.svelte";
+  import type { PanelAnchor } from "./edit-session.svelte";
+  import {
+    closedDisplay,
+    buildCreateDisplay,
+    computeEditDisplay,
+    dateDiffDays,
+    shiftDateStr,
+    PENDING_CREATE_ID,
+  } from "./display-events";
+
+  const calendarStore = getCalendar();
+  const calendarsStore = getCalendars();
+  const pomodoro = getPomodoro();
+  const calZoom = getCalendarZoom();
+  const theme = getTheme();
+
+  let viewMode: CalendarViewMode = $state("week");
+  let anchorDate: Date = $state(new Date());
+  let timezones: string[] = $state([getLocalTimezone()]);
+
+  // --- Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.) ---
+  const session = createEditSession();
+
+  // --- Display events (pure overlay, no store mutation) ---
+  const displayResult = $derived.by(() => {
+    const visIds = calendarsStore.visibleIds;
+    const storeEvents = calendarStore.events.filter((e) => visIds.has(e.calendarId));
+    const s = session.state;
+    if (s.mode === "closed") return closedDisplay(storeEvents);
+    if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes);
+    // mode === "edit": dispatch by scope
+    // Compute active date for hybrid preview (active session keeps original start)
+    let activeDate: string | undefined;
+    if (pomodoro.activeBlockId && s.templateId) {
+      const parts = pomodoro.activeBlockId.split("::");
+      if (parts[0] === s.templateId) activeDate = parts[1];
+    }
+    return computeEditDisplay(
+      calendarStore.rawBlocks,
+      storeEvents,
+      { originalEvent: s.originalEvent, instanceEvent: s.instanceEvent, templateId: s.templateId },
+      session.changes,
+      session.scope,
+      activeDate,
+    );
+  });
+
+  const visibleEvents = $derived(displayResult.events);
+  let suppressEditingGlow = $state(false);
+  const previewedIds = $derived(suppressEditingGlow ? new Set<string>() : displayResult.previewedIds);
+  const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
+
+  // Merged event for the panel (original + changes, so panel sees drag/resize updates)
+  const panelEvent = $derived.by(() => {
+    const s = session.state;
+    if (s.mode === "edit") {
+      return { ...s.originalEvent, ...session.changes } as CalendarEvent;
+    }
+    return undefined;
+  });
+
+  // Past pomodoro events are read-only (completed work is sacred)
+  const isEditingLocked = $derived.by(() => {
+    const s = session.state;
+    if (s.mode !== "edit") return false;
+    const ev = s.originalEvent;
+    if (!ev.pomodoroConfig) return false;
+    if (ev.id === pomodoro.activeBlockId) return false;
+    return parseCalendarDate(ev.end).getTime() < Date.now();
+  });
+
+  function isRecurring(event: CalendarEvent): boolean {
+    return !!event.recurringParentId || !!event.recurrence;
+  }
+
+  /** Would this delete stop the active pomodoro session? */
+  function wouldDeleteActiveSession(scope?: RecurringScope): boolean {
+    if (!pomodoro.activeBlockId || session.state.mode !== "edit") return false;
+    const activeId = pomodoro.activeBlockId;
+    const eventId = session.state.instanceEvent.id;
+
+    // Non-recurring or "this" delete of the active block
+    if (!scope || scope === "this") return eventId === activeId;
+
+    // "Following" delete: stops if active block is at or after the split point
+    if (scope === "following") {
+      const activeRoot = activeId.includes("::") ? activeId.split("::")[0] : activeId;
+      const inst = session.state.instanceEvent;
+      const targetRoot = (inst.recurringParentId ?? inst.id).split("::")[0];
+      if (activeRoot !== targetRoot) return false;
+      const instanceDate = inst.start.split(" ")[0];
+      const activeDate = activeId.includes("::") ? activeId.split("::")[1] : formatDatePart(new Date());
+      return instanceDate <= activeDate;
+    }
+
+    // "All" delete: current code preserves active block via splitDate shift
+    return false;
+  }
+
+  /** Would this save displace the active block out of the current time window? */
+  function wouldSaveStopSession(data: { start: string; end: string }, scope?: RecurringScope): boolean {
+    if (!pomodoro.activeBlockId || session.state.mode !== "edit") return false;
+    // "Following" splits from next day, preserving the active block
+    if (scope === "following") return false;
+
+    const s = session.state;
+    const activeId = pomodoro.activeBlockId;
+
+    // "All events" scope: check if the new time window still covers "now" on today
+    if (scope === "all") {
+      const templateId = (s.instanceEvent.recurringParentId ?? s.instanceEvent.id).split("::")[0];
+      const activeRoot = activeId.includes("::") ? activeId.split("::")[0] : activeId;
+      if (activeRoot !== templateId) return false;
+
+      const todayStr = formatDatePart(new Date());
+      const activeDate = activeId.includes("::") ? activeId.split("::")[1] : null;
+      if (activeDate !== todayStr) return false;
+
+      // Compute the new time window projected onto today
+      const newStartTime = data.start.split(" ")[1];
+      const newEndTime = data.end.split(" ")[1];
+      const dataStartDate = data.start.split(" ")[0];
+      const dataEndDate = data.end.split(" ")[0];
+      const endDaySpan = dateDiffDays(dataStartDate, dataEndDate);
+      const endDateForToday = endDaySpan !== 0 ? shiftDateStr(todayStr, endDaySpan) : todayStr;
+
+      const now = new Date();
+      const newStartMs = parseCalendarDate(`${todayStr} ${newStartTime}`).getTime();
+      const newEndMs = parseCalendarDate(`${endDateForToday} ${newEndTime}`).getTime();
+
+      // Session continues only if the new time window covers right now
+      return !(now.getTime() >= newStartMs && now.getTime() < newEndMs);
+    }
+
+    // Direct edit of active block (non-recurring or "this")
+    if (s.instanceEvent.id !== activeId) return false;
+    const now = new Date();
+    const newStart = parseCalendarDate(data.start);
+    const newEnd = parseCalendarDate(data.end);
+    return !(now >= newStart && now < newEnd);
+  }
+
+  // Flag: the user confirmed the session stop but the actual stopSession() call
+  // must happen AFTER the save (the hybrid logic needs activeBlockId intact)
+  let sessionStopPending = false;
+
+  // View history for Alt+Left/Right navigation (capped at 50)
+  const VIEW_HISTORY_LIMIT = 50;
+  type ViewState = { mode: CalendarViewMode; date: Date };
+  let history: ViewState[] = $state([{ mode: "week", date: new Date() }]);
+  let historyIndex = $state(0);
+  let isNavigatingHistory = false;
+
+  function pushHistory(mode: CalendarViewMode, date: Date) {
+    if (isNavigatingHistory) return;
+    const base = history.slice(0, historyIndex + 1);
+    base[base.length - 1] = { mode: viewMode, date: new Date(anchorDate) };
+    history = [...base, { mode, date }];
+    if (history.length > VIEW_HISTORY_LIMIT) {
+      history = history.slice(history.length - VIEW_HISTORY_LIMIT);
+    }
+    historyIndex = history.length - 1;
+  }
+
+  function historyBack() {
+    if (historyIndex <= 0) return;
+    historyIndex--;
+    isNavigatingHistory = true;
+    viewMode = history[historyIndex].mode;
+    anchorDate = history[historyIndex].date;
+    isNavigatingHistory = false;
+  }
+
+  function historyForward() {
+    if (historyIndex >= history.length - 1) return;
+    historyIndex++;
+    isNavigatingHistory = true;
+    viewMode = history[historyIndex].mode;
+    anchorDate = history[historyIndex].date;
+    isNavigatingHistory = false;
+  }
+
+  function addTimezone(tz: string) {
+    if (timezones.length < 3 && !timezones.includes(tz)) {
+      timezones = [...timezones, tz];
+    }
+  }
+
+  function removeTimezone(index: number) {
+    if (index > 0) {
+      timezones = timezones.filter((_, i) => i !== index);
+    }
+  }
+
+  // Event undo/redo (capped at 20)
+  const UNDO_LIMIT = 20;
+  type UndoAction =
+    | { type: "add"; event: CalendarEvent }
+    | { type: "delete"; event: CalendarEvent }
+    | { type: "update"; before: CalendarEvent; after: CalendarEvent };
+  let undoStack: UndoAction[] = $state([]);
+  let redoStack: UndoAction[] = $state([]);
+
+  function pushUndo(action: UndoAction) {
+    undoStack = [...undoStack, action].slice(-UNDO_LIMIT);
+  }
+
+  // Confirmation dialog
+  let confirmAction: (() => Promise<void>) | null = $state(null);
+  let confirmMessage = $state("");
+  let confirmYesLabel = $state("Yes (Enter)");
+  let confirmNoLabel = $state("No (Esc)");
+  function requestConfirm(
+    message: string,
+    action: () => Promise<void>,
+    opts?: { yesLabel?: string; noLabel?: string },
+  ) {
+    confirmMessage = message;
+    confirmAction = action;
+    confirmYesLabel = opts?.yesLabel ?? "Yes (Enter)";
+    confirmNoLabel = opts?.noLabel ?? "No (Esc)";
+  }
+
+  async function confirmYes() {
+    const action = confirmAction;
+    confirmAction = null;
+    confirmMessage = "";
+    if (action) await action();
+  }
+
+  function confirmNo() {
+    confirmAction = null;
+    confirmMessage = "";
+  }
+
+  function requestUndo() {
+    const action = undoStack[undoStack.length - 1];
+    if (!action) return;
+    let message = "";
+    if (action.type === "add") message = `Undo creating "${action.event.title}"?`;
+    else if (action.type === "delete") message = `Undo deleting "${action.event.title}"?`;
+    else message = `Undo moving "${action.after.title}"?`;
+    requestConfirm(message, async () => {
+      undoStack = undoStack.slice(0, -1);
+      if (action.type === "add") {
+        await calendarStore.deleteBlock(action.event.id);
+      } else if (action.type === "delete") {
+        await calendarStore.addBlock({
+          title: action.event.title, start: action.event.start, end: action.event.end,
+          id: action.event.id, color: action.event.color, description: action.event.description,
+          recurrence: action.event.recurrence, notifications: action.event.notifications,
+          pomodoroConfig: action.event.pomodoroConfig,
+        });
+      } else {
+        await calendarStore.updateBlock(action.before);
+      }
+      redoStack = [...redoStack, action];
+      session.close();
+    });
+  }
+
+  function requestRedo() {
+    const action = redoStack[redoStack.length - 1];
+    if (!action) return;
+    let message = "";
+    if (action.type === "add") message = `Redo creating "${action.event.title}"?`;
+    else if (action.type === "delete") message = `Redo deleting "${action.event.title}"?`;
+    else message = `Redo moving "${action.after.title}"?`;
+    requestConfirm(message, async () => {
+      redoStack = redoStack.slice(0, -1);
+      if (action.type === "add") {
+        await calendarStore.addBlock({
+          title: action.event.title, start: action.event.start, end: action.event.end,
+          id: action.event.id, color: action.event.color, description: action.event.description,
+          recurrence: action.event.recurrence, notifications: action.event.notifications,
+          pomodoroConfig: action.event.pomodoroConfig,
+        });
+      } else if (action.type === "delete") {
+        await calendarStore.deleteBlock(action.event.id);
+      } else {
+        await calendarStore.updateBlock(action.after);
+      }
+      pushUndo(action);
+    });
+  }
+
+  let containerEl: HTMLDivElement | undefined = $state();
+
+  // Shared scroll position (preserved across view switches)
+  let scrollMinute = $state(-1);
+  let viewWrapperEl: HTMLDivElement | undefined = $state();
+
+  // rAF-based arrow key scrolling for day/week views
+  const SCROLL_PX_PER_SEC = 600;
+  let arrowScrollDir = 0;
+  let arrowScrollRaf = 0;
+  let arrowScrollPrev = 0;
+
+  function arrowScrollStep(ts: number) {
+    if (arrowScrollDir === 0) return;
+    if (!arrowScrollPrev) arrowScrollPrev = ts;
+    const dt = ts - arrowScrollPrev;
+    arrowScrollPrev = ts;
+    const el = viewWrapperEl?.querySelector(".hide-scrollbar");
+    if (el) el.scrollTop += arrowScrollDir * SCROLL_PX_PER_SEC * (dt / 1000);
+    arrowScrollRaf = requestAnimationFrame(arrowScrollStep);
+  }
+
+  function startArrowScroll(dir: -1 | 1) {
+    if (arrowScrollDir === dir) return;
+    arrowScrollDir = dir;
+    arrowScrollPrev = 0;
+    const el = viewWrapperEl?.querySelector(".hide-scrollbar");
+    el?.dispatchEvent(new CustomEvent("cancel-smooth-scroll"));
+    if (!arrowScrollRaf) arrowScrollRaf = requestAnimationFrame(arrowScrollStep);
+  }
+
+  function stopArrowScroll() {
+    arrowScrollDir = 0;
+    if (arrowScrollRaf) { cancelAnimationFrame(arrowScrollRaf); arrowScrollRaf = 0; }
+  }
+
+  onMount(() => {
+    function handleKeydown(e: KeyboardEvent) {
+      const active = document.activeElement;
+      if (active && (active as HTMLElement).isContentEditable) return;
+
+      if (e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        historyBack();
+      } else if (e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        historyForward();
+      } else if (e.ctrlKey && e.key === "z") {
+        e.preventDefault();
+        requestUndo();
+      } else if (e.ctrlKey && e.key === "y") {
+        e.preventDefault();
+        requestRedo();
+      } else if (e.key === "Escape" && session.state.mode !== "closed") {
+        e.preventDefault();
+        handlePanelClose();
+      } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          navigate("back");
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          navigate("forward");
+        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          if (viewMode === "month") {
+            navigate(e.key === "ArrowUp" ? "back" : "forward");
+          } else {
+            startArrowScroll(e.key === "ArrowUp" ? -1 : 1);
+          }
+        }
+      }
+    }
+
+    function handleKeyup(e: KeyboardEvent) {
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && arrowScrollDir !== 0) {
+        stopArrowScroll();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeydown);
+    window.addEventListener("keyup", handleKeyup);
+    window.addEventListener("blur", stopArrowScroll);
+    return () => {
+      stopArrowScroll();
+      window.removeEventListener("keydown", handleKeydown);
+      window.removeEventListener("keyup", handleKeyup);
+      window.removeEventListener("blur", stopArrowScroll);
+    };
+  });
+
+  function navigate(direction: "today" | "back" | "forward") {
+    if (direction === "today") {
+      anchorDate = new Date();
+      return;
+    }
+
+    const delta = direction === "forward" ? 1 : -1;
+
+    if (viewMode === "week") {
+      anchorDate = addDays(anchorDate, 7 * delta);
+    } else if (viewMode === "day") {
+      anchorDate = addDays(anchorDate, delta);
+    } else {
+      const d = new Date(anchorDate);
+      const targetMonth = d.getMonth() + delta;
+      d.setDate(1);
+      d.setMonth(targetMonth);
+      anchorDate = d;
+    }
+  }
+
+  function handleWheelNavigate(direction: "back" | "forward") {
+    navigate(direction);
+  }
+
+  function changeView(mode: CalendarViewMode) {
+    pushHistory(mode, anchorDate);
+    viewMode = mode;
+  }
+
+  function handleEventCreate(start: string, end: string, allDay?: boolean) {
+    const previewEl = containerEl?.querySelector("[data-create-preview]");
+    const rect = previewEl?.getBoundingClientRect();
+    const colRect = previewEl?.closest("[data-day-column]")?.getBoundingClientRect();
+    const anchor: PanelAnchor = rect
+      ? { x: colRect?.right ?? rect.right, y: rect.top, width: colRect?.width ?? rect.width, height: rect.height }
+      : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+
+    session.openCreate(start, end, anchor, allDay);
+  }
+
+  function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
+    if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
+
+    // Already editing this exact event. Toggle panel closed if clean.
+    if (session.state.mode === "edit" && (
+      session.state.originalEvent.id === event.id || editingId === event.id
+    )) {
+      handlePanelClose();
+      return;
+    }
+
+    const anchor: PanelAnchor = rect
+      ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
+      : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+
+    const openEvent = () => {
+      if (isRecurring(event)) {
+        session.openEdit(event, anchor, event);
+      } else {
+        session.openEdit(event, anchor);
+      }
+    };
+
+    if (session.dirty) {
+      requestConfirm(
+        "Discard unsaved changes?",
+        async () => { openEvent(); },
+        { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+      );
+      return;
+    }
+
+    openEvent();
+  }
+
+  async function handleEventUpdate(event: CalendarEvent) {
+    // Pseudo-event from create preview drag/resize
+    if (event.id === PENDING_CREATE_ID) {
+      if (session.state.mode === "create") {
+        session.updateChanges({ start: event.start, end: event.end });
+      }
+      return;
+    }
+
+    if (isRecurring(event)) {
+      // If the dragged event matches the current editing ID (may be a virtual ID
+      // from Following/All overlay), route the time changes to the session
+      if (session.state.mode === "edit" && (
+        session.state.originalEvent.id === event.id || editingId === event.id
+      )) {
+        session.updateChanges({ start: event.start, end: event.end });
+        return;
+      }
+
+      // Resolve the original instance before drag modified its position
+      const originalInstance = calendarStore.events.find((e) => e.id === event.id);
+      if (!originalInstance) return;
+
+      // If session is dirty, ask to discard before switching
+      if (session.dirty) {
+        const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
+        const rect = el?.getBoundingClientRect();
+        const anchor: PanelAnchor = rect
+          ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
+          : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+        requestConfirm(
+          "Discard unsaved changes?",
+          async () => {
+            session.openEdit(event, anchor, originalInstance);
+            session.updateChanges({ start: event.start, end: event.end });
+          },
+          { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        );
+        return;
+      }
+
+      // Drag on recurring without panel open -- open panel with changes
+      const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
+      const rect = el?.getBoundingClientRect();
+      const anchor: PanelAnchor = rect
+        ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+
+      session.openEdit(event, anchor, originalInstance);
+      session.updateChanges({ start: event.start, end: event.end });
+      return;
+    }
+
+    // Non-recurring: persist directly (no panel needed for drag)
+    const template = calendarStore.getTemplate(event);
+    const before = template ? { ...template } : undefined;
+    await calendarStore.updateBlock(event);
+    if (before) {
+      const after = calendarStore.getTemplate(event) ?? event;
+      pushUndo({ type: "update", before, after: { ...after } });
+      redoStack = [];
+    }
+    // If panel is open for this event, update it
+    if (session.state.mode === "edit" && session.state.originalEvent.id === event.id) {
+      const updated = calendarStore.getTemplate(event) ?? event;
+      session.openEdit(updated, session.state.anchor);
+    }
+  }
+
+  function handlePanelChange(data: Partial<CalendarEvent>) {
+    session.updateChanges(data);
+  }
+
+  function handleScopeChange(newScope: RecurringScope) {
+    session.updateScope(newScope);
+  }
+
+  function handlePanelClose() {
+    if (session.dirty) {
+      requestConfirm(
+        "Discard unsaved changes?",
+        async () => { session.close(); },
+        { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+      );
+      return;
+    }
+    session.close();
+  }
+
+  async function handlePanelSave(data: {
+    title: string;
+    start: string;
+    end: string;
+    color?: EventColor;
+    description: string;
+    recurrence?: RecurrenceConfig;
+    notifications?: number[];
+    pomodoroConfig?: PomodoroConfig;
+    allDay?: boolean;
+    location?: string;
+    url?: string;
+    transparency?: EventTransparency;
+    status?: EventStatus;
+    visibility?: EventVisibility;
+    attendees?: EventAttendee[];
+    guestPermissions?: GuestPermissions;
+  }, scope?: RecurringScope) {
+    // Gate: confirm before stopping the active pomodoro session.
+    // stopSession() is deferred to AFTER the save so the hybrid logic still sees activeBlockId.
+    if (!sessionStopPending && wouldSaveStopSession(data, scope)) {
+      requestConfirm(
+        "This will stop the current focus session.",
+        async () => {
+          sessionStopPending = true;
+          await handlePanelSave(data, scope);
+        },
+        { yesLabel: "Stop and save (Enter)", noLabel: "Keep editing (Esc)" },
+      );
+      return;
+    }
+
+    const s = session.state;
+
+    if (s.mode === "create") {
+      const event = await calendarStore.addBlock({
+        title: data.title, start: data.start, end: data.end,
+        color: data.color, description: data.description,
+        recurrence: data.recurrence, notifications: data.notifications,
+        pomodoroConfig: data.pomodoroConfig,
+        allDay: data.allDay, location: data.location, url: data.url,
+        transparency: data.transparency, status: data.status,
+        visibility: data.visibility, attendees: data.attendees,
+        guestPermissions: data.guestPermissions,
+      });
+      pushUndo({ type: "add", event: { ...event } });
+      redoStack = [];
+    } else if (s.mode === "edit") {
+      const instanceEvent = s.instanceEvent;
+      const isRec = isRecurring(s.originalEvent);
+
+      if (isRec && scope) {
+        // Suppress both editingId and previewedIds so ALL event blocks
+        // lose the glow simultaneously via CSS transition. This prevents
+        // the glow from reappearing on recreated DOM elements after the
+        // store mutation (which runs before session.close).
+        suppressEditingGlow = true;
+
+        if (scope === "this") {
+          const standalone = await calendarStore.detachInstance(instanceEvent);
+          const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
+          await calendarStore.updateBlock(updated);
+        } else if (scope === "following") {
+          const instanceDate = instanceEvent.start.split(" ")[0];
+          const templateId = instanceEvent.recurringParentId ?? instanceEvent.id;
+
+          // If this is the active session's date, don't detach it; split from tomorrow
+          const isActiveDate = pomodoro.activeBlockId?.startsWith(templateId + "::" + instanceDate);
+          if (isActiveDate) {
+            const nextDate = shiftDateStr(instanceDate, 1);
+            const startTime = instanceEvent.start.split(" ")[1];
+            const endTime = instanceEvent.end.split(" ")[1];
+            const nextDayInstance: CalendarEvent = {
+              ...instanceEvent,
+              id: `${templateId}::${nextDate}`,
+              start: `${nextDate} ${startTime}`,
+              end: `${nextDate} ${endTime}`,
+            };
+            await calendarStore.splitSeries(nextDayInstance, data);
+          } else {
+            const hasProgress = await calendarStore.hasProgressSegments(templateId, instanceDate);
+            if (hasProgress) {
+              // Instance date has progress: detach it first, then split from next day
+              await calendarStore.detachInstance(instanceEvent);
+              const nextDate = shiftDateStr(instanceDate, 1);
+              const startTime = instanceEvent.start.split(" ")[1];
+              const endTime = instanceEvent.end.split(" ")[1];
+              const nextDayInstance: CalendarEvent = {
+                ...instanceEvent,
+                id: `${templateId}::${nextDate}`,
+                start: `${nextDate} ${startTime}`,
+                end: `${nextDate} ${endTime}`,
+              };
+              await calendarStore.splitSeries(nextDayInstance, data);
+            } else {
+              await calendarStore.splitSeries(instanceEvent, data);
+            }
+          }
+        } else {
+          // "all": past instances are immutable, only change today and forward
+          const template = calendarStore.getTemplate(instanceEvent);
+          if (template) {
+            const templateStartDate = template.start.split(" ")[0];
+            const todayStr = formatDatePart(new Date());
+
+            // Detect active session on this series today
+            let activeOnToday = false;
+            if (pomodoro.activeBlockId) {
+              const parts = pomodoro.activeBlockId.split("::");
+              if (parts[0] === template.id && parts[1] === todayStr) {
+                activeOnToday = true;
+              }
+            }
+
+            // Determine split date based on session state:
+            // - Hybrid (session continues): split from tomorrow, today keeps extended block
+            // - Stop (new time doesn't cover now): split from today if new time has
+            //   a future portion, otherwise from tomorrow (skip past-only today block)
+            let splitDate: string;
+            if (activeOnToday) {
+              if (sessionStopPending) {
+                const newEndTime = data.end.split(" ")[1];
+                const dsd = data.start.split(" ")[0];
+                const ded = data.end.split(" ")[0];
+                const edSpan = dateDiffDays(dsd, ded);
+                const endDateToday = edSpan !== 0 ? shiftDateStr(todayStr, edSpan) : todayStr;
+                const newEndMs = parseCalendarDate(`${endDateToday} ${newEndTime}`).getTime();
+                splitDate = Date.now() < newEndMs ? todayStr : shiftDateStr(todayStr, 1);
+              } else {
+                splitDate = shiftDateStr(todayStr, 1);
+              }
+            } else {
+              splitDate = todayStr;
+            }
+
+            // Always split when stopping the active session (even if template started today)
+            const shouldSplit = templateStartDate < splitDate
+              || (sessionStopPending && activeOnToday && splitDate === todayStr);
+
+            if (shouldSplit) {
+              // Batch all mutations so only one reexpand fires at the end
+              calendarStore.beginBatch();
+              try {
+                if (activeOnToday) {
+                  const originalStartTime = template.start.split(" ")[1];
+
+                  if (sessionStopPending) {
+                    // Session will stop: cap standalone at current time
+                    const now = new Date();
+                    const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                    const todayInstance: CalendarEvent = {
+                      ...template,
+                      id: `${template.id}::${todayStr}`,
+                      start: `${todayStr} ${originalStartTime}`,
+                      end: `${todayStr} ${nowTime}`,
+                      recurringParentId: template.id,
+                      recurrence: undefined,
+                      exceptions: undefined,
+                    };
+                    await calendarStore.detachInstance(todayInstance);
+                  } else {
+                    // Hybrid: original start + new end, clamped to at least current time
+                    const newEndTime = data.end.split(" ")[1];
+                    const dataStartDate = data.start.split(" ")[0];
+                    const dataEndDate = data.end.split(" ")[0];
+                    const endDaySpan = dateDiffDays(dataStartDate, dataEndDate);
+                    const hybridEndDate = endDaySpan !== 0 ? shiftDateStr(todayStr, endDaySpan) : todayStr;
+
+                    const todayInstance: CalendarEvent = {
+                      ...template,
+                      id: `${template.id}::${todayStr}`,
+                      start: `${todayStr} ${originalStartTime}`,
+                      end: `${todayStr} ${template.end.split(" ")[1]}`,
+                      recurringParentId: template.id,
+                      recurrence: undefined,
+                      exceptions: undefined,
+                    };
+                    const standalone = await calendarStore.detachInstance(todayInstance);
+
+                    const now = new Date();
+                    const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                    const proposedEnd = `${hybridEndDate} ${newEndTime}`;
+                    const nowEnd = `${todayStr} ${nowTime}`;
+                    const hybridEnd = proposedEnd > nowEnd ? proposedEnd : nowEnd;
+
+                    const hybridUpdate: CalendarEvent = {
+                      ...standalone, ...data,
+                      start: `${todayStr} ${originalStartTime}`,
+                      end: hybridEnd,
+                      recurrence: undefined,
+                    };
+                    await calendarStore.updateBlock(hybridUpdate);
+
+                    // Transfer the pomodoro session to the new standalone ID so
+                    // checkActiveBlock finds it without triggering a session transition
+                    pomodoro.transferBlockId(standalone.id, hybridEnd);
+                  }
+                }
+
+                // Split from splitDate: cap old template, create new template for future
+                const templateTime = template.start.split(" ")[1];
+                const templateEndTime = template.end.split(" ")[1];
+                const virtualInstance: CalendarEvent = {
+                  ...template,
+                  id: `${template.id}::${splitDate}`,
+                  start: `${splitDate} ${templateTime}`,
+                  end: `${splitDate} ${templateEndTime}`,
+                  recurringParentId: template.id,
+                  recurrence: undefined,
+                  exceptions: undefined,
+                };
+                const dataStartDate = data.start.split(" ")[0];
+                const dataEndDate = data.end.split(" ")[0];
+                const daySpan = dateDiffDays(dataStartDate, dataEndDate);
+                const newEndDate = daySpan !== 0 ? shiftDateStr(splitDate, daySpan) : splitDate;
+                const adjustedData = {
+                  ...data,
+                  start: `${splitDate} ${data.start.split(" ")[1]}`,
+                  end: `${newEndDate} ${data.end.split(" ")[1]}`,
+                };
+                await calendarStore.splitSeries(virtualInstance, adjustedData);
+              } finally {
+                calendarStore.endBatch();
+              }
+            } else {
+              // No past instances: update template directly
+              const instanceDateStr = instanceEvent.start.split(" ")[0];
+              const changesDateStr = data.start.split(" ")[0];
+              const delta = dateDiffDays(instanceDateStr, changesDateStr);
+              const newStartDate = delta !== 0 ? shiftDateStr(templateStartDate, delta) : templateStartDate;
+              const dataEndDate = data.end.split(" ")[0];
+              const daySpan = dateDiffDays(changesDateStr, dataEndDate);
+              const newEndDate = shiftDateStr(newStartDate, daySpan);
+              const updated: CalendarEvent = {
+                ...template, ...data,
+                start: `${newStartDate} ${data.start.split(" ")[1]}`,
+                end: `${newEndDate} ${data.end.split(" ")[1]}`,
+              };
+              await calendarStore.updateBlock(updated);
+            }
+          }
+        }
+      } else {
+        // Non-recurring: CSS transition handles the fade naturally (same DOM element)
+        const updated: CalendarEvent = { ...s.originalEvent, ...data };
+        const before = calendarStore.getTemplate(s.originalEvent) ?? s.originalEvent;
+        await calendarStore.updateBlock(updated);
+        pushUndo({ type: "update", before: { ...before }, after: { ...updated } });
+        redoStack = [];
+      }
+    }
+
+    // Stop session after all mutations complete (hybrid logic needs activeBlockId intact)
+    if (sessionStopPending) {
+      pomodoro.stopSession();
+      sessionStopPending = false;
+    }
+    session.close();
+    suppressEditingGlow = false;
+  }
+
+  async function handleDelete(id: string, scope?: RecurringScope) {
+    // Gate: confirm before stopping the active pomodoro session
+    if (!sessionStopPending && wouldDeleteActiveSession(scope)) {
+      requestConfirm(
+        "This will stop the current focus session.",
+        async () => {
+          sessionStopPending = true;
+          await handleDelete(id, scope);
+        },
+        { yesLabel: "Stop and delete (Enter)", noLabel: "Keep editing (Esc)" },
+      );
+      return;
+    }
+
+    const s = session.state;
+
+    if (scope && s.mode === "edit") {
+      const instanceEvent = s.instanceEvent;
+      const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
+      if (scope === "this") {
+        const instanceDate = instanceEvent.start.split(" ")[0];
+        await calendarStore.addException(parentId, instanceDate);
+      } else if (scope === "following") {
+        const instanceDate = instanceEvent.start.split(" ")[0];
+        const dayBefore = shiftDateStr(instanceDate, -1);
+        await calendarStore.setRepeatUntil(parentId, dayBefore);
+      } else {
+        // "all" delete: past instances are immutable
+        const template = calendarStore.getTemplate(instanceEvent);
+        const templateStartDate = template?.start.split(" ")[0];
+
+        let splitDate = formatDatePart(new Date());
+        if (template && pomodoro.activeBlockId) {
+          const parts = pomodoro.activeBlockId.split("::");
+          if (parts[0] === template.id && parts[1] === splitDate) {
+            splitDate = shiftDateStr(splitDate, 1);
+          }
+        }
+
+        if (templateStartDate && templateStartDate < splitDate) {
+          // Series has past instances: cap at splitDate, keep past frozen
+          const dayBefore = shiftDateStr(splitDate, -1);
+          await calendarStore.setRepeatUntil(parentId, dayBefore);
+        } else {
+          // No past instances: delete the whole series
+          if (template) {
+            pushUndo({ type: "delete", event: { ...template } });
+            redoStack = [];
+          }
+          await calendarStore.deleteBlock(parentId);
+        }
+      }
+    } else {
+      // Non-recurring: delete directly
+      const event = calendarStore.getTemplate({ id } as CalendarEvent) ?? calendarStore.events.find((e) => e.id === id);
+      await calendarStore.deleteBlock(id);
+      if (event) {
+        pushUndo({ type: "delete", event: { ...event } });
+        redoStack = [];
+      }
+    }
+
+    if (sessionStopPending) {
+      pomodoro.stopSession();
+      sessionStopPending = false;
+    }
+    session.close();
+  }
+
+  function handleDayClickFromMonth(date: Date) {
+    pushHistory("day", date);
+    anchorDate = date;
+    viewMode = "day";
+  }
+
+  function handleWeekDayHeaderClick(date: Date) {
+    pushHistory("day", date);
+    anchorDate = date;
+    viewMode = "day";
+  }
+
+  function handleDayHeaderClick() {
+    pushHistory("week", anchorDate);
+    viewMode = "week";
+  }
+</script>
+
+<div bind:this={containerEl} class="relative flex h-full flex-col select-none overflow-hidden">
+  <CalendarHeader
+    {anchorDate}
+    {viewMode}
+    onNavigate={navigate}
+    onViewChange={changeView}
+    onDaySelect={(date) => { anchorDate = date; }}
+  />
+
+  <div bind:this={viewWrapperEl} class="min-w-0 flex-1 overflow-hidden" style="background-color: var(--cal-bg);">
+    {#if viewMode === "week"}
+      <WeekView
+        {anchorDate}
+        events={visibleEvents}
+        isDark={theme.isDark}
+        {timezones}
+        editingId={editingId}
+        {previewedIds}
+        initialScrollMinute={scrollMinute}
+        onScrollChange={(m) => { scrollMinute = m; }}
+        onEventClick={handleEventClick}
+        onEventUpdate={handleEventUpdate}
+        onEventCreate={handleEventCreate}
+        onAddTimezone={addTimezone}
+        onRemoveTimezone={removeTimezone}
+        onWheelNavigate={handleWheelNavigate}
+        onDayHeaderClick={handleWeekDayHeaderClick}
+      />
+    {:else if viewMode === "day"}
+      <DayView
+        {anchorDate}
+        events={visibleEvents}
+        isDark={theme.isDark}
+        {timezones}
+        editingId={editingId}
+        {previewedIds}
+        initialScrollMinute={scrollMinute}
+        onScrollChange={(m) => { scrollMinute = m; }}
+        onEventClick={handleEventClick}
+        onEventUpdate={handleEventUpdate}
+        onEventCreate={handleEventCreate}
+        onAddTimezone={addTimezone}
+        onRemoveTimezone={removeTimezone}
+        onWheelNavigate={handleWheelNavigate}
+        onDayHeaderClick={handleDayHeaderClick}
+      />
+    {:else}
+      <MonthView
+        {anchorDate}
+        events={visibleEvents}
+        isDark={theme.isDark}
+        onDayClick={handleDayClickFromMonth}
+        onEventClick={handleEventClick}
+        onWheelNavigate={handleWheelNavigate}
+      />
+    {/if}
+  </div>
+
+  {#if confirmAction}
+    <ConfirmDialog
+      message={confirmMessage}
+      confirmLabel={confirmYesLabel}
+      cancelLabel={confirmNoLabel}
+      onConfirm={confirmYes}
+      onCancel={confirmNo}
+    />
+  {/if}
+
+  <!-- Floating event panel -->
+  {#if session.state.mode === "create" || session.state.mode === "edit"}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="fixed inset-0 z-40" onclick={(e) => {
+      // Peek under the backdrop to check if an event block was clicked
+      const el = e.currentTarget as HTMLElement;
+      el.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      el.style.pointerEvents = '';
+      const eventEl = under?.closest('[data-event-id]');
+      if (eventEl) {
+        (eventEl as HTMLElement).click();
+        return;
+      }
+      handlePanelClose();
+    }} onwheel={(e) => {
+      // Let scroll pass through to the calendar underneath
+      const el = e.currentTarget as HTMLElement;
+      el.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      el.style.pointerEvents = '';
+      under?.dispatchEvent(new WheelEvent('wheel', e));
+    }}></div>
+    {#if session.state.mode === "create"}
+      <EventPanel
+        mode="create"
+        start={session.state.start}
+        end={session.state.end}
+        anchor={session.state.anchor}
+        initialAllDay={!!session.changes.allDay}
+        onSave={handlePanelSave}
+        onChange={handlePanelChange}
+        onClose={handlePanelClose}
+      />
+    {:else if session.state.mode === "edit"}
+      <EventPanel
+        mode="edit"
+        event={panelEvent}
+        anchor={session.state.anchor}
+        externalDirty={session.dirty}
+        readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
+        onSave={handlePanelSave}
+        onDelete={handleDelete}
+        onChange={handlePanelChange}
+        onClose={handlePanelClose}
+        onScopeChange={handleScopeChange}
+      />
+    {/if}
+  {/if}
+
+</div>

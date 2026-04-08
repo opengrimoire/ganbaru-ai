@@ -1,0 +1,438 @@
+import type { PomodoroPhase } from "@ganbaruai/shared-types";
+
+// --- Types ---
+
+export interface PomodoroConfig {
+  focusMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  cyclesBeforeLongBreak: number;
+}
+
+/** Read-only snapshot of timer state, passed to pure decision functions. */
+export interface TimerSnapshot {
+  phase: PomodoroPhase;
+  remainingSeconds: number;
+  currentCycle: number;
+  totalCycles: number;
+  isRunning: boolean;
+  config: PomodoroConfig;
+  completedPomodoros: number;
+  skipNextBreak: boolean;
+  notificationShown: boolean;
+  phaseEndTime: number | null;
+  activeBlockId: string | null;
+  activeBlockEndMs: number | null;
+  blockExpired: boolean;
+  lastTickMs: number | null;
+  sessionStartTime: string | null;
+  hasOvertimeInterval: boolean;
+  suspendedAway: boolean;
+  idlePaused: boolean;
+  idleTimeoutMs: number | null;
+}
+
+// --- Constants ---
+
+export const DEFAULT_CONFIG: PomodoroConfig = {
+  focusMinutes: 40,
+  shortBreakMinutes: 5,
+  longBreakMinutes: 10,
+  cyclesBeforeLongBreak: 4,
+};
+
+export const TIME_MULTIPLIER = 60;
+export const SUSPEND_THRESHOLD_MS = 15_000;
+export const NOTIFICATION_THRESHOLD = 60;
+export const MAX_BREAK_OVERTIME_SECONDS = 1800;
+
+// --- Utility functions ---
+
+export function configEquals(a: PomodoroConfig, b: PomodoroConfig): boolean {
+  return (
+    a.focusMinutes === b.focusMinutes &&
+    a.shortBreakMinutes === b.shortBreakMinutes &&
+    a.longBreakMinutes === b.longBreakMinutes &&
+    a.cyclesBeforeLongBreak === b.cyclesBeforeLongBreak
+  );
+}
+
+export function phaseDurationSeconds(
+  phase: PomodoroPhase,
+  config: PomodoroConfig,
+): number {
+  if (phase === "focus") return config.focusMinutes * TIME_MULTIPLIER;
+  if (phase === "short_break") return config.shortBreakMinutes * TIME_MULTIPLIER;
+  return config.longBreakMinutes * TIME_MULTIPLIER;
+}
+
+// --- decideTick ---
+
+export type TickResult =
+  | {
+      kind: "suspend_and_block_expired";
+      preSuspendRemainingSeconds: number;
+      suspendStartIso: string;
+      suspendEndIso: string;
+      awaySeconds: number;
+    }
+  | {
+      kind: "suspend_block_active";
+      preSuspendRemainingSeconds: number;
+      newPhaseEndTime: number;
+      suspendStartIso: string;
+      suspendEndIso: string;
+      awaySeconds: number;
+    }
+  | { kind: "block_expired" }
+  | { kind: "break_finished" }
+  | { kind: "focus_finished" }
+  | { kind: "countdown_with_notification"; remainingSeconds: number }
+  | { kind: "countdown"; remainingSeconds: number };
+
+export function decideTick(snapshot: TimerSnapshot, nowMs: number): TickResult {
+  // 1. Suspend/wake detection (highest priority)
+  if (
+    snapshot.lastTickMs !== null &&
+    nowMs - snapshot.lastTickMs > SUSPEND_THRESHOLD_MS
+  ) {
+    const suspendStartIso = new Date(snapshot.lastTickMs).toISOString();
+    const suspendEndIso = new Date(nowMs).toISOString();
+    const awaySeconds = Math.round((nowMs - snapshot.lastTickMs) / 1000);
+
+    const preSuspendRemainingSeconds =
+      snapshot.phaseEndTime !== null
+        ? Math.max(0, Math.ceil((snapshot.phaseEndTime - snapshot.lastTickMs) / 1000))
+        : 0;
+
+    if (
+      snapshot.activeBlockEndMs !== null &&
+      nowMs >= snapshot.activeBlockEndMs
+    ) {
+      return {
+        kind: "suspend_and_block_expired",
+        preSuspendRemainingSeconds,
+        suspendStartIso,
+        suspendEndIso,
+        awaySeconds,
+      };
+    }
+
+    return {
+      kind: "suspend_block_active",
+      preSuspendRemainingSeconds,
+      newPhaseEndTime: nowMs + preSuspendRemainingSeconds * 1000,
+      suspendStartIso,
+      suspendEndIso,
+      awaySeconds,
+    };
+  }
+
+  // 2. Block expiry
+  if (
+    snapshot.activeBlockEndMs !== null &&
+    nowMs >= snapshot.activeBlockEndMs
+  ) {
+    return { kind: "block_expired" };
+  }
+
+  // 3. Compute remaining seconds
+  const remainingSeconds =
+    snapshot.phaseEndTime !== null
+      ? Math.max(0, Math.ceil((snapshot.phaseEndTime - nowMs) / 1000))
+      : snapshot.remainingSeconds;
+
+  // 4. Timer at zero
+  if (remainingSeconds <= 0) {
+    if (snapshot.phase === "short_break" || snapshot.phase === "long_break") {
+      return { kind: "break_finished" };
+    }
+    return { kind: "focus_finished" };
+  }
+
+  // 5. Notification check (focus phase, exactly at threshold, not shown)
+  if (
+    snapshot.phase === "focus" &&
+    remainingSeconds === NOTIFICATION_THRESHOLD &&
+    !snapshot.notificationShown
+  ) {
+    return { kind: "countdown_with_notification", remainingSeconds };
+  }
+
+  // 6. Normal countdown
+  return { kind: "countdown", remainingSeconds };
+}
+
+// --- decideAdvancePhase ---
+
+export type AdvancePhaseResult =
+  | {
+      kind: "skip_break_to_focus";
+      remainingSeconds: number;
+      nextCycle: number;
+    }
+  | {
+      kind: "focus_to_long_break";
+      remainingSeconds: number;
+      nextCycle: 1;
+    }
+  | {
+      kind: "focus_to_short_break";
+      remainingSeconds: number;
+      nextCycle: number;
+    }
+  | {
+      kind: "break_to_focus";
+      remainingSeconds: number;
+    };
+
+export function decideAdvancePhase(snapshot: TimerSnapshot): AdvancePhaseResult {
+  if (snapshot.phase === "focus") {
+    if (snapshot.skipNextBreak) {
+      const nextCycle =
+        snapshot.currentCycle < snapshot.totalCycles
+          ? snapshot.currentCycle + 1
+          : 1;
+      return {
+        kind: "skip_break_to_focus",
+        remainingSeconds: snapshot.config.focusMinutes * TIME_MULTIPLIER,
+        nextCycle,
+      };
+    }
+
+    if (snapshot.currentCycle >= snapshot.totalCycles) {
+      return {
+        kind: "focus_to_long_break",
+        remainingSeconds: snapshot.config.longBreakMinutes * TIME_MULTIPLIER,
+        nextCycle: 1,
+      };
+    }
+
+    return {
+      kind: "focus_to_short_break",
+      remainingSeconds: snapshot.config.shortBreakMinutes * TIME_MULTIPLIER,
+      nextCycle: snapshot.currentCycle + 1,
+    };
+  }
+
+  // Break -> focus
+  return {
+    kind: "break_to_focus",
+    remainingSeconds: snapshot.config.focusMinutes * TIME_MULTIPLIER,
+  };
+}
+
+// --- decideTransition ---
+
+export interface TransitionInput {
+  previousConfig: PomodoroConfig;
+  newConfig: PomodoroConfig;
+  phase: PomodoroPhase;
+  remainingSeconds: number;
+  currentCycle: number;
+  totalCycles: number;
+  blockExpired: boolean;
+}
+
+export type TransitionResult =
+  | {
+      kind: "trigger_break";
+      breakPhase: "short_break" | "long_break";
+      breakDurationSeconds: number;
+      nextCycle: number;
+      accumulatedFocusSeconds: number;
+    }
+  | {
+      kind: "continue_focus";
+      remainingSeconds: number;
+      resetNotification: boolean;
+    }
+  | {
+      kind: "fresh_start";
+      remainingSeconds: number;
+    }
+  | { kind: "keep_break" };
+
+export function decideTransition(input: TransitionInput): TransitionResult {
+  if (input.phase === "focus") {
+    const oldFocusSec = input.previousConfig.focusMinutes * TIME_MULTIPLIER;
+    const accumulatedFocusSec = Math.max(0, oldFocusSec - input.remainingSeconds);
+    const newFocusThresholdSec = input.newConfig.focusMinutes * TIME_MULTIPLIER;
+
+    if (accumulatedFocusSec >= newFocusThresholdSec) {
+      const isLong = input.currentCycle >= input.newConfig.cyclesBeforeLongBreak;
+      return {
+        kind: "trigger_break",
+        breakPhase: isLong ? "long_break" : "short_break",
+        breakDurationSeconds: isLong
+          ? input.newConfig.longBreakMinutes * TIME_MULTIPLIER
+          : input.newConfig.shortBreakMinutes * TIME_MULTIPLIER,
+        nextCycle: isLong ? 1 : input.currentCycle + 1,
+        accumulatedFocusSeconds: accumulatedFocusSec,
+      };
+    }
+
+    return {
+      kind: "continue_focus",
+      remainingSeconds: newFocusThresholdSec - accumulatedFocusSec,
+      resetNotification:
+        newFocusThresholdSec - accumulatedFocusSec > NOTIFICATION_THRESHOLD,
+    };
+  }
+
+  // Break phase
+  if (input.blockExpired) {
+    return {
+      kind: "fresh_start",
+      remainingSeconds: input.newConfig.focusMinutes * TIME_MULTIPLIER,
+    };
+  }
+
+  return { kind: "keep_break" };
+}
+
+// --- decideStartFromBlock ---
+
+export interface StartFromBlockInput {
+  currentBlockId: string | null;
+  incomingBlockId: string;
+  incomingConfig: PomodoroConfig;
+  currentConfig: PomodoroConfig;
+  currentEndMs: number | null;
+  incomingEndMs: number | null;
+  hasOvertimeInterval: boolean;
+}
+
+export type StartFromBlockResult =
+  | { kind: "noop" }
+  | { kind: "update_end_only"; newEndMs: number }
+  | { kind: "reconfigure"; newConfig: PomodoroConfig; newEndMs: number }
+  | { kind: "rebuild_segments"; newEndMs: number }
+  | { kind: "transition"; newConfig: PomodoroConfig; newEndMs: number }
+  | { kind: "new_session"; newConfig: PomodoroConfig; newEndMs: number | null };
+
+export function decideStartFromBlock(
+  input: StartFromBlockInput,
+): StartFromBlockResult {
+  if (input.currentBlockId === input.incomingBlockId) {
+    // Same block
+    if (input.incomingEndMs === null) return { kind: "noop" };
+
+    const cfgChanged = !configEquals(input.currentConfig, input.incomingConfig);
+    const endChanged = input.currentEndMs !== input.incomingEndMs;
+
+    if (!cfgChanged && !endChanged) return { kind: "noop" };
+
+    if (input.hasOvertimeInterval) {
+      return { kind: "update_end_only", newEndMs: input.incomingEndMs };
+    }
+
+    if (cfgChanged) {
+      return {
+        kind: "reconfigure",
+        newConfig: input.incomingConfig,
+        newEndMs: input.incomingEndMs,
+      };
+    }
+
+    return { kind: "rebuild_segments", newEndMs: input.incomingEndMs };
+  }
+
+  // Different block
+  if (input.currentBlockId !== null && input.incomingEndMs !== null) {
+    return {
+      kind: "transition",
+      newConfig: input.incomingConfig,
+      newEndMs: input.incomingEndMs,
+    };
+  }
+
+  // New session (no active block, or missing end time for transition)
+  return {
+    kind: "new_session",
+    newConfig: input.incomingConfig,
+    newEndMs: input.incomingEndMs,
+  };
+}
+
+// --- decideReconfigure ---
+
+export interface ReconfigureInput {
+  phase: PomodoroPhase;
+  remainingSeconds: number;
+  currentConfig: PomodoroConfig;
+  newConfig: PomodoroConfig;
+  hasOvertimeInterval: boolean;
+}
+
+export interface ReconfigureResult {
+  newRemainingSeconds: number;
+  exitOvertime: boolean;
+  resetNotification: boolean;
+}
+
+export function decideReconfigure(input: ReconfigureInput): ReconfigureResult {
+  const oldDuration = phaseDurationSeconds(input.phase, input.currentConfig);
+  const elapsed = Math.max(0, oldDuration - input.remainingSeconds);
+
+  const newDuration = phaseDurationSeconds(input.phase, input.newConfig);
+  const newRemaining = Math.max(0, newDuration - elapsed);
+
+  return {
+    newRemainingSeconds: newRemaining,
+    exitOvertime: input.hasOvertimeInterval && newRemaining > 0,
+    resetNotification:
+      input.phase === "focus" && newRemaining > NOTIFICATION_THRESHOLD,
+  };
+}
+
+// --- decideIdleCheck ---
+
+export interface IdleCheckInput {
+  isRunning: boolean;
+  phase: PomodoroPhase;
+  suspendedAway: boolean;
+  idlePaused: boolean;
+  idleTimeoutMs: number | null;
+  webcamInUse: boolean;
+  idleMs: number;
+  phaseEndTime: number | null;
+}
+
+export type IdleCheckResult =
+  | { kind: "skip" }
+  | {
+      kind: "trigger_idle";
+      idleSeconds: number;
+      preSuspendRemainingSeconds: number;
+      idleStartMs: number;
+    };
+
+export function decideIdleCheck(
+  input: IdleCheckInput,
+  nowMs: number,
+): IdleCheckResult {
+  if (!input.isRunning) return { kind: "skip" };
+  if (input.phase !== "focus") return { kind: "skip" };
+  if (input.suspendedAway) return { kind: "skip" };
+  if (input.idlePaused) return { kind: "skip" };
+  if (input.idleTimeoutMs === null) return { kind: "skip" };
+  if (input.webcamInUse) return { kind: "skip" };
+
+  if (input.idleMs >= input.idleTimeoutMs) {
+    const idleStartMs = nowMs - input.idleMs;
+    const preSuspendRemainingSeconds =
+      input.phaseEndTime !== null
+        ? Math.max(0, Math.ceil((input.phaseEndTime - idleStartMs) / 1000))
+        : 0;
+
+    return {
+      kind: "trigger_idle",
+      idleSeconds: Math.round(input.idleMs / 1000),
+      preSuspendRemainingSeconds,
+      idleStartMs,
+    };
+  }
+
+  return { kind: "skip" };
+}

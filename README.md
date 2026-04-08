@@ -1,1 +1,105 @@
-# GanbaruAI
+<div align="center">
+  <img src="apps/client/static/icon.png" alt="GanbaruAI icon" width="20%" />
+  <h1>GanbaruAI</h1>
+
+Anti-procrastination project manager for life and work. Free, local, open-source, privacy-first, lightweight with opt-in AI.
+
+</div>
+
+<p align="center">
+  <a href="#features">Features</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#building-from-source">Building from source</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#contributing">Contributing</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#license">License</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#funding">Funding</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#acknowledgments">Acknowledgments</a>
+</p>
+
+> [!WARNING]
+> The app is under heavy development and is unstable.
+
+## Features
+
+| Feature | Description | Status |
+|---|---|---|
+| **Calendar** | 100% custom-built with Svelte 5. Session blocks with drag-and-drop creation/resizing, day/week/month views, full RFC 5545 RRULE recurrence, auto-environment activation on block start | Available |
+| **Pomodoro timer** | Focus/break phases, configurable cycle durations, timeline rail visualization, idle detection, suspend/wake handling, pre-break notifications | Available |
+| **Kanban board** | Backlog/todo/in-progress/done columns, priority tiers (easy/medium/hard/epic), estimated pomodoro count, task-to-session linking | Available |
+| **Note-taking** | Tiptap block editor with slash commands, markdown storage on disk, bidirectional backlinks indexed in SQLite | Planned |
+| **Daily diary** | Morning and evening entry forms, mood/energy/sleep tracking, personal baselines for AI suggestions | Planned |
+| **Procrastination stopper** | Browser extension (Chrome, Firefox) with URL blocking and content-aware filtering; mobile app-level blocking | Planned |
+| **Work environments** | Saved configs per session block: apps to open/close, browser tabs, playlist, blocker rules. Auto-activated by the calendar | Planned |
+| **Edge panel** | Always-on-top sidebar with live pomodoro timer, quick-add tasks, music controls, active environment name | Planned |
+| **Music player** | Local file playback (Symphonia/FFmpeg), YouTube via IFrame API, playlists tied to session blocks and environments | Planned |
+| **AI panel** | Embedded terminal (xterm.js) for Claude Code, BYOK chat widget (Anthropic, OpenAI-compatible, Ollama), calendar-driven session switching, context injection from app state | Planned |
+| **Project management** | Lifecycle templates (brainstorming, evaluation, planning, execution), requirement version control, date cascade, report generation | Planned |
+| **Sync** | Yjs CRDTs with self-hosted Hocuspocus server, E2E encryption, collaborative workspaces with live presence | Planned |
+| **Mobile** | Tauri v2 Android and iOS builds, sleep alarm with diary integration, notification-based pomodoro | Planned |
+| **Gamification** | Skill tree, XP system, Will metrics, self-imposed contracts, NPC-guided project workflows | Planned |
+
+See [ROADMAP.md](ROADMAP.md) for the full phased development plan.
+
+## Building from source
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) >= 22
+- [pnpm](https://pnpm.io/) >= 10
+- [Rust](https://rustup.rs/) (stable)
+- Tauri v2 system dependencies for your platform: [v2.tauri.app/start/prerequisites](https://v2.tauri.app/start/prerequisites/)
+
+### Setup
+
+```bash
+git clone https://github.com/VictorBenitoGR/GanbaruAI.git
+cd GanbaruAI
+pnpm install
+```
+
+### Development
+
+```bash
+cd apps/client
+pnpm tauri dev              # desktop app with hot reload
+pnpm tauri android dev      # Android (planned)
+pnpm tauri ios dev          # iOS (planned)
+```
+
+### Build
+
+```bash
+cd apps/client
+pnpm tauri build            # produces platform-specific installer
+```
+
+### Tests
+
+```bash
+cd apps/client
+pnpm test         # run all unit tests
+pnpm test:watch   # watch mode
+```
+
+## Contributing
+
+Contributions are welcome, but keep in mind:
+
+- The app is in heavy early development. Architecture, APIs, and data models are still changing.
+- Active testing is limited to **Ubuntu Linux** and **Windows 10**. macOS and iOS builds are untested since no Apple hardware is available for development, so contributions for those platforms are especially valuable.
+- If you are considering a large change, open an issue first to discuss the approach.
+
+## License
+
+[AGPL-3.0](LICENSE) for the app. The media player plugin (planned) will be licensed under [LGPL-2.1](https://www.gnu.org/licenses/lgpl-2.1.html).
+
+## Funding
+
+GanbaruAI is donation-funded. Sponsorship will be set up after a minimum stable version is ready for Linux, Windows, and Android.
+
+## Acknowledgments
+
+### Sound effects
+
+Sound effects sourced from [Freesound](https://freesound.org/) under Attribution and CC0 licenses.
+
+<!-- Add attributions as sounds are added: "sound name" by author (license) - URL -->

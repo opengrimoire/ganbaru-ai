@@ -1,0 +1,552 @@
+import type { CalendarEvent, DragState, EventColor, PositionedEvent } from "./types";
+import {
+  minuteOfDay,
+  snapToGrid,
+  clampMinute,
+  formatDatePart,
+  durationMinutes,
+  minuteOffsetToDateStr,
+  parseCalendarDate,
+} from "./utils";
+import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+
+let cursorStyle: HTMLStyleElement | null = null;
+
+function lockCursor(cursor: string) {
+  unlockCursor();
+  cursorStyle = document.createElement("style");
+  cursorStyle.textContent = `* { cursor: ${cursor} !important; }`;
+  document.head.appendChild(cursorStyle);
+}
+
+function unlockCursor() {
+  if (cursorStyle) {
+    cursorStyle.remove();
+    cursorStyle = null;
+  }
+  document.body.style.cursor = "";
+}
+
+// --- Auto-scroll constants ---
+const AUTO_SCROLL_ZONE = 48; // px from edge to start scrolling
+const AUTO_SCROLL_MAX_SPEED = 12; // px per frame at the very edge
+
+export interface DragControllerConfig {
+  events: () => CalendarEvent[];
+  hourHeight: () => number;
+  getColumnDate: (clientX: number) => string;
+  getScrollContainer: () => HTMLElement | null;
+  onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
+  onEventCreate: (start: string, end: string) => void;
+  canDrag?: (eventId: string) => boolean;
+  /** Returns true if event has completed progress and should not be moved or resized. */
+  isEventLocked?: (eventId: string) => boolean;
+  /** The currently active pomodoro block ID (only resize-bottom is allowed). */
+  activeBlockId?: () => string | null;
+}
+
+export function useDragController(config: DragControllerConfig) {
+  const calZoom = getCalendarZoom();
+  let dragState = $state<DragState | null>(null);
+  let dragPreviewDate = $state<string | null>(null);
+  let dragPreview = $state<PositionedEvent | null>(null);
+
+  let createState = $state<{
+    dateStr: string;
+    anchorMinute: number;
+    columnEl: HTMLElement;
+    didDrag: boolean;
+  } | null>(null);
+  let createPreviewDate = $state<string | null>(null);
+  let createPreview = $state<PositionedEvent | null>(null);
+
+  // Track latest pointer position for scroll-triggered updates and auto-scroll
+  let lastPointerEvent: PointerEvent | null = null;
+  let autoScrollRaf = 0;
+
+  // --- Auto-scroll ---
+
+  function getScrollEdgeSpeed(container: HTMLElement, clientY: number): number {
+    const rect = container.getBoundingClientRect();
+    // Find the bottom of any sticky header inside the container
+    let topEdge = rect.top;
+    for (const el of container.querySelectorAll(":scope > .sticky, :scope > div > .sticky")) {
+      const h = el as HTMLElement;
+      if (h.offsetHeight > 0) {
+        topEdge = Math.max(topEdge, h.getBoundingClientRect().bottom);
+      }
+    }
+    const distFromTop = clientY - topEdge;
+    const distFromBottom = rect.bottom - clientY;
+
+    if (distFromTop < AUTO_SCROLL_ZONE && distFromTop < distFromBottom) {
+      // Scroll up: speed increases as pointer gets closer to edge
+      return -AUTO_SCROLL_MAX_SPEED * (1 - distFromTop / AUTO_SCROLL_ZONE);
+    }
+    if (distFromBottom < AUTO_SCROLL_ZONE && distFromBottom < distFromTop) {
+      // Scroll down
+      return AUTO_SCROLL_MAX_SPEED * (1 - distFromBottom / AUTO_SCROLL_ZONE);
+    }
+    return 0;
+  }
+
+  function autoScrollLoop() {
+    autoScrollRaf = 0;
+    const container = config.getScrollContainer();
+    if (!container || (!dragState && !createState) || !lastPointerEvent) return;
+
+    const speed = getScrollEdgeSpeed(container, lastPointerEvent.clientY);
+    if (speed !== 0) {
+      container.scrollTop += speed;
+      // Re-run the move handler so the preview tracks the new scroll position
+      if (dragState) updateDragPreview();
+      if (createState) updateCreatePreview();
+    }
+    autoScrollRaf = requestAnimationFrame(autoScrollLoop);
+  }
+
+  function startAutoScroll() {
+    if (!autoScrollRaf) autoScrollRaf = requestAnimationFrame(autoScrollLoop);
+  }
+
+  function stopAutoScroll() {
+    if (autoScrollRaf) {
+      cancelAnimationFrame(autoScrollRaf);
+      autoScrollRaf = 0;
+    }
+  }
+
+  // --- Scroll-aware delta ---
+
+  function scrollAwareDeltaY(clientY: number): number {
+    if (!dragState) return 0;
+    const container = config.getScrollContainer();
+    const scrollDelta = container ? container.scrollTop - dragState.scrollTopAtStart : 0;
+    return (clientY - dragState.pointerStartY) + scrollDelta;
+  }
+
+  // --- Existing event drag (move / resize) ---
+
+  function handleDragStart(eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") {
+    if (config.canDrag && !config.canDrag(eventId)) return;
+
+    const event = config.events().find((ev) => ev.id === eventId);
+    if (!event || event.allDay) return;
+
+    const dateStr = event.start.split(" ")[0];
+    const startMin = minuteOfDay(event.start);
+    const dur = durationMinutes(event.start, event.end);
+    const container = config.getScrollContainer();
+
+    dragState = {
+      eventId,
+      type: "move",
+      originDate: dateStr,
+      startColumnDate: config.getColumnDate(e.clientX),
+      originStartMinute: startMin,
+      originEndMinute: startMin + dur,
+      pointerStartY: e.clientY,
+      pointerStartX: e.clientX,
+      scrollTopAtStart: container ? container.scrollTop : 0,
+      columnWidth: 0,
+      startColumnIndex: 0,
+    };
+
+    if (forceEdge) {
+      dragState.type = forceEdge;
+    } else {
+      const blockEl = (e.target as HTMLElement).closest(".event-block-wrapper");
+      if (blockEl) {
+        const rect = blockEl.getBoundingClientRect();
+        const relY = e.clientY - rect.top;
+        const clippedTop = blockEl.hasAttribute("data-clipped-top");
+        const clippedBottom = blockEl.hasAttribute("data-clipped-bottom");
+        if (relY <= 6 && !clippedTop) {
+          dragState.type = "resize-top";
+        } else if (relY >= rect.height - 6 && !clippedBottom) {
+          dragState.type = "resize-bottom";
+        }
+      }
+    }
+
+    // Active block: only allow resize-bottom (extend/shrink future end)
+    const activeId = config.activeBlockId?.();
+    if (activeId && eventId === activeId) {
+      if (dragState.type !== "resize-bottom") {
+        dragState = null;
+        return;
+      }
+    }
+
+    // Locked events (past with completed progress): no drag/resize at all
+    if (config.isEventLocked?.(eventId)) {
+      dragState = null;
+      return;
+    }
+
+    if (dragState.type === "resize-top" || dragState.type === "resize-bottom") {
+      lockCursor("ns-resize");
+    } else {
+      lockCursor("grabbing");
+    }
+
+    lastPointerEvent = e;
+    window.addEventListener("pointermove", handleDragMove);
+    window.addEventListener("pointerup", handleDragEnd);
+    startAutoScroll();
+  }
+
+  function updateDragPreview() {
+    if (!dragState || !lastPointerEvent) return;
+
+    const event = config.events().find((ev) => ev.id === dragState!.eventId);
+    if (!event) return;
+
+    const e = lastPointerEvent;
+    const hourHeight = config.hourHeight();
+    const deltaY = scrollAwareDeltaY(e.clientY);
+    const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60, calZoom.gridMinutes);
+
+    let newStart: number;
+    let newEnd: number;
+    let targetDate = dragState.originDate;
+
+    if (dragState.type === "move") {
+      // Compute column delta to handle dragging from continuation blocks
+      const currentColumnDate = config.getColumnDate(e.clientX);
+      const startCol = parseCalendarDate(`${dragState.startColumnDate} 00:00`);
+      const currentCol = parseCalendarDate(`${currentColumnDate} 00:00`);
+      const dayDelta = Math.round(
+        (currentCol.getTime() - startCol.getTime()) / 86400000,
+      );
+      const originDate = parseCalendarDate(`${dragState.originDate} 00:00`);
+      originDate.setDate(originDate.getDate() + dayDelta);
+      targetDate = formatDatePart(originDate);
+
+      const dur = dragState.originEndMinute - dragState.originStartMinute;
+      let rawStart = snapToGrid(dragState.originStartMinute + deltaMinutes, calZoom.gridMinutes);
+
+      // Shift target day when event fully crosses midnight vertically
+      while (rawStart >= 1440) {
+        rawStart -= 1440;
+        const td = parseCalendarDate(`${targetDate} 00:00`);
+        td.setDate(td.getDate() + 1);
+        targetDate = formatDatePart(td);
+      }
+      while (rawStart + dur <= 0) {
+        rawStart += 1440;
+        const td = parseCalendarDate(`${targetDate} 00:00`);
+        td.setDate(td.getDate() - 1);
+        targetDate = formatDatePart(td);
+      }
+
+      newStart = Math.min(1430, rawStart);
+      newEnd = newStart + dur; // may exceed 1440 or start < 0 -- cross-midnight
+    } else if (dragState.type === "resize-top") {
+      const minSize = calZoom.gridMinutes;
+      const anchor = dragState.originEndMinute;
+      let raw = snapToGrid(dragState.originStartMinute + deltaMinutes, minSize);
+      raw = Math.max(0, raw);
+      if (raw < anchor) {
+        newStart = raw;
+        newEnd = anchor;
+        if (newEnd - newStart < minSize) newStart = newEnd - minSize;
+      } else {
+        // Flipped: top handle crossed below bottom
+        newStart = anchor;
+        newEnd = raw;
+        if (newEnd - newStart < minSize) newEnd = newStart + minSize;
+      }
+    } else {
+      // resize-bottom (supports crossover and crossing midnight)
+      const minSize = calZoom.gridMinutes;
+      const anchor = dragState.originStartMinute;
+      let raw = snapToGrid(dragState.originEndMinute + deltaMinutes, minSize);
+      if (raw > anchor) {
+        newStart = anchor;
+        newEnd = raw;
+        if (newEnd - newStart < minSize) newEnd = newStart + minSize;
+      } else {
+        // Flipped: bottom handle crossed above top
+        raw = Math.max(0, raw);
+        newStart = raw;
+        newEnd = anchor;
+        if (newEnd - newStart < minSize) newStart = newEnd - minSize;
+      }
+    }
+
+    // Active block: start is sacred, only future end can change
+    const activeResize = config.activeBlockId?.();
+    if (activeResize && dragState.eventId === activeResize) {
+      newStart = dragState.originStartMinute;
+      const now = new Date();
+      const nowMinute = now.getHours() * 60 + now.getMinutes();
+      const snap = calZoom.gridMinutes;
+      const minEnd = snapToGrid(nowMinute, snap) + snap;
+      if (newEnd < minEnd) newEnd = minEnd;
+    }
+
+    // During resize, if end reaches midnight, snap to at least 00:30 next day
+    // so the continuation "tip" is clearly visible and easy to grab.
+    // For move, exact midnight (1440) is valid since duration is preserved.
+    if (dragState.type !== "move" && newEnd >= 1440 && newEnd < 1470) {
+      newEnd = 1470;
+    }
+
+    const startStr = minuteOffsetToDateStr(targetDate, newStart);
+    const endStr = minuteOffsetToDateStr(targetDate, newEnd);
+
+    // Minute-based metrics for the primary (start) day column
+    const visibleEnd = Math.min(newEnd, 1440);
+
+    dragPreviewDate = targetDate;
+    dragPreview = {
+      event: {
+        ...event,
+        start: startStr,
+        end: endStr,
+      },
+      startMinute: newStart,
+      durationMinutes: visibleEnd - newStart,
+      left: 0,
+      width: 100,
+      column: 0,
+      totalColumns: 1,
+    };
+  }
+
+  function handleDragMove(e: PointerEvent) {
+    if (!dragState) return;
+    lastPointerEvent = e;
+    updateDragPreview();
+  }
+
+  async function handleDragEnd() {
+    window.removeEventListener("pointermove", handleDragMove);
+    window.removeEventListener("pointerup", handleDragEnd);
+    stopAutoScroll();
+    unlockCursor();
+    lastPointerEvent = null;
+
+    if (dragPreview) {
+      await config.onEventUpdate(dragPreview.event);
+    }
+
+    dragState = null;
+    dragPreview = null;
+    dragPreviewDate = null;
+  }
+
+  // --- Create-by-drag ---
+
+  function handleCreateStart(dateStr: string, minute: number, e: PointerEvent) {
+    if (dragState) return; // don't start create while an event drag is active
+
+    const columnEl = (e.target as HTMLElement).closest(
+      '[style*="border-left"]',
+    ) as HTMLElement;
+    if (!columnEl) return;
+
+    createState = { dateStr, anchorMinute: minute, columnEl, didDrag: false };
+    const snap = calZoom.gridMinutes;
+    const endMinute = Math.min(minute + snap, 1440);
+    createPreviewDate = dateStr;
+    createPreview = buildPreview(dateStr, minute, endMinute);
+
+    lastPointerEvent = e;
+    lockCursor("crosshair");
+    window.addEventListener("pointermove", handleCreateMove);
+    window.addEventListener("pointerup", handleCreateEnd);
+    startAutoScroll();
+  }
+
+  function updateCreatePreview() {
+    if (!createState || !lastPointerEvent) return;
+
+    const hourHeight = config.hourHeight();
+    const rect = createState.columnEl.getBoundingClientRect();
+    const offsetY = lastPointerEvent.clientY - rect.top;
+    const cursorMinute = clampMinute(snapToGrid((offsetY / hourHeight) * 60, calZoom.gridMinutes));
+
+    const anchor = createState.anchorMinute;
+    let startMinute = Math.min(anchor, cursorMinute);
+    let endMinute = Math.max(anchor, cursorMinute);
+    const snap = calZoom.gridMinutes;
+    if (endMinute - startMinute < snap) endMinute = startMinute + snap;
+    createState.didDrag = true;
+
+    createPreview = buildPreview(
+      createState.dateStr,
+      startMinute,
+      clampMinute(endMinute),
+    );
+  }
+
+  function handleCreateMove(e: PointerEvent) {
+    if (!createState) return;
+    lastPointerEvent = e;
+    updateCreatePreview();
+  }
+
+  function handleCreateEnd() {
+    window.removeEventListener("pointermove", handleCreateMove);
+    window.removeEventListener("pointerup", handleCreateEnd);
+    stopAutoScroll();
+    unlockCursor();
+    lastPointerEvent = null;
+
+    if (createPreview && createState) {
+      // Click without drag: use 30-minute default duration
+      if (!createState.didDrag) {
+        const anchor = createState.anchorMinute;
+        const endMinute = clampMinute(Math.min(anchor + 30, 1440));
+        createPreview = buildPreview(createState.dateStr, anchor, endMinute);
+      }
+      config.onEventCreate(createPreview.event.start, createPreview.event.end);
+    }
+
+    createState = null;
+    createPreview = null;
+    createPreviewDate = null;
+  }
+
+  function buildPreview(
+    dateStr: string,
+    startMinute: number,
+    endMinute: number,
+    title?: string,
+    color?: EventColor,
+  ): PositionedEvent {
+    const sh = String(Math.floor(startMinute / 60)).padStart(2, "0");
+    const sm = String(startMinute % 60).padStart(2, "0");
+    const eh = String(Math.floor(Math.min(endMinute, 1440) / 60)).padStart(2, "0");
+    const em = String(Math.min(endMinute, 1440) % 60).padStart(2, "0");
+
+    return {
+      event: {
+        id: "__create__",
+        title: title ?? "",
+        start: `${dateStr} ${sh}:${sm}`,
+        end: `${dateStr} ${eh}:${em}`,
+        color,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        calendarId: "default",
+      },
+      startMinute,
+      durationMinutes: endMinute - startMinute,
+      left: 0,
+      width: 100,
+      column: 0,
+      totalColumns: 1,
+    };
+  }
+
+  // --- Computed helpers for DayColumn props ---
+
+  function getDragPreviewForDate(dateStr: string): PositionedEvent | null {
+    if (!dragPreview) return null;
+
+    const previewStartDate = dragPreview.event.start.split(" ")[0];
+    const previewEndDate = dragPreview.event.end.split(" ")[0];
+
+    // Single-day event -- return preview as-is for its date
+    if (previewStartDate === previewEndDate) {
+      return dateStr === previewStartDate ? dragPreview : null;
+    }
+
+    // Start day -- show from event start to bottom of day
+    if (dateStr === previewStartDate) {
+      const startMin = minuteOfDay(dragPreview.event.start);
+      return {
+        ...dragPreview,
+        startMinute: startMin,
+        durationMinutes: 1440 - startMin,
+      };
+    }
+
+    // End day -- show from top to event end
+    if (dateStr === previewEndDate) {
+      const endMin = minuteOfDay(dragPreview.event.end);
+      if (endMin <= 0) return null;
+      return {
+        ...dragPreview,
+        startMinute: 0,
+        durationMinutes: endMin,
+      };
+    }
+
+    return null;
+  }
+
+  function getCreatePreviewForDate(dateStr: string): PositionedEvent | null {
+    if (createPreviewDate === dateStr) return createPreview;
+    return null;
+  }
+
+  function getHideSnapLine(dateStr: string): boolean {
+    if (dragState?.type === "move") return true;
+    // During create-by-drag, only show snap on the column being drawn on
+    if (createState) return createPreviewDate !== dateStr;
+    // During resize, hide snap on columns without an active snap override,
+    // but keep it visible on the origin column before the first move
+    if (dragState) {
+      const override = getSnapOverrideMinute(dateStr);
+      if (override !== null) return false;
+      // Before first move (no preview yet), keep snap visible on origin column
+      if (!dragPreview && dragState.originDate === dateStr) return false;
+      return true;
+    }
+    return false;
+  }
+
+  function getSnapOverrideMinute(dateStr: string): number | null {
+    // During create-by-drag, show snap at the active edge on the create column
+    if (createState && createPreview && createPreviewDate === dateStr) {
+      const anchor = createState.anchorMinute;
+      const startMin = minuteOfDay(createPreview.event.start);
+      const endMin = minuteOfDay(createPreview.event.end);
+      return startMin === anchor ? endMin : startMin;
+    }
+
+    if (!dragPreview || !dragState || dragState.type === "move") return null;
+
+    const previewStartDate = dragPreview.event.start.split(" ")[0];
+    const previewEndDate = dragPreview.event.end.split(" ")[0];
+
+    if (dragState.type === "resize-top") {
+      // Snap line tracks the start handle
+      if (dateStr === previewStartDate) {
+        return minuteOfDay(dragPreview.event.start);
+      }
+      return null;
+    }
+
+    // resize-bottom: snap line tracks the end handle
+    if (previewStartDate === previewEndDate) {
+      // Same day -- show snap on that day
+      return dateStr === previewStartDate
+        ? minuteOfDay(dragPreview.event.end)
+        : null;
+    }
+
+    // Cross-midnight -- show snap on the end day only
+    if (dateStr === previewEndDate) {
+      return minuteOfDay(dragPreview.event.end);
+    }
+    return null;
+  }
+
+  return {
+    get dragState() { return dragState; },
+    get dragPreview() { return dragPreview; },
+    get dragPreviewDate() { return dragPreviewDate; },
+    get createPreview() { return createPreview; },
+    get createPreviewDate() { return createPreviewDate; },
+    handleDragStart,
+    handleCreateStart,
+    getDragPreviewForDate,
+    getCreatePreviewForDate,
+    getHideSnapLine,
+    getSnapOverrideMinute,
+  };
+}

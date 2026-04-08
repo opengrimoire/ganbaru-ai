@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+target/
+
+# turbo
+.turbo/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+
+# SQLite runtime files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# test coverage
+coverage/
+
+# local scripts
+scripts/

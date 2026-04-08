@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.5rem;
+
+  /* Content area */
+  --background: #F4F4F7;
+  --foreground: #141420;
+  --card: #FFFFFF;
+  --card-foreground: #141420;
+  --popover: #FFFFFF;
+  --popover-foreground: #141420;
+  --primary: #404048;
+  --primary-foreground: #F4F4F7;
+  --secondary: #E2E2E7;
+  --secondary-foreground: #141420;
+  --muted: #E2E2E7;
+  --muted-foreground: #646470;
+  --accent: #E8E8ED;
+  --accent-foreground: #141420;
+  --destructive: #D93B3B;
+  --border: rgba(0, 0, 20, 0.10);
+  --input: rgba(0, 0, 20, 0.08);
+  --ring: #8C8C98;
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.65 0.15 280);
+  --chart-4: oklch(0.65 0.15 145);
+  --chart-5: oklch(0.65 0.18 25);
+
+  /* Frame / contour (titlebar) */
+  --sidebar: #DCDCE2;
+  --sidebar-foreground: #141420;
+  --sidebar-primary: #404048;
+  --sidebar-primary-foreground: #F4F4F7;
+  --sidebar-accent: #CFCFD6;
+  --sidebar-accent-foreground: #141420;
+  --sidebar-border: rgba(0, 0, 20, 0.08);
+  --sidebar-ring: #8C8C98;
+}
+
+.dark {
+  /* Content area */
+  --background: #27282A;
+  --foreground: #ECECF2;
+  --card: #2E2F31;
+  --card-foreground: #ECECF2;
+  --popover: #353638;
+  --popover-foreground: #ECECF2;
+  --primary: #ECECF2;
+  --primary-foreground: #27282A;
+  --secondary: #333436;
+  --secondary-foreground: #ECECF2;
+  --muted: #333436;
+  --muted-foreground: #9494A0;
+  --accent: #3B3B3F;
+  --accent-foreground: #ECECF2;
+  --destructive: #E54545;
+  --border: rgba(255, 255, 255, 0.10);
+  --input: rgba(255, 255, 255, 0.08);
+  --ring: #606070;
+  --chart-1: oklch(0.7 0.18 65);
+  --chart-2: oklch(0.65 0.15 180);
+  --chart-3: oklch(0.65 0.15 280);
+  --chart-4: oklch(0.65 0.15 145);
+  --chart-5: oklch(0.65 0.18 25);
+
+  /* Frame / contour (titlebar) */
+  --sidebar: #1E1E23;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #FFFFFF;
+  --sidebar-primary-foreground: #1E1E23;
+  --sidebar-accent: #3B3B3F;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #606070;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  html {
+    font-size: 15px;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply text-foreground;
+    background: transparent;
+  }
+}
+
+/* Calendar theme variables */
+:root {
+  --cal-bg: #FFFFFF;
+  --cal-header-bg: #F4F4F7;
+  --cal-gridline: #DDDDE3;
+  --cal-today-circle: #38383F;
+  --cal-today-circle-text: #FFFFFF;
+  --cal-time-label: #646470;
+  --cal-current-time: #EA4335;
+  --cal-snap-label: #B83A3A;
+  --cal-hover: rgba(0, 0, 20, 0.04);
+  --cal-past-overlay: rgba(0, 0, 0, 0.04);
+  --cal-timeline-rail: rgba(0, 0, 0, 0.1);
+  --cal-timeline-break: #6B7280;
+  --cal-timeline-focus: #22C55E;
+  --cal-header-row-h: 44px;
+}
+
+.dark {
+  --cal-bg: #131314;
+  --cal-header-bg: #27282A;
+  --cal-gridline: #333537;
+  --cal-today-circle: #A4C4F7;
+  --cal-today-circle-text: #0A1929;
+  --cal-time-label: #9494A0;
+  --cal-current-time: #EA4335;
+  --cal-snap-label: #B83A3A;
+  --cal-hover: rgba(255, 255, 255, 0.04);
+  --cal-past-overlay: rgba(0, 0, 0, 0.15);
+  --cal-timeline-rail: rgba(255, 255, 255, 0.1);
+  --cal-timeline-break: #9CA3AF;
+  --cal-timeline-focus: #4ADE80;
+}
+
+/* Hide native scrollbar (custom scrollbar replaces it) */
+.hide-scrollbar {
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
