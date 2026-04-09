@@ -217,6 +217,12 @@ export function computeDayTimelineBands(
     a.startMinute !== b.startMinute ? a.startMinute - b.startMinute : a.startMs - b.startMs,
   );
 
+  // Find the active event's range so planned bands from overlapping events
+  // are suppressed (the active session's bands take visual priority).
+  const activeEvRange = activeState?.activeBlockId
+    ? sorted.find((ev) => ev.id === activeState.activeBlockId)
+    : null;
+
   const bands: TimelineBand[] = [];
   let cursor = -Infinity; // tracks where the previous event's coverage ends (minute-of-day)
   let inheritedFocus = 0;
@@ -278,22 +284,21 @@ export function computeDayTimelineBands(
         continue;
       }
 
-      // Compute remaining planned bands from now (or effectiveStart)
+      // Compute remaining planned bands from now (or effectiveStart).
+      // Always adjust for elapsed time since event start so break positions
+      // stay aligned with the original schedule regardless of when the app
+      // is opened. (Create previews already clamp evStartMinute to now via
+      // the PENDING_CREATE_ID path in DayColumn.)
       const evStartMs = dayStartMs + effectiveStart * 60000;
       const plannedStartMs = Math.max(nowMs, evStartMs);
       const plannedStartMinute = (plannedStartMs - dayStartMs) / 60000;
       const remainingDuration = ev.endMinute - plannedStartMinute;
 
       if (remainingDuration > 0) {
-        // If starting partway through and the event had actual work, adjust
-        // inheritance for elapsed time. Without persisted segments no focus
-        // actually ran, so breaks compute fresh from now (avoids a flash
-        // between event creation and session start).
         let adjustedFocus = inheritedFocus;
         let adjustedCycle = inheritedCycle;
         const elapsedSinceEffective = plannedStartMinute - effectiveStart;
-        const hasPersistedWork = evPersistedSegs && evPersistedSegs.length > 0;
-        if (elapsedSinceEffective > 0 && hasPersistedWork) {
+        if (elapsedSinceEffective > 0) {
           const elapsedSegments = computePlannedSegments(ev.config, elapsedSinceEffective, inheritedFocus, inheritedCycle);
           adjustedFocus = computeTrailingFocusMinutes(elapsedSegments);
           adjustedCycle = computeTrailingCycleNumber(elapsedSegments);
@@ -302,8 +307,15 @@ export function computeDayTimelineBands(
         const planned = computePlannedSegments(ev.config, remainingDuration, adjustedFocus, adjustedCycle);
         for (const seg of planned) {
           if (seg.phase === "focus") continue;
+          const bandTop = plannedStartMinute + seg.startOffsetMinutes;
+          const bandEnd = bandTop + (seg.endOffsetMinutes - seg.startOffsetMinutes);
+          // Skip planned bands that overlap with the active event's range
+          // (the active session's bands take visual priority on the rail).
+          if (activeEvRange && !isActive && bandTop < activeEvRange.endMinute && bandEnd > activeEvRange.startMinute) {
+            continue;
+          }
           bands.push({
-            topMinute: plannedStartMinute + seg.startOffsetMinutes,
+            topMinute: bandTop,
             heightMinutes: seg.endOffsetMinutes - seg.startOffsetMinutes,
             phase: seg.phase,
             status: "planned",

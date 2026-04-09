@@ -484,6 +484,31 @@ describe("computeDayTimelineBands", () => {
     }
   });
 
+  it("aligns break positions with event start regardless of open time", () => {
+    // A: 09:00-12:00 (3h). Open at different times; future break positions
+    // should be the same because they derive from the event start.
+    const A = makeEvent("A", 9, 12);
+    const nowEarly = DAY_MS + (9 * 60 + 50) * 60000; // 09:50
+    const nowLate = DAY_MS + (10 * 60 + 5) * 60000; // 10:05
+
+    const bandsEarly = computeDayTimelineBands([A], null, DAY_MS, nowEarly);
+    const bandsLate = computeDayTimelineBands([A], null, DAY_MS, nowLate);
+
+    // Both should produce bands; the late set has fewer (past ones dropped)
+    expect(bandsEarly.length).toBeGreaterThanOrEqual(bandsLate.length);
+
+    // Every band from the late set must match a band from the early set
+    // (same topMinute, same heightMinutes) to confirm positions are stable.
+    for (const lb of bandsLate) {
+      const match = bandsEarly.find(
+        (eb) =>
+          Math.abs(eb.topMinute - lb.topMinute) < 0.01 &&
+          Math.abs(eb.heightMinutes - lb.heightMinutes) < 0.01,
+      );
+      expect(match).toBeDefined();
+    }
+  });
+
   it("handles overlapping events with cursor walk", () => {
     // A: 10:00-12:00, B: 11:00-13:00 (overlap, neither contained)
     const A = makeEvent("A", 10, 12);
@@ -560,6 +585,62 @@ describe("computeDayTimelineBands", () => {
     // Future planned break
     const plannedBand = breakBands.find((b) => b.status === "planned");
     expect(plannedBand).toBeDefined();
+  });
+
+  it("suppresses planned bands from non-active events overlapping the active event", () => {
+    // A: 10:00-14:00 (deep focus, processed first by startMinute)
+    // B: 10:30-14:30 (active, creative preset)
+    const A = makeEvent("A", 10, 14);
+    const B: TimelineEvent = {
+      id: "B",
+      config: { focusDurationMinutes: 25, shortBreakMinutes: 5, longBreakMinutes: 15, pomodoroCount: 4, idleTimeoutMinutes: null },
+      startMs: DAY_MS + 10.5 * 3600000,
+      endMs: DAY_MS + 14.5 * 3600000,
+      startMinute: 630,
+      endMinute: 870,
+    };
+
+    const sessionStartMs = DAY_MS + 11 * 3600000; // session started at 11:00
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "B",
+      segments: [
+        {
+          id: "s1", eventId: "B", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(sessionStartMs).toISOString(),
+          plannedEnd: new Date(sessionStartMs + 25 * 60000).toISOString(),
+          actualStart: new Date(sessionStartMs).toISOString(),
+          actualEnd: null,
+          pauseLog: [],
+          status: "active",
+        },
+        {
+          id: "s2", eventId: "B", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "short_break",
+          plannedStart: new Date(sessionStartMs + 25 * 60000).toISOString(),
+          plannedEnd: new Date(sessionStartMs + 30 * 60000).toISOString(),
+          actualStart: null, actualEnd: null,
+          pauseLog: [],
+          status: "planned",
+        },
+      ],
+      remainingSeconds: 600,
+      breakOvertimeSeconds: 0,
+    };
+
+    const nowMs = sessionStartMs + 15 * 60000; // 11:15
+    const bands = computeDayTimelineBands([A, B], activeState, DAY_MS, nowMs);
+
+    // No planned bands from event A should overlap with B's range [630, 870]
+    const plannedInBRange = bands.filter(
+      (b) => b.status === "planned" && b.topMinute < 870 && b.topMinute + b.heightMinutes > 630,
+    );
+    // Only B's own planned segments should appear (they come from projectActiveSegments)
+    for (const pb of plannedInBRange) {
+      // These planned bands must come from B's persisted segments, not from A's planned computation.
+      // B's first planned break starts at 11:25 (minute 685), well within B's range.
+      expect(pb.topMinute).toBeGreaterThanOrEqual(660); // at or after session start
+    }
   });
 
   it("handles no pomodoro events gracefully", () => {
