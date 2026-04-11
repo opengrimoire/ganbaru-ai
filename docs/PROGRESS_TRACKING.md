@@ -30,6 +30,8 @@ These must always hold. Any violation is a bug in the computation, not something
 
 5. **Persisted data is the source of truth.** The rail must render from segment records (persisted or in-memory for the active session), never from re-computation of what "should have happened." If a session was interrupted, the green fill stops where it stopped. If a break was skipped, no break band appears for that slot.
 
+6. **Past progress is never erased.** Once a segment has `actualStart` set and its status is `completed` or `interrupted`, no user action may delete, overwrite, or hide it. Skipping a break, stopping the session, dismissing the idle overlay, reconfiguring pomodoro settings, or the app closing unexpectedly: none of these remove previously recorded work. The only operation that deletes segments is deleting the calendar event itself (cascade delete).
+
 ## Data model
 
 ### Segment
