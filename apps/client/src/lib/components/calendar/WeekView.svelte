@@ -197,6 +197,9 @@
       // Set --hour-h before any scroll/layout so the initial paint is correct
       scrollContainer.style.setProperty("--hour-h", String(calZoom.hourHeight));
 
+      // Register scroll container so buttons/keyboard can animate
+      calZoom.registerScrollContainer(scrollContainer, gutterTopHeight);
+
       const hh = calZoom.hourHeight;
       if (initialScrollMinute >= 0) {
         scrollContainer.scrollTop = (initialScrollMinute / 60) * hh;
@@ -211,9 +214,36 @@
       ready = true;
     }
 
+    // Keyboard shortcuts: Shift + +/- for internal calendar zoom.
+    // The physical key that produces "+" varies by keyboard layout:
+    //   - US/French: "Equal" key (Shift + = produces +)
+    //   - Spanish/German: "BracketRight" key (where + is printed)
+    //   - Nordic: "Minus" key (+ is the base character)
+    // Since the Keyboard API may not be available in all WebViews (e.g., Tauri),
+    // we check all known physical key codes where + is commonly located.
+    const PLUS_KEY_CODES = ["Equal", "BracketRight", "NumpadAdd"];
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey) return; // Reserved for app-level zoom
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+
+      // Zoom in: direct + character, or Shift + any known plus key location
+      if (e.key === "+" || (e.shiftKey && PLUS_KEY_CODES.includes(e.code))) {
+        e.preventDefault();
+        calZoom.zoomStep(1);
+      // Zoom out: - or _ (Shift + -)
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        calZoom.zoomStep(-1);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("keydown", handleKeyDown);
       scrollContainer?.removeEventListener("scroll", handleScroll);
     };
   });

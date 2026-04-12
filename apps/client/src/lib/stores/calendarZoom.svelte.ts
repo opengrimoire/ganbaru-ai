@@ -166,6 +166,11 @@ export function getCalendarZoom() {
     get isAnimating() {
       return gestureActive || animating;
     },
+    /** Register scroll container so buttons/keyboard can animate. */
+    registerScrollContainer(container: HTMLElement, stickyHeight: number) {
+      scrollRef = container;
+      stickyH = stickyHeight;
+    },
     /** Ctrl+Scroll handler: triggers zoomStep with a short cooldown. */
     zoomAt(deltaY: number, stickyHeight: number, scrollContainer: HTMLElement) {
       const now = performance.now();
