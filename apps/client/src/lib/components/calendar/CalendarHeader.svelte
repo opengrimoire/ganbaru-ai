@@ -10,6 +10,7 @@
   } from "./utils";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { onMount } from "svelte";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -55,11 +56,58 @@
     onDaySelect: (date: Date) => void;
   } = $props();
 
-  const viewOptions: { mode: CalendarViewMode; label: string }[] = [
-    { mode: "day", label: "1d" },
-    { mode: "week", label: "7d" },
-    { mode: "month", label: "31d" },
+  const viewOptions: { mode: CalendarViewMode; label: string; shortcut: string }[] = [
+    { mode: "day", label: "1d", shortcut: "D" },
+    { mode: "week", label: "7d", shortcut: "W" },
+    { mode: "month", label: "31d", shortcut: "M" },
   ];
+
+  // Keyboard shortcuts for navigation and view switching
+  onMount(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Skip when typing in inputs or when modifiers are pressed
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      // Shift is allowed for zoom shortcuts, but not for these navigation shortcuts
+      if (e.shiftKey) return;
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          onNavigate("back");
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          onNavigate("forward");
+          break;
+        case "t":
+        case "T":
+          e.preventDefault();
+          onNavigate("today");
+          break;
+        case "d":
+        case "D":
+          e.preventDefault();
+          onViewChange("day");
+          break;
+        case "w":
+        case "W":
+          e.preventDefault();
+          onViewChange("week");
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          onViewChange("month");
+          break;
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
 
   const isOnToday = $derived(isToday(anchorDate));
 
@@ -199,7 +247,7 @@
   <button
     onclick={() => onNavigate("back")}
     class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    title="Previous"
+    title="Previous ('←' key)"
   >
     <ChevronLeft size={14} />
   </button>
@@ -353,7 +401,7 @@
   <button
     onclick={() => onNavigate("forward")}
     class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    title="Next"
+    title="Next ('→' key)"
   >
     <ChevronRight size={14} />
   </button>
@@ -369,6 +417,7 @@
         class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {viewMode === opt.mode
           ? 'bg-card text-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+        title="{opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1)} view ('{opt.shortcut.toLowerCase()}' key)"
       >
         {opt.label}
       </button>
@@ -382,7 +431,7 @@
     class="ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors {isOnToday
       ? 'text-muted-foreground/30 cursor-default'
       : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-    title="Go to today"
+    title="Go to today ('t' key)"
   >
     <RotateCcw size={13} />
   </button>
@@ -394,7 +443,7 @@
     class="ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomOut
       ? 'text-muted-foreground/30 cursor-default'
       : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-    title="Zoom out"
+    title="Zoom out (Shift + -)"
   >
     <Minus size={13} />
   </button>
@@ -404,7 +453,7 @@
     class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomIn
       ? 'text-muted-foreground/30 cursor-default'
       : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-    title="Zoom in"
+    title="Zoom in (Shift + +)"
   >
     <Plus size={13} />
   </button>
