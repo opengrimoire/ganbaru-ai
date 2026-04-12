@@ -2,6 +2,8 @@
 
 This document specifies the intended behavior for how GanbaruAI tracks and renders pomodoro progress. It is the source of truth for testing: if the code disagrees with this document, the code is wrong.
 
+**Maintenance rule:** every section that describes behavior must include at least one practical example showing what the user does, what the app does in response, and what the user sees. When adding or editing a section, add or update examples to match the new behavior. Examples use concrete timestamps, event names, and config values. They describe the user's perspective, not internal function calls. If a section is particularly fragile or easy to misimplement, add multiple examples covering the common path and the edge cases.
+
 ## Overview
 
 When a calendar event has pomodoro enabled, a thin vertical rail appears on the left edge of the day column in the **daily and weekly views** (not the monthly view). This rail visualizes the user's focus progress for the day.
@@ -46,6 +48,8 @@ These must always hold. Any violation is a bug in the computation, not something
 ## Data model
 
 The tracking system uses three tables: `pomodoro_runs`, `pomodoro_segments`, and `pomodoro_pauses`. Together they record every session from start to finish with enough resolution for both real-time rendering and long-term analytics.
+
+All timestamps in all three tables are stored in UTC (ISO 8601 with `Z` suffix). The UI converts to local time for display. This prevents data corruption from timezone changes, DST transitions, or user travel.
 
 ### Runs
 
@@ -92,11 +96,15 @@ This covers all run origins:
 - **Block transition**: inherited values carry the ending run's cycle position and accumulated focus. Example: run A (40/5/10, cycle 2) ends after 30 minutes of focus. Run B (25/5/15) starts with `inherited_focus_minutes=30`, `inherited_cycle=2`. Since 30 >= 25, B starts with a short break (cycle 2 < pomodoro_count), then proceeds with 25-minute focus cycles.
 - **Reconfiguration**: inherited values carry the position within the reconfigured run. The bridge segment (same phase as the interrupted one, with remaining time from the old config) is the first actual segment of the new run, not a stored plan.
 
+**Inherited focus during a break phase:** if a transition or reconfiguration happens while the user is on a break, `inherited_focus_minutes` is 0. The break already "resolved" the accumulated focus. The `inherited_cycle` carries the current cycle number. After the bridge break (if reconfiguring) or the immediate break (if transitioning), the next focus starts fresh at the new config's full duration.
+
 Without `inherited_focus_minutes` and `inherited_cycle`, reconstructing the plan for transition and reconfiguration runs would require traversing the chain of previous runs and their segments, which is fragile (previous runs might reference archived events) and slow (unbounded chain length). Capturing the inherited state on the run itself makes each run self-contained.
 
 Storing planned positions as separate rows would duplicate information derivable from these fields and create a synchronization problem: every transition or reconfiguration would have to update both the inherited fields and the planned rows, with the risk of them diverging.
 
 Actual segments store what really happened. Comparing actuals to the derived ideal gives plan-vs-actual analysis: breaks shorter or longer than planned, focus extended or cut short, breaks skipped (detectable as missing break rows between consecutive focus segments).
+
+**Example: plan-vs-actual for a single run.** A run starts at 14:00 with config 25/5/15, pomodoro_count=4, inherited values 0/1. The derived ideal plan is: focus 14:00-14:25, short break 14:25-14:30, focus 14:30-14:55, short break 14:55-15:00, and so on. The actual segments show: focus 14:00-14:25 (completed), no break segment (skipped), focus 14:25-14:52 (completed, 27 min instead of 25), short break 14:52-14:54 (completed, 2 min instead of 5). Analytics can compute: break 1 was skipped, focus 2 ran 2 minutes over plan, break 2 was 3 minutes shorter than planned. All derived from the run's config vs the segment timestamps, no stored plan needed.
 
 ### Segments
 
@@ -186,7 +194,9 @@ An event whose time window includes the current time cannot be deleted or archiv
 
 Once the session is stopped, the event still appears on the calendar for the remainder of its time window. It can be archived after its end time passes (it becomes a past event).
 
-If the user edits the event's end time to be in the past while a session is running, the session is stopped as if the block expired.
+If the user edits the event's end time to be in the past while a session is running, the session is stopped as if the block expired (with transition-at-expiration check for consecutive events).
+
+If the user edits the event's start time to be after the session's `started_at` while a session is running, this is a no-op for the running session. The session already started, segments already exist. The event's new start time only affects future rendering of the rail background.
 
 ### Future events
 
@@ -256,7 +266,11 @@ The first phase is always a full-length focus period. Even if the user is restar
 Every second, the system checks in priority order:
 
 1. **Suspend detected** (tick gap > 15s): create a pause row (`reason = suspend`), show suspend dialog.
-2. **Block expired** (event end time reached): mark current segment `interrupted`, end the run (`completed`).
+2. **Block expired** (event end time reached): check for a consecutive or overlapping event that starts at or before the expiring event's end time. If one exists, perform a transition with inheritance (see "Block transitions"). If none exists, mark the current segment `interrupted` and end the run (`end_reason = completed`). This ensures continuous focus across consecutive events produces proper inheritance instead of losing accumulated state.
+
+   **Example:** "Morning Focus" (09:00-11:00, 40/5) is followed immediately by "Afternoon Sprint" (11:00-13:00, 25/5). The user has been focused on Morning Focus since 10:35 (25 minutes of focus in cycle 3). At 11:00, block expiration fires. The system finds Afternoon Sprint starting at 11:00. Instead of ending and restarting fresh, it transitions: the new run on Afternoon Sprint gets `inherited_focus_minutes=25, inherited_cycle=3`. Since 25 >= 25 (Sprint's focus threshold), Afternoon Sprint starts with a short break. The user gets their well-deserved break without losing the 25 minutes of focus context.
+
+   Without this transition-at-expiration check, the system would end Morning Focus, then auto-start would create a fresh session on Afternoon Sprint with `inherited_focus_minutes=0`. The user would face a new 25-minute focus period immediately after 25 minutes of unbroken work, missing the break they earned.
 3. **Break finished** (break timer at 0): start overtime accumulation (max 30 min), alert every 60s.
 4. **Focus finished** (focus timer at 0): advance to next phase (see "Phase transitions").
 5. **Notification** (60s remaining in focus): show system notification.
@@ -278,6 +292,22 @@ When break ends (user acknowledges or overtime expires):
 
 Each transition closes any open pause (set `ended_at = now` on any pause row with `ended_at = NULL` for the current segment).
 
+**Example: full cycle progression.** Config: 25/5/15 with pomodoro_count=4. The user starts at 09:00.
+
+- 09:00: focus segment created (cycle 1, active). Timer shows 25:00.
+- 09:25: focus completed. Cycle 1 < 4, so short break segment created (cycle 1, active). Timer shows 5:00.
+- 09:30: break completed. Focus segment created (cycle 2, active). Timer shows 25:00.
+- 09:55: focus completed. Short break (cycle 2). Timer shows 5:00.
+- 10:00: break completed. Focus (cycle 3). Timer shows 25:00.
+- 10:25: focus completed. Short break (cycle 3). Timer shows 5:00.
+- 10:30: break completed. Focus (cycle 4). Timer shows 25:00.
+- 10:55: focus completed. Cycle 4 = pomodoro_count, so long break segment created (cycle 4, active). Timer shows 15:00.
+- 11:10: long break completed. Cycle resets to 1. Focus (cycle 1). Timer shows 25:00.
+
+If at 09:25 the user had set `skipNextBreak`, no break segment would be created. The next focus segment would start immediately at 09:25 (cycle 2), and the database would show two consecutive focus segments with no break between them.
+
+**Example: break overtime.** At 09:25, focus ends and the break screen appears. The user doesn't acknowledge it. At 09:30 (break timer hits 0), overtime starts. The break mark on the rail keeps growing. At 09:35 the user finally clicks "start focus." The break segment is marked completed with `actual_end = 09:35` (10 minutes total instead of the planned 5). If the user still hasn't acknowledged by 10:00 (30 minutes of overtime), the system auto-advances to focus.
+
 ### Session stop and restart
 
 A session can stop for any reason: user stops manually, user dismisses the idle overlay and chooses to stop, app crash, or process termination.
@@ -296,11 +326,33 @@ On restart (whether via auto-start or user action):
 3. Break positions are computed fresh from the new start point.
 4. The previous run's segments are untouched (invariant 6). The rail shows the old green fill alongside the new session's progress.
 
+**Example: stop and restart.** The user has a "Deep Work" event from 14:00-17:00 with 25/5 config. They open the app at 14:10 and focus until 14:45, completing one full cycle (focus 14:10-14:35, break 14:35-14:40, focus 14:40-14:45 interrupted). At 14:45 the user gets a phone call and stops the session.
+
+What the user sees on the rail at 14:50 (during the gap):
+- Green fill from 14:10-14:35 (first focus, completed).
+- Gray break mark at 14:35-14:40 (break, completed).
+- Green fill from 14:40-14:45 (second focus, interrupted).
+- Empty from 14:45-14:50 (gap, no session).
+- Projected gray break marks from 14:50 onward, positioned as if restarting now with a full 25-minute focus: first break at ~15:15, second at ~15:45, etc. These marks shift as each second passes.
+
+At 14:55, the phone call ends. Auto-start fires, detects the event still has time, creates a new run. The user sees:
+- Same green and break marks as before (invariant 6, nothing erased).
+- Empty gap from 14:45-14:55 (honest, the user wasn't working).
+- The timer shows 25:00, not the 20 minutes that were remaining. Full restart.
+- New break marks lock in at their current positions: first break at ~15:20.
+- As the user works, green fill grows from 14:55 onward.
+
 ### Pauses
 
 - **Idle detection** (focus only): the system checks user activity every 15 seconds. If idle beyond the configured threshold, a pause row is created (`reason = idle`, `ended_at = NULL`), the timer pauses, and an overlay is shown. On resume, the pause's `ended_at` is set.
 - **Suspend detection** (any phase): a tick gap > 15 seconds triggers a pause row (`reason = suspend`, `started_at = suspendStartIso`, `ended_at = suspendEndIso`) and a resume dialog.
 - **Manual pause**: user explicitly pauses the timer. A pause row is created (`reason = manual`, `ended_at = NULL`). On resume, `ended_at` is set.
+
+**Example: idle pause and green fill splitting.** The user starts focus at 10:00 with a 5-minute idle threshold. They work until 10:15, then step away without pausing. At 10:20 (5 minutes idle), the system detects inactivity, creates a pause row (`started_at = 10:20, reason = idle`), pauses the timer, and shows the idle overlay. The user returns at 10:30 and clicks "resume." The pause row gets `ended_at = 10:30`.
+
+On the rail, the green fill for this segment shows two bands: 10:00-10:20 (working) and 10:30 onward (working again). The 10:20-10:30 gap is empty (faint gray), honestly reflecting that the user was away. The timer resumes where it paused, so if 15 minutes were remaining at 10:20, the timer still shows 15 minutes at 10:30.
+
+**Example: laptop suspend.** The user is focused at 11:00. They close their laptop at 11:10 (or the OS sleeps). The timer tick loop stops. When the laptop wakes at 11:40, the next tick fires and detects a 30-minute gap (>> 15s threshold). A pause row is created with `started_at = 11:10, ended_at = 11:40, reason = suspend`. The suspend dialog appears, asking the user what they want to do: resume (timer continues from where it was), or stop (session ends). If they resume, green shows 11:00-11:10 and 11:40 onward, with a gap for 11:10-11:40.
 
 ### Session reconfiguration
 
@@ -314,8 +366,23 @@ If the user changes pomodoro settings mid-session:
    - `inherited_focus_minutes` = accumulated focus from step 1.
    - `inherited_cycle` = cycle number from step 1.
    - `inherited_from_run_id` = the ending run's ID.
-6. Create a bridge segment: same phase as the interrupted one, with the remaining time from the old config preserved. For example, if the old config had 40-minute focus and 28 minutes were done, the bridge has 12 minutes remaining. After the bridge completes, the new config's cycle rules take over.
+6. Create a bridge segment: same phase as the interrupted one, with the remaining time from the old config preserved. After the bridge completes, the new config's cycle rules take over.
 7. Previously completed/interrupted segments from the old run are untouched (invariant 6). The rail continues to show all accumulated green fill.
+
+**Example: reconfiguration during focus.** The user is 28 minutes into a 40-minute focus (cycle 2, 25/5/10 "creative" preset). They decide the sessions are too long and switch to 25/5/15 "extended" preset. The system:
+- Completes the current focus segment at minute 28.
+- Ends the old run (`end_reason = reconfigured`).
+- Creates a new run with config 25/5/15, `inherited_focus_minutes=28, inherited_cycle=2`.
+- Creates a bridge focus segment with 12 minutes remaining (40 - 28 = 12 from the old config).
+- After the bridge, the new config takes over: next break is a short break (cycle 2 < 4, using 5 min from new config), then focus periods are 25 minutes.
+
+The user sees: no interruption in the green fill. The current focus continues for 12 more minutes, then the new 25/5 cadence kicks in. All previously completed segments remain.
+
+**Example: reconfiguration during a break.** The user is 3 minutes into a 5-minute break (cycle 2). They switch config. The system:
+- Completes the break segment at minute 3.
+- Creates a new run with `inherited_focus_minutes=0` (the break resolved the accumulated focus), `inherited_cycle=2`.
+- Creates a bridge break segment with 2 minutes remaining (5 - 3 = 2).
+- After the bridge break, the new config starts a fresh focus at the new duration.
 
 ### Block transitions
 
@@ -362,7 +429,27 @@ This is safe because:
 - Pauses are individual rows, not JSON blobs. No string surgery is needed to close an open pause.
 - The worst-case data loss is ~30 seconds (one heartbeat interval).
 
+**Example: crash recovery.** The user is focused on a "Study" event (09:00-12:00, 40/5 config). At 10:15, the power goes out. The last heartbeat was at 10:14:48.
+
+The database contains:
+- Run: `started_at = 09:05, ended_at = NULL, last_heartbeat = 10:14:48`.
+- Active segment: `phase = focus, actual_start = 09:50, actual_end = NULL, status = active` (third focus period).
+- Completed segments: focus 09:05-09:45, break 09:45-09:50 (from earlier in the session).
+
+The user reopens the app at 14:00 (4 hours later). Recovery runs:
+1. Run gets `ended_at = 10:14:48, end_reason = interrupted`.
+2. Active segment gets `status = interrupted, actual_end = 10:14:48`.
+3. Any open pauses get `ended_at = 10:14:48`.
+
+The rail now shows: green 09:05-09:45, gray 09:45-09:50, green 09:50-10:15 (approximately, using heartbeat). Empty from 10:15 onward. The "Study" event ended at 12:00, so it's now a past event (archive only). No new session starts because the event is over.
+
+Without the heartbeat, the system would have set `actual_end = 14:00`, showing 3 hours and 45 minutes of phantom green fill. The heartbeat limits the error to ~30 seconds.
+
 See "Why pauses are rows, not JSON" under the data model section for the rationale behind this design.
+
+### External tools reading the database
+
+If an analytics script, CLI export, or backup tool reads the database while the app is not running (or after a crash), it may encounter dirty state: runs with `ended_at = NULL` and segments with `status = active`. External readers should treat any run where `ended_at IS NULL` and `last_heartbeat` is older than 60 seconds as a crashed session, and apply the same recovery logic (use `last_heartbeat` as the true end time) before computing analytics. The `ganbaruai` CLI should handle this automatically when exporting data.
 
 ## Rail rendering
 
@@ -425,13 +512,15 @@ A semi-transparent overlay covers the column from midnight to the current time. 
 
 The system takes all pomodoro events for a given day and produces a flat list of bands (green fills + break marks) to render on the rail.
 
-**Step 1: filter contained events.** If event B is fully enclosed by event A (A starts at or before B, A ends at or after B, and A is longer), B is removed. This prevents duplicate bands.
+**Step 1: identify the active event.** If a session is running, note which event it belongs to. This event is exempt from containment filtering (step 2) and takes priority in all overlap situations.
 
-**Step 2: sort by start minute.**
+**Step 2: filter contained events.** If event B is fully enclosed by event A (A starts at or before B, A ends at or after B, and A is longer), B is removed. Exception: the active event is never removed, even if fully enclosed. If the enclosed event is active, the enclosing event is suppressed in the overlap region instead. For events with identical time windows, the active event wins; if neither is active, the one created first is kept (creation timestamp as tiebreaker).
 
-**Step 3: identify the active event.** If a session is running, note which event it belongs to. Its time range is used to suppress projected bands from overlapping non-active events (invariant 4).
+**Step 3: sort by start minute.**
 
-**Step 4: cursor walk.** Process events chronologically, tracking where the previous event's coverage ended and what the inherited focus/cycle state is.
+**Step 4: note the active event's time range.** This is used to suppress projected bands from overlapping non-active events (invariant 4).
+
+**Step 5: cursor walk.** Process events chronologically, tracking where the previous event's coverage ended and what the inherited focus/cycle state is. The inherited state for rendering follows the same derivation as the `inherited_focus_minutes` and `inherited_cycle` fields on runs (see "Why plan is not stored as rows").
 
 For each event:
 
@@ -456,25 +545,40 @@ After each event, compute trailing focus/cycle state for inheritance to the next
 
 ### Fully contained
 
-If one event fully encloses another, the enclosed event is filtered out. Only the enclosing event's config drives the rail.
+If one event fully encloses another, the enclosed event is filtered out, unless the enclosed event has the active session. In that case, the enclosed event takes priority in the overlap region, and the enclosing event only contributes bands outside it. For events with identical time windows and no active session, the one created first takes priority.
+
+**Example:** The user has a long "Work" block from 09:00-17:00 (40/5 config) and creates a shorter "Sprint" block from 14:00-15:00 (25/5 config) inside it. "Sprint" is fully contained in "Work."
+
+- If neither has an active session: "Sprint" is filtered out. The rail shows break marks based on the 40/5 config across the whole day.
+- If the user starts a session on "Sprint" at 14:00: "Sprint" takes priority from 14:00-15:00 (25/5 break marks). "Work" contributes break marks from 09:00-14:00 and 15:00-17:00 (40/5 break marks). The user sees the Sprint's faster break cadence during that hour.
 
 ### Partially overlapping (no active session)
 
 The earlier-starting event takes priority for the overlapping portion. The later event only contributes bands after the earlier event ends.
 
+**Example:** "Morning Focus" runs 09:00-11:00 (40/5) and "Team Project" runs 10:00-12:00 (25/5). They overlap from 10:00-11:00. No session is running. The rail shows: 40/5 break marks from 09:00-11:00 (Morning Focus takes priority for the entire overlap), then 25/5 break marks from 11:00-12:00 (Team Project takes over after Morning Focus ends).
+
 ### Partially overlapping (with active session)
 
 The active session takes priority. Projected bands from all other overlapping events are suppressed for the active event's entire time range.
 
+**Example:** Same events as above, but the user starts a session on "Team Project" at 10:15. Now Team Project is active from 10:00-12:00. Morning Focus's break marks from 10:00-11:00 are suppressed (they would conflict with Team Project's 25/5 cadence). The rail shows: 40/5 break marks from 09:00-10:00 (Morning Focus alone), green fill and 25/5 break marks from 10:15-12:00 (Team Project active), empty from 10:00-10:15 (overlap, but Team Project's session started at 10:15).
+
 ### Result for the user
 
-The rail always shows one coherent schedule at any given time. Never a mix of two configs.
+The rail always shows one coherent schedule at any given time. Never a mix of two configs. The user never sees break marks from two different pomodoro settings in the same time slice.
 
 ## Edge cases
 
 ### App opened after event started
 
 The session starts from now, not from the event's calendar start. The time between the event start and the session start has no green fill (the user wasn't working). Projected break marks for events without a session are positioned as if the schedule started at the event start (via elapsed-time adjustment), so the first visible break may be closer than a full focus period.
+
+**Example:** The user scheduled a "Study" block from 14:00-16:00 with 25/5 config but didn't open the app until 14:40. Before the session starts, the rail shows projected breaks as if the pomodoro cycle had been running since 14:00: the first break would have been at 14:25-14:30 (already past), so the next visible break is at 14:50-14:55, only 10 minutes away. This gives the user an accurate picture of where they are in the cycle relative to the event's planned schedule.
+
+When the session starts at 14:40, the run gets `inherited_focus_minutes = 0, inherited_cycle = 1` (fresh session). The timer shows 25:00. The rail shows: empty from 14:00-14:40 (the user wasn't there), green growing from 14:40, with break marks at 15:05, 15:35, etc. The break positions are now anchored to the actual session start, not the event start.
+
+The 14:00-14:40 gap is honest. It tells the user (and the AI) that they started 40 minutes late. If this pattern repeats, the system can learn from it.
 
 ### Multi-day events
 
@@ -497,6 +601,16 @@ On restart, the focus timer begins at the full configured duration. The user's c
 ### Event archival
 
 Archiving a past event removes it from the calendar but preserves all tracking data. Runs retain their `original_event_id` and `event_title_snapshot`. Segments and pauses are unaffected because they cascade from runs, not from events.
+
+**Example:** The user had a "Deep Work" event yesterday from 09:00-12:00 and completed two full pomodoro cycles (2 focus segments, 2 break segments, various pauses). Today they decide to archive it to clean up their calendar.
+
+What happens:
+1. The event row is copied to `calendar_events_archive`.
+2. The event is deleted from `calendar_events`.
+3. The run's `event_id` becomes NULL (SET NULL FK). But `original_event_id` still holds the old event ID, and `event_title_snapshot` still says "Deep Work."
+4. All segments and pauses remain exactly as they were.
+
+What the user sees: the event disappears from the calendar. But when they open the stats page and look at yesterday's productivity, they see "Deep Work, 2 hours 15 minutes of focus." The data is intact. The analytics page joins to `calendar_events_archive` via `original_event_id` to get the full event context (color, description, project link) if needed.
 
 ## Multi-user considerations
 
