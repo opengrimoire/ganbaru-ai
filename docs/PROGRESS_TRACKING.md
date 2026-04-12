@@ -33,11 +33,11 @@ These must always hold. Any violation is a bug in the computation, not something
 
 2. **Exactly one segment is `active` at a time.** Multiple active segments would mean the timer is running two things simultaneously.
 
-3. **Break positions are stable within a session.** For a running session, break positions are deterministic from the run's start point, config, and cycle state. They do not shift while the session is active. For events without an active session, projected breaks are computed from "now" and naturally shift as time passes (this is intentional, see "Projected breaks" under rail rendering).
+3. **Break positions are stable within a session.** For a running session, break positions are deterministic from the run's `started_at`, config snapshot, and inherited state (`inherited_focus_minutes`, `inherited_cycle`). They do not shift while the session is active. For events without an active session, projected breaks are computed from "now" and naturally shift as time passes (this is intentional, see "Projected breaks" under rail rendering).
 
 4. **No duplicate bands in the same time range.** The rail shows one coherent schedule at any point in time. Two overlapping events must never both contribute bands to the same minute range.
 
-5. **Persisted data is the source of truth for the past.** The rail renders past time from segment records, never from re-computation of what "should have happened." If a session was interrupted, the green fill stops where it stopped. If a break was skipped, no break band appears for that slot. Future time is rendered from config-based projections, not persisted data.
+5. **Persisted data is the source of truth for the past.** The rail renders past time from segment records, never from re-computation of what "should have happened." If a session was interrupted, the green fill stops where it stopped. If a break was skipped, no break band appears for that slot. Future time is rendered from config-based projections derived from the run's `started_at`, config snapshot, and inherited state. The planned schedule is never stored as separate rows because it is fully deterministic from these fields (see "Why plan is not stored as rows" under data model).
 
 6. **Past progress is never erased.** Once a segment has `actualStart` set and its status is `completed` or `interrupted`, no user action may delete, overwrite, or hide it. Skipping a break, stopping the session, dismissing the idle overlay, reconfiguring pomodoro settings, the app closing unexpectedly, or archiving the calendar event: none of these remove previously recorded work. There is no mechanism to delete individual segments. They are an append-mostly historical record.
 
@@ -45,7 +45,7 @@ These must always hold. Any violation is a bug in the computation, not something
 
 ## Data model
 
-The tracking system uses three tables. This replaces the earlier single-table design where `pause_log` was a JSON blob inside `pomodoro_segments`.
+The tracking system uses three tables: `pomodoro_runs`, `pomodoro_segments`, and `pomodoro_pauses`. Together they record every session from start to finish with enough resolution for both real-time rendering and long-term analytics.
 
 ### Runs
 
@@ -68,17 +68,41 @@ A run represents one continuous session of pomodoro work. It is created when the
 | `idle_timeout_minutes` | integer or null | Config snapshot: idle threshold (null = disabled) |
 | `last_heartbeat` | ISO datetime | Updated every ~30 seconds while the session is active. Used for crash recovery to determine the true end time |
 | `event_title_snapshot` | text or null | The event's title at the time of the run. Preserved for analytics context after event archival |
+| `inherited_focus_minutes` | integer | Focus minutes accumulated in the current cycle, carried from the preceding run. 0 for fresh sessions. Non-zero when created by block transition or reconfiguration, reflecting how much focus was done before the handoff. Combined with the config snapshot, this determines whether the first phase is focus (remaining) or break (threshold exceeded) |
+| `inherited_cycle` | integer | Cycle number carried from the preceding run. 1 for fresh sessions. Determines whether the next break is short or long |
+| `inherited_from_run_id` | UUID or null | FK to `pomodoro_runs`. The run from which state was inherited. Null for fresh sessions. Enables tracing transition chains in analytics |
 | `experiment_id` | text or null | For A/B testing: which experiment this run belongs to |
 | `variant` | text or null | For A/B testing: which variant was assigned |
 | `created_at` | ISO datetime | Row creation time |
 
-Config is currently per-event, but may be inherited from project defaults in the future. The run's config snapshot always records what was actually used, regardless of where it originated. This means A/B testing of configs works naturally: the system assigns a variant, the config snapshot captures it, and outcomes are measured from the run's segments.
+Config may be set per-event or inherited from project defaults. Regardless of where it originated, the run's config snapshot records exactly what was in force during that session. This makes A/B testing of configs straightforward: the system assigns a variant, the config snapshot captures it, and outcomes are measured from the run's segments.
+
+#### Why plan is not stored as rows
+
+Given a run's `started_at`, config snapshot, and inherited state (`inherited_focus_minutes`, `inherited_cycle`), the ideal planned schedule is fully deterministic:
+
+- If `inherited_focus_minutes >= focus_duration_minutes`: the first phase is a break (short or long, determined by `inherited_cycle` vs `pomodoro_count`).
+- If `inherited_focus_minutes > 0` but below the threshold: the first phase is focus, lasting `focus_duration_minutes - inherited_focus_minutes` minutes.
+- If `inherited_focus_minutes == 0`: the first phase is a full-length focus period.
+- After the first phase, standard cycle rules apply using the run's config.
+
+This covers all run origins:
+
+- **Fresh session** (`new_session`): inherited values are 0 and 1, so the first phase is full-length focus at cycle 1. This includes restarts after a stop (concentration is assumed broken).
+- **Block transition**: inherited values carry the ending run's cycle position and accumulated focus. Example: run A (40/5/10, cycle 2) ends after 30 minutes of focus. Run B (25/5/15) starts with `inherited_focus_minutes=30`, `inherited_cycle=2`. Since 30 >= 25, B starts with a short break (cycle 2 < pomodoro_count), then proceeds with 25-minute focus cycles.
+- **Reconfiguration**: inherited values carry the position within the reconfigured run. The bridge segment (same phase as the interrupted one, with remaining time from the old config) is the first actual segment of the new run, not a stored plan.
+
+Without `inherited_focus_minutes` and `inherited_cycle`, reconstructing the plan for transition and reconfiguration runs would require traversing the chain of previous runs and their segments, which is fragile (previous runs might reference archived events) and slow (unbounded chain length). Capturing the inherited state on the run itself makes each run self-contained.
+
+Storing planned positions as separate rows would duplicate information derivable from these fields and create a synchronization problem: every transition or reconfiguration would have to update both the inherited fields and the planned rows, with the risk of them diverging.
+
+Actual segments store what really happened. Comparing actuals to the derived ideal gives plan-vs-actual analysis: breaks shorter or longer than planned, focus extended or cut short, breaks skipped (detectable as missing break rows between consecutive focus segments).
 
 ### Segments
 
-A segment is one uninterrupted stretch of either focus or break. Segments are created lazily: a new segment is persisted only when its phase actually begins, not when the session starts. This avoids accumulating dead "planned" rows that would need cleanup on every restart or reconfiguration.
+A segment is one uninterrupted stretch of either focus or break. A segment row is only created when its phase begins. The first focus segment is written when the session starts. The next segment (break or focus) is written only when the previous one ends and the next phase actually begins. A phase that never ran has no row.
 
-The system does not persist segments for phases that never started. If a break is skipped, no segment is created for it. The absence of a break segment between two consecutive focus segments is how a skipped break is recorded. Analytics can detect this from the gap pattern.
+If a break is skipped, no row is created for it. The skip is recorded as the absence of a break segment between two consecutive focus segments on the same run. Analytics detect skips from this gap pattern.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -88,12 +112,12 @@ The system does not persist segments for phases that never started. If a break i
 | `phase` | `focus`, `short_break`, `long_break` | What kind of segment |
 | `planned_start` | ISO datetime | When the segment was scheduled to begin |
 | `planned_end` | ISO datetime | When the segment was scheduled to end |
-| `actual_start` | ISO datetime | When the segment actually started. Always set because segments are only created when they begin |
+| `actual_start` | ISO datetime | When the segment actually started. Always set (rows only exist for phases that began) |
 | `actual_end` | ISO datetime or null | When the segment ended. Null if still running |
 | `status` | see below | Lifecycle state |
 | `created_at` | ISO datetime | Row creation time |
 
-Note: `actual_start` is never null in this model because segments are only persisted when they begin. This is a change from the earlier model where planned segments were pre-created with `actual_start = null`.
+`actual_start` is never null. A row existing implies the phase ran.
 
 ### Segment statuses
 
@@ -103,11 +127,11 @@ Note: `actual_start` is never null in this model because segments are only persi
 | `completed` | Finished normally (timer reached zero, user acknowledged break end) |
 | `interrupted` | Started but cut short (app closed, session stopped, event time expired mid-segment) |
 
-The earlier `planned` and `skipped` statuses are removed because segments are no longer pre-created. A phase that never started simply has no segment row. A break that was skipped has no segment row (detectable from the gap between consecutive focus segments).
+There are no `planned` or `skipped` statuses. Since a row is only written when the phase begins, a phase that never ran has no row. A break that was skipped is detectable from the gap between consecutive focus segments on the same run.
 
 ### Pauses
 
-Each pause within a segment is its own row, replacing the JSON `pause_log` blob. This makes pauses individually queryable for analytics (e.g. "average idle duration by time of day across 6 months"), crash-safe (a crash leaves a row with `ended_at = NULL`, trivially fixable without JSON string surgery), and atomic (each write is one row, not a full JSON re-serialization).
+Each pause within a segment is its own row. This makes pauses individually queryable for analytics (e.g. "average idle duration by time of day across 6 months"), crash-safe (a crash leaves a row with `ended_at = NULL`, trivially fixable with a single UPDATE), and atomic (each write is one row, no multi-field serialization).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -130,9 +154,17 @@ Each pause within a segment is its own row, replacing the JSON `pause_log` blob.
 
 Presets: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom.
 
-### Legacy tables
+### Why pauses are rows, not JSON
 
-The `pomodoro_sessions` table (which stores one row per completed focus period with `focus_score`, `app_switch_count`, `break_extended`) predates the segment system. It should be deprecated and its useful fields migrated: `focus_score` can be computed from segment and pause data, `app_switch_count` could become a field on segments or runs if needed in the future.
+Storing pauses as a JSON array inside the segment row (`[[startIso, endIsoOrNull], ...]`) would cause three problems:
+
+1. **Crash recovery becomes fragile.** Closing open pauses in a JSON blob requires string manipulation in SQL (e.g. `REPLACE(..., 'null]', ...)`), which can corrupt data when multiple intervals exist or formatting varies. Individual rows need only `UPDATE WHERE ended_at IS NULL`.
+2. **Analytics require JSON parsing.** Querying "average idle duration by time of day" means parsing JSON in every row. With individual rows, standard SQL aggregation applies directly.
+3. **Writes are not atomic.** Updating a JSON pause means reading the full blob, deserializing, appending, re-serializing, and writing back. A crash during this sequence can produce corrupted JSON. A single row INSERT is atomic.
+
+### Deprecated: pomodoro_sessions table
+
+A `pomodoro_sessions` table exists in the current codebase, storing one row per completed focus period with `focus_score`, `app_switch_count`, `break_extended`. This table predates the segment-based model and should be deprecated. `focus_score` is derivable from segment and pause data. `app_switch_count` could become a field on segments or runs if the metric proves useful.
 
 ## Event lifecycle
 
@@ -164,6 +196,30 @@ An event whose start time is entirely in the future and which has no tracking da
 
 Each instance of a recurring event gets its own runs and segments. Modifying or deleting a future instance in a recurrence chain has zero effect on past instances' tracking data. When a recurring instance is detached into a standalone event, run references are transferred (the `event_id` and `original_event_id` on existing runs are updated to the new standalone event ID).
 
+## Enforcement of past-event protection
+
+Invariant 7 (past events are never deleted) must be enforced at every programmatic boundary. The user owns their data files and can modify SQLite directly; GanbaruAI does not attempt to prevent that. But every code path within the system must refuse to delete past events.
+
+### UI
+
+No delete button or option is shown for events whose end time is in the past. The only available action is archive.
+
+### CLI (`ganbaruai` command-line tool)
+
+The CLI rejects delete commands for past events with a descriptive error explaining the archive-only policy and offering the archive command as an alternative. The rejection is logged with timestamp, command, and event ID.
+
+### MCP tools (for external AI clients)
+
+MCP handlers for event management refuse delete operations on past events at the handler level, returning a structured error with the reason. The response includes the alternative (archive) so the AI client can adjust.
+
+### Internal APIs (Tauri commands, database layer)
+
+All internal DELETE queries on `calendar_events` include a guard: the deletion proceeds only if `end_time > now()`. If the guard fails, the operation is rejected and logged. This is the last-resort protection in case a higher layer has a bug.
+
+### AI agent integration
+
+When agents interact with GanbaruAI (via CLI, MCP, or any future bridge), the system prompt or tool descriptions must communicate the policy clearly: past events can only be archived, not deleted. If an agent attempts deletion and is rejected, the error response includes enough context for the agent to understand why and adapt its behavior. Repeated rejection attempts are logged for diagnostic purposes (the agent may have a flawed understanding of the data model).
+
 ## Session lifecycle
 
 ### Auto-start
@@ -189,7 +245,7 @@ When a new session starts:
 
 1. Create a new `pomodoro_runs` row with config snapshot, `started_at = now`, `last_heartbeat = now`.
 2. Create the first segment: `phase = focus`, `status = active`, `actual_start = now`, `planned_start = now`, `planned_end = now + focusDurationMinutes`.
-3. No other segments are created. Future phases are computed on-the-fly for rail rendering and created lazily when they actually begin.
+3. No other segments are created yet. Future phases are computed on-the-fly for rail rendering. The next segment is written only when the current one finishes and the next phase begins.
 
 Sessions always start from the current time, never from the event's calendar start time. If the event was scheduled for 17:00 but the app opens at 18:15, the session covers 18:15 onward.
 
@@ -230,7 +286,7 @@ When a session stops:
 1. The current segment is marked `interrupted` with `actual_end` set (for manual stop, `actual_end = now`; for crash recovery, `actual_end = last_heartbeat`).
 2. Any open pause on the current segment is closed.
 3. The run is ended (`ended_at = now` or `last_heartbeat`, `end_reason` set appropriately).
-4. No other segments are affected because future segments were never created.
+4. No future segments need cleanup because they were never created.
 
 After a stop, the event still exists on the calendar with time remaining. The rail shows preserved progress from the stopped session plus projected break marks for the remaining time (see "Projected breaks" under rail rendering). Auto-start fires every 30 seconds and will detect the event, creating a new session.
 
@@ -249,21 +305,34 @@ On restart (whether via auto-start or user action):
 ### Session reconfiguration
 
 If the user changes pomodoro settings mid-session:
-1. Mark the current segment `completed` with `actual_end = now`.
-2. Close any open pause.
-3. End the current run with `end_reason = reconfigured`.
-4. Create a new run with the new config snapshot.
-5. Create a bridge segment: same phase as the interrupted one, with the remaining time preserved. For example, if 12 minutes of focus remained, the bridge segment has `planned_end = now + 12min`.
-6. Future break positions are computed from the new config.
+
+1. Read the current cycle number and accumulated focus minutes in the current cycle.
+2. Mark the current segment `completed` with `actual_end = now`.
+3. Close any open pause.
+4. End the current run with `end_reason = reconfigured`.
+5. Create a new run with the new config snapshot and:
+   - `inherited_focus_minutes` = accumulated focus from step 1.
+   - `inherited_cycle` = cycle number from step 1.
+   - `inherited_from_run_id` = the ending run's ID.
+6. Create a bridge segment: same phase as the interrupted one, with the remaining time from the old config preserved. For example, if the old config had 40-minute focus and 28 minutes were done, the bridge has 12 minutes remaining. After the bridge completes, the new config's cycle rules take over.
 7. Previously completed/interrupted segments from the old run are untouched (invariant 6). The rail continues to show all accumulated green fill.
 
 ### Block transitions
 
 When the timer transitions to a different (adjacent or overlapping) pomodoro event:
-1. End the current run with `end_reason = block_transition`.
-2. Compute whether accumulated focus time exceeds the new event's focus duration threshold.
-3. If so, trigger a break on the new event's run. If not, continue focus with adjusted remaining time.
-4. Create a new run for the new event with its config snapshot.
+
+1. Read the current run's cycle number and accumulated focus minutes in the current cycle (time since last break or session start, excluding pauses).
+2. Mark the current segment `completed` with `actual_end = now`. End the current run with `end_reason = block_transition`.
+3. Create a new run for the new event with:
+   - Config snapshot from the new event's pomodoro settings.
+   - `inherited_focus_minutes` = accumulated focus from step 1.
+   - `inherited_cycle` = cycle number from step 1.
+   - `inherited_from_run_id` = the ending run's ID.
+4. Determine the first phase using the inherited state and the new config:
+   - If `inherited_focus_minutes >= focus_duration_minutes`: start with a break (short or long based on `inherited_cycle` vs `pomodoro_count`).
+   - Otherwise: start with focus lasting `focus_duration_minutes - inherited_focus_minutes` minutes.
+
+Example: event A (40/5/10) is on cycle 2 with 30 minutes of focus done. Event B (25/5/15) begins. The new run gets `inherited_focus_minutes=30`, `inherited_cycle=2`. Since 30 >= 25 and cycle 2 < 4, B starts with a short break (5 min per B's config), then a full 25-minute focus.
 
 ### App close and reopen
 
@@ -293,15 +362,7 @@ This is safe because:
 - Pauses are individual rows, not JSON blobs. No string surgery is needed to close an open pause.
 - The worst-case data loss is ~30 seconds (one heartbeat interval).
 
-### Why pauses are rows, not JSON
-
-In the earlier design, pauses were stored as a JSON array (`[[startIso, endIsoOrNull], ...]`) inside the segment row. This had three problems:
-
-1. **Crash recovery required JSON string manipulation in SQL.** The cleanup query used `REPLACE(pause_log, 'null]', ...)` which is fragile and can corrupt data if there are multiple open intervals or unexpected formatting.
-2. **Not queryable for analytics.** Answering "what is the average idle duration by time of day" required parsing JSON in every row.
-3. **Not atomic.** Updating a pause meant reading the full JSON, appending to the array, serializing, and writing the full blob. A crash during this sequence could produce corrupted JSON.
-
-Individual rows solve all three: recovery is a simple `UPDATE WHERE ended_at IS NULL`, analytics uses normal SQL aggregation, and each pause write is atomic.
+See "Why pauses are rows, not JSON" under the data model section for the rationale behind this design.
 
 ## Rail rendering
 
@@ -351,6 +412,8 @@ As time passes during the gap (before restart), these projected break positions 
 When the user restarts (via auto-start or manually), the projected breaks become the actual plan and lock in place.
 
 **Why projected breaks are shown during a gap:** break marks are a visual incentive. They tell the user "it's not too late, you can keep going, your next break is right there." Removing break marks after a stop sends the message "your session is over, you failed, close the app." Showing them says "come back, it's not a big deal, just keep going." This is a deliberate product decision aligned with the anti-procrastination philosophy.
+
+**Why projected breaks are not stored:** projected breaks during a gap are ephemeral. They shift every moment as "now" changes, and if the user never restarts, they never correspond to any run. Storing them would mean recording predictions for every possible restart time, which is unbounded data for zero analytical value. The gap itself (between the stopped run's `ended_at` and the next run's `started_at`) is fully preserved and analyzable from the runs table.
 
 ### Past overlay
 
@@ -427,7 +490,7 @@ After a break timer reaches 0, overtime accumulates for up to 30 minutes. The br
 
 ### Session stop
 
-Stopping a session (manually, from idle overlay, or any other trigger) marks the current segment `interrupted` and ends the run. No future segments exist to clean up because segments are created lazily. The event remains on the calendar. Auto-start will create a new session within 30 seconds if the event still has remaining time.
+Stopping a session (manually, from idle overlay, or any other trigger) marks the current segment `interrupted` and ends the run. No future segments exist to clean up because each segment is only written when its phase begins. The event remains on the calendar. Auto-start will create a new session within 30 seconds if the event still has remaining time.
 
 On restart, the focus timer begins at the full configured duration. The user's concentration is assumed broken by any interruption. Remaining time from the previous session is not carried over.
 
