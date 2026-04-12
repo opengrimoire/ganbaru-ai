@@ -52,13 +52,14 @@
   data-event-id={event.id}
   class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]
     {editing || preview ? 'chip-editing' : ''}
-    {isPast && !editing && !preview && !isDark ? 'chip-past-light' : ''}"
+    {isPast && !editing && !preview && !isDark ? 'chip-past-light' : ''}
+    {isPast && !editing && !preview && isDark ? 'chip-past-dark' : ''}"
   style="
     background-color: {activeColors.bg};
     color: {activeColors.text};
     cursor: grab;
     z-index: 1;
-    filter: {isPast && !editing && !preview ? (isDark ? 'brightness(0.7)' : 'saturate(0.8)') : 'none'};
+    filter: none;
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
     --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
     {isFree ? 'border-left: 2px dashed currentColor;' : ''}
@@ -84,7 +85,7 @@
 
 <style>
   .allday-chip {
-    transition: box-shadow 180ms ease-out, filter 180ms ease-out;
+    transition: box-shadow 180ms ease-out;
   }
 
   /* Past-light overlay: always present, opacity-controlled for smooth fade */
@@ -101,6 +102,11 @@
   }
 
   .chip-past-light::before {
+    opacity: 1;
+  }
+
+  .chip-past-dark::before {
+    background: rgba(0, 0, 0, 0.3);
     opacity: 1;
   }
 

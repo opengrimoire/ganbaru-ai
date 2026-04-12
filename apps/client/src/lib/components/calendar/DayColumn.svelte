@@ -145,21 +145,6 @@
     return merged;
   });
 
-  /** Does the grid line at `minute` fall within any rail segment? */
-  function isMinuteInRail(minute: number): boolean {
-    return railSegments.some(seg => seg.start <= minute && seg.end >= minute);
-  }
-
-  const subHourOffsets = $derived.by(() => {
-    const gm = calZoom.gridMinutes;
-    const spacing = (gm / 60) * calZoom.hourHeight;
-    if (spacing < 8) return [];
-    const offsets: number[] = [];
-    for (let m = gm; m < 60; m += gm) {
-      offsets.push(m);
-    }
-    return offsets;
-  });
 
   // Load persisted segments from DB for all pomodoro events on this day
   interface DbSegmentRow {
@@ -566,7 +551,7 @@
     const hh = calZoom.hourHeight;
     const offsetY = e.clientY - colRect.top;
     const rawMinute = (offsetY / hh) * 60;
-    if (isMinuteInRail(rawMinute)) return;
+    if (railSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
     const minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
     onCreateStart(dateStr, minute, e);
   }
@@ -598,27 +583,21 @@
     </div>
   {/if}
 
-  <!-- Gridlines (offset only where a rail segment covers that line) -->
+  <!-- Hourly gridlines (23 solid lines, one at each hour boundary) -->
   {#each hours as hour}
     {#if hour < 23}
       <div
-        class="pointer-events-none absolute right-0"
-        style="left: {isMinuteInRail((hour + 1) * 60) ? railWidth + 4 : 0}px; top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px); border-bottom: 1px solid var(--cal-gridline);"
+        class="pointer-events-none absolute left-0 right-0"
+        style="top: calc({hour + 1} * var(--hour-h) * 1px); height: 0; border-bottom: 1px solid var(--cal-gridline);"
       ></div>
     {/if}
-    {#each subHourOffsets as subMinute}
-      <div
-        class="pointer-events-none absolute right-0"
-        style="left: {isMinuteInRail(hour * 60 + subMinute) ? railWidth + 4 : 0}px; top: calc({hour * 60 + subMinute} / 60 * var(--hour-h) * 1px); height: 0; border-bottom: 1px dashed var(--cal-gridline); opacity: 0.4;"
-      ></div>
-    {/each}
   {/each}
 
   <!-- Past time dimming overlay (full width, behind rail and content) -->
   {#if pastOverlayMinutes > 0}
     <div
       class="pointer-events-none absolute left-0 right-0 top-0 z-[1]"
-      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay); will-change: transform;"
+      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay);"
     ></div>
   {/if}
 

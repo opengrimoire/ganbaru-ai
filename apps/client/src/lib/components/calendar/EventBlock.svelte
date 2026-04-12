@@ -64,7 +64,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {isPast && !editing && !preview && isDark ? 'past-dark' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -73,7 +73,7 @@
     color: {activeColors.text};
     cursor: grab;
     z-index: {editing ? 45 : 1};
-    filter: {isPast && !editing && !preview ? (isDark ? 'brightness(0.7)' : 'saturate(0.8)') : 'none'};
+    filter: none;
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
     --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
   "
@@ -167,6 +167,16 @@
     position: absolute;
     inset: 0;
     background: rgba(255, 255, 255, 0.3);
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .past-dark::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
     border-radius: inherit;
     pointer-events: none;
     z-index: 1;

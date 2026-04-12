@@ -145,7 +145,7 @@
   function onWheel(e: WheelEvent) {
     if (e.ctrlKey) {
       e.preventDefault();
-      if (!calZoom.isAnimating && scrollContainer) {
+      if (scrollContainer) {
         smoothScroll.cancel();
         const rect = scrollContainer.getBoundingClientRect();
         calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);
@@ -164,7 +164,7 @@
   function handleHeaderWheel(e: WheelEvent) {
     if (e.ctrlKey) {
       e.preventDefault();
-      if (!calZoom.isAnimating && scrollContainer) {
+      if (scrollContainer) {
         smoothScroll.cancel();
         const rect = scrollContainer.getBoundingClientRect();
         calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);

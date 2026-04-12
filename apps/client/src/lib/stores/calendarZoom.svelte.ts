@@ -1,7 +1,7 @@
 const STORAGE_KEY = "ganbaruai-calendar-zoom";
 const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
 const DEFAULT_INDEX = 2; // 67px
-const GESTURE_QUIET = 500; // ms of silence before accepting the next gesture
+const GESTURE_QUIET = 300; // ms of silence before committing the final zoom level
 const ANIM_DURATION = 300; // ms
 
 function findClosestIndex(height: number): number {
@@ -41,7 +41,6 @@ let levelIndex = findClosestIndex(loadSaved());
 let hourHeight = $state(ZOOM_LEVELS[levelIndex]);
 let liveHeight = ZOOM_LEVELS[levelIndex];
 
-let locked = false;
 let gestureTimer = 0;
 let frozenContainer: HTMLElement | null = null;
 
@@ -86,11 +85,13 @@ function animTick(now: number) {
 
 function commitState() {
   gestureTimer = 0;
-  locked = false;
+  liveHeight = ZOOM_LEVELS[levelIndex];
   hourHeight = ZOOM_LEVELS[levelIndex];
   persist();
   if (frozenContainer) {
     const sc = frozenContainer;
+    // Ensure the final CSS value is exact (not a rounded intermediate)
+    sc.style.setProperty("--hour-h", String(ZOOM_LEVELS[levelIndex]));
     frozenContainer = null;
     requestAnimationFrame(() => {
       if (frozenContainer) return;
@@ -110,15 +111,11 @@ export function getCalendarZoom() {
     get isAnimating() {
       return gestureTimer !== 0;
     },
-    /** Step to the next/previous zoom level, once per scroll gesture. */
+    /** Step to the next/previous zoom level. Retargets if already animating. */
     zoomAt(deltaY: number, viewportY: number, stickyHeight: number, scrollContainer: HTMLElement) {
       clearTimeout(gestureTimer);
-      // Wait for both the gesture to settle AND the animation to finish
       const commitDelay = Math.max(GESTURE_QUIET, ANIM_DURATION + 50);
       gestureTimer = window.setTimeout(commitState, commitDelay);
-
-      if (locked) return;
-      locked = true;
 
       const direction = deltaY > 0 ? -1 : 1;
       const targetIndex = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, levelIndex + direction));
@@ -130,7 +127,7 @@ export function getCalendarZoom() {
       scrollContainer.style.overflowY = "hidden";
       frozenContainer = scrollContainer;
 
-      // Capture state for scroll-position preservation across frames
+      // Retarget from the current animated position (not the original start)
       animInitScrollTop = scrollContainer.scrollTop;
       animInitHeight = liveHeight;
       animFrom = liveHeight;
@@ -150,7 +147,6 @@ export function getCalendarZoom() {
       }
       clearTimeout(gestureTimer);
       gestureTimer = 0;
-      locked = false;
       if (frozenContainer) {
         frozenContainer.style.overflowY = "";
         frozenContainer = null;
