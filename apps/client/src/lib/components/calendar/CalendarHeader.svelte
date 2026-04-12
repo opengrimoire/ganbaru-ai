@@ -9,14 +9,17 @@
     isPastDay,
   } from "./utils";
   import { getCalendars } from "$lib/stores/calendars.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
+  import Minus from "@lucide/svelte/icons/minus";
   import Layers from "@lucide/svelte/icons/layers";
 
   const calendarsStore = getCalendars();
+  const calZoom = getCalendarZoom();
 
   // Calendar account selector state
   let showAccountPicker = $state(false);
@@ -382,6 +385,28 @@
     title="Go to today"
   >
     <RotateCcw size={13} />
+  </button>
+
+  <!-- Zoom buttons (temporary, for testing) -->
+  <button
+    onclick={() => calZoom.zoomStep(-1)}
+    disabled={!calZoom.canZoomOut}
+    class="ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomOut
+      ? 'text-muted-foreground/30 cursor-default'
+      : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+    title="Zoom out"
+  >
+    <Minus size={13} />
+  </button>
+  <button
+    onclick={() => calZoom.zoomStep(1)}
+    disabled={!calZoom.canZoomIn}
+    class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomIn
+      ? 'text-muted-foreground/30 cursor-default'
+      : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+    title="Zoom in"
+  >
+    <Plus size={13} />
   </button>
 
   <!-- Calendar account picker -->

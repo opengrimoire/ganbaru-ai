@@ -147,8 +147,7 @@
       e.preventDefault();
       if (scrollContainer) {
         smoothScroll.cancel();
-        const rect = scrollContainer.getBoundingClientRect();
-        calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);
+        calZoom.zoomAt(e.deltaY, gutterTopHeight, scrollContainer);
       }
       return;
     }
@@ -164,11 +163,6 @@
   function handleHeaderWheel(e: WheelEvent) {
     if (e.ctrlKey) {
       e.preventDefault();
-      if (scrollContainer) {
-        smoothScroll.cancel();
-        const rect = scrollContainer.getBoundingClientRect();
-        calZoom.zoomAt(e.deltaY, e.clientY - rect.top, gutterTopHeight, scrollContainer);
-      }
       return;
     }
     smoothScroll.cancel();
@@ -187,13 +181,6 @@
     const nowStr = formatDatePart(now);
     if (nowStr !== todayStr) todayStr = nowStr;
   }
-
-  // Sync --hour-h CSS property via setProperty so Svelte's template never
-  // owns it. This prevents re-renders (from scroll events, etc.) from
-  // overwriting the imperative value set during zoom.
-  $effect(() => {
-    scrollContainer?.style.setProperty("--hour-h", String(calZoom.hourHeight));
-  });
 
   onMount(() => {
     updateCurrentTime();
@@ -228,6 +215,34 @@
       document.removeEventListener("visibilitychange", onVisibilityChange);
       scrollContainer?.removeEventListener("scroll", handleScroll);
     };
+  });
+
+  // Sync --hour-h when hourHeight changes outside of a zoom gesture
+  // (e.g. button-driven zoom). Also adjusts scrollTop to keep the
+  // center time stable. Skipped during gestures because the store
+  // manages --hour-h imperatively via applyZoom/commitZoom.
+  $effect(() => {
+    const newH = calZoom.hourHeight;
+    if (!scrollContainer || calZoom.isAnimating) return;
+
+    const oldHStr = scrollContainer.style.getPropertyValue("--hour-h");
+    const oldH = oldHStr ? parseFloat(oldHStr) : newH;
+
+    if (oldH !== newH && oldH > 0) {
+      // Compute center time at old zoom level
+      const viewportH = scrollContainer.clientHeight;
+      const centerOffset = (viewportH - gutterTopHeight) / 2;
+      const centerMinute = (scrollContainer.scrollTop + centerOffset) / oldH * 60;
+
+      // Apply new zoom
+      scrollContainer.style.setProperty("--hour-h", String(newH));
+
+      // Adjust scrollTop to keep the same center time visible
+      const newScrollTop = (centerMinute / 60) * newH - centerOffset;
+      scrollContainer.scrollTop = Math.max(0, newScrollTop);
+    } else {
+      scrollContainer.style.setProperty("--hour-h", String(newH));
+    }
   });
 
   function handleScroll() {
@@ -546,6 +561,11 @@
       {/if}
 
       <!-- Body: one cell per timezone + 7 day columns -->
+      <div
+        data-zoom-body
+        class="grid"
+        style="grid-column: 1 / -1; grid-template-columns: subgrid;"
+      >
       <TimeGutter {timezones} {anchorDate} tzCount={tzCount} />
 
       <div
@@ -578,7 +598,7 @@
         {/each}
 
         <!-- Unified snap line: single element that slides between columns -->
-        {#if snapData !== null && snapCol >= 0}
+        {#if snapData !== null && snapCol >= 0 && !calZoom.isAnimating}
           {@const s = snapData}
           <div
             class="pointer-events-none absolute"
@@ -607,6 +627,7 @@
             </div>
           </div>
         {/if}
+      </div>
       </div>
     </div>
   </div>

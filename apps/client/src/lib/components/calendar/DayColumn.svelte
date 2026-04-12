@@ -349,7 +349,7 @@
       ? `${String(Math.floor(snapOverrideMinute / 60)).padStart(2, "0")}:${String(snapOverrideMinute % 60).padStart(2, "0")}`
       : snapTimeLabel,
   );
-  const snapVisible = $derived(effectiveSnapY !== null && !hideSnapLine);
+  const snapVisible = $derived(effectiveSnapY !== null && !hideSnapLine && !calZoom.isAnimating);
   const snapEffectiveMin = $derived(snapOverrideMinute ?? snapMinute ?? 0);
   const snapAtBottom = $derived(snapEffectiveMin >= 1440 - (2 / calZoom.hourHeight * 60));
 

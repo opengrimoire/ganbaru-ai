@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+
   let {
     scrollContainer,
     stickyTop = 0,
@@ -6,6 +8,8 @@
     scrollContainer: HTMLElement | undefined;
     stickyTop?: number;
   } = $props();
+
+  const calZoom = getCalendarZoom();
 
   let trackEl: HTMLDivElement | undefined = $state();
   let thumbTop = $state(0);
@@ -16,6 +20,10 @@
   let dragStartScrollTop = 0;
 
   function updateThumb() {
+    // Freeze the scrollbar during zoom gestures: scrollTop is held constant
+    // while a CSS transform compensates visually, so the real scroll ratio
+    // is meaningless until the gesture commits.
+    if (calZoom.isAnimating) return;
     if (!scrollContainer || !trackEl) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
     if (scrollHeight <= clientHeight) {

@@ -1,8 +1,8 @@
 const STORAGE_KEY = "ganbaruai-calendar-zoom";
 const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
 const DEFAULT_INDEX = 2; // 67px
-const GESTURE_QUIET = 300; // ms of silence before committing the final zoom level
-const ANIM_DURATION = 300; // ms
+const COMMIT_DELAY = 150; // ms after last wheel event to commit reactive state
+const STEP_COOLDOWN = 150; // ms between zoom level changes (prevents multi-level jumps per frame)
 
 function findClosestIndex(height: number): number {
   let best = 0;
@@ -33,71 +33,63 @@ function deriveGridMinutes(h: number): number {
   return 30;
 }
 
-function easeOut(t: number): number {
-  return 1 - (1 - t) ** 3;
-}
-
 let levelIndex = findClosestIndex(loadSaved());
 let hourHeight = $state(ZOOM_LEVELS[levelIndex]);
-let liveHeight = ZOOM_LEVELS[levelIndex];
 
-let gestureTimer = 0;
-let frozenContainer: HTMLElement | null = null;
+// --- Zoom gesture state ---
+//
+// During Ctrl+Scroll zoom, we batch updates via rAF. Each frame:
+// 1. Read old --hour-h and scrollTop to compute center time
+// 2. Set new --hour-h
+// 3. Adjust scrollTop to keep center time stable
+//
+// This matches what button-driven zoom does (via the $effect in views),
+// but batched for wheel events. No transforms needed.
+let scrollRef: HTMLElement | null = null;
+let stickyH = 0;
+let pendingH = 0;
+let zoomRaf = 0;
+let gestureActive = false;
+let commitTimer = 0;
+let lastStepTime = 0;
 
-// Animation state
-let animRaf = 0;
-let animStart = 0;
-let animFrom = 0;
-let animTo = 0;
-let animVY = 0;
-let animSH = 0;
-let animInitScrollTop = 0;
-let animInitHeight = 0;
+function applyZoom() {
+  zoomRaf = 0;
+  const sc = scrollRef;
+  if (!sc) return;
 
-function persist() {
-  localStorage.setItem(STORAGE_KEY, String(hourHeight));
+  // Read current state
+  const oldHStr = sc.style.getPropertyValue("--hour-h");
+  const oldH = oldHStr ? parseFloat(oldHStr) : pendingH;
+  const viewportH = sc.clientHeight;
+  const centerOffset = (viewportH - stickyH) / 2;
+
+  // Compute center time at old zoom level
+  const centerMinute = (sc.scrollTop + centerOffset) / oldH * 60;
+
+  // Apply new zoom
+  sc.style.setProperty("--hour-h", String(pendingH));
+
+  // Adjust scrollTop to keep center time stable
+  const newScrollTop = (centerMinute / 60) * pendingH - centerOffset;
+  const maxScroll = Math.max(0, 24 * pendingH - viewportH);
+  sc.scrollTop = Math.max(0, Math.min(newScrollTop, maxScroll));
 }
 
-function animTick(now: number) {
-  const sc = frozenContainer;
-  if (!sc) { animRaf = 0; return; }
+function commitZoom() {
+  commitTimer = 0;
+  gestureActive = false;
+  const sc = scrollRef;
 
-  const t = Math.min(1, (now - animStart) / ANIM_DURATION);
-  const eased = easeOut(t);
-  const newH = Math.round(animFrom + (animTo - animFrom) * eased);
+  // Ensure --hour-h is exact (redundant but safe)
+  if (sc) sc.style.setProperty("--hour-h", String(pendingH));
 
-  if (newH !== liveHeight) {
-    const scale = newH / animInitHeight;
-    const contentY = animInitScrollTop + animVY;
-    const timeContentY = Math.max(0, contentY - animSH);
-    sc.scrollTop = animSH + timeContentY * scale - animVY;
-    sc.style.setProperty("--hour-h", String(newH));
-    liveHeight = newH;
-  }
-
-  if (t < 1) {
-    animRaf = requestAnimationFrame(animTick);
-  } else {
-    animRaf = 0;
-    liveHeight = animTo;
-  }
+  // Update Svelte state (triggers reactivity for thresholds like blockPixelHeight)
+  hourHeight = pendingH;
 }
 
-function commitState() {
-  gestureTimer = 0;
-  liveHeight = ZOOM_LEVELS[levelIndex];
-  hourHeight = ZOOM_LEVELS[levelIndex];
-  persist();
-  if (frozenContainer) {
-    const sc = frozenContainer;
-    // Ensure the final CSS value is exact (not a rounded intermediate)
-    sc.style.setProperty("--hour-h", String(ZOOM_LEVELS[levelIndex]));
-    frozenContainer = null;
-    requestAnimationFrame(() => {
-      if (frozenContainer) return;
-      sc.style.overflowY = "";
-    });
-  }
+function persist(h: number) {
+  localStorage.setItem(STORAGE_KEY, String(h));
 }
 
 export function getCalendarZoom() {
@@ -109,52 +101,73 @@ export function getCalendarZoom() {
       return deriveGridMinutes(hourHeight);
     },
     get isAnimating() {
-      return gestureTimer !== 0;
+      return gestureActive;
     },
-    /** Step to the next/previous zoom level. Retargets if already animating. */
-    zoomAt(deltaY: number, viewportY: number, stickyHeight: number, scrollContainer: HTMLElement) {
-      clearTimeout(gestureTimer);
-      const commitDelay = Math.max(GESTURE_QUIET, ANIM_DURATION + 50);
-      gestureTimer = window.setTimeout(commitState, commitDelay);
-
+    /** Snap to the next/previous zoom level. Anchor is the vertical center of the visible time grid. */
+    zoomAt(deltaY: number, stickyHeight: number, scrollContainer: HTMLElement) {
       const direction = deltaY > 0 ? -1 : 1;
       const targetIndex = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, levelIndex + direction));
       if (targetIndex === levelIndex) return;
 
-      levelIndex = targetIndex;
-
-      // Freeze the container so the compositor cannot scroll it
-      scrollContainer.style.overflowY = "hidden";
-      frozenContainer = scrollContainer;
-
-      // Retarget from the current animated position (not the original start)
-      animInitScrollTop = scrollContainer.scrollTop;
-      animInitHeight = liveHeight;
-      animFrom = liveHeight;
-      animTo = ZOOM_LEVELS[targetIndex];
-      animStart = performance.now();
-      animVY = viewportY;
-      animSH = stickyHeight;
-
-      if (!animRaf) {
-        animRaf = requestAnimationFrame(animTick);
+      // Enforce minimum interval between level changes so each step gets
+      // its own paint frame. Without this, fast scrolling batches multiple
+      // level jumps into one rAF, causing a large layout flash.
+      const now = performance.now();
+      if (gestureActive && now - lastStepTime < STEP_COOLDOWN) {
+        // Still reset commit timer so the gesture stays alive
+        clearTimeout(commitTimer);
+        commitTimer = window.setTimeout(commitZoom, COMMIT_DELAY);
+        return;
       }
+      lastStepTime = now;
+
+      // Capture refs on first event of the gesture
+      if (!gestureActive) {
+        scrollRef = scrollContainer;
+        stickyH = stickyHeight;
+        gestureActive = true;
+      }
+
+      levelIndex = targetIndex;
+      pendingH = ZOOM_LEVELS[targetIndex];
+
+      if (!zoomRaf) {
+        zoomRaf = requestAnimationFrame(applyZoom);
+      }
+
+      clearTimeout(commitTimer);
+      commitTimer = window.setTimeout(commitZoom, COMMIT_DELAY);
+      persist(pendingH);
     },
     reset() {
-      if (animRaf) {
-        cancelAnimationFrame(animRaf);
-        animRaf = 0;
+      if (zoomRaf) {
+        cancelAnimationFrame(zoomRaf);
+        zoomRaf = 0;
       }
-      clearTimeout(gestureTimer);
-      gestureTimer = 0;
-      if (frozenContainer) {
-        frozenContainer.style.overflowY = "";
-        frozenContainer = null;
-      }
+      clearTimeout(commitTimer);
+      commitTimer = 0;
+      gestureActive = false;
       levelIndex = DEFAULT_INDEX;
-      liveHeight = ZOOM_LEVELS[DEFAULT_INDEX];
       hourHeight = ZOOM_LEVELS[DEFAULT_INDEX];
-      persist();
+      if (scrollRef) {
+        scrollRef.style.setProperty("--hour-h", String(ZOOM_LEVELS[DEFAULT_INDEX]));
+      }
+      persist(ZOOM_LEVELS[DEFAULT_INDEX]);
+    },
+    get canZoomIn() {
+      return hourHeight < ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+    },
+    get canZoomOut() {
+      return hourHeight > ZOOM_LEVELS[0];
+    },
+    /** Button-driven zoom: no transform dance, just update the level instantly. */
+    zoomStep(direction: 1 | -1) {
+      const targetIndex = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, levelIndex + direction));
+      if (targetIndex === levelIndex) return;
+      levelIndex = targetIndex;
+      const newH = ZOOM_LEVELS[targetIndex];
+      hourHeight = newH;
+      persist(newH);
     },
   };
 }
