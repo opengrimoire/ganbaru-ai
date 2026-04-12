@@ -143,11 +143,13 @@
   const smoothScroll = createSmoothScroll(() => scrollContainer);
 
   function onWheel(e: WheelEvent) {
-    if (e.ctrlKey) {
+    if (e.ctrlKey || e.shiftKey) {
       e.preventDefault();
       if (scrollContainer) {
         smoothScroll.cancel();
-        calZoom.zoomAt(e.deltaY, gutterTopHeight, scrollContainer);
+        // Shift+Scroll converts deltaY to deltaX for horizontal scrolling, so check both
+        const delta = e.shiftKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        calZoom.zoomAt(delta, gutterTopHeight, scrollContainer);
       }
       return;
     }
@@ -161,7 +163,7 @@
   }
 
   function handleHeaderWheel(e: WheelEvent) {
-    if (e.ctrlKey) {
+    if (e.ctrlKey || e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
       return;

@@ -268,7 +268,7 @@
   let lastClientX: number | null = $state(null);
   let lastClientY: number | null = $state(null);
   let scrollSnapTimer = 0;
-  let ctrlPressed = $state(false);
+  let zoomModifierPressed = $state(false); // Ctrl or Shift held for zoom
 
   // Clear snap position when dragging starts (keeps mouse coords for restore)
   $effect(() => {
@@ -308,13 +308,13 @@
       lastClientY = null;
     }
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Control") {
-        ctrlPressed = true;
+      if (e.key === "Control" || e.key === "Shift") {
+        zoomModifierPressed = true;
         snapMinute = null;
       }
     }
     function handleKeyUp(e: KeyboardEvent) {
-      if (e.key === "Control") ctrlPressed = false;
+      if (e.key === "Control" || e.key === "Shift") zoomModifierPressed = false;
     }
     window.addEventListener("blur", clearSnap);
     window.addEventListener("keydown", handleKeyDown);
@@ -363,7 +363,7 @@
       ? `${String(Math.floor(snapOverrideMinute / 60)).padStart(2, "0")}:${String(snapOverrideMinute % 60).padStart(2, "0")}`
       : snapTimeLabel,
   );
-  const snapVisible = $derived(effectiveSnapY !== null && !hideSnapLine && !calZoom.isAnimating && !ctrlPressed);
+  const snapVisible = $derived(effectiveSnapY !== null && !hideSnapLine && !calZoom.isAnimating && !zoomModifierPressed);
   const snapEffectiveMin = $derived(snapOverrideMinute ?? snapMinute ?? 0);
   const snapAtBottom = $derived(snapEffectiveMin >= 1440 - (2 / calZoom.hourHeight * 60));
 
@@ -525,7 +525,7 @@
     if (!columnEl) return;
 
     // Skip ALL processing during zoom (Ctrl held or animating) to prevent forced layout recalculations
-    if (ctrlPressed || calZoom.isAnimating) {
+    if (zoomModifierPressed || calZoom.isAnimating) {
       snapMinute = null;
       return;
     }
@@ -576,7 +576,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative min-w-0 {ctrlPressed ? 'zoom-active' : proximityResize ? 'cursor-ns-resize' : 'cursor-crosshair'}"
+  class="relative min-w-0 {zoomModifierPressed ? 'zoom-active' : proximityResize ? 'cursor-ns-resize' : 'cursor-crosshair'}"
   style="height: calc(24 * var(--hour-h) * 1px); contain: layout style;"
   onmousemove={handleColumnMouseMove}
   onmouseleave={handleColumnMouseLeave}
@@ -666,7 +666,7 @@
   {#each hours as hour}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="absolute w-full {draggingEventId ? 'pointer-events-none' : ctrlPressed ? '' : proximityResize ? 'cursor-ns-resize' : 'cursor-crosshair'}"
+      class="absolute w-full {draggingEventId ? 'pointer-events-none' : zoomModifierPressed ? '' : proximityResize ? 'cursor-ns-resize' : 'cursor-crosshair'}"
       style="top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px);"
       onpointerdown={(e) => handleSlotPointerDown(e, hour)}
     ></div>
