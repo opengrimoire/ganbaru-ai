@@ -2,7 +2,7 @@ const STORAGE_KEY = "ganbaruai-calendar-zoom";
 const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
 const DEFAULT_INDEX = 2; // 67px
 const ANIM_DURATION = 150; // ms for smooth zoom animation
-const GESTURE_END_DELAY = 250; // ms of silence to consider gesture ended
+const WHEEL_COOLDOWN = 120; // ms between wheel-triggered zoom steps
 
 function findClosestIndex(height: number): number {
   let best = 0;
@@ -46,10 +46,7 @@ let stickyH = 0;
 let zoomRaf = 0;
 let gestureActive = false;
 let commitTimer = 0;
-
-// Wheel gesture state: one gesture = one zoom step
-let wheelGestureActive = false;
-let wheelGestureTimer = 0;
+let lastWheelZoom = 0;
 
 // Animation state
 let animating = false;
@@ -154,11 +151,6 @@ function commitZoom() {
   }
 }
 
-function endWheelGesture() {
-  wheelGestureTimer = 0;
-  wheelGestureActive = false;
-}
-
 function persist(h: number) {
   localStorage.setItem(STORAGE_KEY, String(h));
 }
@@ -174,24 +166,17 @@ export function getCalendarZoom() {
     get isAnimating() {
       return gestureActive || animating;
     },
-    /** Ctrl+Scroll handler: one scroll gesture = one zoom step. */
+    /** Ctrl+Scroll handler: triggers zoomStep with a short cooldown. */
     zoomAt(deltaY: number, stickyHeight: number, scrollContainer: HTMLElement) {
+      const now = performance.now();
+      if (now - lastWheelZoom < WHEEL_COOLDOWN) return;
+      lastWheelZoom = now;
+
       // Capture scroll container reference
       if (!scrollRef) {
         scrollRef = scrollContainer;
         stickyH = stickyHeight;
       }
-
-      // If we're already in a wheel gesture, just reset the end timer
-      if (wheelGestureActive) {
-        clearTimeout(wheelGestureTimer);
-        wheelGestureTimer = window.setTimeout(endWheelGesture, GESTURE_END_DELAY);
-        return;
-      }
-
-      // First event of a new gesture: trigger one zoom step
-      wheelGestureActive = true;
-      wheelGestureTimer = window.setTimeout(endWheelGesture, GESTURE_END_DELAY);
 
       const direction = deltaY > 0 ? -1 : 1;
       this.zoomStep(direction);
@@ -202,12 +187,10 @@ export function getCalendarZoom() {
         zoomRaf = 0;
       }
       clearTimeout(commitTimer);
-      clearTimeout(wheelGestureTimer);
       commitTimer = 0;
-      wheelGestureTimer = 0;
       gestureActive = false;
       animating = false;
-      wheelGestureActive = false;
+      lastWheelZoom = 0;
       levelIndex = DEFAULT_INDEX;
       hourHeight = ZOOM_LEVELS[DEFAULT_INDEX];
       if (scrollRef) {
