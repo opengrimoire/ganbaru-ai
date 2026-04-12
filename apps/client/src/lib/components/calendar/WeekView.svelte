@@ -163,6 +163,7 @@
   function handleHeaderWheel(e: WheelEvent) {
     if (e.ctrlKey) {
       e.preventDefault();
+      e.stopPropagation();
       return;
     }
     smoothScroll.cancel();
@@ -564,7 +565,7 @@
       <div
         data-zoom-body
         class="grid"
-        style="grid-column: 1 / -1; grid-template-columns: subgrid;"
+        style="grid-column: 1 / -1; grid-template-columns: subgrid; {calZoom.isAnimating ? 'pointer-events: none;' : ''}"
       >
       <TimeGutter {timezones} {anchorDate} tzCount={tzCount} />
 

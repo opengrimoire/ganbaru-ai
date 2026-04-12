@@ -20,9 +20,9 @@
   let dragStartScrollTop = 0;
 
   function updateThumb() {
-    // Freeze the scrollbar during zoom gestures: scrollTop is held constant
-    // while a CSS transform compensates visually, so the real scroll ratio
-    // is meaningless until the gesture commits.
+    // Freeze the scrollbar during zoom gestures to avoid forced reflows
+    // that cause visual flashes. The scrollbar updates on the next
+    // scroll or resize event after the zoom gesture completes.
     if (calZoom.isAnimating) return;
     if (!scrollContainer || !trackEl) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
@@ -44,12 +44,14 @@
     if (!el) return;
     updateThumb();
     el.addEventListener("scroll", updateThumb, { passive: true });
+    el.addEventListener("zoomcommit", updateThumb);
     const observer = new ResizeObserver(updateThumb);
     observer.observe(el);
     const content = el.firstElementChild;
     if (content) observer.observe(content as Element);
     return () => {
       el.removeEventListener("scroll", updateThumb);
+      el.removeEventListener("zoomcommit", updateThumb);
       observer.disconnect();
     };
   });
