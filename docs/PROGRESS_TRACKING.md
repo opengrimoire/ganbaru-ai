@@ -4,6 +4,120 @@ This document specifies the intended behavior for how GanbaruAI tracks and rende
 
 **Maintenance rule:** every section that describes behavior must include at least one practical example showing what the user does, what the app does in response, and what the user sees. When adding or editing a section, add or update examples to match the new behavior. Examples use concrete timestamps, event names, and config values. They describe the user's perspective, not internal function calls. If a section is particularly fragile or easy to misimplement, add multiple examples covering the common path and the edge cases.
 
+## Cross-cutting hazards
+
+This section lists the situations that are most likely to produce bugs, data corruption, or confusing UX. Every implementer, reviewer, and AI agent working on this system should internalize these before writing or modifying code. Each hazard describes what makes it dangerous, gives a concrete scenario, and points to which sections of this spec govern the correct behavior.
+
+### 1. Event boundary timing
+
+**Why it's dangerous:** block expiration, auto-start, and consecutive-event transitions all race for the same moment. If the expiration handler fires before the transition handler checks for the next event, inherited state is lost and the user sees a fresh session instead of a continuation.
+
+**Scenario:** the user has "Deep Work" 09:00-11:00 and "Code Review" 11:00-13:00, both with pomodoro enabled. At 10:48 the user starts a 25-minute focus. At 11:00, "Deep Work" expires. The system must: (a) end the current run on "Deep Work" with `end_reason=block_transition`, (b) compute `inherited_focus_minutes=12` (the 12 minutes of focus done from 10:48 to 11:00), (c) create a new run on "Code Review" with those inherited values so the remaining 13 minutes carry over. If the expiration handler simply ends the run and a separate auto-start handler creates a fresh run, those 12 minutes vanish.
+
+**Governed by:** session lifecycle (block expiration with transition), data model (inherited fields on runs), invariant 6.
+
+**Variation: tiny gaps.** If "Code Review" starts at 11:02 instead of 11:00, there is a 2-minute gap. The system should still attempt inheritance if the gap is within a configurable threshold (e.g. 5 minutes). Outside that threshold, the next event auto-starts fresh.
+
+**Variation: events shorter than one focus period.** A 15-minute event with 25-minute focus config will never complete a full cycle. The run starts, produces one focus segment, and the block expires before the focus period ends. The segment is marked `interrupted` with actual duration = 15 minutes. No break segment is created. The inherited focus for the next event is 15 minutes. If there is no next event, the run simply ends.
+
+### 2. Concurrent user edits while a session is running
+
+**Why it's dangerous:** the user can interact with the calendar while a pomodoro session is active. Dragging, resizing, deleting, converting, or reconfiguring an event that owns the active run can invalidate assumptions the timer is relying on.
+
+**Scenario: resize while running.** The user has a session active on "Study" 14:00-16:00. At 14:45, they drag the end edge to 15:00, shortening the event by an hour. The active run's block now expires in 15 minutes instead of 75. The system must re-evaluate the block boundary and schedule an earlier expiration. If the resize is not propagated to the timer, the session continues past the event boundary.
+
+**Scenario: delete while running.** The user tries to delete the active event. For a past or in-progress event, the system must refuse and offer archive instead (invariant 7). If the event is future-only (no tracking data), it can be deleted, but this case cannot arise if a session is currently running on it.
+
+**Scenario: convert away from pomodoro.** The user disables the pomodoro toggle on the active event. The system must stop the session (end the run with `end_reason=stopped`), save all segment data, and remove the rail rendering. Re-enabling pomodoro later starts a fresh session, no inheritance.
+
+**Scenario: reconfigure while running.** The user changes focus duration from 25 to 40 minutes while in a focus phase at minute 18. The system must: end the current run (`end_reason=reconfigured`), create a new run with the new config, carry `inherited_focus_minutes=18` and `inherited_cycle` from the old run, and create a bridge focus segment with remaining time computed under the new config (40-18=22 minutes).
+
+**Governed by:** session lifecycle (reconfiguration), event lifecycle (active events), invariant 6.
+
+### 3. Crash, suspend, or kill at critical moments
+
+**Why it's dangerous:** the app can die at any point, including mid-transaction. The heartbeat mechanism (updated every ~30 seconds) is the recovery signal, but the window between last heartbeat and actual crash can contain important state changes. Phase transitions, pause writes, and reconfigurations are particularly vulnerable because they involve multiple table writes.
+
+**Scenario: crash during phase transition.** The focus phase ends at 14:25. The system needs to: (a) update the focus segment to `completed`, (b) create the break segment. If the app crashes after (a) but before (b), recovery finds a completed focus segment with no following break. The system should not retroactively insert a break; instead, the missing break is treated as a skipped break.
+
+**Scenario: laptop suspend during focus.** The user closes the laptop at 14:20 during a focus phase that started at 14:00. The last heartbeat is at 14:20. The user opens the laptop at 16:00. Recovery detects: last heartbeat (14:20) is far behind the current time. The active segment's actual end is set to 14:20 (the last heartbeat), status becomes `interrupted`. The idle gap from 14:20 to 16:00 is empty rail (gray). The user sees a prompt to start a new session.
+
+**Scenario: crash during pause write.** The user triggers a pause at 14:30. The system needs to insert a row into `pomodoro_pauses`. If it crashes before the write commits, recovery finds no pause record. The segment's green fill extends to the last heartbeat, which is correct (the user was focusing up to that point, the pause hadn't been saved). No data is fabricated.
+
+**Governed by:** crash resilience, data model (heartbeat, pause rows), invariant 5.
+
+### 4. Overlapping events, containment, and auto-start tiebreakers
+
+**Why it's dangerous:** overlapping pomodoro events interact in two ways that compound each other. First, the timeline band algorithm must decide which event's schedule owns each time slot, handling nested containment hierarchies when three or more events stack. Second, when multiple events could auto-start simultaneously (same start time, or app opened mid-overlap), the system must deterministically pick one. If the containment logic and the auto-start logic use different priority rules, the rail shows one event's schedule while the timer runs on another.
+
+**Scenario: triple stack.** "Work Block" 09:00-17:00, "Sprint" 10:00-15:00, "Quick Task" 11:00-11:30. All have pomodoro enabled. The containment algorithm must: identify "Quick Task" as contained in "Sprint", "Sprint" as contained in "Work Block". The rail shows: "Work Block"'s schedule from 09:00-10:00, "Sprint"'s from 10:00-11:00, "Quick Task"'s from 11:00-11:30, "Sprint"'s from 11:30-15:00, "Work Block"'s from 15:00-17:00. If any of these three has an active session, that session's event takes priority regardless of containment.
+
+**Scenario: active session on the contained event.** The user starts a session on "Quick Task" at 11:00. At 11:15, the rail shows "Quick Task"'s green fill from 11:00-11:15, not "Sprint"'s or "Work Block"'s schedule. "Quick Task" owns that time slot even though it's the shortest event. When "Quick Task" ends at 11:30, "Sprint" reclaims the rail.
+
+**Scenario: two events at 09:00.** "Morning Standup" (09:00-09:30) and "Deep Work" (09:00-12:00) both have pomodoro enabled and auto-start on. The user opens the app at 09:00. Tiebreaker: the shorter event wins (it's more time-sensitive). "Morning Standup" auto-starts. When it ends at 09:30, "Deep Work" auto-starts for its remaining window. If two events have the same duration, fall back to creation order (earliest `created_at` wins). This ensures determinism without requiring the user to manually prioritize.
+
+**Scenario: app opened mid-overlap.** The user opens the app at 09:15. "Morning Standup" (09:00-09:30) and "Deep Work" (09:00-12:00) are both in progress. Neither has an active session. The same tiebreaker applies: "Morning Standup" (shorter remaining duration) auto-starts if auto-start is enabled. If the user already had a session on "Deep Work" that was interrupted, the interrupted session takes priority (the user's last intent matters).
+
+**Governed by:** timeline band computation (5-step algorithm), overlapping events, session lifecycle (auto-start).
+
+### 5. DST transitions and timezone boundary cases
+
+**Why it's dangerous:** all timestamps are stored in UTC, but the user sees local time. A DST transition can make a 60-minute event appear as 0 minutes or 120 minutes in local time. The 2 AM hour can repeat (fall back) or vanish (spring forward).
+
+**Scenario: spring forward.** The user has an event from 01:30 to 03:30 local time. At 02:00, clocks jump to 03:00. In UTC, the event is still 2 hours. In the user's display, it looks like a 1-hour event (01:30-02:00, then 03:00-03:30). The rail must render based on UTC duration (2 hours of rail space), not local-time appearance. The pixel mapping uses UTC elapsed time.
+
+**Scenario: fall back.** The user has an event from 01:00 to 03:00. At 02:00, clocks fall back to 01:00. The UTC duration is still 2 hours. The display might show 01:00-01:00-02:00-03:00 (the 01:00-02:00 hour appears twice). The rail must not duplicate bands for the repeated hour. UTC is the authority.
+
+**Scenario: user travels.** The user creates an event in EST, flies to PST during the day. The event times are stored in UTC. The display shifts by 3 hours, but the data is intact. No recalculation needed.
+
+**Assumption: the system clock is reasonably accurate.** UTC protects against timezone and DST issues, but all timestamps ultimately come from the OS clock. If the clock jumps (NTP correction after boot with a dead CMOS battery, VM resume drift, dual-boot clock mismatch), timestamps within an active session can become logically inconsistent (e.g. a heartbeat before the previous one). This does not corrupt the database at the SQLite level, but it produces bad data for that session. The system does not defend against this because the scenarios are rare, the drift is usually small, and reliable countermeasures (monotonic clocks) do not survive reboots. If a user notices wrong session data, a clock issue is the likely cause.
+
+**Governed by:** data model (UTC timestamps), all rendering logic.
+
+### 6. Sub-second and rapid-succession actions
+
+**Why it's dangerous:** users can click quickly. Debouncing and idempotency guards must prevent duplicate runs, duplicate segments, or corrupted state.
+
+**Scenario: double-click start.** The user double-clicks the "Start" button. Two `startSession` calls fire within 50ms. Without a guard, two runs are created on the same event. The system must check for an existing active run before creating a new one. If a run exists, the second call is a no-op.
+
+**Scenario: rapid skip-skip.** The user presses "Skip Break" twice quickly during a break phase. The first skip ends the break segment and creates the next focus segment. The second skip finds no active break, so it's a no-op. The guard is: "skip break" only operates on an active break segment.
+
+**Scenario: start-stop-start.** The user starts, immediately stops, then immediately starts again. Each action must fully commit before the next begins. After start-stop, the first run is closed (`end_reason=stopped`). The second start creates a fresh run with no inheritance (stop breaks concentration). If the stop hasn't committed when the second start arrives, the start must wait or fail gracefully.
+
+**Governed by:** session lifecycle (all transitions), invariant 2.
+
+### 7. Multiple runs on the same event
+
+**Why it's dangerous:** a single calendar event can accumulate many runs across its lifetime (stop/restart, reconfigurations, crash recovery). Analytics queries that assume one run per event will produce wrong results. The rail rendering must stitch all runs together into a coherent visual.
+
+**Scenario: four runs on one event.** "Deep Work" 09:00-13:00. The user starts at 09:00, stops at 10:30 (run 1, `stopped`). Starts again at 10:45 (run 2, fresh, no inheritance). App crashes at 11:20 (run 2, `interrupted`). Opens app at 11:40, starts again (run 3, fresh). Changes config at 12:00 (run 3 ends `reconfigured`, run 4 starts with inheritance). The rail shows: green 09:00-10:30 (run 1's segments), empty 10:30-10:45, green 10:45-11:20 (run 2's segments up to heartbeat), empty 11:20-11:40, green from 11:40 onward (runs 3 and 4's segments). Break marks come from each run's own config and schedule. All four runs share the same `event_id` and `event_date`.
+
+**Governed by:** data model (runs table, segments by run_id), rail rendering, timeline band computation.
+
+### 8. Pause edge cases
+
+**Why it's dangerous:** pauses create holes in the green fill within a segment. Multiple pauses, pauses at phase boundaries, and zero-green segments are all valid states that rendering and analytics must handle.
+
+**Scenario: multiple pauses in one segment.** Focus from 14:00-14:25. The user pauses at 14:05-14:08, again at 14:15-14:18. Total pause time: 6 minutes. Green fill: 14:00-14:05, 14:08-14:15, 14:18-14:25. The focus timer counts 19 minutes of actual focus. Each pause is its own row in `pomodoro_pauses`.
+
+**Scenario: pause at phase boundary.** The user pauses at 14:24 during a focus phase that ends at 14:25. The pause is still within the focus segment. When the timer reaches 14:25 (or when the user resumes, whichever is later), the focus segment ends and the break begins. The pause does not extend the focus segment's planned end, but it does mean the user only focused for 24 minutes instead of 25. The actual end of the segment is when the phase transitions, not when the planned duration elapses.
+
+**Scenario: zero-green segment.** The user starts a focus, immediately pauses, stays paused for the entire focus duration. The segment has `actualStart`, `actualEnd`, status `completed` (the timer ran out), but every second was paused. Green fill for this segment: nothing. The segment exists in the data model but produces no green on the rail. This is correct.
+
+**Scenario: idle detection triggers pause.** The user stops interacting. After `idle_timeout_minutes`, the system inserts a pause starting at `idle_timeout_minutes` ago (the estimated moment the user became idle). If this retroactive start overlaps with previously rendered green, the green is shortened. The pause row's `started_at` is in the past, not at the detection moment.
+
+**Governed by:** data model (pause rows), rail rendering (green fill rules), session lifecycle (pauses).
+
+### 9. Reconfiguration chain integrity
+
+**Why it's dangerous:** each reconfiguration ends one run and creates another with inherited state. A chain of reconfigurations (user changes config multiple times) creates a chain of runs. If any link in the chain miscalculates inherited values, every subsequent run's plan derivation is wrong.
+
+**Scenario: triple reconfiguration.** Run 1: config 25/5/15, starts at 14:00, 18 minutes of focus done. User changes to 40/5/15 at 14:18. Run 2: `inherited_focus_minutes=18`, bridge focus has 22 minutes remaining. At 14:30, user changes to 30/5/15 (12 minutes into the bridge focus of run 2, so total focus = 18+12=30). Run 3: `inherited_focus_minutes=30`. Since 30 >= 30, run 3 starts with a break. If run 2 had miscalculated its inherited focus (e.g. forgot to add run 1's 18 minutes), run 3 would incorrectly start with focus instead of break.
+
+**Key rule:** `inherited_focus_minutes` on the new run = focus already accumulated in the ending run's current cycle (including any focus inherited by the ending run itself). It is cumulative, not just the delta from the last run.
+
+**Governed by:** data model (inherited fields), session lifecycle (reconfiguration), plan derivation.
+
 ## Overview
 
 When a calendar event has pomodoro enabled, a thin vertical rail appears on the left edge of the day column in the **daily and weekly views** (not the monthly view). This rail visualizes the user's focus progress for the day.
