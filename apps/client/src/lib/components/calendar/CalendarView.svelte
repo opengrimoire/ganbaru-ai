@@ -71,7 +71,7 @@
   const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
 
   // Track when drag operations end to prevent click-to-close after drag
-  let lastDragEndTime = $state(0);
+  let lastDragEndTime = 0;
 
   // Merged event for the panel (original + changes, so panel sees drag/resize updates)
   const panelEvent = $derived.by(() => {
@@ -428,12 +428,10 @@
     viewMode = mode;
   }
 
-  function handleGestureEnd() {
-    // Called at the very start of drag/create end to prevent click-to-close race condition
-    lastDragEndTime = Date.now();
-  }
-
   function handleEventCreate(start: string, end: string, allDay?: boolean) {
+    // Track that a create operation ended (prevents click-to-close)
+    lastDragEndTime = Date.now();
+
     const previewEl = containerEl?.querySelector("[data-create-preview]");
     const rect = previewEl?.getBoundingClientRect();
     const colRect = previewEl?.closest("[data-day-column]")?.getBoundingClientRect();
@@ -957,7 +955,6 @@
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}
-        onGestureEnd={handleGestureEnd}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}
@@ -976,7 +973,6 @@
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}
-        onGestureEnd={handleGestureEnd}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}

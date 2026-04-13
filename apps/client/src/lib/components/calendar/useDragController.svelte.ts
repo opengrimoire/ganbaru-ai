@@ -38,8 +38,6 @@ export interface DragControllerConfig {
   getScrollContainer: () => HTMLElement | null;
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
   onEventCreate: (start: string, end: string) => void;
-  /** Called at the very start of gesture end (before onEventCreate/onEventUpdate) to prevent click-to-close race. */
-  onGestureEnd?: () => void;
   canDrag?: (eventId: string) => boolean;
   /** Returns true if event has completed progress and should not be moved or resized. */
   isEventLocked?: (eventId: string) => boolean;
@@ -330,9 +328,6 @@ export function useDragController(config: DragControllerConfig) {
   }
 
   async function handleDragEnd() {
-    // Notify parent immediately to prevent click-to-close race condition
-    config.onGestureEnd?.();
-
     window.removeEventListener("pointermove", handleDragMove);
     window.removeEventListener("pointerup", handleDragEnd);
     stopAutoScroll();
@@ -412,9 +407,6 @@ export function useDragController(config: DragControllerConfig) {
   }
 
   function handleCreateEnd() {
-    // Notify parent immediately to prevent click-to-close race condition
-    config.onGestureEnd?.();
-
     window.removeEventListener("pointermove", handleCreateMove);
     window.removeEventListener("pointerup", handleCreateEnd);
     stopAutoScroll();

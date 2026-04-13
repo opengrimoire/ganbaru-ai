@@ -32,7 +32,6 @@
     onEventClick,
     onEventUpdate,
     onEventCreate,
-    onGestureEnd,
     editingId,
     previewedIds,
     initialScrollMinute = -1,
@@ -49,7 +48,6 @@
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string, allDay?: boolean) => void;
-    onGestureEnd?: () => void;
     editingId?: string;
     previewedIds?: Set<string>;
     initialScrollMinute?: number;
@@ -313,7 +311,6 @@
     getScrollContainer: () => scrollContainer ?? null,
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
-    onGestureEnd: () => onGestureEnd?.(),
     canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
     activeBlockId: () => pomodoroStore.activeBlockId,
     isEventLocked: (id) => {
