@@ -385,6 +385,8 @@
   const snapAtBlockEdge = $derived.by(() => {
     if (snapMinute === null || hideSnapLine) return null;
     for (const pos of effectivePositioned) {
+      // Skip create preview - we don't want to resize it, we want to continue creating
+      if (pos.event.id.startsWith(PENDING_CREATE_ID) || pos.event.id === "__create__") continue;
       if (panelOpen && pos.event.id !== editingId) continue;
       const startMin = pos.startMinute;
       const endMin = pos.startMinute + pos.durationMinutes;
@@ -459,6 +461,8 @@
     const eventAreaWidth = colWidth - eventAreaLeft;
 
     for (const pos of effectivePositioned) {
+      // Skip create preview - we don't want to resize it, we want to continue creating
+      if (pos.event.id.startsWith(PENDING_CREATE_ID) || pos.event.id === "__create__") continue;
       // When panel is open, only consider the edited event for resize
       if (panelOpen && pos.event.id !== editingId) continue;
 
@@ -535,6 +539,8 @@
       // Snap to block edges when cursor is near them (use same threshold as proximity detection)
       const threshold = getResizeThreshold();
       for (const pos of effectivePositioned) {
+        // Skip create preview - we want to snap to real events, not the preview being created
+        if (pos.event.id.startsWith(PENDING_CREATE_ID) || pos.event.id === "__create__") continue;
         // When panel is open, only snap to edited event's edges
         if (panelOpen && pos.event.id !== editingId) continue;
 

@@ -71,7 +71,7 @@
   const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
 
   // Track when drag operations end to prevent click-to-close after drag
-  let lastDragEndTime = 0;
+  let lastDragEndTime = $state(0);
 
   // Merged event for the panel (original + changes, so panel sees drag/resize updates)
   const panelEvent = $derived.by(() => {
@@ -426,6 +426,11 @@
   function changeView(mode: CalendarViewMode) {
     pushHistory(mode, anchorDate);
     viewMode = mode;
+  }
+
+  function handleGestureEnd() {
+    // Called at the very start of drag/create end to prevent click-to-close race condition
+    lastDragEndTime = Date.now();
   }
 
   function handleEventCreate(start: string, end: string, allDay?: boolean) {
@@ -924,7 +929,8 @@
   // Close panel when clicking on empty calendar space (not on events or panel)
   if (session.state.mode === "closed") return;
   // Don't close if a drag operation just ended (click fires after pointerup)
-  if (Date.now() - lastDragEndTime < 100) return;
+  // Use 500ms threshold to account for initialization delays on first interaction
+  if (Date.now() - lastDragEndTime < 500) return;
   const target = e.target as HTMLElement;
   if (target.closest("[data-event-id]") || target.closest(".panel-root")) return;
   handlePanelClose();
@@ -951,6 +957,7 @@
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}
+        onGestureEnd={handleGestureEnd}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}
@@ -969,6 +976,7 @@
         onEventClick={handleEventClick}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}
+        onGestureEnd={handleGestureEnd}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onWheelNavigate={handleWheelNavigate}
