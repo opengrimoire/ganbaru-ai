@@ -43,22 +43,39 @@ export function buildCreateDisplay(
   // Use changes.end if available (panel provides correct cross-midnight end date),
   // otherwise fall back to the drag preview's same-day end
   const isAllDay = preview.allDay || changes.allDay;
+  const startStr = changes.start ? String(changes.start) : `${preview.dateStr} ${fmtMin(preview.startMinute)}`;
   const endStr = changes.end
     ? String(changes.end)
     : isAllDay && preview.endDateStr
       ? `${preview.endDateStr} 00:00`
       : `${preview.dateStr} ${fmtMin(preview.endMinute)}`;
 
+  // If a real event with the same start/end already exists in the store,
+  // the save operation has completed. Return closedDisplay to avoid
+  // showing both the preview and the real event (which would cause overlap).
+  const realEventExists = storeEvents.some(
+    (e) => e.start === startStr && e.end === endStr && !e.id.startsWith("__")
+  );
+  if (realEventExists) {
+    return closedDisplay(storeEvents);
+  }
+
   const template: CalendarEvent = {
     id: PENDING_CREATE_ID,
     title: preview.title ?? changes.title ?? "",
-    start: changes.start ? String(changes.start) : `${preview.dateStr} ${fmtMin(preview.startMinute)}`,
+    start: startStr,
     end: endStr,
     timezone: "",
     calendarId: "ganbaruai",
     color: preview.color ?? changes.color,
     recurrence: preview.recurrence ?? changes.recurrence,
     pomodoroConfig: changes.pomodoroConfig,
+    notifications: changes.notifications,
+    location: changes.location,
+    description: changes.description,
+    url: changes.url,
+    transparency: changes.transparency,
+    status: changes.status,
     allDay: isAllDay || undefined,
   };
 

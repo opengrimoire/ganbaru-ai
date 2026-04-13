@@ -420,12 +420,20 @@ export function useDragController(config: DragControllerConfig) {
         const endMinute = clampMinute(Math.min(anchor + 30, 1440));
         createPreview = buildPreview(createState.dateStr, anchor, endMinute);
       }
-      config.onEventCreate(createPreview.event.start, createPreview.event.end);
+      // Save values and clear preview state BEFORE calling onEventCreate
+      // This prevents both __create__ and PENDING_CREATE_ID from existing simultaneously
+      // which would cause the layout to see them as overlapping and animate width changes
+      const start = createPreview.event.start;
+      const end = createPreview.event.end;
+      createState = null;
+      createPreview = null;
+      createPreviewDate = null;
+      config.onEventCreate(start, end);
+    } else {
+      createState = null;
+      createPreview = null;
+      createPreviewDate = null;
     }
-
-    createState = null;
-    createPreview = null;
-    createPreviewDate = null;
   }
 
   function buildPreview(

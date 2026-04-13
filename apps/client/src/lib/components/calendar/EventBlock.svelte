@@ -34,6 +34,9 @@
   const colors = $derived(getEventColor(positioned.event.color, isDark));
   const activeColors = $derived(colors);
 
+  // Events with IDs starting with __ are temporary (preview/pending) and should never animate
+  const isTemporaryEvent = $derived(positioned.event.id.startsWith("__"));
+
   const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
   const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
@@ -76,7 +79,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview || grabbing ? 'event-editing' : ''} {isPast && !editing && !preview && !grabbing && !isDark ? 'past-light' : ''} {isPast && !editing && !preview && !grabbing && isDark ? 'past-dark' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {isPast && !editing && !preview && !grabbing && !isDark ? 'past-light' : ''} {isPast && !editing && !preview && !grabbing && isDark ? 'past-dark' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -147,6 +150,11 @@
 
   .event-block-wrapper {
     transition: left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  /* Disable layout transition for events being edited/created to avoid jank */
+  .event-block-wrapper.event-editing {
+    transition: none;
   }
 
   .event-editing::after {
