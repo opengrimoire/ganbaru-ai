@@ -418,6 +418,24 @@
     scope = "this";
     dragOffset = { x: 0, y: 0 };
     userDragged = false;
+
+    // For create mode, emit the initial defaults so the preview shows them
+    // (notifications, pomodoro config, etc.)
+    if (mode === "create") {
+      onChange?.({
+        title: "",
+        start: `${startDate} ${startTime}`,
+        end: `${endDate} ${endTime}`,
+        notifications: collectNotifications(),
+        pomodoroConfig: pomodoroEnabled ? {
+          focusDurationMinutes: focusDuration,
+          shortBreakMinutes: shortBreak,
+          longBreakMinutes: longBreak,
+          pomodoroCount: 4,
+          idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
+        } : undefined,
+      });
+    }
   });
 
   // Sync date/time from event prop when block is dragged/resized externally.
