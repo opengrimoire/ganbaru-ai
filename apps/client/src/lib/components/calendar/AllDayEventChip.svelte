@@ -61,7 +61,6 @@
     z-index: 1;
     filter: none;
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
-    --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
     {isFree ? 'border-left: 2px dashed currentColor;' : ''}
     {isTentative ? 'background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}
   "
@@ -110,25 +109,13 @@
     opacity: 1;
   }
 
-  .allday-chip::after {
+  .chip-editing::after {
     content: "";
     position: absolute;
     inset: 0;
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    border: 1px solid rgba(0, 0, 0, 0.3);
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
-    opacity: 0;
-    transition: opacity 180ms ease-out;
-  }
-
-  .chip-editing {
-    box-shadow:
-      0 0 2px 0 var(--glow-color),
-      0 0 5px 0 color-mix(in srgb, var(--glow-color) 50%, transparent);
-  }
-
-  .chip-editing::after {
-    opacity: 0.7;
   }
 </style>

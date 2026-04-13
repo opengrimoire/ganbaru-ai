@@ -75,7 +75,6 @@
     z-index: {editing ? 45 : 1};
     filter: none;
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
-    --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -139,27 +138,14 @@
     transition: box-shadow 180ms ease-out, left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
   }
 
-  .event-block-wrapper::after {
+  .event-editing::after {
     content: "";
     position: absolute;
     inset: 0;
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    border: 1px solid rgba(0, 0, 0, 0.3);
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
-    opacity: 0;
-    transition: opacity 180ms ease-out;
-  }
-
-  .event-editing {
-    box-shadow:
-      0 0 3px 0 var(--glow-color),
-      0 0 8px 1px var(--glow-color),
-      0 0 16px 2px color-mix(in srgb, var(--glow-color) 40%, transparent);
-  }
-
-  .event-editing::after {
-    opacity: 1;
   }
 
   .past-light::before {
