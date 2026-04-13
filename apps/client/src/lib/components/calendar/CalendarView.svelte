@@ -42,13 +42,18 @@
   const session = createEditSession();
 
   // --- Display events (pure overlay, no store mutation) ---
+  // When saving edits, suppress preview computation to prevent flash
+  // (store updates before session closes, so preview would briefly conflict)
+  let suppressEditPreview = $state(false);
+
   const displayResult = $derived.by(() => {
     const visIds = calendarsStore.visibleIds;
     const storeEvents = calendarStore.events.filter((e) => visIds.has(e.calendarId));
     const s = session.state;
     if (s.mode === "closed") return closedDisplay(storeEvents);
     if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes);
-    // mode === "edit": dispatch by scope
+    // mode === "edit": if saving, skip preview and use store directly
+    if (suppressEditPreview) return closedDisplay(storeEvents);
     // Compute active date for hybrid preview (active session keeps original start)
     let activeDate: string | undefined;
     if (pomodoro.activeBlockId && s.templateId) {
@@ -625,16 +630,16 @@
       const isRec = isRecurring(s.originalEvent);
 
       if (isRec && scope) {
-        // Suppress both editingId and previewedIds so ALL event blocks
-        // lose the glow simultaneously via CSS transition. This prevents
-        // the glow from reappearing on recreated DOM elements after the
-        // store mutation (which runs before session.close).
-        suppressEditingGlow = true;
-
         if (scope === "this") {
-          const standalone = await calendarStore.detachInstance(instanceEvent);
-          const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
-          await calendarStore.updateBlock(updated);
+          // Batch so reexpand() only runs once after both operations complete
+          calendarStore.beginBatch();
+          try {
+            const standalone = await calendarStore.detachInstance(instanceEvent);
+            const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
+            await calendarStore.updateBlock(updated);
+          } finally {
+            calendarStore.endBatch();
+          }
         } else if (scope === "following") {
           const instanceDate = instanceEvent.start.split(" ")[0];
           const templateId = instanceEvent.recurringParentId ?? instanceEvent.id;
@@ -816,13 +821,19 @@
           }
         }
       } else {
-        // Non-recurring: CSS transition handles the fade naturally (same DOM element)
+        // Non-recurring edit
         const updated: CalendarEvent = { ...s.originalEvent, ...data };
         const before = calendarStore.getTemplate(s.originalEvent) ?? s.originalEvent;
         await calendarStore.updateBlock(updated);
         pushUndo({ type: "update", before: { ...before }, after: { ...updated } });
         redoStack = [];
       }
+
+      // After all mutations complete, suppress preview so display uses store directly.
+      // This must happen AFTER mutations (not before) so the preview stays visible
+      // during async operations. Once store has the correct data, we can use it.
+      suppressEditPreview = true;
+      suppressEditingGlow = true;
     }
 
     // Stop session after all mutations complete (hybrid logic needs activeBlockId intact)
@@ -832,6 +843,7 @@
     }
     session.close();
     suppressEditingGlow = false;
+    suppressEditPreview = false;
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {

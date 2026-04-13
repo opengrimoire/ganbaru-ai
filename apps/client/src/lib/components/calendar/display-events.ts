@@ -124,6 +124,12 @@ export function applyNonRecurring(
   originalEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
 ): DisplayResult {
+  // If the original event no longer exists, return store as-is
+  const eventExists = events.some((e) => e.id === originalEvent.id);
+  if (!eventExists) {
+    return closedDisplay(events);
+  }
+
   const merged = { ...originalEvent, ...changes };
   const result = events.map((e) =>
     e.id === originalEvent.id ? { ...e, ...merged, id: e.id } : e,
@@ -146,6 +152,15 @@ export function applyThis(
   changes: Partial<CalendarEvent>,
 ): DisplayResult {
   const targetId = originalEvent.id;
+
+  // If the original event no longer exists in the store (e.g., detached to a
+  // standalone with a new ID), return the store as-is. The preview logic
+  // can't work when the ID has changed.
+  const eventExists = events.some((e) => e.id === targetId);
+  if (!eventExists) {
+    return closedDisplay(events);
+  }
+
   const merged = { ...originalEvent, ...changes };
   const result = events.map((e) =>
     e.id === targetId ? { ...e, ...merged, id: e.id } : e,
