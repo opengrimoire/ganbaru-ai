@@ -6,6 +6,7 @@
   import Bell from "@lucide/svelte/icons/bell";
 
   const calZoom = getCalendarZoom();
+  const RESIZE_ZONE = 6; // pixels from edge for resize detection
 
   let {
     positioned,
@@ -13,6 +14,7 @@
     editing = false,
     preview = false,
     grabbing = false,
+    canDrag = true,
     isPast = false,
     onclick,
     onpointerdown,
@@ -22,6 +24,7 @@
     editing?: boolean;
     preview?: boolean;
     grabbing?: boolean;
+    canDrag?: boolean;
     isPast?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
@@ -38,6 +41,9 @@
   const isTentative = $derived(positioned.event.status === "tentative");
   const isCancelled = $derived(positioned.event.status === "cancelled");
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
+
+  // Track if mouse is in resize zone for cursor
+  let inResizeZone = $state(false);
 
   function handlePointerDown(e: PointerEvent) {
     e.stopPropagation();
@@ -56,6 +62,26 @@
       : eventRect;
     onclick(rect);
   }
+
+  function handleMouseMove(e: MouseEvent) {
+    if (!blockEl || !canDrag) {
+      inResizeZone = false;
+      return;
+    }
+    const rect = blockEl.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const isNearTop = relY < RESIZE_ZONE && !positioned.isClippedTop;
+    const isNearBottom = relY > rect.height - RESIZE_ZONE && !positioned.isClippedBottom;
+    inResizeZone = isNearTop || isNearBottom;
+  }
+
+  function handleMouseLeave() {
+    inResizeZone = false;
+  }
+
+  const effectiveCursor = $derived(
+    !canDrag ? 'pointer' : inResizeZone ? 'ns-resize' : 'grab'
+  );
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -73,13 +99,15 @@
     left: {positioned.left}%;
     width: {positioned.totalColumns > 1 ? `calc(${positioned.width}% - 2px)` : `${positioned.width}%`};
     color: {activeColors.text};
-    cursor: grab;
+    cursor: {effectiveCursor};
     z-index: {editing ? 45 : 1};
     filter: none;
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
+  onmousemove={handleMouseMove}
+  onmouseleave={handleMouseLeave}
 >
   <!-- Resize handle: top (hidden on clipped edge) -->
   {#if !positioned.isClippedTop}
@@ -124,7 +152,6 @@
     left: 0;
     right: 0;
     height: 11px;
-    cursor: ns-resize;
     z-index: 2;
   }
 

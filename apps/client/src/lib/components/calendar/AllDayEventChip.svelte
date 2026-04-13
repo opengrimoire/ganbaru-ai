@@ -10,6 +10,7 @@
     editing = false,
     preview = false,
     grabbing = false,
+    canDrag = true,
     isPast = false,
     onclick,
     onpointerdown,
@@ -19,6 +20,7 @@
     editing?: boolean;
     preview?: boolean;
     grabbing?: boolean;
+    canDrag?: boolean;
     isPast?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
@@ -59,7 +61,7 @@
   style="
     background-color: {activeColors.bg};
     color: {activeColors.text};
-    cursor: grab;
+    cursor: {canDrag ? 'grab' : 'pointer'};
     z-index: 1;
     filter: none;
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};

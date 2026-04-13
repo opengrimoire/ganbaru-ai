@@ -264,7 +264,7 @@
     getScrollContainer: () => scrollContainer ?? null,
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
-    canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
+    canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
     activeBlockId: () => pomodoroStore.activeBlockId,
     isEventLocked: (id) => {
       const ev = events.find((e) => e.id === id);

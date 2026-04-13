@@ -70,6 +70,9 @@
   const previewedIds = $derived(suppressEditingGlow ? new Set<string>() : displayResult.previewedIds);
   const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
 
+  // Track when drag operations end to prevent click-to-close after drag
+  let lastDragEndTime = 0;
+
   // Merged event for the panel (original + changes, so panel sees drag/resize updates)
   const panelEvent = $derived.by(() => {
     const s = session.state;
@@ -472,6 +475,9 @@
   }
 
   async function handleEventUpdate(event: CalendarEvent) {
+    // Track that a drag operation ended (prevents click-to-close)
+    lastDragEndTime = Date.now();
+
     // Pseudo-event from create preview drag/resize
     if (event.id === PENDING_CREATE_ID) {
       if (session.state.mode === "create") {
@@ -526,6 +532,10 @@
 
     // Non-recurring: persist directly (no panel needed for drag)
     const template = calendarStore.getTemplate(event);
+    // Skip DB update if position didn't actually change (drag ended at same spot)
+    if (template && template.start === event.start && template.end === event.end) {
+      return;
+    }
     const before = template ? { ...template } : undefined;
     await calendarStore.updateBlock(event);
     if (before) {
@@ -908,7 +918,17 @@
   }
 </script>
 
-<div bind:this={containerEl} class="relative flex h-full flex-col select-none overflow-hidden">
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div bind:this={containerEl} class="relative flex h-full flex-col select-none overflow-hidden" onclick={(e) => {
+  // Close panel when clicking on empty calendar space (not on events or panel)
+  if (session.state.mode === "closed") return;
+  // Don't close if a drag operation just ended (click fires after pointerup)
+  if (Date.now() - lastDragEndTime < 100) return;
+  const target = e.target as HTMLElement;
+  if (target.closest("[data-event-id]") || target.closest(".panel-root")) return;
+  handlePanelClose();
+}}>
   <CalendarHeader
     {anchorDate}
     {viewMode}
@@ -980,35 +1000,8 @@
   {#if session.state.mode === "create" || session.state.mode === "edit"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="fixed inset-0 z-40" onpointerdown={(e) => {
-      // Forward pointerdown to elements underneath (enables drag/resize)
-      const el = e.currentTarget as HTMLElement;
-      el.style.pointerEvents = 'none';
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      el.style.pointerEvents = '';
-      if (under && under !== el) {
-        under.dispatchEvent(new PointerEvent('pointerdown', e));
-      }
-    }} onclick={(e) => {
-      // Peek under the backdrop to check if an event block was clicked
-      const el = e.currentTarget as HTMLElement;
-      el.style.pointerEvents = 'none';
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      el.style.pointerEvents = '';
-      const eventEl = under?.closest('[data-event-id]');
-      if (eventEl) {
-        (eventEl as HTMLElement).click();
-        return;
-      }
-      handlePanelClose();
-    }} onwheel={(e) => {
-      // Let scroll pass through to the calendar underneath
-      const el = e.currentTarget as HTMLElement;
-      el.style.pointerEvents = 'none';
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      el.style.pointerEvents = '';
-      under?.dispatchEvent(new WheelEvent('wheel', e));
-    }}></div>
+    <!-- Invisible backdrop: pointer-events pass through, clicks on empty space close panel -->
+    <div class="fixed inset-0 z-40 pointer-events-none"></div>
     {#if session.state.mode === "create"}
       <EventPanel
         mode="create"

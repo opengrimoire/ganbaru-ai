@@ -193,32 +193,21 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
 
     const colsChanged = preview.startCol !== state.originStartCol || preview.spanCols !== state.originSpanCols;
 
-    // Check if position actually changed
-    if (!colsChanged) {
-      dragState = null;
-      allDayDragPreview = null;
-      draggingEventId = null;
-      grabbingId = null;
-      return;
-    }
-
     // Suppress the click that fires after pointerup
     if (wasDragging) {
       _didDrag = true;
       setTimeout(() => { _didDrag = false; }, 0);
     }
 
-    // Handle column change (move or resize)
-    if (colsChanged) {
-      const newStartDate = dateStrForCol(preview.startCol);
-      const newEndDate = dateStrForCol(preview.startCol + preview.spanCols - 1);
-
-      await config.onEventUpdate({
-        ...event,
-        start: `${newStartDate} 00:00`,
-        end: `${newEndDate} 00:00`,
-      });
-    }
+    // Always notify parent that drag ended (sets lastDragEndTime to prevent panel close).
+    // The parent checks if position actually changed before doing DB update.
+    const newStartDate = dateStrForCol(preview.startCol);
+    const newEndDate = dateStrForCol(preview.startCol + preview.spanCols - 1);
+    await config.onEventUpdate({
+      ...event,
+      start: `${newStartDate} 00:00`,
+      end: `${newEndDate} 00:00`,
+    });
 
     dragState = null;
     allDayDragPreview = null;

@@ -311,7 +311,7 @@
     getScrollContainer: () => scrollContainer ?? null,
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e) => onEventCreate(s, e),
-    canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
+    canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
     activeBlockId: () => pomodoroStore.activeBlockId,
     isEventLocked: (id) => {
       const ev = events.find((e) => e.id === id);
@@ -336,7 +336,7 @@
     getColumnBounds: getAllDayColumnBounds,
     getPositionedEvents: () => allDayPositioned,
     onEventUpdate: (e) => onEventUpdate(e),
-    canDrag: (id) => !previewedIds || !previewedIds.has(id) || id === editingId,
+    canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
   });
 
   const allDayEffectiveRows = $derived.by(() => {
@@ -519,6 +519,7 @@
                 editing={editingId === pos.event.id}
                 preview={previewedIds?.has(pos.event.id) ?? false}
                 grabbing={allDayDrag.grabbingId === pos.event.id}
+                canDrag={!editingId || pos.event.id === editingId}
                 isPast={endDateStr < todayStr}
                 onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
                 onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}

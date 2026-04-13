@@ -163,7 +163,10 @@ export function useDragController(config: DragControllerConfig) {
         const relY = e.clientY - rect.top;
         const clippedTop = blockEl.hasAttribute("data-clipped-top");
         const clippedBottom = blockEl.hasAttribute("data-clipped-bottom");
-        if (relY <= 6 && !clippedTop) {
+        // Match the resize handle's visible zone (6px inside block after overflow clipping)
+        // Top handle: visible from y=0 to y<6 (6 pixels)
+        // Bottom handle: visible from y>H-6 to y<H (6 pixels, where H is block height)
+        if (relY < 6 && !clippedTop) {
           dragState.type = "resize-top";
         } else if (relY >= rect.height - 6 && !clippedBottom) {
           dragState.type = "resize-bottom";
@@ -335,15 +338,9 @@ export function useDragController(config: DragControllerConfig) {
     const wasDragging = !!dragPreview;
 
     if (dragPreview && state) {
-      // Only save if position actually changed
-      const original = config.events().find((ev) => ev.id === state.eventId);
-      const changed = original && (
-        dragPreview.event.start !== original.start ||
-        dragPreview.event.end !== original.end
-      );
-      if (changed) {
-        await config.onEventUpdate(dragPreview.event);
-      }
+      // Always notify parent that drag ended (sets lastDragEndTime to prevent panel close).
+      // The parent checks if position actually changed before doing DB update.
+      await config.onEventUpdate(dragPreview.event);
     }
 
     // Suppress the click that fires after pointerup
