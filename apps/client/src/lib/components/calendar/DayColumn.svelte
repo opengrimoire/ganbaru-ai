@@ -287,7 +287,7 @@
   $effect(() => {
     if (hideSnapLine) return;
     if (lastClientY === null || !columnEl || calZoom.isAnimating) return;
-    updateSnapFromClientY(lastClientY, true);
+    updateSnapFromClientY(lastClientX, lastClientY, true);
     recheckProximity();
   });
 
@@ -381,13 +381,27 @@
   // Derive resize state from snap line position - if snap is at a block edge, we're in resize mode
   let hoverResizeBlockId: string | null = $state(null);
 
-  // Check if snap line is at a block's edge (the snap line being there IS the resize signal)
+  // Check if snap line is at a block's edge AND mouse is horizontally over the block
   const snapAtBlockEdge = $derived.by(() => {
     if (snapMinute === null || hideSnapLine) return null;
+    if (lastClientX === null || !columnEl) return null;
+
+    // Compute mouse X offset relative to column
+    const colRect = columnEl.getBoundingClientRect();
+    const offsetX = lastClientX - colRect.left;
+    const eventAreaLeft = railWidth + 4;
+    const eventAreaWidth = colRect.width - eventAreaLeft;
+
     for (const pos of effectivePositioned) {
       // Skip the drag gesture preview (not the pending create preview which can be resized)
       if (pos.event.id === "__create__") continue;
       if (panelOpen && pos.event.id !== editingId) continue;
+
+      // Check horizontal bounds: mouse must be over this block
+      const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
+      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
+      if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
+
       const startMin = pos.startMinute;
       const endMin = pos.startMinute + pos.durationMinutes;
       if (snapMinute === startMin && !pos.isClippedTop) {
@@ -527,22 +541,34 @@
     onCreateStart(dateStr, minute, e);
   }
 
-  function updateSnapFromClientY(clientY: number, snap: boolean) {
+  function updateSnapFromClientY(clientX: number | null, clientY: number, snap: boolean) {
     if (!columnEl) return;
     const hh = calZoom.hourHeight;
     const rect = columnEl.getBoundingClientRect();
     const offsetY = clientY - rect.top;
+    const offsetX = clientX !== null ? clientX - rect.left : null;
     const rawMinute = (offsetY / hh) * 60;
     let snapped = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
     if (snap) {
       // Snap to block edges when cursor is near them (use same threshold as proximity detection)
+      // Only snap if cursor is horizontally within the block's bounds
       const threshold = getResizeThreshold();
+      const eventAreaLeft = railWidth + 4;
+      const eventAreaWidth = rect.width - eventAreaLeft;
+
       for (const pos of effectivePositioned) {
         // Skip the drag gesture preview (not the pending create preview which can be resized)
         if (pos.event.id === "__create__") continue;
         // When panel is open, only snap to edited event's edges
         if (panelOpen && pos.event.id !== editingId) continue;
+
+        // Check horizontal bounds: only snap to block edges if mouse is over this block
+        if (offsetX !== null) {
+          const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
+          const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
+          if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
+        }
 
         const blockTop = (pos.startMinute / 60) * hh;
         const blockBottom = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
@@ -573,10 +599,10 @@
     if (lastClientY === null || !columnEl || hideSnapLine) return;
     // During zoom animation, snapLineY auto-tracks via $derived; skip recalculation
     if (calZoom.isAnimating) return;
-    updateSnapFromClientY(lastClientY, false);
+    updateSnapFromClientY(lastClientX, lastClientY, false);
     clearTimeout(scrollSnapTimer);
     scrollSnapTimer = window.setTimeout(() => {
-      if (lastClientY !== null) updateSnapFromClientY(lastClientY, true);
+      if (lastClientY !== null) updateSnapFromClientY(lastClientX, lastClientY, true);
     }, 60);
   }
 
@@ -609,7 +635,7 @@
 
     // Only update snap position when not hidden by drag/create
     if (hideSnapLine) return;
-    updateSnapFromClientY(e.clientY, true);
+    updateSnapFromClientY(e.clientX, e.clientY, true);
   }
 
   function handleColumnMouseLeave() {
