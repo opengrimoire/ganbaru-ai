@@ -300,32 +300,14 @@
 
   function recheckProximity() {
     if (!columnEl || lastClientX === null || lastClientY === null) return;
-
-    // Check what's under the cursor
-    const target = document.elementFromPoint(lastClientX, lastClientY);
-    if (!target) {
-      hoverResizeBlockId = null;
-      return;
-    }
-
-    const resizeHandle = target.closest('.resize-handle-top, .resize-handle-bottom');
-    if (resizeHandle) {
-      const blockWrapper = resizeHandle.closest('[data-event-id]');
-      const blockId = blockWrapper?.getAttribute('data-event-id') ?? null;
-      hoverResizeBlockId = (panelOpen && blockId !== editingId) ? null : blockId;
+    const colRect = columnEl.getBoundingClientRect();
+    const colOffsetX = lastClientX - colRect.left;
+    const colOffsetY = lastClientY - colRect.top;
+    const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
+    if (nearby) {
+      hoverResizeBlockId = (panelOpen && nearby.eventId !== editingId) ? null : nearby.eventId;
     } else {
-      const eventBlock = target.closest('[data-event-id]');
-      if (eventBlock) {
-        // Inside block: don't use proximity detection
-        hoverResizeBlockId = null;
-      } else {
-        // Outside blocks: use proximity detection
-        const colRect = columnEl.getBoundingClientRect();
-        const colOffsetX = lastClientX - colRect.left;
-        const colOffsetY = lastClientY - colRect.top;
-        const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
-        hoverResizeBlockId = nearby?.eventId ?? null;
-      }
+      hoverResizeBlockId = null;
     }
   }
 
@@ -396,10 +378,30 @@
   const snapAtBottom = $derived(snapEffectiveMin >= 1440 - (2 / calZoom.hourHeight * 60));
 
   // Snap line matches block bounds during create/drag or resize-handle hover
+  // Derive resize state from snap line position - if snap is at a block edge, we're in resize mode
   let hoverResizeBlockId: string | null = $state(null);
-  const proximityResize = $derived(hoverResizeBlockId !== null);
+
+  // Check if snap line is at a block's edge (the snap line being there IS the resize signal)
+  const snapAtBlockEdge = $derived.by(() => {
+    if (snapMinute === null || hideSnapLine) return null;
+    for (const pos of effectivePositioned) {
+      if (panelOpen && pos.event.id !== editingId) continue;
+      const startMin = pos.startMinute;
+      const endMin = pos.startMinute + pos.durationMinutes;
+      if (snapMinute === startMin && !pos.isClippedTop) {
+        return { eventId: pos.event.id, edge: "resize-top" as const };
+      }
+      if (snapMinute === endMin && !pos.isClippedBottom) {
+        return { eventId: pos.event.id, edge: "resize-bottom" as const };
+      }
+    }
+    return null;
+  });
+
+  const proximityResize = $derived(hoverResizeBlockId !== null || snapAtBlockEdge !== null);
+  const effectiveResizeBlockId = $derived(hoverResizeBlockId ?? snapAtBlockEdge?.eventId ?? null);
   const hoverResizeLayout = $derived(
-    hoverResizeBlockId ? effectivePositioned.find(p => p.event.id === hoverResizeBlockId) ?? null : null,
+    effectiveResizeBlockId ? effectivePositioned.find(p => p.event.id === effectiveResizeBlockId) ?? null : null,
   );
   const activeBlockLayout = $derived(
     (layoutedPreview && (createPreview || dragPreview)) ? layoutedPreview : hoverResizeLayout,
@@ -452,13 +454,18 @@
     const threshold = getResizeThreshold();
     let best: { eventId: string; edge: "resize-top" | "resize-bottom"; dist: number } | null = null;
 
+    // Blocks are positioned inside a container offset by railWidth + 4
+    const eventAreaLeft = railWidth + 4;
+    const eventAreaWidth = colWidth - eventAreaLeft;
+
     for (const pos of effectivePositioned) {
       // When panel is open, only consider the edited event for resize
       if (panelOpen && pos.event.id !== editingId) continue;
 
       // Skip blocks whose horizontal range doesn't contain the cursor
-      const blockLeftPx = (pos.left / 100) * colWidth;
-      const blockRightPx = ((pos.left + pos.width) / 100) * colWidth - (pos.totalColumns > 1 ? 2 : 0);
+      // Block positions are percentages of the event area, not the full column
+      const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
+      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
       if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
 
       const blockTopY = (pos.startMinute / 60) * hh;
@@ -487,7 +494,13 @@
   function handleSlotPointerDown(e: PointerEvent, hour: number) {
     if (e.button !== 0) return;
 
-    // Check proximity to existing block edges (works even when panel is open for edited event)
+    // If snap line is at a block edge, trigger resize (snap line IS the source of truth)
+    if (snapAtBlockEdge) {
+      onDragStart(snapAtBlockEdge.eventId, e, snapAtBlockEdge.edge);
+      return;
+    }
+
+    // Fallback: check proximity to existing block edges
     if (columnEl) {
       const colRect = columnEl.getBoundingClientRect();
       const colOffsetX = e.clientX - colRect.left;
@@ -574,27 +587,18 @@
     lastClientX = e.clientX;
     lastClientY = e.clientY;
 
-    const target = e.target as HTMLElement;
-    const resizeHandle = target.closest('.resize-handle-top, .resize-handle-bottom');
-    if (resizeHandle) {
-      const blockWrapper = resizeHandle.closest('[data-event-id]');
-      const blockId = blockWrapper?.getAttribute('data-event-id') ?? null;
+    // Use unified coordinate system for all resize zone detection
+    // This ensures snap line, cursor, and resize all trigger at exactly the same point
+    const colRect = columnEl.getBoundingClientRect();
+    const colOffsetX = e.clientX - colRect.left;
+    const colOffsetY = e.clientY - colRect.top;
+    const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
+
+    if (nearby) {
       // When panel is open, only show resize for edited event
-      hoverResizeBlockId = (panelOpen && blockId !== editingId) ? null : blockId;
+      hoverResizeBlockId = (panelOpen && nearby.eventId !== editingId) ? null : nearby.eventId;
     } else {
-      // Check if we're inside an event block (not on resize handle)
-      const eventBlock = target.closest('[data-event-id]');
-      if (eventBlock) {
-        // Inside block: don't use proximity detection, rely on resize handle CSS
-        hoverResizeBlockId = null;
-      } else {
-        // Outside blocks (on slot): use proximity detection for external approach
-        const colRect = columnEl.getBoundingClientRect();
-        const colOffsetX = e.clientX - colRect.left;
-        const colOffsetY = e.clientY - colRect.top;
-        const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
-        hoverResizeBlockId = nearby?.eventId ?? null;
-      }
+      hoverResizeBlockId = null;
     }
 
     // Only update snap position when not hidden by drag/create
@@ -732,8 +736,9 @@
       grabbing={pos.event.id === grabbingId}
       canDrag={!panelOpen || pos.event.id === editingId}
       isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
+      inResizeZone={effectiveResizeBlockId === pos.event.id}
       onclick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
-      onpointerdown={(e) => onDragStart(pos.event.id, e)}
+      onpointerdown={(e) => onDragStart(pos.event.id, e, snapAtBlockEdge?.eventId === pos.event.id ? snapAtBlockEdge.edge : undefined)}
     />
   {/each}
 

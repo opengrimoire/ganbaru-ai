@@ -6,7 +6,6 @@
   import Bell from "@lucide/svelte/icons/bell";
 
   const calZoom = getCalendarZoom();
-  const RESIZE_ZONE = 6; // pixels from edge for resize detection
 
   let {
     positioned,
@@ -16,6 +15,7 @@
     grabbing = false,
     canDrag = true,
     isPast = false,
+    inResizeZone = false,
     onclick,
     onpointerdown,
   }: {
@@ -26,6 +26,7 @@
     grabbing?: boolean;
     canDrag?: boolean;
     isPast?: boolean;
+    inResizeZone?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
@@ -41,9 +42,6 @@
   const isTentative = $derived(positioned.event.status === "tentative");
   const isCancelled = $derived(positioned.event.status === "cancelled");
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
-
-  // Track if mouse is in resize zone for cursor
-  let inResizeZone = $state(false);
 
   function handlePointerDown(e: PointerEvent) {
     e.stopPropagation();
@@ -63,22 +61,8 @@
     onclick(rect);
   }
 
-  function handleMouseMove(e: MouseEvent) {
-    if (!blockEl || !canDrag) {
-      inResizeZone = false;
-      return;
-    }
-    const rect = blockEl.getBoundingClientRect();
-    const relY = e.clientY - rect.top;
-    const isNearTop = relY < RESIZE_ZONE && !positioned.isClippedTop;
-    const isNearBottom = relY > rect.height - RESIZE_ZONE && !positioned.isClippedBottom;
-    inResizeZone = isNearTop || isNearBottom;
-  }
-
-  function handleMouseLeave() {
-    inResizeZone = false;
-  }
-
+  // Cursor is controlled by parent (DayColumn) via inResizeZone prop
+  // This ensures cursor matches the snap line and drag detection exactly
   const effectiveCursor = $derived(
     !canDrag ? 'pointer' : inResizeZone ? 'ns-resize' : 'grab'
   );
@@ -106,8 +90,6 @@
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
-  onmousemove={handleMouseMove}
-  onmouseleave={handleMouseLeave}
 >
   <!-- Resize handle: top (hidden on clipped edge) -->
   {#if !positioned.isClippedTop}
