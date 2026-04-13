@@ -402,6 +402,8 @@
           {editingId}
           {previewedIds}
           draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
+          grabbingId={drag.grabbingId ?? undefined}
+          didDrag={drag.didDrag}
           dragPreview={drag.getDragPreviewForDate(dateStr)}
           createPreview={drag.getCreatePreviewForDate(dateStr)}
           hideSnapLine={drag.getHideSnapLine(dateStr)}

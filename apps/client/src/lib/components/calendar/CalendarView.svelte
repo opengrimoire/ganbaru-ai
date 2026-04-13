@@ -980,7 +980,16 @@
   {#if session.state.mode === "create" || session.state.mode === "edit"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="fixed inset-0 z-40" onclick={(e) => {
+    <div class="fixed inset-0 z-40" onpointerdown={(e) => {
+      // Forward pointerdown to elements underneath (enables drag/resize)
+      const el = e.currentTarget as HTMLElement;
+      el.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      el.style.pointerEvents = '';
+      if (under && under !== el) {
+        under.dispatchEvent(new PointerEvent('pointerdown', e));
+      }
+    }} onclick={(e) => {
       // Peek under the backdrop to check if an event block was clicked
       const el = e.currentTarget as HTMLElement;
       el.style.pointerEvents = 'none';

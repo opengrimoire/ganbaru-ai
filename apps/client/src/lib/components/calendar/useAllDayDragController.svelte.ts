@@ -36,6 +36,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
   let dragState = $state<AllDayDragState | null>(null);
   let allDayDragPreview = $state<PositionedAllDayEvent | null>(null);
   let draggingEventId = $state<string | null>(null);
+  let grabbingId = $state<string | null>(null); // Set immediately on pointerdown for visual feedback
   let _didDrag = $state(false);
 
   // --- Helpers ---
@@ -109,6 +110,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
     };
 
     draggingEventId = null; // not committed to drag yet (click threshold)
+    grabbingId = eventId; // Show contour immediately on grab
 
     window.addEventListener("pointermove", handleDragMove);
     window.addEventListener("pointerup", handleDragEnd);
@@ -176,6 +178,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       dragState = null;
       allDayDragPreview = null;
       draggingEventId = null;
+      grabbingId = null;
       return;
     }
 
@@ -184,6 +187,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       dragState = null;
       allDayDragPreview = null;
       draggingEventId = null;
+      grabbingId = null;
       return;
     }
 
@@ -194,6 +198,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       dragState = null;
       allDayDragPreview = null;
       draggingEventId = null;
+      grabbingId = null;
       return;
     }
 
@@ -218,12 +223,14 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
     dragState = null;
     allDayDragPreview = null;
     draggingEventId = null;
+    grabbingId = null;
   }
 
   return {
     get dragState() { return dragState; },
     get allDayDragPreview() { return allDayDragPreview; },
     get draggingEventId() { return draggingEventId; },
+    get grabbingId() { return grabbingId; },
     get didDrag() { return _didDrag; },
     handleDragStart,
   };

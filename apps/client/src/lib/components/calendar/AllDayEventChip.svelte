@@ -9,6 +9,7 @@
     isDark = false,
     editing = false,
     preview = false,
+    grabbing = false,
     isPast = false,
     onclick,
     onpointerdown,
@@ -17,6 +18,7 @@
     isDark?: boolean;
     editing?: boolean;
     preview?: boolean;
+    grabbing?: boolean;
     isPast?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
@@ -51,9 +53,9 @@
   bind:this={chipEl}
   data-event-id={event.id}
   class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]
-    {editing || preview ? 'chip-editing' : ''}
-    {isPast && !editing && !preview && !isDark ? 'chip-past-light' : ''}
-    {isPast && !editing && !preview && isDark ? 'chip-past-dark' : ''}"
+    {editing || preview || grabbing ? 'chip-editing' : ''}
+    {isPast && !editing && !preview && !grabbing && !isDark ? 'chip-past-light' : ''}
+    {isPast && !editing && !preview && !grabbing && isDark ? 'chip-past-dark' : ''}"
   style="
     background-color: {activeColors.bg};
     color: {activeColors.text};
@@ -111,5 +113,9 @@
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
+  }
+
+  :global(.dark) .chip-editing::after {
+    border-color: rgba(255, 255, 255, 0.5);
   }
 </style>

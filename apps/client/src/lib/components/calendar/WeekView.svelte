@@ -518,6 +518,7 @@
                 {isDark}
                 editing={editingId === pos.event.id}
                 preview={previewedIds?.has(pos.event.id) ?? false}
+                grabbing={allDayDrag.grabbingId === pos.event.id}
                 isPast={endDateStr < todayStr}
                 onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
                 onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
@@ -569,7 +570,6 @@
               style="
                 background-color: {dpColor.bg};
                 color: {dpColor.text};
-                opacity: 0.8;
               "
             >
               {#if dpHasRepeat || dpHasNotification}
@@ -618,6 +618,8 @@
               {editingId}
               {previewedIds}
               draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
+              grabbingId={drag.grabbingId ?? undefined}
+              didDrag={drag.didDrag}
               dragPreview={drag.getDragPreviewForDate(dateStr)}
               createPreview={drag.getCreatePreviewForDate(dateStr)}
               hideSnapLine={drag.getHideSnapLine(dateStr)}
@@ -677,9 +679,13 @@
     content: "";
     position: absolute;
     inset: 0;
-    border: 1.5px solid currentColor;
+    border: 1px solid rgba(0, 0, 0, 0.3);
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
+  }
+
+  :global(.dark) .allday-drag-preview::after {
+    border-color: rgba(255, 255, 255, 0.5);
   }
 </style>

@@ -38,6 +38,8 @@
     editingId,
     previewedIds,
     draggingEventId,
+    grabbingId,
+    didDrag = false,
   }: {
     date: Date;
     events: CalendarEvent[];
@@ -52,6 +54,8 @@
     hideSnapLine?: boolean;
     snapOverrideMinute?: number | null;
     draggingEventId?: string;
+    grabbingId?: string;
+    didDrag?: boolean;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
@@ -679,8 +683,9 @@
       {isDark}
       editing={pos.event.id === editingId}
       preview={previewedIds?.has(pos.event.id) === true}
+      grabbing={pos.event.id === grabbingId}
       isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
-      onclick={(rect) => onEventClick(pos.event, rect)}
+      onclick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
       onpointerdown={(e) => onDragStart(pos.event.id, e)}
     />
   {/each}
@@ -732,11 +737,10 @@
   <!-- Create preview (new block being drawn, layout-aware) -->
   {#if createPreview && layoutedPreview}
     {@const lp = layoutedPreview}
-    {@const glowColor = isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'}
     {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     <div
       data-create-preview
-      class="preview-glow pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
+      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
         top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
         height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
@@ -744,8 +748,6 @@
         width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
         color: {getEventColor(undefined, isDark).text};
         z-index: 10;
-        --glow-color: {glowColor};
-        box-shadow: 0 0 3px 0 var(--glow-color), 0 0 8px 1px var(--glow-color), 0 0 16px 2px color-mix(in srgb, var(--glow-color) 40%, transparent);
       "
     >
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {getEventColor(undefined, isDark).bg};">
@@ -793,25 +795,14 @@
     content: "";
     position: absolute;
     inset: 0;
-    border: 1.5px solid currentColor;
+    border: 1px solid rgba(0, 0, 0, 0.3);
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
   }
 
-  .preview-glow {
-    position: relative;
-    transition: left 120ms ease-out, width 120ms ease-out;
-  }
-
-  .preview-glow::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 3;
+  :global(.dark) .preview-outline::after {
+    border-color: rgba(255, 255, 255, 0.5);
   }
 
   .break-band-active {

@@ -12,6 +12,7 @@
     isDark = false,
     editing = false,
     preview = false,
+    grabbing = false,
     isPast = false,
     onclick,
     onpointerdown,
@@ -20,6 +21,7 @@
     isDark?: boolean;
     editing?: boolean;
     preview?: boolean;
+    grabbing?: boolean;
     isPast?: boolean;
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
@@ -64,7 +66,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {isPast && !editing && !preview && isDark ? 'past-dark' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview || grabbing ? 'event-editing' : ''} {isPast && !editing && !preview && !grabbing && !isDark ? 'past-light' : ''} {isPast && !editing && !preview && !grabbing && isDark ? 'past-dark' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -146,6 +148,10 @@
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
+  }
+
+  :global(.dark) .event-editing::after {
+    border-color: rgba(255, 255, 255, 0.5);
   }
 
   .past-light::before {

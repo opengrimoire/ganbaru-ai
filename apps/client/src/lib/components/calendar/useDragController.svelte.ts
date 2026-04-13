@@ -50,6 +50,8 @@ export function useDragController(config: DragControllerConfig) {
   let dragState = $state<DragState | null>(null);
   let dragPreviewDate = $state<string | null>(null);
   let dragPreview = $state<PositionedEvent | null>(null);
+  let grabbingId = $state<string | null>(null); // Set immediately on pointerdown for visual feedback
+  let _didDrag = $state(false); // Suppress click after drag
 
   let createState = $state<{
     dateStr: string;
@@ -190,6 +192,7 @@ export function useDragController(config: DragControllerConfig) {
       lockCursor("grabbing");
     }
 
+    grabbingId = eventId; // Show contour immediately on grab
     lastPointerEvent = e;
     window.addEventListener("pointermove", handleDragMove);
     window.addEventListener("pointerup", handleDragEnd);
@@ -328,13 +331,31 @@ export function useDragController(config: DragControllerConfig) {
     unlockCursor();
     lastPointerEvent = null;
 
-    if (dragPreview) {
-      await config.onEventUpdate(dragPreview.event);
+    const state = dragState;
+    const wasDragging = !!dragPreview;
+
+    if (dragPreview && state) {
+      // Only save if position actually changed
+      const original = config.events().find((ev) => ev.id === state.eventId);
+      const changed = original && (
+        dragPreview.event.start !== original.start ||
+        dragPreview.event.end !== original.end
+      );
+      if (changed) {
+        await config.onEventUpdate(dragPreview.event);
+      }
+    }
+
+    // Suppress the click that fires after pointerup
+    if (wasDragging) {
+      _didDrag = true;
+      setTimeout(() => { _didDrag = false; }, 0);
     }
 
     dragState = null;
     dragPreview = null;
     dragPreviewDate = null;
+    grabbingId = null;
   }
 
   // --- Create-by-drag ---
@@ -542,6 +563,8 @@ export function useDragController(config: DragControllerConfig) {
     get dragPreviewDate() { return dragPreviewDate; },
     get createPreview() { return createPreview; },
     get createPreviewDate() { return createPreviewDate; },
+    get grabbingId() { return grabbingId; },
+    get didDrag() { return _didDrag; },
     handleDragStart,
     handleCreateStart,
     getDragPreviewForDate,
