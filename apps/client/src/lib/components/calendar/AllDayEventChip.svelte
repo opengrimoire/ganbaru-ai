@@ -83,12 +83,7 @@
 </div>
 
 <style>
-  .allday-chip {
-    transition: box-shadow 180ms ease-out;
-  }
-
-  /* Past-light overlay: always present, opacity-controlled for smooth fade */
-  .allday-chip::before {
+  .chip-past-light::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -96,17 +91,16 @@
     border-radius: inherit;
     pointer-events: none;
     z-index: 1;
-    opacity: 0;
-    transition: opacity 180ms ease-out;
-  }
-
-  .chip-past-light::before {
-    opacity: 1;
   }
 
   .chip-past-dark::before {
+    content: "";
+    position: absolute;
+    inset: 0;
     background: rgba(0, 0, 0, 0.3);
-    opacity: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
   }
 
   .chip-editing::after {
