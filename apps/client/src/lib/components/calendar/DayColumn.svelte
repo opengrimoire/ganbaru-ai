@@ -915,7 +915,7 @@
     class="pointer-events-none absolute right-0"
     style="left: {snapToBlock ? railWidth + 4 : 0}px; top: calc({snapEffectiveMin} / 60 * var(--hour-h) * 1px - {snapAtBottom ? 2.3 : 1.3}px); z-index: 47; {snapVisible ? '' : 'display: none;'}"
   >
-    <div class="relative" style="margin-left: {snapBlockLeft}%; width: {snapBlockMultiCol ? `calc(${snapBlockWidth}% - 2px)` : `${snapBlockWidth}%`};">
+    <div class="relative" style="margin-left: {snapBlockLeft}%; width: {snapBlockMultiCol ? `calc(${snapBlockWidth}% - 2px)` : `${snapBlockWidth}%`}; transition: margin-left 100ms ease-out, width 100ms ease-out;">
       <span
         class="absolute left-0 flex h-[16px] items-center justify-center px-1.5 text-[10px] leading-none font-semibold {snapLabelBelow ? 'top-[2.3px]' : 'bottom-0'}"
         style="background-color: var(--cal-snap-label); color: white; border-radius: {snapLabelBelow ? '0 0 2px 2px' : '2px 2px 0 0'};"
