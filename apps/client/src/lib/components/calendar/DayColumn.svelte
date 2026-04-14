@@ -389,23 +389,24 @@
     // Compute mouse offsets relative to column
     const colRect = columnEl.getBoundingClientRect();
     const offsetX = lastClientX - colRect.left;
-    const offsetY = lastClientY - colRect.top;
     const eventAreaLeft = railWidth + 4;
     const eventAreaWidth = colRect.width - eventAreaLeft;
 
     // Compute raw minute (unsnapped) from mouse Y position
+    const offsetY = lastClientY - colRect.top;
     const rawMinute = (offsetY / calZoom.hourHeight) * 60;
 
-    // Collect all candidates that pass horizontal check and have an edge at snapMinute
-    type Candidate = { eventId: string; edge: "resize-top" | "resize-bottom"; startMin: number; endMin: number };
-    const candidates: Candidate[] = [];
+    // Collect all blocks that pass horizontal check and have an edge at snapMinute (for cursor display)
+    const allIds = new Set<string>();
+
+    // Find the block that contains the mouse and has an edge at snapMinute (for snap line positioning)
+    let primary: { eventId: string; edge: "resize-top" | "resize-bottom" } | null = null;
 
     for (const pos of effectivePositioned) {
-      // Skip the drag gesture preview (not the pending create preview which can be resized)
       if (pos.event.id === "__create__") continue;
       if (panelOpen && pos.event.id !== editingId) continue;
 
-      // Check horizontal bounds: mouse must be over this block
+      // Check horizontal bounds
       const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
       const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
       if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
@@ -413,38 +414,39 @@
       const startMin = pos.startMinute;
       const endMin = pos.startMinute + pos.durationMinutes;
 
-      if (snapMinute === startMin && !pos.isClippedTop) {
-        candidates.push({ eventId: pos.event.id, edge: "resize-top", startMin, endMin });
+      // Collect for cursor display (any block with edge at snapMinute)
+      if ((snapMinute === startMin && !pos.isClippedTop) || (snapMinute === endMin && !pos.isClippedBottom)) {
+        allIds.add(pos.event.id);
       }
-      if (snapMinute === endMin && !pos.isClippedBottom) {
-        candidates.push({ eventId: pos.event.id, edge: "resize-bottom", startMin, endMin });
+
+      // For primary: find the block the mouse is actually inside (using [start, end) bounds)
+      // This ensures the snap line matches the block that would receive a click
+      if (primary === null && rawMinute >= startMin && rawMinute < endMin) {
+        if (snapMinute === startMin && !pos.isClippedTop) {
+          primary = { eventId: pos.event.id, edge: "resize-top" };
+        } else if (snapMinute === endMin && !pos.isClippedBottom) {
+          primary = { eventId: pos.event.id, edge: "resize-bottom" };
+        }
       }
     }
 
-    if (candidates.length === 0) return null;
-
-    // All candidate IDs (for cursor: any block at this edge should show resize cursor)
-    const allIds = new Set(candidates.map(c => c.eventId));
-
-    // Determine the "primary" block (for snap line positioning and actual resize target)
-    let primary: { eventId: string; edge: "resize-top" | "resize-bottom" };
-    if (candidates.length === 1) {
-      primary = { eventId: candidates[0].eventId, edge: candidates[0].edge };
-    } else {
-      // Multiple candidates at shared boundary: use rawMinute to pick primary
-      let found: typeof primary | null = null;
-      for (const c of candidates) {
-        if (c.edge === "resize-top" && rawMinute >= c.startMin) {
-          found = { eventId: c.eventId, edge: c.edge };
-          break;
-        }
-        if (c.edge === "resize-bottom" && rawMinute < c.endMin) {
-          found = { eventId: c.eventId, edge: c.edge };
-          break;
+    // If no block contains the mouse but we have candidates, use the first one
+    // (handles edge case of mouse slightly outside any block)
+    if (primary === null && allIds.size > 0) {
+      const firstId = [...allIds][0];
+      const pos = effectivePositioned.find(p => p.event.id === firstId);
+      if (pos) {
+        const startMin = pos.startMinute;
+        const endMin = pos.startMinute + pos.durationMinutes;
+        if (snapMinute === startMin && !pos.isClippedTop) {
+          primary = { eventId: firstId, edge: "resize-top" };
+        } else if (snapMinute === endMin && !pos.isClippedBottom) {
+          primary = { eventId: firstId, edge: "resize-bottom" };
         }
       }
-      primary = found ?? { eventId: candidates[0].eventId, edge: candidates[0].edge };
     }
+
+    if (allIds.size === 0) return null;
 
     return { primary, allIds };
   });
@@ -508,20 +510,17 @@
   function findNearbyBlockEdge(offsetX: number, offsetY: number, colWidth: number): { eventId: string; edge: "resize-top" | "resize-bottom" } | null {
     const hh = calZoom.hourHeight;
     const threshold = getResizeThreshold();
-    let best: { eventId: string; edge: "resize-top" | "resize-bottom"; dist: number } | null = null;
 
     // Blocks are positioned inside a container offset by railWidth + 4
     const eventAreaLeft = railWidth + 4;
     const eventAreaWidth = colWidth - eventAreaLeft;
 
+    // First pass: find the block that strictly contains the mouse (standard bounding box)
+    // At boundaries, blocks are [top, bottom) so only one block contains any given point
     for (const pos of effectivePositioned) {
-      // Skip the drag gesture preview (not the pending create preview which can be resized)
       if (pos.event.id === "__create__") continue;
-      // When panel is open, only consider the edited event for resize
       if (panelOpen && pos.event.id !== editingId) continue;
 
-      // Skip blocks whose horizontal range doesn't contain the cursor
-      // Block positions are percentages of the event area, not the full column
       const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
       const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
       if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
@@ -529,24 +528,44 @@
       const blockTopY = (pos.startMinute / 60) * hh;
       const blockBottomY = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
 
-      // Check proximity from both sides of each edge (outside and inside the block)
-      // Use < threshold to match the resize handle's exact zone (6px)
-      if (!pos.isClippedTop) {
-        const absDist = Math.abs(offsetY - blockTopY);
-        if (absDist < threshold && (!best || absDist < best.dist)) {
-          best = { eventId: pos.event.id, edge: "resize-top", dist: absDist };
+      // Strict containment: [top, bottom)
+      if (offsetY >= blockTopY && offsetY < blockBottomY) {
+        // Mouse is inside this block. Check if near an edge.
+        if (!pos.isClippedTop && Math.abs(offsetY - blockTopY) < threshold) {
+          return { eventId: pos.event.id, edge: "resize-top" };
         }
-      }
-
-      if (!pos.isClippedBottom) {
-        const absDist = Math.abs(offsetY - blockBottomY);
-        if (absDist < threshold && (!best || absDist < best.dist)) {
-          best = { eventId: pos.event.id, edge: "resize-bottom", dist: absDist };
+        if (!pos.isClippedBottom && Math.abs(offsetY - blockBottomY) < threshold) {
+          return { eventId: pos.event.id, edge: "resize-bottom" };
         }
+        // Inside block but not near edge
+        return null;
       }
     }
 
-    return best ? { eventId: best.eventId, edge: best.edge } : null;
+    // Second pass: mouse is not inside any block, check if near an edge from outside
+    // This handles grabbing edges when mouse is slightly above/below a block
+    for (const pos of effectivePositioned) {
+      if (pos.event.id === "__create__") continue;
+      if (panelOpen && pos.event.id !== editingId) continue;
+
+      const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
+      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
+      if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
+
+      const blockTopY = (pos.startMinute / 60) * hh;
+      const blockBottomY = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
+
+      // Check if near top edge from above
+      if (!pos.isClippedTop && offsetY < blockTopY && blockTopY - offsetY < threshold) {
+        return { eventId: pos.event.id, edge: "resize-top" };
+      }
+      // Check if near bottom edge from below
+      if (!pos.isClippedBottom && offsetY >= blockBottomY && offsetY - blockBottomY < threshold) {
+        return { eventId: pos.event.id, edge: "resize-bottom" };
+      }
+    }
+
+    return null;
   }
 
   function handleSlotPointerDown(e: PointerEvent, hour: number) {
