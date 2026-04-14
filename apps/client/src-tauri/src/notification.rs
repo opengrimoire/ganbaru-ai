@@ -778,7 +778,7 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
                     "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
                 ));
                 // Play alert every 15 seconds
-                if e % 15 == 0 {
+                if e.is_multiple_of(15) {
                     std::thread::spawn(|| {
                         let ok = std::process::Command::new("canberra-gtk-play")
                             .args(["--id", "bell"])
@@ -1114,11 +1114,10 @@ pub fn show_pomodoro_notification(app: tauri::AppHandle, remaining_seconds: u32)
 
         match result {
             Ok(handle) => {
-                handle.wait_for_action(|action| match action {
-                    "add_time" => {
+                handle.wait_for_action(|action| {
+                    if action == "add_time" {
                         let _ = app.emit("pomodoro-add-time", AddTimePayload { seconds: 180 });
                     }
-                    _ => {}
                 });
             }
             Err(e) => {
