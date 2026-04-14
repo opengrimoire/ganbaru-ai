@@ -643,7 +643,7 @@
               width: calc(100% / 7);
               top: calc({s.minute} / 60 * var(--hour-h) * 1px - {s.atBottom ? 2.3 : 1.3}px);
               z-index: 47;
-              transition: left 100ms ease-out;
+              {s.isScrolling ? 'transition: left 100ms ease-out;' : 'transition: left 100ms ease-out, top 80ms ease-out;'}
             "
           >
             <div

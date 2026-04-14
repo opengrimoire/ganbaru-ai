@@ -299,6 +299,7 @@ export interface SnapLineState {
   blockLeft: number;
   blockWidth: number;
   blockMultiCol: boolean;
+  isScrolling: boolean;
 }
 
 export interface DragState {

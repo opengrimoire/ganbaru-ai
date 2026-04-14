@@ -495,6 +495,7 @@
         blockLeft: snapBlockLeft,
         blockWidth: snapBlockWidth,
         blockMultiCol: snapBlockMultiCol,
+        isScrolling,
       });
     } else {
       onSnapChange(null);
@@ -645,25 +646,37 @@
       }
       snapMinute = snapped;
     } else {
-      const clamped = clampMinute(Math.round(rawMinute));
+      // During scroll: use raw floating-point value for smooth visual movement
+      // Don't round to avoid discrete jumps that cause jitter
+      const clamped = Math.max(0, Math.min(1440, rawMinute));
       snapMinute = clamped;
+      snapped = Math.round(clamped); // For label display only
     }
 
     updateStickyBottom();
-    const h = String(Math.floor(snapped / 60)).padStart(2, "0");
-    const m = String(snapped % 60).padStart(2, "0");
+    const labelMinute = Math.round(snapped);
+    const h = String(Math.floor(labelMinute / 60)).padStart(2, "0");
+    const m = String(labelMinute % 60).padStart(2, "0");
     snapTimeLabel = `${h}:${m}`;
   }
+
+  let isScrolling = $state(false);
 
   function handleParentScroll() {
     if (lastClientY === null || !columnEl || hideSnapLine) return;
     // During zoom animation, snapLineY auto-tracks via $derived; skip recalculation
     if (calZoom.isAnimating) return;
+
+    // During scroll, update position smoothly (no grid snapping) so the line follows
+    isScrolling = true;
     updateSnapFromClientY(lastClientX, lastClientY, false);
+
+    // After scroll stops, snap to grid
     clearTimeout(scrollSnapTimer);
     scrollSnapTimer = window.setTimeout(() => {
+      isScrolling = false;
       if (lastClientY !== null) updateSnapFromClientY(lastClientX, lastClientY, true);
-    }, 60);
+    }, 80);
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
@@ -913,7 +926,7 @@
   {#if !onSnapChange}
   <div
     class="pointer-events-none absolute right-0"
-    style="left: {snapToBlock ? railWidth + 4 : 0}px; top: calc({snapEffectiveMin} / 60 * var(--hour-h) * 1px - {snapAtBottom ? 2.3 : 1.3}px); z-index: 47; {snapVisible ? '' : 'display: none;'}"
+    style="left: {snapToBlock ? railWidth + 4 : 0}px; top: calc({snapEffectiveMin} / 60 * var(--hour-h) * 1px - {snapAtBottom ? 2.3 : 1.3}px); z-index: 47; {isScrolling ? '' : 'transition: top 80ms ease-out;'} {snapVisible ? '' : 'display: none;'}"
   >
     <div class="relative" style="margin-left: {snapBlockLeft}%; width: {snapBlockMultiCol ? `calc(${snapBlockWidth}% - 2px)` : `${snapBlockWidth}%`}; transition: margin-left 100ms ease-out, width 100ms ease-out;">
       <span
