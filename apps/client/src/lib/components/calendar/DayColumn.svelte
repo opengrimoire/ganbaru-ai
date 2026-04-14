@@ -382,15 +382,23 @@
   let hoverResizeBlockId: string | null = $state(null);
 
   // Check if snap line is at a block's edge AND mouse is horizontally over the block
-  const snapAtBlockEdge = $derived.by(() => {
+  const snapEdgeInfo = $derived.by(() => {
     if (snapMinute === null || hideSnapLine) return null;
-    if (lastClientX === null || !columnEl) return null;
+    if (lastClientX === null || lastClientY === null || !columnEl) return null;
 
-    // Compute mouse X offset relative to column
+    // Compute mouse offsets relative to column
     const colRect = columnEl.getBoundingClientRect();
     const offsetX = lastClientX - colRect.left;
+    const offsetY = lastClientY - colRect.top;
     const eventAreaLeft = railWidth + 4;
     const eventAreaWidth = colRect.width - eventAreaLeft;
+
+    // Compute raw minute (unsnapped) from mouse Y position
+    const rawMinute = (offsetY / calZoom.hourHeight) * 60;
+
+    // Collect all candidates that pass horizontal check and have an edge at snapMinute
+    type Candidate = { eventId: string; edge: "resize-top" | "resize-bottom"; startMin: number; endMin: number };
+    const candidates: Candidate[] = [];
 
     for (const pos of effectivePositioned) {
       // Skip the drag gesture preview (not the pending create preview which can be resized)
@@ -404,15 +412,47 @@
 
       const startMin = pos.startMinute;
       const endMin = pos.startMinute + pos.durationMinutes;
+
       if (snapMinute === startMin && !pos.isClippedTop) {
-        return { eventId: pos.event.id, edge: "resize-top" as const };
+        candidates.push({ eventId: pos.event.id, edge: "resize-top", startMin, endMin });
       }
       if (snapMinute === endMin && !pos.isClippedBottom) {
-        return { eventId: pos.event.id, edge: "resize-bottom" as const };
+        candidates.push({ eventId: pos.event.id, edge: "resize-bottom", startMin, endMin });
       }
     }
-    return null;
+
+    if (candidates.length === 0) return null;
+
+    // All candidate IDs (for cursor: any block at this edge should show resize cursor)
+    const allIds = new Set(candidates.map(c => c.eventId));
+
+    // Determine the "primary" block (for snap line positioning and actual resize target)
+    let primary: { eventId: string; edge: "resize-top" | "resize-bottom" };
+    if (candidates.length === 1) {
+      primary = { eventId: candidates[0].eventId, edge: candidates[0].edge };
+    } else {
+      // Multiple candidates at shared boundary: use rawMinute to pick primary
+      let found: typeof primary | null = null;
+      for (const c of candidates) {
+        if (c.edge === "resize-top" && rawMinute >= c.startMin) {
+          found = { eventId: c.eventId, edge: c.edge };
+          break;
+        }
+        if (c.edge === "resize-bottom" && rawMinute < c.endMin) {
+          found = { eventId: c.eventId, edge: c.edge };
+          break;
+        }
+      }
+      primary = found ?? { eventId: candidates[0].eventId, edge: candidates[0].edge };
+    }
+
+    return { primary, allIds };
   });
+
+  // Primary block at edge (for snap line positioning, click handling, and resize target)
+  const snapAtBlockEdge = $derived(snapEdgeInfo?.primary ?? null);
+  // All block IDs with an edge at snapMinute (for cursor: all should show resize cursor)
+  const snapEdgeBlockIds = $derived(snapEdgeInfo?.allIds ?? null);
 
   const proximityResize = $derived(hoverResizeBlockId !== null || snapAtBlockEdge !== null);
   const effectiveResizeBlockId = $derived(hoverResizeBlockId ?? snapAtBlockEdge?.eventId ?? null);
@@ -768,7 +808,7 @@
       grabbing={pos.event.id === grabbingId}
       canDrag={!panelOpen || pos.event.id === editingId}
       isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
-      inResizeZone={effectiveResizeBlockId === pos.event.id}
+      inResizeZone={hoverResizeBlockId === pos.event.id || snapEdgeBlockIds?.has(pos.event.id) === true}
       onclick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
       onpointerdown={(e) => onDragStart(pos.event.id, e, snapAtBlockEdge?.eventId === pos.event.id ? snapAtBlockEdge.edge : undefined)}
     />
