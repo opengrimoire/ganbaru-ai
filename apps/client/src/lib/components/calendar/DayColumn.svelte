@@ -406,9 +406,9 @@
       if (pos.event.id === "__create__") continue;
       if (panelOpen && pos.event.id !== editingId) continue;
 
-      // Check horizontal bounds
+      // Check horizontal bounds (don't subtract gap for hit detection to avoid dead zones)
       const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
-      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
+      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
       if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
 
       const startMin = pos.startMinute;
@@ -521,8 +521,9 @@
       if (pos.event.id === "__create__") continue;
       if (panelOpen && pos.event.id !== editingId) continue;
 
+      // Don't subtract gap for hit detection to avoid dead zones between stacked blocks
       const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
-      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
+      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
       if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
 
       const blockTopY = (pos.startMinute / 60) * hh;
@@ -549,7 +550,7 @@
       if (panelOpen && pos.event.id !== editingId) continue;
 
       const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
-      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
+      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
       if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
 
       const blockTopY = (pos.startMinute / 60) * hh;
