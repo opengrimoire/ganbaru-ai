@@ -797,7 +797,6 @@
             top: {((band.topMinute - seg.start) / (seg.end - seg.start)) * 100}%;
             height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0.5)}%;
             background-color: var(--cal-timeline-focus);
-            opacity: 0.85;
           "
         ></div>
       {/each}
@@ -809,7 +808,6 @@
             top: {((band.topMinute - seg.start) / (seg.end - seg.start)) * 100}%;
             height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0.5)}%;
             background-color: var(--cal-timeline-break);
-            opacity: {band.status === 'planned' ? 0.6 : band.status === 'skipped' ? 0.3 : band.status === 'completed' ? 0.35 : 0.9};
           "
         ></div>
       {/each}
