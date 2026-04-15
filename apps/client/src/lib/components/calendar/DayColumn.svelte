@@ -368,13 +368,15 @@
       ? (snapOverrideMinute / 60) * calZoom.hourHeight
       : snapLineY,
   );
-  const effectiveSnapLabel = $derived(
-    snapOverrideMinute != null
-      ? `${String(Math.floor(snapOverrideMinute / 60)).padStart(2, "0")}:${String(snapOverrideMinute % 60).padStart(2, "0")}`
-      : snapTimeLabel,
-  );
+  const effectiveSnapLabel = $derived.by(() => {
+    if (snapOverrideMinute != null) {
+      const rounded = Math.round(snapOverrideMinute);
+      return `${String(Math.floor(rounded / 60)).padStart(2, "0")}:${String(rounded % 60).padStart(2, "0")}`;
+    }
+    return snapTimeLabel;
+  });
   const snapVisible = $derived(effectiveSnapY !== null && !hideSnapLine && !calZoom.isAnimating && !zoomModifierPressed);
-  const snapEffectiveMin = $derived(snapOverrideMinute ?? snapMinute ?? 0);
+  const snapEffectiveMin = $derived(Math.round(snapOverrideMinute ?? snapMinute ?? 0));
   const snapAtBottom = $derived(snapEffectiveMin >= 1440 - (2 / calZoom.hourHeight * 60));
 
   // Snap line matches block bounds during create/drag or resize-handle hover
@@ -642,10 +644,11 @@
       }
 
       // Snap to current time line when mouse is close to it
+      // Use floor to match the displayed clock minute (not rounded by seconds)
       if (isToday && currentTimeMinute >= 0) {
         const currentTimeY = (currentTimeMinute / 60) * hh;
         if (Math.abs(offsetY - currentTimeY) < threshold) {
-          snapped = currentTimeMinute;
+          snapped = Math.floor(currentTimeMinute);
         }
       }
 
@@ -734,11 +737,11 @@
     if (railSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
     let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
-    // Snap to current time if close
+    // Snap to current time if close (use floor to match displayed clock minute)
     if (isToday && currentTimeMinute >= 0) {
       const currentTimeY = (currentTimeMinute / 60) * hh;
       if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
-        minute = currentTimeMinute;
+        minute = Math.floor(currentTimeMinute);
       }
     }
 

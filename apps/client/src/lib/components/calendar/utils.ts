@@ -33,6 +33,64 @@ export function formatDatePart(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Validate that a calendar time string is in the correct format.
+ * Expected: "YYYY-MM-DD HH:MM" with integer hours (0-23) and minutes (0-59).
+ */
+export function isValidCalendarTime(str: string): boolean {
+  if (typeof str !== "string") return false;
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+  if (!match) return false;
+  const [, , month, day, hour, minute] = match.map(Number);
+  return (
+    month >= 1 && month <= 12 &&
+    day >= 1 && day <= 31 &&
+    hour >= 0 && hour <= 23 &&
+    minute >= 0 && minute <= 59
+  );
+}
+
+/**
+ * Sanitize a calendar time string to ensure clean "YYYY-MM-DD HH:MM" format.
+ * Handles:
+ * - Floating point minutes (rounds them)
+ * - Missing time part (defaults to 00:00)
+ * - Out of range values (clamps them)
+ * Returns null if the input is completely invalid.
+ */
+export function sanitizeCalendarTime(str: string): string | null {
+  if (typeof str !== "string" || !str.trim()) return null;
+
+  // Try to parse the date part
+  const parts = str.trim().split(" ");
+  const datePart = parts[0];
+  const timePart = parts[1] ?? "00:00";
+
+  // Validate date part format
+  const dateMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) return null;
+
+  // Parse time part, handling potential floats
+  const timeParts = timePart.split(":");
+  if (timeParts.length < 2) return null;
+
+  let hour = parseFloat(timeParts[0]);
+  let minute = parseFloat(timeParts[1]);
+
+  // Handle NaN
+  if (isNaN(hour)) hour = 0;
+  if (isNaN(minute)) minute = 0;
+
+  // Round and clamp
+  hour = Math.max(0, Math.min(23, Math.round(hour)));
+  minute = Math.max(0, Math.min(59, Math.round(minute)));
+
+  const hh = String(hour).padStart(2, "0");
+  const mm = String(minute).padStart(2, "0");
+
+  return `${datePart} ${hh}:${mm}`;
+}
+
 // Week / day helpers
 
 export function startOfWeek(date: Date): Date {
@@ -360,7 +418,7 @@ export function snapToGrid(minute: number, gridMinutes: number = 10): number {
 }
 
 export function clampMinute(minute: number): number {
-  return Math.max(0, Math.min(1440, minute));
+  return Math.max(0, Math.min(1440, Math.round(minute)));
 }
 
 // Cross-midnight helpers

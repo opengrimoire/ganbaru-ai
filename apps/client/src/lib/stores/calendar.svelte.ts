@@ -6,6 +6,7 @@ import type {
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
+import { sanitizeCalendarTime } from "$lib/components/calendar/utils";
 import {
   mapRow, mapAttendee, mapAlarm, mapOverride, toDbTime,
   type DbCalendarEvent, type DbAttendee, type DbAlarm, type DbOverride,
@@ -254,6 +255,13 @@ export function getCalendar() {
       attendees?: EventAttendee[];
       guestPermissions?: GuestPermissions;
     }): Promise<CalendarEvent> {
+      // Sanitize times to ensure clean integer minutes
+      const sanitizedStart = sanitizeCalendarTime(opts.start);
+      const sanitizedEnd = sanitizeCalendarTime(opts.end);
+      if (!sanitizedStart || !sanitizedEnd) {
+        throw new Error(`Invalid calendar time format: start="${opts.start}", end="${opts.end}"`);
+      }
+
       const id = opts.id ?? crypto.randomUUID();
       const now = nowLocal();
       const timezone = localTimezone();
@@ -275,7 +283,7 @@ export function getCalendar() {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
                  $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
                  $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
-        [id, opts.title, toDbTime(opts.start), toDbTime(opts.end),
+        [id, opts.title, toDbTime(sanitizedStart), toDbTime(sanitizedEnd),
          timezone, calendarId, opts.color ?? null, opts.description ?? "",
          rrule, notifJson, repeatUntil,
          opts.allDay ? 1 : 0, opts.location ?? "", opts.url ?? "",
@@ -308,7 +316,7 @@ export function getCalendar() {
         await saveAttendees(id, opts.attendees);
       }
       const event: CalendarEvent = {
-        id, title: opts.title, start: opts.start, end: opts.end,
+        id, title: opts.title, start: sanitizedStart, end: sanitizedEnd,
         timezone, calendarId,
         color: opts.color, description: opts.description,
         recurrence: opts.recurrence, notifications: opts.notifications,
@@ -339,6 +347,14 @@ export function getCalendar() {
         }
       }
       toUpdate = { ...toUpdate, recurringParentId: undefined };
+
+      // Sanitize times to ensure clean integer minutes
+      const sanitizedStart = sanitizeCalendarTime(toUpdate.start);
+      const sanitizedEnd = sanitizeCalendarTime(toUpdate.end);
+      if (!sanitizedStart || !sanitizedEnd) {
+        throw new Error(`Invalid calendar time format: start="${toUpdate.start}", end="${toUpdate.end}"`);
+      }
+      toUpdate = { ...toUpdate, start: sanitizedStart, end: sanitizedEnd };
 
       const now = nowLocal();
       const rrule = toUpdate.recurrence ? recurrenceToRrule(toUpdate.recurrence) : null;

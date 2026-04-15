@@ -365,7 +365,8 @@ export function useDragController(config: DragControllerConfig) {
     ) as HTMLElement;
     if (!columnEl) return;
 
-    createState = { dateStr, anchorMinute: minute, columnEl, didDrag: false };
+    const roundedMinute = Math.round(minute);
+    createState = { dateStr, anchorMinute: roundedMinute, columnEl, didDrag: false };
     const snap = calZoom.gridMinutes;
     const endMinute = Math.min(minute + snap, 1440);
     createPreviewDate = dateStr;
@@ -443,10 +444,12 @@ export function useDragController(config: DragControllerConfig) {
     title?: string,
     color?: EventColor,
   ): PositionedEvent {
-    const sh = String(Math.floor(startMinute / 60)).padStart(2, "0");
-    const sm = String(startMinute % 60).padStart(2, "0");
-    const eh = String(Math.floor(Math.min(endMinute, 1440) / 60)).padStart(2, "0");
-    const em = String(Math.min(endMinute, 1440) % 60).padStart(2, "0");
+    const start = Math.round(startMinute);
+    const end = Math.round(Math.min(endMinute, 1440));
+    const sh = String(Math.floor(start / 60)).padStart(2, "0");
+    const sm = String(start % 60).padStart(2, "0");
+    const eh = String(Math.floor(end / 60)).padStart(2, "0");
+    const em = String(end % 60).padStart(2, "0");
 
     return {
       event: {
