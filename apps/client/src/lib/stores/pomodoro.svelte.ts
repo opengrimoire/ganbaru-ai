@@ -67,7 +67,7 @@ let idleTimeoutMs: number | null = null; // null = disabled
 let idleCheckIntervalId: ReturnType<typeof setInterval> | null = null;
 let idlePaused = $state<{ idleSeconds: number; nativeOverlay: boolean } | null>(null);
 
-// --- Snapshot builder ---
+// Snapshot builder
 
 function buildSnapshot(): TimerSnapshot {
   return {
@@ -93,7 +93,7 @@ function buildSnapshot(): TimerSnapshot {
   };
 }
 
-// --- Segment helpers ---
+// Segment helpers
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -489,7 +489,7 @@ async function transitionToBlock(
   updateTray();
 }
 
-// --- Tray ---
+// Tray
 
 function updateTray() {
   const totalSeconds =
@@ -507,7 +507,7 @@ function updateTray() {
   }).catch(() => {});
 }
 
-// --- Listeners ---
+// Listeners
 
 function initListeners() {
   if (listenersInitialized) return;
@@ -577,7 +577,7 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
 }
 
-// --- Session control ---
+// Session control
 
 function stopOvertime() {
   if (overtimeIntervalId) {
@@ -672,7 +672,7 @@ function dismissSuspend(resume: boolean) {
   }
 }
 
-// --- Idle detection ---
+// Idle detection
 
 interface IdleStatus {
   idle_ms: number;
@@ -852,7 +852,7 @@ async function saveCompletedSession(
   );
 }
 
-// --- Timer ---
+// Timer
 
 function tick() {
   const now = Date.now();
@@ -1092,7 +1092,7 @@ function advancePhase() {
   }
 }
 
-// --- Public API ---
+// Public API
 
 export function getPomodoro() {
   initListeners();

@@ -27,7 +27,7 @@ function unlockCursor() {
   document.body.style.cursor = "";
 }
 
-// --- Auto-scroll constants ---
+// Auto-scroll constants
 const AUTO_SCROLL_ZONE = 48; // px from edge to start scrolling
 const AUTO_SCROLL_MAX_SPEED = 12; // px per frame at the very edge
 
@@ -66,7 +66,7 @@ export function useDragController(config: DragControllerConfig) {
   let lastPointerEvent: PointerEvent | null = null;
   let autoScrollRaf = 0;
 
-  // --- Auto-scroll ---
+  // Auto-scroll
 
   function getScrollEdgeSpeed(container: HTMLElement, clientY: number): number {
     const rect = container.getBoundingClientRect();
@@ -118,7 +118,7 @@ export function useDragController(config: DragControllerConfig) {
     }
   }
 
-  // --- Scroll-aware delta ---
+  // Scroll-aware delta
 
   function scrollAwareDeltaY(clientY: number): number {
     if (!dragState) return 0;
@@ -127,7 +127,7 @@ export function useDragController(config: DragControllerConfig) {
     return (clientY - dragState.pointerStartY) + scrollDelta;
   }
 
-  // --- Existing event drag (move / resize) ---
+  // Existing event drag (move / resize)
 
   function handleDragStart(eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") {
     if (config.canDrag && !config.canDrag(eventId)) return;
@@ -355,7 +355,7 @@ export function useDragController(config: DragControllerConfig) {
     grabbingId = null;
   }
 
-  // --- Create-by-drag ---
+  // Create-by-drag
 
   function handleCreateStart(dateStr: string, minute: number, e: PointerEvent) {
     if (dragState) return; // don't start create while an event drag is active
@@ -467,7 +467,7 @@ export function useDragController(config: DragControllerConfig) {
     };
   }
 
-  // --- Computed helpers for DayColumn props ---
+  // Computed helpers for DayColumn props
 
   function getDragPreviewForDate(dateStr: string): PositionedEvent | null {
     if (!dragPreview) return null;

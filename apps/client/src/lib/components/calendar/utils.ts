@@ -7,7 +7,7 @@ import type {
 
 const MIN_EVENT_HEIGHT = 4;
 
-// --- Date parsing and formatting ---
+// Date parsing and formatting
 
 export function parseCalendarDate(str: string): Date {
   // "YYYY-MM-DD HH:MM" -> Date
@@ -33,7 +33,7 @@ export function formatDatePart(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-// --- Week / day helpers ---
+// Week / day helpers
 
 export function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -86,7 +86,7 @@ export function isPastDay(date: Date): boolean {
   return d.getTime() < today.getTime();
 }
 
-// --- Month helpers ---
+// Month helpers
 
 export function getMonthGrid(year: number, month: number): Date[][] {
   const first = new Date(year, month, 1);
@@ -104,7 +104,7 @@ export function getMonthGrid(year: number, month: number): Date[][] {
   return weeks;
 }
 
-// --- Time helpers ---
+// Time helpers
 
 export function minuteOfDay(dateStr: string): number {
   const timePart = dateStr.split(" ")[1] ?? "00:00";
@@ -140,7 +140,7 @@ export function formatDayName(
   return date.toLocaleDateString("en-US", { weekday: format });
 }
 
-// --- Timezone helpers ---
+// Timezone helpers
 
 export const GUTTER_WIDTH_PER_TZ = 46;
 
@@ -363,7 +363,7 @@ export function clampMinute(minute: number): number {
   return Math.max(0, Math.min(1440, minute));
 }
 
-// --- Cross-midnight helpers ---
+// Cross-midnight helpers
 
 /**
  * Returns the effective minute range for an event within a specific day.
@@ -407,7 +407,7 @@ export function minuteOffsetToDateStr(
   return formatCalendarDate(base);
 }
 
-// --- Event filtering ---
+// Event filtering
 
 export function eventsForDay(
   events: CalendarEvent[],
@@ -523,7 +523,7 @@ export function layoutAllDayEventsForWeek(
   return result;
 }
 
-// --- Overlap layout algorithm ---
+// Overlap layout algorithm
 
 interface EventWithRange {
   event: CalendarEvent;
@@ -644,7 +644,7 @@ export function layoutEventsForDay(
   return result;
 }
 
-// --- Event color palette ---
+// Event color palette
 
 interface ColorEntry {
   bg: string;

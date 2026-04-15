@@ -94,7 +94,7 @@ function parseIntList(raw: string): number[] {
   return raw.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
 }
 
-// --- Serializer ---
+// Serializer
 
 export function recurrenceToRrule(config: RecurrenceConfig): string {
   const parts: string[] = [`FREQ=${FREQ_REVERSE[config.frequency]}`];
@@ -146,7 +146,7 @@ export function recurrenceToRrule(config: RecurrenceConfig): string {
   return parts.join(";");
 }
 
-// --- Parser ---
+// Parser
 
 export function rruleToRecurrence(
   rrule: string,
@@ -240,7 +240,7 @@ export function rruleToRecurrence(
   return config;
 }
 
-// --- Presets ---
+// Presets
 
 export function presetToRecurrence(preset: RecurrencePreset): RecurrenceConfig | undefined {
   switch (preset) {
@@ -291,7 +291,7 @@ export function recurrenceToPreset(config: RecurrenceConfig): RecurrencePreset |
   }
 }
 
-// --- Label formatting ---
+// Label formatting
 
 function formatMonthDay(dateStr: string): string {
   const datePart = dateStr.split("T")[0];

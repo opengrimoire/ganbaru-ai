@@ -422,7 +422,7 @@ export function applyFollowing(
   };
 }
 
-// --- Helpers ---
+// Helpers
 
 export function dateDiffDays(fromDateStr: string, toDateStr: string): number {
   return Math.round(

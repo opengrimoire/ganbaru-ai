@@ -39,7 +39,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
   let grabbingId = $state<string | null>(null); // Set immediately on pointerdown for visual feedback
   let _didDrag = $state(false);
 
-  // --- Helpers ---
+  // Helpers
 
   function columnFromX(clientX: number, bounds: DOMRect[]): number {
     for (let i = 0; i < bounds.length; i++) {
@@ -55,7 +55,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
     return formatDatePart(days[Math.max(0, Math.min(col, days.length - 1))]);
   }
 
-  // --- Existing event drag (move / resize) ---
+  // Existing event drag (move / resize)
 
   function handleDragStart(eventId: string, e: PointerEvent) {
     if (config.canDrag && !config.canDrag(eventId)) return;

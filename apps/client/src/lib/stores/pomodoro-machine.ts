@@ -1,6 +1,6 @@
 import type { PomodoroPhase } from "@ganbaruai/shared-types";
 
-// --- Types ---
+// Types
 
 export interface PomodoroConfig {
   focusMinutes: number;
@@ -32,7 +32,7 @@ export interface TimerSnapshot {
   idleTimeoutMs: number | null;
 }
 
-// --- Constants ---
+// Constants
 
 export const DEFAULT_CONFIG: PomodoroConfig = {
   focusMinutes: 40,
@@ -46,7 +46,7 @@ export const SUSPEND_THRESHOLD_MS = 15_000;
 export const NOTIFICATION_THRESHOLD = 60;
 export const MAX_BREAK_OVERTIME_SECONDS = 1800;
 
-// --- Utility functions ---
+// Utility functions
 
 export function configEquals(a: PomodoroConfig, b: PomodoroConfig): boolean {
   return (
@@ -66,7 +66,7 @@ export function phaseDurationSeconds(
   return config.longBreakMinutes * TIME_MULTIPLIER;
 }
 
-// --- decideTick ---
+// decideTick
 
 export type TickResult =
   | {
@@ -163,7 +163,7 @@ export function decideTick(snapshot: TimerSnapshot, nowMs: number): TickResult {
   return { kind: "countdown", remainingSeconds };
 }
 
-// --- decideAdvancePhase ---
+// decideAdvancePhase
 
 export type AdvancePhaseResult =
   | {
@@ -222,7 +222,7 @@ export function decideAdvancePhase(snapshot: TimerSnapshot): AdvancePhaseResult 
   };
 }
 
-// --- decideTransition ---
+// decideTransition
 
 export interface TransitionInput {
   previousConfig: PomodoroConfig;
@@ -291,7 +291,7 @@ export function decideTransition(input: TransitionInput): TransitionResult {
   return { kind: "keep_break" };
 }
 
-// --- decideStartFromBlock ---
+// decideStartFromBlock
 
 export interface StartFromBlockInput {
   currentBlockId: string | null;
@@ -355,7 +355,7 @@ export function decideStartFromBlock(
   };
 }
 
-// --- decideReconfigure ---
+// decideReconfigure
 
 export interface ReconfigureInput {
   phase: PomodoroPhase;
@@ -386,7 +386,7 @@ export function decideReconfigure(input: ReconfigureInput): ReconfigureResult {
   };
 }
 
-// --- decideIdleCheck ---
+// decideIdleCheck
 
 export interface IdleCheckInput {
   isRunning: boolean;

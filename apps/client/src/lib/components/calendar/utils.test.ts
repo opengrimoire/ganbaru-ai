@@ -398,7 +398,7 @@ describe("calendar store time conversion round-trip", () => {
   });
 });
 
-// --- All-day event helpers ---
+// All-day event helpers
 
 describe("eventsForDay excludes all-day events", () => {
   it("filters out all-day events", () => {

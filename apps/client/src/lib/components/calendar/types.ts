@@ -82,7 +82,7 @@ export type EventTransparency = "opaque" | "transparent";
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
 export type EventVisibility = "public" | "private" | "confidential";
 
-// --- Attendee types (RFC 5545 ATTENDEE/ORGANIZER) ---
+// Attendee types (RFC 5545 ATTENDEE/ORGANIZER)
 
 export type AttendeeRole = "chair" | "req-participant" | "opt-participant" | "non-participant";
 export type AttendeeStatus = "needs-action" | "accepted" | "declined" | "tentative" | "delegated";
@@ -101,7 +101,7 @@ export interface EventOrganizer {
   email: string;
 }
 
-// --- Alarm types (RFC 5545 VALARM) ---
+// Alarm types (RFC 5545 VALARM)
 
 export type AlarmAction = "display" | "audio" | "email";
 
@@ -114,14 +114,14 @@ export interface EventAlarm {
   description?: string;
 }
 
-// --- Geo coordinates (RFC 5545 GEO) ---
+// Geo coordinates (RFC 5545 GEO)
 
 export interface GeoCoordinates {
   lat: number;
   lng: number;
 }
 
-// --- Per-instance override (RFC 5545 RECURRENCE-ID) ---
+// Per-instance override (RFC 5545 RECURRENCE-ID)
 
 export interface EventOverride {
   id: string;
@@ -141,7 +141,7 @@ export interface EventOverride {
   extendedProperties?: Record<string, string>;
 }
 
-// --- Guest permissions (Google Calendar X-properties) ---
+// Guest permissions (Google Calendar X-properties)
 
 export interface GuestPermissions {
   /** Whether guests can modify the event (X-GOOGLE-GUEST-CAN-MODIFY). */
@@ -152,7 +152,7 @@ export interface GuestPermissions {
   canSeeOtherGuests: boolean;
 }
 
-// --- Main event interface ---
+// Main event interface
 
 export interface CalendarEvent {
   id: string;
@@ -246,7 +246,7 @@ export interface PositionedEvent {
   hasEventBelow?: boolean; // another event starts right when this one ends
 }
 
-// --- Pomodoro segment types ---
+// Pomodoro segment types
 
 export type SegmentPhase = "focus" | "short_break" | "long_break";
 

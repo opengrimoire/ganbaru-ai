@@ -38,10 +38,10 @@
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
 
-  // --- Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.) ---
+  // Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.)
   const session = createEditSession();
 
-  // --- Display events (pure overlay, no store mutation) ---
+  // Display events (pure overlay, no store mutation)
   // When saving edits, suppress preview computation to prevent flash
   // (store updates before session closes, so preview would briefly conflict)
   let suppressEditPreview = $state(false);

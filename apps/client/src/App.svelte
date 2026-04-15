@@ -229,7 +229,7 @@
     return () => clearInterval(id);
   });
 
-  // --- Event notifications ---
+  // Event notifications
   const notifiedEvents = new Set<string>();
 
   function checkEventNotifications() {

@@ -13,23 +13,13 @@ import type {
  * Compute the planned sequence of focus and break segments for a pomodoro
  * session within a given event duration.
  *
- * Parameters
- * ----------
- * config : PomodoroConfig
- *     Pomodoro timing settings.
- * eventDurationMinutes : number
- *     Total duration of the calendar event in minutes.
- * initialFocusOffsetMinutes : number
- *     Focus time already accumulated from a preceding event (inheritance).
+ * @param config - Pomodoro timing settings.
+ * @param eventDurationMinutes - Total duration of the calendar event in minutes.
+ * @param initialFocusOffsetMinutes - Focus time already accumulated from a preceding event (inheritance).
  *     If >= focusDuration, the event starts with a break instead of focus.
- * initialCycleNumber : number
- *     Cycle number to start at (from a preceding event's trailing cycle).
+ * @param initialCycleNumber - Cycle number to start at (from a preceding event's trailing cycle).
  *     Default 1. If >= pomodoroCount, the first break will be a long break.
- *
- * Returns
- * -------
- * PlannedSegment[]
- *     Ordered list of segments with minute offsets from the event start.
+ * @returns Ordered list of segments with minute offsets from the event start.
  */
 export function computePlannedSegments(
   config: PomodoroConfig,
@@ -160,19 +150,10 @@ export function computeTrailingCycleNumber(segments: PlannedSegment[]): number {
  * Convert planned segments into accent bar bands for rendering.
  * Only break segments produce bands (focus is the default accent fill).
  *
- * Parameters
- * ----------
- * segments : PlannedSegment[]
- *     Output from computePlannedSegments.
- * eventDurationMinutes : number
- *     Total duration of the calendar event in minutes.
- * status : SegmentStatus
- *     Status to assign to all bands (default "planned").
- *
- * Returns
- * -------
- * AccentBarBand[]
- *     Bands representing break positions within the accent bar.
+ * @param segments - Output from computePlannedSegments.
+ * @param eventDurationMinutes - Total duration of the calendar event in minutes.
+ * @param status - Status to assign to all bands (default "planned").
+ * @returns Bands representing break positions within the accent bar.
  */
 export interface TimelineEvent {
   id: string;
@@ -513,19 +494,10 @@ function projectPersistedSegments(
 /**
  * Compute the focus score for a completed session.
  *
- * Parameters
- * ----------
- * startMs : number
- *     Session start timestamp (ms).
- * endMs : number
- *     Session end timestamp (ms).
- * pauseLog : PauseInterval[]
- *     Array of [pauseStart, resumeOrNull] intervals.
- *
- * Returns
- * -------
- * number
- *     Ratio of actual focus time to total elapsed time (0.0 to 1.0).
+ * @param startMs - Session start timestamp (ms).
+ * @param endMs - Session end timestamp (ms).
+ * @param pauseLog - Array of [pauseStart, resumeOrNull] intervals.
+ * @returns Ratio of actual focus time to total elapsed time (0.0 to 1.0).
  */
 export function computeFocusScore(
   startMs: number,

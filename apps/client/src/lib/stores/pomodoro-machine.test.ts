@@ -20,7 +20,7 @@ import {
   type IdleCheckInput,
 } from "./pomodoro-machine";
 
-// --- Helpers ---
+// Helpers
 
 const NOW = 1_700_000_000_000;
 

@@ -61,7 +61,7 @@ function hasStructuralChanges(
   return false;
 }
 
-// --- Store ---
+// Store
 
 /** DB-backed template events (no virtual instances). */
 let rawBlocks = $state<CalendarEvent[]>([]);

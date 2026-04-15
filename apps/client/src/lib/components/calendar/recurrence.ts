@@ -255,7 +255,7 @@ function advanceYearlyByMonthDay(
   return fallback;
 }
 
-// --- Expansion ---
+// Expansion
 
 const EXPANSION_DAYS = 180;
 const MAX_INSTANCES = 500;
