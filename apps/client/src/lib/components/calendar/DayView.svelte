@@ -58,7 +58,7 @@
   let ready = $state(false);
   let stickyHeaderHeight = $state(0);
   const calZoom = getCalendarZoom();
-  const smoothScroll = createSmoothScroll(() => scrollContainer);
+  const smoothScroll = createSmoothScroll(() => scrollContainer, 6, 12);
 
   function onWheel(e: WheelEvent) {
     if (e.ctrlKey || e.shiftKey) {

@@ -274,6 +274,7 @@
   let lastClientX: number | null = $state(null);
   let lastClientY: number | null = $state(null);
   let scrollSnapTimer = 0;
+  let scrollProximityRaf = 0;
   let isScrolling = $state(false);
   let zoomModifierPressed = $state(false); // Ctrl or Shift held for zoom
 
@@ -350,6 +351,7 @@
       document.removeEventListener("ganbaruai-clear-snap", clearSnap);
       sp?.removeEventListener('scroll', handleParentScroll);
       clearTimeout(scrollSnapTimer);
+      if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
     };
   });
 
@@ -689,9 +691,15 @@
     if (calZoom.isAnimating) return;
 
     // Freeze snap line position during scroll (just fade out)
-    // But update cursor state so hover/resize detection stays accurate
     isScrolling = true;
-    recheckProximity();
+
+    // Defer proximity check to next frame to avoid blocking scroll
+    if (!scrollProximityRaf) {
+      scrollProximityRaf = requestAnimationFrame(() => {
+        scrollProximityRaf = 0;
+        recheckProximity();
+      });
+    }
 
     // After scroll stops, update snap position and fade back in
     clearTimeout(scrollSnapTimer);
