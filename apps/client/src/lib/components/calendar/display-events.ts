@@ -335,7 +335,7 @@ export function applyAll(
 
 /**
  * "Following" scope: cap old template at day before instance, create virtual
- * new template for future instances. No DB mutation -- pure computation.
+ * new template for future instances. No DB mutation, pure computation.
  */
 export function applyFollowing(
   rawBlocks: CalendarEvent[],

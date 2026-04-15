@@ -526,7 +526,7 @@
         return;
       }
 
-      // Drag on recurring without panel open -- open panel with changes
+      // Drag on recurring without panel open: open panel with changes
       const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
       const rect = el?.getBoundingClientRect();
       const anchor: PanelAnchor = rect

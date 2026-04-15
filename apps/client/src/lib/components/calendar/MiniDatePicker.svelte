@@ -15,7 +15,7 @@
 
   type PickerMode = "days" | "months" | "years";
 
-  // svelte-ignore state_referenced_locally -- component remounts per use, initial-only capture is correct
+  // svelte-ignore state_referenced_locally (component remounts per use, initial-only capture is correct)
   const initParts = selectedDate ? selectedDate.split("-").map(Number) : [];
   const initYear = initParts[0] || new Date().getFullYear();
   const initMonth = initParts[1] || new Date().getMonth() + 1;

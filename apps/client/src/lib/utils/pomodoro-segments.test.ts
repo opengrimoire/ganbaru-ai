@@ -339,7 +339,7 @@ describe("segmentsToAccentBands", () => {
   });
 });
 
-// --- computeDayTimelineBands ---
+// computeDayTimelineBands
 
 const CREATIVE_CONFIG: PomodoroConfig = {
   focusDurationMinutes: 25,
@@ -669,7 +669,7 @@ describe("computeDayTimelineBands", () => {
     expect(firstBBreak.phase).toBe("long_break");
   });
 
-  // --- Focus fill bands ---
+  // Focus fill bands
 
   it("active focus segment produces green fill band up to current time", () => {
     const ev = makeEvent("A", 10, 12);

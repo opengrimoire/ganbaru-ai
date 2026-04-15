@@ -303,7 +303,7 @@ function isPastUntil(occDateStr: string, untilDate: string): boolean {
     // Date-only comparison
     return occDateStr > untilDate;
   }
-  // UNTIL has time -- compare the date portion only for the expansion loop
+  // UNTIL has time: compare the date portion only for the expansion loop
   // (the time precision matters for boundary cases, but our instances are date-keyed)
   const untilDatePart = untilDate.split("T")[0];
   return occDateStr > untilDatePart;

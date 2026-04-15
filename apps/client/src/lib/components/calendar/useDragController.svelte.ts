@@ -247,7 +247,7 @@ export function useDragController(config: DragControllerConfig) {
       }
 
       newStart = Math.min(1430, rawStart);
-      newEnd = newStart + dur; // may exceed 1440 or start < 0 -- cross-midnight
+      newEnd = newStart + dur; // may exceed 1440 or start < 0 (cross-midnight)
     } else if (dragState.type === "resize-top") {
       const minSize = calZoom.gridMinutes;
       const anchor = dragState.originEndMinute;
@@ -475,12 +475,12 @@ export function useDragController(config: DragControllerConfig) {
     const previewStartDate = dragPreview.event.start.split(" ")[0];
     const previewEndDate = dragPreview.event.end.split(" ")[0];
 
-    // Single-day event -- return preview as-is for its date
+    // Single-day event: return preview as-is for its date
     if (previewStartDate === previewEndDate) {
       return dateStr === previewStartDate ? dragPreview : null;
     }
 
-    // Start day -- show from event start to bottom of day
+    // Start day: show from event start to bottom of day
     if (dateStr === previewStartDate) {
       const startMin = minuteOfDay(dragPreview.event.start);
       return {
@@ -490,7 +490,7 @@ export function useDragController(config: DragControllerConfig) {
       };
     }
 
-    // End day -- show from top to event end
+    // End day: show from top to event end
     if (dateStr === previewEndDate) {
       const endMin = minuteOfDay(dragPreview.event.end);
       if (endMin <= 0) return null;
@@ -549,13 +549,13 @@ export function useDragController(config: DragControllerConfig) {
 
     // resize-bottom: snap line tracks the end handle
     if (previewStartDate === previewEndDate) {
-      // Same day -- show snap on that day
+      // Same day: show snap on that day
       return dateStr === previewStartDate
         ? minuteOfDay(dragPreview.event.end)
         : null;
     }
 
-    // Cross-midnight -- show snap on the end day only
+    // Cross-midnight: show snap on the end day only
     if (dateStr === previewEndDate) {
       return minuteOfDay(dragPreview.event.end);
     }

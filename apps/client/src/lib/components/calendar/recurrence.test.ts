@@ -278,7 +278,7 @@ describe("expandRecurring - monthly BYMONTHDAY", () => {
     });
     const result = expandRecurring([evt]);
     const dates = collectDates(result);
-    // Jan 31, Mar 31, May 31, Jul 31 -- skips Feb(28), Apr(30), Jun(30)
+    // Jan 31, Mar 31, May 31, Jul 31 (skips Feb 28, Apr 30, Jun 30)
     expect(dates).toEqual(["2026-01-31", "2026-03-31", "2026-05-31", "2026-07-31"]);
   });
 
