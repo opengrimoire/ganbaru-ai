@@ -20,6 +20,8 @@ import {
   effectiveMinuteRange,
   minuteOffsetToDateStr,
   formatHour,
+  isValidCalendarTime,
+  sanitizeCalendarTime,
 } from "./utils";
 import type { CalendarEvent } from "./types";
 
@@ -532,5 +534,122 @@ describe("layoutAllDayEventsForWeek", () => {
   it("returns empty for no events", () => {
     const result = layoutAllDayEventsForWeek([], weekDays);
     expect(result).toHaveLength(0);
+  });
+});
+
+// Time validation and sanitization tests
+
+describe("isValidCalendarTime", () => {
+  it("accepts valid YYYY-MM-DD HH:MM format", () => {
+    expect(isValidCalendarTime("2026-03-13 14:30")).toBe(true);
+    expect(isValidCalendarTime("2026-01-01 00:00")).toBe(true);
+    expect(isValidCalendarTime("2026-12-31 23:59")).toBe(true);
+  });
+
+  it("rejects invalid formats", () => {
+    expect(isValidCalendarTime("2026-03-13")).toBe(false); // missing time
+    expect(isValidCalendarTime("2026-03-13 14:30:00")).toBe(false); // has seconds
+    expect(isValidCalendarTime("2026/03/13 14:30")).toBe(false); // wrong separator
+    expect(isValidCalendarTime("03-13-2026 14:30")).toBe(false); // wrong date format
+    expect(isValidCalendarTime("")).toBe(false);
+    expect(isValidCalendarTime("invalid")).toBe(false);
+  });
+
+  it("rejects out of range values", () => {
+    expect(isValidCalendarTime("2026-13-01 12:00")).toBe(false); // month > 12
+    expect(isValidCalendarTime("2026-00-01 12:00")).toBe(false); // month = 0
+    expect(isValidCalendarTime("2026-03-32 12:00")).toBe(false); // day > 31
+    expect(isValidCalendarTime("2026-03-00 12:00")).toBe(false); // day = 0
+    expect(isValidCalendarTime("2026-03-13 24:00")).toBe(false); // hour > 23
+    expect(isValidCalendarTime("2026-03-13 12:60")).toBe(false); // minute > 59
+  });
+
+  it("rejects non-string inputs", () => {
+    expect(isValidCalendarTime(null as unknown as string)).toBe(false);
+    expect(isValidCalendarTime(undefined as unknown as string)).toBe(false);
+    expect(isValidCalendarTime(12345 as unknown as string)).toBe(false);
+  });
+});
+
+describe("sanitizeCalendarTime", () => {
+  it("passes through valid times unchanged", () => {
+    expect(sanitizeCalendarTime("2026-03-13 14:30")).toBe("2026-03-13 14:30");
+    expect(sanitizeCalendarTime("2026-01-01 00:00")).toBe("2026-01-01 00:00");
+  });
+
+  it("rounds floating point minutes", () => {
+    expect(sanitizeCalendarTime("2026-03-13 14:30.5")).toBe("2026-03-13 14:31");
+    expect(sanitizeCalendarTime("2026-03-13 14:30.4")).toBe("2026-03-13 14:30");
+    expect(sanitizeCalendarTime("2026-03-13 14:30.14999999999977")).toBe("2026-03-13 14:30");
+    expect(sanitizeCalendarTime("2026-03-13 13:23.14999999999977")).toBe("2026-03-13 13:23");
+  });
+
+  it("rounds floating point hours", () => {
+    expect(sanitizeCalendarTime("2026-03-13 14.5:30")).toBe("2026-03-13 15:30");
+  });
+
+  it("clamps out of range values", () => {
+    expect(sanitizeCalendarTime("2026-03-13 25:30")).toBe("2026-03-13 23:30");
+    expect(sanitizeCalendarTime("2026-03-13 -1:30")).toBe("2026-03-13 00:30");
+    expect(sanitizeCalendarTime("2026-03-13 14:70")).toBe("2026-03-13 14:59");
+    expect(sanitizeCalendarTime("2026-03-13 14:-5")).toBe("2026-03-13 14:00");
+  });
+
+  it("defaults missing time to 00:00", () => {
+    expect(sanitizeCalendarTime("2026-03-13")).toBe("2026-03-13 00:00");
+  });
+
+  it("returns null for invalid inputs", () => {
+    expect(sanitizeCalendarTime("")).toBe(null);
+    expect(sanitizeCalendarTime("invalid")).toBe(null);
+    expect(sanitizeCalendarTime("2026/03/13 14:30")).toBe(null);
+    expect(sanitizeCalendarTime(null as unknown as string)).toBe(null);
+    expect(sanitizeCalendarTime(undefined as unknown as string)).toBe(null);
+  });
+
+  it("handles edge cases", () => {
+    expect(sanitizeCalendarTime("2026-03-13 00:00")).toBe("2026-03-13 00:00");
+    expect(sanitizeCalendarTime("2026-03-13 23:59")).toBe("2026-03-13 23:59");
+    expect(sanitizeCalendarTime("  2026-03-13 14:30  ")).toBe("2026-03-13 14:30"); // trims whitespace
+  });
+});
+
+describe("minuteOfDay", () => {
+  it("returns integer minutes", () => {
+    expect(minuteOfDay("2026-03-13 14:30")).toBe(870);
+    expect(minuteOfDay("2026-03-13 00:00")).toBe(0);
+    expect(minuteOfDay("2026-03-13 23:59")).toBe(1439);
+  });
+
+  it("handles missing time part", () => {
+    expect(minuteOfDay("2026-03-13")).toBe(0);
+  });
+});
+
+describe("snapToGrid", () => {
+  it("returns integer values", () => {
+    expect(Number.isInteger(snapToGrid(14.7, 15))).toBe(true);
+    expect(Number.isInteger(snapToGrid(30.5, 5))).toBe(true);
+    expect(Number.isInteger(snapToGrid(0, 30))).toBe(true);
+  });
+
+  it("snaps to nearest grid interval", () => {
+    expect(snapToGrid(7, 15)).toBe(0);
+    expect(snapToGrid(8, 15)).toBe(15);
+    expect(snapToGrid(22, 15)).toBe(15);
+    expect(snapToGrid(23, 15)).toBe(30);
+  });
+});
+
+describe("clampMinute", () => {
+  it("returns integer values", () => {
+    expect(Number.isInteger(clampMinute(100))).toBe(true);
+    expect(Number.isInteger(clampMinute(100.5))).toBe(true);
+  });
+
+  it("clamps to valid range", () => {
+    expect(clampMinute(-10)).toBe(0);
+    expect(clampMinute(1500)).toBe(1440);
+    expect(clampMinute(720)).toBe(720);
   });
 });
