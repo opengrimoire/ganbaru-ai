@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PositionedEvent } from "./types";
-  import { getEventColor } from "./utils";
+  import { getEventColor, getPastEventColor } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
@@ -32,7 +32,12 @@
   } = $props();
 
   const colors = $derived(getEventColor(positioned.event.color, isDark));
-  const activeColors = $derived(colors);
+  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const activeColors = $derived(
+    usePastColors
+      ? getPastEventColor(positioned.event.color, isDark)
+      : colors
+  );
 
   // Events with IDs starting with __ are temporary (preview/pending) and should never animate
   const isTemporaryEvent = $derived(positioned.event.id.startsWith("__"));
@@ -79,7 +84,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {isPast && !editing && !preview && !grabbing && !isDark ? 'past-light' : ''} {isPast && !editing && !preview && !grabbing && isDark ? 'past-dark' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -87,7 +92,7 @@
     width: {positioned.totalColumns > 1 ? `calc(${positioned.width}% - 2px)` : `${positioned.width}%`};
     color: {activeColors.text};
     cursor: {effectiveCursor};
-    z-index: {editing ? 45 : 1};
+    z-index: {editing ? 45 : 3};
     filter: none;
     opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
   "
@@ -170,25 +175,4 @@
   :global(.dark) .event-editing::after {
     border-color: rgba(255, 255, 255, 0.5);
   }
-
-  .past-light::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  .past-dark::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-  }
-
 </style>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CalendarEvent } from "./types";
-  import { getEventColor } from "./utils";
+  import { getEventColor, getPastEventColor } from "./utils";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
 
@@ -27,7 +27,12 @@
   } = $props();
 
   const colors = $derived(getEventColor(event.color, isDark));
-  const activeColors = $derived(colors);
+  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const activeColors = $derived(
+    usePastColors
+      ? getPastEventColor(event.color, isDark)
+      : colors
+  );
 
   const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
   const hasNotification = $derived(event.notifications && event.notifications.length > 0);
@@ -55,9 +60,7 @@
   bind:this={chipEl}
   data-event-id={event.id}
   class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]
-    {editing || preview || grabbing ? 'chip-editing' : ''}
-    {isPast && !editing && !preview && !grabbing && !isDark ? 'chip-past-light' : ''}
-    {isPast && !editing && !preview && !grabbing && isDark ? 'chip-past-dark' : ''}"
+    {editing || preview || grabbing ? 'chip-editing' : ''}"
   style="
     background-color: {activeColors.bg};
     color: {activeColors.text};
@@ -87,26 +90,6 @@
 </div>
 
 <style>
-  .chip-past-light::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  .chip-past-dark::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-  }
-
   .chip-editing::after {
     content: "";
     position: absolute;

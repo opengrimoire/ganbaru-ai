@@ -594,12 +594,8 @@
     // No event creation when panel is open
     if (panelOpen) return;
 
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const offsetY = e.clientY - rect.top;
-    const minuteWithinHour = snapToGrid((offsetY / calZoom.hourHeight) * 60, calZoom.gridMinutes);
-    const minute = clampMinute(hour * 60 + minuteWithinHour);
-    onCreateStart(dateStr, minute, e);
+    // Use the snap line position (includes current time snap), rounded to integer
+    onCreateStart(dateStr, Math.round(snapEffectiveMin), e);
   }
 
   function updateSnapFromClientY(clientX: number | null, clientY: number, snap: boolean) {
@@ -644,6 +640,15 @@
           break;
         }
       }
+
+      // Snap to current time line when mouse is close to it
+      if (isToday && currentTimeMinute >= 0) {
+        const currentTimeY = (currentTimeMinute / 60) * hh;
+        if (Math.abs(offsetY - currentTimeY) < threshold) {
+          snapped = currentTimeMinute;
+        }
+      }
+
       snapMinute = snapped;
     } else {
       // During scroll: use raw floating-point value for smooth visual movement
@@ -727,7 +732,16 @@
     const offsetY = e.clientY - colRect.top;
     const rawMinute = (offsetY / hh) * 60;
     if (railSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
-    const minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
+    let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
+
+    // Snap to current time if close
+    if (isToday && currentTimeMinute >= 0) {
+      const currentTimeY = (currentTimeMinute / 60) * hh;
+      if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
+        minute = currentTimeMinute;
+      }
+    }
+
     onCreateStart(dateStr, minute, e);
   }
 </script>
@@ -752,8 +766,8 @@
         style="background-color: var(--cal-current-time); left: -5px; top: -5px;"
       ></div>
       <div
-        class="absolute left-0 right-0 h-[2px]"
-        style="background-color: var(--cal-current-time); top: -1px;"
+        class="absolute left-0 right-0 h-[2.3px]"
+        style="background-color: var(--cal-current-time); top: -1.15px;"
       ></div>
     </div>
   {/if}
@@ -762,7 +776,7 @@
   {#each hours as hour}
     {#if hour < 23}
       <div
-        class="pointer-events-none absolute left-0 right-0"
+        class="pointer-events-none absolute left-0 right-0 z-[2]"
         style="top: calc({hour + 1} * var(--hour-h) * 1px); height: 0; border-bottom: 1px solid var(--cal-gridline);"
       ></div>
     {/if}
@@ -779,7 +793,7 @@
   <!-- Pomodoro timeline rails (one per contiguous group of pomodoro events) -->
   {#each railSegments as seg}
     <div
-      class="pointer-events-none absolute z-[2] overflow-hidden"
+      class="pointer-events-none absolute z-[3] overflow-hidden"
       style="
         left: 2px;
         width: {railWidth}px;

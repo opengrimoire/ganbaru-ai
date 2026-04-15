@@ -646,7 +646,7 @@ export function layoutEventsForDay(
 
 // Event color palette
 
-interface ColorEntry {
+export interface ColorEntry {
   bg: string;
   accent: string;
   text: string;
@@ -654,6 +654,36 @@ interface ColorEntry {
 
 const LIGHT_TEXT = "#1c1c1e";
 const DARK_TEXT = "#f0f0f2";
+const LIGHT_TEXT_PAST = "#6b6b6d";
+const DARK_TEXT_PAST = "#a0a0a2";
+
+/**
+ * Blend a hex color toward white (for light mode past effect).
+ * Factor 0.3 means 30% white blended in.
+ */
+function blendToWhite(hex: string, factor = 0.3): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const nr = Math.round(r + (255 - r) * factor);
+  const ng = Math.round(g + (255 - g) * factor);
+  const nb = Math.round(b + (255 - b) * factor);
+  return `#${nr.toString(16).padStart(2, "0")}${ng.toString(16).padStart(2, "0")}${nb.toString(16).padStart(2, "0")}`;
+}
+
+/**
+ * Blend a hex color toward black (for dark mode past effect).
+ * Factor 0.3 means 30% darker.
+ */
+function blendToBlack(hex: string, factor = 0.3): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const nr = Math.round(r * (1 - factor));
+  const ng = Math.round(g * (1 - factor));
+  const nb = Math.round(b * (1 - factor));
+  return `#${nr.toString(16).padStart(2, "0")}${ng.toString(16).padStart(2, "0")}${nb.toString(16).padStart(2, "0")}`;
+}
 
 const LIGHT_COLORS: Record<EventColor, ColorEntry> = {
   ruby:      { bg: "#f0c2c2", accent: "#b82e2e", text: LIGHT_TEXT },
@@ -707,6 +737,37 @@ export function getEventColor(
 ): ColorEntry {
   const key = color ?? "slate";
   return isDark ? DARK_COLORS[key] : LIGHT_COLORS[key];
+}
+
+// Cache for computed past colors to avoid recalculating
+const pastColorCache = new Map<string, ColorEntry>();
+
+/**
+ * Get pre-computed dimmed colors for past events.
+ * Uses solid colors instead of transparent overlays for better performance.
+ */
+export function getPastEventColor(
+  color: EventColor | undefined,
+  isDark: boolean,
+): ColorEntry {
+  const key = `${color ?? "slate"}-${isDark ? "dark" : "light"}`;
+  const cached = pastColorCache.get(key);
+  if (cached) return cached;
+
+  const base = getEventColor(color, isDark);
+  const entry: ColorEntry = isDark
+    ? {
+        bg: blendToBlack(base.bg),
+        accent: blendToBlack(base.accent),
+        text: DARK_TEXT_PAST,
+      }
+    : {
+        bg: blendToWhite(base.bg),
+        accent: blendToWhite(base.accent),
+        text: LIGHT_TEXT_PAST,
+      };
+  pastColorCache.set(key, entry);
+  return entry;
 }
 
 export const EVENT_COLOR_OPTIONS: EventColor[] = [
