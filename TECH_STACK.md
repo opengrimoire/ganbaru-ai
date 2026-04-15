@@ -80,15 +80,11 @@ Turborepo does not replace Tauri's build pipeline; it invokes `tauri build`/`tau
 
 ### shadcn-svelte
 
-The primary component source. Generates component source code directly into the project via CLI rather than installing a package. Built on Bits UI primitives. Requires Tailwind CSS v4, which uses CSS-native `@theme` and `@custom-variant` directives via the `@tailwindcss/vite` plugin instead of a `tailwind.config.js` file. Chosen because:
+The primary component source. Generates component source code directly into the project via CLI rather than installing a package. Requires Tailwind CSS v4, which uses CSS-native `@theme` and `@custom-variant` directives via the `@tailwindcss/vite` plugin instead of a `tailwind.config.js` file. Chosen because:
 
 - Components live in your repo and can be freely modified and interconnected without fighting library abstractions.
 - Svelte 5 native.
 - Covers standard UI needs: dialogs, dropdowns, popovers, calendars, date pickers, command palette, tabs, and more.
-
-### Bits UI
-
-The headless primitive layer under shadcn-svelte. Used directly when shadcn-svelte does not have a specific component or when lower-level control is needed. Svelte 5 native from the start, not an incomplete rewrite like Melt UI's current situation.
 
 ### Calendar widget
 
@@ -631,7 +627,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Build tool                | Vite                                                 | Default with Tauri + Svelte                                                        |
 | Package manager           | pnpm                                                 | Strict dependency isolation, disk efficiency, first-class workspace support        |
 | Monorepo orchestration    | Turborepo                                            | Task dependency resolution, build caching, parallel execution across workspaces    |
-| Components                | shadcn-svelte + Bits UI                              | Source-owned, headless, Svelte 5 native                                            |
+| Components                | shadcn-svelte                                        | Source-owned, Svelte 5 native, customizable                                        |
 | Calendar UI               | calendar widget                                           | Only mature Svelte calendar with drag-and-drop                                     |
 | Kanban drag-and-drop      | svelte-dnd-action                                    | Drag-and-drop for Kanban columns and task reordering                               |
 | Note editor               | Tiptap + starter-kit                                 | Notion-like UX, markdown serialization, native Yjs integration                     |

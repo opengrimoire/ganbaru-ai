@@ -139,7 +139,13 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
   - Tauri v2: v2.tauri.app
   - Svelte 5: svelte.dev/docs
   - shadcn-svelte: next.shadcn-svelte.com
-  - Bits UI: bits-ui.com
   - Tailwind CSS v4: tailwindcss.com/docs
   - Tiptap: tiptap.dev/docs
   - If the official docs are not enough, fall back to general web searches (GitHub issues, Stack Overflow, etc.).
+- Dependencies and security: this app handles sensitive personal data. Treat supply chain security seriously.
+  - Prefer official packages from standards bodies or well-known maintainers over popular but unofficial alternatives.
+  - Prefer native browser APIs (Intl, Temporal, fetch) over libraries when the implementation effort is similar.
+  - For date/time handling, use the Temporal API (via @js-temporal/polyfill until browsers ship native support).
+  - Minimize dependencies. Do not add packages "just in case"; add them when actually needed.
+  - Remove unused dependencies promptly rather than keeping them for potential future use.
+  - No analytics, telemetry, or packages that phone home. The app must work fully offline.
