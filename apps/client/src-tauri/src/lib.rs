@@ -19,6 +19,8 @@ fn force_quit(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Delete database files (main, WAL, SHM) and quit the app.
+/// Used to factory reset application state.
 #[tauri::command]
 fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
     let mut db_path = app.path().app_config_dir().map_err(|e| e.to_string())?;

@@ -66,6 +66,7 @@ fn format_tray_time(secs: u32) -> String {
     format!("{mins}:{s:02}")
 }
 
+/// Initialize the system tray with an idle icon and status menu.
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let idle_icon = render_progress_icon(0.0, false);
     let icon = Image::new_owned(idle_icon, ICON_SIZE, ICON_SIZE);
@@ -114,6 +115,8 @@ fn phase_id(phase: &str) -> u8 {
     }
 }
 
+/// Update tray icon progress ring, tooltip, and menu based on pomodoro state.
+/// Optimized to only redraw icon/menu when visual state actually changes.
 #[tauri::command]
 pub fn update_tray(
     app: AppHandle,
