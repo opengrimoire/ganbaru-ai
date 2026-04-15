@@ -641,9 +641,12 @@
             style="
               left: calc({snapCol} / 7 * 100%);
               width: calc(100% / 7);
-              top: calc({s.minute} / 60 * var(--hour-h) * 1px - {s.atBottom ? 2.3 : 1.3}px);
+              top: 0;
+              transform: translateY(calc({s.minute} / 60 * var(--hour-h) * 1px - {s.atBottom ? 2.3 : 1.3}px));
               z-index: 47;
-              {s.isScrolling ? 'transition: left 100ms ease-out;' : 'transition: left 100ms ease-out, top 80ms ease-out;'}
+              will-change: transform, opacity;
+              opacity: {s.isScrolling ? 0 : 1};
+              transition: left 100ms ease-out, opacity 150ms ease-out;
             "
           >
             <div
