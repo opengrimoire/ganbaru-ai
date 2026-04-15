@@ -409,6 +409,15 @@
   <!-- Spacer -->
   <div class="flex-1"></div>
 
+  <!-- Calendar zoom reset (temporary) -->
+  <button
+    onclick={() => calZoom.reset()}
+    class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    title="Reset calendar zoom"
+  >
+    <RotateCcw size={13} />
+  </button>
+
   <!-- View selector -->
   <div class="flex items-center gap-0.5">
     {#each viewOptions as opt}
@@ -465,7 +474,7 @@
       class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       title="Calendars"
     >
-      <Layers size={14} />
+      <Layers size={13} />
     </button>
 
     {#if showAccountPicker}

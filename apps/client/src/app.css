@@ -146,7 +146,7 @@
   --cal-timeline-rail: rgba(0, 0, 0, 0.1);
   --cal-timeline-break: #6B7280;
   --cal-timeline-focus: #22C55E;
-  --cal-header-row-h: 44px;
+  --cal-header-row-h: 42px;
 }
 
 .dark {

@@ -260,7 +260,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-tauri-drag-region
-  class="flex h-12 w-full shrink-0 select-none items-center bg-sidebar"
+  class="flex h-[42px] w-full shrink-0 select-none items-center bg-sidebar"
   onwheel={handleTabWheel}
 >
   <!-- Navigation tabs -->
@@ -281,7 +281,7 @@
         )}
         title={`${tab.label} (Alt+${i + 1})`}
       >
-        <tab.icon size={14} />
+        <tab.icon size={14} strokeWidth={1.75} />
         <span>{tab.label}</span>
       </button>
     {/each}
@@ -298,7 +298,7 @@
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       title={`Zoom: ${zoomPercent}% (Ctrl+0 to reset)`}
     >
-      <RotateCcw size={14} />
+      <RotateCcw size={14} strokeWidth={1.75} />
     </button>
 
     <!-- Pomodoro progress ring with dropdown -->
@@ -375,9 +375,9 @@
       title={theme.isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
       {#if theme.isDark}
-        <Sun size={14} />
+        <Sun size={14} strokeWidth={1.75} />
       {:else}
-        <Moon size={14} />
+        <Moon size={14} strokeWidth={1.75} />
       {/if}
     </button>
 
@@ -388,7 +388,7 @@
         class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
         title={liveReport ? `${Math.round(liveReport.total_mb)} MB (PSS)` : "Performance"}
       >
-        <CircleGauge size={14} />
+        <CircleGauge size={14} strokeWidth={1.75} />
       </button>
       {#if showPerfMenu}
         {#if !perfPinned}
@@ -483,7 +483,7 @@
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       title="Help"
     >
-      <CircleHelp size={14} />
+      <CircleHelp size={14} strokeWidth={1.75} />
     </button>
 
     <!-- Provisional: reset database -->
@@ -492,7 +492,7 @@
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       title="Reset database"
     >
-      <Settings size={14} />
+      <Settings size={14} strokeWidth={1.75} />
     </button>
   </div>
 
@@ -503,7 +503,7 @@
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       title="Minimize"
     >
-      <Minus size={14} />
+      <Minus size={14} strokeWidth={1.75} />
     </button>
     <button
       onclick={() => win.toggleMaximize()}
@@ -511,9 +511,9 @@
       title={isMaximized ? "Restore" : "Maximize"}
     >
       {#if isMaximized}
-        <Minimize2 size={13} />
+        <Minimize2 size={12.75} strokeWidth={1.75} />
       {:else}
-        <Square size={13} />
+        <Square size={12.75} strokeWidth={1.75} />
       {/if}
     </button>
     <button
@@ -521,7 +521,7 @@
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-destructive hover:text-white"
       title="Close"
     >
-      <X size={14} />
+      <X size={14} strokeWidth={1.75} />
     </button>
   </div>
 </div>
