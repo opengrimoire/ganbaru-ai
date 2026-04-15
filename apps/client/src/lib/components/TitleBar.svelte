@@ -17,6 +17,7 @@
   import Moon from "@lucide/svelte/icons/moon";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
   import Settings from "@lucide/svelte/icons/settings";
+  import CircleX from "@lucide/svelte/icons/circle-x";
   import Minus from "@lucide/svelte/icons/minus";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Square from "@lucide/svelte/icons/square";
@@ -477,6 +478,15 @@
       {/if}
     </div>
 
+    <!-- Reset database -->
+    <button
+      onclick={() => { showResetConfirm = true; }}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      title="Reset database"
+    >
+      <CircleX size={14} strokeWidth={1.75} />
+    </button>
+
     <!-- TODO: implement help panel -->
     <button
       onclick={() => {}}
@@ -486,11 +496,11 @@
       <CircleHelp size={14} strokeWidth={1.75} />
     </button>
 
-    <!-- Provisional: reset database -->
+    <!-- Settings -->
     <button
-      onclick={() => { showResetConfirm = true; }}
+      onclick={() => {}}
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-      title="Reset database"
+      title="Settings"
     >
       <Settings size={14} strokeWidth={1.75} />
     </button>
