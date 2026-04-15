@@ -515,6 +515,14 @@ export function computeFocusScore(
   return Math.round(Math.max(0, (totalMs - pauseMs) / totalMs) * 100) / 100;
 }
 
+/**
+ * Convert planned segments to accent bar bands for UI rendering.
+ * Only break segments produce bands (focus is the default fill).
+ * @param segments - Array of planned segments.
+ * @param eventDurationMinutes - Total event duration in minutes.
+ * @param status - Status to assign to all bands (default "planned").
+ * @returns Array of accent bar bands with position and phase info.
+ */
 export function segmentsToAccentBands(
   segments: PlannedSegment[],
   eventDurationMinutes: number,

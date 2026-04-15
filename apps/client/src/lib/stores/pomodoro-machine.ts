@@ -90,6 +90,13 @@ export type TickResult =
   | { kind: "countdown_with_notification"; remainingSeconds: number }
   | { kind: "countdown"; remainingSeconds: number };
 
+/**
+ * Pure function that decides what action to take on each timer tick.
+ * Handles suspend/wake detection, block expiry, phase completion, and notifications.
+ * @param snapshot - Current timer state snapshot.
+ * @param nowMs - Current timestamp in milliseconds.
+ * @returns Action to take based on timer state.
+ */
 export function decideTick(snapshot: TimerSnapshot, nowMs: number): TickResult {
   // 1. Suspend/wake detection (highest priority)
   if (
@@ -186,6 +193,12 @@ export type AdvancePhaseResult =
       remainingSeconds: number;
     };
 
+/**
+ * Pure function that decides the next phase when the current phase completes.
+ * Handles skip-break preference and long break cycle logic.
+ * @param snapshot - Current timer state snapshot.
+ * @returns Next phase and its duration.
+ */
 export function decideAdvancePhase(snapshot: TimerSnapshot): AdvancePhaseResult {
   if (snapshot.phase === "focus") {
     if (snapshot.skipNextBreak) {
@@ -253,6 +266,12 @@ export type TransitionResult =
     }
   | { kind: "keep_break" };
 
+/**
+ * Pure function that decides how to handle a config change during an active session.
+ * May trigger an early break if accumulated focus exceeds new threshold.
+ * @param input - Current state and new config.
+ * @returns Transition action (trigger break, continue, fresh start, or keep break).
+ */
 export function decideTransition(input: TransitionInput): TransitionResult {
   if (input.phase === "focus") {
     const oldFocusSec = input.previousConfig.focusMinutes * TIME_MULTIPLIER;
@@ -311,6 +330,12 @@ export type StartFromBlockResult =
   | { kind: "transition"; newConfig: PomodoroConfig; newEndMs: number }
   | { kind: "new_session"; newConfig: PomodoroConfig; newEndMs: number | null };
 
+/**
+ * Pure function that decides how to handle a calendar block becoming active.
+ * Determines whether to start new session, transition, reconfigure, or do nothing.
+ * @param input - Current block state and incoming block info.
+ * @returns Action to take (noop, update end, reconfigure, rebuild, transition, or new session).
+ */
 export function decideStartFromBlock(
   input: StartFromBlockInput,
 ): StartFromBlockResult {
@@ -371,6 +396,12 @@ export interface ReconfigureResult {
   resetNotification: boolean;
 }
 
+/**
+ * Pure function that recalculates remaining time when config changes mid-phase.
+ * Preserves elapsed time and adjusts remaining based on new duration.
+ * @param input - Current phase state and new config.
+ * @returns New remaining seconds and flags for overtime/notification reset.
+ */
 export function decideReconfigure(input: ReconfigureInput): ReconfigureResult {
   const oldDuration = phaseDurationSeconds(input.phase, input.currentConfig);
   const elapsed = Math.max(0, oldDuration - input.remainingSeconds);
@@ -408,6 +439,13 @@ export type IdleCheckResult =
       idleStartMs: number;
     };
 
+/**
+ * Pure function that checks if user has been idle long enough to trigger auto-pause.
+ * Only triggers during focus phase when not already paused and webcam is not in use.
+ * @param input - Current idle detection state.
+ * @param nowMs - Current timestamp in milliseconds.
+ * @returns Skip or trigger idle pause with timing info.
+ */
 export function decideIdleCheck(
   input: IdleCheckInput,
   nowMs: number,
