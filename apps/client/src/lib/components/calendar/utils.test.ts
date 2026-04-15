@@ -315,7 +315,7 @@ describe("layoutEventsForDay", () => {
     const layout = layoutEventsForDay(events, "2026-03-13");
     expect(layout).toHaveLength(1);
     expect(layout[0].left).toBe(0);
-    expect(layout[0].width).toBe(92);
+    expect(layout[0].width).toBe(88);
     expect(layout[0].column).toBe(0);
     expect(layout[0].totalColumns).toBe(1);
   });
@@ -329,8 +329,8 @@ describe("layoutEventsForDay", () => {
     expect(layout).toHaveLength(2);
     expect(layout[0].totalColumns).toBe(2);
     expect(layout[1].totalColumns).toBe(2);
-    expect(layout[0].width).toBe(46);
-    expect(layout[1].width).toBe(46);
+    expect(layout[0].width).toBe(44);
+    expect(layout[1].width).toBe(44);
   });
 
   it("returns empty array for no events", () => {

@@ -88,7 +88,8 @@ describe("closedDisplay", () => {
 describe("buildCreateDisplay", () => {
   it("injects create pseudo-event", () => {
     const events = [makeEvent()];
-    const preview = { dateStr: "2026-03-20", startMinute: 600, endMinute: 660 };
+    // Use different time than makeEvent() (10:00-11:00) to avoid realEventExists check
+    const preview = { dateStr: "2026-03-20", startMinute: 720, endMinute: 780 };
     const result = buildCreateDisplay(events, preview, {});
     expect(result.events.length).toBe(2);
     expect(result.editingId).toBe(PENDING_CREATE_ID);
@@ -96,8 +97,8 @@ describe("buildCreateDisplay", () => {
 
     const created = result.events.find((e) => e.id === PENDING_CREATE_ID);
     expect(created).toBeDefined();
-    expect(created!.start).toBe("2026-03-20 10:00");
-    expect(created!.end).toBe("2026-03-20 11:00");
+    expect(created!.start).toBe("2026-03-20 12:00");
+    expect(created!.end).toBe("2026-03-20 13:00");
   });
 
   it("expands recurring create preview", () => {
