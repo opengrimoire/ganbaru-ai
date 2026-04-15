@@ -318,7 +318,93 @@ An event whose start time is entirely in the future and which has no tracking da
 
 ### Recurring events
 
-Each instance of a recurring event gets its own runs and segments. Modifying or deleting a future instance in a recurrence chain has zero effect on past instances' tracking data. When a recurring instance is detached into a standalone event, run references are transferred (the `event_id` and `original_event_id` on existing runs are updated to the new standalone event ID).
+Recurring events are expanded from a template. Each instance gets a synthetic ID (`templateId::YYYY-MM-DD`). The template itself is also a valid first occurrence (using the base `templateId` without a date suffix). Each instance gets its own runs and segments, independent of other instances. There is no inheritance of pomodoro state across instances: Monday's session ending mid-cycle does not carry over to Tuesday. Each instance starts fresh.
+
+#### Structural operations
+
+Three operations change the structure of a recurring series. All of them can affect how past instances expand, how active sessions continue, and where run references point.
+
+**Detach ("edit this").** A single instance is pulled out of the series into a standalone event with a new UUID. The template gains an exception for that date so the instance no longer expands from the rule. All runs whose `event_id` matches the synthetic ID (`templateId::date`) must have their `event_id` and `original_event_id` updated to the new standalone UUID. The standalone has no recurrence config.
+
+**Example:** "Daily standup" recurs every weekday. The user edits Wednesday's instance with scope "this," changing the title to "Retro." Wednesday is detached: a new standalone event "Retro" is created. The template gains an exception for Wednesday's date. Any runs recorded on that Wednesday are transferred to the standalone's UUID. Thursday's instance continues expanding normally from the template.
+
+**Split ("edit/delete following").** The template is capped with an UNTIL date (the day before the selected instance). A new template is created from the selected instance onward with the updated properties and a fresh recurrence config. Runs on past instances still reference the old template (which still exists, just capped). Runs on future instances will reference the new template's synthetic IDs.
+
+**Example:** "Study session" recurs daily. The user selects Thursday and edits with scope "following," changing the time from 09:00 to 10:00. The old template gets UNTIL = Wednesday. A new template is created starting Thursday with the 10:00 time and the same recurrence rule. Monday through Wednesday's runs still reference the old template. Thursday onward generates instances from the new template.
+
+**Template-wide edit ("edit all").** The template's properties are updated directly. Past instances that already expanded will now expand with the new properties. This creates a tension with data preservation (see below).
+
+#### Invariant 7 enforcement for recurrence changes
+
+Five operations can cause past instances to silently stop expanding from a recurring template:
+
+1. Adding an exception for a past date
+2. Moving UNTIL to before existing past instances
+3. Reducing the occurrence count below the number of past instances
+4. Changing the recurrence pattern so a past date no longer matches (e.g. "every weekday" to "every Monday" removes past Tuesday through Friday instances)
+5. Removing recurrence entirely with scope "all"
+
+Each of these violates invariant 7: a past instance disappears, and with it any tracking data (or the equally valuable absence of tracking data). The enforcement rule:
+
+**Before any recurrence change takes effect, the system must identify every past instance that would stop expanding under the new configuration and detach each one into a standalone event first.** This means creating a standalone event for each affected date and transferring any run references. Only after all past instances are preserved does the recurrence change apply.
+
+**Example: pattern change.** "Exercise" recurs every weekday (Mon-Fri). The user changes it to "every Monday" with scope "all." Before applying, the system computes which past dates matched the old pattern but not the new one. Past Tuesdays, Wednesdays, Thursdays, and Fridays would vanish. Each is detached into a standalone event. Runs on those dates (if any) are transferred. Dates with no runs still get a standalone event (the absence of work is data). Then the template's pattern is updated to "every Monday."
+
+**Example: UNTIL moved backward.** "Morning routine" recurs daily, no end date. The user sets "end after April 5" with scope "all." Today is April 11. Instances from April 6 through April 10 are in the past and would stop expanding. Each is detached before the UNTIL is applied.
+
+**Example: recurrence removed.** "Weekly review" recurs every Friday. The user removes recurrence with scope "all." Every past Friday instance is detached into a standalone event. The template becomes a non-recurring event (the original Friday). Future Fridays stop expanding.
+
+This detach-before-change approach is expensive for series with many past instances. To keep it tractable: the system only needs to detach past instances within a reasonable historical window (e.g. the past 6 months, matching the expansion horizon). Instances beyond that window that were never expanded don't need detaching because they never generated visible events or tracking opportunities.
+
+#### Active session during recurrence edits
+
+When the user edits a recurring event's recurrence settings while a session is running on one of its instances, the active session must survive regardless of the scope or the nature of the change.
+
+**Scope "this":** the active instance is detached into a standalone. The session transfers to the standalone's UUID. The recurrence change doesn't apply to it (it's no longer part of the series). This is the simplest case.
+
+**Scope "following":** the series splits. If the active instance is at the split point, the split moves to the next day (the active instance stays on the old template, which is capped at today). The session continues uninterrupted. If the active instance is before the split point, it's unaffected.
+
+**Scope "all":** the system must:
+1. Detach all past instances that would vanish (invariant 7, as above).
+2. Detach today's active instance into a standalone. The session transfers to the standalone.
+3. Apply the recurrence change to the template.
+4. The session continues on the standalone. When it ends, it does not transition to the next recurring instance (the standalone is independent).
+
+**Example: removing recurrence while active.** "Daily focus" recurs every day. The user is mid-session on today's instance. They remove recurrence with scope "all." Past instances are detached. Today's instance is detached, session transfers to the standalone. The template becomes non-recurring (the original date). Future daily instances stop expanding. The active session finishes normally on the standalone.
+
+**Example: changing pattern while active.** "Study" recurs Mon/Wed/Fri. Today is Wednesday, session is active. The user changes to "Mon/Thu" with scope "all." Wednesday is no longer in the new pattern, so today's instance would vanish. The system detaches today's instance first (session transfers), detaches past Wednesdays and Fridays, then applies the pattern change. The session continues on the standalone Wednesday.
+
+**Example: adding recurrence to an active non-recurring event.** The user has "Project work" 14:00-16:00 with a running session. They add "repeat daily." The event becomes a template. The active run's `event_id` is the base UUID (the template ID), which is also the first occurrence. Tomorrow's instance will be `UUID::2026-04-12`. The session continues because the template's base ID is still a valid first occurrence. Code must not assume all recurring instances have `::date` suffixes; the template's own occurrence uses the base UUID.
+
+#### Run reference integrity
+
+After any structural operation, runs must point to valid, resolvable event IDs:
+
+| Operation | What happens to run `event_id` |
+|-----------|-------------------------------|
+| Detach instance | Updated from `templateId::date` to the standalone's new UUID |
+| Split series | Runs on old dates keep `templateId::date` (old template still exists, capped). Runs on new dates will reference `newTemplateId::date` |
+| Delete template (future-only, no past instances) | Runs are deleted via CASCADE (no past data exists to preserve) |
+| Archive template | `event_id` becomes null via SET NULL. `original_event_id` preserves the link |
+| Add recurrence to existing event | Existing runs keep the base UUID. Future instance runs will use `UUID::date`. Both are valid |
+| Remove recurrence (scope "all") | Past instances detached first (runs transferred). Template becomes non-recurring. Remaining runs on the base UUID are valid |
+
+**The synthetic ID contract:** code that resolves an `event_id` on a run must handle three formats:
+1. A plain UUID (non-recurring event, or the first occurrence of a template)
+2. A synthetic `UUID::date` (recurring instance that still expands)
+3. A null (archived event, join to `calendar_events_archive` via `original_event_id`)
+
+If a synthetic ID no longer expands (e.g. after an UNTIL cap removed the instance, but detach failed or was skipped), the run is an orphan. Analytics should surface orphaned runs as a data integrity warning, not silently ignore them.
+
+#### Time-shift disconnect
+
+When a scope "all" edit changes the event's time (e.g. 09:00-10:00 becomes 14:00-15:00), past instances re-expand at the new time. But any runs recorded on those instances have segments with timestamps at the old time. The rail would show the event block at 14:00 but green fill at 09:00, outside the visible block.
+
+The solution is the same as invariant 7 enforcement: past instances are detached before the time change applies. The standalone events preserve the original time. Only future instances get the new time.
+
+**Example:** "Morning meeting" recurs daily at 09:00-09:30. The user changes it to 14:00-14:30 with scope "all." Past instances are detached at their original 09:00-09:30 time. The template updates to 14:00-14:30. Future instances expand at the new time. Past standalone events keep 09:00-09:30, and their runs align correctly.
+
+This is not an additional rule. It's a natural consequence of the "detach past instances before any change" approach. If past instances are always detached before template-wide edits, their time, pattern, and config are frozen at the point of detachment.
 
 ## Enforcement of past-event protection
 
@@ -696,11 +782,41 @@ The 14:00-14:40 gap is honest. It tells the user (and the AI) that they started 
 
 ### Multi-day events
 
-Clipped to the current day for rendering. Segments use absolute timestamps, so they map correctly regardless of which day the rail is rendering.
+Multi-day events with pomodoro enabled are clipped to the current day for rendering. Segments use absolute timestamps, so they map correctly regardless of which day the rail is rendering.
+
+Each calendar day within a multi-day event is treated as an independent session window. A session does not carry over across midnight. When the clock crosses midnight, the active session is ended (`end_reason=completed`, the day's window expired) and a new session auto-starts for the next day if auto-start is enabled. There is no inheritance across days within the same multi-day event: each day starts fresh. This is consistent with recurring events (no cross-instance inheritance) and avoids the complexity of a single session spanning midnight with different day columns needing to render parts of it.
+
+**Example:** "Hackathon" spans Friday 09:00 to Sunday 18:00 with pomodoro enabled. On Friday, the user works from 10:00 to 23:45. At midnight, the session ends. Saturday auto-starts a fresh session. Friday's rail shows green from 10:00-23:45 with breaks. Saturday's rail starts empty until the new session begins. The runs are separate, each with `event_date` matching their calendar day.
+
+### All-day toggle on a pomodoro event
+
+A timed event with pomodoro enabled can be converted to all-day. Pomodoro is fundamentally time-based (focus periods, breaks, segment timestamps), so converting to all-day is incompatible with an active or historical pomodoro session.
+
+**If no session has ever run on the event:** the toggle removes the pomodoro config. The event becomes a plain all-day event with no rail, no tracking data. This is a clean conversion.
+
+**If a session is currently active:** the system must stop the session first (`end_reason=stopped`), then proceed as below.
+
+**If past sessions exist (runs and segments recorded):** the pomodoro config is removed from the event, but all existing runs and segments are preserved. The event no longer shows a rail (it's all-day, no time-based rendering), but analytics can still query the historical data via `original_event_id`. The runs' config snapshots preserve the settings that were in effect.
+
+Converting back from all-day to timed restores the time pickers but does not restore the pomodoro config. The user must re-enable pomodoro manually. A new session starts fresh with no inheritance from the pre-conversion sessions.
+
+**Example:** "Sprint planning" is a timed event 09:00-12:00 with pomodoro, two completed focus segments recorded. The user toggles it to all-day. The pomodoro config is removed. The two segments remain in the database. The rail disappears. If the user later converts it back to timed (say, 10:00-11:00) and re-enables pomodoro, the rail reappears showing the old segments (which were at 09:00-10:50) as historical data at their original timestamps, even though the event now starts at 10:00. The pre-10:00 segment data renders outside the current event block but is still valid historical data.
+
+### Undo/redo interaction with pomodoro
+
+Undo and redo operate on calendar event properties (time, title, recurrence), not on pomodoro session state. When a user undoes an event change that triggered a session stop or reconfiguration, the event reverts but the session does not.
+
+**Example: undo after resize stops session.** The user resizes an active event from 16:00 to 15:00 (shortening it). The system stops the session (block expired). The user hits Ctrl+Z. The event reverts to 16:00. But the session is already stopped, segments recorded, run closed. Undo does not restart the session. The user sees the event back at its original time with the recorded progress, and can manually start a new session.
+
+This is intentional. Session state changes (segments written, runs closed, pauses recorded) are append-only historical data. Reverting them would violate invariant 6 (past progress never erased). Undo is a calendar operation, not a time machine for tracking data.
+
+**Example: undo after delete.** The user deletes a future event (no tracking data). Undo restores the event. This is clean because no tracking data existed.
+
+**Example: undo after delete with tracking data.** The user deletes an event that had past tracking data (which means it was archived, not deleted, per invariant 7). Undo should restore the event from the archive back to the active calendar. The runs' `event_id` (which became null on archive) must be restored to the event's ID.
 
 ### Recurring events
 
-Each instance gets its own runs and segments. When a recurring instance is detached into a standalone event, run references are transferred. Modifying or deleting future instances in a chain has zero effect on past instances' data.
+Each instance gets its own runs and segments, independent of other instances (no cross-instance inheritance). Structural operations (detach, split, template-wide edit) follow the rules in "Recurring events" under event lifecycle. The key rendering implication: after a detach, the standalone event's segments and the remaining template's projected schedule must not overlap on the rail. The detached date has an exception on the template, so only the standalone's data renders for that time slot.
 
 ### Break overtime
 
