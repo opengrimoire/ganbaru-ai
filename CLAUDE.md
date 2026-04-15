@@ -15,11 +15,10 @@ Features a highly interconnected:
 
 ## Essential reading
 
-- **PRODUCT_SPEC.md**: full product specification (what the app does and why)
-- **TECH_STACK.md**: complete technical stack and architecture (how it's built)
+- **PRODUCT_SPEC.md**: what the app does and why
+- **TECH_STACK.md**: how it's built
 - **PROGRESS.md**: current state of the project
 - **ROADMAP.md**: phased development plan
-- **TESTING.md**: test setup, conventions, and what is covered
 
 ## Workspace structure
 
@@ -131,6 +130,23 @@ Music files are not stored in the vault. Local audio files stay wherever the use
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
+## Testing
+
+**Writing tests:**
+- Tests live next to source with `.test.ts` suffix (e.g., `utils.ts` and `utils.test.ts`)
+- Pure functions are the best candidates. If a function depends on Tauri IPC or DOM, extract the pure logic into a separate function or skip testing it.
+- Before writing a new test, look at existing tests in the same area to match their depth and style.
+- Cover edge cases, not just happy paths. Shallow "it exists" tests are worthless.
+- Test names describe behavior, not implementation.
+
+**For UI/component changes:** Run the app and verify manually. Unit tests verify logic, not visual behavior.
+
+**Commands (always use `-w` flag for root scripts):**
+- `pnpm -w run check`: fast feedback (types, format, lint). Use while coding.
+- `pnpm -w run test`: all tests (vitest + cargo test). Use after changes to tested code.
+- `pnpm -w run validate`: everything (check + test). Run before reporting a task as complete. All errors must be fixed; do not report a task as done if validate fails.
+- `pnpm test:coverage` (from apps/client): coverage report to see what's tested.
+
 ## Rules
 
 - Read PROGRESS.md at the start of every conversation to understand what has been done and what is in progress.
@@ -139,7 +155,6 @@ Music files are not stored in the vault. Local audio files stay wherever the use
   - When a full phase is complete, collapse its "What exists" items into a single summary line and start the next phase.
   - When starting a new feature branch, add it to "Active work" with the branch name and scope.
   - "Blocked / needs decision" tracks anything that cannot proceed without input.
-- When adding or modifying pure functions (utils, helpers, formulas), write or update unit tests. Tests live next to the source with `.test.ts` suffix. Run `pnpm test` from `apps/client/` to verify. Update TESTING.md if new test categories are added.
 - Do not use em dashes (—) or double dashes (--) in markdown, code comments, or commit messages. Restructure sentences using periods, commas, colons, semicolons, or parentheses instead.
 - This project is entirely donation-funded (GitHub Sponsors). Users never pay for a service and should never depend on infrastructure we host or maintain. Any feature involving external services (sync, backups, AI, integrations) must be designed so the user provisions and hosts it themselves. Prioritize ease of setup: provide step-by-step guides accessible to non-technical users, support multiple provider options (or the most common ones), and ask me for clarification on which providers to target if not already specified in the roadmap.
 - Keep the workspace structure and vault structure in this file up to date. When directories are created, renamed, or removed, update the relevant tree. Never hardcode vault paths; read them from user configuration.
