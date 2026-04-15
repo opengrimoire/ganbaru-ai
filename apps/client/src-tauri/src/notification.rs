@@ -2,7 +2,6 @@ use notify_rust::{Hint, Notification};
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
-
 #[derive(Clone, Serialize)]
 struct AddTimePayload {
     seconds: u32,
@@ -93,16 +92,13 @@ impl SavedShortcuts {
         }
 
         // Mutter overlay-key (Super alone)
-        let overlay_key = gsettings_get("org.gnome.mutter", "overlay-key")
-            .unwrap_or_else(|| "'Super_L'".into());
+        let overlay_key =
+            gsettings_get("org.gnome.mutter", "overlay-key").unwrap_or_else(|| "'Super_L'".into());
         gsettings_set("org.gnome.mutter", "overlay-key", "");
 
         // Ubuntu Dock / Dash to Dock Super+N
-        let dock_hotkeys = gsettings_get(
-            "org.gnome.shell.extensions.dash-to-dock",
-            "hot-keys",
-        )
-        .unwrap_or_else(|| "true".into());
+        let dock_hotkeys = gsettings_get("org.gnome.shell.extensions.dash-to-dock", "hot-keys")
+            .unwrap_or_else(|| "true".into());
         gsettings_set(
             "org.gnome.shell.extensions.dash-to-dock",
             "hot-keys",
@@ -115,7 +111,6 @@ impl SavedShortcuts {
             disabled,
         }
     }
-
 }
 
 /// Inhibit screensaver/idle via D-Bus, returns cookie for uninhibit
@@ -937,8 +932,8 @@ pub fn get_idle_status() -> IdleStatus {
 
 #[cfg(target_os = "windows")]
 fn get_idle_time_ms_windows() -> u64 {
-    use winapi::um::winuser::{GetLastInputInfo, LASTINPUTINFO};
     use winapi::um::sysinfoapi::GetTickCount;
+    use winapi::um::winuser::{GetLastInputInfo, LASTINPUTINFO};
     unsafe {
         let mut lii = LASTINPUTINFO {
             cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
@@ -1016,7 +1011,10 @@ fn is_webcam_in_use_macos() -> bool {
     // On macOS, VDCAssistant or AppleCameraAssistant runs when the camera is active.
     // On Apple Silicon Macs, the process may be called "appleh13camerad".
     let output = std::process::Command::new("bash")
-        .args(["-c", "pgrep -x 'VDCAssistant|AppleCameraAssistant|appleh13camerad'"])
+        .args([
+            "-c",
+            "pgrep -x 'VDCAssistant|AppleCameraAssistant|appleh13camerad'",
+        ])
         .output();
     match output {
         Ok(out) => out.status.success(),
@@ -1072,8 +1070,12 @@ pub fn play_alert_sound() {
         #[cfg(target_os = "windows")]
         {
             let _ = std::process::Command::new("powershell")
-                .args(["-NoProfile", "-NonInteractive", "-Command",
-                    "[System.Media.SystemSounds]::Exclamation.Play()"])
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "[System.Media.SystemSounds]::Exclamation.Play()",
+                ])
                 .status();
         }
         #[cfg(target_os = "macos")]

@@ -21,10 +21,7 @@ fn force_quit(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
-    let mut db_path = app
-        .path()
-        .app_config_dir()
-        .map_err(|e| e.to_string())?;
+    let mut db_path = app.path().app_config_dir().map_err(|e| e.to_string())?;
     let db_file = if cfg!(debug_assertions) {
         "ganbaruai-dev.db"
     } else {
@@ -34,11 +31,7 @@ fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
 
     for suffix in &["", "-wal", "-shm"] {
         let mut path = db_path.clone();
-        let name = format!(
-            "{}{}",
-            path.file_name().unwrap().to_string_lossy(),
-            suffix
-        );
+        let name = format!("{}{}", path.file_name().unwrap().to_string_lossy(), suffix);
         path.set_file_name(name);
         if path.exists() {
             std::fs::remove_file(&path).map_err(|e| e.to_string())?;
@@ -138,8 +131,7 @@ fn get_memory_report() -> MemoryReport {
                     // Format: pid (comm) state ppid ...
                     // Find closing ')' to skip comm which may contain spaces
                     if let Some(after_comm) = stat.rfind(')') {
-                        let fields: Vec<&str> =
-                            stat[after_comm + 2..].split_whitespace().collect();
+                        let fields: Vec<&str> = stat[after_comm + 2..].split_whitespace().collect();
                         // fields[0] = state, fields[1] = ppid
                         if let Some(ppid) = fields.get(1) {
                             if *ppid == my_pid_str {
@@ -155,9 +147,7 @@ fn get_memory_report() -> MemoryReport {
         }
 
         let total_mb = processes.iter().map(|p| p.mb).sum();
-        processes[1..].sort_by(|a, b| {
-            b.mb.partial_cmp(&a.mb).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        processes[1..].sort_by(|a, b| b.mb.partial_cmp(&a.mb).unwrap_or(std::cmp::Ordering::Equal));
 
         MemoryReport {
             processes,
@@ -225,8 +215,7 @@ fn get_memory_report() -> MemoryReport {
             let mut processes = Vec::new();
             let mut webview_idx = 0u32;
             for &pid in &pids {
-                let handle =
-                    OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
+                let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
                 if !handle.is_null() {
                     let mut pmc: PROCESS_MEMORY_COUNTERS = mem::zeroed();
                     pmc.cb = mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
@@ -254,9 +243,8 @@ fn get_memory_report() -> MemoryReport {
             }
 
             let total_mb = processes.iter().map(|p| p.mb).sum();
-            processes[1..].sort_by(|a, b| {
-                b.mb.partial_cmp(&a.mb).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            processes[1..]
+                .sort_by(|a, b| b.mb.partial_cmp(&a.mb).unwrap_or(std::cmp::Ordering::Equal));
 
             MemoryReport {
                 processes,

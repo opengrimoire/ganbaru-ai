@@ -80,7 +80,6 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("GanbaruAI")
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
-
             "pause_resume" => {
                 let _ = app.emit("tray-pause-resume", ());
             }
@@ -98,7 +97,8 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// Initialized to sentinel values so the first update always applies
 static LAST_ICON_STEP: std::sync::Mutex<(u8, bool)> = std::sync::Mutex::new((255, true));
 
-static LAST_MENU_STATE: std::sync::Mutex<(bool, u8, bool)> = std::sync::Mutex::new((true, 255, true));
+static LAST_MENU_STATE: std::sync::Mutex<(bool, u8, bool)> =
+    std::sync::Mutex::new((true, 255, true));
 // (is_running, phase_id, active)
 
 /// Stored reference to status menu item for lightweight text updates
@@ -122,9 +122,7 @@ pub fn update_tray(
     total_seconds: u32,
     is_running: bool,
 ) -> Result<(), String> {
-    let tray = app
-        .tray_by_id("main")
-        .ok_or("No tray icon found")?;
+    let tray = app.tray_by_id("main").ok_or("No tray icon found")?;
 
     let progress = if total_seconds > 0 {
         1.0 - (remaining_seconds as f64 / total_seconds as f64)
@@ -173,11 +171,17 @@ pub fn update_tray(
         if last.0 != is_running || last.1 != pid || last.2 != active {
             *last = (is_running, pid, active);
 
-            let status_item =
-                MenuItemBuilder::with_id("status", if active { &status_text } else { "No active session" })
-                    .enabled(false)
-                    .build(&app)
-                    .map_err(|e| e.to_string())?;
+            let status_item = MenuItemBuilder::with_id(
+                "status",
+                if active {
+                    &status_text
+                } else {
+                    "No active session"
+                },
+            )
+            .enabled(false)
+            .build(&app)
+            .map_err(|e| e.to_string())?;
 
             // Store reference for future text-only updates
             {
