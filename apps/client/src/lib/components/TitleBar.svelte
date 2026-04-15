@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { invoke } from "@tauri-apps/api/core";
   import { getNavigation, type View } from "$lib/stores/navigation.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -17,6 +18,7 @@
   import CircleHelp from "@lucide/svelte/icons/circle-help";
   import Settings from "@lucide/svelte/icons/settings";
   import Minus from "@lucide/svelte/icons/minus";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Square from "@lucide/svelte/icons/square";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import X from "@lucide/svelte/icons/x";
@@ -35,6 +37,7 @@
   let { startupMs = null }: { startupMs: number | null } = $props();
 
   const win = getCurrentWindow();
+  const webview = getCurrentWebviewWindow();
   const nav = getNavigation();
   const pomodoro = getPomodoro();
   const theme = getTheme();
@@ -47,6 +50,31 @@
   let perfPinned = $state(false);
   let perfLive = $state(false);
   let copied = $state(false);
+
+  // Zoom handling with predefined levels (Chrome-like behavior)
+  const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+  let zoomIndex = $state(ZOOM_LEVELS.indexOf(1)); // Start at 100%
+
+  function zoomIn() {
+    if (zoomIndex < ZOOM_LEVELS.length - 1) {
+      zoomIndex++;
+      webview.setZoom(ZOOM_LEVELS[zoomIndex]);
+    }
+  }
+
+  function zoomOut() {
+    if (zoomIndex > 0) {
+      zoomIndex--;
+      webview.setZoom(ZOOM_LEVELS[zoomIndex]);
+    }
+  }
+
+  function resetZoom() {
+    zoomIndex = ZOOM_LEVELS.indexOf(1);
+    webview.setZoom(1);
+  }
+
+  const zoomPercent = $derived(Math.round(ZOOM_LEVELS[zoomIndex] * 100));
 
   async function confirmReset() {
     showResetConfirm = false;
@@ -165,6 +193,32 @@
     }
   }
 
+  // Capture zoom shortcuts early to prevent native webview handling
+  $effect(() => {
+    function handleZoom(e: KeyboardEvent) {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+        if (e.key === "=" || e.key === "+") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          zoomIn();
+        } else if (e.key === "-") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          zoomOut();
+        } else if (e.key === "0") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          resetZoom();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleZoom, { capture: true });
+    return () => window.removeEventListener("keydown", handleZoom, { capture: true });
+  });
+
   let tabEls: HTMLButtonElement[] = $state([]);
   let indicatorStyle = $state("");
 
@@ -238,6 +292,15 @@
 
   <!-- Utility buttons -->
   <div class="flex items-center gap-0.5">
+    <!-- Reset zoom -->
+    <button
+      onclick={resetZoom}
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      title={`Zoom: ${zoomPercent}% (Ctrl+0 to reset)`}
+    >
+      <RotateCcw size={14} />
+    </button>
+
     <!-- Pomodoro progress ring with dropdown -->
     <div class="relative">
       <button
