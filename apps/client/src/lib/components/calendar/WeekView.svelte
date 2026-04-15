@@ -140,7 +140,7 @@
 
   // stickyAllDayBannerHeight is measured via bind:offsetHeight on the all-day banner
   const calZoom = getCalendarZoom();
-  const smoothScroll = createSmoothScroll(() => scrollContainer, 6, 12);
+  const smoothScroll = createSmoothScroll(() => scrollContainer, 8, 12);
 
   function onWheel(e: WheelEvent) {
     if (e.ctrlKey || e.shiftKey) {

@@ -95,7 +95,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={trackEl}
-  class="pointer-events-auto absolute right-0 z-50"
+  class="pointer-events-auto absolute right-0 z-[100]"
   style="top: {stickyTop}px; bottom: 0; width: 8px;"
   onpointerdown={handleTrackPointerDown}
   onpointermove={handlePointerMove}
@@ -109,8 +109,7 @@
       style="
         top: {thumbTop}px;
         height: {thumbHeight}px;
-        background-color: var(--muted-foreground);
-        opacity: {dragging ? 0.5 : hovering ? 0.35 : 0.2};
+        background-color: var(--muted);
       "
     ></div>
   {/if}
