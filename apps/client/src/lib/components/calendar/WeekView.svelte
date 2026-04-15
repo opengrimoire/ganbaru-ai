@@ -388,7 +388,7 @@
     bind:this={scrollContainer}
     onwheel={onWheel}
     class="hide-scrollbar absolute inset-0 overflow-y-auto overflow-x-hidden"
-    style="background-color: var(--cal-bg);"
+    style="background-color: var(--cal-bg); will-change: scroll-position; backface-visibility: hidden;"
   >
     <div
       class="week-grid grid"
