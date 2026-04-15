@@ -22,99 +22,76 @@ Features a highly interconnected:
 
 ## Workspace structure
 
-> This tree shows both existing and planned directories. Items marked with (planned) do not exist yet. Update this tree whenever directories are created, renamed, or removed.
+> Update this when directories are created, renamed, or removed. Items marked (planned) do not exist yet.
 
 ```
-ganbaruai/
-│
-├── apps/
-│   ├── client/                           ← Tauri app (Svelte frontend + Rust backend)
-│   │   ├── src/                          ← Svelte frontend
-│   │   │   ├── lib/                      ← shared frontend code
-│   │   │   │   ├── components/           ← reusable Svelte components
-│   │   │   │   │   ├── calendar/         ← calendar wrappers, session block rendering
-│   │   │   │   │   ├── kanban/           ← board columns, task cards, drag-and-drop
-│   │   │   │   │   ├── pomodoro/         ← timer display, break screen, idle overlay
-│   │   │   │   │   ├── notes/            ← (planned) Tiptap editor wrapper, slash commands
-│   │   │   │   │   ├── diary/            ← (planned) morning/evening entry forms
-│   │   │   │   │   ├── music/            ← (planned) player controls, playlist management
-│   │   │   │   │   ├── ai-panel/         ← (planned) integrated terminal (xterm.js) and BYOK chat
-│   │   │   │   │   ├── visual-novel/     ← (planned) NPC dialogue, conversation state machine
-│   │   │   │   │   ├── edge-panel/       ← (planned) panel layout, quick-access widgets
-│   │   │   │   │   ├── environment/      ← (planned) work environment config UI
-│   │   │   │   │   ├── contracts/        ← (planned) contract creation, tracking, proof UI
-│   │   │   │   │   ├── project/          ← (planned) project management quest chain phases
-│   │   │   │   │   └── ui/              ← shadcn-svelte generated components
-│   │   │   │   ├── hooks/               ← reusable Svelte hooks
-│   │   │   │   ├── stores/              ← Svelte runes ($state), global app state
-│   │   │   │   ├── api/                ← typed wrappers around Tauri invoke() calls
-│   │   │   │   ├── utils/               ← shared helpers, formatters
-│   │   │   │   └── types/               ← frontend-specific TypeScript types
-│   │   │   ├── windows/                 ← (planned) entry points for each Tauri window
-│   │   │   ├── app.html                 ← HTML shell
-│   │   │   ├── app.css                  ← global styles, RPG theme variables
-│   │   │   └── app.d.ts                 ← global type declarations
-│   │   ├── static/                      ← static assets (fonts, icons, sounds)
-│   │   ├── src-tauri/                   ← Rust backend
-│   │   │   ├── src/
-│   │   │   │   ├── main.rs              ← shared entry point
-│   │   │   │   ├── lib.rs               ← shared commands and logic
-│   │   │   │   └── mobile.rs            ← mobile-specific Rust logic
-│   │   │   ├── gen/                     ← auto-generated mobile projects
-│   │   │   ├── capabilities/            ← permission declarations (desktop/mobile)
-│   │   │   ├── icons/                   ← app icons
-│   │   │   ├── tauri.conf.json          ← Tauri config
-│   │   │   └── Cargo.toml
-│   │   ├── package.json
-│   │   ├── svelte.config.js
-│   │   ├── vite.config.ts
-│   │   └── tsconfig.json
-│   │
-│   └── server/                          ← (planned) Hocuspocus sync server (self-hostable)
-│
-├── plugins/                             ← (planned)
-│   └── media-player/                    ← LGPL 2.1 Tauri plugin (Rust crate + npm)
-│
-├── packages/
-│   └── shared-types/                    ← TypeScript types shared across workspaces
-│       ├── src/
-│       └── package.json
-│
-├── extensions/                          ← (planned)
-│   ├── chrome/                          ← Chrome extension (manifest v3)
-│   └── firefox/                         ← Firefox extension
-│
-├── Cargo.toml                           ← cargo workspace root
-├── turbo.json                           ← Turborepo task config
-├── pnpm-workspace.yaml                  ← workspace definition
-└── package.json                         ← root scripts, shared dev dependencies
+apps/
+  client/: Tauri app (Svelte frontend + Rust backend)
+    src/: Svelte frontend
+      lib/: shared frontend code
+        components/: reusable Svelte components
+          calendar/: calendar wrappers, session block rendering
+          kanban/: board columns, task cards, drag-and-drop
+          pomodoro/: timer display, break screen, idle overlay
+          notes/: (planned) Tiptap editor wrapper, slash commands
+          diary/: (planned) morning/evening entry forms
+          music/: (planned) player controls, playlist management
+          ai-panel/: (planned) integrated terminal (xterm.js) and BYOK chat
+          visual-novel/: (planned) NPC dialogue, conversation state machine
+          edge-panel/: (planned) panel layout, quick-access widgets
+          environment/: (planned) work environment config UI
+          contracts/: (planned) contract creation, tracking, proof UI
+          project/: (planned) project management quest chain phases
+          ui/: shadcn-svelte generated components
+        hooks/: reusable Svelte hooks
+        stores/: Svelte runes ($state), global app state
+        api/: typed wrappers around Tauri invoke() calls
+        utils/: shared helpers, formatters
+        types/: frontend-specific TypeScript types
+      windows/: (planned) entry points for each Tauri window
+      app.html, app.css, app.d.ts: HTML shell, global styles, type declarations
+    static/: static assets (fonts, icons, sounds)
+    src-tauri/: Rust backend
+      src/: main.rs (entry), lib.rs (commands), mobile.rs (mobile logic)
+      gen/: auto-generated mobile projects
+      capabilities/: permission declarations (desktop/mobile)
+      icons/: app icons
+      tauri.conf.json, Cargo.toml
+    package.json, svelte.config.js, vite.config.ts, tsconfig.json
+  server/: (planned) Hocuspocus sync server (self-hostable)
+plugins/: (planned)
+  media-player/: LGPL 2.1 Tauri plugin (Rust crate + npm)
+packages/
+  shared-types/: TypeScript types shared across workspaces
+extensions/: (planned)
+  chrome/: Chrome extension (manifest v3)
+  firefox/: Firefox extension
+Cargo.toml: cargo workspace root
+turbo.json: Turborepo task config
+pnpm-workspace.yaml: workspace definition
+package.json: root scripts, shared dev dependencies
 ```
 
 ## Vault structure
 
-> Everything the app produces or manages lives in one folder called the vault. This makes backup and sync the same operation regardless of data type. Update this tree as the project evolves.
+> Everything the app produces lives in one folder (the vault). Update this as the project evolves.
 
 ```
 vault/
-  notes/
-    daily/                ← daily notes (markdown)
-    projects/             ← per-project notes and working documents (markdown)
-  diary/
-    morning/              ← dated morning diary entries (markdown, indexed fields in SQLite)
-    evening/              ← dated evening diary entries (markdown, indexed fields in SQLite)
-  calendar/               ← calendar event data (session blocks, schedule state)
-  projects/
-    {project-id}/         ← per-project file attachments (reference docs, research PDFs, competitor screenshots)
-  reports/                ← generated project status reports (markdown, PDF)
-  assets/                 ← user assets (images embedded in notes, attachments)
-  templates/              ← project management phase templates, methodology templates (SWOT, BMC, etc.)
-  config.json             ← user settings, work environment definitions, blocker rulesets
-  .yjs/                   ← Yjs document state cache (binary, not human-readable)
-  app.db                  ← SQLite index (metadata, search, tags, backlinks, pomodoro sessions,
-                             playlist definitions, requirement version diffs, diary indexed fields)
+  notes/daily/: daily notes (markdown)
+  notes/projects/: per-project notes and working documents (markdown)
+  diary/morning/, diary/evening/: dated diary entries (markdown, indexed fields in SQLite)
+  calendar/: calendar event data (session blocks, schedule state)
+  projects/{project-id}/: per-project file attachments (reference docs, research PDFs)
+  reports/: generated project status reports (markdown, PDF)
+  assets/: user assets (images embedded in notes, attachments)
+  templates/: project management phase templates, methodology templates (SWOT, BMC, etc.)
+  config.json: user settings, work environment definitions, blocker rulesets
+  .yjs/: Yjs document state cache (binary)
+  app.db: SQLite index (metadata, search, tags, backlinks, pomodoro sessions, playlist definitions)
 ```
 
-Music files are not stored in the vault. Local audio files stay wherever the user keeps them; the vault only stores playlist definitions in SQLite. Backups are not stored in the vault; scheduled encrypted exports go to a user-specified path outside the vault.
+Music files stay wherever the user keeps them; vault stores only playlist definitions. Backups go to a user-specified path outside the vault.
 
 ## Key conventions
 
