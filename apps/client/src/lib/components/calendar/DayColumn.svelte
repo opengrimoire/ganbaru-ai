@@ -530,7 +530,7 @@
   {#if pastOverlayMinutes > 0}
     <div
       class="pointer-events-none absolute left-0 right-0 top-0 z-[1]"
-      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay); backface-visibility: hidden;"
+      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay);"
     ></div>
   {/if}
 

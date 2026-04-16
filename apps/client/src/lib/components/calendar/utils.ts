@@ -846,9 +846,6 @@ export const EVENT_COLOR_OPTIONS: EventColor[] = [
  * drift. This drift manifests as a "bounce back" effect, particularly
  * visible when scrolling down. By maintaining our own position and only
  * writing to the DOM, we avoid this browser-induced instability.
- *
- * @param gain - Velocity added per wheel deltaY unit
- * @param friction - Exponential decay factor (higher = faster stop)
  */
 interface SmoothScrollFn {
   (e: WheelEvent): void;

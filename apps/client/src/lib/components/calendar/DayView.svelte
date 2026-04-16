@@ -58,7 +58,7 @@
   let ready = $state(false);
   let stickyHeaderHeight = $state(0);
   const calZoom = getCalendarZoom();
-  const smoothScroll = createSmoothScroll(() => scrollContainer, 8, 12);
+  const smoothScroll = createSmoothScroll(() => scrollContainer);
 
   function onWheel(e: WheelEvent) {
     if (e.ctrlKey || e.shiftKey) {
@@ -282,7 +282,7 @@
     bind:this={scrollContainer}
     onwheel={onWheel}
     class="hide-scrollbar absolute inset-0 overflow-y-auto overflow-x-hidden"
-    style="background-color: var(--cal-bg); will-change: scroll-position; backface-visibility: hidden;"
+    style="background-color: var(--cal-bg);"
   >
     <div class="grid" style="grid-template-columns: {gridCols};">
       <!-- Sticky header row -->

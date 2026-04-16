@@ -2,14 +2,7 @@ const STORAGE_KEY = "ganbaruai-calendar-zoom";
 const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
 const DEFAULT_INDEX = 2; // 67px
 const ANIM_DURATION = 150; // ms for smooth zoom animation
-const COMMIT_DELAY = 180; // ms after last wheel event to commit reactive state
-const STEP_COOLDOWN = 100; // ms between zoom level changes
-
-// Anti-flash protection for extremely fast scrolling
-const REJECTION_WINDOW = 200; // ms window to count rejections
-const REJECTION_THRESHOLD = 5; // rejections in window to trigger pause
-const PAUSE_DURATION = 120; // ms pause when threshold hit
-const POWER_SCROLL_THRESHOLD = 200; // deltaY magnitude indicating a power scroll
+const WHEEL_COOLDOWN = 120; // ms between wheel-triggered zoom steps
 
 function findClosestIndex(height: number): number {
   let best = 0;
@@ -53,7 +46,7 @@ let stickyH = 0;
 let zoomRaf = 0;
 let gestureActive = false;
 let commitTimer = 0;
-let lastStepTime = 0;
+let lastWheelZoom = 0;
 
 // Animation state
 let animating = false;
@@ -62,11 +55,6 @@ let animFromH = 0;
 let animToH = 0;
 let animFromScroll = 0;
 let animToScroll = 0;
-
-// Anti-flash: track rapid rejections
-let rejectionCount = 0;
-let rejectionWindowStart = 0;
-let pausedUntil = 0;
 
 function computeScrollForH(
   h: number,
@@ -136,35 +124,6 @@ function startOrRetargetAnimation(toH: number) {
   }
 }
 
-/** Instant application without animation (flash-free for power scrolls) */
-function instantApply(toH: number) {
-  const sc = scrollRef;
-  if (!sc) return;
-
-  // Cancel any running animation
-  if (zoomRaf) {
-    cancelAnimationFrame(zoomRaf);
-    zoomRaf = 0;
-  }
-  animating = false;
-
-  const viewportH = sc.clientHeight;
-  const centerOffset = (viewportH - stickyH) / 2;
-
-  // Get current state
-  const currentHStr = sc.style.getPropertyValue("--hour-h");
-  const fromH = currentHStr ? parseFloat(currentHStr) : toH;
-  const fromScroll = sc.scrollTop;
-
-  // Compute center time at current state
-  const centerMinute = (fromScroll + centerOffset) / fromH * 60;
-
-  // Apply instantly
-  sc.style.setProperty("--hour-h", String(toH));
-  const newScroll = computeScrollForH(toH, centerMinute, viewportH);
-  sc.scrollTop = newScroll;
-}
-
 function commitZoom() {
   commitTimer = 0;
 
@@ -212,69 +171,20 @@ export function getCalendarZoom() {
       scrollRef = container;
       stickyH = stickyHeight;
     },
-    /** Ctrl+Scroll handler with anti-flash protection for fast scrolling. */
+    /** Ctrl+Scroll handler: triggers zoomStep with a short cooldown. */
     zoomAt(deltaY: number, stickyHeight: number, scrollContainer: HTMLElement) {
-      const direction = deltaY > 0 ? -1 : 1;
-      const targetIndex = Math.max(
-        0,
-        Math.min(ZOOM_LEVELS.length - 1, levelIndex + direction),
-      );
-      if (targetIndex === levelIndex) return;
-
       const now = performance.now();
+      if (now - lastWheelZoom < WHEEL_COOLDOWN) return;
+      lastWheelZoom = now;
 
-      // Check if we're in a forced pause (anti-flash for extreme speed)
-      if (now < pausedUntil) {
-        clearTimeout(commitTimer);
-        commitTimer = window.setTimeout(commitZoom, COMMIT_DELAY);
-        return;
-      }
-
-      // Enforce minimum interval between level changes
-      if (gestureActive && now - lastStepTime < STEP_COOLDOWN) {
-        // Track rejections to detect extremely fast scrolling
-        if (now - rejectionWindowStart > REJECTION_WINDOW) {
-          rejectionWindowStart = now;
-          rejectionCount = 0;
-        }
-        rejectionCount++;
-
-        // Too many rejections = user scrolling extremely fast, force a pause
-        if (rejectionCount >= REJECTION_THRESHOLD) {
-          pausedUntil = now + PAUSE_DURATION;
-          rejectionCount = 0;
-        }
-
-        clearTimeout(commitTimer);
-        commitTimer = window.setTimeout(commitZoom, COMMIT_DELAY);
-        return;
-      }
-      lastStepTime = now;
-      rejectionCount = 0;
-
-      // Capture refs on first event of the gesture
-      if (!gestureActive) {
+      // Capture scroll container reference
+      if (!scrollRef) {
         scrollRef = scrollContainer;
         stickyH = stickyHeight;
-        gestureActive = true;
       }
 
-      levelIndex = targetIndex;
-      const targetH = ZOOM_LEVELS[targetIndex];
-
-      // Power scroll detection: large deltaY = user scrolling very hard.
-      // Use instant application for power scrolls to avoid animation-related flash.
-      const isPowerScroll = Math.abs(deltaY) > POWER_SCROLL_THRESHOLD;
-
-      if (isPowerScroll) {
-        instantApply(targetH);
-      } else {
-        startOrRetargetAnimation(targetH);
-      }
-
-      clearTimeout(commitTimer);
-      commitTimer = window.setTimeout(commitZoom, COMMIT_DELAY);
-      persist(targetH);
+      const direction = deltaY > 0 ? -1 : 1;
+      this.zoomStep(direction);
     },
     reset() {
       if (zoomRaf) {
@@ -285,9 +195,7 @@ export function getCalendarZoom() {
       commitTimer = 0;
       gestureActive = false;
       animating = false;
-      rejectionCount = 0;
-      pausedUntil = 0;
-      lastStepTime = 0;
+      lastWheelZoom = 0;
       levelIndex = DEFAULT_INDEX;
       hourHeight = ZOOM_LEVELS[DEFAULT_INDEX];
       if (scrollRef) {
