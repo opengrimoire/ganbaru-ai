@@ -10,7 +10,7 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
   import WeekView from "./WeekView.svelte";
   import DayView from "./DayView.svelte";
@@ -518,7 +518,12 @@
         requestConfirm(
           "Discard unsaved changes?",
           async () => {
-            session.openEdit(event, anchor, originalInstance);
+            // Open with the pre-drag instance as originalEvent so the panel's
+            // initial sync captures pre-drag values as baseline. tick() lets
+            // the panel mount and emit that sync before the drag delta is
+            // applied to changes, making dirty correctly reflect the drag.
+            session.openEdit(originalInstance, anchor, originalInstance);
+            await tick();
             session.updateChanges({ start: event.start, end: event.end });
           },
           { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
@@ -533,7 +538,8 @@
         ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
         : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-      session.openEdit(event, anchor, originalInstance);
+      session.openEdit(originalInstance, anchor, originalInstance);
+      await tick();
       session.updateChanges({ start: event.start, end: event.end });
       return;
     }
@@ -560,6 +566,10 @@
 
   function handlePanelChange(data: Partial<CalendarEvent>) {
     session.updateChanges(data);
+  }
+
+  function handlePanelInitialSync(data: Partial<CalendarEvent>) {
+    session.setInitialChanges(data);
   }
 
   function handleScopeChange(newScope: RecurringScope) {
@@ -1027,6 +1037,7 @@
         initialAllDay={!!session.changes.allDay}
         onSave={handlePanelSave}
         onChange={handlePanelChange}
+        onInitialSync={handlePanelInitialSync}
         onClose={handlePanelClose}
       />
     {:else if session.state.mode === "edit"}
@@ -1039,6 +1050,7 @@
         onSave={handlePanelSave}
         onDelete={handleDelete}
         onChange={handlePanelChange}
+        onInitialSync={handlePanelInitialSync}
         onClose={handlePanelClose}
         onScopeChange={handleScopeChange}
       />

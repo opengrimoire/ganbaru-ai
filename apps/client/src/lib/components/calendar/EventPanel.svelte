@@ -52,6 +52,7 @@
     onDelete,
     onClose,
     onChange,
+    onInitialSync,
     onScopeChange,
   }: {
     mode: "create" | "edit";
@@ -83,6 +84,7 @@
     onDelete?: (id: string, scope?: RecurringScope) => void;
     onClose: () => void;
     onChange?: (data: Partial<CalendarEvent>) => void;
+    onInitialSync?: (data: Partial<CalendarEvent>) => void;
     onScopeChange?: (scope: RecurringScope) => void;
   } = $props();
 
@@ -413,35 +415,24 @@
     timePickerTarget = null;
     showAsPicker = false;
     statusPicker = false;
-    hasChanges = false;
     openSection = null;
     scope = "this";
     dragOffset = { x: 0, y: 0 };
     userDragged = false;
 
-    // For create mode, emit the initial defaults so the preview shows them
-    // (notifications, pomodoro config, etc.)
-    if (mode === "create") {
-      onChange?.({
-        title: "",
-        start: `${startDate} ${startTime}`,
-        end: `${endDate} ${endTime}`,
-        notifications: collectNotifications(),
-        pomodoroConfig: pomodoroEnabled ? {
-          focusDurationMinutes: focusDuration,
-          shortBreakMinutes: shortBreak,
-          longBreakMinutes: longBreak,
-          pomodoroCount: 4,
-          idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
-        } : undefined,
-      });
-    }
+    // Sync the panel's initial field values so the session baseline exactly
+    // matches what the user sees. This must not mark the session dirty: the
+    // user has not edited anything yet. With this baseline in place, any
+    // subsequent edit that reverts back to the original value restores a
+    // clean session, and the panel can be closed silently (no "Discard
+    // unsaved changes?" prompt).
+    (onInitialSync ?? onChange)?.(buildChangesPayload());
   });
 
   // Sync date/time from event prop when block is dragged/resized externally.
   // Only updates time fields, not title/description/etc. which the user may
-  // have edited in the panel. Doesn't trigger hasChanges since the drag already
-  // committed the time change to the DB.
+  // have edited in the panel. The session's diff-based dirty tracking handles
+  // revert-to-original automatically.
   $effect(() => {
     if (mode === "edit" && event) {
       startDate = event.start.split(" ")[0] ?? "";
@@ -490,17 +481,22 @@
   });
 
   // ─── Dirty tracking ────────────────────────────────────────────
-  let hasChanges = $state(false);
-  const saveReady = $derived(mode === "create" || hasChanges || externalDirty);
+  // Save is always available in create mode (even with default values).
+  // In edit mode it tracks the session's diff-based dirty flag so that
+  // reverting all edits back to the original values disables the button
+  // again, matching the click-outside cancellation behavior.
+  const saveReady = $derived(mode === "create" || externalDirty);
 
   // ─── Emit changes ───────────────────────────────────────────────
-  function emitChange() {
-    hasChanges = true;
-    // Auto-adjust endDate when times are manually typed
-    if (startDate && startTime && endTime && endDate === startDate && endTime < startTime) {
-      syncEndDateFromTimes();
-    }
-    onChange?.({
+  /**
+   * Build the full normalized patch the session tracks as "changes".
+   * Shared by the initial-sync emit (establishes baseline) and every
+   * subsequent emitChange (user edits). Keeping the shape identical is
+   * what lets the session compare the two sides field-by-field and
+   * detect revert-to-original without false positives.
+   */
+  function buildChangesPayload(): Partial<CalendarEvent> {
+    return {
       title: title.trim(),
       start: `${startDate} ${startTime}`,
       end: `${endDate} ${endTime}`,
@@ -522,7 +518,15 @@
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
       attendees: attendees.length > 0 ? attendees : undefined,
-    });
+    };
+  }
+
+  function emitChange() {
+    // Auto-adjust endDate when times are manually typed
+    if (startDate && startTime && endTime && endDate === startDate && endTime < startTime) {
+      syncEndDateFromTimes();
+    }
+    onChange?.(buildChangesPayload());
   }
 
   $effect(() => {
