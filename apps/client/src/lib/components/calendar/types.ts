@@ -290,18 +290,6 @@ export interface TimelineBand {
   status: SegmentStatus;
 }
 
-export interface SnapLineState {
-  minute: number;
-  label: string;
-  labelBelow: boolean;
-  atBottom: boolean;
-  leftInsetPx: number;
-  blockLeft: number;
-  blockWidth: number;
-  blockMultiCol: boolean;
-  isScrolling: boolean;
-}
-
 export interface DragState {
   eventId: string;
   type: "move" | "resize-top" | "resize-bottom";

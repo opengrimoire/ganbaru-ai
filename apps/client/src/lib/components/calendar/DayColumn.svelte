@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, PositionedEvent, PersistedSegment, SnapLineState } from "./types";
+  import type { CalendarEvent, PositionedEvent, PersistedSegment } from "./types";
   import {
     eventsForDay,
     layoutEventsForDay,
@@ -29,12 +29,9 @@
     currentTimeMinute = -1,
     dragPreview = null,
     createPreview = null,
-    hideSnapLine = false,
-    snapOverrideMinute = null,
     onEventClick,
     onDragStart,
     onCreateStart,
-    onSnapChange,
     editingId,
     previewedIds,
     draggingEventId,
@@ -51,15 +48,12 @@
     previewedIds?: Set<string>;
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
-    hideSnapLine?: boolean;
-    snapOverrideMinute?: number | null;
     draggingEventId?: string;
     grabbingId?: string;
     didDrag?: boolean;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
-    onSnapChange?: (state: SnapLineState | null) => void;
   } = $props();
 
   const panelOpen = $derived(!!editingId);
@@ -265,38 +259,19 @@
     }, dayStartMs, nowMs, persistedSegmentsMap);
   });
 
-  let snapMinute: number | null = $state(null);
-  let snapTimeLabel: string = $state("");
-  const snapLineY = $derived(snapMinute !== null ? (snapMinute / 60) * calZoom.hourHeight : null);
   let columnEl: HTMLDivElement | undefined = $state();
-  let scrollParent: HTMLElement | null = null;
-  let stickyBottom = $state(0);
   let lastClientX: number | null = $state(null);
   let lastClientY: number | null = $state(null);
-  let scrollSnapTimer = 0;
   let scrollProximityRaf = 0;
   let isScrolling = $state(false);
   let zoomModifierPressed = $state(false); // Ctrl or Shift held for zoom
+  // Track when mouse is near a block's resize edge (top or bottom)
+  let hoverResizeBlockId: string | null = $state(null);
 
-  // Clear snap position when dragging starts (keeps mouse coords for restore)
-  $effect(() => {
-    if (hideSnapLine) {
-      snapMinute = null;
-    }
-  });
-
-  // Restore snap position and re-check proximity when drag/create ends
-  $effect(() => {
-    if (hideSnapLine) return;
-    if (lastClientY === null || !columnEl || calZoom.isAnimating) return;
-    updateSnapFromClientY(lastClientX, lastClientY);
-    recheckProximity();
-  });
-
-  // Re-check proximity when block layout changes (e.g. new block saved)
+  // Re-check resize proximity when block layout changes (e.g. new block saved)
   $effect(() => {
     void effectivePositioned;
-    if (hideSnapLine || lastClientX === null || lastClientY === null || !columnEl) return;
+    if (lastClientX === null || lastClientY === null || !columnEl) return;
     recheckProximity();
   });
 
@@ -314,199 +289,39 @@
   }
 
   onMount(() => {
-    function clearSnap() {
-      snapMinute = null;
+    function clearMouseState() {
       lastClientX = null;
       lastClientY = null;
+      hoverResizeBlockId = null;
     }
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Control" || e.key === "Shift") {
         zoomModifierPressed = true;
-        snapMinute = null;
       }
     }
     function handleKeyUp(e: KeyboardEvent) {
       if (e.key === "Control" || e.key === "Shift") zoomModifierPressed = false;
     }
-    window.addEventListener("blur", clearSnap);
+    window.addEventListener("blur", clearMouseState);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) clearSnap();
+      if (document.hidden) clearMouseState();
     });
-    // Clear snap line when break overlay closes (GTK overlay steals WebView focus)
-    document.addEventListener("ganbaruai-clear-snap", clearSnap);
 
-    // Track scroll so snap line follows the mouse during scroll
+    // Track scroll for resize detection during scroll
     const sp = columnEl?.closest('.hide-scrollbar') as HTMLElement | null;
     if (sp) {
-      scrollParent = sp;
       sp.addEventListener('scroll', handleParentScroll);
     }
 
     return () => {
-      window.removeEventListener("blur", clearSnap);
+      window.removeEventListener("blur", clearMouseState);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
-      document.removeEventListener("ganbaruai-clear-snap", clearSnap);
       sp?.removeEventListener('scroll', handleParentScroll);
-      clearTimeout(scrollSnapTimer);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
     };
-  });
-
-  function updateStickyBottom() {
-    if (!columnEl) return;
-    if (!scrollParent) scrollParent = columnEl.closest('.hide-scrollbar') as HTMLElement | null;
-    if (scrollParent) {
-      let bottom = scrollParent.getBoundingClientRect().top;
-      for (const h of scrollParent.querySelectorAll(':scope .sticky')) {
-        bottom = Math.max(bottom, h.getBoundingClientRect().bottom);
-      }
-      stickyBottom = bottom;
-    }
-  }
-
-  const effectiveSnapY = $derived(
-    snapOverrideMinute != null
-      ? (snapOverrideMinute / 60) * calZoom.hourHeight
-      : snapLineY,
-  );
-  const effectiveSnapLabel = $derived.by(() => {
-    if (snapOverrideMinute != null) {
-      const rounded = Math.round(snapOverrideMinute);
-      return `${String(Math.floor(rounded / 60)).padStart(2, "0")}:${String(rounded % 60).padStart(2, "0")}`;
-    }
-    return snapTimeLabel;
-  });
-  const snapVisible = $derived(effectiveSnapY !== null && !hideSnapLine && !calZoom.isAnimating && !zoomModifierPressed);
-  const snapEffectiveMin = $derived(Math.round(snapOverrideMinute ?? snapMinute ?? 0));
-  const snapAtBottom = $derived(snapEffectiveMin >= 1440 - (2 / calZoom.hourHeight * 60));
-
-  // Snap line matches block bounds during create/drag or resize-handle hover
-  // Derive resize state from snap line position - if snap is at a block edge, we're in resize mode
-  let hoverResizeBlockId: string | null = $state(null);
-
-  // Check if snap line is at a block's edge AND mouse is horizontally over the block
-  const snapEdgeInfo = $derived.by(() => {
-    if (snapMinute === null || hideSnapLine) return null;
-    if (lastClientX === null || lastClientY === null || !columnEl) return null;
-
-    // Compute mouse offsets relative to column
-    const colRect = columnEl.getBoundingClientRect();
-    const offsetX = lastClientX - colRect.left;
-    const eventAreaLeft = railWidth + 4;
-    const eventAreaWidth = colRect.width - eventAreaLeft;
-
-    // Compute raw minute (unsnapped) from mouse Y position
-    const offsetY = lastClientY - colRect.top;
-    const rawMinute = (offsetY / calZoom.hourHeight) * 60;
-
-    // Collect all blocks that pass horizontal check and have an edge at snapMinute (for cursor display)
-    const allIds = new Set<string>();
-
-    // Find the block that contains the mouse and has an edge at snapMinute (for snap line positioning)
-    let primary: { eventId: string; edge: "resize-top" | "resize-bottom" } | null = null;
-
-    for (const pos of effectivePositioned) {
-      if (pos.event.id === "__create__") continue;
-      if (panelOpen && pos.event.id !== editingId) continue;
-
-      // Check horizontal bounds (don't subtract gap for hit detection to avoid dead zones)
-      const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
-      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
-      if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
-
-      const startMin = pos.startMinute;
-      const endMin = pos.startMinute + pos.durationMinutes;
-
-      // Collect for cursor display (any block with edge at snapMinute)
-      if ((snapMinute === startMin && !pos.isClippedTop) || (snapMinute === endMin && !pos.isClippedBottom)) {
-        allIds.add(pos.event.id);
-      }
-
-      // For primary: find the block the mouse is actually inside (using [start, end) bounds)
-      // This ensures the snap line matches the block that would receive a click
-      if (primary === null && rawMinute >= startMin && rawMinute < endMin) {
-        if (snapMinute === startMin && !pos.isClippedTop) {
-          primary = { eventId: pos.event.id, edge: "resize-top" };
-        } else if (snapMinute === endMin && !pos.isClippedBottom) {
-          primary = { eventId: pos.event.id, edge: "resize-bottom" };
-        }
-      }
-    }
-
-    // If no block contains the mouse but we have candidates, use the first one
-    // (handles edge case of mouse slightly outside any block)
-    if (primary === null && allIds.size > 0) {
-      const firstId = [...allIds][0];
-      const pos = effectivePositioned.find(p => p.event.id === firstId);
-      if (pos) {
-        const startMin = pos.startMinute;
-        const endMin = pos.startMinute + pos.durationMinutes;
-        if (snapMinute === startMin && !pos.isClippedTop) {
-          primary = { eventId: firstId, edge: "resize-top" };
-        } else if (snapMinute === endMin && !pos.isClippedBottom) {
-          primary = { eventId: firstId, edge: "resize-bottom" };
-        }
-      }
-    }
-
-    if (allIds.size === 0) return null;
-
-    return { primary, allIds };
-  });
-
-  // Primary block at edge (for snap line positioning, click handling, and resize target)
-  const snapAtBlockEdge = $derived(snapEdgeInfo?.primary ?? null);
-  // All block IDs with an edge at snapMinute (for cursor: all should show resize cursor)
-  const snapEdgeBlockIds = $derived(snapEdgeInfo?.allIds ?? null);
-
-  // During scroll, snapAtBlockEdge is stale (snapMinute frozen), so only use hoverResizeBlockId
-  const proximityResize = $derived(hoverResizeBlockId !== null || (!isScrolling && snapAtBlockEdge !== null));
-  const effectiveResizeBlockId = $derived(hoverResizeBlockId ?? snapAtBlockEdge?.eventId ?? null);
-  const hoverResizeLayout = $derived(
-    effectiveResizeBlockId ? effectivePositioned.find(p => p.event.id === effectiveResizeBlockId) ?? null : null,
-  );
-  const activeBlockLayout = $derived(
-    (layoutedPreview && (createPreview || dragPreview)) ? layoutedPreview : hoverResizeLayout,
-  );
-  const snapToBlock = $derived(!!activeBlockLayout);
-  const snapBlockLeft = $derived(snapToBlock ? activeBlockLayout!.left : 0);
-  const snapBlockWidth = $derived(snapToBlock ? activeBlockLayout!.width : 100);
-  const snapBlockMultiCol = $derived(snapToBlock && activeBlockLayout!.totalColumns > 1);
-
-  // Keep stickyBottom fresh when snap override changes (drag/resize)
-  $effect(() => {
-    if (snapOverrideMinute != null) updateStickyBottom();
-  });
-
-  // Flip label below line when it would be hidden behind the sticky header
-  const snapLabelBelow = $derived.by(() => {
-    if (effectiveSnapY === null || !columnEl) return false;
-    const colRect = columnEl.getBoundingClientRect();
-    const lineViewportY = colRect.top + effectiveSnapY;
-    return lineViewportY < stickyBottom + 18;
-  });
-
-  // Report snap state to parent when onSnapChange is provided
-  $effect(() => {
-    if (!onSnapChange) return;
-    if (snapVisible) {
-      onSnapChange({
-        minute: snapEffectiveMin,
-        label: effectiveSnapLabel,
-        labelBelow: snapLabelBelow,
-        atBottom: snapAtBottom,
-        leftInsetPx: snapToBlock ? railWidth + 4 : 0,
-        blockLeft: snapBlockLeft,
-        blockWidth: snapBlockWidth,
-        blockMultiCol: snapBlockMultiCol,
-        isScrolling,
-      });
-    } else {
-      onSnapChange(null);
-    }
   });
 
   function getResizeThreshold(): number {
@@ -551,29 +366,7 @@
       }
     }
 
-    // Second pass: mouse is not inside any block, check if near an edge from outside
-    // This handles grabbing edges when mouse is slightly above/below a block
-    for (const pos of effectivePositioned) {
-      if (pos.event.id === "__create__") continue;
-      if (panelOpen && pos.event.id !== editingId) continue;
-
-      const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
-      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
-      if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
-
-      const blockTopY = (pos.startMinute / 60) * hh;
-      const blockBottomY = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
-
-      // Check if near top edge from above
-      if (!pos.isClippedTop && offsetY < blockTopY && blockTopY - offsetY < threshold) {
-        return { eventId: pos.event.id, edge: "resize-top" };
-      }
-      // Check if near bottom edge from below
-      if (!pos.isClippedBottom && offsetY >= blockBottomY && offsetY - blockBottomY < threshold) {
-        return { eventId: pos.event.id, edge: "resize-bottom" };
-      }
-    }
-
+    // Mouse is not inside any block, allow event creation
     return null;
   }
 
@@ -593,7 +386,7 @@
   function handleSlotPointerDown(e: PointerEvent, hour: number) {
     if (e.button !== 0) return;
 
-    // Always calculate position from actual click coordinates (not frozen snap position)
+    // Calculate position from actual click coordinates
     if (!columnEl) return;
     const colRect = columnEl.getBoundingClientRect();
     const colOffsetX = e.clientX - colRect.left;
@@ -625,72 +418,10 @@
     onCreateStart(dateStr, minute, e);
   }
 
-  function updateSnapFromClientY(clientX: number | null, clientY: number) {
-    if (!columnEl) return;
-    const hh = calZoom.hourHeight;
-    const rect = columnEl.getBoundingClientRect();
-    const offsetY = clientY - rect.top;
-    const offsetX = clientX !== null ? clientX - rect.left : null;
-    const rawMinute = (offsetY / hh) * 60;
-    let snapped = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
-
-    // Snap to block edges when cursor is near them (use same threshold as proximity detection)
-    // Only snap if cursor is horizontally within the block's bounds
-    const threshold = getResizeThreshold();
-    const eventAreaLeft = railWidth + 4;
-    const eventAreaWidth = rect.width - eventAreaLeft;
-
-    for (const pos of effectivePositioned) {
-      // Skip the drag gesture preview (not the pending create preview which can be resized)
-      if (pos.event.id === "__create__") continue;
-      // When panel is open, only snap to edited event's edges
-      if (panelOpen && pos.event.id !== editingId) continue;
-
-      // Check horizontal bounds: only snap to block edges if mouse is over this block
-      if (offsetX !== null) {
-        const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
-        const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth - (pos.totalColumns > 1 ? 2 : 0);
-        if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
-      }
-
-      const blockTop = (pos.startMinute / 60) * hh;
-      const blockBottom = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
-
-      if (Math.abs(offsetY - blockTop) < threshold) {
-        snapped = pos.startMinute;
-        break;
-      }
-      if (Math.abs(offsetY - blockBottom) < threshold) {
-        const { endMinute } = effectiveMinuteRange(pos.event, dateStr);
-        snapped = endMinute;
-        break;
-      }
-    }
-
-    // Snap to current time line when mouse is close to it
-    // Use floor to match the displayed clock minute (not rounded by seconds)
-    if (isToday && currentTimeMinute >= 0) {
-      const currentTimeY = (currentTimeMinute / 60) * hh;
-      if (Math.abs(offsetY - currentTimeY) < threshold) {
-        snapped = Math.floor(currentTimeMinute);
-      }
-    }
-
-    snapMinute = snapped;
-    updateStickyBottom();
-
-    const labelMinute = Math.round(snapped);
-    const h = String(Math.floor(labelMinute / 60)).padStart(2, "0");
-    const m = String(labelMinute % 60).padStart(2, "0");
-    snapTimeLabel = `${h}:${m}`;
-  }
-
   function handleParentScroll() {
-    if (lastClientY === null || !columnEl || hideSnapLine) return;
-    // During zoom animation, snapLineY auto-tracks via $derived; skip recalculation
+    if (lastClientY === null || !columnEl) return;
     if (calZoom.isAnimating) return;
 
-    // Freeze snap line position during scroll (just fade out)
     isScrolling = true;
 
     // Defer proximity check to next frame to avoid blocking scroll
@@ -700,30 +431,22 @@
         recheckProximity();
       });
     }
-
-    // After scroll stops, update snap position and fade back in
-    clearTimeout(scrollSnapTimer);
-    scrollSnapTimer = window.setTimeout(() => {
-      isScrolling = false;
-      if (lastClientY !== null) updateSnapFromClientY(lastClientX, lastClientY);
-    }, 80);
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
     if (!columnEl) return;
 
-    // Skip ALL processing during zoom (Ctrl held or animating) to prevent forced layout recalculations
+    // Skip processing during zoom to prevent forced layout recalculations
     if (zoomModifierPressed || calZoom.isAnimating) {
-      snapMinute = null;
+      hoverResizeBlockId = null;
       return;
     }
 
-    // Always track mouse position and proximity (even during drag/create)
+    // Track mouse position for resize detection
     lastClientX = e.clientX;
     lastClientY = e.clientY;
 
-    // Use unified coordinate system for all resize zone detection
-    // This ensures snap line, cursor, and resize all trigger at exactly the same point
+    // Detect if mouse is near a block's resize edge
     const colRect = columnEl.getBoundingClientRect();
     const colOffsetX = e.clientX - colRect.left;
     const colOffsetY = e.clientY - colRect.top;
@@ -735,17 +458,13 @@
     } else {
       hoverResizeBlockId = null;
     }
-
-    // Only update snap position when not hidden by drag/create
-    if (hideSnapLine) return;
-    updateSnapFromClientY(e.clientX, e.clientY);
   }
 
   function handleColumnMouseLeave() {
     lastClientX = null;
     lastClientY = null;
-    snapMinute = null;
     hoverResizeBlockId = null;
+    isScrolling = false;
   }
 
   function handleRailAreaPointerDown(e: PointerEvent) {
@@ -774,7 +493,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative min-w-0 {zoomModifierPressed ? 'zoom-active' : proximityResize ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+  class="relative min-w-0 {zoomModifierPressed ? 'zoom-active' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
   style="height: calc(24 * var(--hour-h) * 1px); contain: layout style;"
   onmousemove={handleColumnMouseMove}
   onmouseleave={handleColumnMouseLeave}
@@ -862,7 +581,7 @@
   {#each hours as hour}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="absolute w-full {draggingEventId ? 'pointer-events-none' : zoomModifierPressed ? '' : proximityResize ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+      class="absolute w-full {draggingEventId ? 'pointer-events-none' : zoomModifierPressed ? '' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
       style="top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px);"
       onpointerdown={(e) => handleSlotPointerDown(e, hour)}
     ></div>
@@ -878,7 +597,7 @@
       grabbing={pos.event.id === grabbingId}
       canDrag={!panelOpen || pos.event.id === editingId}
       isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
-      inResizeZone={hoverResizeBlockId === pos.event.id || (!isScrolling && snapEdgeBlockIds?.has(pos.event.id) === true)}
+      inResizeZone={hoverResizeBlockId === pos.event.id}
       onclick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
       onpointerdown={(e) => onDragStart(pos.event.id, e, getBlockEdgeFromClick(pos.event.id, e))}
     />
@@ -959,25 +678,7 @@
 
   </div>
 
-  <!-- Snap position indicator line with time label (only rendered when parent does not handle it) -->
-  {#if !onSnapChange}
-  <div
-    class="pointer-events-none absolute right-0"
-    style="left: {snapToBlock ? railWidth + 4 : 0}px; top: 0; transform: translateY(calc({snapEffectiveMin} / 60 * var(--hour-h) * 1px - {snapAtBottom ? 2.3 : 1.3}px)); z-index: 47; will-change: transform, opacity; opacity: {isScrolling ? 0 : 1}; transition: opacity 150ms ease-out; {snapVisible ? '' : 'display: none;'}"
-  >
-    <div class="relative" style="margin-left: {snapBlockLeft}%; width: {snapBlockMultiCol ? `calc(${snapBlockWidth}% - 2px)` : `${snapBlockWidth}%`}; transition: margin-left 100ms ease-out, width 100ms ease-out;">
-      <span
-        class="absolute left-0 flex h-[16px] items-center justify-center px-1.5 text-[10px] leading-none font-semibold {snapLabelBelow ? 'top-[2.3px]' : 'bottom-0'}"
-        style="background-color: var(--cal-snap-label); color: white; border-radius: {snapLabelBelow ? '0 0 2px 2px' : '2px 2px 0 0'};"
-      ><span style="margin-left: -0.5px;">{effectiveSnapLabel}</span></span>
-      <div
-        class="h-[2.3px]"
-        style="background-color: var(--cal-snap-label);"
-      ></div>
-    </div>
   </div>
-  {/if}
-</div>
 
 <style>
   .preview-outline {

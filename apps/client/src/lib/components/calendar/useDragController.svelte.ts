@@ -512,59 +512,6 @@ export function useDragController(config: DragControllerConfig) {
     return null;
   }
 
-  function getHideSnapLine(dateStr: string): boolean {
-    if (dragState?.type === "move") return true;
-    // During create-by-drag, only show snap on the column being drawn on
-    if (createState) return createPreviewDate !== dateStr;
-    // During resize, hide snap on columns without an active snap override,
-    // but keep it visible on the origin column before the first move
-    if (dragState) {
-      const override = getSnapOverrideMinute(dateStr);
-      if (override !== null) return false;
-      // Before first move (no preview yet), keep snap visible on origin column
-      if (!dragPreview && dragState.originDate === dateStr) return false;
-      return true;
-    }
-    return false;
-  }
-
-  function getSnapOverrideMinute(dateStr: string): number | null {
-    // During create-by-drag, show snap at the active edge on the create column
-    if (createState && createPreview && createPreviewDate === dateStr) {
-      const anchor = createState.anchorMinute;
-      const startMin = minuteOfDay(createPreview.event.start);
-      const endMin = minuteOfDay(createPreview.event.end);
-      return startMin === anchor ? endMin : startMin;
-    }
-
-    if (!dragPreview || !dragState || dragState.type === "move") return null;
-
-    const previewStartDate = dragPreview.event.start.split(" ")[0];
-    const previewEndDate = dragPreview.event.end.split(" ")[0];
-
-    if (dragState.type === "resize-top") {
-      // Snap line tracks the start handle
-      if (dateStr === previewStartDate) {
-        return minuteOfDay(dragPreview.event.start);
-      }
-      return null;
-    }
-
-    // resize-bottom: snap line tracks the end handle
-    if (previewStartDate === previewEndDate) {
-      // Same day: show snap on that day
-      return dateStr === previewStartDate
-        ? minuteOfDay(dragPreview.event.end)
-        : null;
-    }
-
-    // Cross-midnight: show snap on the end day only
-    if (dateStr === previewEndDate) {
-      return minuteOfDay(dragPreview.event.end);
-    }
-    return null;
-  }
-
   return {
     get dragState() { return dragState; },
     get dragPreview() { return dragPreview; },
@@ -577,7 +524,5 @@ export function useDragController(config: DragControllerConfig) {
     handleCreateStart,
     getDragPreviewForDate,
     getCreatePreviewForDate,
-    getHideSnapLine,
-    getSnapOverrideMinute,
   };
 }

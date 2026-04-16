@@ -70,7 +70,6 @@
   }
 
   // Cursor is controlled by parent (DayColumn) via inResizeZone prop
-  // This ensures cursor matches the snap line and drag detection exactly
   const effectiveCursor = $derived(
     !canDrag ? 'pointer' : inResizeZone ? 'ns-resize' : 'grab'
   );

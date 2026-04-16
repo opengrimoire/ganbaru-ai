@@ -406,8 +406,6 @@
           didDrag={drag.didDrag}
           dragPreview={drag.getDragPreviewForDate(dateStr)}
           createPreview={drag.getCreatePreviewForDate(dateStr)}
-          hideSnapLine={drag.getHideSnapLine(dateStr)}
-          snapOverrideMinute={drag.getSnapOverrideMinute(dateStr)}
           onEventClick={onEventClick}
           onDragStart={drag.handleDragStart}
           onCreateStart={drag.handleCreateStart}
