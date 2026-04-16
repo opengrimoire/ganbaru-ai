@@ -837,22 +837,18 @@ export const EVENT_COLOR_OPTIONS: EventColor[] = [
 
 /**
  * Smooth-scroll wheel handler for Linux/discrete-tick environments.
- * Uses a target-based approach with critically-damped spring interpolation
- * for natural, smooth deceleration.
+ * Intercepts wheel events and applies momentum-based scrolling with
+ * exponential friction decay.
  *
- * Why target-based instead of velocity-based:
- * - Discrete wheel events arrive in bursts; accumulating velocity directly
- *   causes jerky acceleration. A target absorbs bursts gracefully.
- * - Spring interpolation provides natural ease-out without manual tuning.
+ * Implementation note: We track scroll position internally (trackedPos)
+ * rather than reading el.scrollTop each frame. Browsers may round or
+ * clamp scrollTop values between write and read, causing cumulative
+ * drift. This drift manifests as a "bounce back" effect, particularly
+ * visible when scrolling down. By maintaining our own position and only
+ * writing to the DOM, we avoid this browser-induced instability.
  *
- * Why we track position internally (pos/target):
- * - Browsers may round or clamp scrollTop values between write and read,
- *   causing cumulative drift that manifests as "bounce back" when scrolling
- *   down. By maintaining our own state and only writing to the DOM, we avoid
- *   this browser-induced instability.
- *
- * @param gain - Pixels to add to target per wheel deltaY unit
- * @param smoothing - Interpolation factor per frame (0-1). Higher = snappier.
+ * @param gain - Velocity added per wheel deltaY unit
+ * @param friction - Exponential decay factor (higher = faster stop)
  */
 interface SmoothScrollFn {
   (e: WheelEvent): void;
@@ -861,42 +857,60 @@ interface SmoothScrollFn {
 
 export function createSmoothScroll(
   getEl: () => HTMLElement | undefined,
-  gain = 1.5,
-  smoothing = 0.15,
+  gain = 3,
+  friction = 6,
 ): SmoothScrollFn {
-  let pos: number | null = null;
-  let target: number | null = null;
+  let velocity = 0;
   let running = false;
+  let prev = 0;
+  let trackedPos: number | null = null;
 
-  function tick() {
+  function tick(ts: number) {
     if (!running) return;
     const el = getEl();
-    if (!el || pos === null || target === null) {
+    if (!el) {
       running = false;
-      pos = null;
-      target = null;
+      trackedPos = null;
       return;
     }
-
+    if (!prev) {
+      prev = ts;
+      requestAnimationFrame(tick);
+      return;
+    }
+    const dt = (ts - prev) / 1000;
+    prev = ts;
+    velocity *= Math.exp(-friction * dt);
+    if (Math.abs(velocity) < 10) {
+      velocity = 0;
+      running = false;
+      trackedPos = null;
+      return;
+    }
     const max = el.scrollHeight - el.clientHeight;
-    // Clamp target to valid range
-    if (target < 0) target = 0;
-    if (target > max) target = max;
 
-    // Interpolate position toward target
-    const diff = target - pos;
-    if (Math.abs(diff) < 0.5) {
-      // Close enough, snap to target and stop
-      pos = target;
-      el.scrollTop = pos;
+    // Use tracked position if available, otherwise sync from element
+    if (trackedPos === null) trackedPos = el.scrollTop;
+    const newPos = trackedPos + velocity * dt;
+
+    // Stop immediately when hitting boundary
+    if (velocity > 0 && newPos >= max) {
+      el.scrollTop = max;
+      velocity = 0;
       running = false;
-      pos = null;
-      target = null;
+      trackedPos = null;
+      return;
+    }
+    if (velocity < 0 && newPos <= 0) {
+      el.scrollTop = 0;
+      velocity = 0;
+      running = false;
+      trackedPos = null;
       return;
     }
 
-    pos += diff * smoothing;
-    el.scrollTop = pos;
+    trackedPos = newPos;
+    el.scrollTop = newPos;
     requestAnimationFrame(tick);
   }
 
@@ -904,23 +918,20 @@ export function createSmoothScroll(
     const el = getEl();
     if (!el) return;
     e.preventDefault();
-
-    // Initialize from current scroll position if not running
-    if (pos === null) pos = el.scrollTop;
-    if (target === null) target = pos;
-
-    target += e.deltaY * gain;
-
+    velocity += e.deltaY * gain;
     if (!running) {
       running = true;
+      prev = 0;
+      trackedPos = el.scrollTop;
       requestAnimationFrame(tick);
     }
   }) as SmoothScrollFn;
 
   fn.cancel = () => {
     running = false;
-    pos = null;
-    target = null;
+    velocity = 0;
+    prev = 0;
+    trackedPos = null;
   };
 
   return fn;

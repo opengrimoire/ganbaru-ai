@@ -104,7 +104,7 @@
     return { destroy: () => ro.disconnect() };
   }
 
-  const onWheel = createSmoothScroll(() => scrollEl, 0.5, 0.15);
+  const onWheel = createSmoothScroll(() => scrollEl, 2, 8);
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

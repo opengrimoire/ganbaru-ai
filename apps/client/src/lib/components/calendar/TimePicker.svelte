@@ -20,7 +20,7 @@
   });
 
   let scrollEl: HTMLDivElement | undefined = $state();
-  const onWheel = createSmoothScroll(() => scrollEl, 0.5, 0.15);
+  const onWheel = createSmoothScroll(() => scrollEl, 2, 8);
 
   const nearestSlot = $derived.by(() => {
     const [h, m] = (currentTime || "0:0").split(":").map(Number);
