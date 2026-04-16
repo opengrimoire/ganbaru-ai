@@ -837,7 +837,15 @@ export const EVENT_COLOR_OPTIONS: EventColor[] = [
 
 /**
  * Smooth-scroll wheel handler for Linux/discrete-tick environments.
- * Intercepts wheel events and lerps scrollTop toward a target position.
+ * Intercepts wheel events and applies momentum-based scrolling with
+ * exponential friction decay.
+ *
+ * Implementation note: We track scroll position internally (trackedPos)
+ * rather than reading el.scrollTop each frame. Browsers may round or
+ * clamp scrollTop values between write and read, causing cumulative
+ * drift. This drift manifests as a "bounce back" effect, particularly
+ * visible when scrolling down. By maintaining our own position and only
+ * writing to the DOM, we avoid this browser-induced instability.
  */
 interface SmoothScrollFn {
   (e: WheelEvent): void;
@@ -852,11 +860,12 @@ export function createSmoothScroll(
   let velocity = 0;
   let running = false;
   let prev = 0;
+  let trackedPos: number | null = null;
 
   function tick(ts: number) {
     if (!running) return;
     const el = getEl();
-    if (!el) { running = false; return; }
+    if (!el) { running = false; trackedPos = null; return; }
     if (!prev) { prev = ts; requestAnimationFrame(tick); return; }
     const dt = (ts - prev) / 1000;
     prev = ts;
@@ -864,10 +873,33 @@ export function createSmoothScroll(
     if (Math.abs(velocity) < 10) {
       velocity = 0;
       running = false;
+      trackedPos = null;
       return;
     }
     const max = el.scrollHeight - el.clientHeight;
-    el.scrollTop = Math.max(0, Math.min(max, Math.round(el.scrollTop + velocity * dt)));
+
+    // Use tracked position if available, otherwise sync from element
+    if (trackedPos === null) trackedPos = el.scrollTop;
+    const newPos = trackedPos + velocity * dt;
+
+    // Stop immediately when hitting boundary
+    if (velocity > 0 && newPos >= max) {
+      el.scrollTop = max;
+      velocity = 0;
+      running = false;
+      trackedPos = null;
+      return;
+    }
+    if (velocity < 0 && newPos <= 0) {
+      el.scrollTop = 0;
+      velocity = 0;
+      running = false;
+      trackedPos = null;
+      return;
+    }
+
+    trackedPos = newPos;
+    el.scrollTop = newPos;
     requestAnimationFrame(tick);
   }
 
@@ -876,13 +908,19 @@ export function createSmoothScroll(
     if (!el) return;
     e.preventDefault();
     velocity += e.deltaY * gain;
-    if (!running) { running = true; prev = 0; requestAnimationFrame(tick); }
+    if (!running) {
+      running = true;
+      prev = 0;
+      trackedPos = el.scrollTop; // Capture starting position
+      requestAnimationFrame(tick);
+    }
   }) as SmoothScrollFn;
 
   fn.cancel = () => {
     running = false;
     velocity = 0;
     prev = 0;
+    trackedPos = null;
   };
 
   return fn;
