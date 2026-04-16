@@ -105,8 +105,8 @@
 
   <!-- Content -->
   <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
-    {#if blockPixelHeight > 16 && (hasRepeat || hasNotification)}
-      <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
+    {#if hasRepeat || hasNotification}
+      <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px;">
         {#if hasRepeat}
           <Repeat size={8} class="shrink-0 opacity-70" />
         {/if}
@@ -115,16 +115,12 @@
         {/if}
       </div>
     {/if}
-    {#if blockPixelHeight > 14}
-      <div class="truncate font-medium" class:pr-5={(hasRepeat || hasNotification) && blockPixelHeight > 16} style={isCancelled ? 'text-decoration: line-through;' : ''}>
-        {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
-      </div>
-    {/if}
-    {#if blockPixelHeight > 28}
-      <div class="truncate opacity-80">{startTime} - {endTime}</div>
-    {/if}
-    {#if blockPixelHeight > 44 && positioned.event.location}
-      <div class="truncate text-[9px] opacity-60">{positioned.event.location}</div>
+    <div class="event-title truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
+      {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+    </div>
+    <div class="event-time truncate opacity-80">{startTime} - {endTime}</div>
+    {#if positioned.event.location}
+      <div class="event-location truncate text-[9px] opacity-60">{positioned.event.location}</div>
     {/if}
   </div>
 
@@ -153,7 +149,32 @@
   }
 
   .event-block-wrapper {
+    container-type: size;
+    container-name: event-block;
     transition: left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .event-title,
+  .event-icons,
+  .event-time,
+  .event-location {
+    display: none;
+  }
+
+  @container event-block (min-height: 14px) {
+    .event-title { display: block; }
+  }
+
+  @container event-block (min-height: 16px) {
+    .event-icons { display: flex; }
+  }
+
+  @container event-block (min-height: 28px) {
+    .event-time { display: block; }
+  }
+
+  @container event-block (min-height: 44px) {
+    .event-location { display: block; }
   }
 
   /* Disable layout transition for events being edited/created to avoid jank */

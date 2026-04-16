@@ -178,7 +178,12 @@
     setTimeout(() => { wheelCooldown = false; }, 300);
   }
 
+  const SCROLL_SETTLE_MS = 150;
+  let lastScrollAt = 0;
+
   function updateCurrentTime() {
+    if (calZoom.isAnimating) return;
+    if (performance.now() - lastScrollAt < SCROLL_SETTLE_MS) return;
     const now = new Date();
     currentTimeMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
     const nowStr = formatDatePart(now);
@@ -279,6 +284,7 @@
   });
 
   function handleScroll() {
+    lastScrollAt = performance.now();
     if (!scrollContainer || !onScrollChange || calZoom.isAnimating) return;
     const minute = (scrollContainer.scrollTop / calZoom.hourHeight) * 60;
     onScrollChange(Math.round(minute));
