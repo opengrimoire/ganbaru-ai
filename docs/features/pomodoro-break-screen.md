@@ -1,0 +1,80 @@
+# Pomodoro break screen
+
+When a focus phase ends, a break begins. The break screen is the surface that enforces it. The screen covers the user's display, prevents them from continuing to work, and offers a small set of controls (extend by a minute, skip the break, take longer than planned). The aim is to make ignoring the break harder than taking it, without making the app feel hostile.
+
+This doc covers the surfaces, controls, overtime behavior, and edge cases.
+
+## Purpose
+
+A break only works if the user actually takes one. A subtle notification ("time for a break!") is too easy to dismiss; an alarm sound is annoying without being effective. The break screen takes a stronger position: it physically occupies the screen so that switching back to work requires deliberate action.
+
+This is not arbitrary friction. It mirrors physical interventions like stretching at a desk: easier to do once standing than from the chair. The break screen forces the equivalent transition, and gives the user a clear "okay, I am on break" framing.
+
+## Surfaces
+
+The break screen has two implementations, picked at runtime based on platform capabilities.
+
+**GTK native overlay (Linux preferred).** A native GTK window covering all displays, configured as a fullscreen always-on-top window with no decorations. Rendering is done with native widgets so the window appears instantly without webview startup latency, and behaves correctly with multi-monitor setups, virtual desktops, and tiling window managers.
+
+**Webview fallback (everything else).** A Tauri webview window covering the primary display, fullscreen, always-on-top. The contents are a small Svelte component that mirrors the GTK version's controls. Used on Windows, macOS, and Linux distros where the GTK approach is not available.
+
+The webview fallback has a brief startup delay (the webview must mount), which is why GTK is preferred on Linux. Functionally the two are equivalent.
+
+For multi-monitor setups, the GTK overlay covers all displays. The webview fallback covers the primary display only; this is a known limitation of the webview approach and an accepted tradeoff for the simpler implementation.
+
+## Controls
+
+The break screen has a small, deliberate control set.
+
+| Control | Effect |
+|---------|--------|
+| Default (no input) | Closes when the break timer reaches 0. The next focus phase starts automatically. |
+| `Ctrl+Shift+Space` | Adds 1 minute to the current break. Maximum 5 minutes added per break (so a 5-minute break can be extended to 10 minutes total, no further). |
+| Three `Esc` presses in succession | Skips the break. The next focus phase starts immediately. |
+
+The three-press skip is intentionally awkward. A single Esc would let the user dismiss breaks reflexively, defeating the purpose. Three presses are fast enough that a determined user can skip in under two seconds, but slow enough that an absentminded press does not skip by accident.
+
+The Ctrl+Shift+Space chord adds a minute at a time, capped at 5 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
+
+There is no "stop the session" control on the break screen. Stopping the session must go through the main window, which makes it a deliberate action rather than an impulse during a moment of resistance.
+
+## Overtime
+
+If the user does not interact with the break screen and the break timer reaches 0, the system enters overtime. The break segment's `actual_end` is not set yet; the segment continues to be the active segment, but the timer counts up instead of down.
+
+Overtime is capped at `MAX_BREAK_OVERTIME_SECONDS` (1800 seconds = 30 minutes). During overtime:
+
+- The break mark on the rail keeps growing (the active break segment's `actual_end` is still null, so rendering uses now as the upper bound).
+- A reminder alert fires every 60 seconds prompting the user to start the next focus phase.
+- After 30 minutes of overtime, the system auto-advances to focus. The break segment is marked completed with `actual_end` set to the auto-advance moment.
+
+The 30-minute cap exists to prevent indefinite overtime from corrupting analytics. A break that runs for 4 hours is not a break, it is a stop; the system chooses to advance rather than wait forever.
+
+**Example.** Focus ends at 09:25. The break screen appears with a 5-minute timer. The user does not acknowledge it. At 09:30 the timer reaches 0, overtime begins, the break mark on the rail keeps growing. At 09:35 the user finally clicks "start focus." The break segment is marked completed with `actual_end = 09:35` (10 minutes total instead of the planned 5). If the user still had not acknowledged by 10:00 (30 minutes of overtime), the system would auto-advance to focus, with the break recorded as a 35-minute break.
+
+## Suspend and wake during break
+
+The break screen interacts with system suspend in a specific way.
+
+**Suspend during break.** If the OS sleeps while the break screen is showing, the timer pauses naturally (no ticks fire). On wake, the next tick detects the gap (> 15s, see `algorithms/pomodoro-state-machine.md`) and creates a pause row with `reason = suspend` on the active break segment. The break screen is still on screen because Tauri windows survive suspend; the timer resumes from where it paused.
+
+**Suspend triggered by the user.** If the user explicitly closes the laptop or triggers sleep during a break, the same flow applies: the suspend pause is recorded, and on wake the break resumes.
+
+The break screen does not need special suspend handling beyond what the rest of the timer does. It is aware of the pause records via the same data layer, so the time remaining shown on the screen accounts for the pause when the user wakes.
+
+## Display change mid-break
+
+If a monitor is connected or disconnected during a break (common on laptops being plugged into an external display), the break screen may need to redraw. The GTK overlay handles this natively: it updates its window list to cover whatever displays are present at the time. The webview fallback covers only the primary display, so a display change does not affect coverage in the same way.
+
+If the primary display changes (the user disconnects the laptop's external display while it was the primary), the webview window may temporarily lose its always-on-top status until the OS settles the display configuration. This is a brief window measured in seconds and is an accepted tradeoff for the simpler webview implementation.
+
+## When the break screen is hidden
+
+The break screen only shows for `short_break` and `long_break` phases of an active session. It does not show for:
+
+- Suspend pauses (the user is not at the computer; nothing to enforce).
+- Idle pauses (handled by the idle overlay, see `features/pomodoro-idle-detection.md`).
+- Manual pauses (the user explicitly chose to pause; no need to enforce a break).
+- Reconfiguration bridge segments that happen to be break phases (the bridge represents continuation of an interrupted state, not a fresh break to enforce).
+
+The closing of the break screen always coincides with a phase transition: either the next focus segment starts, or the session ends because the event window closed.
