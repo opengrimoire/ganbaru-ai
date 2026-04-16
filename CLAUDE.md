@@ -15,10 +15,21 @@ Features a highly interconnected:
 
 ## Essential reading
 
-- **PRODUCT_SPEC.md**: what the app does and why
-- **TECH_STACK.md**: how it's built
-- **PROGRESS.md**: current state of the project
-- **ROADMAP.md**: phased development plan
+All documentation lives in `docs/`. Top-level overviews:
+
+- **docs/PRODUCT_SPEC.md**: what the app does and why (being migrated into granular docs; will be removed once empty)
+- **docs/TECH_STACK.md**: how it's built
+- **docs/PROGRESS.md**: current state of the project
+- **docs/ROADMAP.md**: phased development plan
+- **docs/PERFORMANCE.md**: memory, startup, and package size measurements
+
+Granular docs (read the relevant one when working on a feature):
+
+- **docs/features/**: per-feature behavior and UX (calendar, calendar-recurrence, pomodoro, pomodoro-break-screen, pomodoro-idle-detection, pomodoro-progress-displays, plus placeholders for unbuilt features)
+- **docs/data/**: data architecture, schema, invariants, sync, hazards, security
+- **docs/algorithms/**: pure-logic specs (recurrence-expansion, pomodoro-segments-and-plan, pomodoro-state-machine, idle-detection, time-conflict-detection, undo-redo)
+
+Docs describe the optimal/ideal end state of the app, not the current implementation. They preserve the "why" behind decisions over time.
 
 ## Workspace structure
 
@@ -128,8 +139,8 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 
 ### Documentation
 
-- Read PROGRESS.md at the start of every conversation to understand what has been done and what is in progress.
-- After every session where files are created, modified, or deleted, update PROGRESS.md before finishing. PROGRESS.md is a current-state board, not a history log (git has the history). Maintenance rules:
+- Read docs/PROGRESS.md at the start of every conversation to understand what has been done and what is in progress.
+- After every session where files are created, modified, or deleted, update docs/PROGRESS.md before finishing. It is a current-state board, not a history log (git has the history). Maintenance rules:
   - When something is completed, move it from "Active work" to "What exists" as a brief line.
   - When a full phase is complete, collapse its "What exists" items into a single summary line and start the next phase.
   - When starting a new feature branch, add it to "Active work" with the branch name and scope.

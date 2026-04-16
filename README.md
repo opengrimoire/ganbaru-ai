@@ -37,7 +37,7 @@ Anti-procrastination project manager for life and work. Free, local, open-source
 | **Mobile** | Tauri v2 Android and iOS builds, sleep alarm with diary integration, notification-based pomodoro | Planned |
 | **Gamification** | Skill tree, XP system, Will metrics, self-imposed contracts, NPC-guided project workflows | Planned |
 
-See [ROADMAP.md](ROADMAP.md) for the full phased development plan.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phased development plan.
 
 ## Building from source
 

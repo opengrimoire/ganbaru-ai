@@ -6,6 +6,7 @@ Phase 1: core loop (wrapping up)
 
 ## Active work
 
+- Documentation reorganization: split the legacy `PROGRESS_TRACKING.md` into granular per-concept files under `docs/features/`, `docs/data/`, and `docs/algorithms/`. Top-level markdowns moved into `docs/`. `PROGRESS_TRACKING.md` deleted. `PRODUCT_SPEC.md` retained pending full migration of unbuilt-feature detail.
 - UI overhaul: tab navigation, contour layout, dual theme (light/dark)
 - Pomodoro: native pre-break notification and fullscreen break overlay (Linux done, Windows/macOS pending)
 - Pomodoro: centralized timeline rail with focus fills and break bands
