@@ -16,7 +16,6 @@
   import { onMount, untrack } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import "@fontsource-variable/inter";
   import { getTheme } from "$lib/stores/theme.svelte";
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -1137,10 +1136,7 @@
     --panel-contrast: #E8EDF5;
     --panel-edge: rgba(0, 0, 0, 0.30);
     --panel-shadow: rgba(0, 0, 0, 0.12);
-    font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
   }
 
   :global(.dark) .panel-root {

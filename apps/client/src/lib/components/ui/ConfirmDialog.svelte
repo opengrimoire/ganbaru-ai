@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import "@fontsource-variable/inter";
 
   let {
     title,
@@ -86,11 +85,3 @@
   </div>
 </div>
 
-<style>
-  .confirm-dialog,
-  .confirm-dialog button {
-    font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-</style>

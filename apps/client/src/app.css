@@ -119,6 +119,9 @@
 @layer base {
   html {
     font-size: 15px;
+    font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   * {
     @apply border-border outline-ring/50;
