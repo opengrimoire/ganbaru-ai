@@ -137,7 +137,7 @@
                 style="background-color: {getEventColor(evt.color, isDark).bg}; color: {getEventColor(evt.color, isDark).text}; opacity: {past ? 0.45 : textOpacity};"
                 onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
               >
-                <span class="truncate">{#if evt.title}{evt.title}{:else}<span class="opacity-50">(No title)</span>{/if}</span>
+                <span class="truncate">{#if evt.title}{evt.title}{:else}(No title){/if}</span>
               </div>
             {/each}
 

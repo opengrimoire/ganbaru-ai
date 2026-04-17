@@ -633,7 +633,7 @@
           </div>
         {/if}
         <div class="truncate font-medium" class:pr-5={dragHasRepeat || dragHasNotification}>
-          {#if dragPreview.event.title}{dragPreview.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+          {#if dragPreview.event.title}{dragPreview.event.title}{:else}(No title){/if}
         </div>
         {#if dragH > 28}
           {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
@@ -665,7 +665,7 @@
     >
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {getEventColor(undefined, isDark).bg};">
         <div class="truncate font-medium">
-          {#if createPreview.event.title}{createPreview.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+          {#if createPreview.event.title}{createPreview.event.title}{:else}(No title){/if}
         </div>
         {#if createH > 28}
           {@const st = createPreview.event.start.split(" ")[1] ?? ""}

@@ -85,7 +85,7 @@
     </span>
   {/if}
   <span class="truncate" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
-    {#if event.title}{event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+    {#if event.title}{event.title}{:else}(No title){/if}
   </span>
 </div>
 

@@ -571,7 +571,7 @@
                 </span>
               {/if}
               <span class="truncate" class:pr-5={dpHasRepeat || dpHasNotification}>
-                {#if dp.event.title}{dp.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+                {#if dp.event.title}{dp.event.title}{:else}(No title){/if}
               </span>
             </div>
             </div>

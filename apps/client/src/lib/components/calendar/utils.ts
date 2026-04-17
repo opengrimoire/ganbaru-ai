@@ -712,14 +712,14 @@ export interface ColorEntry {
 
 const LIGHT_TEXT = "#1c1c1e";
 const DARK_TEXT = "#f0f0f2";
-const LIGHT_TEXT_PAST = "#6b6b6d";
-const DARK_TEXT_PAST = "#a0a0a2";
+const LIGHT_TEXT_PAST = "#3a3a3c";
+const DARK_TEXT_PAST = "#c8c8ca";
 
 /**
  * Blend a hex color toward white (for light mode past effect).
- * Factor 0.3 means 30% white blended in.
+ * Factor 0.5 means 50% white blended in.
  */
-function blendToWhite(hex: string, factor = 0.3): string {
+function blendToWhite(hex: string, factor = 0.5): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -731,9 +731,9 @@ function blendToWhite(hex: string, factor = 0.3): string {
 
 /**
  * Blend a hex color toward black (for dark mode past effect).
- * Factor 0.3 means 30% darker.
+ * Factor 0.5 means 50% darker.
  */
-function blendToBlack(hex: string, factor = 0.3): string {
+function blendToBlack(hex: string, factor = 0.5): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -794,7 +794,7 @@ export function getEventColor(
   isDark: boolean,
 ): ColorEntry {
   const key = color ?? "slate";
-  return isDark ? DARK_COLORS[key] : LIGHT_COLORS[key];
+  return isDark ? LIGHT_COLORS[key] : DARK_COLORS[key];
 }
 
 // Cache for computed past colors to avoid recalculating

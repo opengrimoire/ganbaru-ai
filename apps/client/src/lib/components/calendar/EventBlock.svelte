@@ -116,7 +116,7 @@
       </div>
     {/if}
     <div class="event-title truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
-      {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+      {#if positioned.event.title}{positioned.event.title}{:else}(No title){/if}
     </div>
     <div class="event-time truncate opacity-80">{startTime} - {endTime}</div>
     {#if positioned.event.location}
