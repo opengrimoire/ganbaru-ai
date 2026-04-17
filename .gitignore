@@ -37,3 +37,6 @@ coverage/
 
 # local scripts
 scripts/
+
+# Claude
+.claude/
