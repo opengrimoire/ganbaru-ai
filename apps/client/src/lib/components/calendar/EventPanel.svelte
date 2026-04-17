@@ -48,6 +48,7 @@
     initialAllDay = false,
     externalDirty = false,
     readOnly = false,
+    skipInlineDeleteConfirm = false,
     onSave,
     onDelete,
     onClose,
@@ -63,6 +64,7 @@
     initialAllDay?: boolean;
     externalDirty?: boolean;
     readOnly?: boolean;
+    skipInlineDeleteConfirm?: boolean;
     onSave: (data: {
       title: string;
       start: string;
@@ -143,6 +145,12 @@
 
   // ─── Recurrence ─────────────────────────────────────────────────
   let recurrence: RecurrenceConfig | undefined = $state(undefined);
+
+  // ─── Inline delete confirmation ────────────────────────────────
+  // Two-step delete: first click arms, second click confirms. Any other
+  // click inside the panel disarms (see panel-root onclick below).
+  let deleteArmed = $state(false);
+  let confirmDeleteBtn: HTMLButtonElement | undefined = $state();
 
   // ─── Date pickers ──────────────────────────────────────────────
   let datepickerOpen = $state(false);
@@ -638,6 +646,47 @@
     }, 200);
   }
   function handleDeleteClick() { if (event && onDelete) onDelete(event.id, isRecurring ? scope : undefined); }
+
+  function armOrConfirmDelete() {
+    if (mode !== "edit" || !event || !onDelete) return;
+    // For deletes that would stop the active pomodoro session, skip the
+    // inline arm step and go straight to delete. The parent will show a
+    // modal that acts as the confirmation.
+    if (skipInlineDeleteConfirm) {
+      deleteArmed = false;
+      handleDeleteClick();
+      return;
+    }
+    if (deleteArmed) {
+      deleteArmed = false;
+      handleDeleteClick();
+    } else {
+      deleteArmed = true;
+    }
+  }
+
+  function handlePanelClick(e: MouseEvent) {
+    e.stopPropagation();
+    // Disarm the inline delete confirmation if the click landed outside the
+    // confirm button. The confirm button handles its own disarm on click.
+    if (deleteArmed && confirmDeleteBtn && !confirmDeleteBtn.contains(e.target as Node)) {
+      deleteArmed = false;
+    }
+  }
+
+  /**
+   * Local keydown handler for input/textarea elements. Stops propagation so
+   * keys like Ctrl+Z (undo text) don't leak into CalendarView's global
+   * shortcut handler, while explicitly letting the panel's own shortcuts
+   * (Ctrl+Enter save, Ctrl+D delete, Escape close) bubble up to the
+   * window-level listeners.
+   */
+  function inputKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) return;
+    if ((e.key === "d" || e.key === "D") && (e.ctrlKey || e.metaKey) && !e.shiftKey) return;
+    if (e.key === "Escape") return;
+    e.stopPropagation();
+  }
   function handleScopeClick(s: RecurringScope) { scope = s; onScopeChange?.(s); }
 
   function handleDragStart(e: PointerEvent) {
@@ -648,20 +697,42 @@
   function handleDragMove(e: PointerEvent) { if (isDragging) dragOffset = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }; }
   function handleDragEnd() { isDragging = false; userDragged = true; }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSave(); }
-    // Escape is handled by CalendarView's global keydown listener
-  }
+  // Global shortcut handling: active whenever the panel is mounted, so the
+  // user does not have to click a field inside the panel first. If a modal
+  // (ConfirmDialog) is open, its capture-phase window listener swallows the
+  // event before it reaches this handler.
+  onMount(() => {
+    function handleKeydown(e: KeyboardEvent) {
+      // Ctrl/Cmd + Enter: save. Chosen over plain Enter so typing newlines
+      // in the description textarea still works.
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
+      // Ctrl/Cmd + D: arm delete; press again to confirm. If the target is
+      // the active pomodoro block, the first press goes straight to the
+      // modal (see armOrConfirmDelete).
+      if ((e.key === "d" || e.key === "D") && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        e.preventDefault();
+        armOrConfirmDelete();
+        return;
+      }
+      // Escape is handled by CalendarView's global keydown listener
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   bind:this={panelEl}
   class="panel-root flex flex-col"
   data-readonly={readOnly || undefined}
   style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {panelStyle} background-color: var(--panel-bg);"
-  onclick={(e) => e.stopPropagation()}
-  onkeydown={handleKeydown}
+  onclick={handlePanelClick}
 >
   <!-- Drag handle bar with close button -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -706,7 +777,7 @@
           disabled={readOnly}
           class="w-full bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-[#444746] dark:placeholder:text-[#C4C7C5]"
           oninput={emitChange}
-          onkeydown={(e) => e.stopPropagation()}
+          onkeydown={inputKeydown}
         />
       </div>
       {#if !readOnly}
@@ -750,7 +821,7 @@
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
             {readOnly ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-          onkeydown={(e) => e.stopPropagation()} />
+          onkeydown={inputKeydown} />
         <span class="text-muted-foreground/60">&ndash;</span>
         <input type="text" bind:value={endTime}
           oninput={emitChange}
@@ -759,7 +830,7 @@
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
             {readOnly ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-          onkeydown={(e) => e.stopPropagation()} />
+          onkeydown={inputKeydown} />
 
         <!-- Floating time picker -->
         {#if timePickerTarget}
@@ -945,7 +1016,7 @@
         <input type="url" bind:value={eventUrl} placeholder="Add URL"
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
+          oninput={emitChange} onkeydown={inputKeydown} />
       </div>
       <!-- Location -->
       <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
@@ -953,7 +1024,7 @@
         <input type="text" bind:value={location} placeholder="Add location"
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={emitChange} onkeydown={(e) => e.stopPropagation()} />
+          oninput={emitChange} onkeydown={inputKeydown} />
         {#if geo}
           <span class="shrink-0 text-[10px] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
         {/if}
@@ -1023,26 +1094,38 @@
       </div>
     {:else}
       <div class="flex">
-        {#if mode === "edit" && onDelete && event}
-          <button onclick={handleDeleteClick}
-            class="flex w-9 shrink-0 items-center justify-center bg-black/[0.06] dark:bg-black/[0.30] text-foreground transition-colors hover:text-destructive"
-            title="Delete">
+        {#if deleteArmed && mode === "edit" && onDelete && event}
+          <button
+            bind:this={confirmDeleteBtn}
+            onclick={() => { deleteArmed = false; handleDeleteClick(); }}
+            title="Click again to delete (Ctrl + D)"
+            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-white bg-red-700 dark:bg-red-800">
             <Trash2 size={13} strokeWidth={1.8} />
+            <span>Click again to delete (Ctrl + D)</span>
+          </button>
+        {:else}
+          {#if mode === "edit" && onDelete && event}
+            <button onclick={armOrConfirmDelete}
+              class="flex w-9 shrink-0 items-center justify-center bg-black/[0.06] dark:bg-black/[0.30] text-foreground transition-colors hover:text-destructive"
+              title="Delete (Ctrl + D)">
+              <Trash2 size={13} strokeWidth={1.8} />
+            </button>
+          {/if}
+          <button onclick={handleSave}
+            title="Save (Ctrl + Enter)"
+            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] transition-all
+              {saving || saveReady
+                ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
+                : 'text-muted-foreground cursor-not-allowed'}"
+            style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
+            {#if saving}
+              <CircleCheck size={13} />
+              <span>Saved</span>
+            {:else}
+              <span>Save (Ctrl + Enter)</span>
+            {/if}
           </button>
         {/if}
-        <button onclick={handleSave}
-          class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] transition-all
-            {saving || saveReady
-              ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
-              : 'text-muted-foreground cursor-not-allowed'}"
-          style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
-          {#if saving}
-            <CircleCheck size={13} />
-            <span>Saved</span>
-          {:else}
-            <span>Save</span>
-          {/if}
-        </button>
       </div>
     {/if}
   </div>

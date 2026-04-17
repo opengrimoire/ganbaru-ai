@@ -6,6 +6,7 @@
     confirmLabel = "Yes (Enter)",
     cancelLabel = "No (Esc)",
     danger = true,
+    extraConfirmShortcut,
     onConfirm,
     onCancel,
   }: {
@@ -13,6 +14,7 @@
     confirmLabel?: string;
     cancelLabel?: string;
     danger?: boolean;
+    extraConfirmShortcut?: (e: KeyboardEvent) => boolean;
     onConfirm: () => void;
     onCancel: () => void;
   } = $props();
@@ -34,13 +36,25 @@
     );
 
     function handleKeydown(e: KeyboardEvent) {
-      if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onConfirm(); }
-      else if (e.key === "Escape") {
+      if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onConfirm(); return; }
+      if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
         (document.activeElement as HTMLElement)?.blur();
         onCancel();
+        return;
       }
+      if (extraConfirmShortcut?.(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        onConfirm();
+        return;
+      }
+      // While the modal is open, prevent any other key from triggering
+      // shortcuts in underlying components (e.g. the event panel's
+      // Ctrl+Enter / Ctrl+D). Running in capture phase on window, this
+      // stops propagation before any bubble-phase handler sees the event.
+      e.stopPropagation();
     }
     window.addEventListener("keydown", handleKeydown, true);
     return () => window.removeEventListener("keydown", handleKeydown, true);
@@ -51,7 +65,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="fixed inset-0 z-[60] flex items-center justify-center"
-  onclick={onCancel}
+  onclick={(e) => { e.stopPropagation(); onCancel(); }}
 >
   <div bind:this={backdropEl} class="absolute inset-0 bg-black/20"></div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -64,12 +78,14 @@
     <div class="flex items-center justify-end gap-2">
       <button
         onclick={onCancel}
+        title={cancelLabel}
         class="rounded px-3 py-1.5 text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
       >
         {cancelLabel}
       </button>
       <button
         onclick={onConfirm}
+        title={confirmLabel}
         class="rounded px-3 py-1.5 text-[13px] font-medium text-white transition-colors {danger ? 'bg-red-800/80 hover:bg-red-700/80' : 'bg-primary hover:bg-primary/90'}"
       >
         {confirmLabel}

@@ -87,6 +87,16 @@
     return undefined;
   });
 
+  // Whether clicking delete for the current event+scope would stop the
+  // active pomodoro session (modal will appear). When true, the panel
+  // skips its inline two-step confirmation since the modal already acts
+  // as a strong confirmation step.
+  const deleteWouldStopSession = $derived.by(() => {
+    if (session.state.mode !== "edit") return false;
+    const scopeArg = isRecurring(session.state.instanceEvent) ? session.scope : undefined;
+    return wouldDeleteActiveSession(scopeArg);
+  });
+
   // Past pomodoro events are read-only (completed work is sacred)
   const isEditingLocked = $derived.by(() => {
     const s = session.state;
@@ -238,27 +248,31 @@
   let confirmMessage = $state("");
   let confirmYesLabel = $state("Yes (Enter)");
   let confirmNoLabel = $state("No (Esc)");
+  let confirmExtraShortcut: ((e: KeyboardEvent) => boolean) | undefined = $state(undefined);
   function requestConfirm(
     message: string,
     action: () => Promise<void>,
-    opts?: { yesLabel?: string; noLabel?: string },
+    opts?: { yesLabel?: string; noLabel?: string; extraConfirmShortcut?: (e: KeyboardEvent) => boolean },
   ) {
     confirmMessage = message;
     confirmAction = action;
     confirmYesLabel = opts?.yesLabel ?? "Yes (Enter)";
     confirmNoLabel = opts?.noLabel ?? "No (Esc)";
+    confirmExtraShortcut = opts?.extraConfirmShortcut;
   }
 
   async function confirmYes() {
     const action = confirmAction;
     confirmAction = null;
     confirmMessage = "";
+    confirmExtraShortcut = undefined;
     if (action) await action();
   }
 
   function confirmNo() {
     confirmAction = null;
     confirmMessage = "";
+    confirmExtraShortcut = undefined;
   }
 
   function requestUndo() {
@@ -863,7 +877,12 @@
           sessionStopPending = true;
           await handleDelete(id, scope);
         },
-        { yesLabel: "Stop and delete (Enter)", noLabel: "Keep editing (Esc)" },
+        {
+          yesLabel: "Stop and delete (Ctrl + D)",
+          noLabel: "Keep editing (Esc)",
+          extraConfirmShortcut: (e) =>
+            (e.key === "d" || e.key === "D") && (e.ctrlKey || e.metaKey) && !e.shiftKey,
+        },
       );
       return;
     }
@@ -1015,6 +1034,7 @@
       message={confirmMessage}
       confirmLabel={confirmYesLabel}
       cancelLabel={confirmNoLabel}
+      extraConfirmShortcut={confirmExtraShortcut}
       onConfirm={confirmYes}
       onCancel={confirmNo}
     />
@@ -1045,6 +1065,7 @@
         anchor={session.state.anchor}
         externalDirty={session.dirty}
         readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
+        skipInlineDeleteConfirm={deleteWouldStopSession}
         onSave={handlePanelSave}
         onDelete={handleDelete}
         onChange={handlePanelChange}
