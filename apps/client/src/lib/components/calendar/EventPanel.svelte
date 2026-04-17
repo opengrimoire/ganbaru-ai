@@ -8,7 +8,6 @@
   import MiniDatePicker from "./MiniDatePicker.svelte";
   import TimePicker from "./TimePicker.svelte";
   import ColorPicker from "./ColorPicker.svelte";
-  import DescriptionEditor from "./DescriptionEditor.svelte";
   import MeetingSection from "./MeetingSection.svelte";
   import PomodoroSection from "./PomodoroSection.svelte";
   import NotificationsSection from "./NotificationsSection.svelte";
@@ -888,7 +887,7 @@
     </div>
   </div>
 
-  <!-- Middle: metadata strip and description (always visible) -->
+  <!-- Middle: metadata strip (always visible) -->
   <div class="flex flex-col gap-3 px-3.5 py-1.5">
 
     <!-- All-day / Availability / Status / Visibility -->
@@ -1021,10 +1020,6 @@
       </div>
     </div>
 
-    <!-- Description -->
-    <div class="-mt-1 flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
-      <DescriptionEditor {description} {readOnly} onchange={(html) => { description = html; emitChange(); }} />
-    </div>
   </div>
 
   <!-- Fixed bottom: feature sections (always visible) -->
@@ -1041,11 +1036,13 @@
         bind:guestCanInviteOthers
         bind:guestCanSeeOtherGuests
         {organizer}
+        {description}
         {readOnly}
         expanded={openSection === "meeting"}
         ontoggle={() => handleToggle("meeting")}
         onexpand={() => handleExpand("meeting")}
-        onchange={emitChange} />
+        onchange={emitChange}
+        ondescriptionchange={(html) => { description = html; emitChange(); }} />
 
       <!-- 2) Pomodoro -->
       <PomodoroSection

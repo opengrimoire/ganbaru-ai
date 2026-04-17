@@ -2,6 +2,7 @@
   import type { EventAttendee, EventOrganizer, GeoCoordinates } from "./types";
   import { bounceIcon, panelInputKeydown } from "./event-panel-utils";
   import { createSmoothScroll } from "./utils";
+  import DescriptionEditor from "./DescriptionEditor.svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Users from "@lucide/svelte/icons/users";
@@ -27,9 +28,11 @@
     guestCanInviteOthers = $bindable(true),
     guestCanSeeOtherGuests = $bindable(true),
     organizer,
+    description,
     readOnly = false,
     expanded,
     onchange,
+    ondescriptionchange,
     onexpand,
     ontoggle,
   }: {
@@ -42,9 +45,11 @@
     guestCanInviteOthers: boolean;
     guestCanSeeOtherGuests: boolean;
     organizer?: EventOrganizer;
+    description: string;
     readOnly?: boolean;
     expanded: boolean;
     onchange: () => void;
+    ondescriptionchange: (html: string) => void;
     onexpand: () => void;
     ontoggle: () => void;
   } = $props();
@@ -157,9 +162,9 @@
     </button>
   </div>
   {#if expanded}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="meeting" class="flex flex-col" style="background-color: var(--panel-bg);">
+    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="meeting" class="flex flex-col gap-1.5 p-2.5" style="background-color: var(--panel-bg);">
       <!-- Location -->
-      <div class="flex items-center gap-2.5 px-3 py-2 text-[11px] leading-none">
+      <div class="flex items-center gap-2.5 text-[11px] leading-none">
         <MapPin size={13} class="shrink-0 text-foreground" />
         <input bind:this={locationInput} type="text" bind:value={location} placeholder="Add location"
           disabled={readOnly}
@@ -170,15 +175,19 @@
         {/if}
       </div>
       <!-- URL -->
-      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
+      <div class="flex items-center gap-2.5 text-[11px] leading-none">
         <Video size={13} class="shrink-0 text-foreground" />
         <input type="url" bind:value={url} placeholder="Add call link"
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={onchange} onkeydown={panelInputKeydown} />
       </div>
+      <!-- Description -->
+      <DescriptionEditor {description} {readOnly} onchange={ondescriptionchange} />
+      <!-- Guests divider -->
+      <div class="-mx-2.5 border-t border-border/40"></div>
       <!-- Guests -->
-      <div class="flex flex-col border-t border-border/40 px-3 pt-1.5 pb-2">
+      <div class="flex flex-col">
         <div class="flex items-center gap-2 pb-1">
           <span class="text-[9px] uppercase tracking-wider text-muted-foreground">Guests</span>
           {#if !readOnly && attendees.length > 0}

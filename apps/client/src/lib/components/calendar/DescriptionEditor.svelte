@@ -154,7 +154,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={descAreaEl}>
   {#if descOpen}
-    <div transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1 pr-3" style="padding-left: 35px;">
+    <div transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1" style="padding-left: 23px;">
       {#each [
         { icon: Bold, cmd: "bold", title: "Bold" },
         { icon: Italic, cmd: "italic", title: "Italic" },
@@ -221,7 +221,7 @@
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    class="flex items-center gap-2.5 px-3 pb-2 leading-none transition-[padding-top] duration-250 ease-out {descOpen ? 'pt-0' : 'pt-2'} {!descOpen && !descClosing && !readOnly ? 'cursor-text' : ''}"
+    class="flex items-center gap-2.5 leading-none {!descOpen && !descClosing && !readOnly ? 'cursor-text' : ''}"
     onclick={() => { if (!descOpen && !descClosing) openDescEditor(); }}
   >
     <AlignLeft size={13} class="shrink-0 text-foreground" />
