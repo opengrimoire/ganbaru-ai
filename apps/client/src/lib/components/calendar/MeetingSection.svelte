@@ -74,15 +74,15 @@
     return parts.join(" · ");
   });
 
-  let locationInput: HTMLInputElement | undefined = $state();
+  let urlInput: HTMLInputElement | undefined = $state();
 
-  // When the section opens into an empty state, focus the location input so
-  // the "start a meeting" shortcut drops the caret where the user expects to type first.
+  // When the section opens into an empty state, focus the URL input so the
+  // "start a meeting" shortcut drops the caret on the first field the user sees.
   let wasExpanded = false;
   $effect(() => {
     const nowExpanded = expanded;
     if (nowExpanded && !wasExpanded && !hasContent && !readOnly) {
-      setTimeout(() => locationInput?.focus(), 220);
+      setTimeout(() => urlInput?.focus(), 220);
     }
     wasExpanded = nowExpanded;
   });
@@ -162,11 +162,19 @@
     </button>
   </div>
   {#if expanded}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="meeting" class="flex flex-col gap-1.5 p-2.5" style="background-color: var(--panel-bg);">
+    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="meeting" class="flex flex-col gap-2.5 px-3 pt-3 pb-3" style="background-color: var(--panel-bg);">
+      <!-- URL -->
+      <div class="flex items-center gap-2.5 text-[11px] leading-none">
+        <Video size={13} class="shrink-0 text-foreground" />
+        <input bind:this={urlInput} type="url" bind:value={url} placeholder="Add call link"
+          disabled={readOnly}
+          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
+          oninput={onchange} onkeydown={panelInputKeydown} />
+      </div>
       <!-- Location -->
       <div class="flex items-center gap-2.5 text-[11px] leading-none">
         <MapPin size={13} class="shrink-0 text-foreground" />
-        <input bind:this={locationInput} type="text" bind:value={location} placeholder="Add location"
+        <input type="text" bind:value={location} placeholder="Add location"
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={onchange} onkeydown={panelInputKeydown} />
@@ -174,18 +182,10 @@
           <span class="shrink-0 text-[10px] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
         {/if}
       </div>
-      <!-- URL -->
-      <div class="flex items-center gap-2.5 text-[11px] leading-none">
-        <Video size={13} class="shrink-0 text-foreground" />
-        <input type="url" bind:value={url} placeholder="Add call link"
-          disabled={readOnly}
-          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={onchange} onkeydown={panelInputKeydown} />
-      </div>
       <!-- Description -->
       <DescriptionEditor {description} {readOnly} onchange={ondescriptionchange} />
       <!-- Guests divider -->
-      <div class="-mx-2.5 border-t border-border/40"></div>
+      <div class="-mx-3 border-t border-border/40"></div>
       <!-- Guests -->
       <div class="flex flex-col">
         <div class="flex items-center gap-2 pb-1">
