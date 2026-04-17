@@ -34,7 +34,7 @@ A calendar event is a structured record (see `data/schema.md` for the table). Th
 - **Color:** one of 20 named colors. The full palette: ruby, coral, tangerine, amber, honey, lime, emerald, jade, teal, cyan, sky, azure, indigo, violet, purple, orchid, rose, blush, slate, sage. The palette is named, not hex-coded, so themes (dark, light, future themes) can map each name to whatever shade fits the surrounding UI without rewriting events.
 - **Description:** rich text (markdown source under the hood). Used for context, links, agendas.
 - **Notifications:** zero or more offsets in minutes before the event start. The list is configured per-event; defaults can be set globally.
-- **Attendees:** placeholder for shared and team events. The shape exists in the schema (RFC 5545 ATTENDEE) so import paths preserve it; behavior is described in `data/sync.md` once collaboration ships.
+- **Meeting:** a unified section that groups location (plain text with optional geo coordinates), call link (URL), and attendees (RFC 5545 ATTENDEE shape with RSVP status and guest permissions). The section is collapsible in the event panel and shares the same header pattern as pomodoro, notifications, and recurrence. It is considered enabled when any of its fields has content, so there is no separate on/off flag. Attendee sync behavior for shared and team events is described in `data/sync.md` once collaboration ships.
 - **Pomodoro config:** optional. When present, the event participates in the pomodoro system. See `features/pomodoro.md`.
 - **Recurrence:** optional RRULE. See `features/calendar-recurrence.md`.
 - **Timezone:** IANA name. Stored alongside the UTC times so a meeting created in one timezone displays correctly when the user travels.

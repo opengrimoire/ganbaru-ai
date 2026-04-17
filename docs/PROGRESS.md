@@ -28,6 +28,6 @@ Phase 2: notes and diary
 - shadcn-svelte + Tailwind CSS v4, custom neutral gray theme (dark + light), custom title bar
 - shared-types package
 - SQLite schema with migrations (calendar_events, pomodoro_sessions, pomodoro_configs, pomodoro_segments, tasks, calendars, attendees, alarms, overrides)
-- Calendar: custom Google Calendar-style component (week/day/month views, drag-and-drop create/move/resize, recurring events with full RFC 5545 RRULE support, all-day events, iCalendar field parity, edit session overlay model, EventPanel with 8 extracted sub-components, 275 unit tests)
+- Calendar: custom Google Calendar-style component (week/day/month views, drag-and-drop create/move/resize, recurring events with full RFC 5545 RRULE support, all-day events, iCalendar field parity, edit session overlay model, EventPanel with 8 extracted sub-components including unified Meeting section that bundles attendees, URL, and location under one collapsible, 275 unit tests)
 - Kanban board (backlog/todo/in_progress/done columns, CRUD, move between columns, priority badges)
 - Pomodoro timer (focus/break phases, cycle tracking, segment lifecycle, timeline rail visualization, idle detection, suspend/wake handling)

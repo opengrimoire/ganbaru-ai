@@ -9,7 +9,7 @@
   import TimePicker from "./TimePicker.svelte";
   import ColorPicker from "./ColorPicker.svelte";
   import DescriptionEditor from "./DescriptionEditor.svelte";
-  import AttendeesSection from "./AttendeesSection.svelte";
+  import MeetingSection from "./MeetingSection.svelte";
   import PomodoroSection from "./PomodoroSection.svelte";
   import NotificationsSection from "./NotificationsSection.svelte";
   import RecurrenceSection from "./RecurrenceSection.svelte";
@@ -23,8 +23,6 @@
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
-  import MapPin from "@lucide/svelte/icons/map-pin";
-  import ExternalLink from "@lucide/svelte/icons/external-link";
   import Sun from "@lucide/svelte/icons/sun";
   import Eye from "@lucide/svelte/icons/eye";
   import Check from "@lucide/svelte/icons/check";
@@ -109,7 +107,11 @@
   let eventStatus: EventStatus = $state("confirmed");
   let visibility: EventVisibility = $state("public");
 
-  // ─── Attendees ─────────────────────────────────────────────────
+  // ─── Meeting (attendees + location + url bundle) ────────────────
+  // UI-only flag: when false, the Meeting section's data is retained in
+  // memory (misclick safety) but omitted from save/change payloads so a
+  // Save commits the erasure.
+  let meetingEnabled = $state(false);
   let attendees: EventAttendee[] = $state([]);
   let guestCanModify = $state(false);
   let guestCanInviteOthers = $state(true);
@@ -238,10 +240,11 @@
   }
 
   // ─── Tab system ─────────────────────────────────────────────────
-  type Section = "pomodoro" | "notifications" | "repeat" | "music";
+  type Section = "meeting" | "pomodoro" | "notifications" | "repeat" | "music";
   let openSection: Section | null = $state(null);
 
   function isSectionEnabled(s: Section): boolean {
+    if (s === "meeting") return meetingEnabled;
     if (s === "pomodoro") return pomodoroEnabled;
     if (s === "notifications") return notifEnabled;
     if (s === "repeat") return !!recurrence;
@@ -255,13 +258,16 @@
     if (s === "music") return;
     const enabled = isSectionEnabled(s);
     if (enabled) {
-      // Disable
+      // Disable: keep the meeting data in memory so a misclick is recoverable.
+      // Save is what actually commits the erasure (buildSaveData gates on the flag).
+      if (s === "meeting") meetingEnabled = false;
       if (s === "pomodoro") pomodoroEnabled = false;
       if (s === "notifications") { notifEnabled = false; notifSelected = new Set(); customNotifs = []; }
       if (s === "repeat") recurrence = undefined;
       if (openSection === s) openSection = null;
     } else {
       // Enable with defaults
+      if (s === "meeting") { meetingEnabled = true; handleExpand("meeting"); return; }
       if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "auto"; focusDuration = 40; shortBreak = 5; longBreak = 10; idleTimeoutEnabled = true; }
       if (s === "notifications") { notifEnabled = true; notifSelected = new Set([0]); }
       if (s === "repeat") recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
@@ -275,6 +281,11 @@
     // Auto-activate repeat when expanding for the first time
     if (s === "repeat" && !recurrence && openSection !== s) {
       recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
+      emitChange();
+    }
+    // Auto-activate meeting when expanding from a disabled state
+    if (s === "meeting" && !meetingEnabled && openSection !== s) {
+      meetingEnabled = true;
       emitChange();
     }
     const opening = openSection !== s;
@@ -351,6 +362,7 @@
       guestCanModify = event.guestPermissions?.canModify ?? false;
       guestCanInviteOthers = event.guestPermissions?.canInviteOthers ?? true;
       guestCanSeeOtherGuests = event.guestPermissions?.canSeeOtherGuests ?? true;
+      meetingEnabled = !!(event.attendees && event.attendees.length > 0) || !!event.location || !!event.url;
       geo = event.geo;
       rdate = event.rdate;
 
@@ -415,6 +427,11 @@
       eventUrl = "";
       transparency = "opaque";
       eventStatus = "confirmed";
+      attendees = [];
+      guestCanModify = false;
+      guestCanInviteOthers = true;
+      guestCanSeeOtherGuests = true;
+      meetingEnabled = false;
     }
 
     datepickerOpen = false;
@@ -519,12 +536,12 @@
         idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
       allDay: allDay || undefined,
-      location: location || undefined,
-      url: eventUrl || undefined,
+      location: meetingEnabled && location ? location : undefined,
+      url: meetingEnabled && eventUrl ? eventUrl : undefined,
       transparency: transparency !== "opaque" ? transparency : undefined,
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
-      attendees: attendees.length > 0 ? attendees : undefined,
+      attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
     };
   }
 
@@ -610,13 +627,13 @@
         idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
       allDay: allDay || undefined,
-      location: location || undefined,
-      url: eventUrl || undefined,
+      location: meetingEnabled && location ? location : undefined,
+      url: meetingEnabled && eventUrl ? eventUrl : undefined,
       transparency: transparency !== "opaque" ? transparency : undefined,
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
-      attendees: attendees.length > 0 ? attendees : undefined,
-      guestPermissions: hasNonDefaultPerms ? {
+      attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
+      guestPermissions: meetingEnabled && hasNonDefaultPerms ? {
         canModify: guestCanModify,
         canInviteOthers: guestCanInviteOthers,
         canSeeOtherGuests: guestCanSeeOtherGuests,
@@ -871,9 +888,8 @@
     </div>
   </div>
 
-  <!-- Middle: all-day, description, location, URL (hidden when a section is expanded) -->
-  {#if !openSection}
-  <div transition:slide={{ duration: 180, easing: cubicOut }} class="flex flex-col gap-3 px-3.5 py-1.5">
+  <!-- Middle: metadata strip and description (always visible) -->
+  <div class="flex flex-col gap-3 px-3.5 py-1.5">
 
     <!-- All-day / Availability / Status / Visibility -->
     <div class="-mt-1 flex items-center rounded-none px-0.5 text-[10px] leading-none" style="background-color: var(--panel-contrast);">
@@ -1005,39 +1021,33 @@
       </div>
     </div>
 
-    <!-- Attendees / URL / Location / Description -->
+    <!-- Description -->
     <div class="-mt-1 flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
-      <!-- Attendees -->
-      <AttendeesSection bind:attendees bind:guestCanModify bind:guestCanInviteOthers bind:guestCanSeeOtherGuests {organizer} {readOnly} onchange={emitChange} />
-      <!-- URL -->
-      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
-        <ExternalLink size={13} class="shrink-0 text-foreground" />
-        <input type="url" bind:value={eventUrl} placeholder="Add URL"
-          disabled={readOnly}
-          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={emitChange} onkeydown={inputKeydown} />
-      </div>
-      <!-- Location -->
-      <div class="flex items-center gap-2.5 border-t border-border/40 px-3 py-2 text-[11px] leading-none">
-        <MapPin size={13} class="shrink-0 text-foreground" />
-        <input type="text" bind:value={location} placeholder="Add location"
-          disabled={readOnly}
-          class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={emitChange} onkeydown={inputKeydown} />
-        {#if geo}
-          <span class="shrink-0 text-[10px] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
-        {/if}
-      </div>
-      <!-- Description -->
       <DescriptionEditor {description} {readOnly} onchange={(html) => { description = html; emitChange(); }} />
     </div>
   </div>
-  {/if}
 
   <!-- Fixed bottom: feature sections (always visible) -->
   <div class="shrink-0 flex flex-col gap-1.5 px-3.5 py-1.5">
 
-      <!-- 1) Pomodoro -->
+      <!-- 1) Meeting -->
+      <MeetingSection
+        enabled={meetingEnabled}
+        bind:url={eventUrl}
+        bind:location
+        {geo}
+        bind:attendees
+        bind:guestCanModify
+        bind:guestCanInviteOthers
+        bind:guestCanSeeOtherGuests
+        {organizer}
+        {readOnly}
+        expanded={openSection === "meeting"}
+        ontoggle={() => handleToggle("meeting")}
+        onexpand={() => handleExpand("meeting")}
+        onchange={emitChange} />
+
+      <!-- 2) Pomodoro -->
       <PomodoroSection
         enabled={pomodoroEnabled}
         bind:preset={pomodoroPreset}
@@ -1047,7 +1057,7 @@
         onexpand={() => handleExpand("pomodoro")}
         onchange={emitChange} />
 
-      <!-- 2) Notifications -->
+      <!-- 3) Notifications -->
       <NotificationsSection
         enabled={notifEnabled}
         bind:selected={notifSelected}
@@ -1057,7 +1067,7 @@
         onexpand={() => handleExpand("notifications")}
         onchange={emitChange} />
 
-      <!-- 3) Repeat -->
+      <!-- 4) Repeat -->
       <RecurrenceSection
         bind:recurrence
         {startDate}
@@ -1067,7 +1077,7 @@
         onexpand={() => handleExpand("repeat")}
         onchange={emitChange} />
 
-      <!-- 4) Music -->
+      <!-- 5) Music -->
       <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="flex items-stretch">
           <button class="flex w-9 shrink-0 items-center justify-center text-muted-foreground/50">

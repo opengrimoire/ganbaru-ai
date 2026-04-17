@@ -152,7 +152,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={descAreaEl} class="border-t border-border/40">
+<div bind:this={descAreaEl}>
   {#if descOpen}
     <div transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1 pr-3" style="padding-left: 35px;">
       {#each [
