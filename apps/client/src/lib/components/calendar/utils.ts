@@ -744,26 +744,26 @@ function blendToBlack(hex: string, factor = 0.5): string {
 }
 
 const LIGHT_COLORS: Record<EventColor, ColorEntry> = {
-  ruby:      { bg: "#f0c2c2", accent: "#b82e2e", text: LIGHT_TEXT },
-  coral:     { bg: "#f0cec2", accent: "#b8532e", text: LIGHT_TEXT },
-  tangerine: { bg: "#f0d7c2", accent: "#b86e2e", text: LIGHT_TEXT },
-  amber:     { bg: "#f0e0c2", accent: "#b88a2e", text: LIGHT_TEXT },
-  honey:     { bg: "#f0e8c2", accent: "#b8a12e", text: LIGHT_TEXT },
-  lime:      { bg: "#e4f0c2", accent: "#95b82e", text: LIGHT_TEXT },
-  emerald:   { bg: "#c2f0d5", accent: "#2eb867", text: LIGHT_TEXT },
-  jade:      { bg: "#c2f0e4", accent: "#2eb895", text: LIGHT_TEXT },
-  teal:      { bg: "#c2f0ee", accent: "#2eb8b3", text: LIGHT_TEXT },
-  cyan:      { bg: "#c2e7f0", accent: "#2e9cb8", text: LIGHT_TEXT },
-  sky:       { bg: "#c2dbf0", accent: "#2e7ab8", text: LIGHT_TEXT },
-  azure:     { bg: "#c2d1f0", accent: "#2e5cb8", text: LIGHT_TEXT },
-  indigo:    { bg: "#c2c6f0", accent: "#2e39b8", text: LIGHT_TEXT },
-  violet:    { bg: "#d0c2f0", accent: "#572eb8", text: LIGHT_TEXT },
-  purple:    { bg: "#ddc2f0", accent: "#7e2eb8", text: LIGHT_TEXT },
-  orchid:    { bg: "#ecc2f0", accent: "#ac2eb8", text: LIGHT_TEXT },
-  rose:      { bg: "#f0c2d5", accent: "#b82e67", text: LIGHT_TEXT },
-  blush:     { bg: "#f0c2c9", accent: "#b82e45", text: LIGHT_TEXT },
-  slate:     { bg: "#d2d8e0", accent: "#5e6f87", text: LIGHT_TEXT },
-  sage:      { bg: "#d0e1d6", accent: "#5a8c6a", text: LIGHT_TEXT },
+  ruby:      { bg: "#d4a6a6", accent: "#b82e2e", text: LIGHT_TEXT },
+  coral:     { bg: "#d4b2a6", accent: "#b8532e", text: LIGHT_TEXT },
+  tangerine: { bg: "#d4bba6", accent: "#b86e2e", text: LIGHT_TEXT },
+  amber:     { bg: "#d4c4a6", accent: "#b88a2e", text: LIGHT_TEXT },
+  honey:     { bg: "#d4cca6", accent: "#b8a12e", text: LIGHT_TEXT },
+  lime:      { bg: "#c8d4a6", accent: "#95b82e", text: LIGHT_TEXT },
+  emerald:   { bg: "#a6d4b9", accent: "#2eb867", text: LIGHT_TEXT },
+  jade:      { bg: "#a6d4c8", accent: "#2eb895", text: LIGHT_TEXT },
+  teal:      { bg: "#a6d4d2", accent: "#2eb8b3", text: LIGHT_TEXT },
+  cyan:      { bg: "#a6cbd4", accent: "#2e9cb8", text: LIGHT_TEXT },
+  sky:       { bg: "#a6bfd4", accent: "#2e7ab8", text: LIGHT_TEXT },
+  azure:     { bg: "#a6b5d4", accent: "#2e5cb8", text: LIGHT_TEXT },
+  indigo:    { bg: "#a6aad4", accent: "#2e39b8", text: LIGHT_TEXT },
+  violet:    { bg: "#b4a6d4", accent: "#572eb8", text: LIGHT_TEXT },
+  purple:    { bg: "#c1a6d4", accent: "#7e2eb8", text: LIGHT_TEXT },
+  orchid:    { bg: "#d0a6d4", accent: "#ac2eb8", text: LIGHT_TEXT },
+  rose:      { bg: "#d4a6b9", accent: "#b82e67", text: LIGHT_TEXT },
+  blush:     { bg: "#d4a6ad", accent: "#b82e45", text: LIGHT_TEXT },
+  slate:     { bg: "#b6bcc4", accent: "#5e6f87", text: LIGHT_TEXT },
+  sage:      { bg: "#b4c5ba", accent: "#5a8c6a", text: LIGHT_TEXT },
 };
 
 const DARK_COLORS: Record<EventColor, ColorEntry> = {
@@ -802,17 +802,23 @@ const dimmedColorCache = new Map<string, ColorEntry>();
 
 /**
  * Compute a dimmed variant of an event color by blending the bg toward the canvas
- * and swapping the text for a muted foreground. Used in place of CSS opacity so
- * that contrast is predictable and text sub-pixel antialiasing is preserved.
+ * and optionally swapping the text for a muted foreground. Used in place of CSS
+ * opacity so that contrast is predictable and text sub-pixel antialiasing is
+ * preserved.
  *
  * @param factor Blend amount toward canvas. 0 = no dimming, 1 = full canvas color.
+ * @param mutedText When true, swap text for the muted inverse-luminance token
+ *   (suitable for heavier dims like cancelled or outside-month). When false,
+ *   keep the normal text color so the visual distance from a normal event
+ *   stays subtle (suitable for past events).
  */
 function getDimmedEventColor(
   color: EventColor | undefined,
   isDark: boolean,
   factor: number,
+  mutedText: boolean,
 ): ColorEntry {
-  const key = `${color ?? "slate"}-${isDark ? "dark" : "light"}-${factor}`;
+  const key = `${color ?? "slate"}-${isDark ? "dark" : "light"}-${factor}-${mutedText}`;
   const cached = dimmedColorCache.get(key);
   if (cached) return cached;
 
@@ -821,54 +827,57 @@ function getDimmedEventColor(
   const entry: ColorEntry = {
     bg: blend(base.bg, factor),
     accent: blend(base.accent, factor),
-    text: isDark ? DARK_TEXT_PAST : LIGHT_TEXT_PAST,
+    text: mutedText
+      ? (isDark ? DARK_TEXT_PAST : LIGHT_TEXT_PAST)
+      : base.text,
   };
   dimmedColorCache.set(key, entry);
   return entry;
 }
 
 /**
- * Get pre-computed dimmed colors for past events (~50% toward canvas).
+ * Get pre-computed dimmed colors for past events (~30% toward canvas).
+ * Keeps the normal text color so the transition from a live event stays
+ * subtle: the bg loses saturation, text stays identical.
  */
 export function getPastEventColor(
   color: EventColor | undefined,
   isDark: boolean,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, 0.5);
+  return getDimmedEventColor(color, isDark, 0.3, false);
 }
 
 /**
  * Get pre-computed dimmed colors for cancelled events (~65% toward canvas).
- * Matches the visual weight of the legacy opacity: 0.4 treatment.
+ * Swaps text to the muted inverse token so the event reads as clearly
+ * de-emphasized at a glance.
  */
 export function getCancelledEventColor(
   color: EventColor | undefined,
   isDark: boolean,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, 0.65);
+  return getDimmedEventColor(color, isDark, 0.65, true);
 }
 
 /**
  * Get pre-computed dimmed colors for free/transparent events (~40% toward canvas).
- * Matches the visual weight of the legacy opacity: 0.55 treatment.
  */
 export function getFreeEventColor(
   color: EventColor | undefined,
   isDark: boolean,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, 0.4);
+  return getDimmedEventColor(color, isDark, 0.4, true);
 }
 
 /**
  * Get pre-computed heavily dimmed colors for events shown in outside-month
  * cells of the month view (~75% toward canvas).
- * Matches the visual weight of the legacy opacity: 0.25 treatment.
  */
 export function getOutsideMonthEventColor(
   color: EventColor | undefined,
   isDark: boolean,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, 0.75);
+  return getDimmedEventColor(color, isDark, 0.75, true);
 }
 
 export const EVENT_COLOR_OPTIONS: EventColor[] = [
