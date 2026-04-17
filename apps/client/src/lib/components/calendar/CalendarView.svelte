@@ -494,16 +494,19 @@
       return;
     }
 
-    if (isRecurring(event)) {
-      // If the dragged event matches the current editing ID (may be a virtual ID
-      // from Following/All overlay), route the time changes to the session
-      if (session.state.mode === "edit" && (
-        session.state.originalEvent.id === event.id || editingId === event.id
-      )) {
-        session.updateChanges({ start: event.start, end: event.end });
-        return;
-      }
+    // If panel is open for this exact event, route drag through session so
+    // pending field edits (title, pomodoro config, etc.) are not silently
+    // discarded by an auto-save. The user must click Save to commit.
+    // Covers both non-recurring and recurring (including virtual IDs from
+    // Following/All scope overlays).
+    if (session.state.mode === "edit" && (
+      session.state.originalEvent.id === event.id || editingId === event.id
+    )) {
+      session.updateChanges({ start: event.start, end: event.end });
+      return;
+    }
 
+    if (isRecurring(event)) {
       // Resolve the original instance before drag modified its position
       const originalInstance = calendarStore.events.find((e) => e.id === event.id);
       if (!originalInstance) return;
@@ -556,11 +559,6 @@
       const after = calendarStore.getTemplate(event) ?? event;
       pushUndo({ type: "update", before, after: { ...after } });
       redoStack = [];
-    }
-    // If panel is open for this event, update it
-    if (session.state.mode === "edit" && session.state.originalEvent.id === event.id) {
-      const updated = calendarStore.getTemplate(event) ?? event;
-      session.openEdit(updated, session.state.anchor);
     }
   }
 
