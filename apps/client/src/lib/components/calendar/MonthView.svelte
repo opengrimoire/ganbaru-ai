@@ -6,6 +6,8 @@
     isPastDay,
     allEventsForDay,
     getEventColor,
+    getPastEventColor,
+    getOutsideMonthEventColor,
     formatDayName,
   } from "./utils";
 
@@ -105,7 +107,16 @@
           {@const inMonth = day.getMonth() === currentMonth}
           {@const past = isPastDay(day)}
           {@const active = inMonth && !past}
-          {@const textOpacity = !inMonth ? 0.25 : 1}
+          {@const dayNumberColor = active
+            ? 'var(--foreground)'
+            : !inMonth
+              ? 'color-mix(in srgb, var(--muted-foreground) 25%, var(--background))'
+              : 'var(--muted-foreground)'}
+          {@const moreColor = past
+            ? 'color-mix(in srgb, var(--muted-foreground) 45%, var(--background))'
+            : !inMonth
+              ? 'color-mix(in srgb, var(--muted-foreground) 25%, var(--background))'
+              : 'var(--muted-foreground)'}
           {@const dayEvts = allEventsForDay(events, day)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -124,17 +135,22 @@
 
             <span
               class="relative z-[2] mb-px flex h-6 w-6 items-center justify-center self-center text-xs"
-              style="color: {active ? 'var(--foreground)' : 'var(--muted-foreground)'}; opacity: {textOpacity};"
+              style="color: {dayNumberColor};"
             >
               {day.getDate()}
             </span>
 
             {#each dayEvts.slice(0, maxVisible) as evt}
+              {@const evtColors = past
+                ? getPastEventColor(evt.color, isDark)
+                : !inMonth
+                  ? getOutsideMonthEventColor(evt.color, isDark)
+                  : getEventColor(evt.color, isDark)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
                 class="relative z-[2] mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
-                style="background-color: {getEventColor(evt.color, isDark).bg}; color: {getEventColor(evt.color, isDark).text}; opacity: {past ? 0.45 : textOpacity};"
+                style="background-color: {evtColors.bg}; color: {evtColors.text};"
                 onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
               >
                 <span class="truncate">{#if evt.title}{evt.title}{:else}(No title){/if}</span>
@@ -142,7 +158,7 @@
             {/each}
 
             {#if dayEvts.length > maxVisible}
-              <span class="relative z-[2] mt-px text-center text-[10px] text-muted-foreground" style="opacity: {past ? 0.45 : textOpacity};">
+              <span class="relative z-[2] mt-px text-center text-[10px]" style="color: {moreColor};">
                 +{dayEvts.length - maxVisible} more
               </span>
             {/if}

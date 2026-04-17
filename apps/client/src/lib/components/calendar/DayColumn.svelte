@@ -606,7 +606,10 @@
   <!-- Drag preview (replaces the original block at the target position, layout-aware) -->
   {#if dragPreview && layoutedPreview}
     {@const lp = layoutedPreview}
-    {@const dragColor = dragPreview.event.color ? getEventColor(dragPreview.event.color, isDark) : null}
+    {@const dragBase = getEventColor(dragPreview.event.color, isDark)}
+    {@const dragIconColor = `color-mix(in srgb, ${dragBase.text} 70%, ${dragBase.bg})`}
+    {@const dragTimeColor = `color-mix(in srgb, ${dragBase.text} 80%, ${dragBase.bg})`}
+    {@const dragLocationColor = `color-mix(in srgb, ${dragBase.text} 60%, ${dragBase.bg})`}
     {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     {@const dragHasRepeat = !!dragPreview.event.recurrence || !!dragPreview.event.recurringParentId}
     {@const dragHasNotification = !!dragPreview.event.notifications?.length}
@@ -617,18 +620,18 @@
         height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
         left: {lp.left}%;
         width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
-        color: {dragColor?.text ?? getEventColor(undefined, isDark).text};
+        color: {dragBase.text};
         z-index: 46;
       "
     >
-      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragColor?.bg ?? getEventColor(undefined, isDark).bg};">
+      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragBase.bg};">
         {#if dragHasRepeat || dragHasNotification}
-          <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
+          <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {dragIconColor};">
             {#if dragHasRepeat}
-              <Repeat size={8} class="shrink-0 opacity-70" />
+              <Repeat size={8} class="shrink-0" />
             {/if}
             {#if dragHasNotification}
-              <Bell size={8} class="shrink-0 opacity-70" />
+              <Bell size={8} class="shrink-0" />
             {/if}
           </div>
         {/if}
@@ -638,10 +641,10 @@
         {#if dragH > 28}
           {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
           {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
-          <div class="truncate opacity-80">{st} - {et}</div>
+          <div class="truncate" style="color: {dragTimeColor};">{st} - {et}</div>
         {/if}
         {#if dragH > 44 && dragPreview.event.location}
-          <div class="truncate text-[9px] opacity-60">{dragPreview.event.location}</div>
+          <div class="truncate text-[9px]" style="color: {dragLocationColor};">{dragPreview.event.location}</div>
         {/if}
       </div>
     </div>
@@ -650,6 +653,8 @@
   <!-- Create preview (new block being drawn, layout-aware) -->
   {#if createPreview && layoutedPreview}
     {@const lp = layoutedPreview}
+    {@const createBase = getEventColor(undefined, isDark)}
+    {@const createTimeColor = `color-mix(in srgb, ${createBase.text} 80%, ${createBase.bg})`}
     {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     <div
       data-create-preview
@@ -659,18 +664,18 @@
         height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
         left: {lp.left}%;
         width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
-        color: {getEventColor(undefined, isDark).text};
+        color: {createBase.text};
         z-index: 10;
       "
     >
-      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {getEventColor(undefined, isDark).bg};">
+      <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {createBase.bg};">
         <div class="truncate font-medium">
           {#if createPreview.event.title}{createPreview.event.title}{:else}(No title){/if}
         </div>
         {#if createH > 28}
           {@const st = createPreview.event.start.split(" ")[1] ?? ""}
           {@const et = createPreview.event.end.split(" ")[1] ?? ""}
-          <div class="truncate opacity-80">{st} - {et}</div>
+          <div class="truncate" style="color: {createTimeColor};">{st} - {et}</div>
         {/if}
       </div>
     </div>

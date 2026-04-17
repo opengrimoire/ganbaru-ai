@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { CalendarEvent } from "./types";
-  import { getEventColor, getPastEventColor } from "./utils";
+  import {
+    getEventColor,
+    getPastEventColor,
+    getCancelledEventColor,
+    getFreeEventColor,
+  } from "./utils";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
 
@@ -26,19 +31,24 @@
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
-  const colors = $derived(getEventColor(event.color, isDark));
-  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
-  const activeColors = $derived(
-    usePastColors
-      ? getPastEventColor(event.color, isDark)
-      : colors
-  );
-
   const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
   const hasNotification = $derived(event.notifications && event.notifications.length > 0);
   const isFree = $derived(event.transparency === "transparent");
   const isTentative = $derived(event.status === "tentative");
   const isCancelled = $derived(event.status === "cancelled");
+
+  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const activeColors = $derived(
+    isCancelled
+      ? getCancelledEventColor(event.color, isDark)
+      : isFree
+        ? getFreeEventColor(event.color, isDark)
+        : usePastColors
+          ? getPastEventColor(event.color, isDark)
+          : getEventColor(event.color, isDark)
+  );
+
+  const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
 
   let chipEl: HTMLDivElement | undefined = $state();
 
@@ -67,7 +77,6 @@
     cursor: {canDrag ? 'grab' : 'pointer'};
     z-index: 1;
     filter: none;
-    opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
     {isFree ? 'border-left: 2px dashed currentColor;' : ''}
     {isTentative ? 'background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}
   "
@@ -75,12 +84,12 @@
   onpointerdown={handlePointerDown}
 >
   {#if hasRepeat || hasNotification}
-    <span class="absolute right-1 top-[3px] flex items-center gap-0.5">
+    <span class="absolute right-1 top-[3px] flex items-center gap-0.5" style="color: {iconColor};">
       {#if hasRepeat}
-        <Repeat size={8} class="shrink-0 opacity-70" />
+        <Repeat size={8} class="shrink-0" />
       {/if}
       {#if hasNotification}
-        <Bell size={8} class="shrink-0 opacity-70" />
+        <Bell size={8} class="shrink-0" />
       {/if}
     </span>
   {/if}

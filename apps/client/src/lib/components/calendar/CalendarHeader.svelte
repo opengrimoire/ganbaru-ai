@@ -323,9 +323,9 @@
                       : inWeek
                         ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
                         : !inMonth
-                          ? "opacity: 0.25;"
+                          ? "color: color-mix(in srgb, var(--foreground) 25%, var(--background));"
                           : past
-                            ? "opacity: 0.45; color: var(--foreground);"
+                            ? "color: color-mix(in srgb, var(--foreground) 45%, var(--background));"
                             : "color: var(--foreground);"}
                 >
                   {day.getDate()}

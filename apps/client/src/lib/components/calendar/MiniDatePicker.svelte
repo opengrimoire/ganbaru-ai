@@ -125,11 +125,11 @@
             : day.today
               ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
               : belowMin
-                ? "opacity: 0.2;"
+                ? "color: color-mix(in srgb, var(--foreground) 20%, var(--background));"
                 : !day.currentMonth
-                  ? "opacity: 0.25;"
+                  ? "color: color-mix(in srgb, var(--foreground) 25%, var(--background));"
                   : past
-                    ? "opacity: 0.45; color: var(--foreground);"
+                    ? "color: color-mix(in srgb, var(--foreground) 45%, var(--background));"
                     : "color: var(--foreground);"}
         >{day.day}</button>
       {/each}

@@ -797,35 +797,78 @@ export function getEventColor(
   return isDark ? LIGHT_COLORS[key] : DARK_COLORS[key];
 }
 
-// Cache for computed past colors to avoid recalculating
-const pastColorCache = new Map<string, ColorEntry>();
+// Cache for computed dimmed colors (past, cancelled, free, outside-month variants)
+const dimmedColorCache = new Map<string, ColorEntry>();
 
 /**
- * Get pre-computed dimmed colors for past events.
- * Uses solid colors instead of transparent overlays for better performance.
+ * Compute a dimmed variant of an event color by blending the bg toward the canvas
+ * and swapping the text for a muted foreground. Used in place of CSS opacity so
+ * that contrast is predictable and text sub-pixel antialiasing is preserved.
+ *
+ * @param factor Blend amount toward canvas. 0 = no dimming, 1 = full canvas color.
+ */
+function getDimmedEventColor(
+  color: EventColor | undefined,
+  isDark: boolean,
+  factor: number,
+): ColorEntry {
+  const key = `${color ?? "slate"}-${isDark ? "dark" : "light"}-${factor}`;
+  const cached = dimmedColorCache.get(key);
+  if (cached) return cached;
+
+  const base = getEventColor(color, isDark);
+  const blend = isDark ? blendToBlack : blendToWhite;
+  const entry: ColorEntry = {
+    bg: blend(base.bg, factor),
+    accent: blend(base.accent, factor),
+    text: isDark ? DARK_TEXT_PAST : LIGHT_TEXT_PAST,
+  };
+  dimmedColorCache.set(key, entry);
+  return entry;
+}
+
+/**
+ * Get pre-computed dimmed colors for past events (~50% toward canvas).
  */
 export function getPastEventColor(
   color: EventColor | undefined,
   isDark: boolean,
 ): ColorEntry {
-  const key = `${color ?? "slate"}-${isDark ? "dark" : "light"}`;
-  const cached = pastColorCache.get(key);
-  if (cached) return cached;
+  return getDimmedEventColor(color, isDark, 0.5);
+}
 
-  const base = getEventColor(color, isDark);
-  const entry: ColorEntry = isDark
-    ? {
-        bg: blendToBlack(base.bg),
-        accent: blendToBlack(base.accent),
-        text: DARK_TEXT_PAST,
-      }
-    : {
-        bg: blendToWhite(base.bg),
-        accent: blendToWhite(base.accent),
-        text: LIGHT_TEXT_PAST,
-      };
-  pastColorCache.set(key, entry);
-  return entry;
+/**
+ * Get pre-computed dimmed colors for cancelled events (~65% toward canvas).
+ * Matches the visual weight of the legacy opacity: 0.4 treatment.
+ */
+export function getCancelledEventColor(
+  color: EventColor | undefined,
+  isDark: boolean,
+): ColorEntry {
+  return getDimmedEventColor(color, isDark, 0.65);
+}
+
+/**
+ * Get pre-computed dimmed colors for free/transparent events (~40% toward canvas).
+ * Matches the visual weight of the legacy opacity: 0.55 treatment.
+ */
+export function getFreeEventColor(
+  color: EventColor | undefined,
+  isDark: boolean,
+): ColorEntry {
+  return getDimmedEventColor(color, isDark, 0.4);
+}
+
+/**
+ * Get pre-computed heavily dimmed colors for events shown in outside-month
+ * cells of the month view (~75% toward canvas).
+ * Matches the visual weight of the legacy opacity: 0.25 treatment.
+ */
+export function getOutsideMonthEventColor(
+  color: EventColor | undefined,
+  isDark: boolean,
+): ColorEntry {
+  return getDimmedEventColor(color, isDark, 0.75);
 }
 
 export const EVENT_COLOR_OPTIONS: EventColor[] = [

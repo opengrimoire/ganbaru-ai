@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { PositionedEvent } from "./types";
-  import { getEventColor, getPastEventColor } from "./utils";
+  import {
+    getEventColor,
+    getPastEventColor,
+    getCancelledEventColor,
+    getFreeEventColor,
+  } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
@@ -31,14 +36,6 @@
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
-  const colors = $derived(getEventColor(positioned.event.color, isDark));
-  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
-  const activeColors = $derived(
-    usePastColors
-      ? getPastEventColor(positioned.event.color, isDark)
-      : colors
-  );
-
   // Events with IDs starting with __ are temporary (preview/pending) and should never animate
   const isTemporaryEvent = $derived(positioned.event.id.startsWith("__"));
 
@@ -50,6 +47,21 @@
   const isTentative = $derived(positioned.event.status === "tentative");
   const isCancelled = $derived(positioned.event.status === "cancelled");
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
+
+  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const activeColors = $derived(
+    isCancelled
+      ? getCancelledEventColor(positioned.event.color, isDark)
+      : isFree
+        ? getFreeEventColor(positioned.event.color, isDark)
+        : usePastColors
+          ? getPastEventColor(positioned.event.color, isDark)
+          : getEventColor(positioned.event.color, isDark)
+  );
+
+  const timeColor = $derived(`color-mix(in srgb, ${activeColors.text} 80%, ${activeColors.bg})`);
+  const locationColor = $derived(`color-mix(in srgb, ${activeColors.text} 60%, ${activeColors.bg})`);
+  const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
 
   function handlePointerDown(e: PointerEvent) {
     e.stopPropagation();
@@ -93,7 +105,6 @@
     cursor: {effectiveCursor};
     z-index: {editing ? 45 : 3};
     filter: none;
-    opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
   "
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -106,21 +117,21 @@
   <!-- Content -->
   <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
     {#if hasRepeat || hasNotification}
-      <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px;">
+      <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">
         {#if hasRepeat}
-          <Repeat size={8} class="shrink-0 opacity-70" />
+          <Repeat size={8} class="shrink-0" />
         {/if}
         {#if hasNotification}
-          <Bell size={8} class="shrink-0 opacity-70" />
+          <Bell size={8} class="shrink-0" />
         {/if}
       </div>
     {/if}
     <div class="event-title truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
       {#if positioned.event.title}{positioned.event.title}{:else}(No title){/if}
     </div>
-    <div class="event-time truncate opacity-80">{startTime} - {endTime}</div>
+    <div class="event-time truncate" style="color: {timeColor};">{startTime} - {endTime}</div>
     {#if positioned.event.location}
-      <div class="event-location truncate text-[9px] opacity-60">{positioned.event.location}</div>
+      <div class="event-location truncate text-[9px]" style="color: {locationColor};">{positioned.event.location}</div>
     {/if}
   </div>
 

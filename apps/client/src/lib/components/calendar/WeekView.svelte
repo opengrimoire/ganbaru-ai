@@ -540,6 +540,7 @@
           {#if allDayDrag.allDayDragPreview}
             {@const dp = allDayDrag.allDayDragPreview}
             {@const dpColor = getEventColor(dp.event.color, isDark)}
+            {@const dpIconColor = `color-mix(in srgb, ${dpColor.text} 70%, ${dpColor.bg})`}
             {@const dpHasRepeat = !!dp.event.recurrence || !!dp.event.recurringParentId}
             {@const dpHasNotification = !!dp.event.notifications?.length}
             <div
@@ -561,12 +562,12 @@
               "
             >
               {#if dpHasRepeat || dpHasNotification}
-                <span class="absolute right-1 top-[3px] flex items-center gap-0.5">
+                <span class="absolute right-1 top-[3px] flex items-center gap-0.5" style="color: {dpIconColor};">
                   {#if dpHasRepeat}
-                    <Repeat size={8} class="shrink-0 opacity-70" />
+                    <Repeat size={8} class="shrink-0" />
                   {/if}
                   {#if dpHasNotification}
-                    <Bell size={8} class="shrink-0 opacity-70" />
+                    <Bell size={8} class="shrink-0" />
                   {/if}
                 </span>
               {/if}
