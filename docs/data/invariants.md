@@ -2,17 +2,17 @@
 
 These hold across the whole app. Any operation that can break one is wrong, regardless of which feature it belongs to. The list is numbered for cross-referencing from feature and algorithm docs; the numbers are stable.
 
-A violation is a bug in the code that produced the violation, not in the renderer that exposed it. The renderer must not paper over impossible state.
+A violation is a bug in whatever code produced it: the data layer, the derivation logic, or the renderer's visual math. The renderer must not paper over bad data with cosmetic clamps, and the data layer must not lean on the renderer to hide impossible state. Each side has to be correct on its own.
 
 ## 1. Green never appears after the current time
 
-A focus fill band on the rail can only exist for a segment with `actual_start` in the past and recorded work. Any time the rail shows green beyond the current moment, the segment data or the projection logic is wrong.
+A focus fill band on the rail can only exist for a segment with `actual_start` in the past and recorded work. Any time the rail shows green beyond the current moment, something is wrong: the segment data, the projection logic, or the visual math that maps time to pixels under the current scroll position, calendar zoom, or app scaling.
 
 **Why:** the rail is a record of what happened, not a forecast. Green ahead of "now" would suggest progress the user has not actually made, undermining the trust the rail builds.
 
 **What would break:** the user could be misled into thinking they have already focused, leading them to skip a session they meant to do. Analytics derived from green time would inflate.
 
-**Enforced by:** segment fetch (no future timestamps from the database), the active-segment renderer (clamps to `now`), the projected-band renderer (emits break marks only, never green).
+**Enforced by:** segment fetch (no future timestamps from the database), the active-segment renderer (clamps to `now`), the projected-band renderer (emits break marks only, never green), and a single time-to-pixel transform shared by the `now` indicator and any green band. That transform must stay correct under every viewport state: scroll position, calendar zoom (30 to 200 px/hour), and app or OS scaling. A green pixel past the `now` line under any zoom or scroll combination is a real violation, not a rounding artifact to ignore.
 
 ## 2. Exactly one segment is `active` at a time
 
