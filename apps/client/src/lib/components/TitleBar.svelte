@@ -538,7 +538,8 @@
 
 {#if showResetConfirm}
   <ConfirmDialog
-    message="This will permanently delete all session blocks, tasks, and XP data."
+    title="Reset everything?"
+    message="All data will be permanently deleted."
     confirmLabel="Reset everything (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmReset}
@@ -548,7 +549,8 @@
 
 {#if showCloseConfirm}
   <ConfirmDialog
-    message="All productivity features will stop working if you close the app."
+    title="Close the app?"
+    message="All productivity features will stop working."
     confirmLabel="Close anyway (Enter)"
     cancelLabel="Stay (Esc)"
     onConfirm={confirmClose}

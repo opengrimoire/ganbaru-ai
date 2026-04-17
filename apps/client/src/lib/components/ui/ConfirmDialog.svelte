@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import "@fontsource-variable/inter";
 
   let {
+    title,
     message,
     confirmLabel = "Yes (Enter)",
     cancelLabel = "No (Esc)",
@@ -10,6 +12,7 @@
     onConfirm,
     onCancel,
   }: {
+    title?: string;
     message: string;
     confirmLabel?: string;
     cancelLabel?: string;
@@ -52,28 +55,42 @@
   class="fixed inset-0 z-[60] flex items-center justify-center"
   onclick={(e) => { e.stopPropagation(); onCancel(); }}
 >
-  <div class="absolute inset-0 bg-black/20"></div>
+  <div class="absolute inset-0 bg-black/50"></div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="relative z-10 rounded-md border border-border bg-card px-8 py-5 shadow-xl dark:bg-sidebar"
+    class="confirm-dialog relative z-10 rounded-md border border-black/20 bg-card px-8 py-5 dark:border-white/10 dark:bg-sidebar"
     onclick={(e) => e.stopPropagation()}
   >
-    <p class="mb-4 text-[15px] text-foreground">{message}</p>
-    <div class="flex items-center justify-end gap-2">
+    <div class="mb-5 text-left">
+      {#if title}
+        <h2 class="mb-1 text-[15px] font-semibold text-foreground dark:text-[#D8D8E0]">{title}</h2>
+        <p class="text-[13px] text-foreground dark:text-[#D8D8E0]">{message}</p>
+      {:else}
+        <p class="text-[15px] font-semibold text-foreground dark:text-[#D8D8E0]">{message}</p>
+      {/if}
+    </div>
+    <div class="flex items-center justify-start gap-2">
       <button
         onclick={onCancel}
-        title={cancelLabel}
-        class="rounded px-3 py-1.5 text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
+        class="rounded-md border border-black/10 bg-[#FAFAFC] px-3.5 py-2 text-[13px] font-medium text-[#141420] transition-colors hover:bg-[#F0F0F4] dark:border-white/15 dark:bg-[#18181C] dark:text-[#D8D8E0] dark:hover:bg-[#202025]"
       >
         {cancelLabel}
       </button>
       <button
         onclick={onConfirm}
-        title={confirmLabel}
-        class="rounded px-3 py-1.5 text-[13px] font-medium text-white transition-colors {danger ? 'bg-red-800/80 hover:bg-red-700/80' : 'bg-primary hover:bg-primary/90'}"
+        class="rounded-md border border-black/30 bg-[#2B2B30] px-3.5 py-2 text-[13px] font-medium text-[#F4F4F7] dark:border-black/15 dark:bg-[#D8D8E0] dark:text-[#0A0A0E]"
       >
         {confirmLabel}
       </button>
     </div>
   </div>
 </div>
+
+<style>
+  .confirm-dialog,
+  .confirm-dialog button {
+    font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+</style>

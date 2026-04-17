@@ -245,6 +245,7 @@
 
   // Confirmation dialog
   let confirmAction: (() => Promise<void>) | null = $state(null);
+  let confirmTitle: string | undefined = $state(undefined);
   let confirmMessage = $state("");
   let confirmYesLabel = $state("Yes (Enter)");
   let confirmNoLabel = $state("No (Esc)");
@@ -252,8 +253,14 @@
   function requestConfirm(
     message: string,
     action: () => Promise<void>,
-    opts?: { yesLabel?: string; noLabel?: string; extraConfirmShortcut?: (e: KeyboardEvent) => boolean },
+    opts?: {
+      title?: string;
+      yesLabel?: string;
+      noLabel?: string;
+      extraConfirmShortcut?: (e: KeyboardEvent) => boolean;
+    },
   ) {
+    confirmTitle = opts?.title;
     confirmMessage = message;
     confirmAction = action;
     confirmYesLabel = opts?.yesLabel ?? "Yes (Enter)";
@@ -264,6 +271,7 @@
   async function confirmYes() {
     const action = confirmAction;
     confirmAction = null;
+    confirmTitle = undefined;
     confirmMessage = "";
     confirmExtraShortcut = undefined;
     if (action) await action();
@@ -271,6 +279,7 @@
 
   function confirmNo() {
     confirmAction = null;
+    confirmTitle = undefined;
     confirmMessage = "";
     confirmExtraShortcut = undefined;
   }
@@ -278,10 +287,17 @@
   function requestUndo() {
     const action = undoStack[undoStack.length - 1];
     if (!action) return;
-    let message = "";
-    if (action.type === "add") message = `Undo creating "${action.event.title}"?`;
-    else if (action.type === "delete") message = `Undo deleting "${action.event.title}"?`;
-    else message = `Undo moving "${action.after.title}"?`;
+    let title = "", message = "";
+    if (action.type === "add") {
+      title = "Undo creating this event?";
+      message = `"${action.event.title}" will be removed.`;
+    } else if (action.type === "delete") {
+      title = "Undo delete?";
+      message = `"${action.event.title}" will be restored.`;
+    } else {
+      title = "Undo move?";
+      message = `"${action.after.title}" will return to its previous time.`;
+    }
     requestConfirm(message, async () => {
       undoStack = undoStack.slice(0, -1);
       if (action.type === "add") {
@@ -298,16 +314,23 @@
       }
       redoStack = [...redoStack, action];
       session.close();
-    });
+    }, { title });
   }
 
   function requestRedo() {
     const action = redoStack[redoStack.length - 1];
     if (!action) return;
-    let message = "";
-    if (action.type === "add") message = `Redo creating "${action.event.title}"?`;
-    else if (action.type === "delete") message = `Redo deleting "${action.event.title}"?`;
-    else message = `Redo moving "${action.after.title}"?`;
+    let title = "", message = "";
+    if (action.type === "add") {
+      title = "Redo creating this event?";
+      message = `"${action.event.title}" will be recreated.`;
+    } else if (action.type === "delete") {
+      title = "Redo delete?";
+      message = `"${action.event.title}" will be removed again.`;
+    } else {
+      title = "Redo move?";
+      message = `"${action.after.title}" will move again.`;
+    }
     requestConfirm(message, async () => {
       redoStack = redoStack.slice(0, -1);
       if (action.type === "add") {
@@ -323,7 +346,7 @@
         await calendarStore.updateBlock(action.after);
       }
       pushUndo(action);
-    });
+    }, { title });
   }
 
   let containerEl: HTMLDivElement | undefined = $state();
@@ -486,9 +509,9 @@
 
     if (session.dirty) {
       requestConfirm(
-        "Discard unsaved changes?",
+        "Your changes will be lost.",
         async () => { openEvent(); },
-        { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
       return;
     }
@@ -533,7 +556,7 @@
           ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
           : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
         requestConfirm(
-          "Discard unsaved changes?",
+          "Your changes will be lost.",
           async () => {
             // Open with the pre-drag instance as originalEvent so the panel's
             // initial sync captures pre-drag values as baseline. tick() lets
@@ -543,7 +566,7 @@
             await tick();
             session.updateChanges({ start: event.start, end: event.end });
           },
-          { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+          { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
         );
         return;
       }
@@ -591,9 +614,9 @@
   function handlePanelClose() {
     if (session.dirty) {
       requestConfirm(
-        "Discard unsaved changes?",
+        "Your changes will be lost.",
         async () => { session.close(); },
-        { yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
       return;
     }
@@ -622,12 +645,12 @@
     // stopSession() is deferred to AFTER the save so the hybrid logic still sees activeBlockId.
     if (!sessionStopPending && wouldSaveStopSession(data, scope)) {
       requestConfirm(
-        "This will stop the current focus session.",
+        "The current focus session will stop.",
         async () => {
           sessionStopPending = true;
           await handlePanelSave(data, scope);
         },
-        { yesLabel: "Stop and save (Enter)", noLabel: "Keep editing (Esc)" },
+        { title: "Save and stop the focus session?", yesLabel: "Stop and save (Enter)", noLabel: "Keep editing (Esc)" },
       );
       return;
     }
@@ -872,12 +895,13 @@
     // Gate: confirm before stopping the active pomodoro session
     if (!sessionStopPending && wouldDeleteActiveSession(scope)) {
       requestConfirm(
-        "This will stop the current focus session.",
+        "The current focus session will stop.",
         async () => {
           sessionStopPending = true;
           await handleDelete(id, scope);
         },
         {
+          title: "Delete and stop?",
           yesLabel: "Stop and delete (Ctrl + D)",
           noLabel: "Keep editing (Esc)",
           extraConfirmShortcut: (e) =>
@@ -1031,6 +1055,7 @@
 
   {#if confirmAction}
     <ConfirmDialog
+      title={confirmTitle}
       message={confirmMessage}
       confirmLabel={confirmYesLabel}
       cancelLabel={confirmNoLabel}
