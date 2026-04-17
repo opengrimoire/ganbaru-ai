@@ -19,22 +19,7 @@
     onCancel: () => void;
   } = $props();
 
-  let backdropEl: HTMLDivElement | undefined = $state();
-  let dialogEl: HTMLDivElement | undefined = $state();
-
   onMount(() => {
-    backdropEl?.animate(
-      [{ opacity: 0 }, { opacity: 1 }],
-      { duration: 180, easing: "ease-out" },
-    );
-    dialogEl?.animate(
-      [
-        { transform: "scale(0.95)", opacity: 0 },
-        { transform: "scale(1)", opacity: 1 },
-      ],
-      { duration: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
-    );
-
     function handleKeydown(e: KeyboardEvent) {
       if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onConfirm(); return; }
       if (e.key === "Escape") {
@@ -67,11 +52,10 @@
   class="fixed inset-0 z-[60] flex items-center justify-center"
   onclick={(e) => { e.stopPropagation(); onCancel(); }}
 >
-  <div bind:this={backdropEl} class="absolute inset-0 bg-black/20"></div>
+  <div class="absolute inset-0 bg-black/20"></div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    bind:this={dialogEl}
-    class="relative z-10 rounded-md border border-border bg-card px-8 py-5 shadow-xl"
+    class="relative z-10 rounded-md border border-border bg-card px-8 py-5 shadow-xl dark:bg-sidebar"
     onclick={(e) => e.stopPropagation()}
   >
     <p class="mb-4 text-[15px] text-foreground">{message}</p>
