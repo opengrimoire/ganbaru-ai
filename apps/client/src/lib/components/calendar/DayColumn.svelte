@@ -58,12 +58,6 @@
 
   const panelOpen = $derived(!!editingId);
 
-  const pastOverlayMinutes = $derived.by(() => {
-    if (isPast) return 1440;
-    if (isToday && currentTimeMinute >= 0) return currentTimeMinute;
-    return 0;
-  });
-
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   const dateStr = $derived(formatDatePart(date));
@@ -525,14 +519,6 @@
       ></div>
     {/if}
   {/each}
-
-  <!-- Past time dimming overlay (full width, behind rail and content) -->
-  {#if pastOverlayMinutes > 0}
-    <div
-      class="pointer-events-none absolute left-0 right-0 top-0 z-[1]"
-      style="height: calc({pastOverlayMinutes} / 60 * var(--hour-h) * 1px); background-color: var(--cal-past-overlay);"
-    ></div>
-  {/if}
 
   <!-- Pomodoro timeline rails (one per contiguous group of pomodoro events) -->
   {#each railSegments as seg}

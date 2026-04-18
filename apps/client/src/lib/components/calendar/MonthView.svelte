@@ -125,14 +125,6 @@
             style="{di < 6 ? `border-right: 1px solid var(--cal-gridline);` : ''}"
             onclick={() => onDayClick(day)}
           >
-            <!-- Past day overlay (all past days, including previous/next month) -->
-            {#if past}
-              <div
-                class="pointer-events-none absolute inset-0 z-[1]"
-                style="background-color: var(--cal-past-overlay);"
-              ></div>
-            {/if}
-
             <span
               class="relative z-[2] mb-px flex h-6 w-6 items-center justify-center self-center text-xs"
               style="color: {dayNumberColor};"
