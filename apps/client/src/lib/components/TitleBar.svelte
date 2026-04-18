@@ -24,6 +24,7 @@
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import X from "@lucide/svelte/icons/x";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import SettingsModal from "$lib/components/settings/SettingsModal.svelte";
 
   interface ProcessMemory {
     name: string;
@@ -48,6 +49,7 @@
   let showPomodoroMenu = $state(false);
   let showResetConfirm = $state(false);
   let showPerfMenu = $state(false);
+  let showSettings = $state(false);
   let perfPinned = $state(false);
   let perfLive = $state(false);
   let copied = $state(false);
@@ -498,7 +500,7 @@
 
     <!-- Settings -->
     <button
-      onclick={() => {}}
+      onclick={() => { showSettings = true; }}
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       title="Settings"
     >
@@ -556,6 +558,10 @@
     onConfirm={confirmClose}
     onCancel={cancelClose}
   />
+{/if}
+
+{#if showSettings}
+  <SettingsModal onClose={() => { showSettings = false; }} />
 {/if}
 
 <style>
