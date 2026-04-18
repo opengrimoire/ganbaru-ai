@@ -3,6 +3,7 @@ use tauri::Manager;
 mod db;
 mod notification;
 mod tray;
+mod vault;
 
 static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 
@@ -294,6 +295,8 @@ pub fn run() {
             reset_database,
             get_memory_report,
             get_startup_elapsed_ms,
+            vault::vault_read_config,
+            vault::vault_write_config,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;
