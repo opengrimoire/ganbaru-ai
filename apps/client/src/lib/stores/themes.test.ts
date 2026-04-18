@@ -7,6 +7,8 @@ import {
   lightTheme,
   getThemeById,
   themeIds,
+  computeThemeTokenOps,
+  type Theme,
 } from "./themes";
 
 const REQUIRED_EVENT_COLORS: readonly EventColor[] = [
@@ -99,5 +101,75 @@ describe("getThemeById", () => {
     expect(getThemeById("toString")).toBeUndefined();
     expect(getThemeById("__proto__")).toBeUndefined();
     expect(getThemeById("constructor")).toBeUndefined();
+  });
+});
+
+describe("computeThemeTokenOps", () => {
+  const withOverrides = (
+    app?: Record<string, string>,
+    cal?: Record<string, string>,
+  ): Theme => ({
+    ...lightTheme,
+    id: "test",
+    appTokenOverrides: app,
+    calendarTokenOverrides: cal,
+  });
+
+  it("returns no-op when theme has no overrides and nothing was applied", () => {
+    const result = computeThemeTokenOps(lightTheme, new Set());
+    expect(result.toSet.size).toBe(0);
+    expect(result.toClear.size).toBe(0);
+    expect(result.applied.size).toBe(0);
+  });
+
+  it("sets every app and calendar token override", () => {
+    const theme = withOverrides(
+      { "--primary": "#abc", "--background": "#fff" },
+      { "--cal-bg": "#eee" },
+    );
+    const result = computeThemeTokenOps(theme, new Set());
+    expect(result.toSet.get("--primary")).toBe("#abc");
+    expect(result.toSet.get("--background")).toBe("#fff");
+    expect(result.toSet.get("--cal-bg")).toBe("#eee");
+    expect(result.toClear.size).toBe(0);
+    expect(result.applied).toEqual(
+      new Set(["--primary", "--background", "--cal-bg"]),
+    );
+  });
+
+  it("clears previously applied tokens that the new theme does not set", () => {
+    const theme = withOverrides({ "--primary": "#abc" });
+    const previous = new Set(["--primary", "--background", "--cal-bg"]);
+    const result = computeThemeTokenOps(theme, previous);
+    expect(result.toSet.get("--primary")).toBe("#abc");
+    expect(result.toClear).toEqual(new Set(["--background", "--cal-bg"]));
+    expect(result.applied).toEqual(new Set(["--primary"]));
+  });
+
+  it("reassigns a token the previous theme also set without clearing it", () => {
+    const theme = withOverrides({ "--primary": "#xyz" });
+    const result = computeThemeTokenOps(theme, new Set(["--primary"]));
+    expect(result.toSet.get("--primary")).toBe("#xyz");
+    expect(result.toClear.size).toBe(0);
+    expect(result.applied).toEqual(new Set(["--primary"]));
+  });
+
+  it("clears all previously applied keys when switching to a theme without overrides", () => {
+    const result = computeThemeTokenOps(
+      lightTheme,
+      new Set(["--primary", "--cal-bg"]),
+    );
+    expect(result.toSet.size).toBe(0);
+    expect(result.toClear).toEqual(new Set(["--primary", "--cal-bg"]));
+    expect(result.applied.size).toBe(0);
+  });
+
+  it("merges app and calendar overrides into one applied set", () => {
+    const theme = withOverrides(
+      { "--primary": "#111" },
+      { "--cal-bg": "#222" },
+    );
+    const result = computeThemeTokenOps(theme, new Set());
+    expect(result.applied).toEqual(new Set(["--primary", "--cal-bg"]));
   });
 });

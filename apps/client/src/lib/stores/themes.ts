@@ -18,13 +18,13 @@ export type EventPaletteHexes = Record<EventColor, string>;
 /**
  * A theme is a self-contained visual package. The minimum a theme must
  * carry is an id, a user-visible display name, a base (light or dark, used
- * for chrome inheritance and contrast-text math), a complete event palette,
+ * for shell inheritance and contrast-text math), a complete event palette,
  * and the reference canvas used when blending dimmed event variants.
  *
  * The optional token-override fields are reserved for when themes also
- * recolor app chrome beyond the built-in light/dark CSS. They are empty on
- * the built-in themes today; adding a new theme that overrides chrome
- * tokens later is a data-only change.
+ * recolor the app and calendar shell beyond the built-in light/dark CSS.
+ * They are empty on the built-in themes today; adding a new theme that
+ * overrides shell tokens later is a data-only change.
  */
 export interface Theme {
   id: ThemeId;
@@ -33,9 +33,9 @@ export interface Theme {
   eventPalette: EventPaletteHexes;
   /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
   blendCanvas: string;
-  /** Optional overrides for app-chrome CSS tokens (--primary, etc). */
+  /** Optional overrides for app-shell CSS tokens (--primary, etc). */
   appTokenOverrides?: Readonly<Record<string, string>>;
-  /** Optional overrides for calendar-chrome CSS tokens (--cal-bg, etc). */
+  /** Optional overrides for calendar-shell CSS tokens (--cal-bg, etc). */
   calendarTokenOverrides?: Readonly<Record<string, string>>;
 }
 
@@ -146,4 +146,39 @@ export function getThemeById(id: ThemeId | undefined | null): Theme | undefined 
  */
 export function themeIds(): ThemeId[] {
   return Object.keys(THEME_REGISTRY);
+}
+
+/**
+ * Compute the CSS custom property changes needed to apply a theme when
+ * `previouslyApplied` tokens were set by the last theme.
+ *
+ * Without this, switching from a theme that painted `--primary` to a theme
+ * without overrides would leave the previous value stuck on the root. The
+ * result tells the caller which tokens to set and which leftover keys to
+ * remove, plus the new set of applied keys to remember for the next switch.
+ */
+export function computeThemeTokenOps(
+  theme: Theme,
+  previouslyApplied: ReadonlySet<string>,
+): {
+  toSet: ReadonlyMap<string, string>;
+  toClear: ReadonlySet<string>;
+  applied: Set<string>;
+} {
+  const toSet = new Map<string, string>();
+  const applied = new Set<string>();
+  const merge = (overrides?: Readonly<Record<string, string>>) => {
+    if (!overrides) return;
+    for (const [key, value] of Object.entries(overrides)) {
+      toSet.set(key, value);
+      applied.add(key);
+    }
+  };
+  merge(theme.appTokenOverrides);
+  merge(theme.calendarTokenOverrides);
+  const toClear = new Set<string>();
+  for (const key of previouslyApplied) {
+    if (!applied.has(key)) toClear.add(key);
+  }
+  return { toSet, toClear, applied };
 }

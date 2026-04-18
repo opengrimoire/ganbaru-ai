@@ -3,6 +3,7 @@ import {
   type ThemeId,
   THEME_REGISTRY,
   DEFAULT_THEME_ID,
+  computeThemeTokenOps,
   getThemeById,
   darkTheme,
   lightTheme,
@@ -19,23 +20,22 @@ function loadSavedThemeId(): ThemeId {
 
 let activeId = $state<ThemeId>(loadSavedThemeId());
 
+// Tracks which CSS custom properties the active theme injected. When the
+// user switches, any key set by the previous theme but not the new one is
+// removed from the root so stale colors do not leak across switches.
+let appliedTokenKeys = new Set<string>();
+
 function applyThemeToDom(theme: Theme): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   root.classList.toggle("dark", theme.base === "dark");
-  // Reserved: when themes ship chrome overrides, iterate here and call
-  // root.style.setProperty(key, value) for each override. The built-in
-  // light/dark themes rely on app.css's :root / .dark rules instead.
-  if (theme.appTokenOverrides) {
-    for (const [key, value] of Object.entries(theme.appTokenOverrides)) {
-      root.style.setProperty(key, value);
-    }
-  }
-  if (theme.calendarTokenOverrides) {
-    for (const [key, value] of Object.entries(theme.calendarTokenOverrides)) {
-      root.style.setProperty(key, value);
-    }
-  }
+  const { toSet, toClear, applied } = computeThemeTokenOps(
+    theme,
+    appliedTokenKeys,
+  );
+  for (const [key, value] of toSet) root.style.setProperty(key, value);
+  for (const key of toClear) root.style.removeProperty(key);
+  appliedTokenKeys = applied;
 }
 
 // Apply the initial theme on module load so first paint matches the stored
