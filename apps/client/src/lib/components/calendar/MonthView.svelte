@@ -10,18 +10,19 @@
     getOutsideMonthEventColor,
     formatDayName,
   } from "./utils";
+  import type { Theme } from "$lib/stores/themes";
 
   let {
     anchorDate,
     events,
-    isDark = false,
+    theme,
     onDayClick,
     onEventClick,
     onWheelNavigate,
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
-    isDark?: boolean;
+    theme: Theme;
     onDayClick: (date: Date) => void;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
@@ -134,10 +135,10 @@
 
             {#each dayEvts.slice(0, maxVisible) as evt}
               {@const evtColors = past
-                ? getPastEventColor(evt.color, isDark)
+                ? getPastEventColor(evt.color, theme)
                 : !inMonth
-                  ? getOutsideMonthEventColor(evt.color, isDark)
-                  : getEventColor(evt.color, isDark)}
+                  ? getOutsideMonthEventColor(evt.color, theme)
+                  : getEventColor(evt.color, theme)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div

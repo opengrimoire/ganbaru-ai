@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mapRow, type DbCalendarEvent } from "./map-row";
 
 function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
@@ -196,6 +196,15 @@ describe("mapRow", () => {
   it("maps color", () => {
     expect(mapRow(makeDbRow({ color: "tomato" })).color).toBe("tomato");
     expect(mapRow(makeDbRow({ color: null })).color).toBeUndefined();
+  });
+
+  it("drops unknown color values so render falls back to the default", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(mapRow(makeDbRow({ color: "retired-color-name" })).color).toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("maps location and url when non-empty", () => {

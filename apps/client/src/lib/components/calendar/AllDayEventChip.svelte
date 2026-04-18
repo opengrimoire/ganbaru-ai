@@ -6,12 +6,13 @@
     getCancelledEventColor,
     getFreeEventColor,
   } from "./utils";
+  import type { Theme } from "$lib/stores/themes";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
 
   let {
     event,
-    isDark = false,
+    theme,
     editing = false,
     preview = false,
     grabbing = false,
@@ -21,7 +22,7 @@
     onpointerdown,
   }: {
     event: CalendarEvent;
-    isDark?: boolean;
+    theme: Theme;
     editing?: boolean;
     preview?: boolean;
     grabbing?: boolean;
@@ -31,6 +32,7 @@
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
+  const isDark = $derived(theme.base === "dark");
   const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
   const hasNotification = $derived(event.notifications && event.notifications.length > 0);
   const isFree = $derived(event.transparency === "transparent");
@@ -40,12 +42,12 @@
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
   const activeColors = $derived(
     isCancelled
-      ? getCancelledEventColor(event.color, isDark)
+      ? getCancelledEventColor(event.color, theme)
       : isFree
-        ? getFreeEventColor(event.color, isDark)
+        ? getFreeEventColor(event.color, theme)
         : usePastColors
-          ? getPastEventColor(event.color, isDark)
-          : getEventColor(event.color, isDark)
+          ? getPastEventColor(event.color, theme)
+          : getEventColor(event.color, theme)
   );
 
   const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);

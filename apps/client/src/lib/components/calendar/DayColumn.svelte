@@ -19,13 +19,14 @@
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
+  import type { Theme } from "$lib/stores/themes";
 
   let {
     date,
     events,
+    theme,
     isToday = false,
     isPast = false,
-    isDark = false,
     currentTimeMinute = -1,
     dragPreview = null,
     createPreview = null,
@@ -40,9 +41,9 @@
   }: {
     date: Date;
     events: CalendarEvent[];
+    theme: Theme;
     isToday?: boolean;
     isPast?: boolean;
-    isDark?: boolean;
     currentTimeMinute?: number;
     editingId?: string;
     previewedIds?: Set<string>;
@@ -55,6 +56,8 @@
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
   } = $props();
+
+  const isDark = $derived(theme.base === "dark");
 
   const panelOpen = $derived(!!editingId);
 
@@ -577,7 +580,7 @@
   {#each effectivePositioned as pos (pos.event.id)}
     <EventBlock
       positioned={pos}
-      {isDark}
+      {theme}
       editing={pos.event.id === editingId}
       preview={previewedIds?.has(pos.event.id) === true}
       grabbing={pos.event.id === grabbingId}
@@ -592,7 +595,7 @@
   <!-- Drag preview (replaces the original block at the target position, layout-aware) -->
   {#if dragPreview && layoutedPreview}
     {@const lp = layoutedPreview}
-    {@const dragBase = getEventColor(dragPreview.event.color, isDark)}
+    {@const dragBase = getEventColor(dragPreview.event.color, theme)}
     {@const dragIconColor = `color-mix(in srgb, ${dragBase.text} 70%, ${dragBase.bg})`}
     {@const dragTimeColor = `color-mix(in srgb, ${dragBase.text} 80%, ${dragBase.bg})`}
     {@const dragLocationColor = `color-mix(in srgb, ${dragBase.text} 60%, ${dragBase.bg})`}
@@ -641,7 +644,7 @@
   <!-- Create preview (new block being drawn, layout-aware) -->
   {#if createPreview && layoutedPreview}
     {@const lp = layoutedPreview}
-    {@const createBase = getEventColor(undefined, isDark)}
+    {@const createBase = getEventColor(undefined, theme)}
     {@const createTimeColor = `color-mix(in srgb, ${createBase.text} 80%, ${createBase.bg})`}
     {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     <div

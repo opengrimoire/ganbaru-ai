@@ -7,6 +7,7 @@
     getFreeEventColor,
   } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import type { Theme } from "$lib/stores/themes";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
 
@@ -14,7 +15,7 @@
 
   let {
     positioned,
-    isDark = false,
+    theme,
     editing = false,
     preview = false,
     grabbing = false,
@@ -25,7 +26,7 @@
     onpointerdown,
   }: {
     positioned: PositionedEvent;
-    isDark?: boolean;
+    theme: Theme;
     editing?: boolean;
     preview?: boolean;
     grabbing?: boolean;
@@ -35,6 +36,8 @@
     onclick: (rect?: DOMRect) => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
+
+  const isDark = $derived(theme.base === "dark");
 
   // Events with IDs starting with __ are temporary (preview/pending) and should never animate
   const isTemporaryEvent = $derived(positioned.event.id.startsWith("__"));
@@ -51,12 +54,12 @@
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
   const activeColors = $derived(
     isCancelled
-      ? getCancelledEventColor(positioned.event.color, isDark)
+      ? getCancelledEventColor(positioned.event.color, theme)
       : isFree
-        ? getFreeEventColor(positioned.event.color, isDark)
+        ? getFreeEventColor(positioned.event.color, theme)
         : usePastColors
-          ? getPastEventColor(positioned.event.color, isDark)
-          : getEventColor(positioned.event.color, isDark)
+          ? getPastEventColor(positioned.event.color, theme)
+          : getEventColor(positioned.event.color, theme)
   );
 
   const timeColor = $derived(`color-mix(in srgb, ${activeColors.text} 80%, ${activeColors.bg})`);

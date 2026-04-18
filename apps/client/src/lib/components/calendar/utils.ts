@@ -703,35 +703,41 @@ export function layoutEventsForDay(
 }
 
 // Event color palette
+//
+// Palette values live in the theme registry (see stores/themes.ts). The
+// functions below take a Theme and resolve the active palette into
+// {bg, text} entries, applying contrast-aware text selection and caching
+// the resolved palette per theme ID so switching themes is cheap.
+
+import { lightTheme, type Theme } from "$lib/stores/themes";
 
 export interface ColorEntry {
   bg: string;
   text: string;
 }
 
-// Primary text colors per theme, plus "alt" tokens for when the bg pushes
-// the default out of a readable range. Light-mode events default to white
-// text; pale-bg swatches (e.g. banana, citron) flip to the near-black alt.
-// Dark-mode events default to near-black text; very-dark bgs (produced by
-// past or cancelled dimming) flip to the near-white alt.
+// Contrast text tokens. Light-mode events default to white, pale swatches
+// flip to near-black. Dark-mode events default to near-black, very-dark
+// blended variants flip to near-white.
 const LIGHT_TEXT = "#ffffff";
 const LIGHT_TEXT_ALT = "#1f1f1f";
 const DARK_TEXT = "#131314";
 const DARK_TEXT_ALT = "#e3e3e3";
 
-// Theme reference backgrounds used when blending dimmed variants. The dark
-// value is a fixed charcoal so that dimmed events mix into a slightly lighter
-// tone than the true calendar canvas, keeping them visible without opacity.
-const LIGHT_BLEND_BG = "#ffffff";
-const DARK_BLEND_BG = "#202124";
-
-// Luminance thresholds for flipping to the alt text color. Light-mode bgs
-// brighter than LIGHT_FLIP_ABOVE cannot carry white text; dark-mode bgs
-// darker than DARK_FLIP_BELOW cannot carry near-black text. Values chosen
-// against the 24-color palette so borderline swatches (flamingo, pistachio,
-// sage, birch) stay on the primary side while truly pale or dark bgs flip.
+// Luminance flip thresholds tuned against the 24-color built-in palette.
+// Light-mode bgs brighter than LIGHT_FLIP_ABOVE cannot carry white text;
+// dark-mode bgs darker than DARK_FLIP_BELOW cannot carry near-black text.
+// Themes with palettes outside the tuned range may need custom thresholds;
+// for now these are shared across themes of a given base.
 const LIGHT_FLIP_ABOVE = 0.65;
 const DARK_FLIP_BELOW = 0.35;
+
+// Built-in slot IDs (keys of any registered theme's palette). Used by
+// normalizeEventColor to validate raw DB strings. All themes are required
+// to cover these keys so validation does not need per-theme lookups.
+const BUILT_IN_SLOT_IDS: ReadonlySet<string> = new Set(
+  Object.keys(lightTheme.eventPalette),
+);
 
 /**
  * Linearly blend two hex colors in sRGB space.
@@ -755,144 +761,129 @@ function blendHex(a: string, b: string, weightA: number): string {
 }
 
 /**
- * Pick a readable foreground for a given background within a theme. Each
- * theme has a primary text color that works for most of the palette; when
- * the bg luminance crosses a threshold we swap to the alt token so pale
- * light-mode swatches and dark-mode past blends stay legible. Rec. 709
- * coefficients on raw sRGB are an approximation of perceived luminance;
- * accurate enough for contrast picking on this palette.
+ * Pick a readable foreground for a given background under the given theme
+ * base. Rec. 709 coefficients on raw sRGB approximate perceived luminance;
+ * accurate enough for contrast picking on the current palette. Themes
+ * decide which alt token to use via their `base` field.
  */
-function pickContrastText(bg: string, isDark: boolean): string {
+function pickContrastText(bg: string, themeBase: "light" | "dark"): string {
   const r = parseInt(bg.slice(1, 3), 16);
   const g = parseInt(bg.slice(3, 5), 16);
   const b = parseInt(bg.slice(5, 7), 16);
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  if (isDark) {
+  if (themeBase === "dark") {
     return luminance < DARK_FLIP_BELOW ? DARK_TEXT_ALT : DARK_TEXT;
   }
   return luminance > LIGHT_FLIP_ABOVE ? LIGHT_TEXT_ALT : LIGHT_TEXT;
 }
 
-const LIGHT_MODE_BG: Record<EventColor, string> = {
-  radicchio:     "#AD1457",
-  cherryBlossom: "#D81B60",
-  tomato:        "#D50000",
-  flamingo:      "#E67C73",
-  tangerine:     "#F4511E",
-  pumpkin:       "#EF6C00",
-  mango:         "#F09300",
-  banana:        "#F6BF26",
-  citron:        "#E4C441",
-  avocado:       "#C0CA33",
-  pistachio:     "#7CB342",
-  sage:          "#33B679",
-  basil:         "#0B8043",
-  eucalyptus:    "#009688",
-  peacock:       "#039BE5",
-  cobalt:        "#4285F4",
-  blueberry:     "#3F51B5",
-  lavender:      "#7986CB",
-  wisteria:      "#B39DDB",
-  amethyst:      "#9E69AF",
-  grape:         "#8E24AA",
-  cocoa:         "#795548",
-  graphite:      "#616161",
-  birch:         "#A79B8E",
-};
+/**
+ * Aliases for renamed or removed palette entries. Keys are legacy slot
+ * names that may still appear on stored events; values are the replacement
+ * slot. Empty today; populate when evolving the palette so existing events
+ * preserve their intent instead of falling back to graphite.
+ */
+const COLOR_ALIASES: Record<string, EventColor> = {};
 
-const DARK_MODE_BG: Record<EventColor, string> = {
-  radicchio:     "#C05476",
-  cherryBlossom: "#D85675",
-  tomato:        "#DA5234",
-  flamingo:      "#D6837A",
-  tangerine:     "#E3683E",
-  pumpkin:       "#DD7835",
-  mango:         "#E0963C",
-  banana:        "#E6B951",
-  citron:        "#D8BE5E",
-  avocado:       "#BCC256",
-  pistachio:     "#85AD59",
-  sage:          "#55B080",
-  basil:         "#489160",
-  eucalyptus:    "#429A8E",
-  peacock:       "#4B99D2",
-  cobalt:        "#668BE1",
-  blueberry:     "#6E72C3",
-  lavender:      "#828BC2",
-  wisteria:      "#AE9CCE",
-  amethyst:      "#A479B1",
-  grape:         "#A75ABA",
-  cocoa:         "#957367",
-  graphite:      "#7C7C7C",
-  birch:         "#A5998C",
-};
+// Cache of resolved palettes keyed by theme ID. Each entry maps the
+// theme's palette hexes to full ColorEntry records (bg + contrast text).
+const resolvedPaletteCache = new Map<string, Record<EventColor, ColorEntry>>();
 
-function buildPalette(
-  bgMap: Record<EventColor, string>,
-  isDark: boolean,
-): Record<EventColor, ColorEntry> {
+function resolvePalette(theme: Theme): Record<EventColor, ColorEntry> {
+  const cached = resolvedPaletteCache.get(theme.id);
+  if (cached) return cached;
   const out = {} as Record<EventColor, ColorEntry>;
-  for (const key of Object.keys(bgMap) as EventColor[]) {
-    const bg = bgMap[key];
-    out[key] = { bg, text: pickContrastText(bg, isDark) };
+  for (const key of Object.keys(theme.eventPalette) as EventColor[]) {
+    const bg = theme.eventPalette[key];
+    out[key] = { bg, text: pickContrastText(bg, theme.base) };
   }
+  resolvedPaletteCache.set(theme.id, out);
   return out;
 }
 
-const LIGHT_PALETTE: Record<EventColor, ColorEntry> = buildPalette(LIGHT_MODE_BG, false);
-const DARK_PALETTE: Record<EventColor, ColorEntry> = buildPalette(DARK_MODE_BG, true);
+// Dedupes unknown-color warnings so a legacy name on many rows logs once.
+const warnedUnknownColors = new Set<string>();
 
+/**
+ * Normalize a raw color value read from the database or an external import
+ * into a known EventColor. Resolves COLOR_ALIASES for legacy names and
+ * guards against prototype-chain keys ("toString", "__proto__"). Unknown
+ * strings log a single warning and return undefined, so the render layer
+ * falls back to graphite without masking data drift.
+ *
+ * @param raw Value from an untrusted source (DB column, import file).
+ * @returns A palette key, or undefined for null/empty/unknown inputs.
+ */
+export function normalizeEventColor(raw: unknown): EventColor | undefined {
+  if (raw == null || raw === "") return undefined;
+  if (typeof raw !== "string") {
+    const key = String(raw);
+    if (!warnedUnknownColors.has(key)) {
+      warnedUnknownColors.add(key);
+      console.warn("[calendar] non-string event color:", raw);
+    }
+    return undefined;
+  }
+  if (BUILT_IN_SLOT_IDS.has(raw)) return raw as EventColor;
+  if (Object.hasOwn(COLOR_ALIASES, raw)) return COLOR_ALIASES[raw];
+  if (!warnedUnknownColors.has(raw)) {
+    warnedUnknownColors.add(raw);
+    console.warn(`[calendar] unknown event color "${raw}", falling back to default`);
+  }
+  return undefined;
+}
+
+/**
+ * Resolve an event color within a theme. Unknown slot IDs fall back to
+ * graphite. Pass the active theme from the theme store at the call site.
+ */
 export function getEventColor(
   color: EventColor | undefined,
-  isDark: boolean,
+  theme: Theme,
 ): ColorEntry {
-  const palette = isDark ? DARK_PALETTE : LIGHT_PALETTE;
+  const palette = resolvePalette(theme);
   if (color && palette[color]) return palette[color];
   return palette.graphite;
 }
 
-// Cache for computed dimmed colors (past, cancelled, free, outside-month variants)
+// Cache for computed dimmed colors (past, cancelled, free, outside-month).
 const dimmedColorCache = new Map<string, ColorEntry>();
 
 /**
  * Compute a dimmed variant of an event color by blending the bg toward the
- * theme's reference background (white in light mode, charcoal in dark mode).
- * Used in place of CSS opacity so contrast stays predictable and text
- * sub-pixel antialiasing is preserved. Text is always resolved via
- * pickContrastText; dimmed bgs land well past the flip threshold for their
- * theme, so they naturally pick the alt text token.
+ * theme's blend canvas. Used in place of CSS opacity so contrast stays
+ * predictable and text sub-pixel antialiasing is preserved.
  *
  * @param mainWeight Fraction of the event color in the result (0..1). The
- *   rest fills from the theme's blend background. Lower = more washed out.
+ *   rest fills from the theme's blend canvas. Lower = more washed out.
  */
 function getDimmedEventColor(
   color: EventColor | undefined,
-  isDark: boolean,
+  theme: Theme,
   mainWeight: number,
 ): ColorEntry {
-  const key = `${color ?? "graphite"}-${isDark ? "dark" : "light"}-${mainWeight}`;
+  const key = `${theme.id}-${color ?? "graphite"}-${mainWeight}`;
   const cached = dimmedColorCache.get(key);
   if (cached) return cached;
 
-  const base = getEventColor(color, isDark);
-  const canvas = isDark ? DARK_BLEND_BG : LIGHT_BLEND_BG;
-  const bg = blendHex(base.bg, canvas, mainWeight);
-  const text = pickContrastText(bg, isDark);
+  const base = getEventColor(color, theme);
+  const bg = blendHex(base.bg, theme.blendCanvas, mainWeight);
+  const text = pickContrastText(bg, theme.base);
   const entry: ColorEntry = { bg, text };
   dimmedColorCache.set(key, entry);
   return entry;
 }
 
 /**
- * Past variant: 30% main + 70% white in light mode, 50% main + 50% #202124
- * in dark mode. Text contrast recomputed from the dimmed bg so readability
- * stays consistent across the palette.
+ * Past variant: heavier fade on light themes (30% main), lighter on dark
+ * themes (50% main) to preserve legibility. Text contrast is recomputed
+ * from the dimmed bg.
  */
 export function getPastEventColor(
   color: EventColor | undefined,
-  isDark: boolean,
+  theme: Theme,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, isDark ? 0.5 : 0.3);
+  return getDimmedEventColor(color, theme, theme.base === "dark" ? 0.5 : 0.3);
 }
 
 /**
@@ -902,9 +893,9 @@ export function getPastEventColor(
  */
 export function getCancelledEventColor(
   color: EventColor | undefined,
-  isDark: boolean,
+  theme: Theme,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, 0.35);
+  return getDimmedEventColor(color, theme, 0.35);
 }
 
 /**
@@ -912,9 +903,9 @@ export function getCancelledEventColor(
  */
 export function getFreeEventColor(
   color: EventColor | undefined,
-  isDark: boolean,
+  theme: Theme,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, 0.6);
+  return getDimmedEventColor(color, theme, 0.6);
 }
 
 /**
@@ -923,19 +914,13 @@ export function getFreeEventColor(
  */
 export function getOutsideMonthEventColor(
   color: EventColor | undefined,
-  isDark: boolean,
+  theme: Theme,
 ): ColorEntry {
-  return getDimmedEventColor(color, isDark, 0.25);
+  return getDimmedEventColor(color, theme, 0.25);
 }
 
-export const EVENT_COLOR_OPTIONS: EventColor[] = [
-  "radicchio", "cherryBlossom", "tomato", "flamingo",
-  "tangerine", "pumpkin", "mango", "banana",
-  "citron", "avocado", "pistachio", "sage",
-  "basil", "eucalyptus", "peacock", "cobalt",
-  "blueberry", "lavender", "wisteria", "amethyst",
-  "grape", "cocoa", "graphite", "birch",
-];
+export const EVENT_COLOR_OPTIONS: EventColor[] =
+  Object.keys(lightTheme.eventPalette) as EventColor[];
 
 /**
  * Smooth-scroll wheel handler for Linux/discrete-tick environments.

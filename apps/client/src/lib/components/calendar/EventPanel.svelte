@@ -796,7 +796,7 @@
         />
       </div>
       {#if !readOnly}
-        <ColorPicker {color} isDark={theme.isDark} onselect={(c) => { color = c; emitChange(); }} />
+        <ColorPicker {color} theme={theme.current} onselect={(c) => { color = c; emitChange(); }} />
       {/if}
     </div>
     <hr class="border-[#C4C7C5] dark:border-[#444746] -mt-2 mx-1" />

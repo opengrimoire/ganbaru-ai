@@ -1009,7 +1009,7 @@
       <WeekView
         {anchorDate}
         events={visibleEvents}
-        isDark={theme.isDark}
+        theme={theme.current}
         {timezones}
         editingId={editingId}
         {previewedIds}
@@ -1027,7 +1027,7 @@
       <DayView
         {anchorDate}
         events={visibleEvents}
-        isDark={theme.isDark}
+        theme={theme.current}
         {timezones}
         editingId={editingId}
         {previewedIds}
@@ -1045,7 +1045,7 @@
       <MonthView
         {anchorDate}
         events={visibleEvents}
-        isDark={theme.isDark}
+        theme={theme.current}
         onDayClick={handleDayClickFromMonth}
         onEventClick={handleEventClick}
         onWheelNavigate={handleWheelNavigate}

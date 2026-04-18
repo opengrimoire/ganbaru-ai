@@ -1,9 +1,10 @@
 import type {
   AlarmAction, AttendeeRole, AttendeeStatus, CalendarEvent, EventAlarm,
-  EventAttendee, EventColor, EventOverride, EventOrganizer, EventStatus,
+  EventAttendee, EventOverride, EventOrganizer, EventStatus,
   EventTransparency, EventVisibility, GeoCoordinates, GuestPermissions,
 } from "$lib/components/calendar/types";
 import { rruleToRecurrence } from "$lib/components/calendar/rrule";
+import { normalizeEventColor } from "$lib/components/calendar/utils";
 
 export interface DbCalendarEvent {
   id: string;
@@ -108,7 +109,7 @@ export function mapRow(r: DbCalendarEvent): CalendarEvent {
     end: toCalendarDate(r.end_time),
     timezone: r.timezone,
     calendarId: r.calendar_id,
-    color: (r.color as EventColor) ?? undefined,
+    color: normalizeEventColor(r.color),
     description: r.description || undefined,
     recurrence: r.rrule ? rruleToRecurrence(r.rrule, r.repeat_until ?? undefined) : undefined,
     notifications: safeJsonParse<number[]>(r.notifications),
@@ -175,7 +176,7 @@ export function mapOverride(r: DbOverride): EventOverride {
     description: r.description || undefined,
     location: r.location || undefined,
     url: r.url || undefined,
-    color: (r.color as EventColor) ?? undefined,
+    color: normalizeEventColor(r.color),
     status: r.status ? r.status as EventStatus : undefined,
     transparency: r.transparency ? r.transparency as EventTransparency : undefined,
     visibility: r.visibility ? r.visibility as EventVisibility : undefined,

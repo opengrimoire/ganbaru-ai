@@ -31,7 +31,7 @@ A calendar event is a structured record (see `data/schema.md` for the table). Th
 - **Title:** plain text, required.
 - **Start and end:** stored in UTC, displayed in the user's local timezone (or the event's timezone if the event was imported with one). All-day events use the user's local day boundaries.
 - **All-day flag:** when true, time pickers hide and the event renders as a chip in the all-day band rather than a block in the day column.
-- **Color:** one of 20 named colors. The full palette: ruby, coral, tangerine, amber, honey, lime, emerald, jade, teal, cyan, sky, azure, indigo, violet, purple, orchid, rose, blush, slate, sage. The palette is named, not hex-coded, so themes (dark, light, future themes) can map each name to whatever shade fits the surrounding UI without rewriting events.
+- **Color:** one of 24 named colors. The full palette: radicchio, cherryBlossom, tomato, flamingo, tangerine, pumpkin, mango, banana, citron, avocado, pistachio, sage, basil, eucalyptus, peacock, cobalt, blueberry, lavender, wisteria, amethyst, grape, cocoa, graphite, birch. The palette is named, not hex-coded, so themes (dark, light, future user themes) can map each name to whatever shade fits the surrounding UI without rewriting events. Renaming or removing a color requires an entry in the alias table so existing events keep their intent; unknown color values fall back to graphite and log a warning rather than silently degrading.
 - **Description:** rich text (markdown source under the hood). Used for context, links, agendas.
 - **Notifications:** zero or more offsets in minutes before the event start. The list is configured per-event; defaults can be set globally.
 - **Meeting:** a unified section that groups location (plain text with optional geo coordinates), call link (URL), and attendees (RFC 5545 ATTENDEE shape with RSVP status and guest permissions). The section is collapsible in the event panel and shares the same header pattern as pomodoro, notifications, and recurrence. It is considered enabled when any of its fields has content, so there is no separate on/off flag. Attendee sync behavior for shared and team events is described in `data/sync.md` once collaboration ships.
@@ -71,7 +71,7 @@ Inside the panel, sections are split per concern:
 - **NotificationsSection:** add and remove notification offsets.
 - **AttendeesSection:** add and remove attendees with role and RSVP status. Placeholder until sharing ships.
 - **DescriptionEditor:** rich text editor for the description, backed by markdown.
-- **ColorPicker:** swatches for the 20 named colors.
+- **ColorPicker:** swatches for the 24 named colors.
 - **TimezoneSelector:** IANA timezone for the event. Defaults to the user's timezone.
 - **TimePicker:** start and end time. Hidden when all-day is on.
 

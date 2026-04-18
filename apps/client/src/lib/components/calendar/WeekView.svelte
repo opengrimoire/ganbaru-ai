@@ -23,11 +23,12 @@
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
+  import type { Theme } from "$lib/stores/themes";
 
   let {
     anchorDate,
     events,
-    isDark = false,
+    theme,
     timezones = [] as string[],
     onEventClick,
     onEventUpdate,
@@ -43,7 +44,7 @@
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
-    isDark?: boolean;
+    theme: Theme;
     timezones?: string[];
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
@@ -502,7 +503,7 @@
             >
               <AllDayEventChip
                 event={pos.event}
-                {isDark}
+                {theme}
                 editing={editingId === pos.event.id}
                 preview={previewedIds?.has(pos.event.id) ?? false}
                 grabbing={allDayDrag.grabbingId === pos.event.id}
@@ -539,7 +540,7 @@
           <!-- Drag preview -->
           {#if allDayDrag.allDayDragPreview}
             {@const dp = allDayDrag.allDayDragPreview}
-            {@const dpColor = getEventColor(dp.event.color, isDark)}
+            {@const dpColor = getEventColor(dp.event.color, theme)}
             {@const dpIconColor = `color-mix(in srgb, ${dpColor.text} 70%, ${dpColor.bg})`}
             {@const dpHasRepeat = !!dp.event.recurrence || !!dp.event.recurringParentId}
             {@const dpHasNotification = !!dp.event.notifications?.length}
@@ -600,9 +601,9 @@
             <DayColumn
               date={day}
               events={timedEvents}
+              {theme}
               isToday={formatDatePart(day) === todayStr}
               isPast={formatDatePart(day) < todayStr}
-              {isDark}
               {currentTimeMinute}
               {editingId}
               {previewedIds}

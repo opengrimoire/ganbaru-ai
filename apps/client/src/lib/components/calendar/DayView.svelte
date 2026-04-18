@@ -18,11 +18,12 @@
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { onMount } from "svelte";
+  import type { Theme } from "$lib/stores/themes";
 
   let {
     anchorDate,
     events,
-    isDark = false,
+    theme,
     timezones = [] as string[],
     onEventClick,
     onEventUpdate,
@@ -38,7 +39,7 @@
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
-    isDark?: boolean;
+    theme: Theme;
     timezones?: string[];
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
@@ -359,7 +360,7 @@
           {#each allDayEvents.slice(0, allDayVisibleCount) as evt (evt.id)}
             <AllDayEventChip
               event={evt}
-              {isDark}
+              {theme}
               editing={editingId === evt.id}
               preview={previewedIds?.has(evt.id) ?? false}
               isPast={past}
@@ -401,9 +402,9 @@
         <DayColumn
           date={anchorDate}
           events={timedEvents}
+          {theme}
           isToday={today}
           isPast={past}
-          {isDark}
           {currentTimeMinute}
           {editingId}
           {previewedIds}
