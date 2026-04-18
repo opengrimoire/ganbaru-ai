@@ -118,8 +118,14 @@
 
 @layer base {
   html {
-    font-size: 15px;
-    font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+    font-size: calc(15px * var(--font-scale, 1));
+    font-family: var(
+      --font-family,
+      "Inter Variable",
+      ui-sans-serif,
+      system-ui,
+      sans-serif
+    );
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
