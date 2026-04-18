@@ -74,6 +74,8 @@
   style="
     background-color: {activeColors.bg};
     color: {activeColors.text};
+    --event-bg: {activeColors.bg};
+    --outline-mix: {isDark ? 'white' : 'black'};
     cursor: {canDrag ? 'grab' : 'pointer'};
     z-index: 1;
     filter: none;
@@ -99,17 +101,8 @@
 </div>
 
 <style>
-  .chip-editing::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 3;
-  }
-
-  :global(.dark) .chip-editing::after {
-    border-color: rgba(255, 255, 255, 0.5);
+  .chip-editing {
+    outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
+    outline-offset: 0;
   }
 </style>

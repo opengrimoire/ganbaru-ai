@@ -574,7 +574,7 @@
 
   <div
     bind:this={columnEl}
-    class="absolute top-0 right-0 bottom-0 overflow-hidden"
+    class="absolute top-0 right-0 bottom-0"
     style="left: {railWidth + 4}px;"
   >
   <!-- Hour cells (click targets only, gridlines are in outer container) -->
@@ -621,6 +621,8 @@
         left: {lp.left}%;
         width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
         color: {dragBase.text};
+        --event-bg: {dragBase.bg};
+        --outline-mix: {isDark ? 'white' : 'black'};
         z-index: 46;
       "
     >
@@ -665,6 +667,8 @@
         left: {lp.left}%;
         width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
         color: {createBase.text};
+        --event-bg: {createBase.bg};
+        --outline-mix: {isDark ? 'white' : 'black'};
         z-index: 10;
       "
     >
@@ -688,21 +692,9 @@
 <style>
   .preview-outline {
     position: relative;
+    outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
+    outline-offset: 0;
     transition: left 120ms ease-out, width 120ms ease-out;
-  }
-
-  .preview-outline::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 3;
-  }
-
-  :global(.dark) .preview-outline::after {
-    border-color: rgba(255, 255, 255, 0.5);
   }
 
   .break-band-active {

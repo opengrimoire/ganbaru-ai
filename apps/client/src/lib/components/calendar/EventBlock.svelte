@@ -102,6 +102,8 @@
     left: {positioned.left}%;
     width: {positioned.totalColumns > 1 ? `calc(${positioned.width}% - 2px)` : `${positioned.width}%`};
     color: {activeColors.text};
+    --event-bg: {activeColors.bg};
+    --outline-mix: {isDark ? 'white' : 'black'};
     cursor: {effectiveCursor};
     z-index: {editing ? 45 : 3};
     filter: none;
@@ -193,17 +195,8 @@
     transition: none;
   }
 
-  .event-editing::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 3;
-  }
-
-  :global(.dark) .event-editing::after {
-    border-color: rgba(255, 255, 255, 0.5);
+  .event-editing {
+    outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
+    outline-offset: 0;
   }
 </style>
