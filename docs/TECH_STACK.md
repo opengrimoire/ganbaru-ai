@@ -94,6 +94,10 @@ The calendar and scheduler component. Handles day/week/month views, drag-and-dro
 
 Drag-and-drop library for the Kanban board. Handles column-to-column card movement, priority reordering, and task organization. Used for both personal Kanban (backlog → to do → in progress → done) and per-project Kanban boards within the project management framework.
 
+### Theming
+
+Registry-based theme system. Each theme is a single frozen object containing the 24-slot event color palette plus optional app and calendar shell token overrides applied via CSS variable injection. Adding a theme (built-in or user-authored) is one object in the registry; no other code needs to change. Events store stable slot IDs, not hex, so switching themes recolors the calendar instantly without migrating data. Theming is intentionally color-deep, not structure-deep: heavier UI edits (layout, typography, new components) are out of scope for themes and route through upstream contributions or a fork. Full design in `docs/features/themes.md`.
+
 ---
 
 ## Note editor
@@ -630,6 +634,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Components                | shadcn-svelte                                        | Source-owned, Svelte 5 native, customizable                                        |
 | Calendar UI               | calendar widget                                           | Only mature Svelte calendar with drag-and-drop                                     |
 | Kanban drag-and-drop      | svelte-dnd-action                                    | Drag-and-drop for Kanban columns and task reordering                               |
+| Theming                   | Registry-based theme store                           | One frozen object per theme; palette plus optional shell token overrides           |
 | Note editor               | Tiptap + starter-kit                                 | Notion-like UX, markdown serialization, native Yjs integration                     |
 | Markdown serialization    | `@tiptap/extension-markdown`                         | On-save serialization to `.md` files on disk                                       |
 | Sync / collaboration      | Yjs + `@tiptap/extension-collaboration`              | CRDT-based, conflict-free, same primitive for sync and real-time collab            |
