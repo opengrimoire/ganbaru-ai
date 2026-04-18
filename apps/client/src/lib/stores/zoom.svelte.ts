@@ -1,65 +1,93 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
+/**
+ * Single source of truth for the webview zoom level. Steps through a
+ * Chrome-like set of discrete levels rather than a continuous slider so
+ * each tick produces a crisp, predictable step. The active level persists
+ * to localStorage so zoom survives reloads.
+ */
+
 const STORAGE_KEY = "ganbaruai-zoom";
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 2.0;
-const ZOOM_STEP = 0.1;
-const DEFAULT_ZOOM = 1.0;
+const ZOOM_LEVELS: readonly number[] = Object.freeze([
+  0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3,
+]);
+const DEFAULT_INDEX = ZOOM_LEVELS.indexOf(1);
 
-function round(v: number): number {
-  return Math.round(v * 10) / 10;
+function findClosestIndex(level: number): number {
+  let best = 0;
+  let bestDist = Math.abs(ZOOM_LEVELS[0] - level);
+  for (let i = 1; i < ZOOM_LEVELS.length; i++) {
+    const dist = Math.abs(ZOOM_LEVELS[i] - level);
+    if (dist < bestDist) {
+      best = i;
+      bestDist = dist;
+    }
+  }
+  return best;
 }
 
-function clamp(v: number): number {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, round(v)));
-}
-
-function loadSavedZoom(): number {
-  if (typeof localStorage === "undefined") return DEFAULT_ZOOM;
+function loadSavedIndex(): number {
+  if (typeof localStorage === "undefined") return DEFAULT_INDEX;
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return DEFAULT_ZOOM;
+  if (!saved) return DEFAULT_INDEX;
   const parsed = parseFloat(saved);
-  if (Number.isNaN(parsed)) return DEFAULT_ZOOM;
-  return clamp(parsed);
+  if (Number.isNaN(parsed)) return DEFAULT_INDEX;
+  return findClosestIndex(parsed);
 }
 
-const initialZoom = loadSavedZoom();
-let level = $state<number>(initialZoom);
+const initialIndex = loadSavedIndex();
+let index = $state<number>(initialIndex);
 
-// Apply zoom at module load so there's no flash of default zoom
-if (initialZoom !== DEFAULT_ZOOM) {
-  getCurrentWebviewWindow().setZoom(initialZoom);
+function applyZoom() {
+  getCurrentWebviewWindow().setZoom(ZOOM_LEVELS[index]);
 }
 
 function persist() {
-  localStorage.setItem(STORAGE_KEY, String(level));
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, String(ZOOM_LEVELS[index]));
 }
 
-function applyZoom() {
-  getCurrentWebviewWindow().setZoom(level);
+// Apply saved zoom at module load so there's no flash at the default level.
+// Read the const, not the $state, to keep this outside Svelte reactivity.
+if (initialIndex !== DEFAULT_INDEX) {
+  getCurrentWebviewWindow().setZoom(ZOOM_LEVELS[initialIndex]);
 }
 
 export function getZoom() {
   return {
-    get level() {
-      return level;
+    get level(): number {
+      return ZOOM_LEVELS[index];
+    },
+    get percent(): number {
+      return Math.round(ZOOM_LEVELS[index] * 100);
+    },
+    get canZoomIn(): boolean {
+      return index < ZOOM_LEVELS.length - 1;
+    },
+    get canZoomOut(): boolean {
+      return index > 0;
+    },
+    get isDefault(): boolean {
+      return index === DEFAULT_INDEX;
     },
     zoomIn() {
-      level = clamp(level + ZOOM_STEP);
+      if (index >= ZOOM_LEVELS.length - 1) return;
+      index++;
       persist();
       applyZoom();
     },
     zoomOut() {
-      level = clamp(level - ZOOM_STEP);
+      if (index <= 0) return;
+      index--;
       persist();
       applyZoom();
     },
     reset() {
-      level = DEFAULT_ZOOM;
+      index = DEFAULT_INDEX;
       persist();
       applyZoom();
     },
-    /** Re-assert the current zoom level (counteracts external zoom changes). */
+    /** Re-assert the current zoom level (counteracts external changes). */
     reapply() {
       applyZoom();
     },
