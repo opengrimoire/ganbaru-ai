@@ -62,22 +62,22 @@
   >
     <div class="mb-5 text-left">
       {#if title}
-        <h2 class="mb-1 text-[15px] font-semibold text-foreground dark:text-[#D8D8E0]">{title}</h2>
-        <p class="text-[13px] text-foreground dark:text-[#D8D8E0]">{message}</p>
+        <h2 class="mb-1 text-[15px] font-semibold text-foreground">{title}</h2>
+        <p class="text-[13px] text-foreground">{message}</p>
       {:else}
-        <p class="text-[15px] font-semibold text-foreground dark:text-[#D8D8E0]">{message}</p>
+        <p class="text-[15px] font-semibold text-foreground">{message}</p>
       {/if}
     </div>
     <div class="flex items-center justify-start gap-2">
       <button
         onclick={onCancel}
-        class="rounded-md border border-black/10 bg-[#FAFAFC] px-3.5 py-2 text-[13px] font-medium text-[#141420] transition-colors hover:bg-[#F0F0F4] dark:border-white/15 dark:bg-[#18181C] dark:text-[#D8D8E0] dark:hover:bg-[#202025]"
+        class="rounded-md border border-border bg-card px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
       >
         {cancelLabel}
       </button>
       <button
         onclick={onConfirm}
-        class="rounded-md border border-black/30 bg-[#2B2B30] px-3.5 py-2 text-[13px] font-medium text-[#F4F4F7] dark:border-black/15 dark:bg-[#D8D8E0] dark:text-[#0A0A0E]"
+        class="rounded-md border border-border bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         {confirmLabel}
       </button>
