@@ -60,7 +60,7 @@ describe("isDirtyDiff", () => {
       title: "Meeting",
       start: "2026-04-16 10:00",
       end: "2026-04-16 11:00",
-      color: "azure" as const,
+      color: "peacock" as const,
       notifications: [0, 5],
     };
     const changes = { ...baseline };
@@ -135,7 +135,7 @@ describe("isDirtyDiff", () => {
 
   it("flags dirty when changes add a key absent in baseline", () => {
     const baseline = { title: "Meeting" };
-    const changes = { title: "Meeting", color: "ruby" as const };
+    const changes = { title: "Meeting", color: "tomato" as const };
     expect(isDirtyDiff(changes, baseline)).toBe(true);
   });
 

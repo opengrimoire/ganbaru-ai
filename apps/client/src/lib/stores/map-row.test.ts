@@ -194,7 +194,7 @@ describe("mapRow", () => {
   });
 
   it("maps color", () => {
-    expect(mapRow(makeDbRow({ color: "ruby" })).color).toBe("ruby");
+    expect(mapRow(makeDbRow({ color: "tomato" })).color).toBe("tomato");
     expect(mapRow(makeDbRow({ color: null })).color).toBeUndefined();
   });
 

@@ -473,14 +473,14 @@ describe("expandRecurring - overrides", () => {
           id: "ovr-1",
           parentEventId: "evt-1",
           recurrenceId: "2026-03-16",
-          color: "ruby",
+          color: "tomato",
           status: "tentative",
         },
       ],
     });
     const result = expandRecurring([evt]);
     const march16 = result.find((e) => e.start.startsWith("2026-03-16"));
-    expect(march16!.color).toBe("ruby");
+    expect(march16!.color).toBe("tomato");
     expect(march16!.status).toBe("tentative");
   });
 });
