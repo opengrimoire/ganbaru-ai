@@ -209,6 +209,13 @@ export function getCalendarZoom() {
     get canZoomOut() {
       return hourHeight > ZOOM_LEVELS[0];
     },
+    get isDefault() {
+      return hourHeight === ZOOM_LEVELS[DEFAULT_INDEX];
+    },
+    /** Percent relative to the default hour height. Default row = 100%. */
+    get zoomPercent() {
+      return Math.round((hourHeight / ZOOM_LEVELS[DEFAULT_INDEX]) * 100);
+    },
     /** Zoom one level with smooth animation. */
     zoomStep(direction: 1 | -1) {
       const targetIndex = Math.max(

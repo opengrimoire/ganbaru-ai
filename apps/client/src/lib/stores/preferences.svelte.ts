@@ -79,6 +79,9 @@ export function getPreferences() {
     },
     setFontFamily,
     setFontScale,
+    resetFontFamily() {
+      setFontFamily(DEFAULT_FONT_FAMILY_ID);
+    },
     resetFontScale() {
       setFontScale(DEFAULT_FONT_SCALE);
     },

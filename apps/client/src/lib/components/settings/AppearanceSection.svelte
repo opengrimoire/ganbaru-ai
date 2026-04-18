@@ -1,16 +1,25 @@
 <script lang="ts">
+  import Check from "@lucide/svelte/icons/check";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { getZoom } from "$lib/stores/zoom.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import {
     FONT_SCALE_MIN,
     FONT_SCALE_MAX,
     DEFAULT_FONT_SCALE,
+    DEFAULT_FONT_FAMILY_ID,
+    clampFontScale,
   } from "$lib/stores/preferences";
   import type { EventColor } from "$lib/components/calendar/types";
   import { cn } from "$lib/utils";
+  import StepperControl from "./StepperControl.svelte";
+  import CustomSelect from "./CustomSelect.svelte";
 
   const theme = getTheme();
   const preferences = getPreferences();
+  const zoom = getZoom();
+  const calZoom = getCalendarZoom();
 
   // A compact preview row of representative event-palette slots. Shows how
   // the theme's colors look without dumping all 24 swatches in the picker.
@@ -26,104 +35,118 @@
   ];
 
   const FONT_SCALE_STEP = 0.05;
+
+  function incrementFontScale() {
+    preferences.setFontScale(clampFontScale(preferences.fontScale + FONT_SCALE_STEP));
+  }
+  function decrementFontScale() {
+    preferences.setFontScale(clampFontScale(preferences.fontScale - FONT_SCALE_STEP));
+  }
+
+  const fontFamilyOptions = $derived(
+    preferences.fontFamilies.map((f) => ({
+      value: f.id,
+      label:
+        f.id === DEFAULT_FONT_FAMILY_ID
+          ? `${f.displayName} (recommended)`
+          : f.displayName,
+      style: `font-family: ${f.cssStack};`,
+    })),
+  );
 </script>
 
-<div class="space-y-8">
-  <header>
-    <h1 class="text-lg font-semibold text-foreground">Appearance</h1>
-    <p class="mt-1 text-[13px] text-muted-foreground">
-      Pick a theme, font, and text size. These settings are independent.
-    </p>
-  </header>
-
-  <!-- Theme picker -->
-  <section class="space-y-3">
-    <div>
-      <h2 class="text-[13px] font-semibold text-foreground">Theme</h2>
-      <p class="text-[12px] text-muted-foreground">
-        Changes colors across the app and the calendar palette.
-      </p>
-    </div>
-    <div class="grid gap-2">
+<div class="flex flex-col gap-6">
+  <!-- Theme -->
+  <section class="flex flex-col gap-2">
+    <h2 class="px-1 text-[13px] font-semibold text-foreground">Theme</h2>
+    <div
+      class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
+    >
       {#each Object.values(theme.registry) as option}
         {@const isActive = option.id === theme.id}
         <button
           onclick={() => theme.setTheme(option.id)}
           class={cn(
-            "flex items-center justify-between gap-4 rounded-md border px-3 py-2 text-left transition-colors",
-            isActive
-              ? "border-primary bg-accent/40"
-              : "border-border bg-card hover:bg-accent/40 dark:bg-transparent",
+            "flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors",
+            isActive ? "bg-accent/50" : "hover:bg-accent/30",
           )}
         >
-          <div class="flex flex-col">
-            <span class="text-[13px] font-medium text-foreground">{option.displayName}</span>
-            <span class="text-[11px] uppercase tracking-wider text-muted-foreground">
+          <div class="min-w-0 flex-1">
+            <div class="text-[13px] text-foreground">
+              {option.displayName}
+            </div>
+            <div
+              class="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground"
+            >
               {option.base}
-            </span>
+            </div>
           </div>
-          <div class="flex items-center gap-1">
-            {#each PREVIEW_SLOTS as slot}
-              <span
-                class="h-3.5 w-3.5 rounded-full"
-                style="background-color: {option.eventPalette[slot]};"
-              ></span>
-            {/each}
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
+              {#each PREVIEW_SLOTS as slot}
+                <span
+                  class="h-3.5 w-3.5 rounded-full"
+                  style="background-color: {option.eventPalette[slot]};"
+                ></span>
+              {/each}
+            </div>
+            {#if isActive}
+              <Check size={14} strokeWidth={2.5} class="shrink-0 text-foreground" />
+            {/if}
           </div>
         </button>
       {/each}
     </div>
   </section>
 
-  <!-- Font family -->
-  <section class="space-y-2">
-    <div>
-      <h2 class="text-[13px] font-semibold text-foreground">Font family</h2>
-      <p class="text-[12px] text-muted-foreground">
-        All font options resolve to system or installed fonts. No remote loading.
-      </p>
-    </div>
-    <select
-      value={preferences.fontFamilyId}
-      onchange={(e) => preferences.setFontFamily(e.currentTarget.value)}
-      class="w-full max-w-xs rounded-md border border-border bg-card px-3 py-1.5 text-[13px] text-foreground transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+  <!-- Text and zoom -->
+  <section class="flex flex-col gap-2">
+    <h2 class="px-1 text-[13px] font-semibold text-foreground">Text and zoom</h2>
+    <div
+      class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
     >
-      {#each preferences.fontFamilies as option}
-        <option value={option.id}>{option.displayName}</option>
-      {/each}
-    </select>
-  </section>
-
-  <!-- Font scale -->
-  <section class="space-y-2">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h2 class="text-[13px] font-semibold text-foreground">Font scale</h2>
-        <p class="text-[12px] text-muted-foreground">
-          Multiplies the base text size. Affects the whole app.
-        </p>
-      </div>
-      <button
-        onclick={() => preferences.resetFontScale()}
-        class="shrink-0 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-        disabled={preferences.fontScale === DEFAULT_FONT_SCALE}
-      >
-        Reset
-      </button>
-    </div>
-    <div class="flex items-center gap-3">
-      <input
-        type="range"
-        min={FONT_SCALE_MIN}
-        max={FONT_SCALE_MAX}
-        step={FONT_SCALE_STEP}
-        value={preferences.fontScale}
-        oninput={(e) => preferences.setFontScale(parseFloat(e.currentTarget.value))}
-        class="flex-1 accent-primary"
+      <CustomSelect
+        label="Font family"
+        description="Resolves through system or installed fonts."
+        value={preferences.fontFamilyId}
+        options={fontFamilyOptions}
+        onChange={(id) => preferences.setFontFamily(id)}
+        canReset={preferences.fontFamilyId !== DEFAULT_FONT_FAMILY_ID}
+        onReset={() => preferences.resetFontFamily()}
       />
-      <span class="w-12 text-right text-[12px] tabular-nums text-foreground">
-        {Math.round(preferences.fontScale * 100)}%
-      </span>
+      <StepperControl
+        label="Text size"
+        description="Multiplies the base text size across the app."
+        displayValue={`${Math.round(preferences.fontScale * 100)}%`}
+        canIncrement={preferences.fontScale < FONT_SCALE_MAX}
+        canDecrement={preferences.fontScale > FONT_SCALE_MIN}
+        canReset={preferences.fontScale !== DEFAULT_FONT_SCALE}
+        onIncrement={incrementFontScale}
+        onDecrement={decrementFontScale}
+        onReset={() => preferences.resetFontScale()}
+      />
+      <StepperControl
+        label="App zoom"
+        description="Scales the whole interface. Shortcut: Ctrl +, Ctrl -, Ctrl 0."
+        displayValue={`${zoom.percent}%`}
+        canIncrement={zoom.canZoomIn}
+        canDecrement={zoom.canZoomOut}
+        canReset={!zoom.isDefault}
+        onIncrement={() => zoom.zoomIn()}
+        onDecrement={() => zoom.zoomOut()}
+        onReset={() => zoom.reset()}
+      />
+      <StepperControl
+        label="Calendar zoom (5min / 10min / 15min / 30min)"
+        description="Hour row height. Finer rows enable smaller slot snapping."
+        displayValue={`${calZoom.zoomPercent}% (${calZoom.gridMinutes}min)`}
+        canIncrement={calZoom.canZoomIn}
+        canDecrement={calZoom.canZoomOut}
+        canReset={!calZoom.isDefault}
+        onIncrement={() => calZoom.zoomStep(1)}
+        onDecrement={() => calZoom.zoomStep(-1)}
+        onReset={() => calZoom.reset()}
+      />
     </div>
   </section>
 </div>

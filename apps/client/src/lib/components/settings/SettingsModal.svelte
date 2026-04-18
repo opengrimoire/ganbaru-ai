@@ -1,14 +1,27 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, type Component } from "svelte";
   import { cn } from "$lib/utils";
+  import Palette from "@lucide/svelte/icons/palette";
   import AppearanceSection from "./AppearanceSection.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
   type SectionId = "appearance";
 
-  const SECTIONS: { id: SectionId; label: string }[] = [
-    { id: "appearance", label: "Appearance" },
+  interface SectionMeta {
+    id: SectionId;
+    label: string;
+    icon: Component;
+  }
+
+  // Sections are grouped under headings (like Obsidian's "Options", "Core
+  // plugins"). Each group ships its own list. To add a new section, add an
+  // entry with an icon and a matching branch in the content switch below.
+  const SECTION_GROUPS: { heading: string; items: SectionMeta[] }[] = [
+    {
+      heading: "Options",
+      items: [{ id: "appearance", label: "Appearance", icon: Palette }],
+    },
   ];
 
   let activeSection = $state<SectionId>("appearance");
@@ -40,37 +53,47 @@
 >
   <div class="absolute inset-0 bg-black/50"></div>
   <div
-    class="relative z-10 flex h-[80vh] w-[min(900px,90vw)] overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-sidebar"
+    class="relative z-10 flex h-[80vh] w-[min(900px,90vw)] overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
     onclick={(e) => e.stopPropagation()}
   >
     <!-- Sidebar -->
     <aside
-      class="flex w-56 shrink-0 flex-col border-r border-border bg-background/40 px-2 py-4 dark:bg-black/20"
+      class="flex w-60 shrink-0 flex-col gap-4 border-r border-border bg-background/40 px-2 py-4 dark:bg-black/20"
     >
-      <h2 class="mb-3 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Settings
-      </h2>
-      <nav class="flex flex-col gap-0.5">
-        {#each SECTIONS as section}
-          <button
-            onclick={() => {
-              activeSection = section.id;
-            }}
-            class={cn(
-              "rounded-md px-3 py-1.5 text-left text-[13px] font-medium transition-colors",
-              activeSection === section.id
-                ? "bg-accent text-accent-foreground"
-                : "text-foreground hover:bg-accent/60",
-            )}
+      {#each SECTION_GROUPS as group}
+        <div class="flex flex-col gap-1">
+          <h3
+            class="px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
           >
-            {section.label}
-          </button>
-        {/each}
-      </nav>
+            {group.heading}
+          </h3>
+          <nav class="flex flex-col gap-0.5">
+            {#each group.items as section}
+              {@const Icon = section.icon}
+              <button
+                onclick={() => {
+                  activeSection = section.id;
+                }}
+                class={cn(
+                  "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-[13px] font-medium transition-colors",
+                  activeSection === section.id
+                    ? "bg-accent text-accent-foreground"
+                    : "text-foreground hover:bg-accent/60",
+                )}
+              >
+                <Icon size={15} strokeWidth={1.75} class="shrink-0" />
+                <span>{section.label}</span>
+              </button>
+            {/each}
+          </nav>
+        </div>
+      {/each}
     </aside>
 
     <!-- Content -->
-    <section class="flex-1 overflow-y-auto px-8 py-6">
+    <section
+      class="flex-1 overflow-y-auto bg-background/40 px-8 py-6 dark:bg-black/20"
+    >
       {#if activeSection === "appearance"}
         <AppearanceSection />
       {/if}
