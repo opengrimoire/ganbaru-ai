@@ -25,8 +25,9 @@ let activeId = $state<ThemeId>(loadSavedThemeId());
 // removed from the root so stale colors do not leak across switches.
 let appliedTokenKeys = new Set<string>();
 
-function applyThemeToDom(theme: Theme): void {
+function applyThemeToDom(): void {
   if (typeof document === "undefined") return;
+  const theme = getThemeById(activeId) ?? darkTheme;
   const root = document.documentElement;
   root.classList.toggle("dark", theme.base === "dark");
   const { toSet, toClear, applied } = computeThemeTokenOps(
@@ -41,14 +42,13 @@ function applyThemeToDom(theme: Theme): void {
 // Apply the initial theme on module load so first paint matches the stored
 // preference (no FOUC on light-mode boot).
 if (typeof document !== "undefined") {
-  applyThemeToDom(getThemeById(activeId) ?? darkTheme);
+  applyThemeToDom();
 }
 
 function setTheme(id: ThemeId): void {
-  const target = getThemeById(id);
-  if (!target) return;
+  if (!getThemeById(id)) return;
   activeId = id;
-  applyThemeToDom(target);
+  applyThemeToDom();
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(STORAGE_KEY, id);
   }
