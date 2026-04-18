@@ -8,12 +8,12 @@ import {
   darkTheme,
   lightTheme,
 } from "./themes";
+import { getConfigKey, setConfigKey } from "../vault/config";
 
-const STORAGE_KEY = "ganbaruai-theme";
+const CONFIG_KEY = "theme.activeId";
 
 function loadSavedThemeId(): ThemeId {
-  if (typeof localStorage === "undefined") return DEFAULT_THEME_ID;
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = getConfigKey<string | undefined>(CONFIG_KEY, undefined);
   if (saved && getThemeById(saved)) return saved;
   return DEFAULT_THEME_ID;
 }
@@ -49,9 +49,7 @@ function setTheme(id: ThemeId): void {
   if (!getThemeById(id)) return;
   activeId = id;
   applyThemeToDom();
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(STORAGE_KEY, id);
-  }
+  setConfigKey(CONFIG_KEY, id);
 }
 
 /**

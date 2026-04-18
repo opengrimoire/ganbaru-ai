@@ -7,24 +7,21 @@ import {
   getFontFamilyById,
   resolveFontFamilyStack,
 } from "./preferences";
+import { getConfigKey, setConfigKey } from "../vault/config";
 
-const FONT_FAMILY_STORAGE_KEY = "ganbaruai-font-family";
-const FONT_SCALE_STORAGE_KEY = "ganbaruai-font-scale";
+const FONT_FAMILY_CONFIG_KEY = "preferences.fontFamilyId";
+const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
 
 function loadSavedFontFamilyId(): FontFamilyId {
-  if (typeof localStorage === "undefined") return DEFAULT_FONT_FAMILY_ID;
-  const saved = localStorage.getItem(FONT_FAMILY_STORAGE_KEY);
+  const saved = getConfigKey<string | undefined>(FONT_FAMILY_CONFIG_KEY, undefined);
   if (saved && getFontFamilyById(saved)) return saved;
   return DEFAULT_FONT_FAMILY_ID;
 }
 
 function loadSavedFontScale(): number {
-  if (typeof localStorage === "undefined") return DEFAULT_FONT_SCALE;
-  const saved = localStorage.getItem(FONT_SCALE_STORAGE_KEY);
-  if (!saved) return DEFAULT_FONT_SCALE;
-  const parsed = parseFloat(saved);
-  if (Number.isNaN(parsed)) return DEFAULT_FONT_SCALE;
-  return clampFontScale(parsed);
+  const saved = getConfigKey<number | undefined>(FONT_SCALE_CONFIG_KEY, undefined);
+  if (typeof saved !== "number" || !Number.isFinite(saved)) return DEFAULT_FONT_SCALE;
+  return clampFontScale(saved);
 }
 
 let fontFamilyId = $state<FontFamilyId>(loadSavedFontFamilyId());
@@ -47,18 +44,14 @@ function setFontFamily(id: FontFamilyId): void {
   if (!getFontFamilyById(id)) return;
   fontFamilyId = id;
   applyPreferencesToDom();
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(FONT_FAMILY_STORAGE_KEY, id);
-  }
+  setConfigKey(FONT_FAMILY_CONFIG_KEY, id);
 }
 
 function setFontScale(value: number): void {
   const clamped = clampFontScale(value);
   fontScale = clamped;
   applyPreferencesToDom();
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(FONT_SCALE_STORAGE_KEY, String(clamped));
-  }
+  setConfigKey(FONT_SCALE_CONFIG_KEY, clamped);
 }
 
 /**
