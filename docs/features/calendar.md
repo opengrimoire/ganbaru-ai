@@ -31,7 +31,7 @@ A calendar event is a structured record (see `data/schema.md` for the table). Th
 - **Title:** plain text, required.
 - **Start and end:** stored in UTC, displayed in the user's local timezone (or the event's timezone if the event was imported with one). All-day events use the user's local day boundaries.
 - **All-day flag:** when true, time pickers hide and the event renders as a chip in the all-day band rather than a block in the day column.
-- **Color:** one of 24 named slots. Events store the stable slot ID; each theme owns the hex it resolves to and the display label shown in the picker, so themes can recolor or relabel slots without rewriting events. Unknown values fall back to graphite. See `features/themes.md` for the full palette, the three-layer color model, alias policy, and the custom-theme workflow.
+- **Color:** one of 24 named slots. Events store the stable slot ID; each theme owns the hex it resolves to, so themes can recolor slots without rewriting events. The slot ID is internal only; the picker shows hex codes, never slot names. Unknown values fall back to graphite. See `features/themes.md` for the full palette, the two-layer color model, alias policy, and the custom-theme workflow.
 - **Description:** rich text (markdown source under the hood). Used for context, links, agendas.
 - **Notifications:** zero or more offsets in minutes before the event start. The list is configured per-event; defaults can be set globally.
 - **Meeting:** a unified section that groups location (plain text with optional geo coordinates), call link (URL), and attendees (RFC 5545 ATTENDEE shape with RSVP status and guest permissions). The section is collapsible in the event panel and shares the same header pattern as pomodoro, notifications, and recurrence. It is considered enabled when any of its fields has content, so there is no separate on/off flag. Attendee sync behavior for shared and team events is described in `data/sync.md` once collaboration ships.
@@ -71,7 +71,7 @@ Inside the panel, sections are split per concern:
 - **NotificationsSection:** add and remove notification offsets.
 - **AttendeesSection:** add and remove attendees with role and RSVP status. Placeholder until sharing ships.
 - **DescriptionEditor:** rich text editor for the description, backed by markdown.
-- **ColorPicker:** swatches for the 24 named colors.
+- **ColorPicker:** swatches for the 24 palette slots; hovering a swatch reveals its hex value.
 - **TimezoneSelector:** IANA timezone for the event. Defaults to the user's timezone.
 - **TimePicker:** start and end time. Hidden when all-day is on.
 

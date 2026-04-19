@@ -1,6 +1,6 @@
 # Themes
 
-GanbaruAI ships curated themes and lets users author their own in-app. A theme recolors the built-in light and dark palette across every event slot and across the app and calendar shell. Users can run the built-in themes, pick a user-authored one, or edit slot colors and labels in a theme editor. Adding a new theme is a data-only change: one Theme object in the registry.
+GanbaruAI ships curated themes and lets users author their own in-app. A theme recolors the built-in light and dark palette across every event slot and across the app and calendar shell. Users can run the built-in themes, pick a user-authored one, or edit slot hexes in a theme editor. Adding a new theme is a data-only change: one Theme object in the registry.
 
 Theming is intentionally color-deep, not structure-deep. Themes set colors across the event palette and the app and calendar shell; they do not change layout, add custom components, or control typography. Font family, font size, and UI density live as separate user settings (see "Typography and density" below), orthogonal to the active theme. Heavier UI edits belong upstream (as contributions to the app) or in a fork. Keeping the theme format a validated data contract means no code execution, no remote asset loading, no DOM rewriting, and a stable contract across app updates.
 
@@ -27,15 +27,14 @@ A Theme is frozen after construction. The registry itself is frozen. This preven
 
 The original store was a binary `isDark` toggle. It could not express "a user made their own theme", "there are three themes to cycle through", or "this theme ships a different calendar canvas color". A registry keyed by ID, where each entry carries its own palette and optional shell overrides, makes the entire theme addition a single object: write a Theme, register it, done. No other code needs to change.
 
-## The three-layer color model
+## The two-layer color model
 
-Event colors use three layers so users can redesign themes freely without breaking stored events.
+Event colors use two layers so users can redesign themes freely without breaking stored events.
 
-1. **Slot ID (stable, invisible).** A stable string like `tomato` or `peacock`. Stored in the database on the event row. Never shown to the user. Never renamed in place.
-2. **Display name (per theme).** The label shown in the color picker for a given theme. In the built-in palettes this happens to match the slot ID (`"Tomato"`), but a custom theme can call the same slot `"Brick"` or `"Signal Red"`. Events do not know or care about the display name.
-3. **Hex value (per theme).** The actual RGB the slot resolves to in the active theme. Two themes can assign wildly different hex to the same slot. When the user switches themes, all events across the app pick up the new hex immediately because they reference the slot, not the color.
+1. **Slot ID (stable, invisible).** A stable string like `tomato` or `peacock`. Stored in the database on the event row. Never shown to the user. Never renamed in place. Acts purely as a key into each theme's palette.
+2. **Hex value (per theme).** The actual RGB the slot resolves to in the active theme. Two themes can assign wildly different hex to the same slot. When the user switches themes, all events across the app pick up the new hex immediately because they reference the slot, not the color.
 
-This is what makes the "mango scenario" work: if a theme author does not want a yellow mango slot, they change the hex assigned to the `mango` slot in their theme (and optionally rename the display label). Existing events tagged `mango` keep displaying correctly in any theme that has a hex for that slot, no migration needed.
+There is no third "display name" layer. The slot id is internal only; UI surfaces (the editor grid, the event color picker tooltip) show the hex value next to the swatch instead of a name. This sidesteps the "mango scenario" entirely: a user who recolors the `mango` slot blue never sees the word "Mango" in the editor or the picker, only the swatch and `#3366CC`. No per-theme name field, no auto-naming heuristics, no name-vs-color drift.
 
 ## Event color palette
 

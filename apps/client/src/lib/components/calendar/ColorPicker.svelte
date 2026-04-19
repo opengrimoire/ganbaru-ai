@@ -36,7 +36,7 @@
           onclick={() => { onselect(color === c ? undefined : c); open = false; }}
           class="h-[18px] w-11 rounded-md"
           style="background-color: {entry.bg};{color === c ? ' outline: 2px solid #141420; outline-offset: 0;' : ''}"
-          title={c}
+          title={entry.bg}
         ></button>
       {/each}
     </div>

@@ -60,11 +60,6 @@
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   }
 
-  function humanizeSlot(slot: string): string {
-    const spaced = slot.replace(/([A-Z])/g, " $1").toLowerCase();
-    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-  }
-
   function setName(next: string) {
     themeStore.renameTheme(theme.id, next);
   }
@@ -255,16 +250,16 @@
       class="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg bg-card p-3 dark:bg-background"
     >
       {#each EVENT_SLOTS as slot}
-        <div class="flex items-center justify-between gap-2 px-1 py-1">
-          <span class="truncate text-[12px] text-foreground">
-            {humanizeSlot(slot)}
-          </span>
+        <div class="flex items-center px-1 py-1">
           {#if isBuiltin}
             <span
               class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
               style="background-color: {theme.eventPalette[slot]};"
               title={theme.eventPalette[slot]}
             ></span>
+            <span class="ml-2 font-mono text-[12px] text-foreground">
+              {theme.eventPalette[slot]}
+            </span>
           {:else}
             <ColorField
               value={theme.eventPalette[slot]}
