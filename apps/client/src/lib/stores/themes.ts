@@ -117,7 +117,7 @@ export const darkTheme: Theme = Object.freeze({
   displayName: "Dark",
   base: "dark",
   eventPalette: DARK_EVENT_PALETTE,
-  blendCanvas: "#202124",
+  blendCanvas: "#131314",
 });
 
 /**

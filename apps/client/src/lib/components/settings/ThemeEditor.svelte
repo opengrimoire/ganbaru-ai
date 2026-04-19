@@ -206,12 +206,25 @@
     themeStore.renameTheme(theme.id, next);
   }
 
-  function setBase(next: "light" | "dark") {
-    themeStore.updateTheme(theme.id, { base: next });
+  // Default --cal-bg per base. Built-in themes' blendCanvas matches these
+  // (since past events fade into the calendar grid, not the surrounding
+  // app), so they double as the fallback when a user theme drops its
+  // --cal-bg override.
+  const BASE_CAL_BG: Record<"light" | "dark", string> = {
+    light: "#FFFFFF",
+    dark: "#131314",
+  };
+
+  function effectiveCalBg(t: Theme): string {
+    return t.calendarTokenOverrides?.["--cal-bg"] ?? BASE_CAL_BG[t.base];
   }
 
-  function setBlendCanvas(hex: string) {
-    themeStore.updateTheme(theme.id, { blendCanvas: hex });
+  function setBase(next: "light" | "dark") {
+    const updates: Partial<Theme> = { base: next };
+    if (!theme.calendarTokenOverrides?.["--cal-bg"]) {
+      updates.blendCanvas = BASE_CAL_BG[next];
+    }
+    themeStore.updateTheme(theme.id, updates);
   }
 
   function setSlot(index: number, hex: string) {
@@ -236,14 +249,20 @@
 
   function setCalToken(key: string, hex: string) {
     const next = { ...(theme.calendarTokenOverrides ?? {}), [key]: hex };
-    themeStore.updateTheme(theme.id, { calendarTokenOverrides: next });
+    const updates: Partial<Theme> = { calendarTokenOverrides: next };
+    // Past event variants blend toward --cal-bg, so keep the cached
+    // blendCanvas in lockstep with whatever the user picks.
+    if (key === "--cal-bg") updates.blendCanvas = hex;
+    themeStore.updateTheme(theme.id, updates);
   }
 
   function clearCalToken(key: string) {
     if (!theme.calendarTokenOverrides) return;
     const next = { ...theme.calendarTokenOverrides };
     delete next[key];
-    themeStore.updateTheme(theme.id, { calendarTokenOverrides: next });
+    const updates: Partial<Theme> = { calendarTokenOverrides: next };
+    if (key === "--cal-bg") updates.blendCanvas = BASE_CAL_BG[theme.base];
+    themeStore.updateTheme(theme.id, updates);
   }
 
   function readComputedToken(token: string): string {
@@ -439,6 +458,67 @@
     </section>
   {/if}
 
+  <!-- Event palette -->
+  <section class="flex flex-col gap-2">
+    <div class="flex items-center justify-between px-1">
+      <h2 class="text-[13px] font-semibold text-foreground">Event palette</h2>
+      <span class="text-[11px] text-muted-foreground">
+        {isBuiltin
+          ? "24 colors events can be tagged with."
+          : "24 color slots events can be tagged with. Each slot also has a faded variant for past events, blended toward Calendar background."}
+      </span>
+    </div>
+    <div
+      class="flex flex-col gap-3 rounded-lg p-3 ring-1 ring-border"
+      style="background-color: {effectiveCalBg(theme)};"
+    >
+      <div class="grid grid-cols-4 gap-x-2 gap-y-1.5">
+        {#each paletteIndices as index}
+          {@const base = theme.eventPalette[index]}
+          {@const past = blendHex(
+            base,
+            effectiveCalBg(theme),
+            theme.base === "dark" ? 0.5 : 0.3,
+          )}
+          {#if isBuiltin}
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span
+                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                style="background-color: {past};"
+                title="Past {past}"
+              ></span>
+              <span
+                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                style="background-color: {base};"
+                title="Normal {base}"
+              ></span>
+              <span
+                class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
+              >
+                {base}
+              </span>
+            </div>
+          {:else}
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span
+                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                style="background-color: {past};"
+                title="Past variant {past}"
+              ></span>
+              <ColorField
+                value={base}
+                onChange={(hex) => setSlot(index, hex)}
+                fluid
+                swatchSize={22}
+                class="min-w-0 flex-1"
+              />
+            </div>
+          {/if}
+        {/each}
+      </div>
+    </div>
+  </section>
+
   <!-- Calendar tokens -->
   {#if !isBuiltin || populatedCalTokens.length > 0}
     <section class="flex flex-col gap-2">
@@ -498,96 +578,6 @@
       </div>
     </section>
   {/if}
-
-  <!-- Event palette -->
-  <section class="flex flex-col gap-2">
-    <div class="flex items-center justify-between px-1">
-      <h2 class="text-[13px] font-semibold text-foreground">Event palette</h2>
-      <span class="text-[11px] text-muted-foreground">
-        {isBuiltin
-          ? "24 colors events can be tagged with."
-          : "24 color slots events can be tagged with. Each slot also has a faded variant for past events."}
-      </span>
-    </div>
-    <div
-      class="flex flex-col gap-3 rounded-lg p-3 ring-1 ring-border"
-      style="background-color: {theme.blendCanvas};"
-    >
-      {#if !isBuiltin}
-        <div
-          class="flex items-center justify-between gap-3 rounded-md bg-card/80 p-2.5 backdrop-blur-sm dark:bg-background/80"
-        >
-          <div class="flex min-w-0 flex-col">
-            <span class="text-[12px] text-foreground">Reference background</span>
-            <span class="text-[11px] text-muted-foreground">
-              The faded preview beside each slot blends toward this color, the
-              same way past events fade into the calendar background.
-            </span>
-          </div>
-          <ColorField value={theme.blendCanvas} onChange={setBlendCanvas} />
-        </div>
-      {:else}
-        <div
-          class="flex flex-col rounded-md bg-card/80 p-2.5 backdrop-blur-sm dark:bg-background/80"
-        >
-          <span class="text-[12px] text-foreground">
-            Reference background
-            <span class="font-mono text-muted-foreground">
-              {theme.blendCanvas}
-            </span>
-          </span>
-          <span class="text-[11px] text-muted-foreground">
-            Past event variants blend toward this color so faded events sit
-            naturally on the calendar background.
-          </span>
-        </div>
-      {/if}
-      <div class="grid grid-cols-4 gap-x-2 gap-y-1.5">
-        {#each paletteIndices as index}
-          {@const base = theme.eventPalette[index]}
-          {@const past = blendHex(
-            base,
-            theme.blendCanvas,
-            theme.base === "dark" ? 0.5 : 0.3,
-          )}
-          {#if isBuiltin}
-            <div class="flex min-w-0 items-center gap-1.5">
-              <span
-                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {past};"
-                title="Past {past}"
-              ></span>
-              <span
-                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {base};"
-                title="Normal {base}"
-              ></span>
-              <span
-                class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
-              >
-                {base}
-              </span>
-            </div>
-          {:else}
-            <div class="flex min-w-0 items-center gap-1.5">
-              <span
-                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {past};"
-                title="Past variant {past}"
-              ></span>
-              <ColorField
-                value={base}
-                onChange={(hex) => setSlot(index, hex)}
-                fluid
-                swatchSize={22}
-                class="min-w-0 flex-1"
-              />
-            </div>
-          {/if}
-        {/each}
-      </div>
-    </div>
-  </section>
 
   <!-- JSON -->
   <section class="flex flex-col gap-2">
