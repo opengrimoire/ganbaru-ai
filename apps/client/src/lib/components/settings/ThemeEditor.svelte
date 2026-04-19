@@ -6,6 +6,8 @@
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import Sun from "@lucide/svelte/icons/sun";
+  import Moon from "@lucide/svelte/icons/moon";
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { cn } from "$lib/utils";
@@ -194,12 +196,15 @@
     >
       <div class="flex items-center justify-between gap-3">
         {#if isBuiltin}
-          <div class="flex min-w-0 flex-1 flex-col">
+          {@const BaseIcon = theme.base === "dark" ? Moon : Sun}
+          <div class="flex min-w-0 flex-1 items-center gap-2">
+            <BaseIcon
+              size={15}
+              strokeWidth={1.75}
+              class="shrink-0 text-muted-foreground"
+            />
             <span class="truncate text-[14px] font-semibold text-foreground">
               {theme.displayName}
-            </span>
-            <span class="text-[11px] uppercase tracking-wider text-muted-foreground">
-              {theme.base} · built-in (read-only)
             </span>
           </div>
         {:else}
@@ -247,26 +252,29 @@
   <section class="flex flex-col gap-2">
     <h2 class="px-1 text-[13px] font-semibold text-foreground">Event palette</h2>
     <div
-      class="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg bg-card p-3 dark:bg-background"
+      class="grid grid-cols-4 gap-x-3 gap-y-1.5 rounded-lg bg-card p-3 dark:bg-background"
     >
       {#each EVENT_SLOTS as slot}
-        <div class="flex items-center px-1 py-1">
-          {#if isBuiltin}
+        {#if isBuiltin}
+          <div class="flex w-full items-center gap-1.5">
             <span
               class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
               style="background-color: {theme.eventPalette[slot]};"
               title={theme.eventPalette[slot]}
             ></span>
-            <span class="ml-2 font-mono text-[12px] text-foreground">
+            <span
+              class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
+            >
               {theme.eventPalette[slot]}
             </span>
-          {:else}
-            <ColorField
-              value={theme.eventPalette[slot]}
-              onChange={(hex) => setSlot(slot, hex)}
-            />
-          {/if}
-        </div>
+          </div>
+        {:else}
+          <ColorField
+            value={theme.eventPalette[slot]}
+            onChange={(hex) => setSlot(slot, hex)}
+            fluid
+          />
+        {/if}
       {/each}
     </div>
   </section>

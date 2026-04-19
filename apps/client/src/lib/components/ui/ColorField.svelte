@@ -22,6 +22,7 @@
     canReset = false,
     label,
     swatchSize = 26,
+    fluid = false,
     class: className = "",
   }: {
     value: string;
@@ -30,6 +31,7 @@
     canReset?: boolean;
     label?: string;
     swatchSize?: number;
+    fluid?: boolean;
     class?: string;
   } = $props();
 
@@ -236,13 +238,18 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class={cn("inline-flex items-center gap-1.5", className)}>
+<div
+  class={cn(
+    fluid ? "flex w-full items-center gap-1.5" : "inline-flex items-center gap-1.5",
+    className,
+  )}
+>
   <button
     bind:this={triggerEl}
     type="button"
     aria-label={label ? `Edit ${label}` : "Edit color"}
     onclick={toggleOpen}
-    class="rounded-md border border-border shadow-sm transition-shadow hover:shadow-md"
+    class="shrink-0 rounded-md border border-border shadow-sm transition-shadow hover:shadow-md"
     style="width: {swatchSize}px; height: {swatchSize}px; background: {normalizeHex(value) ??
       '#000000'};"
   ></button>
@@ -250,6 +257,7 @@
     type="text"
     spellcheck={false}
     bind:value={hexDraft}
+    onfocus={(e) => (e.currentTarget as HTMLInputElement).select()}
     onblur={commitHexDraft}
     onkeydown={(e) => {
       if (e.key === "Enter") {
@@ -258,7 +266,10 @@
         (e.currentTarget as HTMLInputElement).blur();
       }
     }}
-    class="h-7 w-[88px] rounded-md border border-border bg-card px-2 text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+    class={cn(
+      "h-7 rounded-md border border-border bg-card px-2 text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent",
+      fluid ? "min-w-0 flex-1" : "w-[88px]",
+    )}
   />
   {#if onReset}
     <button
@@ -268,7 +279,7 @@
       aria-label="Reset color"
       title="Reset to default"
       class={cn(
-        "flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors",
+        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors",
         canReset
           ? "hover:bg-accent hover:text-accent-foreground"
           : "cursor-not-allowed opacity-40",
@@ -359,6 +370,25 @@
             class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
           />
         </label>
+      </div>
+
+      <div class="mt-2 flex flex-col gap-0.5 text-[11px]">
+        <span class="text-muted-foreground">HEX</span>
+        <input
+          type="text"
+          spellcheck={false}
+          bind:value={hexDraft}
+          onfocus={(e) => (e.currentTarget as HTMLInputElement).select()}
+          onblur={commitHexDraft}
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitHexDraft();
+              (e.currentTarget as HTMLInputElement).blur();
+            }
+          }}
+          class="h-7 w-full rounded-md border border-border bg-card px-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+        />
       </div>
 
       <div class="mt-2 grid grid-cols-3 gap-2 text-[11px]">

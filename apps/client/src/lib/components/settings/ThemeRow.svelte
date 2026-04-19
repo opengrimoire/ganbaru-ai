@@ -4,6 +4,8 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import Eye from "@lucide/svelte/icons/eye";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Sun from "@lucide/svelte/icons/sun";
+  import Moon from "@lucide/svelte/icons/moon";
   import { cn } from "$lib/utils";
   import type { EventColor } from "$lib/components/calendar/types";
   import type { Theme } from "$lib/stores/themes";
@@ -36,6 +38,8 @@
     "grape",
     "graphite",
   ];
+
+  const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
 </script>
 
 <div
@@ -53,17 +57,15 @@
   >
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2 text-[13px] text-foreground">
+        <BaseIcon
+          size={13}
+          strokeWidth={1.75}
+          class="shrink-0 text-muted-foreground"
+        />
         <span class="truncate">{theme.displayName}</span>
         {#if isActive}
           <Check size={13} strokeWidth={2.5} class="shrink-0 text-foreground" />
         {/if}
-      </div>
-      <div
-        class="mt-0.5 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground"
-      >
-        <span>{theme.base}</span>
-        <span class="text-muted-foreground/60">·</span>
-        <span>{isBuiltin ? "built-in" : "user"}</span>
       </div>
     </div>
     <div class="flex items-center gap-1">
