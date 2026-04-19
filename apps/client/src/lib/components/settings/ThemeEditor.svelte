@@ -11,6 +11,7 @@
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { cn } from "$lib/utils";
   import { PALETTE_SIZE } from "$lib/components/calendar/types";
+  import { blendHex } from "$lib/components/calendar/utils";
   import {
     APP_TOKEN_KEYS,
     CALENDAR_TOKEN_KEYS,
@@ -18,6 +19,146 @@
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
   import ColorField from "$lib/components/ui/ColorField.svelte";
+
+  type TokenInfo = { title: string; description: string };
+
+  const APP_TOKEN_INFO: Record<string, TokenInfo> = {
+    "--background": {
+      title: "Background",
+      description: "Main app background behind everything else.",
+    },
+    "--foreground": {
+      title: "Text",
+      description: "Default text color across the app.",
+    },
+    "--card": {
+      title: "Card",
+      description: "Background of grouped panels and tinted cards.",
+    },
+    "--card-foreground": {
+      title: "Card text",
+      description: "Text shown inside cards.",
+    },
+    "--popover": {
+      title: "Popover",
+      description: "Background of dropdowns, menus, and floating panels.",
+    },
+    "--popover-foreground": {
+      title: "Popover text",
+      description: "Text shown inside popovers and menus.",
+    },
+    "--primary": {
+      title: "Primary action",
+      description: "Main accent color for highlighted buttons and links.",
+    },
+    "--primary-foreground": {
+      title: "Primary action text",
+      description: "Text on primary buttons.",
+    },
+    "--secondary": {
+      title: "Secondary surface",
+      description: "Background of muted, less emphasized buttons.",
+    },
+    "--secondary-foreground": {
+      title: "Secondary surface text",
+      description: "Text on secondary surfaces.",
+    },
+    "--muted": {
+      title: "Muted surface",
+      description: "Background of subtle areas like input wells.",
+    },
+    "--muted-foreground": {
+      title: "Muted text",
+      description: "Subdued text for hints and labels.",
+    },
+    "--accent": {
+      title: "Hover surface",
+      description: "Soft tint shown when hovering buttons and rows.",
+    },
+    "--accent-foreground": {
+      title: "Hover text",
+      description: "Text shown on the hover tint.",
+    },
+    "--destructive": {
+      title: "Destructive",
+      description: "Color used for delete actions and warnings.",
+    },
+    "--ring": {
+      title: "Focus ring",
+      description: "Outline shown around focused inputs and buttons.",
+    },
+    "--sidebar": {
+      title: "Sidebar",
+      description: "Background of the side navigation panel.",
+    },
+    "--sidebar-foreground": {
+      title: "Sidebar text",
+      description: "Default text inside the sidebar.",
+    },
+    "--sidebar-primary": {
+      title: "Sidebar highlight",
+      description: "Color of the active sidebar item.",
+    },
+    "--sidebar-primary-foreground": {
+      title: "Sidebar highlight text",
+      description: "Text on the active sidebar item.",
+    },
+    "--sidebar-accent": {
+      title: "Sidebar hover",
+      description: "Tint applied when hovering sidebar items.",
+    },
+    "--sidebar-accent-foreground": {
+      title: "Sidebar hover text",
+      description: "Text shown on the sidebar hover tint.",
+    },
+    "--sidebar-ring": {
+      title: "Sidebar focus ring",
+      description: "Outline shown around a focused sidebar item.",
+    },
+  };
+
+  const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
+    "--cal-bg": {
+      title: "Calendar background",
+      description: "Background of the calendar grid.",
+    },
+    "--cal-header-bg": {
+      title: "Calendar header",
+      description: "Background of the day and time headers.",
+    },
+    "--cal-gridline": {
+      title: "Grid lines",
+      description: "Color of the hour and day separator lines.",
+    },
+    "--cal-today-circle": {
+      title: "Today marker",
+      description: "Filled circle around today's date in the header.",
+    },
+    "--cal-today-circle-text": {
+      title: "Today marker text",
+      description: "Date number inside the today circle.",
+    },
+    "--cal-time-label": {
+      title: "Time labels",
+      description: "Hour numbers down the side of the calendar.",
+    },
+    "--cal-current-time": {
+      title: "Now line",
+      description: "Horizontal line marking the current time.",
+    },
+    "--cal-timeline-rail": {
+      title: "Session rail track",
+      description: "Background strip beside an event during a pomodoro.",
+    },
+    "--cal-timeline-break": {
+      title: "Break marker",
+      description: "Color of break segments on the session rail.",
+    },
+    "--cal-timeline-focus": {
+      title: "Focus marker",
+      description: "Color of focus segments on the session rail.",
+    },
+  };
 
   let {
     theme,
@@ -235,48 +376,6 @@
           </div>
         {/if}
       </div>
-      {#if !isBuiltin}
-        <div class="flex items-center justify-between gap-3 text-[12px] text-foreground">
-          <div class="flex flex-col">
-            <span>Blend canvas</span>
-            <span class="text-[11px] text-muted-foreground">
-              Reference background dimmed event variants blend toward.
-            </span>
-          </div>
-          <ColorField value={theme.blendCanvas} onChange={setBlendCanvas} />
-        </div>
-      {/if}
-    </div>
-  </section>
-
-  <!-- Event palette -->
-  <section class="flex flex-col gap-2">
-    <h2 class="px-1 text-[13px] font-semibold text-foreground">Event palette</h2>
-    <div
-      class="grid grid-cols-4 gap-x-3 gap-y-1.5 rounded-lg bg-card p-3 dark:bg-background"
-    >
-      {#each paletteIndices as index}
-        {#if isBuiltin}
-          <div class="flex w-full items-center gap-1.5">
-            <span
-              class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
-              style="background-color: {theme.eventPalette[index]};"
-              title={theme.eventPalette[index]}
-            ></span>
-            <span
-              class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
-            >
-              {theme.eventPalette[index]}
-            </span>
-          </div>
-        {:else}
-          <ColorField
-            value={theme.eventPalette[index]}
-            onChange={(hex) => setSlot(index, hex)}
-            fluid
-          />
-        {/if}
-      {/each}
     </div>
   </section>
 
@@ -297,10 +396,11 @@
         {#if isBuiltin}
           {#each populatedAppTokens as key}
             {@const value = theme.appTokenOverrides?.[key] ?? ""}
+            {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
             <div class="flex items-center justify-between gap-3 px-4 py-2.5">
               <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{humanize(key)}</div>
-                <div class="text-[11px] font-mono text-muted-foreground">{key}</div>
+                <div class="text-[12px] text-foreground">{info.title}</div>
+                <div class="text-[11px] text-muted-foreground">{info.description}</div>
               </div>
               <span
                 class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
@@ -312,10 +412,11 @@
         {:else}
           {#each APP_TOKEN_KEYS as key}
             {@const override = theme.appTokenOverrides?.[key]}
+            {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
             <div class="flex items-center justify-between gap-3 px-4 py-2.5">
               <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{humanize(key)}</div>
-                <div class="text-[11px] font-mono text-muted-foreground">{key}</div>
+                <div class="text-[12px] text-foreground">{info.title}</div>
+                <div class="text-[11px] text-muted-foreground">{info.description}</div>
               </div>
               <ColorField
                 value={override ?? readComputedToken(key)}
@@ -355,10 +456,11 @@
         {#if isBuiltin}
           {#each populatedCalTokens as key}
             {@const value = theme.calendarTokenOverrides?.[key] ?? ""}
+            {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
             <div class="flex items-center justify-between gap-3 px-4 py-2.5">
               <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{humanize(key)}</div>
-                <div class="text-[11px] font-mono text-muted-foreground">{key}</div>
+                <div class="text-[12px] text-foreground">{info.title}</div>
+                <div class="text-[11px] text-muted-foreground">{info.description}</div>
               </div>
               <span
                 class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
@@ -370,10 +472,11 @@
         {:else}
           {#each CALENDAR_TOKEN_KEYS as key}
             {@const override = theme.calendarTokenOverrides?.[key]}
+            {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
             <div class="flex items-center justify-between gap-3 px-4 py-2.5">
               <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{humanize(key)}</div>
-                <div class="text-[11px] font-mono text-muted-foreground">{key}</div>
+                <div class="text-[12px] text-foreground">{info.title}</div>
+                <div class="text-[11px] text-muted-foreground">{info.description}</div>
               </div>
               <ColorField
                 value={override ?? readComputedToken(key)}
@@ -395,6 +498,96 @@
       </div>
     </section>
   {/if}
+
+  <!-- Event palette -->
+  <section class="flex flex-col gap-2">
+    <div class="flex items-center justify-between px-1">
+      <h2 class="text-[13px] font-semibold text-foreground">Event palette</h2>
+      <span class="text-[11px] text-muted-foreground">
+        {isBuiltin
+          ? "24 colors events can be tagged with."
+          : "24 color slots events can be tagged with. Each slot also has a faded variant for past events."}
+      </span>
+    </div>
+    <div
+      class="flex flex-col gap-3 rounded-lg p-3 ring-1 ring-border"
+      style="background-color: {theme.blendCanvas};"
+    >
+      {#if !isBuiltin}
+        <div
+          class="flex items-center justify-between gap-3 rounded-md bg-card/80 p-2.5 backdrop-blur-sm dark:bg-background/80"
+        >
+          <div class="flex min-w-0 flex-col">
+            <span class="text-[12px] text-foreground">Reference background</span>
+            <span class="text-[11px] text-muted-foreground">
+              The faded preview beside each slot blends toward this color, the
+              same way past events fade into the calendar background.
+            </span>
+          </div>
+          <ColorField value={theme.blendCanvas} onChange={setBlendCanvas} />
+        </div>
+      {:else}
+        <div
+          class="flex flex-col rounded-md bg-card/80 p-2.5 backdrop-blur-sm dark:bg-background/80"
+        >
+          <span class="text-[12px] text-foreground">
+            Reference background
+            <span class="font-mono text-muted-foreground">
+              {theme.blendCanvas}
+            </span>
+          </span>
+          <span class="text-[11px] text-muted-foreground">
+            Past event variants blend toward this color so faded events sit
+            naturally on the calendar background.
+          </span>
+        </div>
+      {/if}
+      <div class="grid grid-cols-4 gap-x-2 gap-y-1.5">
+        {#each paletteIndices as index}
+          {@const base = theme.eventPalette[index]}
+          {@const past = blendHex(
+            base,
+            theme.blendCanvas,
+            theme.base === "dark" ? 0.5 : 0.3,
+          )}
+          {#if isBuiltin}
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span
+                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                style="background-color: {past};"
+                title="Past {past}"
+              ></span>
+              <span
+                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                style="background-color: {base};"
+                title="Normal {base}"
+              ></span>
+              <span
+                class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
+              >
+                {base}
+              </span>
+            </div>
+          {:else}
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span
+                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                style="background-color: {past};"
+                title="Past variant {past}"
+              ></span>
+              <ColorField
+                value={base}
+                onChange={(hex) => setSlot(index, hex)}
+                fluid
+                swatchSize={22}
+                class="min-w-0 flex-1"
+              />
+            </div>
+          {/if}
+        {/each}
+      </div>
+    </div>
+  </section>
 
   <!-- JSON -->
   <section class="flex flex-col gap-2">

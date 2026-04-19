@@ -740,7 +740,7 @@ const DARK_FLIP_BELOW = 0.35;
  * @param b Reference hex color to blend toward.
  * @param weightA Fraction of `a` in the result (0..1). The rest is `b`.
  */
-function blendHex(a: string, b: string, weightA: number): string {
+export function blendHex(a: string, b: string, weightA: number): string {
   const ar = parseInt(a.slice(1, 3), 16);
   const ag = parseInt(a.slice(3, 5), 16);
   const ab = parseInt(a.slice(5, 7), 16);
