@@ -27,7 +27,6 @@
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
   import ColorField from "$lib/components/ui/ColorField.svelte";
-  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   type TokenInfo = { title: string; description: string };
 
@@ -39,8 +38,7 @@
     },
     "--foreground": {
       title: "Text color",
-      description:
-        "The actual text color shown across the app. Isolate to fix it while ink keeps tinting the surfaces above.",
+      description: "Applied to text across the app.",
     },
     "--card": {
       title: "Card",
@@ -52,8 +50,7 @@
     },
     "--primary-foreground": {
       title: "Button text",
-      description:
-        "Text on top of the primary button. Derived from the primary color to keep contrast; isolate to pin a specific hex.",
+      description: "Text on primary buttons.",
     },
     "--destructive": {
       title: "Destructive",
@@ -186,15 +183,13 @@
     {
       sourceKey: "ink",
       title: "Ink",
-      description:
-        "Main text color. Also mixes into the muted, secondary, accent, and ring surfaces under App canvas.",
+      description: "Base text color. Tints surfaces derived from canvas.",
       rows: [{ kind: "single", key: "--foreground", scope: "app" }],
     },
     {
       sourceKey: "primary",
       title: "Primary action",
-      description:
-        "Main accent for highlighted buttons and links. The button's text color auto-adjusts for contrast.",
+      description: "Accent for highlighted buttons and links.",
       rows: [{ kind: "single", key: "--primary-foreground", scope: "app" }],
     },
     {
@@ -265,35 +260,24 @@
 
   const isBuiltin = $derived(themeStore.isBuiltin(theme.id));
   const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
-  const canReset = $derived(!isBuiltin && themeStore.canResetTheme(theme.id));
 
-  let resetPending = $state(false);
+  // Input seeds drive per-token reset. They are captured on every modern
+  // clone, so seedSources existing is the signal that the theme was cloned
+  // after the seed feature shipped and can be reset at the row level.
+  const hasSeeds = $derived(theme.seedSources !== undefined);
 
-  function openResetConfirm() {
-    resetPending = true;
-  }
-
-  function confirmReset() {
-    themeStore.resetTheme(theme.id);
-    resetPending = false;
-    // The JSON drawer mirrors the current theme; re-sync it so the reset is
-    // reflected in the textarea even if the user had unapplied edits.
-    jsonDraft = themeStore.exportTheme(theme.id) ?? "";
-    jsonDirty = false;
-    jsonErrors = [];
-  }
-
-  function cancelReset() {
-    resetPending = false;
-  }
-
-  // Collapse state is ephemeral (not persisted across sessions). Every source
-  // group starts collapsed so the editor opens scannable: the user picks a
-  // section by name before any swatches or inputs mount. Keyed by group title
-  // because it's stable across renders and unique within SOURCE_GROUPS.
+  // Collapse state is ephemeral (not persisted across sessions). Multi-row
+  // groups start collapsed so the editor opens scannable: the user picks a
+  // section by name before any swatches or inputs mount. Single-row and
+  // zero-row groups are not collapsible and get no entry here.
   let collapsed = $state<Record<string, boolean>>(
     untrack(() =>
-      Object.fromEntries(SOURCE_GROUPS.map((g) => [g.title, true])),
+      Object.fromEntries(
+        SOURCE_GROUPS.filter((g) => g.rows.length > 1).map((g) => [
+          g.title,
+          true,
+        ]),
+      ),
     ),
   );
 
@@ -445,6 +429,53 @@
     themeStore.updateTheme(theme.id, updates);
   }
 
+  // Per-token reset restores a single control back to the value it had when
+  // the theme was cloned. A source channel is reset to its seed value; an
+  // app/cal token is either reset to its seed override or relinked when the
+  // seed had no override for it. Gating on hasSeeds keeps legacy themes
+  // (cloned before the seed feature) without reset affordances.
+  function canResetSource(key: keyof ThemeSources): boolean {
+    if (!theme.sources || !theme.seedSources) return false;
+    return theme.sources[key] !== theme.seedSources[key];
+  }
+
+  function resetSource(key: keyof ThemeSources) {
+    if (!theme.sources || !theme.seedSources) return;
+    const seedValue = theme.seedSources[key];
+    const nextSources: ThemeSources = { ...theme.sources, [key]: seedValue };
+    const updates: Partial<Omit<Theme, "id">> = { sources: nextSources };
+    if (key === "calCanvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
+      updates.blendCanvas = seedValue;
+    }
+    themeStore.updateTheme(theme.id, updates);
+  }
+
+  function canResetAppToken(key: string): boolean {
+    if (!hasSeeds) return false;
+    const current = theme.appTokenOverrides?.[key];
+    const seed = theme.seedAppTokenOverrides?.[key];
+    return current !== seed;
+  }
+
+  function resetAppToken(key: string) {
+    const seed = theme.seedAppTokenOverrides?.[key];
+    if (seed === undefined) relinkAppToken(key);
+    else setAppToken(key, seed);
+  }
+
+  function canResetCalToken(key: string): boolean {
+    if (!hasSeeds) return false;
+    const current = theme.calendarTokenOverrides?.[key];
+    const seed = theme.seedCalendarTokenOverrides?.[key];
+    return current !== seed;
+  }
+
+  function resetCalToken(key: string) {
+    const seed = theme.seedCalendarTokenOverrides?.[key];
+    if (seed === undefined) relinkCalToken(key);
+    else setCalToken(key, seed);
+  }
+
   async function copyJsonToClipboard() {
     try {
       await navigator.clipboard.writeText(jsonDraft);
@@ -560,28 +591,22 @@
             aria-label="Theme name"
             class="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-1.5 text-[14px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
           />
-          <button
-            type="button"
-            onclick={openResetConfirm}
-            disabled={!canReset}
-            title={canReset
-              ? "Restore all colors to the values captured when this theme was created"
-              : "This theme was saved before reset was available; edit once to refresh the snapshot"}
-            aria-label="Reset theme to original"
-            class={cn(
-              "flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[12px] font-medium transition-colors dark:bg-transparent",
-              canReset
-                ? "text-foreground hover:bg-accent"
-                : "cursor-not-allowed text-muted-foreground opacity-60",
-            )}
-          >
-            <RotateCcw size={12} strokeWidth={2.25} />
-            <span>Reset</span>
-          </button>
         {/if}
       </div>
     </div>
   </section>
+
+  {#snippet resetIconButton(onClick: () => void, label: string)}
+    <button
+      type="button"
+      onclick={onClick}
+      aria-label="Reset {label} to its original value"
+      title="Restore original value"
+      class="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
+    >
+      <RotateCcw size={11} strokeWidth={2.25} />
+    </button>
+  {/snippet}
 
   {#snippet tokenEditor(
     key: string,
@@ -597,6 +622,8 @@
         ? autoValueApp(key)
         : autoValueCal(key)
       : pinnedVal}
+    {@const canResetRow =
+      scope === "app" ? canResetAppToken(key) : canResetCalToken(key)}
     <div class="flex items-center gap-1.5">
       <ColorField
         value={displayVal}
@@ -608,6 +635,15 @@
         readOnly={isLinked}
         label={ariaLabel}
       />
+      {#if canResetRow}
+        {@render resetIconButton(
+          () => {
+            if (scope === "app") resetAppToken(key);
+            else resetCalToken(key);
+          },
+          ariaLabel,
+        )}
+      {/if}
       {#if isLinked}
         <button
           type="button"
@@ -679,11 +715,9 @@
   {/snippet}
 
   {#snippet groupCard(group: SourceGroup)}
-    {@const firstRow = group.rows[0]}
-    {@const singleChild =
-      group.rows.length === 1 && firstRow?.kind === "single" ? firstRow : null}
-    {@const isCollapsible = group.rows.length > 0 && !singleChild}
+    {@const isCollapsible = group.rows.length > 1}
     {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
+    {@const showRows = group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
     <section
       class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
     >
@@ -704,14 +738,14 @@
               onChange={(hex) => setSource(sourceKey, hex)}
               label="{group.title} source"
             />
+            {#if canResetSource(sourceKey)}
+              {@render resetIconButton(
+                () => resetSource(sourceKey),
+                group.title,
+              )}
+            {/if}
           {/if}
-          {#if singleChild}
-            {@render tokenEditor(
-              singleChild.key,
-              singleChild.scope,
-              tokenInfo(singleChild).title,
-            )}
-          {:else if isCollapsible}
+          {#if isCollapsible}
             <button
               type="button"
               onclick={() => toggleGroup(group.title)}
@@ -728,7 +762,7 @@
           {/if}
         </div>
       </header>
-      {#if isCollapsible && !isCollapsed}
+      {#if showRows}
         <div class="divide-y divide-border border-t border-border">
           {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
             {#if row.kind === "single"}
@@ -983,14 +1017,3 @@
     </div>
   </section>
 </div>
-
-{#if resetPending}
-  <ConfirmDialog
-    title="Reset theme"
-    message={`Restore "${theme.displayName}" to the colors it had when it was created? Your edits to colors and the event palette will be lost.`}
-    confirmLabel="Reset (Enter)"
-    cancelLabel="Cancel (Esc)"
-    onConfirm={confirmReset}
-    onCancel={cancelReset}
-  />
-{/if}
