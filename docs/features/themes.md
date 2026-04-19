@@ -84,10 +84,12 @@ Users can:
 1. **Create a theme** by clicking "New theme". A user theme is added (seeded from the current active theme) and the editor opens on it.
 2. **Duplicate** any theme (built-in or user) into a new editable user theme. Built-ins remain frozen.
 3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
-4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, opt into Quick colors to drive the shell from five source values, pin individual app or calendar shell tokens, and clear overrides back to derivation or base CSS. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
+4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the five Quick colors to shift the shell in lockstep, and pin individual app or calendar tokens to break them off the source for surgical edits. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
 5. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
 6. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
 7. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
+
+Every new user theme (created or duplicated) starts with a `sources` palette sampled from its resolved colors, so the editor opens in Quick-colors mode and source edits immediately propagate through derived tokens. Explicit overrides on the source theme are preserved as pinned tokens so surgical edits survive the duplicate.
 
 Editing a built-in is blocked at the store level: mutators return false, `replaceTheme` rejects built-in ids, and the editor hides every input (name field, base toggle, color pickers, add-override buttons) when the target is built-in. Duplicate is the only path to a modifiable copy.
 
@@ -132,23 +134,29 @@ Only the derivable subset of calendar tokens participates: `--cal-bg`, `--cal-he
 
 ### Editor UI
 
-The editor groups shell tokens into six sections so related colors sit together and their relationships are visible at a glance:
+Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. Shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
 
-- **Quick colors** (user themes only): the five source inputs. Editing one live-propagates through derived tokens. A theme without sources shows a "Set up Quick colors" button that samples the five values from the current resolved palette; a theme with sources shows a "Turn off Quick colors" action that drops back to plain overrides.
-- **Surfaces:** background, card, and popover (paired with popover text).
-- **Title bar:** background with default text, and hover tint with hover text (both paired).
-- **Interactive:** primary, secondary, muted, and accent (each paired with its foreground), plus destructive and focus ring.
-- **Text:** the default foreground color.
-- **Calendar grid:** cal-bg, cal-header-bg, gridline, today marker (paired with text), time labels, and current-time line.
-- **Session rail:** rail track, break marker, focus marker.
+The groups:
 
-Each row carries a provenance badge:
+- **App canvas**: the dominant background color. Drives background, card, popover (paired with its text), secondary surface, muted surface, hover highlight, focus ring, title bar, and title bar hover. Editing it shifts the entire non-accent palette at once.
+- **Ink**: base text color, also the tint mixed into every lifted surface. Drives the default foreground.
+- **Primary action**: main accent for highlighted buttons and links. Drives the primary button background and its text.
+- **Destructive**: color for delete actions and warnings.
+- **Calendar canvas**: calendar grid background. Drives the grid, header, gridlines, time labels, and pomodoro rail track.
+- **Calendar markers**: a trailing group with no source. Collects semantic tokens that don't derive (today marker and its text, now line, break marker, focus marker).
 
-- **Auto** (derived): the token is computed from sources and will update when a source changes.
-- **Pinned** (override): the token has an explicit override and is immune to source changes. Click the reset button to drop the pin and fall through to the layer below.
-- No badge: the token resolves to the base CSS default.
+Each group card shows its source color as an editable `ColorField` at the top (except Calendar markers, which has no source). Driven rows below it have two states:
 
-Clicking reset on a source-driven theme clears the override so derivation takes over; on plain themes it restores the clone-time seed snapshot so duplicates can always return to the original palette.
+- **Auto**: a readonly swatch showing the current derived or default value, with a **Pin** button to its right. Clicking Pin captures the current value as an explicit override and unlocks inline editing.
+- **Pinned**: a full `ColorField` with a reset button that unpins the token back to Auto.
+
+Badge summary:
+
+- **Auto** (derived): the derivation engine drives the value; editing the source color updates it.
+- **Pinned**: an explicit override is in place and Quick-color edits don't affect it.
+- No badge: semantic calendar tokens that the user hasn't pinned (falls through to base CSS).
+
+Legacy user themes imported without a `sources` field show a "Set up Quick colors" card that samples the five values from the current resolved palette. After clicking, the editor switches to the grouped layout.
 
 The current roadmap: gradually migrate remaining hardcoded color sites (pomodoro idle overlay, kanban priority badges, confirm dialog, event panel placeholders, and similar) into CSS tokens so a custom theme can recolor them without touching component code.
 
