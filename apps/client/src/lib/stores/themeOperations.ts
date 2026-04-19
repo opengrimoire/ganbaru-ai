@@ -18,19 +18,20 @@ const NAME_SUFFIX_CAP = 999;
 
 /**
  * Deep-copy a theme, replacing its identity (id + displayName) with the
- * supplied values.
+ * supplied values. The clone always comes out in Quick-colors mode:
  *
- * The clone's strategy depends on whether the source has a `sources` field:
+ * - If the source carries a `sources` palette, copy it verbatim.
+ * - Otherwise synthesize sources by sampling canvas, ink, primary,
+ *   destructive, and calCanvas from the source's resolved tokens (base
+ *   defaults filled in for any token the source did not override).
  *
- * - **Source-driven (sources present):** copy `sources` and only the explicit
- *   overrides. The three-layer resolver will re-derive the rest from sources,
- *   so manipulating source colors on the clone keeps propagating through
- *   derived tokens. Seed fields still snapshot the effective resolved values
- *   so per-row reset restores what the source theme looked like at clone time.
- * - **Override-only (no sources):** snapshot the full set of resolved tokens
- *   into both the working overrides AND the seed fields. The clone becomes
- *   visually self-contained even before the user edits anything. This is the
- *   path built-ins take when duplicated.
+ * Synthesizing on source-less sources makes the common path (duplicate a
+ * built-in, then tweak Quick colors) behave as the user expects: edits to
+ * canvas or ink propagate through the derived palette instead of being
+ * silently shadowed by pinned overrides. Explicit overrides on the source
+ * are preserved as pinned tokens so surgical edits do not vanish on
+ * duplicate. Seeds always snapshot the full resolved set so per-row reset
+ * restores what the source looked like at clone time.
  */
 export function cloneTheme(
   source: Theme,
@@ -52,15 +53,26 @@ export function cloneTheme(
   };
   if (source.sources) {
     next.sources = { ...source.sources };
-    if (source.appTokenOverrides) {
-      next.appTokenOverrides = { ...source.appTokenOverrides };
-    }
-    if (source.calendarTokenOverrides) {
-      next.calendarTokenOverrides = { ...source.calendarTokenOverrides };
-    }
   } else {
-    next.appTokenOverrides = { ...resolvedApp };
-    next.calendarTokenOverrides = { ...resolvedCal };
+    next.sources = {
+      canvas: resolvedApp["--background"],
+      ink: resolvedApp["--foreground"],
+      primary: resolvedApp["--primary"],
+      destructive: resolvedApp["--destructive"],
+      calCanvas: resolvedCal["--cal-bg"],
+    };
+  }
+  if (
+    source.appTokenOverrides &&
+    Object.keys(source.appTokenOverrides).length > 0
+  ) {
+    next.appTokenOverrides = { ...source.appTokenOverrides };
+  }
+  if (
+    source.calendarTokenOverrides &&
+    Object.keys(source.calendarTokenOverrides).length > 0
+  ) {
+    next.calendarTokenOverrides = { ...source.calendarTokenOverrides };
   }
   return next;
 }

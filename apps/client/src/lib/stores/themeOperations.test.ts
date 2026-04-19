@@ -50,22 +50,14 @@ describe("cloneTheme", () => {
     expect(source.eventPalette[2]).toBe("#abcdef");
   });
 
-  it("seeds appTokenOverrides from the source's existing overrides", () => {
+  it("preserves explicit appTokenOverrides as pinned tokens", () => {
     const source = makeTheme({ appTokenOverrides: { "--primary": "#111111" } });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.appTokenOverrides?.["--primary"]).toBe("#111111");
     expect(copy.appTokenOverrides).not.toBe(source.appTokenOverrides);
   });
 
-  it("fills missing app tokens from BASE_APP_TOKENS for the source's base", () => {
-    const source = makeTheme({ base: "light" });
-    const copy = cloneTheme(source, "fork", "Fork");
-    for (const key of APP_TOKEN_KEYS) {
-      expect(copy.appTokenOverrides?.[key]).toBe(BASE_APP_TOKENS.light[key]);
-    }
-  });
-
-  it("seeds calendarTokenOverrides from the source's existing overrides", () => {
+  it("preserves explicit calendarTokenOverrides as pinned tokens", () => {
     const source = makeTheme({
       calendarTokenOverrides: { "--cal-bg": "#202020" },
     });
@@ -74,25 +66,85 @@ describe("cloneTheme", () => {
     expect(copy.calendarTokenOverrides).not.toBe(source.calendarTokenOverrides);
   });
 
-  it("fills missing calendar tokens from BASE_CALENDAR_TOKENS for the source's base", () => {
+  it("leaves overrides undefined when the source has none", () => {
     const source = makeTheme({ base: "dark" });
     const copy = cloneTheme(source, "fork", "Fork");
-    for (const key of CALENDAR_TOKEN_KEYS) {
-      expect(copy.calendarTokenOverrides?.[key]).toBe(
-        BASE_CALENDAR_TOKENS.dark[key],
-      );
-    }
+    expect(copy.appTokenOverrides).toBeUndefined();
+    expect(copy.calendarTokenOverrides).toBeUndefined();
   });
 
-  it("snapshots seedAppTokens, seedCalendarTokens, seedEventPalette equal to the resolved source", () => {
+  it("synthesizes sources from the resolved palette when source has none", () => {
+    const source = makeTheme({ base: "light" });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.sources).toEqual({
+      canvas: BASE_APP_TOKENS.light["--background"],
+      ink: BASE_APP_TOKENS.light["--foreground"],
+      primary: BASE_APP_TOKENS.light["--primary"],
+      destructive: BASE_APP_TOKENS.light["--destructive"],
+      calCanvas: BASE_CALENDAR_TOKENS.light["--cal-bg"],
+    });
+  });
+
+  it("synthesizes sources from explicit overrides when the source has them", () => {
+    const source = makeTheme({
+      base: "dark",
+      appTokenOverrides: {
+        "--background": "#111111",
+        "--foreground": "#eeeeee",
+      },
+      calendarTokenOverrides: { "--cal-bg": "#222222" },
+    });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.sources?.canvas).toBe("#111111");
+    expect(copy.sources?.ink).toBe("#eeeeee");
+    expect(copy.sources?.calCanvas).toBe("#222222");
+  });
+
+  it("preserves sources verbatim when the source already has them", () => {
+    const theSources = {
+      canvas: "#111111",
+      ink: "#eeeeee",
+      primary: "#00aaff",
+      destructive: "#ff0033",
+      calCanvas: "#0a0a0a",
+    };
+    const source = makeTheme({ sources: theSources });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.sources).toEqual(theSources);
+    expect(copy.sources).not.toBe(source.sources);
+  });
+
+  it("snapshots seedAppTokens from the resolved source palette", () => {
     const source = makeTheme({
       base: "light",
       appTokenOverrides: { "--primary": "#abc123" },
     });
     const copy = cloneTheme(source, "fork", "Fork");
-    expect(copy.seedAppTokens).toEqual(copy.appTokenOverrides);
-    expect(copy.seedAppTokens).not.toBe(copy.appTokenOverrides);
-    expect(copy.seedCalendarTokens).toEqual(copy.calendarTokenOverrides);
+    expect(copy.seedAppTokens?.["--primary"]).toBe("#abc123");
+    for (const key of APP_TOKEN_KEYS) {
+      if (key === "--primary") continue;
+      expect(copy.seedAppTokens?.[key]).toBe(BASE_APP_TOKENS.light[key]);
+    }
+  });
+
+  it("snapshots seedCalendarTokens from the resolved source palette", () => {
+    const source = makeTheme({
+      base: "dark",
+      calendarTokenOverrides: { "--cal-bg": "#202020" },
+    });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.seedCalendarTokens?.["--cal-bg"]).toBe("#202020");
+    for (const key of CALENDAR_TOKEN_KEYS) {
+      if (key === "--cal-bg") continue;
+      expect(copy.seedCalendarTokens?.[key]).toBe(
+        BASE_CALENDAR_TOKENS.dark[key],
+      );
+    }
+  });
+
+  it("clones seedEventPalette so later mutations do not leak", () => {
+    const source = makeTheme();
+    const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.seedEventPalette).toEqual(copy.eventPalette);
     expect(copy.seedEventPalette).not.toBe(copy.eventPalette);
   });
