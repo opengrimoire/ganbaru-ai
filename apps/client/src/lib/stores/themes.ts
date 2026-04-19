@@ -240,6 +240,15 @@ export function computeThemeTokenOps(
       applied.add(key);
     }
   };
+  // Derived values go first so explicit overrides layered on top win. Both
+  // derived AND overridden tokens need to be pushed to the DOM; if derived
+  // values were omitted, clearing the previous theme's override would drop
+  // the token back to the base CSS rule instead of the new theme's derived
+  // value.
+  if (theme.sources) {
+    merge(deriveAppTokens(theme.sources, theme.base));
+    merge(deriveCalendarTokens(theme.sources, theme.base));
+  }
   merge(theme.appTokenOverrides);
   merge(theme.calendarTokenOverrides);
   const toClear = new Set<string>();
@@ -554,28 +563,48 @@ export function deriveCalendarTokens(
 }
 
 /**
- * Resolve every app-shell token for a theme: explicit override first, then
- * the CSS base default for the theme's `base`. Used at clone time so the
- * duplicate is fully self-contained instead of inheriting whatever theme
- * happens to be active in the DOM.
+ * Resolve every app-shell token for a theme using the three-layer lookup:
+ *
+ * 1. Explicit override in `theme.appTokenOverrides` wins.
+ * 2. Else, if the theme carries `sources`, the derivation engine's value
+ *    for this token (when defined) is used.
+ * 3. Else, the CSS base default for the theme's `base` is used.
+ *
+ * Used at clone time so the duplicate is self-contained, and by the
+ * token-apply pipeline so `root.style.setProperty` pushes both pinned
+ * overrides AND derived values to the DOM (otherwise derived values
+ * would stay at their base CSS defaults instead of tracking sources).
  */
 export function resolveAppTokens(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
+  const derived = theme.sources
+    ? deriveAppTokens(theme.sources, theme.base)
+    : undefined;
   for (const key of APP_TOKEN_KEYS) {
     out[key] =
-      theme.appTokenOverrides?.[key] ?? BASE_APP_TOKENS[theme.base][key];
+      theme.appTokenOverrides?.[key] ??
+      derived?.[key] ??
+      BASE_APP_TOKENS[theme.base][key];
   }
   return out;
 }
 
 /**
- * Calendar-shell counterpart to {@link resolveAppTokens}.
+ * Calendar-shell counterpart to {@link resolveAppTokens}. The derivation
+ * engine only returns entries for derivable tokens (cal-bg, cal-header-bg,
+ * cal-gridline, cal-time-label, cal-timeline-rail); semantic tokens
+ * (today marker, current time, timeline break / focus) fall through to
+ * the base CSS defaults automatically.
  */
 export function resolveCalendarTokens(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
+  const derived = theme.sources
+    ? deriveCalendarTokens(theme.sources, theme.base)
+    : undefined;
   for (const key of CALENDAR_TOKEN_KEYS) {
     out[key] =
       theme.calendarTokenOverrides?.[key] ??
+      derived?.[key] ??
       BASE_CALENDAR_TOKENS[theme.base][key];
   }
   return out;
