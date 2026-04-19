@@ -29,10 +29,10 @@
   });
 
   const priorityColors: Record<string, string> = {
-    easy: "bg-green-500/20 text-green-400",
-    medium: "bg-yellow-500/20 text-yellow-400",
-    hard: "bg-orange-500/20 text-orange-400",
-    epic: "bg-purple-500/20 text-purple-400",
+    easy: "bg-priority-easy/20 text-priority-easy",
+    medium: "bg-priority-medium/20 text-priority-medium",
+    hard: "bg-priority-hard/20 text-priority-hard",
+    epic: "bg-priority-epic/20 text-priority-epic",
   };
 
   function handleAdd() {

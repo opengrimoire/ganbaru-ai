@@ -118,6 +118,38 @@
       description:
         "Background of the delete button once it has been armed (click-again-to-confirm state).",
     },
+    "--status-accepted": {
+      title: "Accepted attendee",
+      description: "Status tile color for accepted attendees on a calendar event.",
+    },
+    "--status-tentative": {
+      title: "Tentative attendee",
+      description: "Status tile color for tentative attendees on a calendar event.",
+    },
+    "--status-declined": {
+      title: "Declined attendee",
+      description: "Status tile color for declined attendees on a calendar event.",
+    },
+    "--priority-easy": {
+      title: "Easy priority",
+      description:
+        "Kanban badge color for easy-difficulty tasks. Applied as a tint for background and solid for text.",
+    },
+    "--priority-medium": {
+      title: "Medium priority",
+      description:
+        "Kanban badge color for medium-difficulty tasks. Applied as a tint for background and solid for text.",
+    },
+    "--priority-hard": {
+      title: "Hard priority",
+      description:
+        "Kanban badge color for hard-difficulty tasks. Applied as a tint for background and solid for text.",
+    },
+    "--priority-epic": {
+      title: "Epic priority",
+      description:
+        "Kanban badge color for epic-difficulty tasks. Applied as a tint for background and solid for text.",
+    },
   };
 
   const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
@@ -332,6 +364,29 @@
           scope: "app",
         },
         { kind: "single", key: "--action-danger-armed", scope: "app" },
+      ],
+    },
+    {
+      sourceKey: null,
+      title: "Attendance status",
+      description:
+        "Per-status tile colors on the event panel attendee list.",
+      rows: [
+        { kind: "single", key: "--status-accepted", scope: "app" },
+        { kind: "single", key: "--status-tentative", scope: "app" },
+        { kind: "single", key: "--status-declined", scope: "app" },
+      ],
+    },
+    {
+      sourceKey: null,
+      title: "Task priority",
+      description:
+        "Kanban badge colors per difficulty tier. Each token tints the badge background at 20% and colors the label text.",
+      rows: [
+        { kind: "single", key: "--priority-easy", scope: "app" },
+        { kind: "single", key: "--priority-medium", scope: "app" },
+        { kind: "single", key: "--priority-hard", scope: "app" },
+        { kind: "single", key: "--priority-epic", scope: "app" },
       ],
     },
   ];

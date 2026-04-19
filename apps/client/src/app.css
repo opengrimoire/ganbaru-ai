@@ -52,6 +52,17 @@
   --action-confirm: #059669;
   --action-confirm-foreground: #FFFFFF;
   --action-danger-armed: #B91C1C;
+
+  /* Attendance status (light) */
+  --status-accepted: #10B981;
+  --status-tentative: #F59E0B;
+  --status-declined: #EF4444;
+
+  /* Task priority (light) */
+  --priority-easy: #22C55E;
+  --priority-medium: #EAB308;
+  --priority-hard: #F97316;
+  --priority-epic: #A855F7;
 }
 
 .dark {
@@ -102,6 +113,17 @@
   --action-confirm: #065F46;
   --action-confirm-foreground: #D1FAE5;
   --action-danger-armed: #991B1B;
+
+  /* Attendance status (dark) */
+  --status-accepted: #10B981;
+  --status-tentative: #F59E0B;
+  --status-declined: #EF4444;
+
+  /* Task priority (dark) */
+  --priority-easy: #4ADE80;
+  --priority-medium: #FACC15;
+  --priority-hard: #FB923C;
+  --priority-epic: #C084FC;
 }
 
 @theme inline {
@@ -145,6 +167,13 @@
   --color-action-confirm: var(--action-confirm);
   --color-action-confirm-foreground: var(--action-confirm-foreground);
   --color-action-danger-armed: var(--action-danger-armed);
+  --color-status-accepted: var(--status-accepted);
+  --color-status-tentative: var(--status-tentative);
+  --color-status-declined: var(--status-declined);
+  --color-priority-easy: var(--priority-easy);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-hard: var(--priority-hard);
+  --color-priority-epic: var(--priority-epic);
 }
 
 @layer base {

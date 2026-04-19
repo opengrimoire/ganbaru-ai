@@ -308,6 +308,13 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--action-confirm",
   "--action-confirm-foreground",
   "--action-danger-armed",
+  "--status-accepted",
+  "--status-tentative",
+  "--status-declined",
+  "--priority-easy",
+  "--priority-medium",
+  "--priority-hard",
+  "--priority-epic",
 ] as const);
 
 /**
@@ -372,6 +379,13 @@ export const BASE_APP_TOKENS: Readonly<
     "--action-confirm": "#059669",
     "--action-confirm-foreground": "#FFFFFF",
     "--action-danger-armed": "#B91C1C",
+    "--status-accepted": "#10B981",
+    "--status-tentative": "#F59E0B",
+    "--status-declined": "#EF4444",
+    "--priority-easy": "#22C55E",
+    "--priority-medium": "#EAB308",
+    "--priority-hard": "#F97316",
+    "--priority-epic": "#A855F7",
   }),
   dark: Object.freeze({
     "--background": "#27282A",
@@ -406,6 +420,13 @@ export const BASE_APP_TOKENS: Readonly<
     "--action-confirm": "#065F46",
     "--action-confirm-foreground": "#D1FAE5",
     "--action-danger-armed": "#991B1B",
+    "--status-accepted": "#10B981",
+    "--status-tentative": "#F59E0B",
+    "--status-declined": "#EF4444",
+    "--priority-easy": "#4ADE80",
+    "--priority-medium": "#FACC15",
+    "--priority-hard": "#FB923C",
+    "--priority-epic": "#C084FC",
   }),
 });
 

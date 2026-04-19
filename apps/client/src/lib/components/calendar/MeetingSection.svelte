@@ -217,13 +217,13 @@
             style:-webkit-mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}>
             {#if organizer}
               <div class="flex items-center gap-2 py-0.5 text-[11px]">
-                <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-emerald-500"><Check size={10} strokeWidth={2.5} class="block text-white" /></span>
+                <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={10} strokeWidth={2.5} class="block text-white" /></span>
                 <span class="min-w-0 flex-1 truncate text-foreground">{organizer.name ?? organizer.email}</span>
                 <span class="shrink-0 text-[10px] text-muted-foreground/60">organizer</span>
               </div>
             {/if}
             {#each attendees as att (att.id)}
-              {@const sqBg = att.status === "accepted" ? "bg-emerald-500" : att.status === "tentative" ? "bg-amber-500" : att.status === "declined" ? "bg-red-500" : "bg-muted-foreground/30"}
+              {@const sqBg = att.status === "accepted" ? "bg-status-accepted" : att.status === "tentative" ? "bg-status-tentative" : att.status === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
               {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
               {@const statusLabel = att.status === "needs-action" ? "pending" : att.status}
               <div class="flex items-center gap-2 py-0.5 text-[11px]">
