@@ -2,7 +2,6 @@
   import { untrack } from "svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
-  import Plus from "@lucide/svelte/icons/plus";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -318,27 +317,20 @@
                 <div class="text-[12px] text-foreground">{humanize(key)}</div>
                 <div class="text-[11px] font-mono text-muted-foreground">{key}</div>
               </div>
-              {#if override}
-                <ColorField value={override} onChange={(hex) => setAppToken(key, hex)} />
-                <button
-                  type="button"
-                  onclick={() => clearAppToken(key)}
-                  title="Clear override"
-                  aria-label="Clear override"
-                  class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
-                >
-                  <X size={13} strokeWidth={2} />
-                </button>
-              {:else}
-                <button
-                  type="button"
-                  onclick={() => setAppToken(key, readComputedToken(key))}
-                  class="flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <Plus size={11} strokeWidth={2.25} />
-                  <span>Add override</span>
-                </button>
-              {/if}
+              <ColorField
+                value={override ?? readComputedToken(key)}
+                onChange={(hex) => setAppToken(key, hex)}
+              />
+              <button
+                type="button"
+                onclick={() => clearAppToken(key)}
+                title={override ? "Clear override" : "No override set"}
+                aria-label="Clear override"
+                disabled={!override}
+                class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card disabled:hover:text-muted-foreground dark:bg-transparent dark:disabled:hover:bg-transparent"
+              >
+                <X size={13} strokeWidth={2} />
+              </button>
             </div>
           {/each}
         {/if}
@@ -383,27 +375,20 @@
                 <div class="text-[12px] text-foreground">{humanize(key)}</div>
                 <div class="text-[11px] font-mono text-muted-foreground">{key}</div>
               </div>
-              {#if override}
-                <ColorField value={override} onChange={(hex) => setCalToken(key, hex)} />
-                <button
-                  type="button"
-                  onclick={() => clearCalToken(key)}
-                  title="Clear override"
-                  aria-label="Clear override"
-                  class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
-                >
-                  <X size={13} strokeWidth={2} />
-                </button>
-              {:else}
-                <button
-                  type="button"
-                  onclick={() => setCalToken(key, readComputedToken(key))}
-                  class="flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <Plus size={11} strokeWidth={2.25} />
-                  <span>Add override</span>
-                </button>
-              {/if}
+              <ColorField
+                value={override ?? readComputedToken(key)}
+                onChange={(hex) => setCalToken(key, hex)}
+              />
+              <button
+                type="button"
+                onclick={() => clearCalToken(key)}
+                title={override ? "Clear override" : "No override set"}
+                aria-label="Clear override"
+                disabled={!override}
+                class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card disabled:hover:text-muted-foreground dark:bg-transparent dark:disabled:hover:bg-transparent"
+              >
+                <X size={13} strokeWidth={2} />
+              </button>
             </div>
           {/each}
         {/if}
