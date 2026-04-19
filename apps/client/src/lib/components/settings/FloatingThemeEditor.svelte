@@ -25,7 +25,12 @@
       themeStore.id === themeEditor.editingId,
   );
 
-  const PANEL_WIDTH = 620;
+  // Width matches the old in-modal content area plus a small bump so rows
+  // breathe the same on both layouts; height is capped well below the
+  // viewport so the app underneath stays scannable.
+  const PANEL_WIDTH = 700;
+  const PANEL_MAX_HEIGHT_PX = 640;
+  const PANEL_MAX_HEIGHT_VH = 80;
   const PANEL_MARGIN = 16;
 
   // Seed the initial position so the panel opens near the top-right of the
@@ -113,7 +118,7 @@
 {#if editing}
   <div
     class="fixed z-[75] flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
-    style="left: {posX}px; top: {posY}px; width: {PANEL_WIDTH}px; max-height: calc(100vh - 32px);"
+    style="left: {posX}px; top: {posY}px; width: {PANEL_WIDTH}px; max-height: min({PANEL_MAX_HEIGHT_VH}vh, {PANEL_MAX_HEIGHT_PX}px);"
     role="dialog"
     aria-label="Theme editor"
   >
