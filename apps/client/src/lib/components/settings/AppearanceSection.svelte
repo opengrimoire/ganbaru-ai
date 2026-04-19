@@ -16,6 +16,14 @@
   import StepperControl from "./StepperControl.svelte";
   import CustomSelect from "./CustomSelect.svelte";
 
+  // The slim "Manage themes…" link wired through onNavigate lands in the
+  // next commit; declaring the prop here lets SettingsModal pass it now.
+  let {
+    onNavigate: _onNavigate,
+  }: {
+    onNavigate?: (section: "appearance" | "themes") => void;
+  } = $props();
+
   const theme = getTheme();
   const preferences = getPreferences();
   const zoom = getZoom();
