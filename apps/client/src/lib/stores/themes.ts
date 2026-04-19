@@ -418,8 +418,12 @@ const APP_DERIVATION_LIGHT = {
   mutedForegroundLift: 0.64,
   accentLift: 0.05,
   ringLift: 0.46,
-  sidebarRecess: 0.11,
-  sidebarAccentRecess: 0.17,
+  // Light sidebar is slightly inked toward foreground (a soft tinted gray),
+  // not recessed toward black: fitting against built-in #DCDCE2 / #CFCFD6
+  // showed lift(canvas, ink, 0.10 / 0.16) tracks within ~2 channels whereas
+  // recess(canvas, 0.11 / 0.17) diverges on the blue channel.
+  sidebarLift: 0.1,
+  sidebarAccentLift: 0.16,
 } as const;
 
 const APP_DERIVATION_DARK = {
@@ -484,9 +488,9 @@ export function deriveAppTokens(
       "--accent-foreground": ink,
       "--destructive": destructive,
       "--ring": lift(w.ringLift),
-      "--sidebar": recess(w.sidebarRecess),
+      "--sidebar": lift(w.sidebarLift),
       "--sidebar-foreground": ink,
-      "--sidebar-accent": recess(w.sidebarAccentRecess),
+      "--sidebar-accent": lift(w.sidebarAccentLift),
       "--sidebar-accent-foreground": ink,
     };
   }
