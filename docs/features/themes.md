@@ -76,25 +76,32 @@ Dimmed event variants (past events, cancelled events, transparent/free events, o
 
 ## Persistence
 
-Today, the active theme ID lives in `localStorage` under `ganbaruai-theme`. The initial theme is applied synchronously on module load so first paint matches the stored preference, no flash of unstyled content on light-mode boot. Unknown or removed theme IDs fall back to the default (currently `dark`).
+The active theme ID, user-authored themes, font family, and font scale all live in `vault/config.json` under dotted keys (`theme.activeId`, `themes.user`, `preferences.fontFamilyId`, `preferences.fontScale`). The vault folder defaults to `app_config_dir / "vault"` and is created on first launch. Writes are atomic: the Rust backend serializes to `config.json.tmp`, fsyncs, and renames into place, so a crash mid-write leaves either the previous good file or an ignored temp.
 
-Later, the active theme ID and user-authored themes will move into `vault/config.json` so they sync alongside the rest of the user's data. Third-party themes shipped as files in the vault (for example, `vault/themes/my-theme.json`) are the natural next step. The registry already accepts arbitrary IDs; the only missing piece is loading and persisting user-authored Theme objects.
+The frontend bridge (`lib/vault/config.ts`) loads the config once at boot, exposes synchronous reads against an in-memory cache, and debounces writes (250 ms) so rapid edits coalesce into one disk write. Stores hydrate from the cache on first read, keeping first paint synchronous.
 
-## Custom theme workflow (end state)
+The first vault load runs a one-time migration that copies the legacy `ganbaruai-theme`, `ganbaruai-font-family`, and `ganbaruai-font-scale` keys out of `localStorage` and removes them. The migration is idempotent.
 
-Users should be able to:
+Built-in themes are validated through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`dark`).
 
-1. **Create a theme** by duplicating an existing one (or starting from scratch) and editing slot hex values, display names, and optional token overrides in a theme editor UI.
-2. **Switch between any registered themes.** Built-in and user themes coexist in the picker, grouped by origin. Switching is non-destructive: it only changes the active theme ID; nothing is rewritten, merged, or overridden.
-3. **Share a theme** by exporting the Theme object as JSON and importing it into another install.
-4. **Copy a slot value from a built-in** while editing a user theme, as a starting-point shortcut. This pulls the built-in's hex into the user theme being edited; it never modifies the built-in itself.
-5. **Delete a user theme** they no longer want. Built-in themes cannot be deleted and are always present in the picker.
+## Custom theme workflow
 
-Built-in themes are not editable. Editing a built-in clones it into a new user-theme with a unique ID.
+Users can:
+
+1. **Create a theme** by clicking "New theme" in the Themes settings section. The editor opens on a fresh user theme seeded from the current active theme.
+2. **Duplicate** any theme (built-in or user) into a new editable user theme. Built-ins remain frozen.
+3. **Edit** a user theme inline: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, override individual app or calendar shell tokens, and clear overrides back to the base CSS.
+4. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
+5. **Share** a theme by exporting it as JSON. Two paths: copy the JSON to the clipboard, or save it to a file via the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
+6. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
+
+Editing a built-in is blocked at the store level; the UI silently duplicates first and opens the copy.
 
 ## Shell token overrides
 
-The app and calendar shell today are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). The registry already reserves `appTokenOverrides` and `calendarTokenOverrides` fields on Theme so a future theme can repaint the shell without touching the built-in rules. When a theme with overrides is applied, the store iterates the maps and calls `root.style.setProperty(key, value)` for each entry. Clearing overrides on theme switch is handled by the next theme's setProperty calls replacing them, or by an explicit reset when switching to a theme that has no overrides.
+The app and calendar shell are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). User themes can override any token in the `APP_TOKEN_KEYS` (23 tokens) and `CALENDAR_TOKEN_KEYS` (10 tokens) catalogs. Unknown keys are stripped on import; only valid hex values are accepted. When a theme with overrides is applied, the store iterates the maps and calls `root.style.setProperty(key, value)` for each entry; switching themes clears overrides not present in the next theme.
+
+The editor exposes both catalogs as edit rows. Each row shows the token name, the resolved current value, and an "Add override" button that seeds the picker from the computed style if no override exists yet. Clearing an override removes the key entirely so the base CSS rule applies.
 
 The current roadmap: gradually migrate remaining hardcoded color sites (pomodoro idle overlay, kanban priority badges, confirm dialog, event panel placeholders, and similar) into CSS tokens so a custom theme can recolor them without touching component code.
 
