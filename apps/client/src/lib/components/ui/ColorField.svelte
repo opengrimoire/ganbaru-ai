@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
+  import { portal } from "$lib/utils/portal";
   import {
     type HsvColor,
     clampChannel,
@@ -32,14 +33,53 @@
     class?: string;
   } = $props();
 
+  // Width of the popover; kept in sync with the rendered class so position
+  // math can keep the panel inside the viewport without a measurement pass.
+  const POPOVER_WIDTH = 228;
+  // Rough height estimate; used only for off-bottom flipping. Slightly
+  // overestimating is safe: it just biases towards opening upward sooner.
+  const POPOVER_HEIGHT = 320;
+  const VIEWPORT_MARGIN = 8;
+
   let open = $state(false);
-  let rootEl: HTMLDivElement | undefined = $state();
+  let triggerEl: HTMLButtonElement | undefined = $state();
+  let popoverEl: HTMLDivElement | undefined = $state();
+  let popoverPos = $state({ top: 0, left: 0 });
   let svEl: HTMLDivElement | undefined = $state();
   let hueEl: HTMLDivElement | undefined = $state();
   let hexDraft = $state(untrack(() => normalizeHex(value) ?? "#000000"));
   let hsv = $state<HsvColor>(
     untrack(() => hexToHsv(value) ?? { h: 0, s: 0, v: 0 }),
   );
+
+  function computePosition() {
+    if (!triggerEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    let left = rect.left;
+    if (left + POPOVER_WIDTH + VIEWPORT_MARGIN > viewportWidth) {
+      left = Math.max(
+        VIEWPORT_MARGIN,
+        viewportWidth - POPOVER_WIDTH - VIEWPORT_MARGIN,
+      );
+    }
+    let top = rect.bottom + 6;
+    if (top + POPOVER_HEIGHT + VIEWPORT_MARGIN > viewportHeight) {
+      // Flip above the trigger if there isn't room below.
+      top = Math.max(VIEWPORT_MARGIN, rect.top - POPOVER_HEIGHT - 6);
+    }
+    popoverPos = { top, left };
+  }
+
+  function toggleOpen() {
+    if (open) {
+      open = false;
+      return;
+    }
+    computePosition();
+    open = true;
+  }
 
   // External value can change (theme switch, reset). Sync local state when
   // the popover is closed, or when the incoming value differs from the hex
@@ -168,23 +208,40 @@
   $effect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      if (!rootEl) return;
-      if (rootEl.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (triggerEl?.contains(target)) return;
+      if (popoverEl?.contains(target)) return;
       close();
     }
+    // Close on scroll instead of repositioning: cheaper, and the popover is
+    // tied to a specific anchor, so letting it drift with the layout looks
+    // broken. Resize gets a reposition since users expect the panel to track
+    // the trigger across window resizes.
+    function handleScroll() {
+      close();
+    }
+    function handleResize() {
+      computePosition();
+    }
     window.addEventListener("mousedown", handleClickOutside, true);
-    return () =>
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
       window.removeEventListener("mousedown", handleClickOutside, true);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
   });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div bind:this={rootEl} class={cn("relative inline-flex items-center gap-1.5", className)}>
+<div class={cn("inline-flex items-center gap-1.5", className)}>
   <button
+    bind:this={triggerEl}
     type="button"
     aria-label={label ? `Edit ${label}` : "Edit color"}
-    onclick={() => (open = !open)}
+    onclick={toggleOpen}
     class="rounded-md border border-border shadow-sm transition-shadow hover:shadow-md"
     style="width: {swatchSize}px; height: {swatchSize}px; background: {normalizeHex(value) ??
       '#000000'};"
@@ -223,9 +280,12 @@
 
   {#if open}
     <div
+      bind:this={popoverEl}
+      use:portal
       role="dialog"
       aria-label={label ? `${label} color picker` : "Color picker"}
-      class="absolute left-0 top-[calc(100%+6px)] z-[80] w-[228px] rounded-lg border border-border bg-popover p-3 shadow-xl"
+      class="fixed z-[80] w-[228px] rounded-lg border border-border bg-popover p-3 shadow-xl"
+      style="top: {popoverPos.top}px; left: {popoverPos.left}px;"
     >
       <div
         bind:this={svEl}

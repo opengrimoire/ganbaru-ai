@@ -184,19 +184,19 @@
   <ThemeEditor theme={editingTheme} onDone={exitEditor} />
 {:else}
   <div class="flex flex-col gap-4">
-    <header class="flex items-center justify-between gap-2 px-1">
-      <div>
+    <header class="flex items-start justify-between gap-3 px-1">
+      <div class="min-w-0 flex-1">
         <h2 class="text-[13px] font-semibold text-foreground">Themes</h2>
         <p class="mt-0.5 text-[12px] text-muted-foreground">
           Apply, edit, or import theme JSON. Built-in themes are read-only;
           edit them to spawn an editable duplicate.
         </p>
       </div>
-      <div class="flex items-center gap-1.5">
+      <div class="flex shrink-0 items-center gap-1.5">
         <button
           type="button"
           onclick={handleImportToggle}
-          class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
           <ClipboardPaste size={12} strokeWidth={2.25} />
           <span>Import</span>
@@ -204,7 +204,7 @@
         <button
           type="button"
           onclick={handleNew}
-          class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Plus size={12} strokeWidth={2.25} />
           <span>New theme</span>
