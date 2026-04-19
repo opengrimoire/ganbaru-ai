@@ -86,16 +86,19 @@ Built-in themes are validated through `validateThemeJson` on load (defense in de
 
 ## Custom theme workflow
 
+Themes are managed from the single Appearance section in Settings. The section lists every theme (built-ins first, user themes below) above the font and zoom controls; opening one swaps the section into a detail view for that theme and the "Back to themes" action returns to the list.
+
 Users can:
 
-1. **Create a theme** by clicking "New theme" in the Themes settings section. The editor opens on a fresh user theme seeded from the current active theme.
+1. **Create a theme** by clicking "New theme". A user theme is added (seeded from the current active theme) and the editor opens on it.
 2. **Duplicate** any theme (built-in or user) into a new editable user theme. Built-ins remain frozen.
-3. **Edit** a user theme inline: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, override individual app or calendar shell tokens, and clear overrides back to the base CSS.
-4. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
-5. **Share** a theme by exporting it as JSON. Two paths: copy the JSON to the clipboard, or save it to a file via the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
-6. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
+3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
+4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, override individual app or calendar shell tokens, and clear overrides back to the base CSS. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
+5. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
+6. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
+7. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
 
-Editing a built-in is blocked at the store level; the UI silently duplicates first and opens the copy.
+Editing a built-in is blocked at the store level: mutators return false, `replaceTheme` rejects built-in ids, and the editor hides every input (name field, base toggle, color pickers, add-override buttons) when the target is built-in. Duplicate is the only path to a modifiable copy.
 
 ## Shell token overrides
 

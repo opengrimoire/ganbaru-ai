@@ -3,6 +3,7 @@
   import Check from "@lucide/svelte/icons/check";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
+  import { portal } from "$lib/utils/portal";
 
   interface Option {
     value: string;
@@ -31,13 +32,43 @@
     class?: string;
   } = $props();
 
+  const VIEWPORT_MARGIN = 8;
+  const ESTIMATED_DROPDOWN_HEIGHT = 240;
+
   let open = $state(false);
-  let rootEl: HTMLDivElement | undefined = $state();
+  let triggerEl: HTMLButtonElement | undefined = $state();
+  let popoverEl: HTMLDivElement | undefined = $state();
+  let popoverPos = $state({ top: 0, right: 0, minWidth: 0 });
 
   const current = $derived(options.find((o) => o.value === value));
 
+  function computePosition() {
+    if (!triggerEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    let top = rect.bottom + 4;
+    if (
+      top + ESTIMATED_DROPDOWN_HEIGHT + VIEWPORT_MARGIN > viewportHeight
+    ) {
+      top = Math.max(
+        VIEWPORT_MARGIN,
+        rect.top - ESTIMATED_DROPDOWN_HEIGHT - 4,
+      );
+    }
+    popoverPos = {
+      top,
+      right: Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.right),
+      minWidth: rect.width,
+    };
+  }
+
   function toggle() {
-    open = !open;
+    if (open) {
+      open = false;
+      return;
+    }
+    computePosition();
+    open = true;
   }
 
   function select(next: string) {
@@ -57,12 +88,25 @@
   $effect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      if (!rootEl) return;
-      if (rootEl.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (triggerEl?.contains(target)) return;
+      if (popoverEl?.contains(target)) return;
       open = false;
     }
+    function handleScroll() {
+      open = false;
+    }
+    function handleResize() {
+      computePosition();
+    }
     window.addEventListener("mousedown", handleClickOutside, true);
-    return () => window.removeEventListener("mousedown", handleClickOutside, true);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside, true);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
   });
 </script>
 
@@ -78,8 +122,9 @@
     </div>
   {/if}
   <div class="flex items-center gap-1.5">
-    <div bind:this={rootEl} class={cn("relative", className)}>
+    <div class={cn("relative", className)}>
       <button
+        bind:this={triggerEl}
         type="button"
         onclick={toggle}
         aria-haspopup="listbox"
@@ -95,8 +140,11 @@
       </button>
       {#if open}
         <div
+          bind:this={popoverEl}
+          use:portal
           role="listbox"
-          class="absolute right-0 top-[calc(100%+4px)] z-[80] min-w-full overflow-hidden rounded-md border border-border bg-popover py-1 shadow-lg"
+          class="fixed z-[80] max-h-[60vh] overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-lg"
+          style="top: {popoverPos.top}px; right: {popoverPos.right}px; min-width: {popoverPos.minWidth}px;"
         >
           {#each options as option}
             {@const isActive = option.value === value}

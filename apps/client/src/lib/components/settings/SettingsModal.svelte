@@ -2,13 +2,11 @@
   import { onMount, type Component } from "svelte";
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
-  import Brush from "@lucide/svelte/icons/brush";
   import AppearanceSection from "./AppearanceSection.svelte";
-  import ThemesSection from "./ThemesSection.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
-  type SectionId = "appearance" | "themes";
+  type SectionId = "appearance";
 
   interface SectionMeta {
     id: SectionId;
@@ -22,18 +20,11 @@
   const SECTION_GROUPS: { heading: string; items: SectionMeta[] }[] = [
     {
       heading: "Options",
-      items: [
-        { id: "appearance", label: "Appearance", icon: Palette },
-        { id: "themes", label: "Themes", icon: Brush },
-      ],
+      items: [{ id: "appearance", label: "Appearance", icon: Palette }],
     },
   ];
 
   let activeSection = $state<SectionId>("appearance");
-
-  function navigate(id: SectionId) {
-    activeSection = id;
-  }
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
@@ -104,9 +95,7 @@
       class="flex-1 overflow-y-auto bg-background/40 px-8 py-6 dark:bg-black/20"
     >
       {#if activeSection === "appearance"}
-        <AppearanceSection onNavigate={navigate} />
-      {:else if activeSection === "themes"}
-        <ThemesSection />
+        <AppearanceSection />
       {/if}
     </section>
   </div>

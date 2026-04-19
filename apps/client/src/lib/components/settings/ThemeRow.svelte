@@ -2,9 +2,8 @@
   import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import Pencil from "@lucide/svelte/icons/pencil";
+  import Eye from "@lucide/svelte/icons/eye";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import ClipboardCopy from "@lucide/svelte/icons/clipboard-copy";
-  import Download from "@lucide/svelte/icons/download";
   import { cn } from "$lib/utils";
   import type { EventColor } from "$lib/components/calendar/types";
   import type { Theme } from "$lib/stores/themes";
@@ -14,20 +13,16 @@
     isActive,
     isBuiltin,
     onApply,
-    onEdit,
+    onOpen,
     onDuplicate,
-    onExport,
-    onExportFile,
     onDelete,
   }: {
     theme: Theme;
     isActive: boolean;
     isBuiltin: boolean;
     onApply: () => void;
-    onEdit: () => void;
+    onOpen: () => void;
     onDuplicate: () => void;
-    onExport: () => void;
-    onExportFile: () => void;
     onDelete: () => void;
   } = $props();
 
@@ -93,30 +88,16 @@
     </button>
     <button
       type="button"
-      onclick={onEdit}
-      title={isBuiltin ? "Duplicate and edit" : "Edit"}
-      aria-label={isBuiltin ? "Duplicate and edit theme" : "Edit theme"}
+      onclick={onOpen}
+      title={isBuiltin ? "View" : "Edit"}
+      aria-label={isBuiltin ? "View theme" : "Edit theme"}
       class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
-      <Pencil size={13} strokeWidth={2} />
-    </button>
-    <button
-      type="button"
-      onclick={onExport}
-      title="Copy theme JSON"
-      aria-label="Copy theme JSON"
-      class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-    >
-      <ClipboardCopy size={13} strokeWidth={2} />
-    </button>
-    <button
-      type="button"
-      onclick={onExportFile}
-      title="Save theme JSON to file"
-      aria-label="Save theme JSON to file"
-      class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-    >
-      <Download size={13} strokeWidth={2} />
+      {#if isBuiltin}
+        <Eye size={13} strokeWidth={2} />
+      {:else}
+        <Pencil size={13} strokeWidth={2} />
+      {/if}
     </button>
     {#if !isBuiltin}
       <button

@@ -187,6 +187,46 @@ function exportTheme(id: ThemeId): string | undefined {
   return serializeTheme(theme);
 }
 
+export type ReplaceThemeResult =
+  | { ok: true }
+  | { ok: false; errors: string[] };
+
+/**
+ * Replace a user theme in place from raw JSON. The id is locked to the
+ * existing slot so the editor's "Apply changes" path cannot accidentally
+ * fork into a new theme. Built-in ids and unknown ids are rejected.
+ */
+function replaceTheme(id: ThemeId, json: string): ReplaceThemeResult {
+  if (isBuiltinThemeId(id)) {
+    return { ok: false, errors: ["built-in themes cannot be edited"] };
+  }
+  if (!Object.hasOwn(customThemes, id)) {
+    return { ok: false, errors: ["theme not found"] };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch (err) {
+    return {
+      ok: false,
+      errors: [
+        `could not parse JSON: ${err instanceof Error ? err.message : String(err)}`,
+      ],
+    };
+  }
+  // Force the validator to evaluate against the locked id so callers cannot
+  // sneak through a rename by editing the id field in the textarea.
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    (parsed as Record<string, unknown>).id = id;
+  }
+  const result = validateThemeJson(parsed);
+  if (!result.ok) return result;
+  customThemes[id] = { ...result.theme, id };
+  persistCustomThemes();
+  if (id === activeId) applyThemeToDom();
+  return { ok: true };
+}
+
 /**
  * Access the active theme and mutators. Returns an object of getters so
  * Svelte's reactivity tracks reads and re-runs derived values when the
@@ -222,6 +262,7 @@ export function getTheme() {
     deleteTheme,
     importTheme,
     exportTheme,
+    replaceTheme,
     /**
      * Cycle between the two built-in themes. Used by the title bar
      * sun/moon toggle. For the full multi-theme selector, use setTheme.
