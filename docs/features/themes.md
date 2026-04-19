@@ -18,7 +18,8 @@ A Theme is a self-contained visual package. The minimum fields:
 
 Optional fields reserved for shell theming:
 
-- **appTokenOverrides:** map of app-level CSS tokens (`--primary`, `--background`, etc.) to hex values. Applied on theme switch via `root.style.setProperty`. Empty on the built-in themes today, which rely on the `.dark` class and the existing light/dark rules in `app.css`.
+- **sources:** five-color palette (`canvas`, `ink`, `primary`, `destructive`, `calCanvas`) that drives the rest of the shell through the derivation engine. Omitted on both built-ins, so they resolve straight to the base CSS. See "Sources and derivation" below.
+- **appTokenOverrides:** map of app-level CSS tokens (`--primary`, `--background`, etc.) to hex values. Applied on theme switch via `root.style.setProperty`. Pinned values here win over derivation and base CSS.
 - **calendarTokenOverrides:** same idea, scoped to calendar shell tokens (`--cal-bg`, `--cal-gridline`, etc.).
 
 A Theme is frozen after construction. The registry itself is frozen. This prevents runtime mutation of a shipped theme by accident.
@@ -83,18 +84,71 @@ Users can:
 1. **Create a theme** by clicking "New theme". A user theme is added (seeded from the current active theme) and the editor opens on it.
 2. **Duplicate** any theme (built-in or user) into a new editable user theme. Built-ins remain frozen.
 3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
-4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, override individual app or calendar shell tokens, and clear overrides back to the base CSS. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
+4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, opt into Quick colors to drive the shell from five source values, pin individual app or calendar shell tokens, and clear overrides back to derivation or base CSS. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
 5. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
 6. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
 7. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
 
 Editing a built-in is blocked at the store level: mutators return false, `replaceTheme` rejects built-in ids, and the editor hides every input (name field, base toggle, color pickers, add-override buttons) when the target is built-in. Duplicate is the only path to a modifiable copy.
 
-## Shell token overrides
+## Shell token derivation and overrides
 
-The app and calendar shell are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). User themes can override any token in the `APP_TOKEN_KEYS` (23 tokens) and `CALENDAR_TOKEN_KEYS` (10 tokens) catalogs. Unknown keys are stripped on import; only valid hex values are accepted. When a theme with overrides is applied, the store iterates the maps and calls `root.style.setProperty(key, value)` for each entry; switching themes clears overrides not present in the next theme.
+The app and calendar shell are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). User themes can tint or pin those tokens through a three-layer pipeline: override, derived, base.
 
-The editor exposes both catalogs as edit rows. Each row shows the token name, the resolved current value, and an "Add override" button that seeds the picker from the computed style if no override exists yet. Clearing an override removes the key entirely so the base CSS rule applies.
+### Resolution order
+
+For each token in `APP_TOKEN_KEYS` (19 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
+
+1. **Override (pinned).** `theme.appTokenOverrides[key]` / `theme.calendarTokenOverrides[key]` if set.
+2. **Derived (auto).** If the theme carries `sources` and the token is covered by the derivation engine, the engine's value for that token.
+3. **Default.** The base CSS rule (`:root` for light, `.dark` for dark) read from `BASE_APP_TOKENS` / `BASE_CALENDAR_TOKENS`.
+
+Built-in themes ship without `sources` and without overrides, so every token resolves at layer 3, byte-identical to the pre-derivation behavior. When a theme with sources or overrides is applied, `computeThemeTokenOps` merges derived values first and then pinned overrides, pushing the result to the root via `root.style.setProperty`. Switching themes clears tokens set by the previous theme that the next one does not cover.
+
+Unknown keys in overrides are stripped on import; only valid hex values are accepted.
+
+### Sources
+
+A theme can ship a `sources` object with five hex colors:
+
+- `canvas`: app background. Lifted toward `ink` to produce the secondary, muted, and accent surfaces, and the base from which the title bar tokens tint.
+- `ink`: text base. Used directly for `--foreground` and mixed into every lifted surface.
+- `primary`: brand/action accent, used directly for `--primary`.
+- `destructive`: danger signal for delete actions and warnings, used directly for `--destructive`.
+- `calCanvas`: calendar grid background. Kept distinct from `canvas` in both built-ins so the calendar reads as its own surface.
+
+Editing one source color propagates through the derivation tables and shifts every non-pinned token in lockstep. Pinned overrides are untouched, so the user can let the engine drive the coherent parts of the shell while surgically fixing specific tokens (pinning `--card` to pure white, for example).
+
+### Derivation formulas
+
+The engine uses two linear blends over sRGB hex:
+
+- `liftTowardInk(c, ink, t)`: blend `c` toward `ink` by fraction `t`. Produces softly tinted grays, which is how the built-in secondary, muted, accent, and ring surfaces relate to their canvas.
+- `recessTowardBlack(c, t)`: blend `c` toward pure black by fraction `t`. Used only for the dark title bar, which wants a shade darker than canvas without picking up ink hue.
+
+Weights live in `APP_DERIVATION_LIGHT`, `APP_DERIVATION_DARK`, `CAL_DERIVATION_LIGHT`, `CAL_DERIVATION_DARK` (see `stores/themes.ts`) and were fitted so that seeding the built-in themes' canvas, ink, primary, destructive, and calCanvas reproduces the built-in shell palette within a small per-channel tolerance. A golden test in `themeDerivation.test.ts` guards the reproduction on every change. Card and popover are pinned to pure white in light mode; both sidebar foregrounds are pinned to pure white in dark mode.
+
+Only the derivable subset of calendar tokens participates: `--cal-bg`, `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, `--cal-timeline-rail`. Semantic tokens (today marker, current-time line, timeline break, timeline focus) carry meaning that does not reduce to a source palette (red for "now", green for focus, a bold today circle) and always fall through to base CSS unless the user explicitly pins them.
+
+### Editor UI
+
+The editor groups shell tokens into six sections so related colors sit together and their relationships are visible at a glance:
+
+- **Quick colors** (user themes only): the five source inputs. Editing one live-propagates through derived tokens. A theme without sources shows a "Set up Quick colors" button that samples the five values from the current resolved palette; a theme with sources shows a "Turn off Quick colors" action that drops back to plain overrides.
+- **Surfaces:** background, card, and popover (paired with popover text).
+- **Title bar:** background with default text, and hover tint with hover text (both paired).
+- **Interactive:** primary, secondary, muted, and accent (each paired with its foreground), plus destructive and focus ring.
+- **Text:** the default foreground color.
+- **Calendar grid:** cal-bg, cal-header-bg, gridline, today marker (paired with text), time labels, and current-time line.
+- **Session rail:** rail track, break marker, focus marker.
+
+Each row carries a provenance badge:
+
+- **Auto** (derived): the token is computed from sources and will update when a source changes.
+- **Pinned** (override): the token has an explicit override and is immune to source changes. Click the reset button to drop the pin and fall through to the layer below.
+- No badge: the token resolves to the base CSS default.
+
+Clicking reset on a source-driven theme clears the override so derivation takes over; on plain themes it restores the clone-time seed snapshot so duplicates can always return to the original palette.
 
 The current roadmap: gradually migrate remaining hardcoded color sites (pomodoro idle overlay, kanban priority badges, confirm dialog, event panel placeholders, and similar) into CSS tokens so a custom theme can recolor them without touching component code.
 
