@@ -1,15 +1,35 @@
 import { describe, it, expect } from "vitest";
 import type { EventColor } from "$lib/components/calendar/types";
 import {
-  THEME_REGISTRY,
+  BUILTIN_THEME_REGISTRY,
   DEFAULT_THEME_ID,
+  EVENT_SLOTS,
+  APP_TOKEN_KEYS,
+  CALENDAR_TOKEN_KEYS,
   darkTheme,
   lightTheme,
   getThemeById,
+  isBuiltinThemeId,
   themeIds,
   computeThemeTokenOps,
+  generateThemeId,
+  serializeTheme,
+  validateThemeJson,
   type Theme,
 } from "./themes";
+
+function buildValidThemeInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const palette: Record<string, string> = {};
+  for (const slot of EVENT_SLOTS) palette[slot] = "#abcdef";
+  return {
+    id: "custom-theme",
+    displayName: "Custom Theme",
+    base: "dark",
+    blendCanvas: "#202020",
+    eventPalette: palette,
+    ...overrides,
+  };
+}
 
 const REQUIRED_EVENT_COLORS: readonly EventColor[] = [
   "radicchio", "cherryBlossom", "tomato", "flamingo", "tangerine",
@@ -20,8 +40,8 @@ const REQUIRED_EVENT_COLORS: readonly EventColor[] = [
 
 describe("theme registry", () => {
   it("registers light and dark built-in themes", () => {
-    expect(THEME_REGISTRY[lightTheme.id]).toBe(lightTheme);
-    expect(THEME_REGISTRY[darkTheme.id]).toBe(darkTheme);
+    expect(BUILTIN_THEME_REGISTRY[lightTheme.id]).toBe(lightTheme);
+    expect(BUILTIN_THEME_REGISTRY[darkTheme.id]).toBe(darkTheme);
   });
 
   it("exposes themeIds in insertion order", () => {
@@ -35,7 +55,7 @@ describe("theme registry", () => {
   });
 
   it("freezes registry to prevent mutation", () => {
-    expect(Object.isFrozen(THEME_REGISTRY)).toBe(true);
+    expect(Object.isFrozen(BUILTIN_THEME_REGISTRY)).toBe(true);
   });
 });
 
@@ -171,5 +191,231 @@ describe("computeThemeTokenOps", () => {
     );
     const result = computeThemeTokenOps(theme, new Set());
     expect(result.applied).toEqual(new Set(["--primary", "--cal-bg"]));
+  });
+});
+
+describe("isBuiltinThemeId", () => {
+  it("identifies built-in IDs", () => {
+    expect(isBuiltinThemeId("light")).toBe(true);
+    expect(isBuiltinThemeId("dark")).toBe(true);
+  });
+
+  it("rejects unknown IDs", () => {
+    expect(isBuiltinThemeId("custom-abc")).toBe(false);
+    expect(isBuiltinThemeId(undefined)).toBe(false);
+    expect(isBuiltinThemeId(null)).toBe(false);
+    expect(isBuiltinThemeId("")).toBe(false);
+  });
+
+  it("guards against prototype-chain keys", () => {
+    expect(isBuiltinThemeId("toString")).toBe(false);
+    expect(isBuiltinThemeId("__proto__")).toBe(false);
+  });
+});
+
+describe("EVENT_SLOTS", () => {
+  it("matches the EventColor union", () => {
+    expect(EVENT_SLOTS).toEqual(REQUIRED_EVENT_COLORS);
+  });
+
+  it("is frozen", () => {
+    expect(Object.isFrozen(EVENT_SLOTS)).toBe(true);
+  });
+});
+
+describe("token catalogs", () => {
+  it("APP_TOKEN_KEYS only contains -- prefixed names", () => {
+    for (const key of APP_TOKEN_KEYS) expect(key.startsWith("--")).toBe(true);
+  });
+
+  it("CALENDAR_TOKEN_KEYS only contains --cal- prefixed names", () => {
+    for (const key of CALENDAR_TOKEN_KEYS) expect(key.startsWith("--cal-")).toBe(true);
+  });
+
+  it("are frozen", () => {
+    expect(Object.isFrozen(APP_TOKEN_KEYS)).toBe(true);
+    expect(Object.isFrozen(CALENDAR_TOKEN_KEYS)).toBe(true);
+  });
+});
+
+describe("generateThemeId", () => {
+  it("returns a unique ID not in the existing registry", () => {
+    const existing = { "theme-aaaaaa": darkTheme };
+    const id = generateThemeId(existing);
+    expect(existing).not.toHaveProperty(id);
+    expect(id.startsWith("theme-")).toBe(true);
+  });
+
+  it("uses the provided slug-shaped prefix", () => {
+    const id = generateThemeId({}, "midnight");
+    expect(id.startsWith("midnight-")).toBe(true);
+  });
+
+  it("falls back to the default prefix when given a non-slug prefix", () => {
+    const id = generateThemeId({}, "not a slug!");
+    expect(id.startsWith("theme-")).toBe(true);
+  });
+});
+
+describe("validateThemeJson", () => {
+  it("accepts a fully valid theme", () => {
+    const result = validateThemeJson(buildValidThemeInput());
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.id).toBe("custom-theme");
+      expect(result.theme.displayName).toBe("Custom Theme");
+      expect(result.theme.base).toBe("dark");
+      expect(result.theme.eventPalette.radicchio).toBe("#abcdef");
+    }
+  });
+
+  it("rejects non-object inputs", () => {
+    expect(validateThemeJson(null).ok).toBe(false);
+    expect(validateThemeJson("not an object").ok).toBe(false);
+    expect(validateThemeJson(42).ok).toBe(false);
+    expect(validateThemeJson([]).ok).toBe(false);
+  });
+
+  it("rejects an id that is not a slug", () => {
+    const result = validateThemeJson(buildValidThemeInput({ id: "Has Spaces" }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.some((e) => e.includes("id"))).toBe(true);
+  });
+
+  it("rejects an empty displayName", () => {
+    const result = validateThemeJson(buildValidThemeInput({ displayName: "   " }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.some((e) => e.includes("displayName"))).toBe(true);
+  });
+
+  it("rejects an oversized displayName", () => {
+    const result = validateThemeJson(
+      buildValidThemeInput({ displayName: "x".repeat(61) }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.some((e) => e.includes("displayName"))).toBe(true);
+  });
+
+  it("rejects unknown base values", () => {
+    const result = validateThemeJson(buildValidThemeInput({ base: "rainbow" }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.some((e) => e.includes("base"))).toBe(true);
+  });
+
+  it("rejects an invalid blendCanvas", () => {
+    const result = validateThemeJson(buildValidThemeInput({ blendCanvas: "white" }));
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.some((e) => e.includes("blendCanvas"))).toBe(true);
+  });
+
+  it("reports every missing event slot", () => {
+    const partial: Record<string, string> = {};
+    for (const slot of EVENT_SLOTS.slice(0, 3)) partial[slot] = "#000000";
+    const result = validateThemeJson(
+      buildValidThemeInput({ eventPalette: partial }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.length).toBeGreaterThanOrEqual(EVENT_SLOTS.length - 3);
+  });
+
+  it("rejects a non-hex slot value", () => {
+    const palette: Record<string, string> = {};
+    for (const slot of EVENT_SLOTS) palette[slot] = "#abcdef";
+    palette.radicchio = "tomato";
+    const result = validateThemeJson(
+      buildValidThemeInput({ eventPalette: palette }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.some((e) => e.includes("radicchio"))).toBe(true);
+  });
+
+  it("accepts known appTokenOverrides and rejects bad hex", () => {
+    const result = validateThemeJson(
+      buildValidThemeInput({
+        appTokenOverrides: { "--primary": "#112233", "--background": "not-a-color" },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.some((e) => e.includes("--background"))).toBe(true);
+  });
+
+  it("strips unknown override keys without erroring", () => {
+    const result = validateThemeJson(
+      buildValidThemeInput({
+        appTokenOverrides: { "--primary": "#112233", "--made-up-token": "#000000" },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.appTokenOverrides).toEqual({ "--primary": "#112233" });
+    }
+  });
+
+  it("omits empty override blocks from the cleaned theme", () => {
+    const result = validateThemeJson(
+      buildValidThemeInput({ appTokenOverrides: { "--unknown": "#000000" } }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.theme.appTokenOverrides).toBeUndefined();
+  });
+
+  it("ignores prototype-chain keys when reading overrides", () => {
+    const overrides = Object.create({ "--primary": "#000000" }) as Record<string, string>;
+    overrides["--accent"] = "#112233";
+    const result = validateThemeJson(
+      buildValidThemeInput({ appTokenOverrides: overrides }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(result.theme.appTokenOverrides).toEqual({ "--accent": "#112233" });
+  });
+});
+
+describe("serializeTheme round-trip", () => {
+  it("survives validate(serialize(t))", () => {
+    const result = validateThemeJson(buildValidThemeInput());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const json = serializeTheme(result.theme);
+    const reparsed = validateThemeJson(JSON.parse(json));
+    expect(reparsed.ok).toBe(true);
+    if (reparsed.ok) {
+      expect(reparsed.theme.id).toBe(result.theme.id);
+      expect(reparsed.theme.eventPalette).toEqual(result.theme.eventPalette);
+    }
+  });
+
+  it("serializes overrides only when non-empty", () => {
+    const result = validateThemeJson(buildValidThemeInput());
+    if (!result.ok) throw new Error("expected valid theme");
+    const json = serializeTheme(result.theme);
+    expect(json).not.toContain("appTokenOverrides");
+    expect(json).not.toContain("calendarTokenOverrides");
+  });
+
+  it("emits keys in canonical order", () => {
+    const result = validateThemeJson(
+      buildValidThemeInput({
+        appTokenOverrides: { "--accent": "#111111", "--primary": "#222222" },
+      }),
+    );
+    if (!result.ok) throw new Error("expected valid theme");
+    const json = serializeTheme(result.theme);
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(Object.keys(parsed)).toEqual([
+      "id",
+      "displayName",
+      "base",
+      "blendCanvas",
+      "eventPalette",
+      "appTokenOverrides",
+    ]);
+    const overrides = parsed.appTokenOverrides as Record<string, string>;
+    expect(Object.keys(overrides)).toEqual(["--primary", "--accent"]);
   });
 });

@@ -115,11 +115,11 @@ export const darkTheme: Theme = Object.freeze({
 });
 
 /**
- * Registry of all available themes. To add a theme: write one Theme object
- * above and include it here. No other code changes are required for the
- * theme to become available in the store.
+ * Registry of the themes that ship with the app. Frozen so it cannot be
+ * mutated at runtime; user-authored themes live in the store layer and are
+ * merged with this registry when the active theme is resolved.
  */
-export const THEME_REGISTRY: Readonly<Record<ThemeId, Theme>> = Object.freeze({
+export const BUILTIN_THEME_REGISTRY: Readonly<Record<ThemeId, Theme>> = Object.freeze({
   [lightTheme.id]: lightTheme,
   [darkTheme.id]: darkTheme,
 });
@@ -131,21 +131,37 @@ export const THEME_REGISTRY: Readonly<Record<ThemeId, Theme>> = Object.freeze({
 export const DEFAULT_THEME_ID: ThemeId = darkTheme.id;
 
 /**
- * Look up a theme by ID, returning undefined if the ID isn't registered.
- * Guards against prototype-chain keys via Object.hasOwn.
+ * Returns true when the given ID matches a theme that ships with the app.
+ * Used to guard mutators (built-in themes are immutable; "edit" duplicates
+ * a built-in into a user theme first).
  */
-export function getThemeById(id: ThemeId | undefined | null): Theme | undefined {
-  if (!id || typeof id !== "string") return undefined;
-  if (!Object.hasOwn(THEME_REGISTRY, id)) return undefined;
-  return THEME_REGISTRY[id];
+export function isBuiltinThemeId(id: ThemeId | undefined | null): boolean {
+  if (!id || typeof id !== "string") return false;
+  return Object.hasOwn(BUILTIN_THEME_REGISTRY, id);
 }
 
 /**
- * List of registered theme IDs in insertion order. Useful for building a
- * theme picker.
+ * Look up a theme by ID. By default searches only the built-in registry;
+ * pass the combined registry from the store to resolve user themes too.
+ * Guards against prototype-chain keys via Object.hasOwn.
  */
-export function themeIds(): ThemeId[] {
-  return Object.keys(THEME_REGISTRY);
+export function getThemeById(
+  id: ThemeId | undefined | null,
+  registry: Readonly<Record<ThemeId, Theme>> = BUILTIN_THEME_REGISTRY,
+): Theme | undefined {
+  if (!id || typeof id !== "string") return undefined;
+  if (!Object.hasOwn(registry, id)) return undefined;
+  return registry[id];
+}
+
+/**
+ * List of registered theme IDs in insertion order. Defaults to built-ins;
+ * pass a combined registry to include user themes.
+ */
+export function themeIds(
+  registry: Readonly<Record<ThemeId, Theme>> = BUILTIN_THEME_REGISTRY,
+): ThemeId[] {
+  return Object.keys(registry);
 }
 
 /**
@@ -181,4 +197,290 @@ export function computeThemeTokenOps(
     if (!applied.has(key)) toClear.add(key);
   }
   return { toSet, toClear, applied };
+}
+
+/**
+ * Canonical ordering of event color slots. The editor and validator iterate
+ * this list so a slot added or removed from EventColor flows through one
+ * source of truth.
+ */
+export const EVENT_SLOTS: readonly EventColor[] = Object.freeze([
+  "radicchio",
+  "cherryBlossom",
+  "tomato",
+  "flamingo",
+  "tangerine",
+  "pumpkin",
+  "mango",
+  "banana",
+  "citron",
+  "avocado",
+  "pistachio",
+  "sage",
+  "basil",
+  "eucalyptus",
+  "peacock",
+  "cobalt",
+  "blueberry",
+  "lavender",
+  "wisteria",
+  "amethyst",
+  "grape",
+  "cocoa",
+  "graphite",
+  "birch",
+] satisfies readonly EventColor[]);
+
+/**
+ * App-shell CSS custom properties a user theme is allowed to override.
+ * Limited to hex-color tokens for now: the in-house color picker emits hex
+ * only, and tokens that ship as rgba (border alpha) or oklch (charts) are
+ * intentionally excluded until the picker grows wider format support.
+ */
+export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
+  "--background",
+  "--foreground",
+  "--card",
+  "--card-foreground",
+  "--popover",
+  "--popover-foreground",
+  "--primary",
+  "--primary-foreground",
+  "--secondary",
+  "--secondary-foreground",
+  "--muted",
+  "--muted-foreground",
+  "--accent",
+  "--accent-foreground",
+  "--destructive",
+  "--ring",
+  "--sidebar",
+  "--sidebar-foreground",
+  "--sidebar-primary",
+  "--sidebar-primary-foreground",
+  "--sidebar-accent",
+  "--sidebar-accent-foreground",
+  "--sidebar-ring",
+] as const);
+
+/**
+ * Calendar-shell CSS custom properties a user theme is allowed to override.
+ * Same hex-only restriction as APP_TOKEN_KEYS; cal-hover (rgba) and
+ * cal-header-row-h (px) are excluded.
+ */
+export const CALENDAR_TOKEN_KEYS: readonly string[] = Object.freeze([
+  "--cal-bg",
+  "--cal-header-bg",
+  "--cal-gridline",
+  "--cal-today-circle",
+  "--cal-today-circle-text",
+  "--cal-time-label",
+  "--cal-current-time",
+  "--cal-timeline-rail",
+  "--cal-timeline-break",
+  "--cal-timeline-focus",
+] as const);
+
+const APP_TOKEN_KEY_SET = new Set(APP_TOKEN_KEYS);
+const CALENDAR_TOKEN_KEY_SET = new Set(CALENDAR_TOKEN_KEYS);
+
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+const MAX_DISPLAY_NAME_LENGTH = 60;
+
+function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && HEX_COLOR_RE.test(value);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Generate a unique slug-style theme ID. Prefix is short and human-friendly,
+ * suffix is a 6-char base36 random tail. Pass the existing combined registry
+ * to guarantee no collisions with current themes.
+ */
+export function generateThemeId(
+  existing: Readonly<Record<ThemeId, Theme>>,
+  prefix = "theme",
+): ThemeId {
+  const safePrefix = SLUG_RE.test(prefix) ? prefix : "theme";
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const tail = Math.random().toString(36).slice(2, 8);
+    const candidate = `${safePrefix}-${tail}`;
+    if (!Object.hasOwn(existing, candidate)) return candidate;
+  }
+  return `${safePrefix}-${Date.now().toString(36)}`;
+}
+
+/**
+ * Serialize a theme to a stable, pretty-printed JSON string suitable for
+ * clipboard or file export. Keys are emitted in a deterministic order so
+ * exported files diff cleanly across saves.
+ */
+export function serializeTheme(theme: Theme): string {
+  const ordered: Record<string, unknown> = {
+    id: theme.id,
+    displayName: theme.displayName,
+    base: theme.base,
+    blendCanvas: theme.blendCanvas,
+    eventPalette: orderedPalette(theme.eventPalette),
+  };
+  if (theme.appTokenOverrides && Object.keys(theme.appTokenOverrides).length > 0) {
+    ordered.appTokenOverrides = orderedTokens(theme.appTokenOverrides, APP_TOKEN_KEYS);
+  }
+  if (
+    theme.calendarTokenOverrides &&
+    Object.keys(theme.calendarTokenOverrides).length > 0
+  ) {
+    ordered.calendarTokenOverrides = orderedTokens(
+      theme.calendarTokenOverrides,
+      CALENDAR_TOKEN_KEYS,
+    );
+  }
+  return JSON.stringify(ordered, null, 2);
+}
+
+function orderedPalette(palette: EventPaletteHexes): EventPaletteHexes {
+  const out = {} as EventPaletteHexes;
+  for (const slot of EVENT_SLOTS) out[slot] = palette[slot];
+  return out;
+}
+
+function orderedTokens(
+  source: Readonly<Record<string, string>>,
+  order: readonly string[],
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of order) {
+    if (Object.hasOwn(source, key)) out[key] = source[key];
+  }
+  return out;
+}
+
+export type ThemeValidationResult =
+  | { ok: true; theme: Theme }
+  | { ok: false; errors: string[] };
+
+/**
+ * Validate an unknown JSON-parsed value as a Theme suitable for import.
+ * Returns the cleaned theme on success; on failure returns a list of all
+ * problems found so the UI can surface them at once instead of one round-trip
+ * per error. Unknown override keys are stripped silently because dropping a
+ * stale token name should not block an otherwise valid theme.
+ */
+export function validateThemeJson(input: unknown): ThemeValidationResult {
+  const errors: string[] = [];
+  if (!isPlainObject(input)) {
+    return { ok: false, errors: ["theme must be a JSON object"] };
+  }
+  const { id, displayName, base, blendCanvas, eventPalette } = input;
+
+  let cleanId = "";
+  if (typeof id !== "string" || id.length === 0) {
+    errors.push("id must be a non-empty string");
+  } else if (!SLUG_RE.test(id)) {
+    errors.push(
+      "id must be a slug (lowercase letters, digits, and hyphens; must start with a letter or digit)",
+    );
+  } else {
+    cleanId = id;
+  }
+
+  let cleanDisplayName = "";
+  if (typeof displayName !== "string" || displayName.trim().length === 0) {
+    errors.push("displayName must be a non-empty string");
+  } else if (displayName.length > MAX_DISPLAY_NAME_LENGTH) {
+    errors.push(`displayName must be ${MAX_DISPLAY_NAME_LENGTH} characters or fewer`);
+  } else {
+    cleanDisplayName = displayName;
+  }
+
+  let cleanBase: "light" | "dark" = "dark";
+  if (base !== "light" && base !== "dark") {
+    errors.push('base must be "light" or "dark"');
+  } else {
+    cleanBase = base;
+  }
+
+  let cleanBlend = "";
+  if (!isHexColor(blendCanvas)) {
+    errors.push("blendCanvas must be a hex color (#RRGGBB or #RRGGBBAA)");
+  } else {
+    cleanBlend = blendCanvas;
+  }
+
+  const cleanPalette = {} as EventPaletteHexes;
+  if (!isPlainObject(eventPalette)) {
+    errors.push("eventPalette must be an object");
+  } else {
+    for (const slot of EVENT_SLOTS) {
+      if (!Object.hasOwn(eventPalette, slot)) {
+        errors.push(`eventPalette.${slot} is missing`);
+        continue;
+      }
+      const value = (eventPalette as Record<string, unknown>)[slot];
+      if (!isHexColor(value)) {
+        errors.push(`eventPalette.${slot} must be a hex color`);
+      } else {
+        cleanPalette[slot] = value;
+      }
+    }
+  }
+
+  const cleanAppOverrides = sanitizeOverrides(
+    input.appTokenOverrides,
+    APP_TOKEN_KEY_SET,
+    "appTokenOverrides",
+    errors,
+  );
+  const cleanCalOverrides = sanitizeOverrides(
+    input.calendarTokenOverrides,
+    CALENDAR_TOKEN_KEY_SET,
+    "calendarTokenOverrides",
+    errors,
+  );
+
+  if (errors.length > 0) return { ok: false, errors };
+
+  const theme: Theme = {
+    id: cleanId,
+    displayName: cleanDisplayName,
+    base: cleanBase,
+    blendCanvas: cleanBlend,
+    eventPalette: cleanPalette,
+  };
+  if (cleanAppOverrides && Object.keys(cleanAppOverrides).length > 0) {
+    theme.appTokenOverrides = cleanAppOverrides;
+  }
+  if (cleanCalOverrides && Object.keys(cleanCalOverrides).length > 0) {
+    theme.calendarTokenOverrides = cleanCalOverrides;
+  }
+  return { ok: true, theme };
+}
+
+function sanitizeOverrides(
+  source: unknown,
+  allowed: ReadonlySet<string>,
+  fieldName: string,
+  errors: string[],
+): Record<string, string> | undefined {
+  if (source === undefined) return undefined;
+  if (!isPlainObject(source)) {
+    errors.push(`${fieldName} must be an object`);
+    return undefined;
+  }
+  const out: Record<string, string> = {};
+  for (const key of Object.keys(source)) {
+    if (!Object.hasOwn(source, key)) continue;
+    if (!allowed.has(key)) continue;
+    const value = (source as Record<string, unknown>)[key];
+    if (!isHexColor(value)) {
+      errors.push(`${fieldName}.${key} must be a hex color`);
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
 }
