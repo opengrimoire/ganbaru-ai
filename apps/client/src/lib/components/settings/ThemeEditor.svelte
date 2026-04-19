@@ -1,6 +1,5 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import Link2 from "@lucide/svelte/icons/link-2";
@@ -247,13 +246,7 @@
     "--cal-timeline-rail",
   ]);
 
-  let {
-    theme,
-    onDone,
-  }: {
-    theme: Theme;
-    onDone: () => void;
-  } = $props();
+  let { theme }: { theme: Theme } = $props();
 
   const themeStore = getTheme();
   const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
@@ -552,14 +545,6 @@
 <div class="flex flex-col gap-6">
   <!-- Header -->
   <section class="flex flex-col gap-2">
-    <button
-      type="button"
-      onclick={onDone}
-      class="flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-    >
-      <ArrowLeft size={13} strokeWidth={2} />
-      <span>Back to themes</span>
-    </button>
     <div
       class="flex flex-col gap-3 overflow-hidden rounded-lg bg-card p-4 dark:bg-background"
     >

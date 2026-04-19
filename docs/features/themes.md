@@ -77,7 +77,7 @@ Built-in themes are validated through `validateThemeJson` on load (defense in de
 
 ## Custom theme workflow
 
-Themes are managed from the single Appearance section in Settings. The section lists every theme (built-ins first, user themes below) above the font and zoom controls; opening one swaps the section into a detail view for that theme and the "Back to themes" action returns to the list.
+Themes are managed from the single Appearance section in Settings. The section lists every theme (built-ins first, user themes below) above the font and zoom controls. Opening one hands off to a floating theme editor: the Settings modal closes and a draggable panel appears in the top-right of the viewport. The panel has no backdrop, so the app underneath stays interactive and every edit can be verified live (switch tabs, hover rows, open dialogs) without dismissing the editor. A grip in the panel's header lets the user drag it anywhere (constrained so at least the drag handle stays on screen), and a sticky footer exposes Back to themes (closes the panel and reopens the Settings modal on the list view) and Apply theme (activates the edited theme when it isn't already active). An X in the header dismisses the panel outright without reopening Settings. Edits persist to the vault as the user makes them, so closing the panel never loses work.
 
 Users can:
 

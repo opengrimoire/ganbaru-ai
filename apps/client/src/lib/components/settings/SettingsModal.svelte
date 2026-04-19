@@ -3,8 +3,17 @@
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
   import AppearanceSection from "./AppearanceSection.svelte";
+  import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
+
+  const themeEditor = getThemeEditor();
+
+  // When the user opens a theme in the floating editor, step out of the way
+  // so the modal backdrop does not block clicking through to the app.
+  $effect(() => {
+    if (themeEditor.editingId) onClose();
+  });
 
   type SectionId = "appearance";
 

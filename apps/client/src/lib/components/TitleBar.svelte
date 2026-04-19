@@ -24,6 +24,8 @@
   import X from "@lucide/svelte/icons/x";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import SettingsModal from "$lib/components/settings/SettingsModal.svelte";
+  import FloatingThemeEditor from "$lib/components/settings/FloatingThemeEditor.svelte";
+  import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
 
   interface ProcessMemory {
     name: string;
@@ -49,6 +51,7 @@
   let showResetConfirm = $state(false);
   let showPerfMenu = $state(false);
   let showSettings = $state(false);
+  const themeEditor = getThemeEditor();
   let perfPinned = $state(false);
   let perfLive = $state(false);
   let copied = $state(false);
@@ -527,6 +530,15 @@
 
 {#if showSettings}
   <SettingsModal onClose={() => { showSettings = false; }} />
+{/if}
+
+{#if themeEditor.editingId}
+  <FloatingThemeEditor
+    onBackToList={() => {
+      themeEditor.close();
+      showSettings = true;
+    }}
+  />
 {/if}
 
 <style>
