@@ -18,11 +18,19 @@ const NAME_SUFFIX_CAP = 999;
 
 /**
  * Deep-copy a theme, replacing its identity (id + displayName) with the
- * supplied values. The clone is fully self-contained: we snapshot the
- * source's effective tokens (override + base CSS fallback) into both the
- * working overrides AND the seed* fields, so the duplicate visually matches
- * the source even when a different theme is currently active in the DOM,
- * and the per-row reset affordance can restore source values later.
+ * supplied values.
+ *
+ * The clone's strategy depends on whether the source has a `sources` field:
+ *
+ * - **Source-driven (sources present):** copy `sources` and only the explicit
+ *   overrides. The three-layer resolver will re-derive the rest from sources,
+ *   so manipulating source colors on the clone keeps propagating through
+ *   derived tokens. Seed fields still snapshot the effective resolved values
+ *   so per-row reset restores what the source theme looked like at clone time.
+ * - **Override-only (no sources):** snapshot the full set of resolved tokens
+ *   into both the working overrides AND the seed fields. The clone becomes
+ *   visually self-contained even before the user edits anything. This is the
+ *   path built-ins take when duplicated.
  */
 export function cloneTheme(
   source: Theme,
@@ -32,18 +40,29 @@ export function cloneTheme(
   const resolvedApp = resolveAppTokens(source);
   const resolvedCal = resolveCalendarTokens(source);
   const palette = [...source.eventPalette];
-  return {
+  const next: Theme = {
     id,
     displayName,
     base: source.base,
     blendCanvas: source.blendCanvas,
     eventPalette: palette,
-    appTokenOverrides: { ...resolvedApp },
-    calendarTokenOverrides: { ...resolvedCal },
     seedAppTokens: { ...resolvedApp },
     seedCalendarTokens: { ...resolvedCal },
     seedEventPalette: [...palette],
   };
+  if (source.sources) {
+    next.sources = { ...source.sources };
+    if (source.appTokenOverrides) {
+      next.appTokenOverrides = { ...source.appTokenOverrides };
+    }
+    if (source.calendarTokenOverrides) {
+      next.calendarTokenOverrides = { ...source.calendarTokenOverrides };
+    }
+  } else {
+    next.appTokenOverrides = { ...resolvedApp };
+    next.calendarTokenOverrides = { ...resolvedCal };
+  }
+  return next;
 }
 
 /**

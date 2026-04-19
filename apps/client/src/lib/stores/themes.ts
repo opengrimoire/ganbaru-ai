@@ -1,10 +1,38 @@
 import { PALETTE_SIZE } from "$lib/components/calendar/types";
+import { blendHex } from "$lib/components/calendar/utils";
 
 /**
  * Stable ID identifying a theme. Built-in IDs are "light" and "dark".
  * Custom themes added later should use slugs or UUIDs to avoid collisions.
  */
 export type ThemeId = string;
+
+/**
+ * Five source colors that drive most of the shell palette through the
+ * derivation formulas in {@link deriveAppTokens} / {@link deriveCalendarTokens}.
+ *
+ * - **canvas:** app background. The color visible in framing gaps and the
+ *   Settings modal; also the reference the other app surfaces lift toward
+ *   ink from.
+ * - **ink:** text base. Default text color and the color every "lifted"
+ *   surface mixes a small fraction of to tint it.
+ * - **primary:** brand/action accent used on highlighted buttons and links.
+ * - **destructive:** danger signal for delete actions and warnings.
+ * - **calCanvas:** calendar grid background; intentionally distinct from
+ *   canvas so the calendar reads as a different surface from the rest of
+ *   the app (both built-ins keep them apart).
+ *
+ * Themes without `sources` fall back to the base CSS tokens unchanged;
+ * sources exist purely to let a small number of color choices drive a
+ * consistent palette across the shell.
+ */
+export interface ThemeSources {
+  canvas: string;
+  ink: string;
+  primary: string;
+  destructive: string;
+  calCanvas: string;
+}
 
 /**
  * Full palette for event color slots within a theme. Always exactly
@@ -38,6 +66,13 @@ export interface Theme {
   eventPalette: EventPaletteHexes;
   /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
   blendCanvas: string;
+  /**
+   * Optional five-color source palette that drives the rest of the shell
+   * through the derivation formulas. When set, the token resolver uses
+   * overrides first, then derivation, then base CSS defaults. Built-ins do
+   * not ship sources: they resolve straight to base CSS tokens.
+   */
+  sources?: ThemeSources;
   /** Optional overrides for app-shell CSS tokens (--primary, etc). */
   appTokenOverrides?: Readonly<Record<string, string>>;
   /** Optional overrides for calendar-shell CSS tokens (--cal-bg, etc). */
@@ -352,6 +387,169 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_DISPLAY_NAME_LENGTH = 60;
 
 /**
+ * Blend `c` toward `ink` by fraction `t`. A weight of 0 returns `c`
+ * unchanged; 1 returns `ink`. Used to "lift" a base surface toward its
+ * text color (slightly tinted grays), which is how the built-in secondary,
+ * muted, accent, and ring surfaces relate to their canvas.
+ */
+function liftTowardInk(c: string, ink: string, t: number): string {
+  return blendHex(c, ink, 1 - t);
+}
+
+/**
+ * Blend `c` toward pure black by fraction `t`. Used for the title bar
+ * surface in light mode, which is a shade darker than canvas without
+ * picking up any ink hue.
+ */
+function recessTowardBlack(c: string, t: number): string {
+  return blendHex(c, "#000000", 1 - t);
+}
+
+/**
+ * App-shell derivation weights fitted empirically so that seeding the
+ * built-in themes' canvas / ink / primary / destructive reproduces the
+ * built-in token values within a small channel tolerance (see
+ * `themeDerivation.test.ts`). Each weight is the fraction of ink (or
+ * black, for `sidebar*Recess`) mixed into the target color.
+ */
+const APP_DERIVATION_LIGHT = {
+  secondaryLift: 0.08,
+  mutedLift: 0.08,
+  mutedForegroundLift: 0.64,
+  accentLift: 0.05,
+  ringLift: 0.46,
+  sidebarRecess: 0.11,
+  sidebarAccentRecess: 0.17,
+} as const;
+
+const APP_DERIVATION_DARK = {
+  cardLift: 0.035,
+  popoverLift: 0.071,
+  secondaryLift: 0.061,
+  mutedLift: 0.061,
+  mutedForegroundLift: 0.553,
+  accentLift: 0.101,
+  ringLift: 0.289,
+  sidebarRecess: 0.23,
+  sidebarAccentLift: 0.101,
+} as const;
+
+const CAL_DERIVATION_LIGHT = {
+  gridlineLift: 0.13,
+  timeLabelLift: 0.64,
+  timelineRailLift: 0.09,
+} as const;
+
+const CAL_DERIVATION_DARK = {
+  gridlineLift: 0.13,
+  timeLabelLift: 0.553,
+  timelineRailLift: 0.15,
+} as const;
+
+/**
+ * Derive every app-shell token from a source palette for the given base.
+ *
+ * The "light" and "dark" branches differ in more than just numeric
+ * weights: card and popover are fixed white in light mode but lifted from
+ * canvas in dark, and sidebar foregrounds are pinned to pure white in
+ * dark (where built-in ink is already near-white but the titlebar is
+ * darker than ink, so contrast needs a hard anchor).
+ *
+ * Built-in themes carry no `sources` field and never reach this function
+ * at resolve time; it is called only for user themes that have opted into
+ * the source-driven workflow.
+ */
+export function deriveAppTokens(
+  sources: ThemeSources,
+  base: "light" | "dark",
+): Record<string, string> {
+  const { canvas, ink, primary, destructive } = sources;
+  const lift = (t: number) => liftTowardInk(canvas, ink, t);
+  const recess = (t: number) => recessTowardBlack(canvas, t);
+  if (base === "light") {
+    const w = APP_DERIVATION_LIGHT;
+    return {
+      "--background": canvas,
+      "--foreground": ink,
+      "--card": "#FFFFFF",
+      "--popover": "#FFFFFF",
+      "--popover-foreground": ink,
+      "--primary": primary,
+      "--primary-foreground": canvas,
+      "--secondary": lift(w.secondaryLift),
+      "--secondary-foreground": ink,
+      "--muted": lift(w.mutedLift),
+      "--muted-foreground": lift(w.mutedForegroundLift),
+      "--accent": lift(w.accentLift),
+      "--accent-foreground": ink,
+      "--destructive": destructive,
+      "--ring": lift(w.ringLift),
+      "--sidebar": recess(w.sidebarRecess),
+      "--sidebar-foreground": ink,
+      "--sidebar-accent": recess(w.sidebarAccentRecess),
+      "--sidebar-accent-foreground": ink,
+    };
+  }
+  const w = APP_DERIVATION_DARK;
+  return {
+    "--background": canvas,
+    "--foreground": ink,
+    "--card": lift(w.cardLift),
+    "--popover": lift(w.popoverLift),
+    "--popover-foreground": ink,
+    "--primary": primary,
+    "--primary-foreground": canvas,
+    "--secondary": lift(w.secondaryLift),
+    "--secondary-foreground": ink,
+    "--muted": lift(w.mutedLift),
+    "--muted-foreground": lift(w.mutedForegroundLift),
+    "--accent": lift(w.accentLift),
+    "--accent-foreground": ink,
+    "--destructive": destructive,
+    "--ring": lift(w.ringLift),
+    "--sidebar": recess(w.sidebarRecess),
+    "--sidebar-foreground": "#FFFFFF",
+    "--sidebar-accent": lift(w.sidebarAccentLift),
+    "--sidebar-accent-foreground": "#FFFFFF",
+  };
+}
+
+/**
+ * Derive the calendar-shell tokens that can be computed from sources.
+ *
+ * Only returns entries for the derivable tokens (bg, header bg, gridline,
+ * time label, timeline rail). The semantic tokens (today circle, current
+ * time, timeline break, timeline focus) are intentionally omitted: those
+ * colors carry meaning (today marker, red for "now", green for focus)
+ * that does not reduce to the source palette, so the resolver falls
+ * through to the base CSS defaults for them.
+ */
+export function deriveCalendarTokens(
+  sources: ThemeSources,
+  base: "light" | "dark",
+): Record<string, string> {
+  const { canvas, ink, calCanvas } = sources;
+  if (base === "light") {
+    const w = CAL_DERIVATION_LIGHT;
+    return {
+      "--cal-bg": calCanvas,
+      "--cal-header-bg": canvas,
+      "--cal-gridline": liftTowardInk(calCanvas, ink, w.gridlineLift),
+      "--cal-time-label": liftTowardInk(canvas, ink, w.timeLabelLift),
+      "--cal-timeline-rail": liftTowardInk(canvas, ink, w.timelineRailLift),
+    };
+  }
+  const w = CAL_DERIVATION_DARK;
+  return {
+    "--cal-bg": calCanvas,
+    "--cal-header-bg": canvas,
+    "--cal-gridline": liftTowardInk(calCanvas, ink, w.gridlineLift),
+    "--cal-time-label": liftTowardInk(canvas, ink, w.timeLabelLift),
+    "--cal-timeline-rail": liftTowardInk(canvas, ink, w.timelineRailLift),
+  };
+}
+
+/**
  * Resolve every app-shell token for a theme: explicit override first, then
  * the CSS base default for the theme's `base`. Used at clone time so the
  * duplicate is fully self-contained instead of inheriting whatever theme
@@ -418,6 +616,9 @@ export function serializeTheme(theme: Theme): string {
     blendCanvas: theme.blendCanvas,
     eventPalette: orderedPalette(theme.eventPalette),
   };
+  if (theme.sources) {
+    ordered.sources = orderedSources(theme.sources);
+  }
   if (theme.appTokenOverrides && Object.keys(theme.appTokenOverrides).length > 0) {
     ordered.appTokenOverrides = orderedTokens(theme.appTokenOverrides, APP_TOKEN_KEYS);
   }
@@ -435,6 +636,20 @@ export function serializeTheme(theme: Theme): string {
 
 function orderedPalette(palette: EventPaletteHexes): string[] {
   return [...palette];
+}
+
+const SOURCE_KEY_ORDER: readonly (keyof ThemeSources)[] = [
+  "canvas",
+  "ink",
+  "primary",
+  "destructive",
+  "calCanvas",
+];
+
+function orderedSources(sources: ThemeSources): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of SOURCE_KEY_ORDER) out[key] = sources[key];
+  return out;
 }
 
 function orderedTokens(
@@ -519,6 +734,8 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     }
   }
 
+  const cleanSources = sanitizeSources(input.sources, errors);
+
   const cleanAppOverrides = sanitizeOverrides(
     input.appTokenOverrides,
     APP_TOKEN_KEY_SET,
@@ -557,6 +774,7 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
   };
+  if (cleanSources) theme.sources = cleanSources;
   if (cleanAppOverrides && Object.keys(cleanAppOverrides).length > 0) {
     theme.appTokenOverrides = cleanAppOverrides;
   }
@@ -600,6 +818,30 @@ function sanitizeSeedPalette(
     out.push(value);
   }
   return out;
+}
+
+function sanitizeSources(
+  source: unknown,
+  errors: string[],
+): ThemeSources | undefined {
+  if (source === undefined) return undefined;
+  if (!isPlainObject(source)) {
+    errors.push("sources must be an object");
+    return undefined;
+  }
+  const out: Partial<ThemeSources> = {};
+  let ok = true;
+  for (const key of SOURCE_KEY_ORDER) {
+    const value = (source as Record<string, unknown>)[key];
+    if (!isHexColor(value)) {
+      errors.push(`sources.${key} must be a hex color`);
+      ok = false;
+      continue;
+    }
+    out[key] = value;
+  }
+  if (!ok) return undefined;
+  return out as ThemeSources;
 }
 
 function sanitizeOverrides(
