@@ -88,6 +88,9 @@ export function mergeThemePatch(
       ? [...patch.eventPalette]
       : current.eventPalette,
   };
+  if ("sources" in patch) {
+    next.sources = patch.sources ? { ...patch.sources } : undefined;
+  }
   if (patch.appTokenOverrides !== undefined) {
     next.appTokenOverrides =
       Object.keys(patch.appTokenOverrides).length > 0

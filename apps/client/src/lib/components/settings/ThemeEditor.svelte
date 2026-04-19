@@ -16,7 +16,11 @@
     BASE_APP_TOKENS,
     BASE_CALENDAR_TOKENS,
     CALENDAR_TOKEN_KEYS,
+    deriveCalendarTokens,
+    resolveAppTokens,
+    resolveCalendarTokens,
     type Theme,
+    type ThemeSources,
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
   import ColorField from "$lib/components/ui/ColorField.svelte";
@@ -144,6 +148,56 @@
       description: "Color of focus segments on the session rail.",
     },
   };
+
+  // Source colors feed the derivation engine: editing one can update many
+  // downstream tokens in lockstep. Descriptions mention the primary effect a
+  // user will notice so they can match intent to input without memorising the
+  // derivation table.
+  const SOURCE_INFO: ReadonlyArray<{
+    key: keyof ThemeSources;
+    title: string;
+    description: string;
+  }> = [
+    {
+      key: "canvas",
+      title: "App canvas",
+      description:
+        "Background color that tints most surfaces (title bar, buttons, muted areas) through derivation.",
+    },
+    {
+      key: "ink",
+      title: "Ink",
+      description:
+        "Base text color. Also used as the tint mixed into surfaces to create subtle contrast.",
+    },
+    {
+      key: "primary",
+      title: "Primary action",
+      description: "Main accent color for highlighted buttons and links.",
+    },
+    {
+      key: "destructive",
+      title: "Destructive",
+      description: "Color used for delete actions and warnings.",
+    },
+    {
+      key: "calCanvas",
+      title: "Calendar canvas",
+      description:
+        "Background of the calendar grid. Gridlines and other calendar tints derive from it.",
+    },
+  ];
+
+  // Calendar tokens that the derivation engine can compute from sources.
+  // Semantic tokens (today marker, current time, rail break/focus) are not
+  // in this set and always fall through to overrides or base CSS.
+  const CAL_DERIVED_KEYS: ReadonlySet<string> = new Set([
+    "--cal-bg",
+    "--cal-header-bg",
+    "--cal-gridline",
+    "--cal-time-label",
+    "--cal-timeline-rail",
+  ]);
 
   type SingleRow = { kind: "single"; key: string };
   type PairRow = {
@@ -367,11 +421,46 @@
     themeStore.updateTheme(theme.id, updates);
   }
 
-  // Seed helpers: the value a row should restore to on Reset. For themes
-  // created via duplicate, the seed snapshot captures the source's resolved
-  // tokens at clone time, so reset restores the SOURCE colors, not the
-  // built-in defaults. Imported themes that ship without seeds fall back
-  // to the base CSS defaults.
+  function setSource(key: keyof ThemeSources, hex: string) {
+    if (!theme.sources) return;
+    const nextSources: ThemeSources = { ...theme.sources, [key]: hex };
+    const updates: Partial<Omit<Theme, "id">> = { sources: nextSources };
+    // Past event variants blend against the calendar canvas; when that canvas
+    // is derived from sources.calCanvas, the blend reference has to follow.
+    if (key === "calCanvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
+      updates.blendCanvas = hex;
+    }
+    themeStore.updateTheme(theme.id, updates);
+  }
+
+  // Sample the five source values from the theme's currently resolved tokens
+  // so turning Quick colors on does not visually change anything up front;
+  // the user sees the same palette with a new relationship attached, ready
+  // to drive derivations once they start clearing pinned overrides.
+  function enableSources() {
+    if (theme.sources) return;
+    const resolvedApp = resolveAppTokens(theme);
+    const resolvedCal = resolveCalendarTokens(theme);
+    const sources: ThemeSources = {
+      canvas: resolvedApp["--background"],
+      ink: resolvedApp["--foreground"],
+      primary: resolvedApp["--primary"],
+      destructive: resolvedApp["--destructive"],
+      calCanvas: resolvedCal["--cal-bg"],
+    };
+    themeStore.updateTheme(theme.id, { sources });
+  }
+
+  function removeSources() {
+    if (!theme.sources) return;
+    themeStore.updateTheme(theme.id, { sources: undefined });
+  }
+
+  // Seed helpers: the value a row should restore to on Reset for override-only
+  // themes. For themes created via duplicate, the seed snapshot captures the
+  // source's resolved tokens at clone time, so reset restores the SOURCE
+  // colors, not the built-in defaults. Source-driven themes ignore seeds:
+  // reset there means "clear the pin and let derivation drive this token".
   function appSeed(key: string): string {
     return theme.seedAppTokens?.[key] ?? BASE_APP_TOKENS[theme.base][key];
   }
@@ -383,23 +472,79 @@
   }
 
   function resetAppToken(key: string) {
+    if (theme.sources) {
+      const next = { ...(theme.appTokenOverrides ?? {}) };
+      delete next[key];
+      themeStore.updateTheme(theme.id, { appTokenOverrides: next });
+      return;
+    }
     setAppToken(key, appSeed(key));
   }
 
   function resetCalToken(key: string) {
+    if (theme.sources) {
+      const next = { ...(theme.calendarTokenOverrides ?? {}) };
+      delete next[key];
+      const updates: Partial<Theme> = { calendarTokenOverrides: next };
+      // Clearing a cal-bg pin means the derived calCanvas will drive it;
+      // keep blendCanvas aligned so past event variants blend correctly.
+      if (key === "--cal-bg") {
+        const derived = deriveCalendarTokens(theme.sources, theme.base);
+        updates.blendCanvas = derived["--cal-bg"] ?? theme.blendCanvas;
+      }
+      themeStore.updateTheme(theme.id, updates);
+      return;
+    }
     setCalToken(key, calSeed(key));
   }
 
   function appCanReset(key: string): boolean {
     const override = theme.appTokenOverrides?.[key];
     if (override === undefined) return false;
+    // On source-driven themes, reset always means "clear the pin": the
+    // derivation layer below is what the user wants to see take over, even
+    // if the current override happens to equal the stored seed snapshot.
+    if (theme.sources) return true;
     return override.toLowerCase() !== appSeed(key).toLowerCase();
   }
 
   function calCanReset(key: string): boolean {
     const override = theme.calendarTokenOverrides?.[key];
     if (override === undefined) return false;
+    if (theme.sources) return true;
     return override.toLowerCase() !== calSeed(key).toLowerCase();
+  }
+
+  type Provenance = "default" | "derived" | "override";
+
+  function appProvenance(key: string): Provenance {
+    if (theme.appTokenOverrides?.[key] !== undefined) return "override";
+    // deriveAppTokens emits every APP_TOKEN_KEYS entry whenever sources are
+    // present, so "sources set" is sufficient for app tokens.
+    if (theme.sources) return "derived";
+    return "default";
+  }
+
+  function calProvenance(key: string): Provenance {
+    if (theme.calendarTokenOverrides?.[key] !== undefined) return "override";
+    if (theme.sources && CAL_DERIVED_KEYS.has(key)) return "derived";
+    return "default";
+  }
+
+  // Collapse a pair of related tokens to a single badge: override dominates
+  // derived dominates default. Showing two badges per pair row adds noise
+  // without clarifying which color the user should pay attention to.
+  function pairProvenance(
+    keyA: string,
+    keyB: string,
+    kind: "app" | "cal",
+  ): Provenance {
+    const resolver = kind === "app" ? appProvenance : calProvenance;
+    const a = resolver(keyA);
+    const b = resolver(keyB);
+    if (a === "override" || b === "override") return "override";
+    if (a === "derived" || b === "derived") return "derived";
+    return "default";
   }
 
   async function copyJsonToClipboard() {
@@ -516,11 +661,47 @@
     </div>
   </section>
 
-  {#snippet appSingleRow(key: string)}
-    {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+  {#snippet provenanceBadge(prov: Provenance)}
+    {#if prov === "override"}
+      <span
+        title="Pinned. This color is set explicitly and does not change when Quick colors are edited."
+        class="shrink-0 rounded-sm border border-border px-1.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
+      >
+        Pinned
+      </span>
+    {:else if prov === "derived"}
+      <span
+        title="Derived from Quick colors. Updates automatically when a source color changes."
+        class="shrink-0 rounded-sm bg-accent px-1.5 text-[9px] font-medium uppercase tracking-wide text-accent-foreground/75"
+      >
+        Auto
+      </span>
+    {/if}
+  {/snippet}
+
+  {#snippet sourceRow(entry: { key: keyof ThemeSources; title: string; description: string })}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{info.title}</div>
+        <div class="text-[12px] text-foreground">{entry.title}</div>
+        <div class="text-[11px] text-muted-foreground">{entry.description}</div>
+      </div>
+      <ColorField
+        value={theme.sources?.[entry.key] ?? "#000000"}
+        onChange={(hex) => setSource(entry.key, hex)}
+        label={entry.title}
+      />
+    </div>
+  {/snippet}
+
+  {#snippet appSingleRow(key: string)}
+    {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    {@const prov = appProvenance(key)}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2">
+          <span class="text-[12px] text-foreground">{info.title}</span>
+          {@render provenanceBadge(prov)}
+        </div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
       </div>
       <ColorField
@@ -534,9 +715,13 @@
   {/snippet}
 
   {#snippet appPairRow(row: PairRow)}
+    {@const prov = pairProvenance(row.key, row.fgKey, "app")}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{row.title}</div>
+        <div class="flex items-center gap-2">
+          <span class="text-[12px] text-foreground">{row.title}</span>
+          {@render provenanceBadge(prov)}
+        </div>
         <div class="text-[11px] text-muted-foreground">{row.description}</div>
       </div>
       <div class="flex shrink-0 items-center gap-3">
@@ -583,6 +768,53 @@
       ></span>
     </div>
   {/snippet}
+
+  <!-- Quick colors: source palette that drives the rest of the shell -->
+  {#if !isBuiltin}
+    <section class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-3 px-1">
+        <h2 class="text-[13px] font-semibold text-foreground">Quick colors</h2>
+        <span class="text-[11px] text-muted-foreground">
+          {theme.sources
+            ? "Five source colors that drive the rest of the palette. Pin individual tokens below to opt out."
+            : "Opt into a five-color palette that drives the rest of the shell through automatic tinting."}
+        </span>
+      </div>
+      {#if theme.sources}
+        <div
+          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
+        >
+          {#each SOURCE_INFO as entry}
+            {@render sourceRow(entry)}
+          {/each}
+          <div class="flex items-center justify-end px-4 py-2.5">
+            <button
+              type="button"
+              onclick={removeSources}
+              class="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Turn off Quick colors
+            </button>
+          </div>
+        </div>
+      {:else}
+        <div
+          class="flex items-center justify-between gap-3 rounded-lg bg-card px-4 py-3 dark:bg-background"
+        >
+          <div class="min-w-0 flex-1 text-[11px] text-muted-foreground">
+            Samples canvas, ink, primary, destructive, and calendar canvas from the current theme so edits propagate through derived tokens.
+          </div>
+          <button
+            type="button"
+            onclick={enableSources}
+            class="shrink-0 rounded-md border border-border bg-card px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          >
+            Set up Quick colors
+          </button>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <!-- App shell tokens -->
   {#each APP_SECTIONS as section}
@@ -678,9 +910,13 @@
 
   {#snippet calSingleRow(key: string)}
     {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    {@const prov = calProvenance(key)}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{info.title}</div>
+        <div class="flex items-center gap-2">
+          <span class="text-[12px] text-foreground">{info.title}</span>
+          {@render provenanceBadge(prov)}
+        </div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
       </div>
       <ColorField
@@ -694,9 +930,13 @@
   {/snippet}
 
   {#snippet calPairRow(row: PairRow)}
+    {@const prov = pairProvenance(row.key, row.fgKey, "cal")}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{row.title}</div>
+        <div class="flex items-center gap-2">
+          <span class="text-[12px] text-foreground">{row.title}</span>
+          {@render provenanceBadge(prov)}
+        </div>
         <div class="text-[11px] text-muted-foreground">{row.description}</div>
       </div>
       <div class="flex shrink-0 items-center gap-3">
