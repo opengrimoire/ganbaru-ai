@@ -253,13 +253,9 @@
   }
 
   .desc-editing {
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: var(--cal-description-editor-bg);
     padding: 6px 8px;
     border-radius: 4px;
-  }
-
-  :global(.dark) .desc-editing {
-    background-color: rgba(0, 0, 0, 0.15);
   }
 
   .desc-editor:empty::before {

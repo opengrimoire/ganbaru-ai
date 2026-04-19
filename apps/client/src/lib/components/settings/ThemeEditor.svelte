@@ -150,6 +150,26 @@
       description:
         "Kanban badge color for epic-difficulty tasks. Applied as a tint for background and solid for text.",
     },
+    "--pomodoro-idle-text": {
+      title: "Pomodoro idle caption",
+      description:
+        "Caption text shown over the dark idle overlay during a paused focus session.",
+    },
+    "--cal-color-picker-outline": {
+      title: "Event color outline",
+      description:
+        "Outline drawn around the selected swatch inside the event color picker.",
+    },
+    "--cal-description-editor-bg": {
+      title: "Description editor tint",
+      description:
+        "Background wash on the event description editor while in edit mode. Accepts alpha.",
+    },
+    "--cal-drag-preview-border": {
+      title: "All-day drag preview border",
+      description:
+        "Border around the ghost tile shown while dragging an all-day event on the calendar. Accepts alpha.",
+    },
   };
 
   const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
@@ -387,6 +407,23 @@
         { kind: "single", key: "--priority-medium", scope: "app" },
         { kind: "single", key: "--priority-hard", scope: "app" },
         { kind: "single", key: "--priority-epic", scope: "app" },
+      ],
+    },
+    {
+      sourceKey: null,
+      title: "Pomodoro",
+      description: "Pomodoro-specific surfaces outside the event panel.",
+      rows: [{ kind: "single", key: "--pomodoro-idle-text", scope: "app" }],
+    },
+    {
+      sourceKey: null,
+      title: "Calendar extras",
+      description:
+        "Remaining calendar accents that don't fit under another group.",
+      rows: [
+        { kind: "single", key: "--cal-color-picker-outline", scope: "app" },
+        { kind: "single", key: "--cal-description-editor-bg", scope: "app" },
+        { kind: "single", key: "--cal-drag-preview-border", scope: "app" },
       ],
     },
   ];

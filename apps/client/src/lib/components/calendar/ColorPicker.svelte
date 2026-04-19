@@ -35,7 +35,7 @@
         <button
           onclick={() => { onselect(color === c ? undefined : c); open = false; }}
           class="h-[18px] w-11 rounded-md"
-          style="background-color: {entry.bg};{color === c ? ' outline: 2px solid #141420; outline-offset: 0;' : ''}"
+          style="background-color: {entry.bg};{color === c ? ' outline: 2px solid var(--cal-color-picker-outline); outline-offset: 0;' : ''}"
           title={entry.bg}
         ></button>
       {/each}

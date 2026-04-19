@@ -315,6 +315,10 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--priority-medium",
   "--priority-hard",
   "--priority-epic",
+  "--pomodoro-idle-text",
+  "--cal-color-picker-outline",
+  "--cal-description-editor-bg",
+  "--cal-drag-preview-border",
 ] as const);
 
 /**
@@ -386,6 +390,10 @@ export const BASE_APP_TOKENS: Readonly<
     "--priority-medium": "#EAB308",
     "--priority-hard": "#F97316",
     "--priority-epic": "#A855F7",
+    "--pomodoro-idle-text": "#9CA3AF",
+    "--cal-color-picker-outline": "#141420",
+    "--cal-description-editor-bg": "#0000000D",
+    "--cal-drag-preview-border": "#0000004D",
   }),
   dark: Object.freeze({
     "--background": "#27282A",
@@ -427,6 +435,10 @@ export const BASE_APP_TOKENS: Readonly<
     "--priority-medium": "#FACC15",
     "--priority-hard": "#FB923C",
     "--priority-epic": "#C084FC",
+    "--pomodoro-idle-text": "#9CA3AF",
+    "--cal-color-picker-outline": "#141420",
+    "--cal-description-editor-bg": "#00000026",
+    "--cal-drag-preview-border": "#FFFFFF80",
   }),
 });
 

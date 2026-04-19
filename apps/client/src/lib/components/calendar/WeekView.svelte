@@ -636,13 +636,9 @@
     content: "";
     position: absolute;
     inset: 0;
-    border: 1px solid rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--cal-drag-preview-border);
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
-  }
-
-  :global(.dark) .allday-drag-preview::after {
-    border-color: rgba(255, 255, 255, 0.5);
   }
 </style>
