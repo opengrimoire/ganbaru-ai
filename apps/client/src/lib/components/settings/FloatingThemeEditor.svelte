@@ -2,8 +2,9 @@
   import { onMount } from "svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Check from "@lucide/svelte/icons/check";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import GripHorizontal from "@lucide/svelte/icons/grip-horizontal";
-  import X from "@lucide/svelte/icons/x";
   import { cn } from "$lib/utils";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
@@ -20,9 +21,10 @@
       : undefined,
   );
 
-  const isActive = $derived(
-    themeEditor.editingId !== undefined &&
-      themeStore.id === themeEditor.editingId,
+  const isBuiltin = $derived(
+    themeEditor.editingId
+      ? themeStore.isBuiltin(themeEditor.editingId)
+      : false,
   );
 
   // Width matches the old in-modal content area plus a small bump so rows
@@ -33,9 +35,6 @@
   const PANEL_MAX_HEIGHT_VH = 80;
   const PANEL_MARGIN = 16;
 
-  // Seed the initial position so the panel opens near the top-right of the
-  // viewport instead of covering the center. Users can drag it anywhere
-  // from there.
   function initialLeft(): number {
     if (typeof window === "undefined") return 100;
     return Math.max(
@@ -45,13 +44,13 @@
   }
 
   function initialTop(): number {
-    if (typeof window === "undefined") return 80;
     return 80;
   }
 
   let posX = $state(initialLeft());
   let posY = $state(initialTop());
   let dragging = $state(false);
+  let collapsed = $state(false);
   let dragOffsetX = 0;
   let dragOffsetY = 0;
 
@@ -105,13 +104,21 @@
     return () => window.removeEventListener("resize", onResize);
   });
 
-  function close() {
-    themeEditor.close();
+  function toggleCollapsed() {
+    collapsed = !collapsed;
   }
 
-  function applyTheme() {
-    if (!themeEditor.editingId) return;
-    themeStore.setTheme(themeEditor.editingId);
+  // Back rolls the session back to its pre-edit state and returns to the
+  // Settings list. Save keeps the edits as the committed state. Both close
+  // the panel through the same callback into TitleBar.
+  function onCancel() {
+    themeEditor.cancel();
+    onBackToList();
+  }
+
+  function onCommit() {
+    themeEditor.commit();
+    onBackToList();
   }
 </script>
 
@@ -144,19 +151,26 @@
       </span>
       <button
         type="button"
-        onclick={close}
-        aria-label="Close theme editor"
-        title="Close (edits stay saved)"
+        onclick={toggleCollapsed}
+        aria-label={collapsed ? "Expand editor" : "Collapse editor"}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Expand" : "Collapse"}
         class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <X size={13} strokeWidth={2} />
+        {#if collapsed}
+          <ChevronDown size={13} strokeWidth={2} />
+        {:else}
+          <ChevronUp size={13} strokeWidth={2} />
+        {/if}
       </button>
     </header>
 
-    <!-- Scrollable body -->
-    <div class="flex-1 overflow-y-auto bg-background/40 px-5 py-4 dark:bg-black/20">
-      <ThemeEditor theme={editing} />
-    </div>
+    <!-- Scrollable body (hidden while collapsed) -->
+    {#if !collapsed}
+      <div class="flex-1 overflow-y-auto bg-background/40 px-5 py-4 dark:bg-black/20">
+        <ThemeEditor theme={editing} />
+      </div>
+    {/if}
 
     <!-- Sticky footer -->
     <footer
@@ -164,7 +178,7 @@
     >
       <button
         type="button"
-        onclick={onBackToList}
+        onclick={onCancel}
         class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
       >
         <ArrowLeft size={11} strokeWidth={2.25} />
@@ -172,17 +186,11 @@
       </button>
       <button
         type="button"
-        onclick={applyTheme}
-        disabled={isActive}
-        class={cn(
-          "flex items-center gap-1.5 rounded-md border px-3 py-1 text-[11px] font-medium transition-colors",
-          isActive
-            ? "cursor-not-allowed border-border bg-card text-muted-foreground opacity-60 dark:bg-transparent"
-            : "border-primary bg-primary text-primary-foreground hover:bg-primary/90",
-        )}
+        onclick={onCommit}
+        class="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         <Check size={11} strokeWidth={2.25} />
-        <span>{isActive ? "Applied" : "Apply theme"}</span>
+        <span>{isBuiltin ? "Apply and return" : "Save and apply"}</span>
       </button>
     </footer>
   </div>

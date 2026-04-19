@@ -68,6 +68,10 @@
 
   function confirmClose() {
     showCloseConfirm = false;
+    // Best-effort rollback of any open theme edit so the vault does not
+    // keep half-tuned colors after a forced quit. Debounced writes may not
+    // flush before the process dies, so this is not a guarantee.
+    if (themeEditor.editingId) themeEditor.cancel();
     invoke("force_quit");
   }
 
@@ -535,7 +539,6 @@
 {#if themeEditor.editingId}
   <FloatingThemeEditor
     onBackToList={() => {
-      themeEditor.close();
       showSettings = true;
     }}
   />

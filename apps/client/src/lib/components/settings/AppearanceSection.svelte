@@ -2,7 +2,6 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
-  import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import {
     FONT_SCALE_MIN,
     FONT_SCALE_MAX,
@@ -10,7 +9,6 @@
     DEFAULT_FONT_FAMILY_ID,
     clampFontScale,
   } from "$lib/stores/preferences";
-  import type { ThemeId } from "$lib/stores/themes";
   import StepperControl from "./StepperControl.svelte";
   import CustomSelect from "./CustomSelect.svelte";
   import ThemeList from "./ThemeList.svelte";
@@ -18,7 +16,6 @@
   const preferences = getPreferences();
   const zoom = getZoom();
   const calZoom = getCalendarZoom();
-  const themeEditor = getThemeEditor();
 
   const FONT_SCALE_STEP = 0.05;
 
@@ -39,17 +36,10 @@
       style: `font-family: ${f.cssStack};`,
     })),
   );
-
-  // Opening the editor is now a global event: the floating panel mounts
-  // outside the modal, and the modal auto-closes via an effect watching
-  // the same store. The local list/editor mode is gone.
-  function openEditor(id: ThemeId) {
-    themeEditor.open(id);
-  }
 </script>
 
 <div class="flex flex-col gap-6">
-  <ThemeList onOpenEditor={openEditor} />
+  <ThemeList />
 
   <section class="flex flex-col gap-2">
     <h2 class="px-1 text-[13px] font-semibold text-foreground">Text and zoom</h2>

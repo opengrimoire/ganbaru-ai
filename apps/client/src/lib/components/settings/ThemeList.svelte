@@ -6,13 +6,13 @@
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import type { ThemeId } from "$lib/stores/themes";
   import ThemeRow from "./ThemeRow.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
-  let { onOpenEditor }: { onOpenEditor: (id: ThemeId) => void } = $props();
-
   const themeStore = getTheme();
+  const themeEditor = getThemeEditor();
   const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
 
   let pendingDelete = $state<ThemeId | undefined>(undefined);
@@ -42,20 +42,33 @@
     themeStore.setTheme(id);
   }
 
+  // Fresh themes (New, Duplicate and edit) open with the edited theme as
+  // the active one so the floating panel reflects changes live. Editing an
+  // existing user theme also activates it for the same reason and captures
+  // a JSON snapshot so cancel can roll back the edits. Built-ins carry no
+  // snapshot: they cannot be mutated while the editor is open, so there is
+  // nothing to restore.
   function handleDuplicate(id: ThemeId) {
+    const previousActiveId = themeStore.id;
     const newId = themeStore.duplicateTheme(id);
     if (!newId) return;
     themeStore.setTheme(newId);
-    onOpenEditor(newId);
+    themeEditor.open(newId, { createdFresh: true, previousActiveId });
   }
 
   function handleOpen(id: ThemeId) {
-    onOpenEditor(id);
+    const previousActiveId = themeStore.id;
+    const isBuiltin = themeStore.isBuiltin(id);
+    const snapshot = isBuiltin ? undefined : themeStore.exportTheme(id);
+    if (themeStore.id !== id) themeStore.setTheme(id);
+    themeEditor.open(id, { snapshot, previousActiveId });
   }
 
   function handleNew() {
+    const previousActiveId = themeStore.id;
     const newId = themeStore.createTheme();
-    onOpenEditor(newId);
+    themeStore.setTheme(newId);
+    themeEditor.open(newId, { createdFresh: true, previousActiveId });
   }
 
   function handleImportToggle() {
