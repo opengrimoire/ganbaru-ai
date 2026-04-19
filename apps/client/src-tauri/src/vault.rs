@@ -69,3 +69,45 @@ pub fn vault_write_config(app: tauri::AppHandle, json: String) -> Result<(), Str
     fs::rename(&tmp_path, &final_path).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+/// Read a UTF-8 text file from an absolute path returned by the dialog
+/// plugin. The user has already authorized that location by picking it.
+/// Pulls in only `std::fs::read_to_string` so we don't depend on
+/// tauri-plugin-fs just for one read.
+#[tauri::command]
+pub fn vault_read_text(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.is_absolute() {
+        return Err("path must be absolute".to_string());
+    }
+    fs::read_to_string(&p).map_err(|e| e.to_string())
+}
+
+/// Write a UTF-8 text file to an absolute path returned by the dialog
+/// plugin (typically through a Save dialog). Atomic via .tmp + rename so
+/// an interrupted write cannot leave the target file truncated.
+#[tauri::command]
+pub fn vault_write_text(path: String, contents: String) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    if !target.is_absolute() {
+        return Err("path must be absolute".to_string());
+    }
+    let parent = target
+        .parent()
+        .ok_or_else(|| "target has no parent directory".to_string())?
+        .to_path_buf();
+    let file_name = target
+        .file_name()
+        .ok_or_else(|| "target has no file name".to_string())?
+        .to_string_lossy()
+        .into_owned();
+    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    {
+        let mut file = fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        file.write_all(contents.as_bytes())
+            .map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+    }
+    fs::rename(&tmp_path, &target).map_err(|e| e.to_string())?;
+    Ok(())
+}

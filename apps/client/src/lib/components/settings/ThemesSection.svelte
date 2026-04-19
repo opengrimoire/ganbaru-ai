@@ -1,7 +1,10 @@
 <script lang="ts">
   import Plus from "@lucide/svelte/icons/plus";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
+  import FolderOpen from "@lucide/svelte/icons/folder-open";
   import X from "@lucide/svelte/icons/x";
+  import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+  import { invoke } from "@tauri-apps/api/core";
   import { getTheme } from "$lib/stores/theme.svelte";
   import type { ThemeId } from "$lib/stores/themes";
   import ThemeRow from "./ThemeRow.svelte";
@@ -9,6 +12,8 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const themeStore = getTheme();
+
+  const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
 
   let mode = $state<"list" | "editor">("list");
   let editingId = $state<ThemeId | undefined>(undefined);
@@ -70,6 +75,50 @@
     } catch (err) {
       console.error("clipboard write failed", err);
       flashToast("Could not copy to clipboard");
+    }
+  }
+
+  async function handleExportFile(id: ThemeId) {
+    const json = themeStore.exportTheme(id);
+    if (!json) return;
+    try {
+      const target = await saveDialog({
+        defaultPath: `${id}.json`,
+        filters: THEME_FILE_FILTER,
+      });
+      if (!target) return;
+      await invoke("vault_write_text", { path: target, contents: json });
+      flashToast("Theme saved to file");
+    } catch (err) {
+      console.error("save dialog failed", err);
+      flashToast("Could not save theme");
+    }
+  }
+
+  async function handleImportFromFile() {
+    try {
+      const picked = await openDialog({
+        multiple: false,
+        directory: false,
+        filters: THEME_FILE_FILTER,
+      });
+      if (!picked || typeof picked !== "string") return;
+      const text = await invoke<string>("vault_read_text", { path: picked });
+      const result = themeStore.importTheme(text);
+      if (!result.ok) {
+        importErrors = result.errors;
+        importDraft = text;
+        return;
+      }
+      importErrors = [];
+      importDraft = "";
+      importOpen = false;
+      flashToast("Theme imported");
+    } catch (err) {
+      console.error("import from file failed", err);
+      importErrors = [
+        err instanceof Error ? err.message : "Could not read the selected file.",
+      ];
     }
   }
 
@@ -196,14 +245,24 @@
             {/each}
           </ul>
         {/if}
-        <div class="flex items-center justify-between">
-          <button
-            type="button"
-            onclick={handlePasteFromClipboard}
-            class="rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-          >
-            Paste from clipboard
-          </button>
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              onclick={handlePasteFromClipboard}
+              class="rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            >
+              Paste from clipboard
+            </button>
+            <button
+              type="button"
+              onclick={handleImportFromFile}
+              class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            >
+              <FolderOpen size={11} strokeWidth={2.25} />
+              <span>Open file</span>
+            </button>
+          </div>
           <button
             type="button"
             onclick={handleImport}
@@ -227,6 +286,7 @@
           onEdit={() => handleEdit(t.id)}
           onDuplicate={() => handleDuplicate(t.id)}
           onExport={() => handleExport(t.id)}
+          onExportFile={() => handleExportFile(t.id)}
           onDelete={() => handleDelete(t.id)}
         />
       {/each}

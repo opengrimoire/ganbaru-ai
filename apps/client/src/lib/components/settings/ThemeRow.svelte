@@ -4,6 +4,7 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import ClipboardCopy from "@lucide/svelte/icons/clipboard-copy";
+  import Download from "@lucide/svelte/icons/download";
   import { cn } from "$lib/utils";
   import type { EventColor } from "$lib/components/calendar/types";
   import type { Theme } from "$lib/stores/themes";
@@ -16,6 +17,7 @@
     onEdit,
     onDuplicate,
     onExport,
+    onExportFile,
     onDelete,
   }: {
     theme: Theme;
@@ -25,6 +27,7 @@
     onEdit: () => void;
     onDuplicate: () => void;
     onExport: () => void;
+    onExportFile: () => void;
     onDelete: () => void;
   } = $props();
 
@@ -105,6 +108,15 @@
       class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
       <ClipboardCopy size={13} strokeWidth={2} />
+    </button>
+    <button
+      type="button"
+      onclick={onExportFile}
+      title="Save theme JSON to file"
+      aria-label="Save theme JSON to file"
+      class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+    >
+      <Download size={13} strokeWidth={2} />
     </button>
     {#if !isBuiltin}
       <button
