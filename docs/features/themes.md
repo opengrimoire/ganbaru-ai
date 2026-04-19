@@ -111,7 +111,7 @@ The app and calendar shell are styled through CSS tokens defined in `app.css` un
 
 ### Resolution order
 
-For each token in `APP_TOKEN_KEYS` (19 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
+For each token in `APP_TOKEN_KEYS` (43 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
 
 1. **Override (pinned).** `theme.appTokenOverrides[key]` / `theme.calendarTokenOverrides[key]` if set.
 2. **Derived (auto).** If the theme carries `sources` and the token is covered by the derivation engine, the engine's value for that token.
@@ -172,7 +172,21 @@ Both action buttons share a fixed minimum width so the row geometry stays stable
 
 Legacy user themes imported without a `sources` field show a "Set up Quick colors" card that samples the five values from the current resolved palette. After clicking, the editor switches to the grouped layout.
 
-The current roadmap: gradually migrate remaining hardcoded color sites (pomodoro idle overlay, kanban priority badges, confirm dialog, event panel placeholders, and similar) into CSS tokens so a custom theme can recolor them without touching component code.
+### Semantic tokens
+
+Beyond the derived shell, the editor exposes 24 semantic tokens for surfaces that don't reduce to a source palette. They're grouped in the editor under trailing cards (no source header) so users can reach each one individually. All default to the original hardcoded values, so installing this round is a visual no-op; only the editor surface grows.
+
+- **Event panel** (9): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, `--event-panel-text`, `--event-panel-muted-text`. These paint the event creation/edit panel surface, its section header strip, outer border, drop shadow, title divider, and the text inside inputs, placeholders, the body, and muted captions.
+- **Form controls** (1): `--form-indicator` paints the filled dot inside radio/checkbox pills in the calendar sub-sections (recurrence, notifications, pomodoro).
+- **Action semantics** (3): `--action-confirm` and `--action-confirm-foreground` paint the Save button and the active scope-selector pill (Only this / Following / All). `--action-danger-armed` paints the delete button once it has been armed for the second click.
+- **Attendance status** (3): `--status-accepted`, `--status-tentative`, `--status-declined` paint the per-status tiles in the attendee list on the event panel (pending still uses `--muted-foreground`).
+- **Task priority** (4): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic` paint the kanban priority badges. Each token feeds both the background (at 20% opacity through Tailwind's `/20` modifier) and the label text at full opacity.
+- **Pomodoro** (1): `--pomodoro-idle-text` paints the caption text on the idle overlay shown when a focus session auto-pauses.
+- **Calendar extras** (3): `--cal-color-picker-outline` outlines the selected swatch in the event color picker. `--cal-description-editor-bg` tints the description editor while in edit mode. `--cal-drag-preview-border` draws the ghost tile border while dragging an all-day event. The last two carry alpha.
+
+Four of these tokens (`--event-panel-edge`, `--event-panel-shadow`, `--cal-description-editor-bg`, `--cal-drag-preview-border`) carry alpha. `ColorField` accepts and emits 8-digit `#rrggbbaa` for them, with a fourth slider (A) in the picker popover and a checkerboard swatch on the trigger so transparency is visible. Alpha-bearing tokens skip the Tailwind `@theme inline` alias and are consumed via plain CSS variables in scoped styles or inline `style` attributes.
+
+The semantic tokens do not participate in derivation. They resolve through the same override/base fall-through used by the rest of the shell, so a user who never opens these rows sees the byte-for-byte default values; a user who pins one gets a surgical override that survives theme export/import.
 
 ## Typography and density
 
