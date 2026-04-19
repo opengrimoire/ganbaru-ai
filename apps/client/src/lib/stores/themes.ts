@@ -224,7 +224,6 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--background",
   "--foreground",
   "--card",
-  "--card-foreground",
   "--popover",
   "--popover-foreground",
   "--primary",
@@ -239,11 +238,8 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--ring",
   "--sidebar",
   "--sidebar-foreground",
-  "--sidebar-primary",
-  "--sidebar-primary-foreground",
   "--sidebar-accent",
   "--sidebar-accent-foreground",
-  "--sidebar-ring",
 ] as const);
 
 /**
@@ -279,7 +275,6 @@ export const BASE_APP_TOKENS: Readonly<
     "--background": "#F4F4F7",
     "--foreground": "#141420",
     "--card": "#FFFFFF",
-    "--card-foreground": "#141420",
     "--popover": "#FFFFFF",
     "--popover-foreground": "#141420",
     "--primary": "#404048",
@@ -294,17 +289,13 @@ export const BASE_APP_TOKENS: Readonly<
     "--ring": "#8C8C98",
     "--sidebar": "#DCDCE2",
     "--sidebar-foreground": "#141420",
-    "--sidebar-primary": "#404048",
-    "--sidebar-primary-foreground": "#F4F4F7",
     "--sidebar-accent": "#CFCFD6",
     "--sidebar-accent-foreground": "#141420",
-    "--sidebar-ring": "#8C8C98",
   }),
   dark: Object.freeze({
     "--background": "#27282A",
     "--foreground": "#ECECF2",
     "--card": "#2E2F31",
-    "--card-foreground": "#ECECF2",
     "--popover": "#353638",
     "--popover-foreground": "#ECECF2",
     "--primary": "#ECECF2",
@@ -319,11 +310,8 @@ export const BASE_APP_TOKENS: Readonly<
     "--ring": "#606070",
     "--sidebar": "#1E1E23",
     "--sidebar-foreground": "#FFFFFF",
-    "--sidebar-primary": "#FFFFFF",
-    "--sidebar-primary-foreground": "#1E1E23",
     "--sidebar-accent": "#3B3B3F",
     "--sidebar-accent-foreground": "#FFFFFF",
-    "--sidebar-ring": "#606070",
   }),
 });
 

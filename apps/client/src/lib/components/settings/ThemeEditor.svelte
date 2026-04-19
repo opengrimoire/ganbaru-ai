@@ -25,8 +25,8 @@
 
   const APP_TOKEN_INFO: Record<string, TokenInfo> = {
     "--background": {
-      title: "Background",
-      description: "Main app background behind everything else.",
+      title: "App canvas",
+      description: "Visible in Settings and between panels. Most views paint their own surface over it.",
     },
     "--foreground": {
       title: "Text",
@@ -34,11 +34,7 @@
     },
     "--card": {
       title: "Card",
-      description: "Background of grouped panels and tinted cards.",
-    },
-    "--card-foreground": {
-      title: "Card text",
-      description: "Text shown inside cards.",
+      description: "Background of grouped panels, dialogs, and tinted cards.",
     },
     "--popover": {
       title: "Popover",
@@ -73,11 +69,11 @@
       description: "Subdued text for hints and labels.",
     },
     "--accent": {
-      title: "Hover surface",
+      title: "Hover highlight",
       description: "Soft tint shown when hovering buttons and rows.",
     },
     "--accent-foreground": {
-      title: "Hover text",
+      title: "Hover highlight text",
       description: "Text shown on the hover tint.",
     },
     "--destructive": {
@@ -89,32 +85,20 @@
       description: "Outline shown around focused inputs and buttons.",
     },
     "--sidebar": {
-      title: "Sidebar",
-      description: "Background of the side navigation panel.",
+      title: "Title bar",
+      description: "Background of the top title bar frame.",
     },
     "--sidebar-foreground": {
-      title: "Sidebar text",
-      description: "Default text inside the sidebar.",
-    },
-    "--sidebar-primary": {
-      title: "Sidebar highlight",
-      description: "Color of the active sidebar item.",
-    },
-    "--sidebar-primary-foreground": {
-      title: "Sidebar highlight text",
-      description: "Text on the active sidebar item.",
+      title: "Title bar text",
+      description: "Default text in the title bar (tabs, labels).",
     },
     "--sidebar-accent": {
-      title: "Sidebar hover",
-      description: "Tint applied when hovering sidebar items.",
+      title: "Title bar hover",
+      description: "Tint applied when hovering title bar buttons.",
     },
     "--sidebar-accent-foreground": {
-      title: "Sidebar hover text",
-      description: "Text shown on the sidebar hover tint.",
-    },
-    "--sidebar-ring": {
-      title: "Sidebar focus ring",
-      description: "Outline shown around a focused sidebar item.",
+      title: "Title bar hover text",
+      description: "Text shown on the title bar hover tint.",
     },
   };
 
