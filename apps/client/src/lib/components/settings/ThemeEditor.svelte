@@ -16,6 +16,7 @@
     BASE_APP_TOKENS,
     BASE_CALENDAR_TOKENS,
     CALENDAR_TOKEN_KEYS,
+    deriveAppTokens,
     deriveCalendarTokens,
     resolveAppTokens,
     resolveCalendarTokens,
@@ -30,7 +31,8 @@
   const APP_TOKEN_INFO: Record<string, TokenInfo> = {
     "--background": {
       title: "App canvas",
-      description: "Visible in Settings and between panels. Most views paint their own surface over it.",
+      description:
+        "Visible in Settings and between panels. Most views paint their own surface over it.",
     },
     "--foreground": {
       title: "Text",
@@ -40,45 +42,9 @@
       title: "Card",
       description: "Background of grouped panels, dialogs, and tinted cards.",
     },
-    "--popover": {
-      title: "Popover",
-      description: "Background of dropdowns, menus, and floating panels.",
-    },
-    "--popover-foreground": {
-      title: "Popover text",
-      description: "Text shown inside popovers and menus.",
-    },
     "--primary": {
       title: "Primary action",
       description: "Main accent color for highlighted buttons and links.",
-    },
-    "--primary-foreground": {
-      title: "Primary action text",
-      description: "Text on primary buttons.",
-    },
-    "--secondary": {
-      title: "Secondary surface",
-      description: "Background of muted, less emphasized buttons.",
-    },
-    "--secondary-foreground": {
-      title: "Secondary surface text",
-      description: "Text on secondary surfaces.",
-    },
-    "--muted": {
-      title: "Muted surface",
-      description: "Background of subtle areas like input wells.",
-    },
-    "--muted-foreground": {
-      title: "Muted text",
-      description: "Subdued text for hints and labels.",
-    },
-    "--accent": {
-      title: "Hover highlight",
-      description: "Soft tint shown when hovering buttons and rows.",
-    },
-    "--accent-foreground": {
-      title: "Hover highlight text",
-      description: "Text shown on the hover tint.",
     },
     "--destructive": {
       title: "Destructive",
@@ -87,22 +53,6 @@
     "--ring": {
       title: "Focus ring",
       description: "Outline shown around focused inputs and buttons.",
-    },
-    "--sidebar": {
-      title: "Title bar",
-      description: "Background of the top title bar frame.",
-    },
-    "--sidebar-foreground": {
-      title: "Title bar text",
-      description: "Default text in the title bar (tabs, labels).",
-    },
-    "--sidebar-accent": {
-      title: "Title bar hover",
-      description: "Tint applied when hovering title bar buttons.",
-    },
-    "--sidebar-accent-foreground": {
-      title: "Title bar hover text",
-      description: "Text shown on the title bar hover tint.",
     },
   };
 
@@ -118,14 +68,6 @@
     "--cal-gridline": {
       title: "Grid lines",
       description: "Color of the hour and day separator lines.",
-    },
-    "--cal-today-circle": {
-      title: "Today marker",
-      description: "Filled circle around today's date in the header.",
-    },
-    "--cal-today-circle-text": {
-      title: "Today marker text",
-      description: "Date number inside the today circle.",
     },
     "--cal-time-label": {
       title: "Time labels",
@@ -149,48 +91,156 @@
     },
   };
 
-  // Source colors feed the derivation engine: editing one can update many
-  // downstream tokens in lockstep. Descriptions mention the primary effect a
-  // user will notice so they can match intent to input without memorising the
-  // derivation table.
-  const SOURCE_INFO: ReadonlyArray<{
-    key: keyof ThemeSources;
+  type GroupSingleRow = { kind: "single"; key: string; scope: "app" | "cal" };
+  type GroupPairRow = {
+    kind: "pair";
+    bg: string;
+    fg: string;
     title: string;
     description: string;
-  }> = [
+    scope: "app" | "cal";
+  };
+  type GroupRow = GroupSingleRow | GroupPairRow;
+  type SourceGroup = {
+    sourceKey: keyof ThemeSources | null;
+    title: string;
+    description: string;
+    rows: GroupRow[];
+  };
+
+  // Groups each driven token under the source color whose change shifts it
+  // most visibly. Paired rows live under the background source (canvas or
+  // primary): the text half is usually just ink, but bundling it with its bg
+  // keeps the contrast relationship legible and halves the row count.
+  // The trailing "Calendar markers" group collects semantic calendar tokens
+  // that don't derive from sources, so they have no source header, only the
+  // Pin/Unpin affordance per row.
+  const SOURCE_GROUPS: SourceGroup[] = [
     {
-      key: "canvas",
+      sourceKey: "canvas",
       title: "App canvas",
       description:
-        "Background color that tints most surfaces (title bar, buttons, muted areas) through derivation.",
+        "Dominant background color. Most surfaces tint automatically from it.",
+      rows: [
+        { kind: "single", key: "--background", scope: "app" },
+        { kind: "single", key: "--card", scope: "app" },
+        {
+          kind: "pair",
+          bg: "--popover",
+          fg: "--popover-foreground",
+          title: "Popover",
+          description: "Dropdowns, menus, and floating panels.",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--secondary",
+          fg: "--secondary-foreground",
+          title: "Secondary surface",
+          description: "Less emphasized buttons.",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--muted",
+          fg: "--muted-foreground",
+          title: "Muted surface",
+          description: "Subtle wells and the default hint-text color.",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--accent",
+          fg: "--accent-foreground",
+          title: "Hover highlight",
+          description: "Soft tint shown when hovering rows and buttons.",
+          scope: "app",
+        },
+        { kind: "single", key: "--ring", scope: "app" },
+        {
+          kind: "pair",
+          bg: "--sidebar",
+          fg: "--sidebar-foreground",
+          title: "Title bar",
+          description: "Top frame of the app window.",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--sidebar-accent",
+          fg: "--sidebar-accent-foreground",
+          title: "Title bar hover",
+          description: "Tint shown when hovering title bar buttons.",
+          scope: "app",
+        },
+      ],
     },
     {
-      key: "ink",
+      sourceKey: "ink",
       title: "Ink",
       description:
-        "Base text color. Also used as the tint mixed into surfaces to create subtle contrast.",
+        "Base text color. Also the tint that lifted surfaces blend toward.",
+      rows: [{ kind: "single", key: "--foreground", scope: "app" }],
     },
     {
-      key: "primary",
+      sourceKey: "primary",
       title: "Primary action",
-      description: "Main accent color for highlighted buttons and links.",
+      description: "Main accent for highlighted buttons and links.",
+      rows: [
+        {
+          kind: "pair",
+          bg: "--primary",
+          fg: "--primary-foreground",
+          title: "Primary button",
+          description: "Background and text of highlighted buttons.",
+          scope: "app",
+        },
+      ],
     },
     {
-      key: "destructive",
+      sourceKey: "destructive",
       title: "Destructive",
-      description: "Color used for delete actions and warnings.",
+      description: "Color for delete actions and warnings.",
+      rows: [{ kind: "single", key: "--destructive", scope: "app" }],
     },
     {
-      key: "calCanvas",
+      sourceKey: "calCanvas",
       title: "Calendar canvas",
       description:
-        "Background of the calendar grid. Gridlines and other calendar tints derive from it.",
+        "Background of the calendar grid. Gridlines and time labels tint from it.",
+      rows: [
+        { kind: "single", key: "--cal-bg", scope: "cal" },
+        { kind: "single", key: "--cal-header-bg", scope: "cal" },
+        { kind: "single", key: "--cal-gridline", scope: "cal" },
+        { kind: "single", key: "--cal-time-label", scope: "cal" },
+        { kind: "single", key: "--cal-timeline-rail", scope: "cal" },
+      ],
+    },
+    {
+      sourceKey: null,
+      title: "Calendar markers",
+      description:
+        "Semantic colors that don't derive from sources. Pin any to edit.",
+      rows: [
+        {
+          kind: "pair",
+          bg: "--cal-today-circle",
+          fg: "--cal-today-circle-text",
+          title: "Today marker",
+          description:
+            "Filled circle around today's date and the number inside.",
+          scope: "cal",
+        },
+        { kind: "single", key: "--cal-current-time", scope: "cal" },
+        { kind: "single", key: "--cal-timeline-break", scope: "cal" },
+        { kind: "single", key: "--cal-timeline-focus", scope: "cal" },
+      ],
     },
   ];
 
-  // Calendar tokens that the derivation engine can compute from sources.
+  // Calendar tokens the derivation engine can compute from sources.
   // Semantic tokens (today marker, current time, rail break/focus) are not
-  // in this set and always fall through to overrides or base CSS.
+  // in this set and fall through to overrides or base CSS.
   const CAL_DERIVED_KEYS: ReadonlySet<string> = new Set([
     "--cal-bg",
     "--cal-header-bg",
@@ -198,145 +248,6 @@
     "--cal-time-label",
     "--cal-timeline-rail",
   ]);
-
-  type SingleRow = { kind: "single"; key: string };
-  type PairRow = {
-    kind: "pair";
-    key: string;
-    fgKey: string;
-    title: string;
-    description: string;
-  };
-  type Row = SingleRow | PairRow;
-  interface TokenSection {
-    title: string;
-    description: string;
-    rows: Row[];
-  }
-
-  // Sections group tokens by the surface they affect. Paired rows render
-  // background + text side-by-side because those tokens are semantically
-  // linked: the foreground sibling is always used on top of its background,
-  // and editing them together makes the contrast relationship obvious.
-  const APP_SECTIONS: TokenSection[] = [
-    {
-      title: "Surfaces",
-      description: "Backgrounds for panels and floating menus.",
-      rows: [
-        { kind: "single", key: "--background" },
-        { kind: "single", key: "--card" },
-        {
-          kind: "pair",
-          key: "--popover",
-          fgKey: "--popover-foreground",
-          title: "Popover",
-          description:
-            "Background and text of dropdowns, menus, and floating panels.",
-        },
-      ],
-    },
-    {
-      title: "Title bar",
-      description: "The top frame of the app window.",
-      rows: [
-        {
-          kind: "pair",
-          key: "--sidebar",
-          fgKey: "--sidebar-foreground",
-          title: "Title bar",
-          description: "Background and default text of the top title bar frame.",
-        },
-        {
-          kind: "pair",
-          key: "--sidebar-accent",
-          fgKey: "--sidebar-accent-foreground",
-          title: "Title bar hover",
-          description:
-            "Tint and text shown when hovering buttons in the title bar.",
-        },
-      ],
-    },
-    {
-      title: "Interactive",
-      description: "Buttons, hover states, focus rings, and destructive actions.",
-      rows: [
-        {
-          kind: "pair",
-          key: "--primary",
-          fgKey: "--primary-foreground",
-          title: "Primary action",
-          description: "Main accent color for highlighted buttons and links.",
-        },
-        {
-          kind: "pair",
-          key: "--secondary",
-          fgKey: "--secondary-foreground",
-          title: "Secondary surface",
-          description: "Background and text of muted, less emphasized buttons.",
-        },
-        {
-          kind: "pair",
-          key: "--muted",
-          fgKey: "--muted-foreground",
-          title: "Muted surface",
-          description:
-            "Subtle areas like input wells, plus the default color for hint text.",
-        },
-        {
-          kind: "pair",
-          key: "--accent",
-          fgKey: "--accent-foreground",
-          title: "Hover highlight",
-          description: "Soft tint and text shown when hovering buttons and rows.",
-        },
-        { kind: "single", key: "--destructive" },
-        { kind: "single", key: "--ring" },
-      ],
-    },
-    {
-      title: "Text",
-      description: "Default text color across the app.",
-      rows: [{ kind: "single", key: "--foreground" }],
-    },
-  ];
-
-  const CAL_SECTIONS: TokenSection[] = [
-    {
-      title: "Calendar grid",
-      description: "Calendar background, headers, and time markers.",
-      rows: [
-        { kind: "single", key: "--cal-bg" },
-        { kind: "single", key: "--cal-header-bg" },
-        { kind: "single", key: "--cal-gridline" },
-        {
-          kind: "pair",
-          key: "--cal-today-circle",
-          fgKey: "--cal-today-circle-text",
-          title: "Today marker",
-          description:
-            "Filled circle around today's date and the date number inside it.",
-        },
-        { kind: "single", key: "--cal-time-label" },
-        { kind: "single", key: "--cal-current-time" },
-      ],
-    },
-    {
-      title: "Session rail",
-      description:
-        "The thin track that marks focus and break segments during a pomodoro.",
-      rows: [
-        { kind: "single", key: "--cal-timeline-rail" },
-        { kind: "single", key: "--cal-timeline-break" },
-        { kind: "single", key: "--cal-timeline-focus" },
-      ],
-    },
-  ];
-
-  function sectionKeys(section: TokenSection): string[] {
-    return section.rows.flatMap((r) =>
-      r.kind === "single" ? [r.key] : [r.key, r.fgKey],
-    );
-  }
 
   let {
     theme,
@@ -386,10 +297,7 @@
   }
 
   function effectiveCalBg(t: Theme): string {
-    return (
-      t.calendarTokenOverrides?.["--cal-bg"] ??
-      BASE_CALENDAR_TOKENS[t.base]["--cal-bg"]
-    );
+    return resolveCalendarTokens(t)["--cal-bg"];
   }
 
   // The base toggle is purely a marker so the user remembers whether they
@@ -435,8 +343,7 @@
 
   // Sample the five source values from the theme's currently resolved tokens
   // so turning Quick colors on does not visually change anything up front;
-  // the user sees the same palette with a new relationship attached, ready
-  // to drive derivations once they start clearing pinned overrides.
+  // the user sees the same palette with a new relationship attached.
   function enableSources() {
     if (theme.sources) return;
     const resolvedApp = resolveAppTokens(theme);
@@ -451,68 +358,54 @@
     themeStore.updateTheme(theme.id, { sources });
   }
 
-  function removeSources() {
-    if (!theme.sources) return;
-    themeStore.updateTheme(theme.id, { sources: undefined });
+  // Auto value for a token: what it resolves to when no override is set.
+  // Matches the three-layer resolver's bottom two layers (derived or
+  // default), skipping the override layer the caller is comparing against.
+  function autoValueApp(key: string): string {
+    if (theme.sources) {
+      const derived = deriveAppTokens(theme.sources, theme.base);
+      if (derived[key] !== undefined) return derived[key];
+    }
+    return BASE_APP_TOKENS[theme.base][key];
   }
 
-  // Seed helpers: the value a row should restore to on Reset for override-only
-  // themes. For themes created via duplicate, the seed snapshot captures the
-  // source's resolved tokens at clone time, so reset restores the SOURCE
-  // colors, not the built-in defaults. Source-driven themes ignore seeds:
-  // reset there means "clear the pin and let derivation drive this token".
-  function appSeed(key: string): string {
-    return theme.seedAppTokens?.[key] ?? BASE_APP_TOKENS[theme.base][key];
+  function autoValueCal(key: string): string {
+    if (theme.sources) {
+      const derived = deriveCalendarTokens(theme.sources, theme.base);
+      if (derived[key] !== undefined) return derived[key];
+    }
+    return BASE_CALENDAR_TOKENS[theme.base][key];
   }
 
-  function calSeed(key: string): string {
-    return (
-      theme.seedCalendarTokens?.[key] ?? BASE_CALENDAR_TOKENS[theme.base][key]
-    );
+  // Pin captures the current auto value as an explicit override so the user
+  // can edit it independently of the source. This is the "opt out of
+  // derivation" action. Visually the row swaps the readonly swatch + Pin
+  // button for a full ColorField + reset (= unpin).
+  function pinAppToken(key: string) {
+    setAppToken(key, autoValueApp(key));
+  }
+
+  function pinCalToken(key: string) {
+    setCalToken(key, autoValueCal(key));
   }
 
   function resetAppToken(key: string) {
-    if (theme.sources) {
-      const next = { ...(theme.appTokenOverrides ?? {}) };
-      delete next[key];
-      themeStore.updateTheme(theme.id, { appTokenOverrides: next });
-      return;
-    }
-    setAppToken(key, appSeed(key));
+    const next = { ...(theme.appTokenOverrides ?? {}) };
+    delete next[key];
+    themeStore.updateTheme(theme.id, { appTokenOverrides: next });
   }
 
   function resetCalToken(key: string) {
-    if (theme.sources) {
-      const next = { ...(theme.calendarTokenOverrides ?? {}) };
-      delete next[key];
-      const updates: Partial<Theme> = { calendarTokenOverrides: next };
-      // Clearing a cal-bg pin means the derived calCanvas will drive it;
-      // keep blendCanvas aligned so past event variants blend correctly.
-      if (key === "--cal-bg") {
-        const derived = deriveCalendarTokens(theme.sources, theme.base);
-        updates.blendCanvas = derived["--cal-bg"] ?? theme.blendCanvas;
-      }
-      themeStore.updateTheme(theme.id, updates);
-      return;
+    const next = { ...(theme.calendarTokenOverrides ?? {}) };
+    delete next[key];
+    const updates: Partial<Theme> = { calendarTokenOverrides: next };
+    // Clearing a cal-bg pin means the derived calCanvas will drive it;
+    // keep blendCanvas aligned so past event variants blend correctly.
+    if (key === "--cal-bg" && theme.sources) {
+      const derived = deriveCalendarTokens(theme.sources, theme.base);
+      updates.blendCanvas = derived["--cal-bg"] ?? theme.blendCanvas;
     }
-    setCalToken(key, calSeed(key));
-  }
-
-  function appCanReset(key: string): boolean {
-    const override = theme.appTokenOverrides?.[key];
-    if (override === undefined) return false;
-    // On source-driven themes, reset always means "clear the pin": the
-    // derivation layer below is what the user wants to see take over, even
-    // if the current override happens to equal the stored seed snapshot.
-    if (theme.sources) return true;
-    return override.toLowerCase() !== appSeed(key).toLowerCase();
-  }
-
-  function calCanReset(key: string): boolean {
-    const override = theme.calendarTokenOverrides?.[key];
-    if (override === undefined) return false;
-    if (theme.sources) return true;
-    return override.toLowerCase() !== calSeed(key).toLowerCase();
+    themeStore.updateTheme(theme.id, updates);
   }
 
   type Provenance = "default" | "derived" | "override";
@@ -596,8 +489,8 @@
   }
 
   // Built-in detail view shows only overrides that the seed theme actually
-  // ships with, otherwise the empty list of all 23 app tokens would dwarf
-  // the meaningful content.
+  // ships with, otherwise the empty list of all app tokens would dwarf the
+  // meaningful content.
   const populatedAppTokens = $derived(
     theme.appTokenOverrides
       ? Object.keys(theme.appTokenOverrides).filter((k) =>
@@ -612,6 +505,12 @@
         )
       : [],
   );
+
+  function tokenInfo(row: GroupSingleRow): TokenInfo {
+    const lookup =
+      row.scope === "app" ? APP_TOKEN_INFO : CALENDAR_TOKEN_INFO;
+    return lookup[row.key] ?? { title: humanize(row.key), description: "" };
+  }
 </script>
 
 <div class="flex flex-col gap-6">
@@ -679,23 +578,51 @@
     {/if}
   {/snippet}
 
-  {#snippet sourceRow(entry: { key: keyof ThemeSources; title: string; description: string })}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-      <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{entry.title}</div>
-        <div class="text-[11px] text-muted-foreground">{entry.description}</div>
-      </div>
+  {#snippet tokenEditor(key: string, scope: "app" | "cal", ariaLabel: string)}
+    {@const overrideMap =
+      scope === "app" ? theme.appTokenOverrides : theme.calendarTokenOverrides}
+    {@const pinnedVal = overrideMap?.[key]}
+    {#if pinnedVal !== undefined}
       <ColorField
-        value={theme.sources?.[entry.key] ?? "#000000"}
-        onChange={(hex) => setSource(entry.key, hex)}
-        label={entry.title}
+        value={pinnedVal}
+        onChange={(hex) => {
+          if (scope === "app") setAppToken(key, hex);
+          else setCalToken(key, hex);
+        }}
+        onReset={() => {
+          if (scope === "app") resetAppToken(key);
+          else resetCalToken(key);
+        }}
+        canReset={true}
+        label={ariaLabel}
       />
-    </div>
+    {:else}
+      {@const autoVal = scope === "app" ? autoValueApp(key) : autoValueCal(key)}
+      <div class="flex items-center gap-1.5">
+        <span
+          class="h-[26px] w-[26px] rounded-md border border-border shadow-sm"
+          style="background-color: {autoVal};"
+          title={autoVal}
+        ></span>
+        <button
+          type="button"
+          onclick={() => {
+            if (scope === "app") pinAppToken(key);
+            else pinCalToken(key);
+          }}
+          aria-label="Pin {ariaLabel}"
+          class="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
+        >
+          Pin
+        </button>
+      </div>
+    {/if}
   {/snippet}
 
-  {#snippet appSingleRow(key: string)}
-    {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-    {@const prov = appProvenance(key)}
+  {#snippet groupSingleRow(row: GroupSingleRow)}
+    {@const info = tokenInfo(row)}
+    {@const prov =
+      row.scope === "app" ? appProvenance(row.key) : calProvenance(row.key)}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
@@ -704,18 +631,12 @@
         </div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
       </div>
-      <ColorField
-        value={theme.appTokenOverrides?.[key] ?? appSeed(key)}
-        onChange={(hex) => setAppToken(key, hex)}
-        onReset={() => resetAppToken(key)}
-        canReset={appCanReset(key)}
-        label={info.title}
-      />
+      {@render tokenEditor(row.key, row.scope, info.title)}
     </div>
   {/snippet}
 
-  {#snippet appPairRow(row: PairRow)}
-    {@const prov = pairProvenance(row.key, row.fgKey, "app")}
+  {#snippet groupPairRow(row: GroupPairRow)}
+    {@const prov = pairProvenance(row.bg, row.fg, row.scope)}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
@@ -728,34 +649,46 @@
         <div class="flex items-center gap-1.5">
           <span
             class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-          >Bg</span>
-          <ColorField
-            value={theme.appTokenOverrides?.[row.key] ?? appSeed(row.key)}
-            onChange={(hex) => setAppToken(row.key, hex)}
-            onReset={() => resetAppToken(row.key)}
-            canReset={appCanReset(row.key)}
-            label="{row.title} background"
-          />
+          >
+            Bg
+          </span>
+          {@render tokenEditor(row.bg, row.scope, `${row.title} background`)}
         </div>
         <div class="flex items-center gap-1.5">
           <span
             class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-          >Text</span>
-          <ColorField
-            value={theme.appTokenOverrides?.[row.fgKey] ?? appSeed(row.fgKey)}
-            onChange={(hex) => setAppToken(row.fgKey, hex)}
-            onReset={() => resetAppToken(row.fgKey)}
-            canReset={appCanReset(row.fgKey)}
-            label="{row.title} text"
-          />
+          >
+            Text
+          </span>
+          {@render tokenEditor(row.fg, row.scope, `${row.title} text`)}
         </div>
       </div>
     </div>
   {/snippet}
 
+  {#snippet sourceGroupHeader(group: SourceGroup)}
+    <div
+      class="flex items-center justify-between gap-3 bg-muted/40 px-4 py-3 dark:bg-muted/25"
+    >
+      <div class="min-w-0 flex-1">
+        <div class="text-[13px] font-semibold text-foreground">{group.title}</div>
+        <div class="text-[11px] text-muted-foreground">{group.description}</div>
+      </div>
+      {#if group.sourceKey !== null && theme.sources}
+        {@const sourceKey = group.sourceKey}
+        <ColorField
+          value={theme.sources[sourceKey]}
+          onChange={(hex) => setSource(sourceKey, hex)}
+          label={group.title}
+        />
+      {/if}
+    </div>
+  {/snippet}
+
   {#snippet appBuiltinSwatch(key: string)}
     {@const value = theme.appTokenOverrides?.[key] ?? ""}
-    {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    {@const info =
+      APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[12px] text-foreground">{info.title}</div>
@@ -769,83 +702,101 @@
     </div>
   {/snippet}
 
-  <!-- Quick colors: source palette that drives the rest of the shell -->
-  {#if !isBuiltin}
-    <section class="flex flex-col gap-2">
-      <div class="flex items-center justify-between gap-3 px-1">
-        <h2 class="text-[13px] font-semibold text-foreground">Quick colors</h2>
-        <span class="text-[11px] text-muted-foreground">
-          {theme.sources
-            ? "Five source colors that drive the rest of the palette. Pin individual tokens below to opt out."
-            : "Opt into a five-color palette that drives the rest of the shell through automatic tinting."}
-        </span>
+  {#snippet calBuiltinSwatch(key: string)}
+    {@const value = theme.calendarTokenOverrides?.[key] ?? ""}
+    {@const info =
+      CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[12px] text-foreground">{info.title}</div>
+        <div class="text-[11px] text-muted-foreground">{info.description}</div>
       </div>
-      {#if theme.sources}
-        <div
-          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-        >
-          {#each SOURCE_INFO as entry}
-            {@render sourceRow(entry)}
-          {/each}
-          <div class="flex items-center justify-end px-4 py-2.5">
-            <button
-              type="button"
-              onclick={removeSources}
-              class="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Turn off Quick colors
-            </button>
-          </div>
-        </div>
-      {:else}
-        <div
-          class="flex items-center justify-between gap-3 rounded-lg bg-card px-4 py-3 dark:bg-background"
-        >
-          <div class="min-w-0 flex-1 text-[11px] text-muted-foreground">
-            Samples canvas, ink, primary, destructive, and calendar canvas from the current theme so edits propagate through derived tokens.
-          </div>
-          <button
-            type="button"
-            onclick={enableSources}
-            class="shrink-0 rounded-md border border-border bg-card px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-          >
-            Set up Quick colors
-          </button>
-        </div>
-      {/if}
-    </section>
-  {/if}
+      <span
+        class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
+        style="background-color: {value};"
+        title={value}
+      ></span>
+    </div>
+  {/snippet}
 
-  <!-- App shell tokens -->
-  {#each APP_SECTIONS as section}
-    {@const keys = sectionKeys(section)}
-    {@const populated = keys.filter((k) => populatedAppTokens.includes(k))}
-    {#if !isBuiltin || populated.length > 0}
+  <!-- Body: built-in swatches, grouped editor for source-bearing user themes,
+       or a Set up Quick colors CTA for legacy source-less user themes. -->
+  {#if isBuiltin}
+    {#if populatedAppTokens.length > 0}
       <section class="flex flex-col gap-2">
         <div class="flex items-center justify-between gap-3 px-1">
-          <h2 class="text-[13px] font-semibold text-foreground">{section.title}</h2>
-          <span class="text-[11px] text-muted-foreground">{section.description}</span>
+          <h2 class="text-[13px] font-semibold text-foreground">
+            App shell overrides
+          </h2>
         </div>
         <div
           class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
         >
-          {#if isBuiltin}
-            {#each populated as key}
-              {@render appBuiltinSwatch(key)}
-            {/each}
-          {:else}
-            {#each section.rows as row}
-              {#if row.kind === "single"}
-                {@render appSingleRow(row.key)}
-              {:else}
-                {@render appPairRow(row)}
-              {/if}
-            {/each}
-          {/if}
+          {#each populatedAppTokens as key}
+            {@render appBuiltinSwatch(key)}
+          {/each}
         </div>
       </section>
     {/if}
-  {/each}
+    {#if populatedCalTokens.length > 0}
+      <section class="flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-3 px-1">
+          <h2 class="text-[13px] font-semibold text-foreground">
+            Calendar overrides
+          </h2>
+        </div>
+        <div
+          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
+        >
+          {#each populatedCalTokens as key}
+            {@render calBuiltinSwatch(key)}
+          {/each}
+        </div>
+      </section>
+    {/if}
+  {:else if theme.sources}
+    <section class="flex flex-col gap-1 px-1">
+      <h2 class="text-[13px] font-semibold text-foreground">Colors</h2>
+      <span class="text-[11px] text-muted-foreground">
+        Edit Quick colors to shift the whole palette. Pin individual tokens to
+        edit them independently.
+      </span>
+    </section>
+    {#each SOURCE_GROUPS as group}
+      <section class="flex flex-col gap-2">
+        <div
+          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
+        >
+          {@render sourceGroupHeader(group)}
+          {#each group.rows as row}
+            {#if row.kind === "single"}
+              {@render groupSingleRow(row)}
+            {:else}
+              {@render groupPairRow(row)}
+            {/if}
+          {/each}
+        </div>
+      </section>
+    {/each}
+  {:else}
+    <section class="flex flex-col gap-2">
+      <div
+        class="flex items-center justify-between gap-3 rounded-lg bg-card px-4 py-3 dark:bg-background"
+      >
+        <div class="min-w-0 flex-1 text-[11px] text-muted-foreground">
+          This theme has no Quick colors set up. Enable them to use the color
+          editor, or edit the JSON directly below.
+        </div>
+        <button
+          type="button"
+          onclick={enableSources}
+          class="shrink-0 rounded-md border border-border bg-card px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+        >
+          Set up Quick colors
+        </button>
+      </div>
+    </section>
+  {/if}
 
   <!-- Event palette -->
   <section class="flex flex-col gap-2">
@@ -907,113 +858,6 @@
       </div>
     </div>
   </section>
-
-  {#snippet calSingleRow(key: string)}
-    {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-    {@const prov = calProvenance(key)}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="text-[12px] text-foreground">{info.title}</span>
-          {@render provenanceBadge(prov)}
-        </div>
-        <div class="text-[11px] text-muted-foreground">{info.description}</div>
-      </div>
-      <ColorField
-        value={theme.calendarTokenOverrides?.[key] ?? calSeed(key)}
-        onChange={(hex) => setCalToken(key, hex)}
-        onReset={() => resetCalToken(key)}
-        canReset={calCanReset(key)}
-        label={info.title}
-      />
-    </div>
-  {/snippet}
-
-  {#snippet calPairRow(row: PairRow)}
-    {@const prov = pairProvenance(row.key, row.fgKey, "cal")}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="text-[12px] text-foreground">{row.title}</span>
-          {@render provenanceBadge(prov)}
-        </div>
-        <div class="text-[11px] text-muted-foreground">{row.description}</div>
-      </div>
-      <div class="flex shrink-0 items-center gap-3">
-        <div class="flex items-center gap-1.5">
-          <span
-            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-          >Bg</span>
-          <ColorField
-            value={theme.calendarTokenOverrides?.[row.key] ?? calSeed(row.key)}
-            onChange={(hex) => setCalToken(row.key, hex)}
-            onReset={() => resetCalToken(row.key)}
-            canReset={calCanReset(row.key)}
-            label="{row.title} background"
-          />
-        </div>
-        <div class="flex items-center gap-1.5">
-          <span
-            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-          >Text</span>
-          <ColorField
-            value={theme.calendarTokenOverrides?.[row.fgKey] ?? calSeed(row.fgKey)}
-            onChange={(hex) => setCalToken(row.fgKey, hex)}
-            onReset={() => resetCalToken(row.fgKey)}
-            canReset={calCanReset(row.fgKey)}
-            label="{row.title} text"
-          />
-        </div>
-      </div>
-    </div>
-  {/snippet}
-
-  {#snippet calBuiltinSwatch(key: string)}
-    {@const value = theme.calendarTokenOverrides?.[key] ?? ""}
-    {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-      <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{info.title}</div>
-        <div class="text-[11px] text-muted-foreground">{info.description}</div>
-      </div>
-      <span
-        class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
-        style="background-color: {value};"
-        title={value}
-      ></span>
-    </div>
-  {/snippet}
-
-  <!-- Calendar tokens -->
-  {#each CAL_SECTIONS as section}
-    {@const keys = sectionKeys(section)}
-    {@const populated = keys.filter((k) => populatedCalTokens.includes(k))}
-    {#if !isBuiltin || populated.length > 0}
-      <section class="flex flex-col gap-2">
-        <div class="flex items-center justify-between gap-3 px-1">
-          <h2 class="text-[13px] font-semibold text-foreground">{section.title}</h2>
-          <span class="text-[11px] text-muted-foreground">{section.description}</span>
-        </div>
-        <div
-          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-        >
-          {#if isBuiltin}
-            {#each populated as key}
-              {@render calBuiltinSwatch(key)}
-            {/each}
-          {:else}
-            {#each section.rows as row}
-              {#if row.kind === "single"}
-                {@render calSingleRow(row.key)}
-              {:else}
-                {@render calPairRow(row)}
-              {/if}
-            {/each}
-          {/if}
-        </div>
-      </section>
-    {/if}
-  {/each}
 
   <!-- JSON -->
   <section class="flex flex-col gap-2">
