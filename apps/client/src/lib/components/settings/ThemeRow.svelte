@@ -27,11 +27,17 @@
     onDelete: () => void;
   } = $props();
 
-  // Indices into the eventPalette array for the row's preview swatches.
-  // Picked across the spectrum so the strip reads as a quick visual summary.
-  const PREVIEW_INDICES: readonly number[] = [2, 4, 7, 12, 14, 16, 20, 22];
+  // Sampled palette indices for the row's signature gradient. Picked across
+  // the spectrum so the strip reads as a quick visual summary.
+  const PREVIEW_INDICES: readonly number[] = [2, 5, 8, 11, 14, 17, 20, 23];
 
   const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
+
+  const previewGradient = $derived(
+    `linear-gradient(to right, ${PREVIEW_INDICES
+      .map((i) => theme.eventPalette[i])
+      .join(", ")})`,
+  );
 </script>
 
 <div
@@ -60,25 +66,23 @@
         {/if}
       </div>
     </div>
-    <div class="flex items-center gap-1">
-      {#each PREVIEW_INDICES as index}
-        <span
-          class="h-3.5 w-3.5 rounded-full"
-          style="background-color: {theme.eventPalette[index]};"
-        ></span>
-      {/each}
-    </div>
+    <span
+      class="h-2 w-16 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/10"
+      style="background-image: {previewGradient};"
+      aria-hidden="true"
+    ></span>
   </button>
 
   <div class="flex shrink-0 items-center gap-1">
     <button
       type="button"
       onclick={onDuplicate}
-      title="Duplicate"
-      aria-label="Duplicate theme"
-      class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+      title="Duplicate and edit"
+      aria-label="Duplicate and edit theme"
+      class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
       <Copy size={13} strokeWidth={2} />
+      <span>Duplicate and edit</span>
     </button>
     <button
       type="button"
@@ -93,16 +97,15 @@
         <Pencil size={13} strokeWidth={2} />
       {/if}
     </button>
-    {#if !isBuiltin}
-      <button
-        type="button"
-        onclick={onDelete}
-        title="Delete"
-        aria-label="Delete theme"
-        class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-destructive transition-colors hover:bg-destructive/10 dark:bg-transparent"
-      >
-        <Trash2 size={13} strokeWidth={2} />
-      </button>
-    {/if}
+    <button
+      type="button"
+      onclick={onDelete}
+      title={isBuiltin ? "Built-in themes can't be deleted" : "Delete"}
+      aria-label="Delete theme"
+      disabled={isBuiltin}
+      class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent"
+    >
+      <Trash2 size={13} strokeWidth={2} />
+    </button>
   </div>
 </div>
