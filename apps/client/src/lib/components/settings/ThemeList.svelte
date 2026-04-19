@@ -44,7 +44,9 @@
 
   function handleDuplicate(id: ThemeId) {
     const newId = themeStore.duplicateTheme(id);
-    if (newId) flashToast("Theme duplicated");
+    if (!newId) return;
+    themeStore.setTheme(newId);
+    onOpenEditor(newId);
   }
 
   function handleOpen(id: ThemeId) {

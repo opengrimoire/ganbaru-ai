@@ -1,7 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import Link2 from "@lucide/svelte/icons/link-2";
@@ -38,8 +37,9 @@
         "Visible in Settings and between panels. Most views paint their own surface over it.",
     },
     "--foreground": {
-      title: "Text",
-      description: "Default text color across the app.",
+      title: "Text color",
+      description:
+        "The actual text color shown across the app. Isolate to fix it while ink keeps tinting the surfaces above.",
     },
     "--card": {
       title: "Card",
@@ -48,6 +48,11 @@
     "--primary": {
       title: "Primary action",
       description: "Main accent color for highlighted buttons and links.",
+    },
+    "--primary-foreground": {
+      title: "Button text",
+      description:
+        "Text on top of the primary button. Derived from the primary color to keep contrast; isolate to pin a specific hex.",
     },
     "--destructive": {
       title: "Destructive",
@@ -181,29 +186,24 @@
       sourceKey: "ink",
       title: "Ink",
       description:
-        "Base text color. Also the tint that lifted surfaces blend toward.",
+        "Main text color. Also mixes into the muted, secondary, accent, and ring surfaces under App canvas.",
       rows: [{ kind: "single", key: "--foreground", scope: "app" }],
     },
     {
       sourceKey: "primary",
       title: "Primary action",
-      description: "Main accent for highlighted buttons and links.",
-      rows: [
-        {
-          kind: "pair",
-          bg: "--primary",
-          fg: "--primary-foreground",
-          title: "Primary button",
-          description: "Background and text of highlighted buttons.",
-          scope: "app",
-        },
-      ],
+      description:
+        "Main accent for highlighted buttons and links. The button's text color auto-adjusts for contrast.",
+      rows: [{ kind: "single", key: "--primary-foreground", scope: "app" }],
     },
     {
       sourceKey: "destructive",
       title: "Destructive",
       description: "Color for delete actions and warnings.",
-      rows: [{ kind: "single", key: "--destructive", scope: "app" }],
+      // No rows: the source feeds --destructive through identity derivation
+      // and nothing else uses it, so an isolated row would just repeat the
+      // header ColorField with no extra capability.
+      rows: [],
     },
     {
       sourceKey: "calCanvas",
@@ -639,67 +639,55 @@
   {/snippet}
 
   {#snippet groupCard(group: SourceGroup)}
-    {@const isCollapsed = collapsed[group.title] === true}
-    {@const sourceHex =
-      group.sourceKey !== null && theme.sources
-        ? theme.sources[group.sourceKey]
-        : undefined}
-    {@const spineColor = sourceHex ?? "var(--border)"}
+    {@const isInline = group.rows.length <= 1}
+    {@const isCollapsed = !isInline && collapsed[group.title] === true}
     <section
       class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
     >
-      <header class="flex items-stretch gap-2 px-3 py-3">
-        <button
-          type="button"
-          onclick={() => toggleGroup(group.title)}
-          aria-expanded={!isCollapsed}
-          aria-label="{isCollapsed ? 'Expand' : 'Collapse'} {group.title}"
-          class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-accent/30"
-        >
-          <ChevronDown
-            size={14}
-            strokeWidth={2.25}
-            class={cn(
-              "shrink-0 text-muted-foreground transition-transform duration-150",
-              isCollapsed && "-rotate-90",
-            )}
-          />
-          <div class="min-w-0 flex-1">
-            <div class="text-[13px] font-semibold text-foreground">
-              {group.title}
-            </div>
-            <div class="text-[11px] text-muted-foreground">
-              {group.description}
-            </div>
+      <header class="flex items-center justify-between gap-3 px-4 py-2.5">
+        <div class="min-w-0 flex-1">
+          <div class="text-[13px] font-semibold text-foreground">
+            {group.title}
           </div>
-        </button>
-        {#if group.sourceKey !== null && theme.sources}
-          {@const sourceKey = group.sourceKey}
-          <div class="flex shrink-0 items-center">
+          <div class="text-[11px] text-muted-foreground">
+            {group.description}
+          </div>
+        </div>
+        <div class="flex shrink-0 items-center gap-1.5">
+          {#if group.sourceKey !== null && theme.sources}
+            {@const sourceKey = group.sourceKey}
             <ColorField
               value={theme.sources[sourceKey]}
               onChange={(hex) => setSource(sourceKey, hex)}
               label="{group.title} source"
             />
-          </div>
-        {/if}
+          {/if}
+          {#if isInline}
+            <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+          {:else}
+            <button
+              type="button"
+              onclick={() => toggleGroup(group.title)}
+              aria-expanded={!isCollapsed}
+              aria-label="{isCollapsed
+                ? 'Expand'
+                : 'Collapse'} {group.title} options"
+              class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
+            >
+              <span>{isCollapsed ? "Expand options" : "Collapse options"}</span>
+            </button>
+          {/if}
+        </div>
       </header>
-      {#if !isCollapsed}
-        <div class="flex">
-          <div
-            class="w-[3px] shrink-0"
-            style="background-color: {spineColor};"
-            aria-hidden="true"
-          ></div>
-          <div class="min-w-0 flex-1 divide-y divide-border border-t border-border">
-            {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
-              {#if row.kind === "single"}
-                {@render groupSingleRow(row)}
-              {:else}
-                {@render groupPairRow(row)}
-              {/if}
-            {/each}
-          </div>
+      {#if !isCollapsed && group.rows.length > 0}
+        <div class="divide-y divide-border border-t border-border">
+          {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
+            {#if row.kind === "single"}
+              {@render groupSingleRow(row)}
+            {:else}
+              {@render groupPairRow(row)}
+            {/if}
+          {/each}
         </div>
       {/if}
     </section>

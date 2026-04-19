@@ -82,7 +82,7 @@ Themes are managed from the single Appearance section in Settings. The section l
 Users can:
 
 1. **Create a theme** by clicking "New theme". A user theme is added (seeded from the current active theme) and the editor opens on it.
-2. **Duplicate** any theme (built-in or user) into a new editable user theme. Built-ins remain frozen.
+2. **Duplicate and edit** any theme (built-in or user) into a new editable user theme. The duplicate is immediately applied as the active theme and the editor opens on it, so the user sees their edits live from the first change. Built-ins remain frozen.
 3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
 4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the five Quick colors to shift the shell in lockstep, and click Isolated edit on any driven row to break it off the source for a surgical edit (Link back re-links it). The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
 5. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
@@ -136,18 +136,18 @@ Only the derivable subset of calendar tokens participates: `--cal-bg`, `--cal-he
 
 Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. Shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
 
-Each group is a collapsible accordion card, with a **colored spine** running down the left edge of its body in the source color. The spine makes the parent-child relationship obvious at a glance, and works in both light and dark mode because it uses the source color directly rather than a neutral. Every group starts collapsed so the editor opens scannable: the user picks a section by name before any swatches or inputs mount. The entire header region (chevron, title, description) is a single toggle target; only the source `ColorField` on the right sits outside it so clicking the swatch opens the picker without toggling the group.
+Each group is a collapsible accordion card. Every group starts collapsed so the editor opens scannable: the user picks a section by name before any swatches or inputs mount. The header has three parts, all on one row: the title and description on the left (non-interactive), the source `ColorField` in the middle at the same size and horizontal position as the ColorFields in the sub-option rows, and an explicit **Expand options** / **Collapse options** button on the right that shares the fixed minimum width of the Isolated edit / Link back buttons in the sub-options. This keeps every interactive control vertically aligned across the group and avoids any wasted space beside the source swatch. Groups with at most one row (Ink, Primary action) skip the collapse mechanism and render their row inline below the header; the Expand/Collapse slot becomes an invisible placeholder so the source `ColorField` stays aligned with its peers. Destructive has no row at all: its source feeds `--destructive` through identity derivation and nothing else consumes it, so an isolated row would just repeat the header ColorField without adding capability.
 
 The groups:
 
 - **App canvas**: the dominant background color. Drives background, card, popover (paired with its text), secondary surface, muted surface, hover highlight, focus ring, title bar, and title bar hover. Editing it shifts the entire non-accent palette at once.
 - **Ink**: base text color, also the tint mixed into every lifted surface. Drives the default foreground.
-- **Primary action**: main accent for highlighted buttons and links. Drives the primary button background and its text.
-- **Destructive**: color for delete actions and warnings.
+- **Primary action**: main accent for highlighted buttons and links. The source drives the button background directly (identity derivation) and the button text through contrast pick, so the editor exposes two controls: the source (for the background) and one row for the text. A third row for the background would just repeat the source.
+- **Destructive**: color for delete actions and warnings. Has no sub-option row: the source is the only control because `--destructive` is driven by identity derivation and no other token consumes the destructive source.
 - **Calendar canvas**: calendar grid background. Drives the grid, header, gridlines, time labels, and pomodoro rail track.
 - **Calendar markers**: a trailing group with no source (no spine color, neutral border). Collects semantic tokens that don't derive (today marker and its text, now line, break marker, focus marker).
 
-Each group card shows its source color as an editable `ColorField` in the header (except Calendar markers, which has no source). Driven rows below it have two states, expressed through the HEX input and the trailing action button:
+Groups with a source color show it as an editable `ColorField` in the header (except Calendar markers, which has no source and leaves only the Expand/Collapse button on the right). Driven rows below have two states, expressed through the HEX input and the trailing action button:
 
 - **Linked**: the `ColorField` renders its swatch and hex input in a disabled state (reduced opacity, not-allowed cursor) showing the current derived or default value, with an **Isolated edit** action button. Clicking it captures the current auto value as an explicit override and swaps the row to the Isolated state.
 - **Isolated**: the same `ColorField` becomes fully editable (swatch opens the picker, hex input accepts input), with a **Link back** action that drops the override so the token re-follows its source.
