@@ -111,3 +111,69 @@ pub fn vault_write_text(path: String, contents: String) -> Result<(), String> {
     fs::rename(&tmp_path, &target).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_path(suffix: &str) -> PathBuf {
+        // Avoid pulling in `tempfile` for two tests: hand-roll a unique path
+        // under the system temp dir, salted with pid + time + a per-call seq
+        // so parallel runs do not collide.
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+        let mut path = std::env::temp_dir();
+        path.push(format!("ganbaruai-vault-test-{pid}-{nanos}-{seq}-{suffix}"));
+        path
+    }
+
+    #[test]
+    fn vault_read_text_rejects_relative_paths() {
+        let err = vault_read_text("relative/path.txt".to_string()).unwrap_err();
+        assert_eq!(err, "path must be absolute");
+    }
+
+    #[test]
+    fn vault_write_text_rejects_relative_paths() {
+        let err = vault_write_text("relative/path.txt".to_string(), "data".into()).unwrap_err();
+        assert_eq!(err, "path must be absolute");
+    }
+
+    #[test]
+    fn vault_read_text_returns_file_contents_for_absolute_path() {
+        let path = unique_path("read.txt");
+        fs::write(&path, "hello vault").expect("seed file");
+        let result = vault_read_text(path.to_string_lossy().into_owned());
+        let _ = fs::remove_file(&path);
+        assert_eq!(result.unwrap(), "hello vault");
+    }
+
+    #[test]
+    fn vault_write_text_writes_atomically_to_absolute_path() {
+        let path = unique_path("write.txt");
+        let parent = path.parent().unwrap().to_path_buf();
+        let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let tmp_sibling = parent.join(format!("{file_name}.tmp"));
+
+        vault_write_text(path.to_string_lossy().into_owned(), "payload".into())
+            .expect("write should succeed");
+
+        let on_disk = fs::read_to_string(&path).expect("file should exist");
+        assert_eq!(on_disk, "payload");
+        // The .tmp sibling must not survive a successful write.
+        assert!(
+            !tmp_sibling.exists(),
+            "tmp file should have been renamed away"
+        );
+
+        let _ = fs::remove_file(&path);
+    }
+}

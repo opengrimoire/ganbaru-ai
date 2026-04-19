@@ -12,6 +12,12 @@ import {
   darkTheme,
   lightTheme,
 } from "./themes";
+import {
+  cloneTheme,
+  mergeThemePatch,
+  nextUniqueDisplayName,
+  normalizeDisplayName,
+} from "./themeOperations";
 import { getConfigKey, setConfigKey } from "../vault/config";
 
 const ACTIVE_KEY = "theme.activeId";
@@ -89,33 +95,8 @@ function setTheme(id: ThemeId): void {
   setConfigKey(ACTIVE_KEY, id);
 }
 
-function uniqueDisplayName(base: string): string {
-  const existing = new Set(
-    Object.values(combinedRegistry()).map((t) => t.displayName.toLowerCase()),
-  );
-  if (!existing.has(base.toLowerCase())) return base;
-  for (let i = 2; i < 999; i++) {
-    const candidate = `${base} ${i}`;
-    if (!existing.has(candidate.toLowerCase())) return candidate;
-  }
-  return base;
-}
-
-function deepCopyTheme(source: Theme, id: ThemeId, displayName: string): Theme {
-  const copy: Theme = {
-    id,
-    displayName,
-    base: source.base,
-    blendCanvas: source.blendCanvas,
-    eventPalette: { ...source.eventPalette },
-  };
-  if (source.appTokenOverrides) {
-    copy.appTokenOverrides = { ...source.appTokenOverrides };
-  }
-  if (source.calendarTokenOverrides) {
-    copy.calendarTokenOverrides = { ...source.calendarTokenOverrides };
-  }
-  return copy;
+function existingDisplayNames(): string[] {
+  return Object.values(combinedRegistry()).map((t) => t.displayName);
 }
 
 function createTheme(seedFromId?: ThemeId): ThemeId {
@@ -124,8 +105,8 @@ function createTheme(seedFromId?: ThemeId): ThemeId {
     ? (registry[seedFromId] ?? darkTheme)
     : (registry[activeId] ?? darkTheme);
   const id = generateThemeId(registry);
-  const displayName = uniqueDisplayName("New theme");
-  customThemes[id] = deepCopyTheme(seed, id, displayName);
+  const displayName = nextUniqueDisplayName("New theme", existingDisplayNames());
+  customThemes[id] = cloneTheme(seed, id, displayName);
   persistCustomThemes();
   return id;
 }
@@ -135,8 +116,11 @@ function duplicateTheme(sourceId: ThemeId): ThemeId | undefined {
   const source = registry[sourceId];
   if (!source) return undefined;
   const id = generateThemeId(registry);
-  const displayName = uniqueDisplayName(`${source.displayName} copy`);
-  customThemes[id] = deepCopyTheme(source, id, displayName);
+  const displayName = nextUniqueDisplayName(
+    `${source.displayName} copy`,
+    existingDisplayNames(),
+  );
+  customThemes[id] = cloneTheme(source, id, displayName);
   persistCustomThemes();
   return id;
 }
@@ -145,36 +129,16 @@ function updateTheme(id: ThemeId, patch: Partial<Omit<Theme, "id">>): boolean {
   if (isBuiltinThemeId(id)) return false;
   const current = customThemes[id];
   if (!current) return false;
-  const next: Theme = {
-    ...current,
-    ...patch,
-    id: current.id,
-    eventPalette: patch.eventPalette
-      ? { ...current.eventPalette, ...patch.eventPalette }
-      : current.eventPalette,
-  };
-  if (patch.appTokenOverrides !== undefined) {
-    next.appTokenOverrides =
-      Object.keys(patch.appTokenOverrides).length > 0
-        ? { ...patch.appTokenOverrides }
-        : undefined;
-  }
-  if (patch.calendarTokenOverrides !== undefined) {
-    next.calendarTokenOverrides =
-      Object.keys(patch.calendarTokenOverrides).length > 0
-        ? { ...patch.calendarTokenOverrides }
-        : undefined;
-  }
-  customThemes[id] = next;
+  customThemes[id] = mergeThemePatch(current, patch);
   persistCustomThemes();
   if (id === activeId) applyThemeToDom();
   return true;
 }
 
 function renameTheme(id: ThemeId, displayName: string): boolean {
-  const trimmed = displayName.trim();
-  if (trimmed.length === 0) return false;
-  return updateTheme(id, { displayName: trimmed.slice(0, 60) });
+  const normalized = normalizeDisplayName(displayName);
+  if (normalized === undefined) return false;
+  return updateTheme(id, { displayName: normalized });
 }
 
 function deleteTheme(id: ThemeId): boolean {
