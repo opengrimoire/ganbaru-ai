@@ -84,7 +84,7 @@ Users can:
 1. **Create a theme** by clicking "New theme". A user theme is added (seeded from the current active theme) and the editor opens on it.
 2. **Duplicate** any theme (built-in or user) into a new editable user theme. Built-ins remain frozen.
 3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
-4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the five Quick colors to shift the shell in lockstep, and pin individual app or calendar tokens to break them off the source for surgical edits. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
+4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the five Quick colors to shift the shell in lockstep, and click Isolated edit on any driven row to break it off the source for a surgical edit (Link back re-links it). The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
 5. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
 6. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
 7. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
@@ -136,6 +136,8 @@ Only the derivable subset of calendar tokens participates: `--cal-bg`, `--cal-he
 
 Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. Shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
 
+Each group is a collapsible accordion card, with a **colored spine** running down the left edge of its body in the source color. The spine makes the parent-child relationship obvious at a glance, and works in both light and dark mode because it uses the source color directly rather than a neutral. Every group starts collapsed so the editor opens scannable: the user picks a section by name before any swatches or inputs mount. The entire header region (chevron, title, description) is a single toggle target; only the source `ColorField` on the right sits outside it so clicking the swatch opens the picker without toggling the group.
+
 The groups:
 
 - **App canvas**: the dominant background color. Drives background, card, popover (paired with its text), secondary surface, muted surface, hover highlight, focus ring, title bar, and title bar hover. Editing it shifts the entire non-accent palette at once.
@@ -143,18 +145,14 @@ The groups:
 - **Primary action**: main accent for highlighted buttons and links. Drives the primary button background and its text.
 - **Destructive**: color for delete actions and warnings.
 - **Calendar canvas**: calendar grid background. Drives the grid, header, gridlines, time labels, and pomodoro rail track.
-- **Calendar markers**: a trailing group with no source. Collects semantic tokens that don't derive (today marker and its text, now line, break marker, focus marker).
+- **Calendar markers**: a trailing group with no source (no spine color, neutral border). Collects semantic tokens that don't derive (today marker and its text, now line, break marker, focus marker).
 
-Each group card shows its source color as an editable `ColorField` at the top (except Calendar markers, which has no source). Driven rows below it have two states:
+Each group card shows its source color as an editable `ColorField` in the header (except Calendar markers, which has no source). Driven rows below it have two states, expressed through the HEX input and the trailing action button:
 
-- **Auto**: a readonly swatch showing the current derived or default value, with a **Pin** button to its right. Clicking Pin captures the current value as an explicit override and unlocks inline editing.
-- **Pinned**: a full `ColorField` with a reset button that unpins the token back to Auto.
+- **Linked**: the `ColorField` renders its swatch and hex input in a disabled state (reduced opacity, not-allowed cursor) showing the current derived or default value, with an **Isolated edit** action button. Clicking it captures the current auto value as an explicit override and swaps the row to the Isolated state.
+- **Isolated**: the same `ColorField` becomes fully editable (swatch opens the picker, hex input accepts input), with a **Link back** action that drops the override so the token re-follows its source.
 
-Badge summary:
-
-- **Auto** (derived): the derivation engine drives the value; editing the source color updates it.
-- **Pinned**: an explicit override is in place and Quick-color edits don't affect it.
-- No badge: semantic calendar tokens that the user hasn't pinned (falls through to base CSS).
+Both action buttons share a fixed minimum width so the row geometry stays stable when a user flips between states. The HEX value is always visible, which keeps the actual color number readable even for linked rows.
 
 Legacy user themes imported without a `sources` field show a "Set up Quick colors" card that samples the five values from the current resolved palette. After clicking, the editor switches to the grouped layout.
 

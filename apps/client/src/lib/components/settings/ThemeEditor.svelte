@@ -1,11 +1,14 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
+  import Link2 from "@lucide/svelte/icons/link-2";
+  import Moon from "@lucide/svelte/icons/moon";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Sun from "@lucide/svelte/icons/sun";
-  import Moon from "@lucide/svelte/icons/moon";
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { cn } from "$lib/utils";
@@ -113,8 +116,7 @@
   // primary): the text half is usually just ink, but bundling it with its bg
   // keeps the contrast relationship legible and halves the row count.
   // The trailing "Calendar markers" group collects semantic calendar tokens
-  // that don't derive from sources, so they have no source header, only the
-  // Pin/Unpin affordance per row.
+  // that don't derive from sources, so they have no source header and no spine.
   const SOURCE_GROUPS: SourceGroup[] = [
     {
       sourceKey: "canvas",
@@ -220,7 +222,7 @@
       sourceKey: null,
       title: "Calendar markers",
       description:
-        "Semantic colors that don't derive from sources. Pin any to edit.",
+        "Semantic calendar colors that don't follow a source. Edit any individually.",
       rows: [
         {
           kind: "pair",
@@ -262,6 +264,20 @@
 
   const isBuiltin = $derived(themeStore.isBuiltin(theme.id));
   const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
+
+  // Collapse state is ephemeral (not persisted across sessions). Every source
+  // group starts collapsed so the editor opens scannable: the user picks a
+  // section by name before any swatches or inputs mount. Keyed by group title
+  // because it's stable across renders and unique within SOURCE_GROUPS.
+  let collapsed = $state<Record<string, boolean>>(
+    untrack(() =>
+      Object.fromEntries(SOURCE_GROUPS.map((g) => [g.title, true])),
+    ),
+  );
+
+  function toggleGroup(title: string) {
+    collapsed[title] = !collapsed[title];
+  }
 
   // The JSON drawer mirrors the theme's serialized form. We only refresh it
   // from props while the user has not yet typed anything, otherwise their
@@ -377,67 +393,34 @@
     return BASE_CALENDAR_TOKENS[theme.base][key];
   }
 
-  // Pin captures the current auto value as an explicit override so the user
-  // can edit it independently of the source. This is the "opt out of
-  // derivation" action. Visually the row swaps the readonly swatch + Pin
-  // button for a full ColorField + reset (= unpin).
-  function pinAppToken(key: string) {
+  // Isolating a token captures the current auto value as an explicit override
+  // so the user can edit it independently of the source. Visually the row
+  // swaps its readonly swatch + Isolated-edit button for a ColorField + Link-back.
+  function isolateAppToken(key: string) {
     setAppToken(key, autoValueApp(key));
   }
 
-  function pinCalToken(key: string) {
+  function isolateCalToken(key: string) {
     setCalToken(key, autoValueCal(key));
   }
 
-  function resetAppToken(key: string) {
+  function relinkAppToken(key: string) {
     const next = { ...(theme.appTokenOverrides ?? {}) };
     delete next[key];
     themeStore.updateTheme(theme.id, { appTokenOverrides: next });
   }
 
-  function resetCalToken(key: string) {
+  function relinkCalToken(key: string) {
     const next = { ...(theme.calendarTokenOverrides ?? {}) };
     delete next[key];
     const updates: Partial<Theme> = { calendarTokenOverrides: next };
-    // Clearing a cal-bg pin means the derived calCanvas will drive it;
-    // keep blendCanvas aligned so past event variants blend correctly.
+    // Relinking cal-bg means the derived calCanvas drives it; keep blendCanvas
+    // aligned so past event variants blend correctly.
     if (key === "--cal-bg" && theme.sources) {
       const derived = deriveCalendarTokens(theme.sources, theme.base);
       updates.blendCanvas = derived["--cal-bg"] ?? theme.blendCanvas;
     }
     themeStore.updateTheme(theme.id, updates);
-  }
-
-  type Provenance = "default" | "derived" | "override";
-
-  function appProvenance(key: string): Provenance {
-    if (theme.appTokenOverrides?.[key] !== undefined) return "override";
-    // deriveAppTokens emits every APP_TOKEN_KEYS entry whenever sources are
-    // present, so "sources set" is sufficient for app tokens.
-    if (theme.sources) return "derived";
-    return "default";
-  }
-
-  function calProvenance(key: string): Provenance {
-    if (theme.calendarTokenOverrides?.[key] !== undefined) return "override";
-    if (theme.sources && CAL_DERIVED_KEYS.has(key)) return "derived";
-    return "default";
-  }
-
-  // Collapse a pair of related tokens to a single badge: override dominates
-  // derived dominates default. Showing two badges per pair row adds noise
-  // without clarifying which color the user should pay attention to.
-  function pairProvenance(
-    keyA: string,
-    keyB: string,
-    kind: "app" | "cal",
-  ): Provenance {
-    const resolver = kind === "app" ? appProvenance : calProvenance;
-    const a = resolver(keyA);
-    const b = resolver(keyB);
-    if (a === "override" || b === "override") return "override";
-    if (a === "derived" || b === "derived") return "derived";
-    return "default";
   }
 
   async function copyJsonToClipboard() {
@@ -560,75 +543,68 @@
     </div>
   </section>
 
-  {#snippet provenanceBadge(prov: Provenance)}
-    {#if prov === "override"}
-      <span
-        title="Pinned. This color is set explicitly and does not change when Quick colors are edited."
-        class="shrink-0 rounded-sm border border-border px-1.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
-      >
-        Pinned
-      </span>
-    {:else if prov === "derived"}
-      <span
-        title="Derived from Quick colors. Updates automatically when a source color changes."
-        class="shrink-0 rounded-sm bg-accent px-1.5 text-[9px] font-medium uppercase tracking-wide text-accent-foreground/75"
-      >
-        Auto
-      </span>
-    {/if}
-  {/snippet}
-
-  {#snippet tokenEditor(key: string, scope: "app" | "cal", ariaLabel: string)}
+  {#snippet tokenEditor(
+    key: string,
+    scope: "app" | "cal",
+    ariaLabel: string,
+  )}
     {@const overrideMap =
       scope === "app" ? theme.appTokenOverrides : theme.calendarTokenOverrides}
     {@const pinnedVal = overrideMap?.[key]}
-    {#if pinnedVal !== undefined}
+    {@const isLinked = pinnedVal === undefined}
+    {@const displayVal = isLinked
+      ? scope === "app"
+        ? autoValueApp(key)
+        : autoValueCal(key)
+      : pinnedVal}
+    <div class="flex items-center gap-1.5">
       <ColorField
-        value={pinnedVal}
+        value={displayVal}
         onChange={(hex) => {
+          if (isLinked) return;
           if (scope === "app") setAppToken(key, hex);
           else setCalToken(key, hex);
         }}
-        onReset={() => {
-          if (scope === "app") resetAppToken(key);
-          else resetCalToken(key);
-        }}
-        canReset={true}
+        readOnly={isLinked}
         label={ariaLabel}
       />
-    {:else}
-      {@const autoVal = scope === "app" ? autoValueApp(key) : autoValueCal(key)}
-      <div class="flex items-center gap-1.5">
-        <span
-          class="h-[26px] w-[26px] rounded-md border border-border shadow-sm"
-          style="background-color: {autoVal};"
-          title={autoVal}
-        ></span>
+      {#if isLinked}
         <button
           type="button"
           onclick={() => {
-            if (scope === "app") pinAppToken(key);
-            else pinCalToken(key);
+            if (scope === "app") isolateAppToken(key);
+            else isolateCalToken(key);
           }}
-          aria-label="Pin {ariaLabel}"
-          class="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
+          aria-label="Isolated edit {ariaLabel}"
+          title="Edit this color independently of its source"
+          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
         >
-          Pin
+          <Pencil size={10} strokeWidth={2.25} />
+          <span>Isolated edit</span>
         </button>
-      </div>
-    {/if}
+      {:else}
+        <button
+          type="button"
+          onclick={() => {
+            if (scope === "app") relinkAppToken(key);
+            else relinkCalToken(key);
+          }}
+          aria-label="Link back {ariaLabel} to its source"
+          title="Re-link this color to its source"
+          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
+        >
+          <Link2 size={10} strokeWidth={2.25} />
+          <span>Link back</span>
+        </button>
+      {/if}
+    </div>
   {/snippet}
 
   {#snippet groupSingleRow(row: GroupSingleRow)}
     {@const info = tokenInfo(row)}
-    {@const prov =
-      row.scope === "app" ? appProvenance(row.key) : calProvenance(row.key)}
     <div class="flex items-center justify-between gap-3 px-4 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="text-[12px] text-foreground">{info.title}</span>
-          {@render provenanceBadge(prov)}
-        </div>
+        <div class="text-[12px] text-foreground">{info.title}</div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
       </div>
       {@render tokenEditor(row.key, row.scope, info.title)}
@@ -636,19 +612,15 @@
   {/snippet}
 
   {#snippet groupPairRow(row: GroupPairRow)}
-    {@const prov = pairProvenance(row.bg, row.fg, row.scope)}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="text-[12px] text-foreground">{row.title}</span>
-          {@render provenanceBadge(prov)}
-        </div>
+        <div class="text-[12px] text-foreground">{row.title}</div>
         <div class="text-[11px] text-muted-foreground">{row.description}</div>
       </div>
-      <div class="flex shrink-0 items-center gap-3">
+      <div class="flex shrink-0 flex-col items-end gap-2">
         <div class="flex items-center gap-1.5">
           <span
-            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Bg
           </span>
@@ -656,7 +628,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           <span
-            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Text
           </span>
@@ -666,23 +638,71 @@
     </div>
   {/snippet}
 
-  {#snippet sourceGroupHeader(group: SourceGroup)}
-    <div
-      class="flex items-center justify-between gap-3 bg-muted/40 px-4 py-3 dark:bg-muted/25"
+  {#snippet groupCard(group: SourceGroup)}
+    {@const isCollapsed = collapsed[group.title] === true}
+    {@const sourceHex =
+      group.sourceKey !== null && theme.sources
+        ? theme.sources[group.sourceKey]
+        : undefined}
+    {@const spineColor = sourceHex ?? "var(--border)"}
+    <section
+      class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
     >
-      <div class="min-w-0 flex-1">
-        <div class="text-[13px] font-semibold text-foreground">{group.title}</div>
-        <div class="text-[11px] text-muted-foreground">{group.description}</div>
-      </div>
-      {#if group.sourceKey !== null && theme.sources}
-        {@const sourceKey = group.sourceKey}
-        <ColorField
-          value={theme.sources[sourceKey]}
-          onChange={(hex) => setSource(sourceKey, hex)}
-          label={group.title}
-        />
+      <header class="flex items-stretch gap-2 px-3 py-3">
+        <button
+          type="button"
+          onclick={() => toggleGroup(group.title)}
+          aria-expanded={!isCollapsed}
+          aria-label="{isCollapsed ? 'Expand' : 'Collapse'} {group.title}"
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-accent/30"
+        >
+          <ChevronDown
+            size={14}
+            strokeWidth={2.25}
+            class={cn(
+              "shrink-0 text-muted-foreground transition-transform duration-150",
+              isCollapsed && "-rotate-90",
+            )}
+          />
+          <div class="min-w-0 flex-1">
+            <div class="text-[13px] font-semibold text-foreground">
+              {group.title}
+            </div>
+            <div class="text-[11px] text-muted-foreground">
+              {group.description}
+            </div>
+          </div>
+        </button>
+        {#if group.sourceKey !== null && theme.sources}
+          {@const sourceKey = group.sourceKey}
+          <div class="flex shrink-0 items-center">
+            <ColorField
+              value={theme.sources[sourceKey]}
+              onChange={(hex) => setSource(sourceKey, hex)}
+              label="{group.title} source"
+            />
+          </div>
+        {/if}
+      </header>
+      {#if !isCollapsed}
+        <div class="flex">
+          <div
+            class="w-[3px] shrink-0"
+            style="background-color: {spineColor};"
+            aria-hidden="true"
+          ></div>
+          <div class="min-w-0 flex-1 divide-y divide-border border-t border-border">
+            {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
+              {#if row.kind === "single"}
+                {@render groupSingleRow(row)}
+              {:else}
+                {@render groupPairRow(row)}
+              {/if}
+            {/each}
+          </div>
+        </div>
       {/if}
-    </div>
+    </section>
   {/snippet}
 
   {#snippet appBuiltinSwatch(key: string)}
@@ -755,28 +775,8 @@
       </section>
     {/if}
   {:else if theme.sources}
-    <section class="flex flex-col gap-1 px-1">
-      <h2 class="text-[13px] font-semibold text-foreground">Colors</h2>
-      <span class="text-[11px] text-muted-foreground">
-        Edit Quick colors to shift the whole palette. Pin individual tokens to
-        edit them independently.
-      </span>
-    </section>
-    {#each SOURCE_GROUPS as group}
-      <section class="flex flex-col gap-2">
-        <div
-          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-        >
-          {@render sourceGroupHeader(group)}
-          {#each group.rows as row}
-            {#if row.kind === "single"}
-              {@render groupSingleRow(row)}
-            {:else}
-              {@render groupPairRow(row)}
-            {/if}
-          {/each}
-        </div>
-      </section>
+    {#each SOURCE_GROUPS as group (group.title)}
+      {@render groupCard(group)}
     {/each}
   {:else}
     <section class="flex flex-col gap-2">

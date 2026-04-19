@@ -20,6 +20,7 @@
     onChange,
     onReset,
     canReset = false,
+    readOnly = false,
     label,
     swatchSize = 26,
     fluid = false,
@@ -29,6 +30,7 @@
     onChange: (hex: string) => void;
     onReset?: () => void;
     canReset?: boolean;
+    readOnly?: boolean;
     label?: string;
     swatchSize?: number;
     fluid?: boolean;
@@ -75,6 +77,7 @@
   }
 
   function toggleOpen() {
+    if (readOnly) return;
     if (open) {
       open = false;
       return;
@@ -247,9 +250,13 @@
   <button
     bind:this={triggerEl}
     type="button"
+    disabled={readOnly}
     aria-label={label ? `Edit ${label}` : "Edit color"}
     onclick={toggleOpen}
-    class="shrink-0 rounded-md border border-border shadow-sm transition-shadow hover:shadow-md"
+    class={cn(
+      "shrink-0 rounded-md border border-border shadow-sm transition-shadow",
+      readOnly ? "cursor-not-allowed opacity-60" : "hover:shadow-md",
+    )}
     style="width: {swatchSize}px; height: {swatchSize}px; background: {normalizeHex(value) ??
       '#000000'};"
   ></button>
@@ -257,6 +264,7 @@
     type="text"
     spellcheck={false}
     bind:value={hexDraft}
+    disabled={readOnly}
     onfocus={(e) => (e.currentTarget as HTMLInputElement).select()}
     onblur={commitHexDraft}
     onkeydown={(e) => {
@@ -269,6 +277,7 @@
     class={cn(
       "h-7 rounded-md border border-border bg-card px-2 text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent",
       fluid ? "min-w-0 flex-1" : "w-[88px]",
+      readOnly && "cursor-not-allowed opacity-60",
     )}
   />
   {#if onReset}
