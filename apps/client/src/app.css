@@ -35,6 +35,18 @@
   --sidebar-accent: #CFCFD6;
   --sidebar-accent-foreground: #141420;
   --sidebar-border: rgba(0, 0, 20, 0.08);
+
+  /* Event panel surface + form controls (light) */
+  --event-panel-bg: #F0F4F9;
+  --event-panel-contrast: #E8EDF5;
+  --event-panel-edge: #0000004D;
+  --event-panel-shadow: #0000001F;
+  --event-panel-divider: #C4C7C5;
+  --event-panel-input-text: #1F1F1F;
+  --event-panel-placeholder: #444746;
+  --event-panel-text: #141420;
+  --event-panel-muted-text: #646470;
+  --form-indicator: #6B6F6E;
 }
 
 .dark {
@@ -68,6 +80,18 @@
   --sidebar-accent: #3B3B3F;
   --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: rgba(255, 255, 255, 0.08);
+
+  /* Event panel surface + form controls (dark) */
+  --event-panel-bg: #2A2B2E;
+  --event-panel-contrast: #222325;
+  --event-panel-edge: #0000008C;
+  --event-panel-shadow: #00000066;
+  --event-panel-divider: #444746;
+  --event-panel-input-text: #E3E3E3;
+  --event-panel-placeholder: #C4C7C5;
+  --event-panel-text: #C4C7C5;
+  --event-panel-muted-text: #9EA1A0;
+  --form-indicator: #ECECF2;
 }
 
 @theme inline {
@@ -102,6 +126,12 @@
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
+  --color-event-panel-bg: var(--event-panel-bg);
+  --color-event-panel-contrast: var(--event-panel-contrast);
+  --color-event-panel-divider: var(--event-panel-divider);
+  --color-event-panel-input-text: var(--event-panel-input-text);
+  --color-event-panel-placeholder: var(--event-panel-placeholder);
+  --color-form-indicator: var(--form-indicator);
 }
 
 @layer base {

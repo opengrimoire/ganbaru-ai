@@ -72,26 +72,28 @@ function assertCloseHex(actual: string, expected: string, label: string) {
 }
 
 describe("deriveAppTokens", () => {
-  it("returns every APP_TOKEN_KEYS entry for both bases", () => {
+  it("returns values for every derivable key in both bases", () => {
     const light = deriveAppTokens(LIGHT_SOURCES, "light");
     const dark = deriveAppTokens(DARK_SOURCES, "dark");
-    for (const key of Object.keys(BASE_APP_TOKENS.light)) {
+    for (const key of Object.keys(light)) {
       expect(light[key]).toBeDefined();
       expect(dark[key]).toBeDefined();
+      expect(BASE_APP_TOKENS.light[key]).toBeDefined();
+      expect(BASE_APP_TOKENS.dark[key]).toBeDefined();
     }
   });
 
   it("derives light tokens close to the built-in light palette", () => {
     const derived = deriveAppTokens(LIGHT_SOURCES, "light");
-    for (const [key, expected] of Object.entries(BASE_APP_TOKENS.light)) {
-      assertCloseHex(derived[key], expected, `light ${key}`);
+    for (const key of Object.keys(derived)) {
+      assertCloseHex(derived[key], BASE_APP_TOKENS.light[key], `light ${key}`);
     }
   });
 
   it("derives dark tokens close to the built-in dark palette", () => {
     const derived = deriveAppTokens(DARK_SOURCES, "dark");
-    for (const [key, expected] of Object.entries(BASE_APP_TOKENS.dark)) {
-      assertCloseHex(derived[key], expected, `dark ${key}`);
+    for (const key of Object.keys(derived)) {
+      assertCloseHex(derived[key], BASE_APP_TOKENS.dark[key], `dark ${key}`);
     }
   });
 

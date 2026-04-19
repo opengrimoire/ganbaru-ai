@@ -208,7 +208,7 @@
         <input type="number" value={recInterval}
           oninput={(e) => updateInterval(parseInt(e.currentTarget.value, 10) || 1)}
           min={1} max={99}
-          class="num-input w-10 rounded-none bg-black/5 dark:bg-black/15 px-1 py-1 text-center text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
+          class="num-input w-10 rounded-none bg-black/5 dark:bg-black/15 px-1 py-1 text-center text-[11px] text-event-panel-input-text outline-none"
           onkeydown={(e) => e.stopPropagation()} />
         <div class="flex gap-1">
           {#each FREQ_OPTIONS as opt}
@@ -250,7 +250,7 @@
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
               <div class="size-[11px] shrink-0 rounded-full
-                {monthlyMode === 'day' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
+                {monthlyMode === 'day' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
               <span>Day {getEventDayOfMonth()}</span>
             </button>
@@ -260,7 +260,7 @@
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
               <div class="size-[11px] shrink-0 rounded-full
-                {monthlyMode === 'ordinal' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
+                {monthlyMode === 'ordinal' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
               <span>{getEventOrdinalWeekday().label}</span>
             </button>
@@ -275,7 +275,7 @@
         <button onclick={() => updateEndType("never")}
           class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px] text-foreground">
           <div class="size-[11px] shrink-0 rounded-full
-            {recEndType === 'never' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
+            {recEndType === 'never' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
           </div>
           <span>Never</span>
         </button>
@@ -284,7 +284,7 @@
           <button onclick={() => updateEndType("until")}
             class="flex w-12 items-center gap-2 text-foreground transition-all">
             <div class="size-[11px] shrink-0 rounded-full
-              {recEndType === 'until' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
+              {recEndType === 'until' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>On</span>
           </button>
@@ -296,7 +296,7 @@
               onblur={parseDateInput}
               onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); parseDateInput(); pickerOpen = false; } }}
               class="w-[110px] rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] outline-none transition-colors
-                {recEndType === 'until' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}
+                {recEndType === 'until' ? 'text-event-panel-input-text' : 'text-muted-foreground'}
                 {pickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}" />
 
             {#if pickerOpen}
@@ -315,7 +315,7 @@
           <button onclick={() => updateEndType("count")}
             class="flex w-12 items-center gap-2 text-foreground transition-all">
             <div class="size-[11px] shrink-0 rounded-full
-              {recEndType === 'count' ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
+              {recEndType === 'count' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>After</span>
           </button>
@@ -325,9 +325,9 @@
               oninput={(e) => updateEndCount(parseInt(e.currentTarget.value, 10) || 1)}
               min={1} max={999}
               class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[11px] outline-none
-                {recEndType === 'count' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}"
+                {recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}"
               onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} />
-            <span class="{recEndType === 'count' ? 'text-[#1F1F1F] dark:text-[#E3E3E3]' : 'text-muted-foreground'}">times</span>
+            <span class="{recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}">times</span>
           </div>
         </div>
       </div>

@@ -102,7 +102,7 @@
               <span class="w-16">{field.label}</span>
               <input type="number" value={field.value} min={field.min} max={field.max}
                 oninput={(e) => field.set(parseInt(e.currentTarget.value, 10) || field.min)}
-                class="num-input w-8 rounded bg-black/5 dark:bg-black/15 px-0.5 py-0.5 text-center text-[10px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
+                class="num-input w-8 rounded bg-black/5 dark:bg-black/15 px-0.5 py-0.5 text-center text-[10px] text-event-panel-input-text outline-none"
                 onkeydown={(e) => e.stopPropagation()} />
               <span class="text-muted-foreground">min</span>
             </label>
@@ -115,7 +115,7 @@
           class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] w-full text-foreground"
         >
           <div class="size-[11px] shrink-0
-            {idleTimeoutEnabled ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
+            {idleTimeoutEnabled ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
           </div>
           <span>Pause on inactivity</span>
         </button>

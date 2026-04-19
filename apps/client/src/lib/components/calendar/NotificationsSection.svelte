@@ -129,7 +129,7 @@
             class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] text-foreground"
           >
             <div class="size-[11px] shrink-0
-              {selected.has(opt.value) ? 'bg-[#6B6F6E] dark:bg-foreground' : 'border border-muted-foreground/40'}">
+              {selected.has(opt.value) ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>{opt.label}</span>
           </button>
@@ -139,13 +139,13 @@
         <div class="flex items-center gap-1.5 px-2">
           <input type="number" value={cn.amount} min={1} max={999}
             oninput={(e) => updateCustomNotif(idx, parseInt(e.currentTarget.value, 10) || 1, cn.unit)}
-            class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none"
+            class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[11px] text-event-panel-input-text outline-none"
             onkeydown={(e) => e.stopPropagation()} />
           <button bind:this={dropdownBtns[idx]}
             onclick={() => { dropdownIdx = dropdownIdx === idx ? null : idx; }}
             class="rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] transition-colors
               {dropdownIdx === idx ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}
-              text-[#1F1F1F] dark:text-[#E3E3E3]">
+              text-event-panel-input-text">
             {CUSTOM_UNITS.find((u) => u.value === cn.unit)?.label ?? "minutes"}
           </button>
           <span class="text-[11px] text-muted-foreground">before</span>

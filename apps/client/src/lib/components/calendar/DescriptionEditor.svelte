@@ -197,7 +197,7 @@
           <input bind:this={linkInputEl}
             type="text" bind:value={linkUrl} placeholder="https://..."
             onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { linkPopoverOpen = false; } }}
-            class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-[#1F1F1F] dark:text-[#E3E3E3] outline-none placeholder:text-muted-foreground"
+            class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-event-panel-input-text outline-none placeholder:text-muted-foreground"
           />
           <button onclick={applyLink}
             class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">

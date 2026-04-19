@@ -59,6 +59,51 @@
       title: "Focus ring",
       description: "Outline shown around focused inputs and buttons.",
     },
+    "--event-panel-bg": {
+      title: "Event panel surface",
+      description:
+        "Background of the event creation/edit panel opened from the calendar.",
+    },
+    "--event-panel-contrast": {
+      title: "Event panel section header",
+      description:
+        "Background strip behind section rows (location, recurrence, pomodoro, etc.).",
+    },
+    "--event-panel-edge": {
+      title: "Event panel edge",
+      description: "Outer border tint around the event panel. Accepts alpha.",
+    },
+    "--event-panel-shadow": {
+      title: "Event panel shadow",
+      description: "Drop shadow beneath the event panel. Accepts alpha.",
+    },
+    "--event-panel-divider": {
+      title: "Event panel divider",
+      description: "Thin separator line under the title input.",
+    },
+    "--event-panel-input-text": {
+      title: "Event panel input text",
+      description: "Text color inside numeric and text inputs within the panel.",
+    },
+    "--event-panel-placeholder": {
+      title: "Event panel placeholder",
+      description: "Placeholder text color in the title and other inputs.",
+    },
+    "--event-panel-text": {
+      title: "Event panel body text",
+      description:
+        "Default text color used across the event panel surface. Overrides --foreground inside the panel.",
+    },
+    "--event-panel-muted-text": {
+      title: "Event panel muted text",
+      description:
+        "Secondary text color inside the panel (captions, hints, inactive rows).",
+    },
+    "--form-indicator": {
+      title: "Form indicator",
+      description:
+        "Filled dot inside radio/checkbox pills in calendar sub-sections (recurrence, notifications, pomodoro).",
+    },
   };
 
   const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
@@ -232,6 +277,30 @@
         { kind: "single", key: "--cal-timeline-break", scope: "cal" },
         { kind: "single", key: "--cal-timeline-focus", scope: "cal" },
       ],
+    },
+    {
+      sourceKey: null,
+      title: "Event panel",
+      description:
+        "Colors on the event creation/edit panel opened from the calendar.",
+      rows: [
+        { kind: "single", key: "--event-panel-bg", scope: "app" },
+        { kind: "single", key: "--event-panel-contrast", scope: "app" },
+        { kind: "single", key: "--event-panel-edge", scope: "app" },
+        { kind: "single", key: "--event-panel-shadow", scope: "app" },
+        { kind: "single", key: "--event-panel-divider", scope: "app" },
+        { kind: "single", key: "--event-panel-input-text", scope: "app" },
+        { kind: "single", key: "--event-panel-placeholder", scope: "app" },
+        { kind: "single", key: "--event-panel-text", scope: "app" },
+        { kind: "single", key: "--event-panel-muted-text", scope: "app" },
+      ],
+    },
+    {
+      sourceKey: null,
+      title: "Form controls",
+      description:
+        "Shared form affordances used across calendar sub-sections.",
+      rows: [{ kind: "single", key: "--form-indicator", scope: "app" }],
     },
   ];
 

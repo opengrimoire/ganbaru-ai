@@ -790,7 +790,7 @@
           bind:value={title}
           placeholder="Session title..."
           disabled={readOnly}
-          class="w-full bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-[#444746] dark:placeholder:text-[#C4C7C5]"
+          class="w-full bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
           oninput={emitChange}
           onkeydown={inputKeydown}
         />
@@ -799,14 +799,14 @@
         <ColorPicker {color} theme={theme.current} onselect={(c) => { color = c; emitChange(); }} />
       {/if}
     </div>
-    <hr class="border-[#C4C7C5] dark:border-[#444746] -mt-2 mx-1" />
+    <hr class="border-event-panel-divider -mt-2 mx-1" />
 
     <!-- Date + time -->
     <div class="relative -mt-1 flex items-center px-1 text-[12px]">
       <!-- Start date (left) -->
       <div class="relative z-[1] shrink-0">
         <button onclick={toggleDatepicker}
-          class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+          class="rounded py-1 transition-colors text-event-panel-input-text
             {readOnly ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
         </button>
@@ -834,7 +834,7 @@
           onclick={() => openTimePicker("start")}
           disabled={readOnly}
           maxlength={5} placeholder="HH:MM"
-          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-event-panel-input-text
             {readOnly ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
         <span class="text-muted-foreground/60">&ndash;</span>
@@ -843,7 +843,7 @@
           onclick={() => openTimePicker("end")}
           disabled={readOnly}
           maxlength={5} placeholder="HH:MM"
-          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-event-panel-input-text
             {readOnly ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
 
@@ -869,7 +869,7 @@
       <!-- End date (right) -->
       <div class="relative z-[1] shrink-0">
         <button onclick={toggleEndDatepicker}
-          class="rounded py-1 transition-colors text-[#1F1F1F] dark:text-[#E3E3E3]
+          class="rounded py-1 transition-colors text-event-panel-input-text
             {readOnly ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
         </button>
@@ -1139,20 +1139,13 @@
 
 <style>
   .panel-root {
-    --panel-bg: #F0F4F9;
-    --panel-contrast: #E8EDF5;
-    --panel-edge: rgba(0, 0, 0, 0.30);
-    --panel-shadow: rgba(0, 0, 0, 0.12);
+    --panel-bg: var(--event-panel-bg);
+    --panel-contrast: var(--event-panel-contrast);
+    --panel-edge: var(--event-panel-edge);
+    --panel-shadow: var(--event-panel-shadow);
+    --foreground: var(--event-panel-text);
+    --muted-foreground: var(--event-panel-muted-text);
     font-variant-numeric: tabular-nums;
-  }
-
-  :global(.dark) .panel-root {
-    --panel-bg: #2A2B2E;
-    --panel-contrast: #222325;
-    --panel-edge: rgba(0, 0, 0, 0.55);
-    --panel-shadow: rgba(0, 0, 0, 0.40);
-    --foreground: #C4C7C5;
-    --muted-foreground: #9EA1A0;
   }
 
   .title-wrapper::after {
