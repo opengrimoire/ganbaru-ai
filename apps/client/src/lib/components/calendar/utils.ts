@@ -771,20 +771,21 @@ function pickContrastText(bg: string, themeBase: "light" | "dark"): string {
   return luminance > LIGHT_FLIP_ABOVE ? LIGHT_TEXT_ALT : LIGHT_TEXT;
 }
 
-// Cache of resolved palettes keyed by theme ID. Each entry is a positional
-// array of ColorEntry records (bg + contrast text) sharing the theme's
-// palette index space.
-const resolvedPaletteCache = new Map<string, ColorEntry[]>();
+// Cache of resolved palettes keyed on the Theme object reference. Every
+// `updateTheme` call produces a fresh object (via `mergeThemePatch`), so a
+// WeakMap lookup naturally misses on edits and rebuilds the palette; old
+// Theme objects get GC'd with their cache entries.
+const resolvedPaletteCache = new WeakMap<Theme, ColorEntry[]>();
 
 function resolvePalette(theme: Theme): ColorEntry[] {
-  const cached = resolvedPaletteCache.get(theme.id);
+  const cached = resolvedPaletteCache.get(theme);
   if (cached) return cached;
   const out: ColorEntry[] = [];
   for (let i = 0; i < theme.eventPalette.length; i++) {
     const bg = theme.eventPalette[i];
     out.push({ bg, text: pickContrastText(bg, theme.base) });
   }
-  resolvedPaletteCache.set(theme.id, out);
+  resolvedPaletteCache.set(theme, out);
   return out;
 }
 
@@ -850,7 +851,9 @@ export function getEventColor(
 }
 
 // Cache for computed dimmed colors (past, cancelled, free, outside-month).
-const dimmedColorCache = new Map<string, ColorEntry>();
+// Keyed on the Theme reference so edits (which mint a new Theme object)
+// naturally miss and recompute; old entries get GC'd with their themes.
+const dimmedColorCache = new WeakMap<Theme, Map<string, ColorEntry>>();
 
 /**
  * Compute a dimmed variant of an event color by blending the bg toward the
@@ -865,15 +868,20 @@ function getDimmedEventColor(
   theme: Theme,
   mainWeight: number,
 ): ColorEntry {
-  const key = `${theme.id}-${color ?? FALLBACK_COLOR_INDEX}-${mainWeight}`;
-  const cached = dimmedColorCache.get(key);
+  let inner = dimmedColorCache.get(theme);
+  if (!inner) {
+    inner = new Map();
+    dimmedColorCache.set(theme, inner);
+  }
+  const key = `${color ?? FALLBACK_COLOR_INDEX}-${mainWeight}`;
+  const cached = inner.get(key);
   if (cached) return cached;
 
   const base = getEventColor(color, theme);
   const bg = blendHex(base.bg, theme.blendCanvas, mainWeight);
   const text = pickContrastText(bg, theme.base);
   const entry: ColorEntry = { bg, text };
-  dimmedColorCache.set(key, entry);
+  inner.set(key, entry);
   return entry;
 }
 

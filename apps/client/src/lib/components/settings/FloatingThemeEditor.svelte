@@ -37,14 +37,14 @@
 
   function initialLeft(): number {
     if (typeof window === "undefined") return 100;
-    return Math.max(
-      PANEL_MARGIN,
-      window.innerWidth - PANEL_WIDTH - PANEL_MARGIN,
-    );
+    return Math.max(PANEL_MARGIN, (window.innerWidth - PANEL_WIDTH) / 2);
   }
 
   function initialTop(): number {
-    return 80;
+    if (typeof window === "undefined") return 80;
+    const viewportCap = (window.innerHeight * PANEL_MAX_HEIGHT_VH) / 100;
+    const panelHeight = Math.min(PANEL_MAX_HEIGHT_PX, viewportCap);
+    return Math.max(PANEL_MARGIN, (window.innerHeight - panelHeight) / 2);
   }
 
   let posX = $state(initialLeft());
