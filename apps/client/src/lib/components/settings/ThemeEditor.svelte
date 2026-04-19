@@ -145,6 +145,145 @@
     },
   };
 
+  type SingleRow = { kind: "single"; key: string };
+  type PairRow = {
+    kind: "pair";
+    key: string;
+    fgKey: string;
+    title: string;
+    description: string;
+  };
+  type Row = SingleRow | PairRow;
+  interface TokenSection {
+    title: string;
+    description: string;
+    rows: Row[];
+  }
+
+  // Sections group tokens by the surface they affect. Paired rows render
+  // background + text side-by-side because those tokens are semantically
+  // linked: the foreground sibling is always used on top of its background,
+  // and editing them together makes the contrast relationship obvious.
+  const APP_SECTIONS: TokenSection[] = [
+    {
+      title: "Surfaces",
+      description: "Backgrounds for panels and floating menus.",
+      rows: [
+        { kind: "single", key: "--background" },
+        { kind: "single", key: "--card" },
+        {
+          kind: "pair",
+          key: "--popover",
+          fgKey: "--popover-foreground",
+          title: "Popover",
+          description:
+            "Background and text of dropdowns, menus, and floating panels.",
+        },
+      ],
+    },
+    {
+      title: "Title bar",
+      description: "The top frame of the app window.",
+      rows: [
+        {
+          kind: "pair",
+          key: "--sidebar",
+          fgKey: "--sidebar-foreground",
+          title: "Title bar",
+          description: "Background and default text of the top title bar frame.",
+        },
+        {
+          kind: "pair",
+          key: "--sidebar-accent",
+          fgKey: "--sidebar-accent-foreground",
+          title: "Title bar hover",
+          description:
+            "Tint and text shown when hovering buttons in the title bar.",
+        },
+      ],
+    },
+    {
+      title: "Interactive",
+      description: "Buttons, hover states, focus rings, and destructive actions.",
+      rows: [
+        {
+          kind: "pair",
+          key: "--primary",
+          fgKey: "--primary-foreground",
+          title: "Primary action",
+          description: "Main accent color for highlighted buttons and links.",
+        },
+        {
+          kind: "pair",
+          key: "--secondary",
+          fgKey: "--secondary-foreground",
+          title: "Secondary surface",
+          description: "Background and text of muted, less emphasized buttons.",
+        },
+        {
+          kind: "pair",
+          key: "--muted",
+          fgKey: "--muted-foreground",
+          title: "Muted surface",
+          description:
+            "Subtle areas like input wells, plus the default color for hint text.",
+        },
+        {
+          kind: "pair",
+          key: "--accent",
+          fgKey: "--accent-foreground",
+          title: "Hover highlight",
+          description: "Soft tint and text shown when hovering buttons and rows.",
+        },
+        { kind: "single", key: "--destructive" },
+        { kind: "single", key: "--ring" },
+      ],
+    },
+    {
+      title: "Text",
+      description: "Default text color across the app.",
+      rows: [{ kind: "single", key: "--foreground" }],
+    },
+  ];
+
+  const CAL_SECTIONS: TokenSection[] = [
+    {
+      title: "Calendar grid",
+      description: "Calendar background, headers, and time markers.",
+      rows: [
+        { kind: "single", key: "--cal-bg" },
+        { kind: "single", key: "--cal-header-bg" },
+        { kind: "single", key: "--cal-gridline" },
+        {
+          kind: "pair",
+          key: "--cal-today-circle",
+          fgKey: "--cal-today-circle-text",
+          title: "Today marker",
+          description:
+            "Filled circle around today's date and the date number inside it.",
+        },
+        { kind: "single", key: "--cal-time-label" },
+        { kind: "single", key: "--cal-current-time" },
+      ],
+    },
+    {
+      title: "Session rail",
+      description:
+        "The thin track that marks focus and break segments during a pomodoro.",
+      rows: [
+        { kind: "single", key: "--cal-timeline-rail" },
+        { kind: "single", key: "--cal-timeline-break" },
+        { kind: "single", key: "--cal-timeline-focus" },
+      ],
+    },
+  ];
+
+  function sectionKeys(section: TokenSection): string[] {
+    return section.rows.flatMap((r) =>
+      r.kind === "single" ? [r.key] : [r.key, r.fgKey],
+    );
+  }
+
   let {
     theme,
     onDone,
@@ -377,58 +516,104 @@
     </div>
   </section>
 
+  {#snippet appSingleRow(key: string)}
+    {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[12px] text-foreground">{info.title}</div>
+        <div class="text-[11px] text-muted-foreground">{info.description}</div>
+      </div>
+      <ColorField
+        value={theme.appTokenOverrides?.[key] ?? appSeed(key)}
+        onChange={(hex) => setAppToken(key, hex)}
+        onReset={() => resetAppToken(key)}
+        canReset={appCanReset(key)}
+        label={info.title}
+      />
+    </div>
+  {/snippet}
+
+  {#snippet appPairRow(row: PairRow)}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[12px] text-foreground">{row.title}</div>
+        <div class="text-[11px] text-muted-foreground">{row.description}</div>
+      </div>
+      <div class="flex shrink-0 items-center gap-3">
+        <div class="flex items-center gap-1.5">
+          <span
+            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+          >Bg</span>
+          <ColorField
+            value={theme.appTokenOverrides?.[row.key] ?? appSeed(row.key)}
+            onChange={(hex) => setAppToken(row.key, hex)}
+            onReset={() => resetAppToken(row.key)}
+            canReset={appCanReset(row.key)}
+            label="{row.title} background"
+          />
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span
+            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+          >Text</span>
+          <ColorField
+            value={theme.appTokenOverrides?.[row.fgKey] ?? appSeed(row.fgKey)}
+            onChange={(hex) => setAppToken(row.fgKey, hex)}
+            onReset={() => resetAppToken(row.fgKey)}
+            canReset={appCanReset(row.fgKey)}
+            label="{row.title} text"
+          />
+        </div>
+      </div>
+    </div>
+  {/snippet}
+
+  {#snippet appBuiltinSwatch(key: string)}
+    {@const value = theme.appTokenOverrides?.[key] ?? ""}
+    {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[12px] text-foreground">{info.title}</div>
+        <div class="text-[11px] text-muted-foreground">{info.description}</div>
+      </div>
+      <span
+        class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
+        style="background-color: {value};"
+        title={value}
+      ></span>
+    </div>
+  {/snippet}
+
   <!-- App shell tokens -->
-  {#if !isBuiltin || populatedAppTokens.length > 0}
-    <section class="flex flex-col gap-2">
-      <div class="flex items-center justify-between px-1">
-        <h2 class="text-[13px] font-semibold text-foreground">App shell</h2>
-        <span class="text-[11px] text-muted-foreground">
-          {isBuiltin
-            ? "Tokens this theme overrides on the app shell."
-            : "Override CSS variables used across the whole app."}
-        </span>
-      </div>
-      <div
-        class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-      >
-        {#if isBuiltin}
-          {#each populatedAppTokens as key}
-            {@const value = theme.appTokenOverrides?.[key] ?? ""}
-            {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-            <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{info.title}</div>
-                <div class="text-[11px] text-muted-foreground">{info.description}</div>
-              </div>
-              <span
-                class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {value};"
-                title={value}
-              ></span>
-            </div>
-          {/each}
-        {:else}
-          {#each APP_TOKEN_KEYS as key}
-            {@const override = theme.appTokenOverrides?.[key]}
-            {@const info = APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-            <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{info.title}</div>
-                <div class="text-[11px] text-muted-foreground">{info.description}</div>
-              </div>
-              <ColorField
-                value={override ?? appSeed(key)}
-                onChange={(hex) => setAppToken(key, hex)}
-                onReset={() => resetAppToken(key)}
-                canReset={appCanReset(key)}
-                label={info.title}
-              />
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </section>
-  {/if}
+  {#each APP_SECTIONS as section}
+    {@const keys = sectionKeys(section)}
+    {@const populated = keys.filter((k) => populatedAppTokens.includes(k))}
+    {#if !isBuiltin || populated.length > 0}
+      <section class="flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-3 px-1">
+          <h2 class="text-[13px] font-semibold text-foreground">{section.title}</h2>
+          <span class="text-[11px] text-muted-foreground">{section.description}</span>
+        </div>
+        <div
+          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
+        >
+          {#if isBuiltin}
+            {#each populated as key}
+              {@render appBuiltinSwatch(key)}
+            {/each}
+          {:else}
+            {#each section.rows as row}
+              {#if row.kind === "single"}
+                {@render appSingleRow(row.key)}
+              {:else}
+                {@render appPairRow(row)}
+              {/if}
+            {/each}
+          {/if}
+        </div>
+      </section>
+    {/if}
+  {/each}
 
   <!-- Event palette -->
   <section class="flex flex-col gap-2">
@@ -491,58 +676,104 @@
     </div>
   </section>
 
+  {#snippet calSingleRow(key: string)}
+    {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[12px] text-foreground">{info.title}</div>
+        <div class="text-[11px] text-muted-foreground">{info.description}</div>
+      </div>
+      <ColorField
+        value={theme.calendarTokenOverrides?.[key] ?? calSeed(key)}
+        onChange={(hex) => setCalToken(key, hex)}
+        onReset={() => resetCalToken(key)}
+        canReset={calCanReset(key)}
+        label={info.title}
+      />
+    </div>
+  {/snippet}
+
+  {#snippet calPairRow(row: PairRow)}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[12px] text-foreground">{row.title}</div>
+        <div class="text-[11px] text-muted-foreground">{row.description}</div>
+      </div>
+      <div class="flex shrink-0 items-center gap-3">
+        <div class="flex items-center gap-1.5">
+          <span
+            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+          >Bg</span>
+          <ColorField
+            value={theme.calendarTokenOverrides?.[row.key] ?? calSeed(row.key)}
+            onChange={(hex) => setCalToken(row.key, hex)}
+            onReset={() => resetCalToken(row.key)}
+            canReset={calCanReset(row.key)}
+            label="{row.title} background"
+          />
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span
+            class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+          >Text</span>
+          <ColorField
+            value={theme.calendarTokenOverrides?.[row.fgKey] ?? calSeed(row.fgKey)}
+            onChange={(hex) => setCalToken(row.fgKey, hex)}
+            onReset={() => resetCalToken(row.fgKey)}
+            canReset={calCanReset(row.fgKey)}
+            label="{row.title} text"
+          />
+        </div>
+      </div>
+    </div>
+  {/snippet}
+
+  {#snippet calBuiltinSwatch(key: string)}
+    {@const value = theme.calendarTokenOverrides?.[key] ?? ""}
+    {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[12px] text-foreground">{info.title}</div>
+        <div class="text-[11px] text-muted-foreground">{info.description}</div>
+      </div>
+      <span
+        class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
+        style="background-color: {value};"
+        title={value}
+      ></span>
+    </div>
+  {/snippet}
+
   <!-- Calendar tokens -->
-  {#if !isBuiltin || populatedCalTokens.length > 0}
-    <section class="flex flex-col gap-2">
-      <div class="flex items-center justify-between px-1">
-        <h2 class="text-[13px] font-semibold text-foreground">Calendar shell</h2>
-        <span class="text-[11px] text-muted-foreground">
-          {isBuiltin
-            ? "Tokens this theme overrides on the calendar grid."
-            : "Override CSS variables used inside the calendar grid."}
-        </span>
-      </div>
-      <div
-        class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-      >
-        {#if isBuiltin}
-          {#each populatedCalTokens as key}
-            {@const value = theme.calendarTokenOverrides?.[key] ?? ""}
-            {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-            <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{info.title}</div>
-                <div class="text-[11px] text-muted-foreground">{info.description}</div>
-              </div>
-              <span
-                class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {value};"
-                title={value}
-              ></span>
-            </div>
-          {/each}
-        {:else}
-          {#each CALENDAR_TOKEN_KEYS as key}
-            {@const override = theme.calendarTokenOverrides?.[key]}
-            {@const info = CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-            <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div class="min-w-0 flex-1">
-                <div class="text-[12px] text-foreground">{info.title}</div>
-                <div class="text-[11px] text-muted-foreground">{info.description}</div>
-              </div>
-              <ColorField
-                value={override ?? calSeed(key)}
-                onChange={(hex) => setCalToken(key, hex)}
-                onReset={() => resetCalToken(key)}
-                canReset={calCanReset(key)}
-                label={info.title}
-              />
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </section>
-  {/if}
+  {#each CAL_SECTIONS as section}
+    {@const keys = sectionKeys(section)}
+    {@const populated = keys.filter((k) => populatedCalTokens.includes(k))}
+    {#if !isBuiltin || populated.length > 0}
+      <section class="flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-3 px-1">
+          <h2 class="text-[13px] font-semibold text-foreground">{section.title}</h2>
+          <span class="text-[11px] text-muted-foreground">{section.description}</span>
+        </div>
+        <div
+          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
+        >
+          {#if isBuiltin}
+            {#each populated as key}
+              {@render calBuiltinSwatch(key)}
+            {/each}
+          {:else}
+            {#each section.rows as row}
+              {#if row.kind === "single"}
+                {@render calSingleRow(row.key)}
+              {:else}
+                {@render calPairRow(row)}
+              {/if}
+            {/each}
+          {/if}
+        </div>
+      </section>
+    {/if}
+  {/each}
 
   <!-- JSON -->
   <section class="flex flex-col gap-2">
