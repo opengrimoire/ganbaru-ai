@@ -305,6 +305,9 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--event-panel-text",
   "--event-panel-muted-text",
   "--form-indicator",
+  "--action-confirm",
+  "--action-confirm-foreground",
+  "--action-danger-armed",
 ] as const);
 
 /**
@@ -366,6 +369,9 @@ export const BASE_APP_TOKENS: Readonly<
     "--event-panel-text": "#141420",
     "--event-panel-muted-text": "#646470",
     "--form-indicator": "#6B6F6E",
+    "--action-confirm": "#059669",
+    "--action-confirm-foreground": "#FFFFFF",
+    "--action-danger-armed": "#B91C1C",
   }),
   dark: Object.freeze({
     "--background": "#27282A",
@@ -397,6 +403,9 @@ export const BASE_APP_TOKENS: Readonly<
     "--event-panel-text": "#C4C7C5",
     "--event-panel-muted-text": "#9EA1A0",
     "--form-indicator": "#ECECF2",
+    "--action-confirm": "#065F46",
+    "--action-confirm-foreground": "#D1FAE5",
+    "--action-danger-armed": "#991B1B",
   }),
 });
 

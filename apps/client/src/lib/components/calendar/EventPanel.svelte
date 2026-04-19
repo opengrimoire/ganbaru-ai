@@ -774,7 +774,7 @@
             onclick={() => handleScopeClick(val as RecurringScope)}
             class="flex-1 rounded px-2 py-1 text-[10px] font-medium transition-all
               {scope === val
-                ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 shadow-sm'
+                ? 'bg-action-confirm text-action-confirm-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'}"
           >{lbl}</button>
         {/each}
@@ -1105,7 +1105,7 @@
             bind:this={confirmDeleteBtn}
             onclick={() => { deleteArmed = false; handleDeleteClick(); }}
             title="Click again to delete (Ctrl + D)"
-            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-white bg-red-700 dark:bg-red-800">
+            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-white bg-action-danger-armed">
             <Trash2 size={13} strokeWidth={1.8} />
             <span>Click again to delete (Ctrl + D)</span>
           </button>
@@ -1121,7 +1121,7 @@
             title="Save (Ctrl + Enter)"
             class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] transition-all
               {saving || saveReady
-                ? 'bg-emerald-600 dark:bg-emerald-800 text-white dark:text-emerald-100 hover:opacity-90'
+                ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'
                 : 'text-muted-foreground cursor-not-allowed'}"
             style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
             {#if saving}

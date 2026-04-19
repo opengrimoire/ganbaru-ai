@@ -104,6 +104,20 @@
       description:
         "Filled dot inside radio/checkbox pills in calendar sub-sections (recurrence, notifications, pomodoro).",
     },
+    "--action-confirm": {
+      title: "Confirm action",
+      description:
+        "Background of the Save button and the active scope selector pill in the event panel.",
+    },
+    "--action-confirm-foreground": {
+      title: "Confirm action text",
+      description: "Text color on the Save button and active scope pill.",
+    },
+    "--action-danger-armed": {
+      title: "Armed delete",
+      description:
+        "Background of the delete button once it has been armed (click-again-to-confirm state).",
+    },
   };
 
   const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
@@ -301,6 +315,24 @@
       description:
         "Shared form affordances used across calendar sub-sections.",
       rows: [{ kind: "single", key: "--form-indicator", scope: "app" }],
+    },
+    {
+      sourceKey: null,
+      title: "Action semantics",
+      description:
+        "Colors that communicate confirm/danger intent on buttons and pills.",
+      rows: [
+        {
+          kind: "pair",
+          bg: "--action-confirm",
+          fg: "--action-confirm-foreground",
+          title: "Confirm action",
+          description:
+            "Save button and the active scope pill on the event panel.",
+          scope: "app",
+        },
+        { kind: "single", key: "--action-danger-armed", scope: "app" },
+      ],
     },
   ];
 

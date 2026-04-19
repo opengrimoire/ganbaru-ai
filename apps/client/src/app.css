@@ -47,6 +47,11 @@
   --event-panel-text: #141420;
   --event-panel-muted-text: #646470;
   --form-indicator: #6B6F6E;
+
+  /* Action semantics (light) */
+  --action-confirm: #059669;
+  --action-confirm-foreground: #FFFFFF;
+  --action-danger-armed: #B91C1C;
 }
 
 .dark {
@@ -92,6 +97,11 @@
   --event-panel-text: #C4C7C5;
   --event-panel-muted-text: #9EA1A0;
   --form-indicator: #ECECF2;
+
+  /* Action semantics (dark) */
+  --action-confirm: #065F46;
+  --action-confirm-foreground: #D1FAE5;
+  --action-danger-armed: #991B1B;
 }
 
 @theme inline {
@@ -132,6 +142,9 @@
   --color-event-panel-input-text: var(--event-panel-input-text);
   --color-event-panel-placeholder: var(--event-panel-placeholder);
   --color-form-indicator: var(--form-indicator);
+  --color-action-confirm: var(--action-confirm);
+  --color-action-confirm-foreground: var(--action-confirm-foreground);
+  --color-action-danger-armed: var(--action-danger-armed);
 }
 
 @layer base {
