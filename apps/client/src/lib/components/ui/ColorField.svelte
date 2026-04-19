@@ -8,11 +8,12 @@
     clampChannel,
     clampHue,
     clampPercent,
-    hexToHsv,
+    hexToRgba,
     hsvToHex,
     hsvToRgb,
     normalizeHex,
     rgbToHsv,
+    rgbaToHex,
   } from "./colorMath";
 
   let {
@@ -42,8 +43,13 @@
   const POPOVER_WIDTH = 228;
   // Rough height estimate; used only for off-bottom flipping. Slightly
   // overestimating is safe: it just biases towards opening upward sooner.
-  const POPOVER_HEIGHT = 320;
+  const POPOVER_HEIGHT = 360;
   const VIEWPORT_MARGIN = 8;
+
+  // Inline SVG checkerboard used behind semi-transparent swatches so alpha
+  // is visually obvious. Two-tile pattern keeps the data URL tiny.
+  const CHECKER_BG =
+    "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='5' height='5' fill='%23cccccc'/><rect x='5' y='5' width='5' height='5' fill='%23cccccc'/></svg>\") 0 0/10px 10px, #ffffff";
 
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
@@ -51,10 +57,16 @@
   let popoverPos = $state({ top: 0, left: 0 });
   let svEl: HTMLDivElement | undefined = $state();
   let hueEl: HTMLDivElement | undefined = $state();
+  let alphaEl: HTMLDivElement | undefined = $state();
   let hexDraft = $state(untrack(() => normalizeHex(value) ?? "#000000"));
   let hsv = $state<HsvColor>(
-    untrack(() => hexToHsv(value) ?? { h: 0, s: 0, v: 0 }),
+    untrack(() => {
+      const rgba = hexToRgba(value);
+      return rgba ? rgbToHsv(rgba.r, rgba.g, rgba.b) : { h: 0, s: 0, v: 0 };
+    }),
   );
+  // Alpha stored as 0..255 so it round-trips losslessly through hex.
+  let alpha = $state(untrack(() => hexToRgba(value)?.a ?? 255));
 
   function computePosition() {
     if (!triggerEl) return;
@@ -92,28 +104,42 @@
   $effect(() => {
     const normalized = normalizeHex(value);
     if (!normalized) return;
+    const rgba = hexToRgba(normalized);
+    if (!rgba) return;
+    const incomingHsv = rgbToHsv(rgba.r, rgba.g, rgba.b);
     if (!open) {
       hexDraft = normalized;
-      hsv = hexToHsv(normalized) ?? hsv;
+      hsv = incomingHsv;
+      alpha = rgba.a;
       return;
     }
-    const currentHex = normalizeHex(hsvToHex(hsv.h, hsv.s, hsv.v));
+    const currentHex = currentEmittedHex();
     if (currentHex !== normalized) {
       hexDraft = normalized;
-      hsv = hexToHsv(normalized) ?? hsv;
+      hsv = incomingHsv;
+      alpha = rgba.a;
     }
   });
 
   const rgb = $derived(hsvToRgb(hsv.h, hsv.s, hsv.v));
   const hueColor = $derived(hsvToHex(hsv.h, 100, 100));
+  const solidHex = $derived(hsvToHex(hsv.h, hsv.s, hsv.v));
+  const alphaPercentDisplay = $derived(Math.round((alpha / 255) * 100));
 
-  function emit(next: HsvColor) {
+  function currentEmittedHex(): string {
+    const { r, g, b } = hsvToRgb(hsv.h, hsv.s, hsv.v);
+    return rgbaToHex(r, g, b, alpha);
+  }
+
+  function emit(next: HsvColor, nextAlpha: number = alpha) {
     hsv = {
       h: clampHue(next.h),
       s: clampPercent(next.s),
       v: clampPercent(next.v),
     };
-    const hex = hsvToHex(hsv.h, hsv.s, hsv.v);
+    alpha = clampChannel(nextAlpha);
+    const { r, g, b } = hsvToRgb(hsv.h, hsv.s, hsv.v);
+    const hex = rgbaToHex(r, g, b, alpha);
     hexDraft = hex;
     onChange(hex);
   }
@@ -174,15 +200,42 @@
     target.addEventListener("pointercancel", onUp);
   }
 
+  function pointerToAlpha(e: PointerEvent) {
+    if (!alphaEl) return;
+    const rect = alphaEl.getBoundingClientRect();
+    const x = Math.min(Math.max(e.clientX - rect.left, 0), rect.width);
+    const a = Math.round((x / rect.width) * 255);
+    emit(hsv, a);
+  }
+
+  function startAlphaDrag(e: PointerEvent) {
+    e.preventDefault();
+    pointerToAlpha(e);
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    function onMove(ev: PointerEvent) {
+      pointerToAlpha(ev);
+    }
+    function onUp(ev: PointerEvent) {
+      target.releasePointerCapture(ev.pointerId);
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", onUp);
+      target.removeEventListener("pointercancel", onUp);
+    }
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", onUp);
+    target.addEventListener("pointercancel", onUp);
+  }
+
   function commitHexDraft() {
     const normalized = normalizeHex(hexDraft);
     if (!normalized) {
-      hexDraft = hsvToHex(hsv.h, hsv.s, hsv.v);
+      hexDraft = currentEmittedHex();
       return;
     }
-    const next = hexToHsv(normalized);
-    if (!next) return;
-    emit(next);
+    const rgba = hexToRgba(normalized);
+    if (!rgba) return;
+    emit(rgbToHsv(rgba.r, rgba.g, rgba.b), rgba.a);
   }
 
   function setRgb(r: number, g: number, b: number) {
@@ -195,6 +248,12 @@
     if (field === "h") emit({ h: value, s: hsv.s, v: hsv.v });
     if (field === "s") emit({ h: hsv.h, s: value, v: hsv.v });
     if (field === "v") emit({ h: hsv.h, s: hsv.s, v: value });
+  }
+
+  function setAlphaPercent(value: number) {
+    if (!Number.isFinite(value)) return;
+    const clamped = Math.min(Math.max(value, 0), 100);
+    emit(hsv, Math.round((clamped / 100) * 255));
   }
 
   function close() {
@@ -254,12 +313,16 @@
     aria-label={label ? `Edit ${label}` : "Edit color"}
     onclick={toggleOpen}
     class={cn(
-      "shrink-0 rounded-md border border-border shadow-sm transition-shadow",
+      "shrink-0 overflow-hidden rounded-md border border-border shadow-sm transition-shadow",
       readOnly ? "cursor-not-allowed opacity-60" : "hover:shadow-md",
     )}
-    style="width: {swatchSize}px; height: {swatchSize}px; background: {normalizeHex(value) ??
-      '#000000'};"
-  ></button>
+    style="width: {swatchSize}px; height: {swatchSize}px; background: {CHECKER_BG};"
+  >
+    <span
+      class="block h-full w-full"
+      style="background: {normalizeHex(value) ?? '#000000'};"
+    ></span>
+  </button>
   <input
     type="text"
     spellcheck={false}
@@ -342,7 +405,27 @@
         ></div>
       </div>
 
-      <div class="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+      <div
+        bind:this={alphaEl}
+        onpointerdown={startAlphaDrag}
+        role="slider"
+        aria-label="Alpha"
+        aria-valuenow={alphaPercentDisplay}
+        tabindex="0"
+        class="relative mt-2 h-3 w-full touch-none overflow-hidden rounded-full"
+        style="background: {CHECKER_BG};"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 rounded-full"
+          style="background: linear-gradient(to right, transparent 0%, {solidHex} 100%);"
+        ></div>
+        <div
+          class="pointer-events-none absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-white bg-transparent shadow"
+          style="left: {(alpha / 255) * 100}%;"
+        ></div>
+      </div>
+
+      <div class="mt-3 grid grid-cols-4 gap-2 text-[11px]">
         <label class="flex flex-col gap-0.5">
           <span class="text-muted-foreground">H</span>
           <input
@@ -376,6 +459,20 @@
             value={Math.round(hsv.v)}
             onchange={(e) =>
               setHsv("v", Number((e.currentTarget as HTMLInputElement).value))}
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+          />
+        </label>
+        <label class="flex flex-col gap-0.5">
+          <span class="text-muted-foreground">A%</span>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={alphaPercentDisplay}
+            onchange={(e) =>
+              setAlphaPercent(
+                Number((e.currentTarget as HTMLInputElement).value),
+              )}
             class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
           />
         </label>

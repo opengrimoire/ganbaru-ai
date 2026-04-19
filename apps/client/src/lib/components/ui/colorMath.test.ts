@@ -5,7 +5,9 @@ import {
   clampPercent,
   normalizeHex,
   hexToRgb,
+  hexToRgba,
   rgbToHex,
+  rgbaToHex,
   rgbToHsv,
   hsvToRgb,
   hexToHsv,
@@ -63,8 +65,60 @@ describe("normalizeHex", () => {
   it("rejects invalid input", () => {
     expect(normalizeHex("not-a-color")).toBeNull();
     expect(normalizeHex("#ggg")).toBeNull();
-    expect(normalizeHex("#1234")).toBeNull();
     expect(normalizeHex("")).toBeNull();
+    expect(normalizeHex("#12345")).toBeNull();
+  });
+
+  it("preserves 8-digit hex when alpha is not ff", () => {
+    expect(normalizeHex("#11223380")).toBe("#11223380");
+    expect(normalizeHex("11223380")).toBe("#11223380");
+  });
+
+  it("collapses 8-digit hex with ff alpha to 6-digit", () => {
+    expect(normalizeHex("#112233ff")).toBe("#112233");
+  });
+
+  it("expands 4-digit hex", () => {
+    expect(normalizeHex("#abcd")).toBe("#aabbccdd");
+    expect(normalizeHex("#abcf")).toBe("#aabbcc");
+  });
+});
+
+describe("hexToRgba / rgbaToHex", () => {
+  it("defaults alpha to 255 for 6-digit input", () => {
+    expect(hexToRgba("#808080")).toEqual({ r: 128, g: 128, b: 128, a: 255 });
+  });
+
+  it("parses 8-digit hex alpha", () => {
+    expect(hexToRgba("#ff000080")).toEqual({ r: 255, g: 0, b: 0, a: 128 });
+  });
+
+  it("round-trips through rgba", () => {
+    const samples = [
+      { r: 0, g: 0, b: 0, a: 0 },
+      { r: 17, g: 42, b: 200, a: 255 },
+      { r: 240, g: 100, b: 30, a: 128 },
+      { r: 255, g: 255, b: 255, a: 1 },
+    ];
+    for (const { r, g, b, a } of samples) {
+      const hex = rgbaToHex(r, g, b, a);
+      const rgba = hexToRgba(hex);
+      expect(rgba).toEqual({ r, g, b, a });
+    }
+  });
+
+  it("emits 6-digit hex when alpha is 255", () => {
+    expect(rgbaToHex(0, 0, 0, 255)).toBe("#000000");
+    expect(rgbaToHex(255, 255, 255, 255)).toBe("#ffffff");
+  });
+
+  it("emits 8-digit hex when alpha is less than 255", () => {
+    expect(rgbaToHex(0, 0, 0, 0)).toBe("#00000000");
+    expect(rgbaToHex(255, 0, 0, 128)).toBe("#ff000080");
+  });
+
+  it("hexToRgb drops alpha from 8-digit input", () => {
+    expect(hexToRgb("#ff000080")).toEqual({ r: 255, g: 0, b: 0 });
   });
 });
 
