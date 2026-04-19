@@ -21,7 +21,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `start_time` | ISO datetime | Event start (UTC). |
 | `end_time` | ISO datetime | Event end (UTC). For all-day, midnight to midnight in the user's timezone, converted to UTC. |
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |
-| `color` | text | Slot ID from the 24-color palette (e.g. `tomato`, `peacock`). See `features/themes.md` for the palette, theme model, and aliases. Values are validated on read via `normalizeEventColor`: known slots pass through, legacy aliases rewrite, unknown values fall back to `graphite` with a deduped warning. |
+| `color` | integer or null | Slot index (0..23) into the active theme's 24-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
 | `recurrence_exceptions` | text or null | Comma-separated EXDATE values (`YYYY-MM-DD`). Null if none. |
 | `recurrence_parent_id` | UUID or null | For detached instances, points to the original template. Used to trace history. |

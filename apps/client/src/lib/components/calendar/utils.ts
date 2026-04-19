@@ -4,7 +4,7 @@ import type {
   PositionedAllDayEvent,
   PositionedEvent,
 } from "./types";
-import { GRAPHITE_INDEX, PALETTE_SIZE } from "./types";
+import { FALLBACK_COLOR_INDEX, PALETTE_SIZE } from "./types";
 
 const MIN_EVENT_HEIGHT = 4;
 
@@ -796,8 +796,8 @@ const warnedUnknownColors = new Set<string>();
  * Normalize a raw color value read from the database or an external import
  * into a valid EventColor (slot index 0..PALETTE_SIZE-1). Inputs outside
  * the range, or non-numeric inputs, log a single warning and return
- * undefined so the render layer falls back to graphite without masking
- * data drift.
+ * undefined so the render layer falls back to the FALLBACK_COLOR_INDEX
+ * slot without masking data drift.
  *
  * @param raw Value from an untrusted source (DB column, import file).
  * @returns A palette index, or undefined for null/empty/out-of-range inputs.
@@ -837,8 +837,8 @@ export function normalizeEventColor(raw: unknown): EventColor | undefined {
 
 /**
  * Resolve an event color within a theme. Out-of-range or undefined slots
- * fall back to GRAPHITE_INDEX. Pass the active theme from the theme store
- * at the call site.
+ * fall back to FALLBACK_COLOR_INDEX. Pass the active theme from the theme
+ * store at the call site.
  */
 export function getEventColor(
   color: EventColor | undefined,
@@ -846,7 +846,7 @@ export function getEventColor(
 ): ColorEntry {
   const palette = resolvePalette(theme);
   if (color !== undefined && palette[color]) return palette[color];
-  return palette[GRAPHITE_INDEX];
+  return palette[FALLBACK_COLOR_INDEX];
 }
 
 // Cache for computed dimmed colors (past, cancelled, free, outside-month).
@@ -865,7 +865,7 @@ function getDimmedEventColor(
   theme: Theme,
   mainWeight: number,
 ): ColorEntry {
-  const key = `${theme.id}-${color ?? GRAPHITE_INDEX}-${mainWeight}`;
+  const key = `${theme.id}-${color ?? FALLBACK_COLOR_INDEX}-${mainWeight}`;
   const cached = dimmedColorCache.get(key);
   if (cached) return cached;
 

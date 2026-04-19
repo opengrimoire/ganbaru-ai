@@ -4,7 +4,7 @@ export type CalendarViewMode = "week" | "day" | "month";
  * Index into a theme's eventPalette array. Valid range is 0..PALETTE_SIZE-1
  * (currently 0..23). Stored as INTEGER on calendar_events.color so palette
  * order is intrinsic and storage stays compact. The render layer falls back
- * to the GRAPHITE_INDEX slot for unknown values.
+ * to the FALLBACK_COLOR_INDEX slot for unknown values.
  */
 export type EventColor = number;
 
@@ -12,7 +12,7 @@ export type EventColor = number;
 export const PALETTE_SIZE = 24;
 
 /** Index of the render-layer fallback slot. Every theme must fill it. */
-export const GRAPHITE_INDEX = 22;
+export const FALLBACK_COLOR_INDEX = 22;
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
 

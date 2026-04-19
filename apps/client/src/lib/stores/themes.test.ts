@@ -310,7 +310,7 @@ describe("validateThemeJson", () => {
 
   it("rejects an eventPalette that is not an array", () => {
     const result = validateThemeJson(
-      buildValidThemeInput({ eventPalette: { radicchio: "#abcdef" } }),
+      buildValidThemeInput({ eventPalette: { 0: "#abcdef" } }),
     );
     expect(result.ok).toBe(false);
     if (!result.ok)
@@ -319,7 +319,7 @@ describe("validateThemeJson", () => {
 
   it("rejects a non-hex palette entry", () => {
     const palette: string[] = Array.from({ length: PALETTE_SIZE }, () => "#abcdef");
-    palette[0] = "tomato";
+    palette[0] = "not-a-hex";
     const result = validateThemeJson(
       buildValidThemeInput({ eventPalette: palette }),
     );

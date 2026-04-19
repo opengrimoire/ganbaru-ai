@@ -717,9 +717,9 @@ describe("normalizeEventColor", () => {
     expect(normalizeEventColor(true)).toBeUndefined();
   });
 
-  it("rejects legacy slot-name strings", () => {
-    expect(normalizeEventColor("tomato")).toBeUndefined();
-    expect(normalizeEventColor("graphite")).toBeUndefined();
+  it("rejects non-numeric strings", () => {
+    expect(normalizeEventColor("not-a-number")).toBeUndefined();
+    expect(normalizeEventColor("abc")).toBeUndefined();
     expect(normalizeEventColor("__proto__")).toBeUndefined();
   });
 });
@@ -733,7 +733,7 @@ describe("EVENT_COLOR_OPTIONS", () => {
     }
   });
 
-  it("includes the graphite fallback index", () => {
+  it("includes the fallback index", () => {
     expect(EVENT_COLOR_OPTIONS).toContain(22);
   });
 });
@@ -752,7 +752,7 @@ describe("getEventColor", () => {
     assertColorEntry(entry);
   });
 
-  it("returns graphite for undefined color (render fallback)", () => {
+  it("returns the fallback slot for undefined color (render fallback)", () => {
     const entry = getEventColor(undefined, lightTheme);
     expect(entry.bg.toLowerCase()).toBe(lightTheme.eventPalette[22].toLowerCase());
   });
@@ -810,7 +810,7 @@ describe("dimmed color variants", () => {
     expect(past.bg).not.toBe(outside.bg);
   });
 
-  it("fallbacks to graphite dimmed when color is undefined", () => {
+  it("falls back to the dimmed fallback slot when color is undefined", () => {
     assertColorEntry(getPastEventColor(undefined, lightTheme));
     assertColorEntry(getCancelledEventColor(undefined, darkTheme));
   });

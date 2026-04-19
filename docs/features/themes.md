@@ -34,11 +34,11 @@ Event colors use two layers so users can redesign themes freely without breaking
 1. **Slot index (stable, invisible).** An integer in the range `0..PALETTE_SIZE-1` (currently `0..23`). Stored as `INTEGER` on the event row. Never shown to the user. Acts purely as a position into each theme's `eventPalette` array.
 2. **Hex value (per theme).** The actual RGB the slot resolves to in the active theme. Two themes can assign wildly different hex to the same index. When the user switches themes, all events across the app pick up the new hex immediately because they reference the position, not the color.
 
-There is no third "display name" layer. The index is internal only; UI surfaces (the editor grid, the event color picker tooltip) show the hex value next to the swatch instead of a name. This sidesteps the "mango scenario" entirely: a user who recolors slot `6` blue never sees the word "Mango" in the editor or the picker, only the swatch and `#3366CC`. No per-slot name field, no auto-naming heuristics, no name-vs-color drift.
+There is no third "display name" layer. The index is internal only; UI surfaces (the editor grid, the event color picker tooltip) show the hex value next to the swatch. A user who recolors slot `6` blue never sees a name attached to that slot, only the swatch and `#3366CC`. No per-slot name field, no auto-naming heuristics, no name-vs-color drift.
 
 ## Event color palette
 
-The built-in themes ship a 24-slot palette inspired by Google Calendar. Each theme's `eventPalette` is a frozen array of 24 hex strings; the slot at index `n` is whatever color the active theme assigns to that position. `GRAPHITE_INDEX = 22` is the render-layer fallback when a stored color is unknown or missing. Every theme must keep all 24 slots filled and must keep slot 22 readable as a neutral fallback.
+Each theme's `eventPalette` is a frozen array of 24 hex strings; the slot at index `n` is whatever color the active theme assigns to that position. `FALLBACK_COLOR_INDEX = 22` is the render-layer fallback when a stored color is unknown or missing. Every theme must keep all 24 slots filled and must keep slot 22 readable as a neutral fallback.
 
 The two layers mean themes can swap any color at any position freely; existing events keep rendering, just in the new color the active theme assigns to their stored index.
 
@@ -48,9 +48,9 @@ Raw color values come in from the database, iCalendar imports, and user edits. `
 
 - Integer in `0..PALETTE_SIZE-1`: pass through.
 - Numeric string parseable to such an integer: coerce and pass through.
-- Out of range, non-integer, `NaN`, or `Infinity`: warn once to the console, return undefined; render falls back to the `GRAPHITE_INDEX` slot.
+- Out of range, non-integer, `NaN`, or `Infinity`: warn once to the console, return undefined; render falls back to the `FALLBACK_COLOR_INDEX` slot.
 - Null, empty string, or other non-numeric type: return undefined silently.
-- Legacy slot-name strings (`"tomato"`, `"peacock"`, etc.): not coerced; treated as unknown and dropped. The DB schema migration to `INTEGER` removed the only path that ever produced them.
+- Non-numeric strings: not coerced; treated as unknown and dropped. The DB schema migration to `INTEGER` removed the only path that ever produced them.
 
 The warning is deduped across a session (Set-backed) so a bad value on a thousand rows logs one line, not one thousand.
 

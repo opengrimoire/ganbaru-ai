@@ -196,7 +196,7 @@ pub fn migrations() -> Vec<Migration> {
         description: "convert event color column from text slot names to integer slot indices",
         // SQLite ALTER cannot retype a column; drop and re-add. Existing
         // string values are dropped (treated as undefined; events render
-        // with the graphite fallback) since this is a single-user dev DB
+        // with the fallback slot) since this is a single-user dev DB
         // and the new shape is incompatible with the old.
         sql: "
             ALTER TABLE calendar_events DROP COLUMN color;

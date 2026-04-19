@@ -44,65 +44,64 @@ export interface Theme {
   calendarTokenOverrides?: Readonly<Record<string, string>>;
 }
 
-// Built-in event palettes. These are the Google-calendar-inspired 24-color
-// sets shipped previously. Stored as positional arrays so the slot index
+// Built-in event palettes. Stored as positional arrays so the slot index
 // (the value events save on disk) maps directly into the array. Additional
-// themes can freely deviate without being locked to these colors. Position
-// 22 is the GRAPHITE_INDEX render-layer fallback; every theme must keep all
-// PALETTE_SIZE positions filled.
+// themes can freely deviate from these hexes. Slot FALLBACK_COLOR_INDEX is
+// the render-layer fallback; every theme must keep all PALETTE_SIZE
+// positions filled.
 
 const LIGHT_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
-  "#AD1457", // 0  radicchio
-  "#D81B60", // 1  cherry blossom
-  "#D50000", // 2  tomato
-  "#E67C73", // 3  flamingo
-  "#F4511E", // 4  tangerine
-  "#EF6C00", // 5  pumpkin
-  "#F09300", // 6  mango
-  "#F6BF26", // 7  banana
-  "#E4C441", // 8  citron
-  "#C0CA33", // 9  avocado
-  "#7CB342", // 10 pistachio
-  "#33B679", // 11 sage
-  "#0B8043", // 12 basil
-  "#009688", // 13 eucalyptus
-  "#039BE5", // 14 peacock
-  "#4285F4", // 15 cobalt
-  "#3F51B5", // 16 blueberry
-  "#7986CB", // 17 lavender
-  "#B39DDB", // 18 wisteria
-  "#9E69AF", // 19 amethyst
-  "#8E24AA", // 20 grape
-  "#795548", // 21 cocoa
-  "#616161", // 22 graphite (fallback)
-  "#A79B8E", // 23 birch
+  "#AD1457",
+  "#D81B60",
+  "#D50000",
+  "#E67C73",
+  "#F4511E",
+  "#EF6C00",
+  "#F09300",
+  "#F6BF26",
+  "#E4C441",
+  "#C0CA33",
+  "#7CB342",
+  "#33B679",
+  "#0B8043",
+  "#009688",
+  "#039BE5",
+  "#4285F4",
+  "#3F51B5",
+  "#7986CB",
+  "#B39DDB",
+  "#9E69AF",
+  "#8E24AA",
+  "#795548",
+  "#616161",
+  "#A79B8E",
 ]);
 
 const DARK_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
-  "#C05476", // 0  radicchio
-  "#D85675", // 1  cherry blossom
-  "#DA5234", // 2  tomato
-  "#D6837A", // 3  flamingo
-  "#E3683E", // 4  tangerine
-  "#DD7835", // 5  pumpkin
-  "#E0963C", // 6  mango
-  "#E6B951", // 7  banana
-  "#D8BE5E", // 8  citron
-  "#BCC256", // 9  avocado
-  "#85AD59", // 10 pistachio
-  "#55B080", // 11 sage
-  "#489160", // 12 basil
-  "#429A8E", // 13 eucalyptus
-  "#4B99D2", // 14 peacock
-  "#668BE1", // 15 cobalt
-  "#6E72C3", // 16 blueberry
-  "#828BC2", // 17 lavender
-  "#AE9CCE", // 18 wisteria
-  "#A479B1", // 19 amethyst
-  "#A75ABA", // 20 grape
-  "#957367", // 21 cocoa
-  "#7C7C7C", // 22 graphite (fallback)
-  "#A5998C", // 23 birch
+  "#C05476",
+  "#D85675",
+  "#DA5234",
+  "#D6837A",
+  "#E3683E",
+  "#DD7835",
+  "#E0963C",
+  "#E6B951",
+  "#D8BE5E",
+  "#BCC256",
+  "#85AD59",
+  "#55B080",
+  "#489160",
+  "#429A8E",
+  "#4B99D2",
+  "#668BE1",
+  "#6E72C3",
+  "#828BC2",
+  "#AE9CCE",
+  "#A479B1",
+  "#A75ABA",
+  "#957367",
+  "#7C7C7C",
+  "#A5998C",
 ]);
 
 export const lightTheme: Theme = Object.freeze({
