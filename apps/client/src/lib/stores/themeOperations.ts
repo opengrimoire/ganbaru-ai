@@ -27,7 +27,7 @@ export function cloneTheme(
     displayName,
     base: source.base,
     blendCanvas: source.blendCanvas,
-    eventPalette: { ...source.eventPalette },
+    eventPalette: [...source.eventPalette],
   };
   if (source.appTokenOverrides) {
     copy.appTokenOverrides = { ...source.appTokenOverrides };
@@ -42,7 +42,9 @@ export function cloneTheme(
  * Apply a partial patch to a theme, returning a new Theme.
  *
  * - The id is preserved (callers cannot rename ids through a patch).
- * - eventPalette merges (single-slot edits do not require sending all 24).
+ * - eventPalette is an array; passing it replaces the palette wholesale,
+ *   so callers should spread the current palette and overwrite the slots
+ *   they want to change before handing it in.
  * - appTokenOverrides / calendarTokenOverrides REPLACE the existing block
  *   when present (the editor manages the full override set), and an empty
  *   object collapses to `undefined` so the on-disk JSON stays minimal.
@@ -56,7 +58,7 @@ export function mergeThemePatch(
     ...patch,
     id: current.id,
     eventPalette: patch.eventPalette
-      ? { ...current.eventPalette, ...patch.eventPalette }
+      ? [...patch.eventPalette]
       : current.eventPalette,
   };
   if (patch.appTokenOverrides !== undefined) {

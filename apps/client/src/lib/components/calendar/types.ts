@@ -1,30 +1,18 @@
 export type CalendarViewMode = "week" | "day" | "month";
 
-export type EventColor =
-  | "radicchio"
-  | "cherryBlossom"
-  | "tomato"
-  | "flamingo"
-  | "tangerine"
-  | "pumpkin"
-  | "mango"
-  | "banana"
-  | "citron"
-  | "avocado"
-  | "pistachio"
-  | "sage"
-  | "basil"
-  | "eucalyptus"
-  | "peacock"
-  | "cobalt"
-  | "blueberry"
-  | "lavender"
-  | "wisteria"
-  | "amethyst"
-  | "grape"
-  | "cocoa"
-  | "graphite"
-  | "birch";
+/**
+ * Index into a theme's eventPalette array. Valid range is 0..PALETTE_SIZE-1
+ * (currently 0..23). Stored as INTEGER on calendar_events.color so palette
+ * order is intrinsic and storage stays compact. The render layer falls back
+ * to the GRAPHITE_INDEX slot for unknown values.
+ */
+export type EventColor = number;
+
+/** Number of slots every theme palette must provide. */
+export const PALETTE_SIZE = 24;
+
+/** Index of the render-layer fallback slot. Every theme must fill it. */
+export const GRAPHITE_INDEX = 22;
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
 

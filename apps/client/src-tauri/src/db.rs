@@ -190,5 +190,20 @@ pub fn migrations() -> Vec<Migration> {
         description: "add event_id to pomodoro_sessions",
         sql: "ALTER TABLE pomodoro_sessions ADD COLUMN event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL;",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 3,
+        description: "convert event color column from text slot names to integer slot indices",
+        // SQLite ALTER cannot retype a column; drop and re-add. Existing
+        // string values are dropped (treated as undefined; events render
+        // with the graphite fallback) since this is a single-user dev DB
+        // and the new shape is incompatible with the old.
+        sql: "
+            ALTER TABLE calendar_events DROP COLUMN color;
+            ALTER TABLE calendar_events ADD COLUMN color INTEGER;
+            ALTER TABLE calendar_event_overrides DROP COLUMN color;
+            ALTER TABLE calendar_event_overrides ADD COLUMN color INTEGER;
+        ",
+        kind: MigrationKind::Up,
     }]
 }

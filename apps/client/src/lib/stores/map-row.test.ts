@@ -194,14 +194,14 @@ describe("mapRow", () => {
   });
 
   it("maps color", () => {
-    expect(mapRow(makeDbRow({ color: "tomato" })).color).toBe("tomato");
+    expect(mapRow(makeDbRow({ color: 2 })).color).toBe(2);
     expect(mapRow(makeDbRow({ color: null })).color).toBeUndefined();
   });
 
-  it("drops unknown color values so render falls back to the default", () => {
+  it("drops out-of-range color values so render falls back to the default", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      expect(mapRow(makeDbRow({ color: "retired-color-name" })).color).toBeUndefined();
+      expect(mapRow(makeDbRow({ color: 99 })).color).toBeUndefined();
     } finally {
       warn.mockRestore();
     }

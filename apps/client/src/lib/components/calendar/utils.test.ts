@@ -673,10 +673,16 @@ describe("normalizeEventColor", () => {
     warn.mockRestore();
   });
 
-  it("accepts known palette keys unchanged", () => {
-    expect(normalizeEventColor("radicchio")).toBe("radicchio");
-    expect(normalizeEventColor("graphite")).toBe("graphite");
-    expect(normalizeEventColor("birch")).toBe("birch");
+  it("accepts integer indices in range unchanged", () => {
+    expect(normalizeEventColor(0)).toBe(0);
+    expect(normalizeEventColor(22)).toBe(22);
+    expect(normalizeEventColor(23)).toBe(23);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("accepts numeric strings that parse to in-range integers", () => {
+    expect(normalizeEventColor("0")).toBe(0);
+    expect(normalizeEventColor("14")).toBe(14);
     expect(warn).not.toHaveBeenCalled();
   });
 
@@ -687,36 +693,48 @@ describe("normalizeEventColor", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("returns undefined and warns once for unknown strings", () => {
+  it("returns undefined and warns once for non-numeric strings", () => {
     expect(normalizeEventColor("not-a-color-xyz")).toBeUndefined();
     expect(normalizeEventColor("not-a-color-xyz")).toBeUndefined();
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects non-string values with a warning", () => {
-    expect(normalizeEventColor(42)).toBeUndefined();
-    expect(normalizeEventColor({})).toBeUndefined();
-    expect(normalizeEventColor([])).toBeUndefined();
+  it("rejects out-of-range numbers", () => {
+    expect(normalizeEventColor(-1)).toBeUndefined();
+    expect(normalizeEventColor(24)).toBeUndefined();
+    expect(normalizeEventColor(99)).toBeUndefined();
   });
 
-  it("does not resolve inherited object properties as valid colors", () => {
-    expect(normalizeEventColor("toString")).toBeUndefined();
+  it("rejects non-integer numbers", () => {
+    expect(normalizeEventColor(1.5)).toBeUndefined();
+    expect(normalizeEventColor(Number.NaN)).toBeUndefined();
+    expect(normalizeEventColor(Number.POSITIVE_INFINITY)).toBeUndefined();
+  });
+
+  it("rejects non-numeric values with a warning", () => {
+    expect(normalizeEventColor({})).toBeUndefined();
+    expect(normalizeEventColor([])).toBeUndefined();
+    expect(normalizeEventColor(true)).toBeUndefined();
+  });
+
+  it("rejects legacy slot-name strings", () => {
+    expect(normalizeEventColor("tomato")).toBeUndefined();
+    expect(normalizeEventColor("graphite")).toBeUndefined();
     expect(normalizeEventColor("__proto__")).toBeUndefined();
-    expect(normalizeEventColor("constructor")).toBeUndefined();
-    expect(normalizeEventColor("hasOwnProperty")).toBeUndefined();
   });
 });
 
 describe("EVENT_COLOR_OPTIONS", () => {
-  it("is non-empty and every entry resolves via normalizeEventColor", () => {
+  it("contains every palette index in order", () => {
     expect(EVENT_COLOR_OPTIONS.length).toBeGreaterThan(0);
-    for (const name of EVENT_COLOR_OPTIONS) {
-      expect(normalizeEventColor(name)).toBe(name);
+    for (let i = 0; i < EVENT_COLOR_OPTIONS.length; i++) {
+      expect(EVENT_COLOR_OPTIONS[i]).toBe(i);
+      expect(normalizeEventColor(EVENT_COLOR_OPTIONS[i])).toBe(i);
     }
   });
 
-  it("includes graphite so the render-layer fallback target exists", () => {
-    expect(EVENT_COLOR_OPTIONS).toContain("graphite");
+  it("includes the graphite fallback index", () => {
+    expect(EVENT_COLOR_OPTIONS).toContain(22);
   });
 });
 
@@ -729,19 +747,19 @@ function assertColorEntry(entry: { bg: string; text: string }): void {
 
 describe("getEventColor", () => {
   it("returns the theme's palette entry for a known slot", () => {
-    const entry = getEventColor("tomato", lightTheme);
-    expect(entry.bg.toLowerCase()).toBe(lightTheme.eventPalette.tomato.toLowerCase());
+    const entry = getEventColor(2, lightTheme);
+    expect(entry.bg.toLowerCase()).toBe(lightTheme.eventPalette[2].toLowerCase());
     assertColorEntry(entry);
   });
 
   it("returns graphite for undefined color (render fallback)", () => {
     const entry = getEventColor(undefined, lightTheme);
-    expect(entry.bg.toLowerCase()).toBe(lightTheme.eventPalette.graphite.toLowerCase());
+    expect(entry.bg.toLowerCase()).toBe(lightTheme.eventPalette[22].toLowerCase());
   });
 
   it("returns different hex values across light and dark themes for the same slot", () => {
-    const light = getEventColor("peacock", lightTheme);
-    const dark = getEventColor("peacock", darkTheme);
+    const light = getEventColor(14, lightTheme);
+    const dark = getEventColor(14, darkTheme);
     expect(light.bg.toLowerCase()).not.toBe(dark.bg.toLowerCase());
   });
 
@@ -754,14 +772,16 @@ describe("getEventColor", () => {
   });
 
   it("resolves palettes for a custom theme as long as all slots are filled", () => {
+    const customPalette = [...darkTheme.eventPalette];
+    customPalette[2] = "#123456";
     const customTheme: Theme = {
       id: "custom-test",
       displayName: "Custom Test",
       base: "dark",
       blendCanvas: "#000000",
-      eventPalette: { ...darkTheme.eventPalette, tomato: "#123456" },
+      eventPalette: customPalette,
     };
-    const entry = getEventColor("tomato", customTheme);
+    const entry = getEventColor(2, customTheme);
     expect(entry.bg.toLowerCase()).toBe("#123456");
   });
 });
@@ -769,24 +789,24 @@ describe("getEventColor", () => {
 describe("dimmed color variants", () => {
   it("past, cancelled, free, outside-month all return valid hex entries", () => {
     for (const theme of [lightTheme, darkTheme]) {
-      assertColorEntry(getPastEventColor("tomato", theme));
-      assertColorEntry(getCancelledEventColor("tomato", theme));
-      assertColorEntry(getFreeEventColor("tomato", theme));
-      assertColorEntry(getOutsideMonthEventColor("tomato", theme));
+      assertColorEntry(getPastEventColor(2, theme));
+      assertColorEntry(getCancelledEventColor(2, theme));
+      assertColorEntry(getFreeEventColor(2, theme));
+      assertColorEntry(getOutsideMonthEventColor(2, theme));
     }
   });
 
   it("dimmed variants differ from the base color", () => {
-    const base = getEventColor("tomato", lightTheme);
-    const past = getPastEventColor("tomato", lightTheme);
+    const base = getEventColor(2, lightTheme);
+    const past = getPastEventColor(2, lightTheme);
     expect(past.bg.toLowerCase()).not.toBe(base.bg.toLowerCase());
   });
 
   it("outside-month is more washed out than past (lower main weight)", () => {
     // Outside-month uses 0.25 main weight; past uses 0.3 (light theme).
     // The blended bg should therefore be closer to the canvas color.
-    const past = getPastEventColor("tomato", lightTheme);
-    const outside = getOutsideMonthEventColor("tomato", lightTheme);
+    const past = getPastEventColor(2, lightTheme);
+    const outside = getOutsideMonthEventColor(2, lightTheme);
     expect(past.bg).not.toBe(outside.bg);
   });
 

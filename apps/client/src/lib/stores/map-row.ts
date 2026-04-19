@@ -13,7 +13,7 @@ export interface DbCalendarEvent {
   end_time: string;
   timezone: string;
   calendar_id: string;
-  color: string | null;
+  color: number | null;
   description: string;
   rrule: string | null;
   notifications: string | null;
@@ -77,7 +77,7 @@ export interface DbOverride {
   description: string | null;
   location: string | null;
   url: string | null;
-  color: string | null;
+  color: number | null;
   status: string | null;
   transparency: string | null;
   visibility: string | null;

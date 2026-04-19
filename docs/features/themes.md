@@ -13,7 +13,7 @@ A Theme is a self-contained visual package. The minimum fields:
 - **id:** stable string used in storage and lookups. Built-in IDs are `light` and `dark`. Custom themes use slugs or UUIDs.
 - **displayName:** user-visible name in the theme picker.
 - **base:** `light` or `dark`. Drives inherited shell styling (via the `.dark` class on the HTML root) and contrast-text selection for events.
-- **eventPalette:** full map of event color slots to hex values (see "Event color palette" below). Every registered slot must have a hex entry, even if the theme reuses the same color across multiple slots.
+- **eventPalette:** ordered array of 24 hex values (one per slot index). Every position must be filled, even if the theme reuses the same color across multiple slots. See "Event color palette" below.
 - **blendCanvas:** hex color the dimmed event variants blend toward. Usually the theme's canvas background.
 
 Optional fields reserved for shell theming:
@@ -31,41 +31,32 @@ The original store was a binary `isDark` toggle. It could not express "a user ma
 
 Event colors use two layers so users can redesign themes freely without breaking stored events.
 
-1. **Slot ID (stable, invisible).** A stable string like `tomato` or `peacock`. Stored in the database on the event row. Never shown to the user. Never renamed in place. Acts purely as a key into each theme's palette.
-2. **Hex value (per theme).** The actual RGB the slot resolves to in the active theme. Two themes can assign wildly different hex to the same slot. When the user switches themes, all events across the app pick up the new hex immediately because they reference the slot, not the color.
+1. **Slot index (stable, invisible).** An integer in the range `0..PALETTE_SIZE-1` (currently `0..23`). Stored as `INTEGER` on the event row. Never shown to the user. Acts purely as a position into each theme's `eventPalette` array.
+2. **Hex value (per theme).** The actual RGB the slot resolves to in the active theme. Two themes can assign wildly different hex to the same index. When the user switches themes, all events across the app pick up the new hex immediately because they reference the position, not the color.
 
-There is no third "display name" layer. The slot id is internal only; UI surfaces (the editor grid, the event color picker tooltip) show the hex value next to the swatch instead of a name. This sidesteps the "mango scenario" entirely: a user who recolors the `mango` slot blue never sees the word "Mango" in the editor or the picker, only the swatch and `#3366CC`. No per-theme name field, no auto-naming heuristics, no name-vs-color drift.
+There is no third "display name" layer. The index is internal only; UI surfaces (the editor grid, the event color picker tooltip) show the hex value next to the swatch instead of a name. This sidesteps the "mango scenario" entirely: a user who recolors slot `6` blue never sees the word "Mango" in the editor or the picker, only the swatch and `#3366CC`. No per-slot name field, no auto-naming heuristics, no name-vs-color drift.
 
 ## Event color palette
 
-The built-in themes ship a 24-slot palette inspired by Google Calendar:
+The built-in themes ship a 24-slot palette inspired by Google Calendar. Each theme's `eventPalette` is a frozen array of 24 hex strings; the slot at index `n` is whatever color the active theme assigns to that position. `GRAPHITE_INDEX = 22` is the render-layer fallback when a stored color is unknown or missing. Every theme must keep all 24 slots filled and must keep slot 22 readable as a neutral fallback.
 
-```
-radicchio, cherryBlossom, tomato, flamingo, tangerine, pumpkin,
-mango, banana, citron, avocado, pistachio, sage,
-basil, eucalyptus, peacock, cobalt, blueberry, lavender,
-wisteria, amethyst, grape, cocoa, graphite, birch
-```
-
-`graphite` is the render-layer fallback when a color is unknown or missing. It must exist in every theme's palette.
+The two layers mean themes can swap any color at any position freely; existing events keep rendering, just in the new color the active theme assigns to their stored index.
 
 ### Validation on read
 
 Raw color values come in from the database, iCalendar imports, and user edits. `normalizeEventColor(raw)` in `components/calendar/utils.ts` validates every value on its way into the in-memory event model:
 
-- Known slot ID: pass through.
-- Known legacy alias (see next section): rewrite to the current slot.
-- Unknown non-empty string: warn once to the console, return undefined, render falls back to graphite.
-- Null, empty, or non-string: return undefined silently.
-- Prototype-chain keys (`toString`, `__proto__`, `constructor`): rejected.
+- Integer in `0..PALETTE_SIZE-1`: pass through.
+- Numeric string parseable to such an integer: coerce and pass through.
+- Out of range, non-integer, `NaN`, or `Infinity`: warn once to the console, return undefined; render falls back to the `GRAPHITE_INDEX` slot.
+- Null, empty string, or other non-numeric type: return undefined silently.
+- Legacy slot-name strings (`"tomato"`, `"peacock"`, etc.): not coerced; treated as unknown and dropped. The DB schema migration to `INTEGER` removed the only path that ever produced them.
 
-The warning is deduped across a session (Set-backed) so a legacy name on a thousand rows logs one line, not one thousand.
+The warning is deduped across a session (Set-backed) so a bad value on a thousand rows logs one line, not one thousand.
 
-### Evolving the palette (aliases)
+### Evolving the palette
 
-When a slot is renamed or removed, add an entry to the `COLOR_ALIASES` map in `utils.ts`. Example: if `flamingo` were renamed to `coral`, the alias `{ flamingo: "coral" }` keeps every stored `flamingo` event rendering as coral instead of silently degrading to graphite. Aliases are permanent: removing an alias breaks events that still reference the old name in backups or exports.
-
-Never rename a slot in place without an alias. Never silently drop a slot: at minimum, add it to `COLOR_ALIASES` pointing to the closest remaining slot.
+The palette size is fixed at 24 (`PALETTE_SIZE`). Themes redefine what color sits at each index; they do not add or remove slots. Stored events keep their integer reference forever, so changing a theme's hex for any slot is always safe. If the palette ever needs to grow, increase `PALETTE_SIZE` and add the new positions at the end so existing indices stay valid.
 
 ## Contrast text and dimmed variants
 

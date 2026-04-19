@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
-import type { EventColor } from "$lib/components/calendar/types";
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
   BUILTIN_THEME_REGISTRY,
   DEFAULT_THEME_ID,
-  EVENT_SLOTS,
   APP_TOKEN_KEYS,
   CALENDAR_TOKEN_KEYS,
   darkTheme,
@@ -19,8 +18,7 @@ import {
 } from "./themes";
 
 function buildValidThemeInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  const palette: Record<string, string> = {};
-  for (const slot of EVENT_SLOTS) palette[slot] = "#abcdef";
+  const palette: string[] = Array.from({ length: PALETTE_SIZE }, () => "#abcdef");
   return {
     id: "custom-theme",
     displayName: "Custom Theme",
@@ -31,12 +29,10 @@ function buildValidThemeInput(overrides: Record<string, unknown> = {}): Record<s
   };
 }
 
-const REQUIRED_EVENT_COLORS: readonly EventColor[] = [
-  "radicchio", "cherryBlossom", "tomato", "flamingo", "tangerine",
-  "pumpkin", "mango", "banana", "citron", "avocado", "pistachio",
-  "sage", "basil", "eucalyptus", "peacock", "cobalt", "blueberry",
-  "lavender", "wisteria", "amethyst", "grape", "cocoa", "graphite", "birch",
-];
+const PALETTE_INDICES: readonly number[] = Array.from(
+  { length: PALETTE_SIZE },
+  (_, i) => i,
+);
 
 describe("theme registry", () => {
   it("registers light and dark built-in themes", () => {
@@ -60,12 +56,13 @@ describe("theme registry", () => {
 });
 
 describe("built-in themes", () => {
-  it("every built-in theme covers all required event colors", () => {
+  it("every built-in theme has a hex value at every palette index", () => {
     for (const theme of [lightTheme, darkTheme]) {
-      for (const color of REQUIRED_EVENT_COLORS) {
+      expect(theme.eventPalette.length).toBe(PALETTE_SIZE);
+      for (const i of PALETTE_INDICES) {
         expect(
-          theme.eventPalette[color],
-          `${theme.id} is missing ${color}`,
+          theme.eventPalette[i],
+          `${theme.id} is missing index ${i}`,
         ).toMatch(/^#[0-9a-fA-F]{6}$/);
       }
     }
@@ -92,11 +89,11 @@ describe("built-in themes", () => {
   });
 
   it("light and dark palettes differ for every slot", () => {
-    for (const color of REQUIRED_EVENT_COLORS) {
+    for (const i of PALETTE_INDICES) {
       expect(
-        lightTheme.eventPalette[color].toLowerCase(),
-        `${color} is identical across light and dark`,
-      ).not.toBe(darkTheme.eventPalette[color].toLowerCase());
+        lightTheme.eventPalette[i].toLowerCase(),
+        `index ${i} is identical across light and dark`,
+      ).not.toBe(darkTheme.eventPalette[i].toLowerCase());
     }
   });
 });
@@ -213,16 +210,6 @@ describe("isBuiltinThemeId", () => {
   });
 });
 
-describe("EVENT_SLOTS", () => {
-  it("matches the EventColor union", () => {
-    expect(EVENT_SLOTS).toEqual(REQUIRED_EVENT_COLORS);
-  });
-
-  it("is frozen", () => {
-    expect(Object.isFrozen(EVENT_SLOTS)).toBe(true);
-  });
-});
-
 describe("token catalogs", () => {
   it("APP_TOKEN_KEYS only contains -- prefixed names", () => {
     for (const key of APP_TOKEN_KEYS) expect(key.startsWith("--")).toBe(true);
@@ -265,7 +252,8 @@ describe("validateThemeJson", () => {
       expect(result.theme.id).toBe("custom-theme");
       expect(result.theme.displayName).toBe("Custom Theme");
       expect(result.theme.base).toBe("dark");
-      expect(result.theme.eventPalette.radicchio).toBe("#abcdef");
+      expect(result.theme.eventPalette).toHaveLength(PALETTE_SIZE);
+      expect(result.theme.eventPalette[0]).toBe("#abcdef");
     }
   });
 
@@ -310,27 +298,34 @@ describe("validateThemeJson", () => {
       expect(result.errors.some((e) => e.includes("blendCanvas"))).toBe(true);
   });
 
-  it("reports every missing event slot", () => {
-    const partial: Record<string, string> = {};
-    for (const slot of EVENT_SLOTS.slice(0, 3)) partial[slot] = "#000000";
+  it("rejects a palette of the wrong length", () => {
+    const partial = Array.from({ length: 3 }, () => "#000000");
     const result = validateThemeJson(
       buildValidThemeInput({ eventPalette: partial }),
     );
     expect(result.ok).toBe(false);
     if (!result.ok)
-      expect(result.errors.length).toBeGreaterThanOrEqual(EVENT_SLOTS.length - 3);
+      expect(result.errors.some((e) => e.includes("eventPalette"))).toBe(true);
   });
 
-  it("rejects a non-hex slot value", () => {
-    const palette: Record<string, string> = {};
-    for (const slot of EVENT_SLOTS) palette[slot] = "#abcdef";
-    palette.radicchio = "tomato";
+  it("rejects an eventPalette that is not an array", () => {
+    const result = validateThemeJson(
+      buildValidThemeInput({ eventPalette: { radicchio: "#abcdef" } }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.some((e) => e.includes("eventPalette"))).toBe(true);
+  });
+
+  it("rejects a non-hex palette entry", () => {
+    const palette: string[] = Array.from({ length: PALETTE_SIZE }, () => "#abcdef");
+    palette[0] = "tomato";
     const result = validateThemeJson(
       buildValidThemeInput({ eventPalette: palette }),
     );
     expect(result.ok).toBe(false);
     if (!result.ok)
-      expect(result.errors.some((e) => e.includes("radicchio"))).toBe(true);
+      expect(result.errors.some((e) => e.includes("[0]"))).toBe(true);
   });
 
   it("accepts known appTokenOverrides and rejects bad hex", () => {

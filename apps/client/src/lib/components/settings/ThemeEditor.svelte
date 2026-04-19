@@ -11,8 +11,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { cn } from "$lib/utils";
+  import { PALETTE_SIZE } from "$lib/components/calendar/types";
   import {
-    EVENT_SLOTS,
     APP_TOKEN_KEYS,
     CALENDAR_TOKEN_KEYS,
     type Theme,
@@ -74,11 +74,13 @@
     themeStore.updateTheme(theme.id, { blendCanvas: hex });
   }
 
-  function setSlot(slot: keyof typeof theme.eventPalette, hex: string) {
-    themeStore.updateTheme(theme.id, {
-      eventPalette: { ...theme.eventPalette, [slot]: hex },
-    });
+  function setSlot(index: number, hex: string) {
+    const next = [...theme.eventPalette];
+    next[index] = hex;
+    themeStore.updateTheme(theme.id, { eventPalette: next });
   }
+
+  const paletteIndices = Array.from({ length: PALETTE_SIZE }, (_, i) => i);
 
   function setAppToken(key: string, hex: string) {
     const next = { ...(theme.appTokenOverrides ?? {}), [key]: hex };
@@ -254,24 +256,24 @@
     <div
       class="grid grid-cols-4 gap-x-3 gap-y-1.5 rounded-lg bg-card p-3 dark:bg-background"
     >
-      {#each EVENT_SLOTS as slot}
+      {#each paletteIndices as index}
         {#if isBuiltin}
           <div class="flex w-full items-center gap-1.5">
             <span
               class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
-              style="background-color: {theme.eventPalette[slot]};"
-              title={theme.eventPalette[slot]}
+              style="background-color: {theme.eventPalette[index]};"
+              title={theme.eventPalette[index]}
             ></span>
             <span
               class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
             >
-              {theme.eventPalette[slot]}
+              {theme.eventPalette[index]}
             </span>
           </div>
         {:else}
           <ColorField
-            value={theme.eventPalette[slot]}
-            onChange={(hex) => setSlot(slot, hex)}
+            value={theme.eventPalette[index]}
+            onChange={(hex) => setSlot(index, hex)}
             fluid
           />
         {/if}

@@ -1,4 +1,4 @@
-import type { EventColor } from "$lib/components/calendar/types";
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
 
 /**
  * Stable ID identifying a theme. Built-in IDs are "light" and "dark".
@@ -7,13 +7,18 @@ import type { EventColor } from "$lib/components/calendar/types";
 export type ThemeId = string;
 
 /**
- * Full palette for event color slots within a theme. Every built-in
- * EventColor must have a hex entry. Themes may differ arbitrarily: two
- * themes can assign the same slot ID completely different colors, and
- * events preserve their slot reference across theme switches so they
- * render correctly in whichever theme the user is on.
+ * Full palette for event color slots within a theme. Always exactly
+ * PALETTE_SIZE entries (currently 24); each entry is a hex color the slot
+ * resolves to. Events store the slot index, not the hex, so two themes can
+ * assign the same slot index completely different colors and stored events
+ * pick up the active theme's hex automatically when the user switches.
+ *
+ * Stored as an array (not an object) so order is intrinsic to the data
+ * shape: a slot's position is its identity. JSON serialization preserves
+ * the order without depending on object-key insertion semantics, and the
+ * on-disk integer color (0..23) is tighter than any string key.
  */
-export type EventPaletteHexes = Record<EventColor, string>;
+export type EventPaletteHexes = readonly string[];
 
 /**
  * A theme is a self-contained visual package. The minimum a theme must
@@ -40,63 +45,65 @@ export interface Theme {
 }
 
 // Built-in event palettes. These are the Google-calendar-inspired 24-color
-// sets shipped previously, split from the former combined {light, dark}
-// palette so each theme now owns one standalone palette. Additional themes
-// can freely deviate without being locked to these colors.
+// sets shipped previously. Stored as positional arrays so the slot index
+// (the value events save on disk) maps directly into the array. Additional
+// themes can freely deviate without being locked to these colors. Position
+// 22 is the GRAPHITE_INDEX render-layer fallback; every theme must keep all
+// PALETTE_SIZE positions filled.
 
-const LIGHT_EVENT_PALETTE: EventPaletteHexes = {
-  radicchio:     "#AD1457",
-  cherryBlossom: "#D81B60",
-  tomato:        "#D50000",
-  flamingo:      "#E67C73",
-  tangerine:     "#F4511E",
-  pumpkin:       "#EF6C00",
-  mango:         "#F09300",
-  banana:        "#F6BF26",
-  citron:        "#E4C441",
-  avocado:       "#C0CA33",
-  pistachio:     "#7CB342",
-  sage:          "#33B679",
-  basil:         "#0B8043",
-  eucalyptus:    "#009688",
-  peacock:       "#039BE5",
-  cobalt:        "#4285F4",
-  blueberry:     "#3F51B5",
-  lavender:      "#7986CB",
-  wisteria:      "#B39DDB",
-  amethyst:      "#9E69AF",
-  grape:         "#8E24AA",
-  cocoa:         "#795548",
-  graphite:      "#616161",
-  birch:         "#A79B8E",
-};
+const LIGHT_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
+  "#AD1457", // 0  radicchio
+  "#D81B60", // 1  cherry blossom
+  "#D50000", // 2  tomato
+  "#E67C73", // 3  flamingo
+  "#F4511E", // 4  tangerine
+  "#EF6C00", // 5  pumpkin
+  "#F09300", // 6  mango
+  "#F6BF26", // 7  banana
+  "#E4C441", // 8  citron
+  "#C0CA33", // 9  avocado
+  "#7CB342", // 10 pistachio
+  "#33B679", // 11 sage
+  "#0B8043", // 12 basil
+  "#009688", // 13 eucalyptus
+  "#039BE5", // 14 peacock
+  "#4285F4", // 15 cobalt
+  "#3F51B5", // 16 blueberry
+  "#7986CB", // 17 lavender
+  "#B39DDB", // 18 wisteria
+  "#9E69AF", // 19 amethyst
+  "#8E24AA", // 20 grape
+  "#795548", // 21 cocoa
+  "#616161", // 22 graphite (fallback)
+  "#A79B8E", // 23 birch
+]);
 
-const DARK_EVENT_PALETTE: EventPaletteHexes = {
-  radicchio:     "#C05476",
-  cherryBlossom: "#D85675",
-  tomato:        "#DA5234",
-  flamingo:      "#D6837A",
-  tangerine:     "#E3683E",
-  pumpkin:       "#DD7835",
-  mango:         "#E0963C",
-  banana:        "#E6B951",
-  citron:        "#D8BE5E",
-  avocado:       "#BCC256",
-  pistachio:     "#85AD59",
-  sage:          "#55B080",
-  basil:         "#489160",
-  eucalyptus:    "#429A8E",
-  peacock:       "#4B99D2",
-  cobalt:        "#668BE1",
-  blueberry:     "#6E72C3",
-  lavender:      "#828BC2",
-  wisteria:      "#AE9CCE",
-  amethyst:      "#A479B1",
-  grape:         "#A75ABA",
-  cocoa:         "#957367",
-  graphite:      "#7C7C7C",
-  birch:         "#A5998C",
-};
+const DARK_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
+  "#C05476", // 0  radicchio
+  "#D85675", // 1  cherry blossom
+  "#DA5234", // 2  tomato
+  "#D6837A", // 3  flamingo
+  "#E3683E", // 4  tangerine
+  "#DD7835", // 5  pumpkin
+  "#E0963C", // 6  mango
+  "#E6B951", // 7  banana
+  "#D8BE5E", // 8  citron
+  "#BCC256", // 9  avocado
+  "#85AD59", // 10 pistachio
+  "#55B080", // 11 sage
+  "#489160", // 12 basil
+  "#429A8E", // 13 eucalyptus
+  "#4B99D2", // 14 peacock
+  "#668BE1", // 15 cobalt
+  "#6E72C3", // 16 blueberry
+  "#828BC2", // 17 lavender
+  "#AE9CCE", // 18 wisteria
+  "#A479B1", // 19 amethyst
+  "#A75ABA", // 20 grape
+  "#957367", // 21 cocoa
+  "#7C7C7C", // 22 graphite (fallback)
+  "#A5998C", // 23 birch
+]);
 
 export const lightTheme: Theme = Object.freeze({
   id: "light",
@@ -198,38 +205,6 @@ export function computeThemeTokenOps(
   }
   return { toSet, toClear, applied };
 }
-
-/**
- * Canonical ordering of event color slots. The editor and validator iterate
- * this list so a slot added or removed from EventColor flows through one
- * source of truth.
- */
-export const EVENT_SLOTS: readonly EventColor[] = Object.freeze([
-  "radicchio",
-  "cherryBlossom",
-  "tomato",
-  "flamingo",
-  "tangerine",
-  "pumpkin",
-  "mango",
-  "banana",
-  "citron",
-  "avocado",
-  "pistachio",
-  "sage",
-  "basil",
-  "eucalyptus",
-  "peacock",
-  "cobalt",
-  "blueberry",
-  "lavender",
-  "wisteria",
-  "amethyst",
-  "grape",
-  "cocoa",
-  "graphite",
-  "birch",
-] satisfies readonly EventColor[]);
 
 /**
  * App-shell CSS custom properties a user theme is allowed to override.
@@ -342,10 +317,8 @@ export function serializeTheme(theme: Theme): string {
   return JSON.stringify(ordered, null, 2);
 }
 
-function orderedPalette(palette: EventPaletteHexes): EventPaletteHexes {
-  const out = {} as EventPaletteHexes;
-  for (const slot of EVENT_SLOTS) out[slot] = palette[slot];
-  return out;
+function orderedPalette(palette: EventPaletteHexes): string[] {
+  return [...palette];
 }
 
 function orderedTokens(
@@ -411,20 +384,21 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     cleanBlend = blendCanvas;
   }
 
-  const cleanPalette = {} as EventPaletteHexes;
-  if (!isPlainObject(eventPalette)) {
-    errors.push("eventPalette must be an object");
+  const cleanPalette: string[] = [];
+  if (!Array.isArray(eventPalette)) {
+    errors.push(`eventPalette must be an array of ${PALETTE_SIZE} hex strings`);
+  } else if (eventPalette.length !== PALETTE_SIZE) {
+    errors.push(
+      `eventPalette must contain exactly ${PALETTE_SIZE} entries (got ${eventPalette.length})`,
+    );
   } else {
-    for (const slot of EVENT_SLOTS) {
-      if (!Object.hasOwn(eventPalette, slot)) {
-        errors.push(`eventPalette.${slot} is missing`);
-        continue;
-      }
-      const value = (eventPalette as Record<string, unknown>)[slot];
+    for (let i = 0; i < PALETTE_SIZE; i++) {
+      const value = eventPalette[i];
       if (!isHexColor(value)) {
-        errors.push(`eventPalette.${slot} must be a hex color`);
+        errors.push(`eventPalette[${i}] must be a hex color`);
+        cleanPalette.push("#000000");
       } else {
-        cleanPalette[slot] = value;
+        cleanPalette.push(value);
       }
     }
   }

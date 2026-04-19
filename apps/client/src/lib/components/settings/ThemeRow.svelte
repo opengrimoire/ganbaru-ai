@@ -7,7 +7,6 @@
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import { cn } from "$lib/utils";
-  import type { EventColor } from "$lib/components/calendar/types";
   import type { Theme } from "$lib/stores/themes";
 
   let {
@@ -28,16 +27,9 @@
     onDelete: () => void;
   } = $props();
 
-  const PREVIEW_SLOTS: readonly EventColor[] = [
-    "tomato",
-    "tangerine",
-    "banana",
-    "basil",
-    "peacock",
-    "blueberry",
-    "grape",
-    "graphite",
-  ];
+  // Indices into the eventPalette array for the row's preview swatches.
+  // Picked across the spectrum so the strip reads as a quick visual summary.
+  const PREVIEW_INDICES: readonly number[] = [2, 4, 7, 12, 14, 16, 20, 22];
 
   const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
 </script>
@@ -69,10 +61,10 @@
       </div>
     </div>
     <div class="flex items-center gap-1">
-      {#each PREVIEW_SLOTS as slot}
+      {#each PREVIEW_INDICES as index}
         <span
           class="h-3.5 w-3.5 rounded-full"
-          style="background-color: {theme.eventPalette[slot]};"
+          style="background-color: {theme.eventPalette[index]};"
         ></span>
       {/each}
     </div>

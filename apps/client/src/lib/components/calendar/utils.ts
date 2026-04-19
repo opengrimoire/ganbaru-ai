@@ -4,6 +4,7 @@ import type {
   PositionedAllDayEvent,
   PositionedEvent,
 } from "./types";
+import { GRAPHITE_INDEX, PALETTE_SIZE } from "./types";
 
 const MIN_EVENT_HEIGHT = 4;
 
@@ -709,7 +710,7 @@ export function layoutEventsForDay(
 // {bg, text} entries, applying contrast-aware text selection and caching
 // the resolved palette per theme ID so switching themes is cheap.
 
-import { lightTheme, type Theme } from "$lib/stores/themes";
+import type { Theme } from "$lib/stores/themes";
 
 export interface ColorEntry {
   bg: string;
@@ -731,13 +732,6 @@ const DARK_TEXT_ALT = "#e3e3e3";
 // for now these are shared across themes of a given base.
 const LIGHT_FLIP_ABOVE = 0.65;
 const DARK_FLIP_BELOW = 0.35;
-
-// Built-in slot IDs (keys of any registered theme's palette). Used by
-// normalizeEventColor to validate raw DB strings. All themes are required
-// to cover these keys so validation does not need per-theme lookups.
-const BUILT_IN_SLOT_IDS: ReadonlySet<string> = new Set(
-  Object.keys(lightTheme.eventPalette),
-);
 
 /**
  * Linearly blend two hex colors in sRGB space.
@@ -777,73 +771,82 @@ function pickContrastText(bg: string, themeBase: "light" | "dark"): string {
   return luminance > LIGHT_FLIP_ABOVE ? LIGHT_TEXT_ALT : LIGHT_TEXT;
 }
 
-/**
- * Aliases for renamed or removed palette entries. Keys are legacy slot
- * names that may still appear on stored events; values are the replacement
- * slot. Empty today; populate when evolving the palette so existing events
- * preserve their intent instead of falling back to graphite.
- */
-const COLOR_ALIASES: Record<string, EventColor> = {};
+// Cache of resolved palettes keyed by theme ID. Each entry is a positional
+// array of ColorEntry records (bg + contrast text) sharing the theme's
+// palette index space.
+const resolvedPaletteCache = new Map<string, ColorEntry[]>();
 
-// Cache of resolved palettes keyed by theme ID. Each entry maps the
-// theme's palette hexes to full ColorEntry records (bg + contrast text).
-const resolvedPaletteCache = new Map<string, Record<EventColor, ColorEntry>>();
-
-function resolvePalette(theme: Theme): Record<EventColor, ColorEntry> {
+function resolvePalette(theme: Theme): ColorEntry[] {
   const cached = resolvedPaletteCache.get(theme.id);
   if (cached) return cached;
-  const out = {} as Record<EventColor, ColorEntry>;
-  for (const key of Object.keys(theme.eventPalette) as EventColor[]) {
-    const bg = theme.eventPalette[key];
-    out[key] = { bg, text: pickContrastText(bg, theme.base) };
+  const out: ColorEntry[] = [];
+  for (let i = 0; i < theme.eventPalette.length; i++) {
+    const bg = theme.eventPalette[i];
+    out.push({ bg, text: pickContrastText(bg, theme.base) });
   }
   resolvedPaletteCache.set(theme.id, out);
   return out;
 }
 
-// Dedupes unknown-color warnings so a legacy name on many rows logs once.
+// Dedupes unknown-color warnings so a stray legacy value on many rows logs
+// once per session.
 const warnedUnknownColors = new Set<string>();
 
 /**
  * Normalize a raw color value read from the database or an external import
- * into a known EventColor. Resolves COLOR_ALIASES for legacy names and
- * guards against prototype-chain keys ("toString", "__proto__"). Unknown
- * strings log a single warning and return undefined, so the render layer
- * falls back to graphite without masking data drift.
+ * into a valid EventColor (slot index 0..PALETTE_SIZE-1). Inputs outside
+ * the range, or non-numeric inputs, log a single warning and return
+ * undefined so the render layer falls back to graphite without masking
+ * data drift.
  *
  * @param raw Value from an untrusted source (DB column, import file).
- * @returns A palette key, or undefined for null/empty/unknown inputs.
+ * @returns A palette index, or undefined for null/empty/out-of-range inputs.
  */
 export function normalizeEventColor(raw: unknown): EventColor | undefined {
   if (raw == null || raw === "") return undefined;
-  if (typeof raw !== "string") {
+  let n: number;
+  if (typeof raw === "number") {
+    n = raw;
+  } else if (typeof raw === "string") {
+    n = Number(raw);
+    if (!Number.isFinite(n)) {
+      if (!warnedUnknownColors.has(raw)) {
+        warnedUnknownColors.add(raw);
+        console.warn(`[calendar] non-numeric event color "${raw}", falling back to default`);
+      }
+      return undefined;
+    }
+  } else {
     const key = String(raw);
     if (!warnedUnknownColors.has(key)) {
       warnedUnknownColors.add(key);
-      console.warn("[calendar] non-string event color:", raw);
+      console.warn("[calendar] non-numeric event color:", raw);
     }
     return undefined;
   }
-  if (BUILT_IN_SLOT_IDS.has(raw)) return raw as EventColor;
-  if (Object.hasOwn(COLOR_ALIASES, raw)) return COLOR_ALIASES[raw];
-  if (!warnedUnknownColors.has(raw)) {
-    warnedUnknownColors.add(raw);
-    console.warn(`[calendar] unknown event color "${raw}", falling back to default`);
+  if (!Number.isInteger(n) || n < 0 || n >= PALETTE_SIZE) {
+    const key = String(raw);
+    if (!warnedUnknownColors.has(key)) {
+      warnedUnknownColors.add(key);
+      console.warn(`[calendar] event color ${raw} out of range, falling back to default`);
+    }
+    return undefined;
   }
-  return undefined;
+  return n;
 }
 
 /**
- * Resolve an event color within a theme. Unknown slot IDs fall back to
- * graphite. Pass the active theme from the theme store at the call site.
+ * Resolve an event color within a theme. Out-of-range or undefined slots
+ * fall back to GRAPHITE_INDEX. Pass the active theme from the theme store
+ * at the call site.
  */
 export function getEventColor(
   color: EventColor | undefined,
   theme: Theme,
 ): ColorEntry {
   const palette = resolvePalette(theme);
-  if (color && palette[color]) return palette[color];
-  return palette.graphite;
+  if (color !== undefined && palette[color]) return palette[color];
+  return palette[GRAPHITE_INDEX];
 }
 
 // Cache for computed dimmed colors (past, cancelled, free, outside-month).
@@ -862,7 +865,7 @@ function getDimmedEventColor(
   theme: Theme,
   mainWeight: number,
 ): ColorEntry {
-  const key = `${theme.id}-${color ?? "graphite"}-${mainWeight}`;
+  const key = `${theme.id}-${color ?? GRAPHITE_INDEX}-${mainWeight}`;
   const cached = dimmedColorCache.get(key);
   if (cached) return cached;
 
@@ -919,8 +922,9 @@ export function getOutsideMonthEventColor(
   return getDimmedEventColor(color, theme, 0.25);
 }
 
-export const EVENT_COLOR_OPTIONS: EventColor[] =
-  Object.keys(lightTheme.eventPalette) as EventColor[];
+export const EVENT_COLOR_OPTIONS: readonly EventColor[] = Object.freeze(
+  Array.from({ length: PALETTE_SIZE }, (_, i) => i),
+);
 
 /**
  * Smooth-scroll wheel handler for Linux/discrete-tick environments.

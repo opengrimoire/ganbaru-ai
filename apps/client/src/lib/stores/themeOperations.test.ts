@@ -1,16 +1,18 @@
 import { describe, it, expect } from "vitest";
-import type { EventColor } from "$lib/components/calendar/types";
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
   cloneTheme,
   mergeThemePatch,
   nextUniqueDisplayName,
   normalizeDisplayName,
 } from "./themeOperations";
-import { EVENT_SLOTS, type Theme } from "./themes";
+import { type Theme } from "./themes";
 
 function makeTheme(overrides: Partial<Theme> = {}): Theme {
-  const eventPalette: Record<EventColor, string> = {} as Record<EventColor, string>;
-  for (const slot of EVENT_SLOTS) eventPalette[slot] = "#abcdef";
+  const eventPalette: string[] = Array.from(
+    { length: PALETTE_SIZE },
+    () => "#abcdef",
+  );
   return {
     id: "seed",
     displayName: "Seed",
@@ -38,8 +40,8 @@ describe("cloneTheme", () => {
   it("clones the eventPalette so source mutations do not leak", () => {
     const source = makeTheme();
     const copy = cloneTheme(source, "fork", "Fork");
-    copy.eventPalette.tomato = "#ff0000";
-    expect(source.eventPalette.tomato).toBe("#abcdef");
+    (copy.eventPalette as string[])[2] = "#ff0000";
+    expect(source.eventPalette[2]).toBe("#abcdef");
   });
 
   it("clones appTokenOverrides when present", () => {
@@ -75,24 +77,33 @@ describe("mergeThemePatch", () => {
     expect(next.displayName).toBe("renamed");
   });
 
-  it("merges eventPalette so unspecified slots stay put", () => {
+  it("replaces eventPalette wholesale when the patch supplies one", () => {
     const current = makeTheme();
-    // Production callers spread the current palette first; the runtime merge
-    // is defensive on top of that so a single-slot patch overlays cleanly.
     const next = mergeThemePatch(current, {
-      eventPalette: { ...current.eventPalette, tomato: "#ff0000" },
+      eventPalette: [...current.eventPalette].map((hex, i) =>
+        i === 2 ? "#ff0000" : hex,
+      ),
     });
-    expect(next.eventPalette.tomato).toBe("#ff0000");
-    expect(next.eventPalette.basil).toBe(current.eventPalette.basil);
+    expect(next.eventPalette[2]).toBe("#ff0000");
+    expect(next.eventPalette[12]).toBe(current.eventPalette[12]);
   });
 
   it("does not mutate the source palette", () => {
     const current = makeTheme();
-    const before = current.eventPalette.tomato;
-    mergeThemePatch(current, {
-      eventPalette: { ...current.eventPalette, tomato: "#ff0000" },
-    });
-    expect(current.eventPalette.tomato).toBe(before);
+    const before = current.eventPalette[2];
+    const patched = [...current.eventPalette];
+    patched[2] = "#ff0000";
+    mergeThemePatch(current, { eventPalette: patched });
+    expect(current.eventPalette[2]).toBe(before);
+  });
+
+  it("clones the patch palette so later mutations do not leak", () => {
+    const current = makeTheme();
+    const patched = [...current.eventPalette];
+    patched[2] = "#ff0000";
+    const next = mergeThemePatch(current, { eventPalette: patched });
+    patched[2] = "#0000ff";
+    expect(next.eventPalette[2]).toBe("#ff0000");
   });
 
   it("replaces appTokenOverrides wholesale", () => {
