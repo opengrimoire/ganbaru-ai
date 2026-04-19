@@ -6,7 +6,13 @@ import {
   nextUniqueDisplayName,
   normalizeDisplayName,
 } from "./themeOperations";
-import { type Theme } from "./themes";
+import {
+  APP_TOKEN_KEYS,
+  BASE_APP_TOKENS,
+  BASE_CALENDAR_TOKENS,
+  CALENDAR_TOKEN_KEYS,
+  type Theme,
+} from "./themes";
 
 function makeTheme(overrides: Partial<Theme> = {}): Theme {
   const eventPalette: string[] = Array.from(
@@ -44,26 +50,51 @@ describe("cloneTheme", () => {
     expect(source.eventPalette[2]).toBe("#abcdef");
   });
 
-  it("clones appTokenOverrides when present", () => {
+  it("seeds appTokenOverrides from the source's existing overrides", () => {
     const source = makeTheme({ appTokenOverrides: { "--primary": "#111111" } });
     const copy = cloneTheme(source, "fork", "Fork");
-    expect(copy.appTokenOverrides).toEqual({ "--primary": "#111111" });
+    expect(copy.appTokenOverrides?.["--primary"]).toBe("#111111");
     expect(copy.appTokenOverrides).not.toBe(source.appTokenOverrides);
   });
 
-  it("clones calendarTokenOverrides when present", () => {
+  it("fills missing app tokens from BASE_APP_TOKENS for the source's base", () => {
+    const source = makeTheme({ base: "light" });
+    const copy = cloneTheme(source, "fork", "Fork");
+    for (const key of APP_TOKEN_KEYS) {
+      expect(copy.appTokenOverrides?.[key]).toBe(BASE_APP_TOKENS.light[key]);
+    }
+  });
+
+  it("seeds calendarTokenOverrides from the source's existing overrides", () => {
     const source = makeTheme({
       calendarTokenOverrides: { "--cal-bg": "#202020" },
     });
     const copy = cloneTheme(source, "fork", "Fork");
-    expect(copy.calendarTokenOverrides).toEqual({ "--cal-bg": "#202020" });
+    expect(copy.calendarTokenOverrides?.["--cal-bg"]).toBe("#202020");
     expect(copy.calendarTokenOverrides).not.toBe(source.calendarTokenOverrides);
   });
 
-  it("omits override blocks that the source did not carry", () => {
-    const copy = cloneTheme(makeTheme(), "fork", "Fork");
-    expect(copy.appTokenOverrides).toBeUndefined();
-    expect(copy.calendarTokenOverrides).toBeUndefined();
+  it("fills missing calendar tokens from BASE_CALENDAR_TOKENS for the source's base", () => {
+    const source = makeTheme({ base: "dark" });
+    const copy = cloneTheme(source, "fork", "Fork");
+    for (const key of CALENDAR_TOKEN_KEYS) {
+      expect(copy.calendarTokenOverrides?.[key]).toBe(
+        BASE_CALENDAR_TOKENS.dark[key],
+      );
+    }
+  });
+
+  it("snapshots seedAppTokens, seedCalendarTokens, seedEventPalette equal to the resolved source", () => {
+    const source = makeTheme({
+      base: "light",
+      appTokenOverrides: { "--primary": "#abc123" },
+    });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.seedAppTokens).toEqual(copy.appTokenOverrides);
+    expect(copy.seedAppTokens).not.toBe(copy.appTokenOverrides);
+    expect(copy.seedCalendarTokens).toEqual(copy.calendarTokenOverrides);
+    expect(copy.seedEventPalette).toEqual(copy.eventPalette);
+    expect(copy.seedEventPalette).not.toBe(copy.eventPalette);
   });
 });
 

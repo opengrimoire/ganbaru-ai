@@ -42,6 +42,15 @@ export interface Theme {
   appTokenOverrides?: Readonly<Record<string, string>>;
   /** Optional overrides for calendar-shell CSS tokens (--cal-bg, etc). */
   calendarTokenOverrides?: Readonly<Record<string, string>>;
+  /**
+   * Snapshot of the source theme's resolved tokens at clone time. Drives the
+   * per-row "reset" affordance: clicking reset restores this value, not the
+   * built-in light/dark CSS default. Only set on user themes; built-ins
+   * never carry seeds.
+   */
+  seedAppTokens?: Readonly<Record<string, string>>;
+  seedCalendarTokens?: Readonly<Record<string, string>>;
+  seedEventPalette?: EventPaletteHexes;
 }
 
 // Built-in event palettes. Stored as positional arrays so the slot index
@@ -258,9 +267,129 @@ export const CALENDAR_TOKEN_KEYS: readonly string[] = Object.freeze([
 const APP_TOKEN_KEY_SET = new Set(APP_TOKEN_KEYS);
 const CALENDAR_TOKEN_KEY_SET = new Set(CALENDAR_TOKEN_KEYS);
 
+/**
+ * Hex defaults for the app-shell tokens, mirrored from `app.css` so the
+ * editor can show what a token resolves to without consulting the live DOM
+ * (which reflects the currently active theme, not the one being edited).
+ */
+export const BASE_APP_TOKENS: Readonly<
+  Record<"light" | "dark", Readonly<Record<string, string>>>
+> = Object.freeze({
+  light: Object.freeze({
+    "--background": "#F4F4F7",
+    "--foreground": "#141420",
+    "--card": "#FFFFFF",
+    "--card-foreground": "#141420",
+    "--popover": "#FFFFFF",
+    "--popover-foreground": "#141420",
+    "--primary": "#404048",
+    "--primary-foreground": "#F4F4F7",
+    "--secondary": "#E2E2E7",
+    "--secondary-foreground": "#141420",
+    "--muted": "#E2E2E7",
+    "--muted-foreground": "#646470",
+    "--accent": "#E8E8ED",
+    "--accent-foreground": "#141420",
+    "--destructive": "#D93B3B",
+    "--ring": "#8C8C98",
+    "--sidebar": "#DCDCE2",
+    "--sidebar-foreground": "#141420",
+    "--sidebar-primary": "#404048",
+    "--sidebar-primary-foreground": "#F4F4F7",
+    "--sidebar-accent": "#CFCFD6",
+    "--sidebar-accent-foreground": "#141420",
+    "--sidebar-ring": "#8C8C98",
+  }),
+  dark: Object.freeze({
+    "--background": "#27282A",
+    "--foreground": "#ECECF2",
+    "--card": "#2E2F31",
+    "--card-foreground": "#ECECF2",
+    "--popover": "#353638",
+    "--popover-foreground": "#ECECF2",
+    "--primary": "#ECECF2",
+    "--primary-foreground": "#27282A",
+    "--secondary": "#333436",
+    "--secondary-foreground": "#ECECF2",
+    "--muted": "#333436",
+    "--muted-foreground": "#9494A0",
+    "--accent": "#3B3B3F",
+    "--accent-foreground": "#ECECF2",
+    "--destructive": "#E54545",
+    "--ring": "#606070",
+    "--sidebar": "#1E1E23",
+    "--sidebar-foreground": "#FFFFFF",
+    "--sidebar-primary": "#FFFFFF",
+    "--sidebar-primary-foreground": "#1E1E23",
+    "--sidebar-accent": "#3B3B3F",
+    "--sidebar-accent-foreground": "#FFFFFF",
+    "--sidebar-ring": "#606070",
+  }),
+});
+
+/**
+ * Hex defaults for the calendar-shell tokens, mirrored from `app.css`.
+ */
+export const BASE_CALENDAR_TOKENS: Readonly<
+  Record<"light" | "dark", Readonly<Record<string, string>>>
+> = Object.freeze({
+  light: Object.freeze({
+    "--cal-bg": "#FFFFFF",
+    "--cal-header-bg": "#F4F4F7",
+    "--cal-gridline": "#DDDDE3",
+    "--cal-today-circle": "#38383F",
+    "--cal-today-circle-text": "#FFFFFF",
+    "--cal-time-label": "#646470",
+    "--cal-current-time": "#B83A3A",
+    "--cal-timeline-rail": "#E5E7EB",
+    "--cal-timeline-break": "#A1A1AA",
+    "--cal-timeline-focus": "#4ADE80",
+  }),
+  dark: Object.freeze({
+    "--cal-bg": "#131314",
+    "--cal-header-bg": "#27282A",
+    "--cal-gridline": "#333537",
+    "--cal-today-circle": "#A4C4F7",
+    "--cal-today-circle-text": "#0A1929",
+    "--cal-time-label": "#9494A0",
+    "--cal-current-time": "#B83A3A",
+    "--cal-timeline-rail": "#3F3F46",
+    "--cal-timeline-break": "#71717A",
+    "--cal-timeline-focus": "#4ADE80",
+  }),
+});
+
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_DISPLAY_NAME_LENGTH = 60;
+
+/**
+ * Resolve every app-shell token for a theme: explicit override first, then
+ * the CSS base default for the theme's `base`. Used at clone time so the
+ * duplicate is fully self-contained instead of inheriting whatever theme
+ * happens to be active in the DOM.
+ */
+export function resolveAppTokens(theme: Theme): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of APP_TOKEN_KEYS) {
+    out[key] =
+      theme.appTokenOverrides?.[key] ?? BASE_APP_TOKENS[theme.base][key];
+  }
+  return out;
+}
+
+/**
+ * Calendar-shell counterpart to {@link resolveAppTokens}.
+ */
+export function resolveCalendarTokens(theme: Theme): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of CALENDAR_TOKEN_KEYS) {
+    out[key] =
+      theme.calendarTokenOverrides?.[key] ??
+      BASE_CALENDAR_TOKENS[theme.base][key];
+  }
+  return out;
+}
 
 function isHexColor(value: unknown): value is string {
   return typeof value === "string" && HEX_COLOR_RE.test(value);
@@ -414,6 +543,22 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     "calendarTokenOverrides",
     errors,
   );
+  const cleanSeedApp = sanitizeOverrides(
+    input.seedAppTokens,
+    APP_TOKEN_KEY_SET,
+    "seedAppTokens",
+    errors,
+  );
+  const cleanSeedCal = sanitizeOverrides(
+    input.seedCalendarTokens,
+    CALENDAR_TOKEN_KEY_SET,
+    "seedCalendarTokens",
+    errors,
+  );
+  const cleanSeedPalette = sanitizeSeedPalette(
+    input.seedEventPalette,
+    errors,
+  );
 
   if (errors.length > 0) return { ok: false, errors };
 
@@ -430,7 +575,43 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
   if (cleanCalOverrides && Object.keys(cleanCalOverrides).length > 0) {
     theme.calendarTokenOverrides = cleanCalOverrides;
   }
+  if (cleanSeedApp && Object.keys(cleanSeedApp).length > 0) {
+    theme.seedAppTokens = cleanSeedApp;
+  }
+  if (cleanSeedCal && Object.keys(cleanSeedCal).length > 0) {
+    theme.seedCalendarTokens = cleanSeedCal;
+  }
+  if (cleanSeedPalette) {
+    theme.seedEventPalette = cleanSeedPalette;
+  }
   return { ok: true, theme };
+}
+
+function sanitizeSeedPalette(
+  source: unknown,
+  errors: string[],
+): string[] | undefined {
+  if (source === undefined) return undefined;
+  if (!Array.isArray(source)) {
+    errors.push(`seedEventPalette must be an array of ${PALETTE_SIZE} hex strings`);
+    return undefined;
+  }
+  if (source.length !== PALETTE_SIZE) {
+    errors.push(
+      `seedEventPalette must contain exactly ${PALETTE_SIZE} entries (got ${source.length})`,
+    );
+    return undefined;
+  }
+  const out: string[] = [];
+  for (let i = 0; i < PALETTE_SIZE; i++) {
+    const value = source[i];
+    if (!isHexColor(value)) {
+      errors.push(`seedEventPalette[${i}] must be a hex color`);
+      return undefined;
+    }
+    out.push(value);
+  }
+  return out;
 }
 
 function sanitizeOverrides(

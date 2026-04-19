@@ -6,36 +6,44 @@
  * it can be tested in isolation.
  */
 
-import type { Theme, ThemeId } from "./themes";
+import {
+  resolveAppTokens,
+  resolveCalendarTokens,
+  type Theme,
+  type ThemeId,
+} from "./themes";
 
 const MAX_DISPLAY_NAME_LENGTH = 60;
 const NAME_SUFFIX_CAP = 999;
 
 /**
  * Deep-copy a theme, replacing its identity (id + displayName) with the
- * supplied values. The eventPalette and any override blocks are cloned at
- * the top level so later mutations on the copy do not bleed back into the
- * source theme.
+ * supplied values. The clone is fully self-contained: we snapshot the
+ * source's effective tokens (override + base CSS fallback) into both the
+ * working overrides AND the seed* fields, so the duplicate visually matches
+ * the source even when a different theme is currently active in the DOM,
+ * and the per-row reset affordance can restore source values later.
  */
 export function cloneTheme(
   source: Theme,
   id: ThemeId,
   displayName: string,
 ): Theme {
-  const copy: Theme = {
+  const resolvedApp = resolveAppTokens(source);
+  const resolvedCal = resolveCalendarTokens(source);
+  const palette = [...source.eventPalette];
+  return {
     id,
     displayName,
     base: source.base,
     blendCanvas: source.blendCanvas,
-    eventPalette: [...source.eventPalette],
+    eventPalette: palette,
+    appTokenOverrides: { ...resolvedApp },
+    calendarTokenOverrides: { ...resolvedCal },
+    seedAppTokens: { ...resolvedApp },
+    seedCalendarTokens: { ...resolvedCal },
+    seedEventPalette: [...palette],
   };
-  if (source.appTokenOverrides) {
-    copy.appTokenOverrides = { ...source.appTokenOverrides };
-  }
-  if (source.calendarTokenOverrides) {
-    copy.calendarTokenOverrides = { ...source.calendarTokenOverrides };
-  }
-  return copy;
 }
 
 /**

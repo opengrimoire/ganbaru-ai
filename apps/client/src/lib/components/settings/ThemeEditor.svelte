@@ -1,7 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import X from "@lucide/svelte/icons/x";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -14,6 +13,8 @@
   import { blendHex } from "$lib/components/calendar/utils";
   import {
     APP_TOKEN_KEYS,
+    BASE_APP_TOKENS,
+    BASE_CALENDAR_TOKENS,
     CALENDAR_TOKEN_KEYS,
     type Theme,
   } from "$lib/stores/themes";
@@ -172,6 +173,7 @@
   const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
 
   const isBuiltin = $derived(themeStore.isBuiltin(theme.id));
+  const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
 
   // The JSON drawer mirrors the theme's serialized form. We only refresh it
   // from props while the user has not yet typed anything, otherwise their
@@ -206,25 +208,18 @@
     themeStore.renameTheme(theme.id, next);
   }
 
-  // Default --cal-bg per base. Built-in themes' blendCanvas matches these
-  // (since past events fade into the calendar grid, not the surrounding
-  // app), so they double as the fallback when a user theme drops its
-  // --cal-bg override.
-  const BASE_CAL_BG: Record<"light" | "dark", string> = {
-    light: "#FFFFFF",
-    dark: "#131314",
-  };
-
   function effectiveCalBg(t: Theme): string {
-    return t.calendarTokenOverrides?.["--cal-bg"] ?? BASE_CAL_BG[t.base];
+    return (
+      t.calendarTokenOverrides?.["--cal-bg"] ??
+      BASE_CALENDAR_TOKENS[t.base]["--cal-bg"]
+    );
   }
 
+  // The base toggle is purely a marker so the user remembers whether they
+  // are crafting a light or dark theme. Flipping it MUST NOT touch any
+  // colors: that would clobber edits the user already made.
   function setBase(next: "light" | "dark") {
-    const updates: Partial<Theme> = { base: next };
-    if (!theme.calendarTokenOverrides?.["--cal-bg"]) {
-      updates.blendCanvas = BASE_CAL_BG[next];
-    }
-    themeStore.updateTheme(theme.id, updates);
+    themeStore.updateTheme(theme.id, { base: next });
   }
 
   function setSlot(index: number, hex: string) {
@@ -240,13 +235,6 @@
     themeStore.updateTheme(theme.id, { appTokenOverrides: next });
   }
 
-  function clearAppToken(key: string) {
-    if (!theme.appTokenOverrides) return;
-    const next = { ...theme.appTokenOverrides };
-    delete next[key];
-    themeStore.updateTheme(theme.id, { appTokenOverrides: next });
-  }
-
   function setCalToken(key: string, hex: string) {
     const next = { ...(theme.calendarTokenOverrides ?? {}), [key]: hex };
     const updates: Partial<Theme> = { calendarTokenOverrides: next };
@@ -256,22 +244,39 @@
     themeStore.updateTheme(theme.id, updates);
   }
 
-  function clearCalToken(key: string) {
-    if (!theme.calendarTokenOverrides) return;
-    const next = { ...theme.calendarTokenOverrides };
-    delete next[key];
-    const updates: Partial<Theme> = { calendarTokenOverrides: next };
-    if (key === "--cal-bg") updates.blendCanvas = BASE_CAL_BG[theme.base];
-    themeStore.updateTheme(theme.id, updates);
+  // Seed helpers: the value a row should restore to on Reset. For themes
+  // created via duplicate, the seed snapshot captures the source's resolved
+  // tokens at clone time, so reset restores the SOURCE colors, not the
+  // built-in defaults. Imported themes that ship without seeds fall back
+  // to the base CSS defaults.
+  function appSeed(key: string): string {
+    return theme.seedAppTokens?.[key] ?? BASE_APP_TOKENS[theme.base][key];
   }
 
-  function readComputedToken(token: string): string {
-    if (typeof document === "undefined") return "#000000";
-    const computed = getComputedStyle(document.documentElement)
-      .getPropertyValue(token)
-      .trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(computed)) return computed;
-    return "#000000";
+  function calSeed(key: string): string {
+    return (
+      theme.seedCalendarTokens?.[key] ?? BASE_CALENDAR_TOKENS[theme.base][key]
+    );
+  }
+
+  function resetAppToken(key: string) {
+    setAppToken(key, appSeed(key));
+  }
+
+  function resetCalToken(key: string) {
+    setCalToken(key, calSeed(key));
+  }
+
+  function appCanReset(key: string): boolean {
+    const override = theme.appTokenOverrides?.[key];
+    if (override === undefined) return false;
+    return override.toLowerCase() !== appSeed(key).toLowerCase();
+  }
+
+  function calCanReset(key: string): boolean {
+    const override = theme.calendarTokenOverrides?.[key];
+    if (override === undefined) return false;
+    return override.toLowerCase() !== calSeed(key).toLowerCase();
   }
 
   async function copyJsonToClipboard() {
@@ -355,44 +360,34 @@
     <div
       class="flex flex-col gap-3 overflow-hidden rounded-lg bg-card p-4 dark:bg-background"
     >
-      <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
         {#if isBuiltin}
-          {@const BaseIcon = theme.base === "dark" ? Moon : Sun}
-          <div class="flex min-w-0 flex-1 items-center gap-2">
-            <BaseIcon
-              size={15}
-              strokeWidth={1.75}
-              class="shrink-0 text-muted-foreground"
-            />
-            <span class="truncate text-[14px] font-semibold text-foreground">
-              {theme.displayName}
-            </span>
-          </div>
+          <BaseIcon
+            size={15}
+            strokeWidth={1.75}
+            aria-label="{theme.base} theme"
+            class="shrink-0 text-muted-foreground"
+          />
+          <span class="truncate text-[14px] font-semibold text-foreground">
+            {theme.displayName}
+          </span>
         {:else}
+          <button
+            type="button"
+            onclick={() => setBase(theme.base === "dark" ? "light" : "dark")}
+            aria-label="Flip scheme marker (currently {theme.base})"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <BaseIcon size={14} strokeWidth={1.75} />
+          </button>
           <input
             type="text"
             value={theme.displayName}
             oninput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
             maxlength={60}
             aria-label="Theme name"
-            class="flex-1 rounded-md border border-border bg-card px-3 py-1.5 text-[14px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-1.5 text-[14px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
           />
-          <div class="flex h-8 items-center gap-0 rounded-md border border-border p-0.5">
-            {#each ["light", "dark"] as const as base}
-              <button
-                type="button"
-                onclick={() => setBase(base)}
-                class={cn(
-                  "rounded-sm px-3 py-1 text-[12px] font-medium transition-colors",
-                  theme.base === base
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {base}
-              </button>
-            {/each}
-          </div>
         {/if}
       </div>
     </div>
@@ -438,19 +433,12 @@
                 <div class="text-[11px] text-muted-foreground">{info.description}</div>
               </div>
               <ColorField
-                value={override ?? readComputedToken(key)}
+                value={override ?? appSeed(key)}
                 onChange={(hex) => setAppToken(key, hex)}
+                onReset={() => resetAppToken(key)}
+                canReset={appCanReset(key)}
+                label={info.title}
               />
-              <button
-                type="button"
-                onclick={() => clearAppToken(key)}
-                title={override ? "Clear override" : "No override set"}
-                aria-label="Clear override"
-                disabled={!override}
-                class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card disabled:hover:text-muted-foreground dark:bg-transparent dark:disabled:hover:bg-transparent"
-              >
-                <X size={13} strokeWidth={2} />
-              </button>
             </div>
           {/each}
         {/if}
@@ -559,19 +547,12 @@
                 <div class="text-[11px] text-muted-foreground">{info.description}</div>
               </div>
               <ColorField
-                value={override ?? readComputedToken(key)}
+                value={override ?? calSeed(key)}
                 onChange={(hex) => setCalToken(key, hex)}
+                onReset={() => resetCalToken(key)}
+                canReset={calCanReset(key)}
+                label={info.title}
               />
-              <button
-                type="button"
-                onclick={() => clearCalToken(key)}
-                title={override ? "Clear override" : "No override set"}
-                aria-label="Clear override"
-                disabled={!override}
-                class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card disabled:hover:text-muted-foreground dark:bg-transparent dark:disabled:hover:bg-transparent"
-              >
-                <X size={13} strokeWidth={2} />
-              </button>
             </div>
           {/each}
         {/if}
