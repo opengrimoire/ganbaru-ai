@@ -85,13 +85,25 @@ Users can:
 2. **Duplicate and edit** any theme (built-in or user) into a new editable user theme. The duplicate is immediately applied as the active theme and the editor opens on it, so the user sees their edits live from the first change. Built-ins remain frozen.
 3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
 4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the five Quick colors to shift the shell in lockstep, and click Isolated edit on any driven row to break it off the source for a surgical edit (Link back re-links it). The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
-5. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
-6. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
-7. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
+5. **Reset a user theme** to the colors it had when it was created. The Reset button next to the name field pops a confirmation dialog and restores `sources`, `appTokenOverrides`, `calendarTokenOverrides`, `blendCanvas`, and `eventPalette` from the input snapshot captured at clone time (see "Seed snapshots" below). Only the theme name and base flag are kept across a reset; every color goes back to the original.
+6. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
+7. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
+8. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
 
 Every new user theme (created or duplicated) starts with a `sources` palette sampled from its resolved colors, so the editor opens in Quick-colors mode and source edits immediately propagate through derived tokens. Explicit overrides on the source theme are preserved as pinned tokens so surgical edits survive the duplicate.
 
 Editing a built-in is blocked at the store level: mutators return false, `replaceTheme` rejects built-in ids, and the editor hides every input (name field, base toggle, color pickers, add-override buttons) when the target is built-in. Duplicate is the only path to a modifiable copy.
+
+### Seed snapshots
+
+`cloneTheme` captures two snapshots on every clone, both stored on the Theme as optional fields and both persisted in the vault so Reset survives a relaunch:
+
+- **Input seeds** (`seedSources`, `seedAppTokenOverrides`, `seedCalendarTokenOverrides`, `seedBlendCanvas`, `seedEventPalette`): the editable inputs the theme had immediately after cloning. Reset restores these back into `sources`, the two override blocks, `blendCanvas`, and `eventPalette` so the clone behaves again as it did right after it was forked (derivation intact, pinned overrides intact, palette intact).
+- **Resolved seeds** (`seedAppTokens`, `seedCalendarTokens`): the fully resolved token palette at clone time. Retained for a future per-row reset affordance; nothing reads them yet.
+
+Built-in themes never carry seeds. User themes created before the input seeds were added are loaded without them; the store's `canResetTheme` helper returns false for those so the Reset button renders disabled. The next edit persists the theme back to disk, but the input seeds remain missing until the theme is re-cloned from a fresh source.
+
+Input seeds are not exported in the JSON payload: `serializeTheme` omits every seed field so the exported file describes the theme as portable data, not as a forked snapshot with history. Reset is an install-local affordance; sharing a theme ships just the current colors.
 
 ## Shell token derivation and overrides
 
@@ -136,7 +148,7 @@ Only the derivable subset of calendar tokens participates: `--cal-bg`, `--cal-he
 
 Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. Shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
 
-Each group is a collapsible accordion card. Every group starts collapsed so the editor opens scannable: the user picks a section by name before any swatches or inputs mount. The header has three parts, all on one row: the title and description on the left (non-interactive), the source `ColorField` in the middle at the same size and horizontal position as the ColorFields in the sub-option rows, and an explicit **Expand options** / **Collapse options** button on the right that shares the fixed minimum width of the Isolated edit / Link back buttons in the sub-options. This keeps every interactive control vertically aligned across the group and avoids any wasted space beside the source swatch. Groups with at most one row (Ink, Primary action) skip the collapse mechanism and render their row inline below the header; the Expand/Collapse slot becomes an invisible placeholder so the source `ColorField` stays aligned with its peers. Destructive has no row at all: its source feeds `--destructive` through identity derivation and nothing else consumes it, so an isolated row would just repeat the header ColorField without adding capability.
+Groups with more than one driven row are collapsible accordion cards, starting collapsed so the editor opens scannable. The header has three parts, all on one row: the title and description on the left (non-interactive), the source `ColorField` at the same size and horizontal position as the ColorFields in the sub-option rows, and an **EXPAND** / **COLLAPSE** button on the right that shares the fixed minimum width of the Isolated edit / Link back buttons in the sub-options. This keeps every interactive control vertically aligned across the group and avoids any wasted space beside the source swatch. Groups with exactly one driven row (Ink, Primary action) inline that row's `ColorField` and Isolated edit / Link back button directly into the header's right side in place of the EXPAND / COLLAPSE button, so the card always renders as a single line with the source and its one sub-option visible at once. Destructive has no row at all: its source feeds `--destructive` through identity derivation and nothing else consumes it, so an isolated row would just repeat the header ColorField without adding capability; the header shows the source with an invisible placeholder in the action slot to stay aligned with its peers.
 
 The groups:
 
@@ -147,7 +159,7 @@ The groups:
 - **Calendar canvas**: calendar grid background. Drives the grid, header, gridlines, time labels, and pomodoro rail track.
 - **Calendar markers**: a trailing group with no source (no spine color, neutral border). Collects semantic tokens that don't derive (today marker and its text, now line, break marker, focus marker).
 
-Groups with a source color show it as an editable `ColorField` in the header (except Calendar markers, which has no source and leaves only the Expand/Collapse button on the right). Driven rows below have two states, expressed through the HEX input and the trailing action button:
+Groups with a source color show it as an editable `ColorField` in the header (except Calendar markers, which has no source and leaves only the EXPAND / COLLAPSE button on the right). Driven rows, whether rendered inline in the header (Ink, Primary action) or below in the expanded body (App canvas, Calendar canvas, Calendar markers), have two states expressed through the HEX input and the trailing action button:
 
 - **Linked**: the `ColorField` renders its swatch and hex input in a disabled state (reduced opacity, not-allowed cursor) showing the current derived or default value, with an **Isolated edit** action button. Clicking it captures the current auto value as an explicit override and swaps the row to the Isolated state.
 - **Isolated**: the same `ColorField` becomes fully editable (swatch opens the picker, hex input accepts input), with a **Link back** action that drops the override so the token re-follows its source.

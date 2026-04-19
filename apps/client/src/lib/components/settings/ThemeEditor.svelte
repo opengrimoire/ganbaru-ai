@@ -27,6 +27,7 @@
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
   import ColorField from "$lib/components/ui/ColorField.svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   type TokenInfo = { title: string; description: string };
 
@@ -264,6 +265,27 @@
 
   const isBuiltin = $derived(themeStore.isBuiltin(theme.id));
   const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
+  const canReset = $derived(!isBuiltin && themeStore.canResetTheme(theme.id));
+
+  let resetPending = $state(false);
+
+  function openResetConfirm() {
+    resetPending = true;
+  }
+
+  function confirmReset() {
+    themeStore.resetTheme(theme.id);
+    resetPending = false;
+    // The JSON drawer mirrors the current theme; re-sync it so the reset is
+    // reflected in the textarea even if the user had unapplied edits.
+    jsonDraft = themeStore.exportTheme(theme.id) ?? "";
+    jsonDirty = false;
+    jsonErrors = [];
+  }
+
+  function cancelReset() {
+    resetPending = false;
+  }
 
   // Collapse state is ephemeral (not persisted across sessions). Every source
   // group starts collapsed so the editor opens scannable: the user picks a
@@ -538,6 +560,24 @@
             aria-label="Theme name"
             class="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-1.5 text-[14px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
           />
+          <button
+            type="button"
+            onclick={openResetConfirm}
+            disabled={!canReset}
+            title={canReset
+              ? "Restore all colors to the values captured when this theme was created"
+              : "This theme was saved before reset was available; edit once to refresh the snapshot"}
+            aria-label="Reset theme to original"
+            class={cn(
+              "flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[12px] font-medium transition-colors dark:bg-transparent",
+              canReset
+                ? "text-foreground hover:bg-accent"
+                : "cursor-not-allowed text-muted-foreground opacity-60",
+            )}
+          >
+            <RotateCcw size={12} strokeWidth={2.25} />
+            <span>Reset</span>
+          </button>
         {/if}
       </div>
     </div>
@@ -639,8 +679,11 @@
   {/snippet}
 
   {#snippet groupCard(group: SourceGroup)}
-    {@const isInline = group.rows.length <= 1}
-    {@const isCollapsed = !isInline && collapsed[group.title] === true}
+    {@const firstRow = group.rows[0]}
+    {@const singleChild =
+      group.rows.length === 1 && firstRow?.kind === "single" ? firstRow : null}
+    {@const isCollapsible = group.rows.length > 0 && !singleChild}
+    {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
     <section
       class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
     >
@@ -662,9 +705,13 @@
               label="{group.title} source"
             />
           {/if}
-          {#if isInline}
-            <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
-          {:else}
+          {#if singleChild}
+            {@render tokenEditor(
+              singleChild.key,
+              singleChild.scope,
+              tokenInfo(singleChild).title,
+            )}
+          {:else if isCollapsible}
             <button
               type="button"
               onclick={() => toggleGroup(group.title)}
@@ -674,12 +721,14 @@
                 : 'Collapse'} {group.title} options"
               class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
             >
-              <span>{isCollapsed ? "Expand options" : "Collapse options"}</span>
+              <span>{isCollapsed ? "EXPAND" : "COLLAPSE"}</span>
             </button>
+          {:else}
+            <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
           {/if}
         </div>
       </header>
-      {#if !isCollapsed && group.rows.length > 0}
+      {#if isCollapsible && !isCollapsed}
         <div class="divide-y divide-border border-t border-border">
           {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
             {#if row.kind === "single"}
@@ -934,3 +983,14 @@
     </div>
   </section>
 </div>
+
+{#if resetPending}
+  <ConfirmDialog
+    title="Reset theme"
+    message={`Restore "${theme.displayName}" to the colors it had when it was created? Your edits to colors and the event palette will be lost.`}
+    confirmLabel="Reset (Enter)"
+    cancelLabel="Cancel (Esc)"
+    onConfirm={confirmReset}
+    onCancel={cancelReset}
+  />
+{/if}

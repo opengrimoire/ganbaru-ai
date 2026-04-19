@@ -154,6 +154,47 @@ function deleteTheme(id: ThemeId): boolean {
   return true;
 }
 
+/**
+ * Whether the theme can be reset to its clone-time state. Requires the
+ * input seeds (seedSources and friends) to exist, which cloneTheme populates
+ * on all new user themes. Old themes saved before the reset feature was
+ * introduced lack these fields and cannot be reset.
+ */
+function canResetTheme(id: ThemeId): boolean {
+  const theme = customThemes[id];
+  if (!theme) return false;
+  return theme.seedSources !== undefined;
+}
+
+/**
+ * Restore a user theme to the inputs captured at clone time: sources,
+ * overrides, blend canvas, and event palette. Resolved-token seeds are left
+ * alone because they describe outputs, not inputs.
+ */
+function resetTheme(id: ThemeId): boolean {
+  if (isBuiltinThemeId(id)) return false;
+  const current = customThemes[id];
+  if (!current) return false;
+  if (!current.seedSources) return false;
+  const patch: Partial<Omit<Theme, "id">> = {
+    sources: { ...current.seedSources },
+    appTokenOverrides: current.seedAppTokenOverrides
+      ? { ...current.seedAppTokenOverrides }
+      : {},
+    calendarTokenOverrides: current.seedCalendarTokenOverrides
+      ? { ...current.seedCalendarTokenOverrides }
+      : {},
+    blendCanvas: current.seedBlendCanvas ?? current.blendCanvas,
+    eventPalette: current.seedEventPalette
+      ? [...current.seedEventPalette]
+      : current.eventPalette,
+  };
+  customThemes[id] = mergeThemePatch(current, patch);
+  persistCustomThemes();
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
 export type ImportThemeResult =
   | { ok: true; id: ThemeId }
   | { ok: false; errors: string[] };
@@ -260,6 +301,8 @@ export function getTheme() {
     updateTheme,
     renameTheme,
     deleteTheme,
+    canResetTheme,
+    resetTheme,
     importTheme,
     exportTheme,
     replaceTheme,

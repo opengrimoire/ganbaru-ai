@@ -148,6 +148,46 @@ describe("cloneTheme", () => {
     expect(copy.seedEventPalette).toEqual(copy.eventPalette);
     expect(copy.seedEventPalette).not.toBe(copy.eventPalette);
   });
+
+  it("snapshots seedSources matching the clone's sources", () => {
+    const source = makeTheme({ base: "light" });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.seedSources).toEqual(copy.sources);
+    expect(copy.seedSources).not.toBe(copy.sources);
+  });
+
+  it("snapshots seedBlendCanvas from the source blendCanvas", () => {
+    const source = makeTheme({ blendCanvas: "#fafafa" });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.seedBlendCanvas).toBe("#fafafa");
+  });
+
+  it("snapshots seedAppTokenOverrides when the source carries app overrides", () => {
+    const source = makeTheme({
+      appTokenOverrides: { "--primary": "#abc123" },
+    });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.seedAppTokenOverrides?.["--primary"]).toBe("#abc123");
+    expect(copy.seedAppTokenOverrides).not.toBe(copy.appTokenOverrides);
+  });
+
+  it("snapshots seedCalendarTokenOverrides when the source carries calendar overrides", () => {
+    const source = makeTheme({
+      calendarTokenOverrides: { "--cal-bg": "#202020" },
+    });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.seedCalendarTokenOverrides?.["--cal-bg"]).toBe("#202020");
+    expect(copy.seedCalendarTokenOverrides).not.toBe(
+      copy.calendarTokenOverrides,
+    );
+  });
+
+  it("leaves override seeds undefined when the source has no overrides", () => {
+    const source = makeTheme();
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.seedAppTokenOverrides).toBeUndefined();
+    expect(copy.seedCalendarTokenOverrides).toBeUndefined();
+  });
 });
 
 describe("mergeThemePatch", () => {

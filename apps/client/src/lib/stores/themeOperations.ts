@@ -50,6 +50,7 @@ export function cloneTheme(
     seedAppTokens: { ...resolvedApp },
     seedCalendarTokens: { ...resolvedCal },
     seedEventPalette: [...palette],
+    seedBlendCanvas: source.blendCanvas,
   };
   if (source.sources) {
     next.sources = { ...source.sources };
@@ -62,17 +63,20 @@ export function cloneTheme(
       calCanvas: resolvedCal["--cal-bg"],
     };
   }
+  next.seedSources = { ...next.sources };
   if (
     source.appTokenOverrides &&
     Object.keys(source.appTokenOverrides).length > 0
   ) {
     next.appTokenOverrides = { ...source.appTokenOverrides };
+    next.seedAppTokenOverrides = { ...source.appTokenOverrides };
   }
   if (
     source.calendarTokenOverrides &&
     Object.keys(source.calendarTokenOverrides).length > 0
   ) {
     next.calendarTokenOverrides = { ...source.calendarTokenOverrides };
+    next.seedCalendarTokenOverrides = { ...source.calendarTokenOverrides };
   }
   return next;
 }

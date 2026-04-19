@@ -78,14 +78,25 @@ export interface Theme {
   /** Optional overrides for calendar-shell CSS tokens (--cal-bg, etc). */
   calendarTokenOverrides?: Readonly<Record<string, string>>;
   /**
-   * Snapshot of the source theme's resolved tokens at clone time. Drives the
-   * per-row "reset" affordance: clicking reset restores this value, not the
-   * built-in light/dark CSS default. Only set on user themes; built-ins
-   * never carry seeds.
+   * Snapshot of the source theme's resolved tokens at clone time. Drives
+   * per-token lookups (future per-row reset) by recording what each token
+   * looked like when the clone was created, regardless of derivation.
    */
   seedAppTokens?: Readonly<Record<string, string>>;
   seedCalendarTokens?: Readonly<Record<string, string>>;
   seedEventPalette?: EventPaletteHexes;
+  /**
+   * Snapshot of the clone-time editable inputs (sources, overrides, blend
+   * canvas). Drives the theme-level "Reset to original" affordance: restoring
+   * these fields rewinds the theme to how it looked right after cloning.
+   * Separate from the resolved-token seeds above because reset restores the
+   * inputs the derivation reads, not the outputs. Only set on user themes;
+   * built-ins never carry seeds.
+   */
+  seedSources?: ThemeSources;
+  seedAppTokenOverrides?: Readonly<Record<string, string>>;
+  seedCalendarTokenOverrides?: Readonly<Record<string, string>>;
+  seedBlendCanvas?: string;
 }
 
 // Built-in event palettes. Stored as positional arrays so the slot index
@@ -797,6 +808,31 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     input.seedEventPalette,
     errors,
   );
+  const cleanSeedSources = sanitizeSources(
+    input.seedSources,
+    errors,
+    "seedSources",
+  );
+  const cleanSeedAppOverrides = sanitizeOverrides(
+    input.seedAppTokenOverrides,
+    APP_TOKEN_KEY_SET,
+    "seedAppTokenOverrides",
+    errors,
+  );
+  const cleanSeedCalOverrides = sanitizeOverrides(
+    input.seedCalendarTokenOverrides,
+    CALENDAR_TOKEN_KEY_SET,
+    "seedCalendarTokenOverrides",
+    errors,
+  );
+  let cleanSeedBlend: string | undefined;
+  if (input.seedBlendCanvas !== undefined) {
+    if (!isHexColor(input.seedBlendCanvas)) {
+      errors.push("seedBlendCanvas must be a hex color (#RRGGBB or #RRGGBBAA)");
+    } else {
+      cleanSeedBlend = input.seedBlendCanvas;
+    }
+  }
 
   if (errors.length > 0) return { ok: false, errors };
 
@@ -823,6 +859,14 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
   if (cleanSeedPalette) {
     theme.seedEventPalette = cleanSeedPalette;
   }
+  if (cleanSeedSources) theme.seedSources = cleanSeedSources;
+  if (cleanSeedAppOverrides && Object.keys(cleanSeedAppOverrides).length > 0) {
+    theme.seedAppTokenOverrides = cleanSeedAppOverrides;
+  }
+  if (cleanSeedCalOverrides && Object.keys(cleanSeedCalOverrides).length > 0) {
+    theme.seedCalendarTokenOverrides = cleanSeedCalOverrides;
+  }
+  if (cleanSeedBlend) theme.seedBlendCanvas = cleanSeedBlend;
   return { ok: true, theme };
 }
 
@@ -856,10 +900,11 @@ function sanitizeSeedPalette(
 function sanitizeSources(
   source: unknown,
   errors: string[],
+  fieldName: string = "sources",
 ): ThemeSources | undefined {
   if (source === undefined) return undefined;
   if (!isPlainObject(source)) {
-    errors.push("sources must be an object");
+    errors.push(`${fieldName} must be an object`);
     return undefined;
   }
   const out: Partial<ThemeSources> = {};
@@ -867,7 +912,7 @@ function sanitizeSources(
   for (const key of SOURCE_KEY_ORDER) {
     const value = (source as Record<string, unknown>)[key];
     if (!isHexColor(value)) {
-      errors.push(`sources.${key} must be a hex color`);
+      errors.push(`${fieldName}.${key} must be a hex color`);
       ok = false;
       continue;
     }
