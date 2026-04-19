@@ -159,7 +159,11 @@ The groups:
 - **Calendar canvas**: calendar grid background. Drives the grid, header, gridlines, time labels, and pomodoro rail track.
 - **Calendar markers**: a trailing group with no source (no spine color, neutral border). Collects semantic tokens that don't derive (today marker and its text, now line, break marker, focus marker).
 
-Groups with a source color show it as an editable `ColorField` in the header (except Calendar markers, which has no source and leaves only the EXPAND / COLLAPSE button on the right). Driven rows, always rendered below the header (always visible for single-row groups, hidden until expand for multi-row groups), have two states expressed through the HEX input and the trailing action button:
+Groups with a source color show it as an editable `ColorField` in the header (except Calendar markers, which has no source and leaves only the EXPAND / COLLAPSE button on the right). Driven rows render below the header with two distinct layouts.
+
+**Single-row groups** (Ink, Primary action): the sub-row uses the same bold header typography (`text-[13px] font-semibold`) so the driven token reads as a peer of its source rather than a subordinate option. The right side shows an always-editable `ColorField` followed by an optional reset icon and an invisible placeholder sized to match the header's EXPAND / COLLAPSE slot. There is no Isolated edit or Link back button: editing the field directly writes an override, and clicking the reset icon falls back through the seed (restoring the seed's override, or dropping it when the seed had none so the token re-follows its source).
+
+**Multi-row groups** (App canvas, Calendar canvas, Calendar markers): rows start collapsed and expand into a list that shares two states expressed through the HEX input and the trailing action button:
 
 - **Linked**: the `ColorField` renders its swatch and hex input in a disabled state (reduced opacity, not-allowed cursor) showing the current derived or default value, with an **Isolated edit** action button. Clicking it captures the current auto value as an explicit override and swaps the row to the Isolated state.
 - **Isolated**: the same `ColorField` becomes fully editable (swatch opens the picker, hex input accepts input), with a **Link back** action that drops the override so the token re-follows its source.

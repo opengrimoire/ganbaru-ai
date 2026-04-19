@@ -687,6 +687,54 @@
     </div>
   {/snippet}
 
+  <!-- Peer-styled sub-row for single-row groups (Ink, Primary action).
+       Mirrors the source header layout so the driven token reads as a peer
+       of the source it tints. Always editable: writing to it creates or
+       updates the override; reset falls back through the seed per the
+       shared per-row reset semantics. -->
+  {#snippet groupHeaderStyleRow(row: GroupSingleRow)}
+    {@const info = tokenInfo(row)}
+    {@const overrideMap =
+      row.scope === "app" ? theme.appTokenOverrides : theme.calendarTokenOverrides}
+    {@const pinnedVal = overrideMap?.[row.key]}
+    {@const isLinked = pinnedVal === undefined}
+    {@const displayVal = isLinked
+      ? row.scope === "app"
+        ? autoValueApp(row.key)
+        : autoValueCal(row.key)
+      : pinnedVal}
+    {@const canResetRow =
+      row.scope === "app"
+        ? canResetAppToken(row.key)
+        : canResetCalToken(row.key)}
+    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+      <div class="min-w-0 flex-1">
+        <div class="text-[13px] font-semibold text-foreground">{info.title}</div>
+        <div class="text-[11px] text-muted-foreground">{info.description}</div>
+      </div>
+      <div class="flex shrink-0 items-center gap-1.5">
+        <ColorField
+          value={displayVal}
+          onChange={(hex) => {
+            if (row.scope === "app") setAppToken(row.key, hex);
+            else setCalToken(row.key, hex);
+          }}
+          label={info.title}
+        />
+        {#if canResetRow}
+          {@render resetIconButton(
+            () => {
+              if (row.scope === "app") resetAppToken(row.key);
+              else resetCalToken(row.key);
+            },
+            info.title,
+          )}
+        {/if}
+        <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+      </div>
+    </div>
+  {/snippet}
+
   {#snippet groupPairRow(row: GroupPairRow)}
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5">
       <div class="min-w-0 flex-1">
@@ -764,13 +812,17 @@
       </header>
       {#if showRows}
         <div class="divide-y divide-border border-t border-border">
-          {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
-            {#if row.kind === "single"}
-              {@render groupSingleRow(row)}
-            {:else}
-              {@render groupPairRow(row)}
-            {/if}
-          {/each}
+          {#if group.rows.length === 1 && group.rows[0].kind === "single"}
+            {@render groupHeaderStyleRow(group.rows[0])}
+          {:else}
+            {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
+              {#if row.kind === "single"}
+                {@render groupSingleRow(row)}
+              {:else}
+                {@render groupPairRow(row)}
+              {/if}
+            {/each}
+          {/if}
         </div>
       {/if}
     </section>
