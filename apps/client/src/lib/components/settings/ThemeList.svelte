@@ -8,7 +8,9 @@
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import type { ThemeId } from "$lib/stores/themes";
+  import type { ThemePreset } from "$lib/data/themePresets";
   import ThemeRow from "./ThemeRow.svelte";
+  import ThemePresetPicker from "./ThemePresetPicker.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const themeStore = getTheme();
@@ -19,6 +21,7 @@
   let importOpen = $state(false);
   let importDraft = $state("");
   let importErrors = $state<string[]>([]);
+  let presetPickerOpen = $state(false);
   let toast = $state<string | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -65,10 +68,35 @@
   }
 
   function handleNew() {
+    presetPickerOpen = true;
+  }
+
+  function openEditorForNew(preset?: ThemePreset) {
     const previousActiveId = themeStore.id;
     const newId = themeStore.createTheme();
+    if (preset) {
+      themeStore.updateTheme(newId, {
+        base: preset.base,
+        sources: { ...preset.sources },
+        displayName: preset.displayName,
+      });
+    }
     themeStore.setTheme(newId);
     themeEditor.open(newId, { createdFresh: true, previousActiveId });
+  }
+
+  function handlePresetPicked(preset: ThemePreset) {
+    presetPickerOpen = false;
+    openEditorForNew(preset);
+  }
+
+  function handlePresetBlank() {
+    presetPickerOpen = false;
+    openEditorForNew();
+  }
+
+  function handlePresetClose() {
+    presetPickerOpen = false;
   }
 
   function handleImportToggle() {
@@ -270,5 +298,13 @@
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmDelete}
     onCancel={cancelDelete}
+  />
+{/if}
+
+{#if presetPickerOpen}
+  <ThemePresetPicker
+    onPick={handlePresetPicked}
+    onStartBlank={handlePresetBlank}
+    onClose={handlePresetClose}
   />
 {/if}
