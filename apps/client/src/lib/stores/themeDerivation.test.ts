@@ -6,6 +6,10 @@ import {
   deriveCalendarTokens,
   type ThemeSources,
 } from "./themes";
+import {
+  contrastRatio,
+  meetsWcag,
+} from "$lib/components/ui/colorMath";
 
 /**
  * Source palettes fitted from the built-in light and dark themes.
@@ -37,42 +41,47 @@ const DARK_SOURCES: ThemeSources = {
 };
 
 /**
- * Max per-channel difference allowed between a derived color and its
- * corresponding built-in. The built-in palette was hand-tuned, and
- * several tokens (notably `--ring` and `--muted-foreground` in dark)
- * carry a stronger cool bias on the blue channel than a single-weight
- * linear blend of canvas + ink can reach (R and B need different
- * weights). Worst-case drift across all tokens at the current weights
- * is ~12 channels (dark ring) on a 255-scale channel. A tolerance of
- * 16 leaves headroom for the tuned values without masking regressions:
- * a future weight change that noticeably shifts a token past a subtle
- * tint will still fail the test.
+ * Pairs of (foreground token, background token) that must meet AA
+ * body-text contrast (4.5:1). Every pair here is a surface where users
+ * read prose-weight copy.
  */
-const MAX_CHANNEL_DRIFT = 16;
+const AA_FOREGROUND_PAIRS: ReadonlyArray<[string, string]> = [
+  ["--foreground", "--background"],
+  ["--popover-foreground", "--popover"],
+  ["--primary-foreground", "--primary"],
+  ["--secondary-foreground", "--secondary"],
+  ["--accent-foreground", "--accent"],
+  ["--destructive-foreground", "--destructive"],
+  ["--sidebar-foreground", "--sidebar"],
+  ["--sidebar-accent-foreground", "--sidebar-accent"],
+  ["--action-confirm-foreground", "--action-confirm"],
+  ["--action-danger-armed-foreground", "--action-danger-armed"],
+  ["--status-accepted-foreground", "--status-accepted"],
+  ["--status-tentative-foreground", "--status-tentative"],
+  ["--status-declined-foreground", "--status-declined"],
+];
 
-function parseChannels(hex: string): [number, number, number] {
-  const clean = hex.replace(/^#/, "");
-  return [
-    parseInt(clean.slice(0, 2), 16),
-    parseInt(clean.slice(2, 4), 16),
-    parseInt(clean.slice(4, 6), 16),
-  ];
-}
+/**
+ * Tokens that must park in the muted band `[3.0, 4.4]` against their
+ * paired background: recessed enough to read as secondary copy,
+ * readable enough to never disappear.
+ */
+const MUTED_BANDS: ReadonlyArray<{ fg: string; bg: string }> = [
+  { fg: "--muted-foreground", bg: "--muted" },
+];
 
-function channelDiff(a: string, b: string): number {
-  const [ar, ag, ab] = parseChannels(a);
-  const [br, bg, bb] = parseChannels(b);
-  return Math.max(Math.abs(ar - br), Math.abs(ag - bg), Math.abs(ab - bb));
-}
+const BORDER_PAIRS: ReadonlyArray<{ border: string; against: string }> = [
+  { border: "--ring", against: "--background" },
+];
 
-function assertCloseHex(actual: string, expected: string, label: string) {
-  const drift = channelDiff(actual, expected);
-  if (drift > MAX_CHANNEL_DRIFT) {
+function assertAA(fgHex: string, bgHex: string, label: string) {
+  const ratio = contrastRatio(fgHex, bgHex);
+  if (!meetsWcag(fgHex, bgHex, "AA", "body")) {
     throw new Error(
-      `${label}: derived ${actual}, built-in ${expected}, drift ${drift} > ${MAX_CHANNEL_DRIFT}`,
+      `${label}: fg ${fgHex} on bg ${bgHex} = ${ratio.toFixed(2)}:1, expected >= 4.5`,
     );
   }
-  expect(drift).toBeLessThanOrEqual(MAX_CHANNEL_DRIFT);
+  expect(ratio).toBeGreaterThanOrEqual(4.5);
 }
 
 describe("deriveAppTokens", () => {
@@ -87,19 +96,33 @@ describe("deriveAppTokens", () => {
     }
   });
 
-  it("derives light tokens close to the built-in light palette", () => {
-    const derived = deriveAppTokens(LIGHT_SOURCES, "light");
-    for (const key of Object.keys(derived)) {
-      assertCloseHex(derived[key], BASE_APP_TOKENS.light[key], `light ${key}`);
-    }
-  });
+  for (const base of ["light", "dark"] as const) {
+    const sources = base === "light" ? LIGHT_SOURCES : DARK_SOURCES;
 
-  it("derives dark tokens close to the built-in dark palette", () => {
-    const derived = deriveAppTokens(DARK_SOURCES, "dark");
-    for (const key of Object.keys(derived)) {
-      assertCloseHex(derived[key], BASE_APP_TOKENS.dark[key], `dark ${key}`);
-    }
-  });
+    it(`meets AA 4.5:1 on every foreground/background pair (${base})`, () => {
+      const tokens = deriveAppTokens(sources, base);
+      for (const [fg, bg] of AA_FOREGROUND_PAIRS) {
+        assertAA(tokens[fg], tokens[bg], `${base} ${fg} on ${bg}`);
+      }
+    });
+
+    it(`parks muted captions inside [3.0, 4.4] (${base})`, () => {
+      const tokens = deriveAppTokens(sources, base);
+      for (const { fg, bg } of MUTED_BANDS) {
+        const ratio = contrastRatio(tokens[fg], tokens[bg]);
+        expect(ratio).toBeGreaterThanOrEqual(3.0);
+        expect(ratio).toBeLessThanOrEqual(4.5);
+      }
+    });
+
+    it(`keeps borders at or above 3:1 (${base})`, () => {
+      const tokens = deriveAppTokens(sources, base);
+      for (const { border, against } of BORDER_PAIRS) {
+        const ratio = contrastRatio(tokens[border], tokens[against]);
+        expect(ratio).toBeGreaterThanOrEqual(3.0);
+      }
+    });
+  }
 
   it("pins the source colors to the tokens they represent", () => {
     const light = deriveAppTokens(LIGHT_SOURCES, "light");
@@ -107,6 +130,8 @@ describe("deriveAppTokens", () => {
     expect(light["--foreground"]).toBe(LIGHT_SOURCES.ink);
     expect(light["--primary"]).toBe(LIGHT_SOURCES.primary);
     expect(light["--destructive"]).toBe(LIGHT_SOURCES.destructive);
+    expect(light["--action-confirm"]).toBe(LIGHT_SOURCES.confirm);
+    expect(light["--status-tentative"]).toBe(LIGHT_SOURCES.warning);
 
     const dark = deriveAppTokens(DARK_SOURCES, "dark");
     expect(dark["--background"]).toBe(DARK_SOURCES.canvas);
@@ -121,12 +146,6 @@ describe("deriveAppTokens", () => {
     expect(derived["--popover"]).toBe("#FFFFFF");
   });
 
-  it("pins sidebar foregrounds to #FFFFFF in dark mode", () => {
-    const derived = deriveAppTokens(DARK_SOURCES, "dark");
-    expect(derived["--sidebar-foreground"]).toBe("#FFFFFF");
-    expect(derived["--sidebar-accent-foreground"]).toBe("#FFFFFF");
-  });
-
   it("re-derives live when canvas changes", () => {
     const shifted: ThemeSources = { ...LIGHT_SOURCES, canvas: "#FFEEDD" };
     const derived = deriveAppTokens(shifted, "light");
@@ -134,6 +153,22 @@ describe("deriveAppTokens", () => {
     expect(derived["--secondary"]).not.toBe(
       deriveAppTokens(LIGHT_SOURCES, "light")["--secondary"],
     );
+  });
+
+  it("stays legible when the user picks extreme canvas/ink pairs", () => {
+    const extreme: ThemeSources = {
+      canvas: "#000000",
+      ink: "#FFFFFF",
+      primary: "#FFD700",
+      destructive: "#FF1493",
+      confirm: "#00FF7F",
+      warning: "#FFA500",
+      calCanvas: "#0A0A0A",
+    };
+    const tokens = deriveAppTokens(extreme, "dark");
+    for (const [fg, bg] of AA_FOREGROUND_PAIRS) {
+      assertAA(tokens[fg], tokens[bg], `extreme ${fg} on ${bg}`);
+    }
   });
 });
 
@@ -158,25 +193,23 @@ describe("deriveCalendarTokens", () => {
     expect(light["--cal-header-bg"]).toBe(LIGHT_SOURCES.canvas);
   });
 
-  it("derives light calendar tokens close to built-in values", () => {
-    const derived = deriveCalendarTokens(LIGHT_SOURCES, "light");
-    for (const key of Object.keys(derived)) {
-      assertCloseHex(
-        derived[key],
-        BASE_CALENDAR_TOKENS.light[key],
-        `light ${key}`,
-      );
-    }
-  });
+  for (const base of ["light", "dark"] as const) {
+    const sources = base === "light" ? LIGHT_SOURCES : DARK_SOURCES;
 
-  it("derives dark calendar tokens close to built-in values", () => {
-    const derived = deriveCalendarTokens(DARK_SOURCES, "dark");
-    for (const key of Object.keys(derived)) {
-      assertCloseHex(
-        derived[key],
-        BASE_CALENDAR_TOKENS.dark[key],
-        `dark ${key}`,
+    it(`gridline sits at or above 3:1 against the calendar canvas (${base})`, () => {
+      const tokens = deriveCalendarTokens(sources, base);
+      const ratio = contrastRatio(tokens["--cal-gridline"], tokens["--cal-bg"]);
+      expect(ratio).toBeGreaterThanOrEqual(3.0);
+    });
+
+    it(`time label parks inside [3.0, 4.5] against the app canvas (${base})`, () => {
+      const tokens = deriveCalendarTokens(sources, base);
+      const ratio = contrastRatio(
+        tokens["--cal-time-label"],
+        tokens["--cal-header-bg"],
       );
-    }
-  });
+      expect(ratio).toBeGreaterThanOrEqual(3.0);
+      expect(ratio).toBeLessThanOrEqual(4.5);
+    });
+  }
 });

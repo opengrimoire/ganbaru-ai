@@ -1,5 +1,10 @@
 import { PALETTE_SIZE } from "$lib/components/calendar/types";
-import { blendHex } from "$lib/components/calendar/utils";
+import {
+  blendHex,
+  pickReadableBorder,
+  pickReadableForeground,
+  pickReadableMuted,
+} from "$lib/components/ui/colorMath";
 
 /**
  * Stable ID identifying a theme. Built-in IDs are "light" and "dark".
@@ -524,32 +529,23 @@ function recessTowardBlack(c: string, t: number): string {
 }
 
 /**
- * App-shell derivation weights fitted empirically so that seeding the
- * built-in themes' canvas / ink / primary / destructive reproduces the
- * built-in token values within a small channel tolerance (see
- * `themeDerivation.test.ts`). Each weight is the fraction of ink (or
- * black, for `sidebar*Recess`) mixed into the target color.
+ * App-shell derivation weights for surface backgrounds only. Foregrounds,
+ * borders, and muted captions are now computed from contrast math (see
+ * `deriveAppTokens`) rather than empirical lifts. These weights preserve
+ * the tinted-gray aesthetic of the built-in palettes for card/popover/
+ * secondary/muted/accent/sidebar while contrast-aware pickers handle
+ * every token that needs to stay legible against its paired surface.
  */
 const APP_DERIVATION_LIGHT = {
   secondaryLift: 0.08,
   mutedLift: 0.08,
-  mutedForegroundLift: 0.64,
   accentLift: 0.05,
-  ringLift: 0.46,
   // Light sidebar is slightly inked toward foreground (a soft tinted gray),
   // not recessed toward black: fitting against built-in #DCDCE2 / #CFCFD6
   // showed lift(canvas, ink, 0.10 / 0.16) tracks within ~2 channels whereas
   // recess(canvas, 0.11 / 0.17) diverges on the blue channel.
   sidebarLift: 0.1,
   sidebarAccentLift: 0.16,
-  // Form/pomodoro/event-panel text tints fitted to built-in values.
-  // Form indicator (#6B6F6E) sits between muted and foreground; pomodoro
-  // idle caption (#9CA3AF) is near the muted gray; event panel placeholder
-  // (#444746) and muted text (#646470, same as --muted-foreground) round
-  // out the surface typography.
-  formIndicatorLift: 0.61,
-  pomodoroIdleLift: 0.36,
-  eventPanelPlaceholderLift: 0.8,
 } as const;
 
 const APP_DERIVATION_DARK = {
@@ -557,41 +553,29 @@ const APP_DERIVATION_DARK = {
   popoverLift: 0.071,
   secondaryLift: 0.061,
   mutedLift: 0.061,
-  mutedForegroundLift: 0.553,
   accentLift: 0.101,
-  ringLift: 0.289,
   sidebarRecess: 0.23,
   sidebarAccentLift: 0.101,
-  // Dark form indicator matches --foreground (identity via lift(1.0) short-
-  // circuited to `ink` directly in the derivation body). Pomodoro idle
-  // (#9CA3AF) is a mid gray; event panel text (#C4C7C5) and placeholder
-  // (#C4C7C5) are deliberately dimmer than ink so they recede on the panel
-  // surface.
-  pomodoroIdleLift: 0.63,
-  eventPanelTextLift: 0.79,
-  eventPanelPlaceholderLift: 0.79,
 } as const;
 
 const CAL_DERIVATION_LIGHT = {
-  gridlineLift: 0.13,
-  timeLabelLift: 0.64,
   timelineRailLift: 0.09,
 } as const;
 
 const CAL_DERIVATION_DARK = {
-  gridlineLift: 0.13,
-  timeLabelLift: 0.553,
   timelineRailLift: 0.15,
 } as const;
 
 /**
  * Derive every app-shell token from a source palette for the given base.
  *
- * The "light" and "dark" branches differ in more than just numeric
- * weights: card and popover are fixed white in light mode but lifted from
- * canvas in dark, and sidebar foregrounds are pinned to pure white in
- * dark (where built-in ink is already near-white but the titlebar is
- * darker than ink, so contrast needs a hard anchor).
+ * Surface backgrounds (card, popover, secondary, muted, accent, sidebar)
+ * still use empirical ink lifts so the tinted-gray aesthetic is preserved.
+ * Every foreground, border, and muted caption is recomputed from contrast
+ * math so the pairing stays legible regardless of which sources the user
+ * picks: `pickReadableForeground` guarantees AA 4.5:1 on body text,
+ * `pickReadableBorder` parks borders at 3:1, and `pickReadableMuted` walks
+ * captions down to exactly 3:1 so they recede without vanishing.
  *
  * Built-in themes carry no `sources` field and never reach this function
  * at resolve time; it is called only for user themes that have opted into
@@ -604,79 +588,110 @@ export function deriveAppTokens(
   const { canvas, ink, primary, destructive, confirm, warning } = sources;
   const lift = (t: number) => liftTowardInk(canvas, ink, t);
   const recess = (t: number) => recessTowardBlack(canvas, t);
+  const fg = (bg: string, target?: number) =>
+    pickReadableForeground(bg, { ink, canvas, target });
+  const muted = (bg: string) => pickReadableMuted(bg, ink, { target: 3 });
+  const eventPanelBg = BASE_APP_TOKENS[base]["--event-panel-bg"];
+  // Pomodoro idle overlay paints a full-screen black surface; tokens over
+  // it pair against pure black rather than against canvas.
+  const idleBg = "#000000";
   if (base === "light") {
     const w = APP_DERIVATION_LIGHT;
+    const card = "#FFFFFF";
+    const popover = "#FFFFFF";
+    const secondary = lift(w.secondaryLift);
+    const mutedBg = lift(w.mutedLift);
+    const accent = lift(w.accentLift);
+    const sidebar = lift(w.sidebarLift);
+    const sidebarAccent = lift(w.sidebarAccentLift);
     return {
       "--background": canvas,
       "--foreground": ink,
-      "--card": "#FFFFFF",
-      "--popover": "#FFFFFF",
-      "--popover-foreground": ink,
+      "--card": card,
+      "--popover": popover,
+      "--popover-foreground": fg(popover),
       "--primary": primary,
-      "--primary-foreground": canvas,
-      "--secondary": lift(w.secondaryLift),
-      "--secondary-foreground": ink,
-      "--muted": lift(w.mutedLift),
-      "--muted-foreground": lift(w.mutedForegroundLift),
-      "--accent": lift(w.accentLift),
-      "--accent-foreground": ink,
+      "--primary-foreground": fg(primary, 4.5),
+      "--secondary": secondary,
+      "--secondary-foreground": fg(secondary),
+      "--muted": mutedBg,
+      "--muted-foreground": muted(mutedBg),
+      "--accent": accent,
+      "--accent-foreground": fg(accent),
       "--destructive": destructive,
-      "--ring": lift(w.ringLift),
-      "--sidebar": lift(w.sidebarLift),
-      "--sidebar-foreground": ink,
-      "--sidebar-accent": lift(w.sidebarAccentLift),
-      "--sidebar-accent-foreground": ink,
-      // Semantic signals: identity. User picks one green, one amber, one
-      // red; each source drives its action button and its status tile.
+      "--destructive-foreground": fg(destructive),
+      "--ring": pickReadableBorder(canvas, ink, { target: 3 }),
+      "--sidebar": sidebar,
+      "--sidebar-foreground": fg(sidebar),
+      "--sidebar-accent": sidebarAccent,
+      "--sidebar-accent-foreground": fg(sidebarAccent),
+      // Semantic signals: background identity, foreground contrast-picked.
       "--action-confirm": confirm,
-      "--status-accepted": confirm,
+      "--action-confirm-foreground": fg(confirm),
       "--action-danger-armed": destructive,
-      "--status-declined": destructive,
+      "--action-danger-armed-foreground": fg(destructive),
+      "--status-accepted": confirm,
+      "--status-accepted-foreground": fg(confirm),
       "--status-tentative": warning,
+      "--status-tentative-foreground": fg(warning),
+      "--status-declined": destructive,
+      "--status-declined-foreground": fg(destructive),
       // Ink-derived typography beyond --foreground.
-      "--form-indicator": lift(w.formIndicatorLift),
-      "--pomodoro-idle-text": lift(w.pomodoroIdleLift),
-      "--event-panel-text": ink,
-      "--event-panel-input-text": ink,
-      "--event-panel-placeholder": lift(w.eventPanelPlaceholderLift),
-      "--event-panel-muted-text": lift(w.mutedForegroundLift),
+      "--form-indicator": muted(canvas),
+      "--pomodoro-idle-text": muted(idleBg),
+      "--pomodoro-idle-timer": fg(idleBg, 4.5),
+      "--event-panel-text": fg(eventPanelBg),
+      "--event-panel-input-text": fg(eventPanelBg),
+      "--event-panel-placeholder": muted(eventPanelBg),
+      "--event-panel-muted-text": muted(eventPanelBg),
     };
   }
   const w = APP_DERIVATION_DARK;
+  const card = lift(w.cardLift);
+  const popover = lift(w.popoverLift);
+  const secondary = lift(w.secondaryLift);
+  const mutedBg = lift(w.mutedLift);
+  const accent = lift(w.accentLift);
+  const sidebar = recess(w.sidebarRecess);
+  const sidebarAccent = lift(w.sidebarAccentLift);
   return {
     "--background": canvas,
     "--foreground": ink,
-    "--card": lift(w.cardLift),
-    "--popover": lift(w.popoverLift),
-    "--popover-foreground": ink,
+    "--card": card,
+    "--popover": popover,
+    "--popover-foreground": fg(popover),
     "--primary": primary,
-    "--primary-foreground": canvas,
-    "--secondary": lift(w.secondaryLift),
-    "--secondary-foreground": ink,
-    "--muted": lift(w.mutedLift),
-    "--muted-foreground": lift(w.mutedForegroundLift),
-    "--accent": lift(w.accentLift),
-    "--accent-foreground": ink,
+    "--primary-foreground": fg(primary, 4.5),
+    "--secondary": secondary,
+    "--secondary-foreground": fg(secondary),
+    "--muted": mutedBg,
+    "--muted-foreground": muted(mutedBg),
+    "--accent": accent,
+    "--accent-foreground": fg(accent),
     "--destructive": destructive,
-    "--ring": lift(w.ringLift),
-    "--sidebar": recess(w.sidebarRecess),
-    "--sidebar-foreground": "#FFFFFF",
-    "--sidebar-accent": lift(w.sidebarAccentLift),
-    "--sidebar-accent-foreground": "#FFFFFF",
+    "--destructive-foreground": fg(destructive),
+    "--ring": pickReadableBorder(canvas, ink, { target: 3 }),
+    "--sidebar": sidebar,
+    "--sidebar-foreground": fg(sidebar),
+    "--sidebar-accent": sidebarAccent,
+    "--sidebar-accent-foreground": fg(sidebarAccent),
     "--action-confirm": confirm,
-    "--status-accepted": confirm,
+    "--action-confirm-foreground": fg(confirm),
     "--action-danger-armed": destructive,
-    "--status-declined": destructive,
+    "--action-danger-armed-foreground": fg(destructive),
+    "--status-accepted": confirm,
+    "--status-accepted-foreground": fg(confirm),
     "--status-tentative": warning,
-    // Dark form indicator is ink itself (matches --foreground); event panel
-    // input text is near-ink (small drift absorbed by the tolerance) so we
-    // reuse ink identity rather than carry a near-1.0 weight.
-    "--form-indicator": ink,
-    "--pomodoro-idle-text": lift(w.pomodoroIdleLift),
-    "--event-panel-text": lift(w.eventPanelTextLift),
-    "--event-panel-input-text": ink,
-    "--event-panel-placeholder": lift(w.eventPanelPlaceholderLift),
-    "--event-panel-muted-text": lift(w.mutedForegroundLift),
+    "--status-tentative-foreground": fg(warning),
+    "--status-declined": destructive,
+    "--status-declined-foreground": fg(destructive),
+    "--form-indicator": muted(canvas),
+    "--pomodoro-idle-text": muted(idleBg),
+    "--pomodoro-idle-timer": fg(idleBg, 4.5),
+    "--event-panel-text": fg(eventPanelBg),
+    "--event-panel-input-text": fg(eventPanelBg),
+    "--event-panel-placeholder": muted(eventPanelBg),
+    "--event-panel-muted-text": muted(eventPanelBg),
   };
 }
 
@@ -695,22 +710,12 @@ export function deriveCalendarTokens(
   base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink, calCanvas } = sources;
-  if (base === "light") {
-    const w = CAL_DERIVATION_LIGHT;
-    return {
-      "--cal-bg": calCanvas,
-      "--cal-header-bg": canvas,
-      "--cal-gridline": liftTowardInk(calCanvas, ink, w.gridlineLift),
-      "--cal-time-label": liftTowardInk(canvas, ink, w.timeLabelLift),
-      "--cal-timeline-rail": liftTowardInk(canvas, ink, w.timelineRailLift),
-    };
-  }
-  const w = CAL_DERIVATION_DARK;
+  const w = base === "light" ? CAL_DERIVATION_LIGHT : CAL_DERIVATION_DARK;
   return {
     "--cal-bg": calCanvas,
     "--cal-header-bg": canvas,
-    "--cal-gridline": liftTowardInk(calCanvas, ink, w.gridlineLift),
-    "--cal-time-label": liftTowardInk(canvas, ink, w.timeLabelLift),
+    "--cal-gridline": pickReadableBorder(calCanvas, ink, { target: 3 }),
+    "--cal-time-label": pickReadableMuted(canvas, ink, { target: 3 }),
     "--cal-timeline-rail": liftTowardInk(canvas, ink, w.timelineRailLift),
   };
 }
