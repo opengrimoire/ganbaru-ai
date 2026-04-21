@@ -85,6 +85,13 @@
     return ((total - pomodoro.remainingSeconds) / total) * 100;
   });
 
+  // While the floating theme editor is open, the buttons that would navigate
+  // away from or disrupt the edit session (theme toggle flips base; settings
+  // modal reopens behind the panel; help/reset are destructive or noisy) are
+  // disabled. Window controls, pomodoro, and the performance monitor stay
+  // live because they do not interfere with the edit session.
+  const lockedByThemeEditor = $derived(!!themeEditor.editingId);
+
   const isActive = $derived(
     pomodoro.isRunning || pomodoro.remainingSeconds < pomodoro.totalSecondsForPhase,
   );
@@ -346,8 +353,18 @@
     <!-- Theme toggle -->
     <button
       onclick={() => theme.toggle()}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-      title={theme.isDark ? "Switch to light mode" : "Switch to dark mode"}
+      disabled={lockedByThemeEditor}
+      class={cn(
+        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+        lockedByThemeEditor
+          ? "cursor-not-allowed opacity-40"
+          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+      )}
+      title={lockedByThemeEditor
+        ? "Disabled while editing a theme"
+        : theme.isDark
+          ? "Switch to light mode"
+          : "Switch to dark mode"}
     >
       {#if theme.isDark}
         <Sun size={14} strokeWidth={1.75} />
@@ -455,8 +472,14 @@
     <!-- Reset database -->
     <button
       onclick={() => { showResetConfirm = true; }}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-      title="Reset database"
+      disabled={lockedByThemeEditor}
+      class={cn(
+        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+        lockedByThemeEditor
+          ? "cursor-not-allowed opacity-40"
+          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+      )}
+      title={lockedByThemeEditor ? "Disabled while editing a theme" : "Reset database"}
     >
       <CircleX size={14} strokeWidth={1.75} />
     </button>
@@ -464,8 +487,14 @@
     <!-- TODO: implement help panel -->
     <button
       onclick={() => {}}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-      title="Help"
+      disabled={lockedByThemeEditor}
+      class={cn(
+        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+        lockedByThemeEditor
+          ? "cursor-not-allowed opacity-40"
+          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+      )}
+      title={lockedByThemeEditor ? "Disabled while editing a theme" : "Help"}
     >
       <CircleHelp size={14} strokeWidth={1.75} />
     </button>
@@ -473,8 +502,14 @@
     <!-- Settings -->
     <button
       onclick={() => { showSettings = true; }}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-      title="Settings"
+      disabled={lockedByThemeEditor}
+      class={cn(
+        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+        lockedByThemeEditor
+          ? "cursor-not-allowed opacity-40"
+          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+      )}
+      title={lockedByThemeEditor ? "Disabled while editing a theme" : "Settings"}
     >
       <Settings size={14} strokeWidth={1.75} />
     </button>
