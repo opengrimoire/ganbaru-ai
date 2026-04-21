@@ -801,7 +801,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="theme-editor-chrome flex flex-col gap-6">
   <!-- Header -->
   <section class="flex flex-col gap-2">
     <div

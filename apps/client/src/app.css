@@ -77,6 +77,20 @@
   --cal-color-picker-outline: #141420;
   --cal-description-editor-bg: #0000000D;
   --cal-drag-preview-border: #0000004D;
+
+  /* Editor chrome (light; fixed, not user-overridable) */
+  --editor-chrome-bg: #FFFFFF;
+  --editor-chrome-fg: #141420;
+  --editor-chrome-muted-fg: #646470;
+  --editor-chrome-border: #DDDDE3;
+  --editor-chrome-accent-bg: #F4F4F7;
+  --editor-chrome-primary: #404048;
+  --editor-chrome-primary-fg: #F4F4F7;
+  --editor-chrome-destructive: #D93B3B;
+  --editor-chrome-destructive-fg: #FFFFFF;
+  --editor-chrome-checker-a: #CCCCCC;
+  --editor-chrome-checker-b: #FFFFFF;
+  --editor-chrome-thumb-border: #FFFFFF;
 }
 
 .dark {
@@ -152,6 +166,20 @@
   --cal-color-picker-outline: #141420;
   --cal-description-editor-bg: #00000026;
   --cal-drag-preview-border: #FFFFFF80;
+
+  /* Editor chrome (dark; fixed, not user-overridable) */
+  --editor-chrome-bg: #2E2F31;
+  --editor-chrome-fg: #ECECF2;
+  --editor-chrome-muted-fg: #9494A0;
+  --editor-chrome-border: #404046;
+  --editor-chrome-accent-bg: #3B3B3F;
+  --editor-chrome-primary: #ECECF2;
+  --editor-chrome-primary-fg: #27282A;
+  --editor-chrome-destructive: #E54545;
+  --editor-chrome-destructive-fg: #FFFFFF;
+  --editor-chrome-checker-a: #3A3A3F;
+  --editor-chrome-checker-b: #5A5A60;
+  --editor-chrome-thumb-border: #FFFFFF;
 }
 
 @theme inline {
@@ -269,4 +297,32 @@
 }
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * Theme-editor chrome scope.
+ *
+ * Shadows user-editable tokens inside the editor so its HEX inputs, sliders,
+ * buttons, popovers, and labels stay legible even when the user drags the
+ * theme sources to extremes. The scope class must travel with portaled
+ * popovers (see ColorField) so the chrome extends to every editor surface.
+ */
+.theme-editor-chrome {
+  --background: var(--editor-chrome-bg);
+  --foreground: var(--editor-chrome-fg);
+  --card: var(--editor-chrome-bg);
+  --popover: var(--editor-chrome-bg);
+  --popover-foreground: var(--editor-chrome-fg);
+  --border: var(--editor-chrome-border);
+  --input: var(--editor-chrome-border);
+  --muted: var(--editor-chrome-accent-bg);
+  --muted-foreground: var(--editor-chrome-muted-fg);
+  --accent: var(--editor-chrome-accent-bg);
+  --accent-foreground: var(--editor-chrome-fg);
+  --secondary: var(--editor-chrome-accent-bg);
+  --secondary-foreground: var(--editor-chrome-fg);
+  --primary: var(--editor-chrome-primary);
+  --primary-foreground: var(--editor-chrome-primary-fg);
+  --destructive: var(--editor-chrome-destructive);
+  --destructive-foreground: var(--editor-chrome-destructive-fg);
 }

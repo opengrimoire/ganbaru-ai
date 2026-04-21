@@ -124,7 +124,7 @@
 
 {#if editing}
   <div
-    class="fixed z-[75] flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
+    class="theme-editor-chrome fixed z-[75] flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
     style="left: {posX}px; top: {posY}px; width: {PANEL_WIDTH}px; max-height: min({PANEL_MAX_HEIGHT_VH}vh, {PANEL_MAX_HEIGHT_PX}px);"
     role="dialog"
     aria-label="Theme editor"

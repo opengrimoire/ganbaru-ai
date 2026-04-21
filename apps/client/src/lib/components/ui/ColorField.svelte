@@ -46,10 +46,16 @@
   const POPOVER_HEIGHT = 360;
   const VIEWPORT_MARGIN = 8;
 
-  // Inline SVG checkerboard used behind semi-transparent swatches so alpha
-  // is visually obvious. Two-tile pattern keeps the data URL tiny.
+  // Checkerboard background rendered from chrome tokens so the pattern stays
+  // visible against any editor-chrome background and adapts to light/dark.
+  // The conic-gradient quadrants lay out a 2x2 checker inside each 10px tile.
   const CHECKER_BG =
-    "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='5' height='5' fill='%23cccccc'/><rect x='5' y='5' width='5' height='5' fill='%23cccccc'/></svg>\") 0 0/10px 10px, #ffffff";
+    "conic-gradient(" +
+    "var(--editor-chrome-checker-b) 25%, " +
+    "var(--editor-chrome-checker-a) 25% 50%, " +
+    "var(--editor-chrome-checker-b) 50% 75%, " +
+    "var(--editor-chrome-checker-a) 75%" +
+    ") 0 0/10px 10px";
 
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
@@ -367,7 +373,7 @@
       use:portal
       role="dialog"
       aria-label={label ? `${label} color picker` : "Color picker"}
-      class="fixed z-[80] w-[228px] rounded-lg border border-border bg-popover p-3 shadow-xl"
+      class="theme-editor-chrome fixed z-[80] w-[228px] rounded-lg border border-border bg-popover p-3 shadow-xl"
       style="top: {popoverPos.top}px; left: {popoverPos.left}px;"
     >
       <div
@@ -384,8 +390,8 @@
           {hueColor};"
       >
         <div
-          class="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
-          style="left: {hsv.s}%; top: {100 - hsv.v}%;"
+          class="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow"
+          style="left: {hsv.s}%; top: {100 - hsv.v}%; border-color: var(--editor-chrome-thumb-border);"
         ></div>
       </div>
 
@@ -400,8 +406,8 @@
         style="background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);"
       >
         <div
-          class="pointer-events-none absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-white bg-transparent shadow"
-          style="left: {(hsv.h / 360) * 100}%;"
+          class="pointer-events-none absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-transparent shadow"
+          style="left: {(hsv.h / 360) * 100}%; border-color: var(--editor-chrome-thumb-border);"
         ></div>
       </div>
 
@@ -420,8 +426,8 @@
           style="background: linear-gradient(to right, transparent 0%, {solidHex} 100%);"
         ></div>
         <div
-          class="pointer-events-none absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-white bg-transparent shadow"
-          style="left: {(alpha / 255) * 100}%;"
+          class="pointer-events-none absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-transparent shadow"
+          style="left: {(alpha / 255) * 100}%; border-color: var(--editor-chrome-thumb-border);"
         ></div>
       </div>
 
