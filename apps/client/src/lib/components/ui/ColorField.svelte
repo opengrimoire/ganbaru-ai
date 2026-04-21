@@ -313,13 +313,13 @@
     aria-label={label ? `Edit ${label}` : "Edit color"}
     onclick={toggleOpen}
     class={cn(
-      "shrink-0 overflow-hidden rounded-md border border-border shadow-sm transition-shadow",
+      "relative shrink-0 overflow-hidden rounded-md border border-border shadow-sm transition-shadow",
       readOnly ? "cursor-not-allowed opacity-60" : "hover:shadow-md",
     )}
-    style="width: {swatchSize}px; height: {swatchSize}px; background: {CHECKER_BG};"
+    style="width: {swatchSize}px; height: {swatchSize}px;{alpha < 255 ? ` background: ${CHECKER_BG};` : ''}"
   >
     <span
-      class="block h-full w-full"
+      class="absolute inset-0 block"
       style="background: {normalizeHex(value) ?? '#000000'};"
     ></span>
   </button>
@@ -338,8 +338,8 @@
       }
     }}
     class={cn(
-      "h-7 rounded-md border border-border bg-card px-2 text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent",
-      fluid ? "min-w-0 flex-1" : "w-[88px]",
+      "h-7 rounded-md border border-border bg-card px-2 text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+      fluid ? "min-w-0 flex-1" : "w-[76px]",
       readOnly && "cursor-not-allowed opacity-60",
     )}
   />
@@ -435,7 +435,7 @@
             value={Math.round(hsv.h)}
             onchange={(e) =>
               setHsv("h", Number((e.currentTarget as HTMLInputElement).value))}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
         <label class="flex flex-col gap-0.5">
@@ -447,7 +447,7 @@
             value={Math.round(hsv.s)}
             onchange={(e) =>
               setHsv("s", Number((e.currentTarget as HTMLInputElement).value))}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
         <label class="flex flex-col gap-0.5">
@@ -459,7 +459,7 @@
             value={Math.round(hsv.v)}
             onchange={(e) =>
               setHsv("v", Number((e.currentTarget as HTMLInputElement).value))}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
         <label class="flex flex-col gap-0.5">
@@ -473,7 +473,7 @@
               setAlphaPercent(
                 Number((e.currentTarget as HTMLInputElement).value),
               )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
       </div>
@@ -493,7 +493,7 @@
               (e.currentTarget as HTMLInputElement).blur();
             }
           }}
-          class="h-7 w-full rounded-md border border-border bg-card px-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+          class="h-7 w-full rounded-md border border-border bg-card px-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
 
@@ -511,7 +511,7 @@
                 rgb.g,
                 rgb.b,
               )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
         <label class="flex flex-col gap-0.5">
@@ -527,7 +527,7 @@
                 Number((e.currentTarget as HTMLInputElement).value),
                 rgb.b,
               )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
         <label class="flex flex-col gap-0.5">
@@ -543,7 +543,7 @@
                 rgb.g,
                 Number((e.currentTarget as HTMLInputElement).value),
               )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
       </div>

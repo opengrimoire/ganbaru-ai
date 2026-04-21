@@ -179,7 +179,7 @@
       <button
         type="button"
         onclick={onCancel}
-        class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+        class="flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-destructive/90"
       >
         <ArrowLeft size={11} strokeWidth={2.25} />
         <span>Back to themes</span>

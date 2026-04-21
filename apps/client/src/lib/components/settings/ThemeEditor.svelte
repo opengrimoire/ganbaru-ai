@@ -1,5 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import Link2 from "@lucide/svelte/icons/link-2";
@@ -224,13 +226,25 @@
     rows: GroupRow[];
   };
 
-  // Groups each driven token under the source color whose change shifts it
-  // most visibly. Paired rows live under the background source (canvas or
-  // primary): the text half is usually just ink, but bundling it with its bg
-  // keeps the contrast relationship legible and halves the row count.
-  // The trailing "Calendar markers" group collects semantic calendar tokens
-  // that don't derive from sources, so they have no source header and no spine.
+  // Three-tier layout the user edits top-to-bottom:
+  //
+  //   Tier 1 (App foundation): the four shell sources every surface reads
+  //   from, ordered canvas then ink then primary then destructive.
+  //
+  //   Tier 2 (Semantic signals): positive and cautionary accents that
+  //   communicate intent across buttons and status tiles.
+  //
+  //   Tier 3 (Per-feature): colors scoped to a single feature (calendar,
+  //   event panel, kanban). Calendar canvas and its semantic details live
+  //   adjacent so all calendar editing happens in one place.
+  //
+  // Collapse button is gated on (sourceKey != null && rows.length > 1):
+  // only source-driven multi-row groups benefit from the accordion, since
+  // the header's ColorField is the "change everything together" affordance.
+  // Sourceless groups show all rows inline; source-driven single-row groups
+  // render the row as a peer of the source via groupHeaderStyleRow.
   const SOURCE_GROUPS: SourceGroup[] = [
+    // Tier 1: App foundation
     {
       sourceKey: "canvas",
       title: "App canvas",
@@ -293,8 +307,13 @@
     {
       sourceKey: "ink",
       title: "Ink",
-      description: "Base text color. Tints surfaces derived from canvas.",
-      rows: [{ kind: "single", key: "--foreground", scope: "app" }],
+      description:
+        "Base text color. Drives body text, form indicators, and secondary captions.",
+      rows: [
+        { kind: "single", key: "--foreground", scope: "app" },
+        { kind: "single", key: "--form-indicator", scope: "app" },
+        { kind: "single", key: "--pomodoro-idle-text", scope: "app" },
+      ],
     },
     {
       sourceKey: "primary",
@@ -305,12 +324,41 @@
     {
       sourceKey: "destructive",
       title: "Destructive",
-      description: "Color for delete actions and warnings.",
-      // No rows: the source feeds --destructive through identity derivation
-      // and nothing else uses it, so an isolated row would just repeat the
-      // header ColorField with no extra capability.
-      rows: [],
+      description:
+        "Danger signal. Drives delete buttons, the armed-delete state, and the declined attendance tile.",
+      rows: [
+        { kind: "single", key: "--destructive", scope: "app" },
+        { kind: "single", key: "--action-danger-armed", scope: "app" },
+        { kind: "single", key: "--status-declined", scope: "app" },
+      ],
     },
+    // Tier 2: Semantic signals
+    {
+      sourceKey: "confirm",
+      title: "Confirm",
+      description:
+        "Positive signal. Drives the save button, the active scope pill, and the accepted attendance tile.",
+      rows: [
+        {
+          kind: "pair",
+          bg: "--action-confirm",
+          fg: "--action-confirm-foreground",
+          title: "Confirm action button",
+          description:
+            "Save button and the active scope pill on the event panel.",
+          scope: "app",
+        },
+        { kind: "single", key: "--status-accepted", scope: "app" },
+      ],
+    },
+    {
+      sourceKey: "warning",
+      title: "Warning",
+      description:
+        "Caution signal. Drives the tentative attendance tile; reserved for future notification warnings and deadlines.",
+      rows: [{ kind: "single", key: "--status-tentative", scope: "app" }],
+    },
+    // Tier 3: Per-feature
     {
       sourceKey: "calCanvas",
       title: "Calendar canvas",
@@ -326,9 +374,9 @@
     },
     {
       sourceKey: null,
-      title: "Calendar markers",
+      title: "Calendar details",
       description:
-        "Semantic calendar colors that don't follow a source. Edit any individually.",
+        "Semantic markers and accents on the calendar grid. Each edits independently.",
       rows: [
         {
           kind: "pair",
@@ -342,13 +390,16 @@
         { kind: "single", key: "--cal-current-time", scope: "cal" },
         { kind: "single", key: "--cal-timeline-break", scope: "cal" },
         { kind: "single", key: "--cal-timeline-focus", scope: "cal" },
+        { kind: "single", key: "--cal-color-picker-outline", scope: "app" },
+        { kind: "single", key: "--cal-description-editor-bg", scope: "app" },
+        { kind: "single", key: "--cal-drag-preview-border", scope: "app" },
       ],
     },
     {
       sourceKey: null,
       title: "Event panel",
       description:
-        "Colors on the event creation/edit panel opened from the calendar.",
+        "Surfaces on the event creation and edit panel opened from the calendar.",
       rows: [
         { kind: "single", key: "--event-panel-bg", scope: "app" },
         { kind: "single", key: "--event-panel-contrast", scope: "app" },
@@ -363,67 +414,14 @@
     },
     {
       sourceKey: null,
-      title: "Form controls",
-      description:
-        "Shared form affordances used across calendar sub-sections.",
-      rows: [{ kind: "single", key: "--form-indicator", scope: "app" }],
-    },
-    {
-      sourceKey: null,
-      title: "Action semantics",
-      description:
-        "Colors that communicate confirm/danger intent on buttons and pills.",
-      rows: [
-        {
-          kind: "pair",
-          bg: "--action-confirm",
-          fg: "--action-confirm-foreground",
-          title: "Confirm action",
-          description:
-            "Save button and the active scope pill on the event panel.",
-          scope: "app",
-        },
-        { kind: "single", key: "--action-danger-armed", scope: "app" },
-      ],
-    },
-    {
-      sourceKey: null,
-      title: "Attendance status",
-      description:
-        "Per-status tile colors on the event panel attendee list.",
-      rows: [
-        { kind: "single", key: "--status-accepted", scope: "app" },
-        { kind: "single", key: "--status-tentative", scope: "app" },
-        { kind: "single", key: "--status-declined", scope: "app" },
-      ],
-    },
-    {
-      sourceKey: null,
       title: "Task priority",
       description:
-        "Kanban badge colors per difficulty tier. Each token tints the badge background at 20% and colors the label text.",
+        "Kanban badge colors per difficulty tier. Each token tints the badge background and colors the label text.",
       rows: [
         { kind: "single", key: "--priority-easy", scope: "app" },
         { kind: "single", key: "--priority-medium", scope: "app" },
         { kind: "single", key: "--priority-hard", scope: "app" },
         { kind: "single", key: "--priority-epic", scope: "app" },
-      ],
-    },
-    {
-      sourceKey: null,
-      title: "Pomodoro",
-      description: "Pomodoro-specific surfaces outside the event panel.",
-      rows: [{ kind: "single", key: "--pomodoro-idle-text", scope: "app" }],
-    },
-    {
-      sourceKey: null,
-      title: "Calendar extras",
-      description:
-        "Remaining calendar accents that don't fit under another group.",
-      rows: [
-        { kind: "single", key: "--cal-color-picker-outline", scope: "app" },
-        { kind: "single", key: "--cal-description-editor-bg", scope: "app" },
-        { kind: "single", key: "--cal-drag-preview-border", scope: "app" },
       ],
     },
   ];
@@ -452,17 +450,17 @@
   // after the seed feature shipped and can be reset at the row level.
   const hasSeeds = $derived(theme.seedSources !== undefined);
 
-  // Collapse state is ephemeral (not persisted across sessions). Multi-row
-  // groups start collapsed so the editor opens scannable: the user picks a
-  // section by name before any swatches or inputs mount. Single-row and
-  // zero-row groups are not collapsible and get no entry here.
+  // Collapse state is ephemeral (not persisted across sessions). Only
+  // source-driven multi-row groups are collapsible: the source color at the
+  // header is the "change everything together" affordance that gives the
+  // accordion a purpose. Sourceless groups show every row inline, and
+  // single-row source groups render the row as a peer of the header.
   let collapsed = $state<Record<string, boolean>>(
     untrack(() =>
       Object.fromEntries(
-        SOURCE_GROUPS.filter((g) => g.rows.length > 1).map((g) => [
-          g.title,
-          true,
-        ]),
+        SOURCE_GROUPS.filter(
+          (g) => g.sourceKey !== null && g.rows.length > 1,
+        ).map((g) => [g.title, true]),
       ),
     ),
   );
@@ -549,9 +547,11 @@
     themeStore.updateTheme(theme.id, updates);
   }
 
-  // Sample the five source values from the theme's currently resolved tokens
-  // so turning Quick colors on does not visually change anything up front;
-  // the user sees the same palette with a new relationship attached.
+  // Sample the seven source values from the theme's currently resolved
+  // tokens so turning Quick colors on does not visually change anything up
+  // front; the user sees the same palette with a new relationship attached.
+  // Confirm and warning sample the tokens they identity-drive so built-in
+  // clones keep their accepted/tentative colors intact.
   function enableSources() {
     if (theme.sources) return;
     const resolvedApp = resolveAppTokens(theme);
@@ -561,6 +561,8 @@
       ink: resolvedApp["--foreground"],
       primary: resolvedApp["--primary"],
       destructive: resolvedApp["--destructive"],
+      confirm: resolvedApp["--action-confirm"],
+      warning: resolvedApp["--status-tentative"],
       calCanvas: resolvedCal["--cal-bg"],
     };
     themeStore.updateTheme(theme.id, { sources });
@@ -767,20 +769,30 @@
             oninput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
             maxlength={60}
             aria-label="Theme name"
-            class="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-1.5 text-[14px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring dark:bg-transparent"
+            class="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-1.5 text-[14px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         {/if}
       </div>
     </div>
   </section>
 
-  {#snippet resetIconButton(onClick: () => void, label: string)}
+  {#snippet resetIconButton(
+    onClick: () => void,
+    label: string,
+    canReset: boolean,
+  )}
     <button
       type="button"
       onclick={onClick}
+      disabled={!canReset}
       aria-label="Reset {label} to its original value"
-      title="Restore original value"
-      class="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
+      title={canReset ? "Restore original value" : "Already at original value"}
+      class={cn(
+        "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors",
+        canReset
+          ? "hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          : "cursor-not-allowed opacity-40",
+      )}
     >
       <RotateCcw size={11} strokeWidth={2.25} />
     </button>
@@ -813,15 +825,14 @@
         readOnly={isLinked}
         label={ariaLabel}
       />
-      {#if canResetRow}
-        {@render resetIconButton(
-          () => {
-            if (scope === "app") resetAppToken(key);
-            else resetCalToken(key);
-          },
-          ariaLabel,
-        )}
-      {/if}
+      {@render resetIconButton(
+        () => {
+          if (scope === "app") resetAppToken(key);
+          else resetCalToken(key);
+        },
+        ariaLabel,
+        canResetRow,
+      )}
       {#if isLinked}
         <button
           type="button"
@@ -831,7 +842,7 @@
           }}
           aria-label="Isolated edit {ariaLabel}"
           title="Edit this color independently of its source"
-          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
+          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Pencil size={10} strokeWidth={2.25} />
           <span>Isolated edit</span>
@@ -845,7 +856,7 @@
           }}
           aria-label="Link back {ariaLabel} to its source"
           title="Re-link this color to its source"
-          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
+          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Link2 size={10} strokeWidth={2.25} />
           <span>Link back</span>
@@ -899,15 +910,14 @@
           }}
           label={info.title}
         />
-        {#if canResetRow}
-          {@render resetIconButton(
-            () => {
-              if (row.scope === "app") resetAppToken(row.key);
-              else resetCalToken(row.key);
-            },
-            info.title,
-          )}
-        {/if}
+        {@render resetIconButton(
+          () => {
+            if (row.scope === "app") resetAppToken(row.key);
+            else resetCalToken(row.key);
+          },
+          info.title,
+          canResetRow,
+        )}
         <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
       </div>
     </div>
@@ -941,7 +951,7 @@
   {/snippet}
 
   {#snippet groupCard(group: SourceGroup)}
-    {@const isCollapsible = group.rows.length > 1}
+    {@const isCollapsible = group.sourceKey !== null && group.rows.length > 1}
     {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
     {@const showRows = group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
     <section
@@ -964,12 +974,11 @@
               onChange={(hex) => setSource(sourceKey, hex)}
               label="{group.title} source"
             />
-            {#if canResetSource(sourceKey)}
-              {@render resetIconButton(
-                () => resetSource(sourceKey),
-                group.title,
-              )}
-            {/if}
+            {@render resetIconButton(
+              () => resetSource(sourceKey),
+              group.title,
+              canResetSource(sourceKey),
+            )}
           {/if}
           {#if isCollapsible}
             <button
@@ -979,9 +988,17 @@
               aria-label="{isCollapsed
                 ? 'Expand'
                 : 'Collapse'} {group.title} options"
-              class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground dark:bg-transparent"
+              class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
             >
-              <span>{isCollapsed ? "EXPAND" : "COLLAPSE"}</span>
+              {#if isCollapsed}
+                <ChevronDown size={11} strokeWidth={2.25} />
+                <span>EXPAND</span>
+                <ChevronDown size={11} strokeWidth={2.25} />
+              {:else}
+                <ChevronUp size={11} strokeWidth={2.25} />
+                <span>COLLAPSE</span>
+                <ChevronUp size={11} strokeWidth={2.25} />
+              {/if}
             </button>
           {:else}
             <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
@@ -990,7 +1007,7 @@
       </header>
       {#if showRows}
         <div class="divide-y divide-border border-t border-border">
-          {#if group.rows.length === 1 && group.rows[0].kind === "single"}
+          {#if group.sourceKey !== null && group.rows.length === 1 && group.rows[0].kind === "single"}
             {@render groupHeaderStyleRow(group.rows[0])}
           {:else}
             {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
@@ -1091,7 +1108,7 @@
         <button
           type="button"
           onclick={enableSources}
-          class="shrink-0 rounded-md border border-border bg-card px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          class="shrink-0 rounded-md border border-border bg-card px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
         >
           Set up Quick colors
         </button>
@@ -1195,7 +1212,7 @@
           <button
             type="button"
             onclick={copyJsonToClipboard}
-            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent"
           >
             <Copy size={11} strokeWidth={2.25} />
             <span>Copy JSON</span>
@@ -1203,7 +1220,7 @@
           <button
             type="button"
             onclick={saveJsonToFile}
-            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent"
           >
             <Download size={11} strokeWidth={2.25} />
             <span>Save to file</span>
@@ -1216,7 +1233,7 @@
               onclick={resetJsonDraft}
               disabled={!jsonDirty}
               class={cn(
-                "flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] transition-colors dark:bg-transparent",
+                "flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] transition-colors",
                 jsonDirty
                   ? "text-foreground hover:bg-accent"
                   : "cursor-not-allowed text-muted-foreground opacity-60",
@@ -1233,7 +1250,7 @@
                 "rounded-md border border-border px-3 py-1 text-[11px] font-medium transition-colors",
                 jsonDirty
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "cursor-not-allowed bg-card text-muted-foreground opacity-60 dark:bg-transparent",
+                  : "cursor-not-allowed bg-card text-muted-foreground opacity-60",
               )}
             >
               Apply changes
