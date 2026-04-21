@@ -11,6 +11,8 @@
     formatDayName,
   } from "./utils";
   import type { Theme } from "$lib/stores/themes";
+  import { resolveAppTokens, resolveCalendarTokens } from "$lib/stores/themes";
+  import { dayNumberShade } from "$lib/components/ui/colorMath";
 
   let {
     anchorDate,
@@ -43,6 +45,12 @@
   const weeks = $derived(
     getMonthGrid(anchorDate.getFullYear(), anchorDate.getMonth()),
   );
+
+  const shadeRefs = $derived.by(() => {
+    const app = resolveAppTokens(theme);
+    const cal = resolveCalendarTokens(theme);
+    return { bg: cal["--cal-bg"], ink: app["--foreground"] };
+  });
 
   // Reference days for day-of-week headers (Mon-Sun from first week)
   const dayNameDates = $derived(weeks[0]);
@@ -108,16 +116,18 @@
           {@const inMonth = day.getMonth() === currentMonth}
           {@const past = isPastDay(day)}
           {@const active = inMonth && !past}
-          {@const dayNumberColor = active
-            ? 'var(--foreground)'
-            : !inMonth
-              ? 'color-mix(in srgb, var(--muted-foreground) 25%, var(--background))'
-              : 'var(--muted-foreground)'}
-          {@const moreColor = past
-            ? 'color-mix(in srgb, var(--muted-foreground) 45%, var(--background))'
-            : !inMonth
-              ? 'color-mix(in srgb, var(--muted-foreground) 25%, var(--background))'
-              : 'var(--muted-foreground)'}
+          {@const dayNumberColor = dayNumberShade(
+            shadeRefs.bg,
+            shadeRefs.ink,
+            inMonth,
+            past,
+          )}
+          {@const moreColor = dayNumberShade(
+            shadeRefs.bg,
+            shadeRefs.ink,
+            inMonth,
+            past,
+          )}
           {@const dayEvts = allEventsForDay(events, day)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->

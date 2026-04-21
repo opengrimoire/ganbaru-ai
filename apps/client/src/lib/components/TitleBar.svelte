@@ -537,7 +537,7 @@
     </button>
     <button
       onclick={handleClose}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-destructive hover:text-white"
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-destructive hover:text-destructive-foreground"
       title="Close"
     >
       <X size={14} strokeWidth={1.75} />

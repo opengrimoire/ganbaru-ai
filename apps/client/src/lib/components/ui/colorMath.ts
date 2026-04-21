@@ -503,3 +503,22 @@ export function pickReadableMuted(
   }
   return lastGood;
 }
+
+/**
+ * Pick a legible shade for a calendar day number given its cell state.
+ * Returns `ink` for active cells (in-month, not past), a muted AA-large
+ * shade (~3:1) for inactive-in-month cells, and an intentionally
+ * sub-AA shade (~2:1) for off-month cells so they recede visually
+ * without disappearing. The 2:1 floor guards against plausible themes
+ * where a lower target would collapse the digit into the background.
+ */
+export function dayNumberShade(
+  bg: string,
+  ink: string,
+  isInMonth: boolean,
+  isPast: boolean,
+): string {
+  if (isInMonth && !isPast) return ink;
+  if (isInMonth) return pickReadableMuted(bg, ink, { target: 3 });
+  return pickReadableMuted(bg, ink, { target: 2 });
+}

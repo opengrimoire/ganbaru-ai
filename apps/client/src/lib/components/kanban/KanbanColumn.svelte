@@ -2,10 +2,15 @@
   import type { Task, TaskStatus } from "@ganbaruai/shared-types";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import { cn } from "$lib/utils";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import { getTheme } from "$lib/stores/theme.svelte";
+  import { resolveAppTokens } from "$lib/stores/themes";
+  import {
+    blendHex,
+    pickReadableForeground,
+  } from "$lib/components/ui/colorMath";
 
   interface Props {
     status: TaskStatus;
@@ -28,12 +33,21 @@
     return idx < statusOrder.length - 1 ? statusOrder[idx + 1] : null;
   });
 
-  const priorityColors: Record<string, string> = {
-    easy: "bg-priority-easy/20 text-priority-easy",
-    medium: "bg-priority-medium/20 text-priority-medium",
-    hard: "bg-priority-hard/20 text-priority-hard",
-    epic: "bg-priority-epic/20 text-priority-epic",
-  };
+  const theme = getTheme();
+  const priorityStyles = $derived.by(() => {
+    const tokens = resolveAppTokens(theme.current);
+    const canvas = tokens["--background"];
+    const ink = tokens["--foreground"];
+    const priorities = ["easy", "medium", "hard", "epic"] as const;
+    const out: Record<string, { bg: string; fg: string }> = {};
+    for (const p of priorities) {
+      const base = tokens[`--priority-${p}`];
+      const bg = blendHex(base, canvas, 0.18);
+      const fg = pickReadableForeground(bg, { ink, canvas });
+      out[p] = { bg, fg };
+    }
+    return out;
+  });
 
   function handleAdd() {
     if (newTitle.trim()) {
@@ -119,7 +133,11 @@
           </div>
         </div>
         <div class="mt-2 flex items-center gap-2">
-          <span class={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", priorityColors[task.priority])}>
+          <span
+            class="rounded px-1.5 py-0.5 text-[10px] font-medium"
+            style:background-color={priorityStyles[task.priority]?.bg}
+            style:color={priorityStyles[task.priority]?.fg}
+          >
             {task.priority}
           </span>
           {#if task.estimatedPomodoros > 0}

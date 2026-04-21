@@ -1105,7 +1105,7 @@
             bind:this={confirmDeleteBtn}
             onclick={() => { deleteArmed = false; handleDeleteClick(); }}
             title="Click again to delete (Ctrl + D)"
-            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-white bg-action-danger-armed">
+            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-action-danger-armed-foreground bg-action-danger-armed">
             <Trash2 size={13} strokeWidth={1.8} />
             <span>Click again to delete (Ctrl + D)</span>
           </button>

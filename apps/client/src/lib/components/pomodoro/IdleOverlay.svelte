@@ -114,7 +114,7 @@
   <div class="flex flex-col items-center gap-8">
     <p class="text-pomodoro-idle-text text-sm tracking-wide uppercase">Focus session paused</p>
 
-    <p class="text-white text-7xl font-light tabular-nums">
+    <p class="text-pomodoro-idle-timer text-7xl font-light tabular-nums">
       {formatDuration(elapsed)}
     </p>
 
