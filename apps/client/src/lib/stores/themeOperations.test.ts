@@ -5,6 +5,7 @@ import {
   mergeThemePatch,
   nextUniqueDisplayName,
   normalizeDisplayName,
+  synthesizeSeedsIfMissing,
 } from "./themeOperations";
 import {
   APP_TOKEN_KEYS,
@@ -324,5 +325,116 @@ describe("normalizeDisplayName", () => {
 
   it("leaves short names untouched", () => {
     expect(normalizeDisplayName("Solarized")).toBe("Solarized");
+  });
+});
+
+describe("synthesizeSeedsIfMissing", () => {
+  it("returns the theme unchanged when seedSources already exist", () => {
+    const existing: Theme = makeTheme({
+      sources: {
+        canvas: "#111111",
+        ink: "#eeeeee",
+        primary: "#00aaff",
+        destructive: "#ff0033",
+        confirm: "#00cc88",
+        warning: "#f5a524",
+        calCanvas: "#0a0a0a",
+      },
+      seedSources: {
+        canvas: "#222222",
+        ink: "#dddddd",
+        primary: "#0099ee",
+        destructive: "#ee0022",
+        confirm: "#00bb77",
+        warning: "#e49413",
+        calCanvas: "#090909",
+      },
+    });
+    const result = synthesizeSeedsIfMissing(existing);
+    expect(result).toBe(existing);
+  });
+
+  it("synthesizes seeds for a sources-less legacy theme from resolved tokens", () => {
+    const legacy = makeTheme({ base: "light" });
+    const result = synthesizeSeedsIfMissing(legacy);
+    expect(result).not.toBe(legacy);
+    expect(result.seedSources).toEqual({
+      canvas: BASE_APP_TOKENS.light["--background"],
+      ink: BASE_APP_TOKENS.light["--foreground"],
+      primary: BASE_APP_TOKENS.light["--primary"],
+      destructive: BASE_APP_TOKENS.light["--destructive"],
+      confirm: BASE_APP_TOKENS.light["--action-confirm"],
+      warning: BASE_APP_TOKENS.light["--status-tentative"],
+      calCanvas: BASE_CALENDAR_TOKENS.light["--cal-bg"],
+    });
+  });
+
+  it("copies sources into seedSources when the theme has sources but no seeds", () => {
+    const src = {
+      canvas: "#111111",
+      ink: "#eeeeee",
+      primary: "#00aaff",
+      destructive: "#ff0033",
+      confirm: "#00cc88",
+      warning: "#f5a524",
+      calCanvas: "#0a0a0a",
+    };
+    const legacy = makeTheme({ sources: src });
+    const result = synthesizeSeedsIfMissing(legacy);
+    expect(result.seedSources).toEqual(src);
+    expect(result.seedSources).not.toBe(legacy.sources);
+  });
+
+  it("snapshots the eventPalette and blendCanvas as seeds", () => {
+    const legacy = makeTheme({ blendCanvas: "#abcdef" });
+    const result = synthesizeSeedsIfMissing(legacy);
+    expect(result.seedEventPalette).toEqual(legacy.eventPalette);
+    expect(result.seedEventPalette).not.toBe(legacy.eventPalette);
+    expect(result.seedBlendCanvas).toBe("#abcdef");
+  });
+
+  it("seeds app and calendar token snapshots from the resolved palette", () => {
+    const legacy = makeTheme({
+      base: "dark",
+      appTokenOverrides: { "--primary": "#abc123" },
+      calendarTokenOverrides: { "--cal-bg": "#202020" },
+    });
+    const result = synthesizeSeedsIfMissing(legacy);
+    expect(result.seedAppTokens?.["--primary"]).toBe("#abc123");
+    expect(result.seedCalendarTokens?.["--cal-bg"]).toBe("#202020");
+    for (const key of APP_TOKEN_KEYS) {
+      if (key === "--primary") continue;
+      expect(result.seedAppTokens?.[key]).toBe(BASE_APP_TOKENS.dark[key]);
+    }
+    for (const key of CALENDAR_TOKEN_KEYS) {
+      if (key === "--cal-bg") continue;
+      expect(result.seedCalendarTokens?.[key]).toBe(
+        BASE_CALENDAR_TOKENS.dark[key],
+      );
+    }
+  });
+
+  it("captures seedAppTokenOverrides when the theme has pinned tokens", () => {
+    const legacy = makeTheme({
+      appTokenOverrides: { "--primary": "#abc123" },
+    });
+    const result = synthesizeSeedsIfMissing(legacy);
+    expect(result.seedAppTokenOverrides).toEqual({ "--primary": "#abc123" });
+    expect(result.seedAppTokenOverrides).not.toBe(legacy.appTokenOverrides);
+  });
+
+  it("leaves seed override maps undefined when the theme has none", () => {
+    const legacy = makeTheme();
+    const result = synthesizeSeedsIfMissing(legacy);
+    expect(result.seedAppTokenOverrides).toBeUndefined();
+    expect(result.seedCalendarTokenOverrides).toBeUndefined();
+  });
+
+  it("is idempotent: running twice returns an equal seeded theme", () => {
+    const legacy = makeTheme({ base: "light" });
+    const first = synthesizeSeedsIfMissing(legacy);
+    const second = synthesizeSeedsIfMissing(first);
+    expect(second).toBe(first);
+    expect(second.seedSources).toEqual(first.seedSources);
   });
 });

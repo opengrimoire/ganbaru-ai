@@ -152,3 +152,50 @@ export function normalizeDisplayName(input: string): string | undefined {
   if (trimmed.length === 0) return undefined;
   return trimmed.slice(0, MAX_DISPLAY_NAME_LENGTH);
 }
+
+/**
+ * Fill in `seed*` snapshots for a theme that predates the seed feature.
+ *
+ * A legacy user theme (cloned before seeds landed) may carry `sources` but
+ * no `seedSources`, which disables row-level reset and "Reset all". This
+ * helper copies the current live values as the synthetic seed set: the
+ * theme's present state is treated as the reset target. It is a no-op for
+ * themes that already have seeds, so loading is safely idempotent across
+ * app restarts.
+ */
+export function synthesizeSeedsIfMissing(theme: Theme): Theme {
+  if (theme.seedSources !== undefined) return theme;
+  const resolvedApp = resolveAppTokens(theme);
+  const resolvedCal = resolveCalendarTokens(theme);
+  const next: Theme = { ...theme };
+  next.seedAppTokens = { ...resolvedApp };
+  next.seedCalendarTokens = { ...resolvedCal };
+  next.seedEventPalette = [...theme.eventPalette];
+  next.seedBlendCanvas = theme.blendCanvas;
+  if (theme.sources) {
+    next.seedSources = { ...theme.sources };
+  } else {
+    next.seedSources = {
+      canvas: resolvedApp["--background"],
+      ink: resolvedApp["--foreground"],
+      primary: resolvedApp["--primary"],
+      destructive: resolvedApp["--destructive"],
+      confirm: resolvedApp["--action-confirm"],
+      warning: resolvedApp["--status-tentative"],
+      calCanvas: resolvedCal["--cal-bg"],
+    };
+  }
+  if (
+    theme.appTokenOverrides &&
+    Object.keys(theme.appTokenOverrides).length > 0
+  ) {
+    next.seedAppTokenOverrides = { ...theme.appTokenOverrides };
+  }
+  if (
+    theme.calendarTokenOverrides &&
+    Object.keys(theme.calendarTokenOverrides).length > 0
+  ) {
+    next.seedCalendarTokenOverrides = { ...theme.calendarTokenOverrides };
+  }
+  return next;
+}

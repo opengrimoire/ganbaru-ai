@@ -17,6 +17,7 @@ import {
   mergeThemePatch,
   nextUniqueDisplayName,
   normalizeDisplayName,
+  synthesizeSeedsIfMissing,
 } from "./themeOperations";
 import { getConfigKey, setConfigKey } from "../vault/config";
 
@@ -36,7 +37,7 @@ function loadSavedCustomThemes(): Record<ThemeId, Theme> {
     const value = saved[key];
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const result = validateThemeJson({ ...(value as Record<string, unknown>), id: key });
-    if (result.ok) out[key] = result.theme;
+    if (result.ok) out[key] = synthesizeSeedsIfMissing(result.theme);
   }
   return out;
 }
