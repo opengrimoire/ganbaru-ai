@@ -60,6 +60,8 @@ export function cloneTheme(
       ink: resolvedApp["--foreground"],
       primary: resolvedApp["--primary"],
       destructive: resolvedApp["--destructive"],
+      confirm: resolvedApp["--action-confirm"],
+      warning: resolvedApp["--status-tentative"],
       calCanvas: resolvedCal["--cal-bg"],
     };
   }

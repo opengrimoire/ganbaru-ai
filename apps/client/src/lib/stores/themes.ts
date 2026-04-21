@@ -8,16 +8,22 @@ import { blendHex } from "$lib/components/calendar/utils";
 export type ThemeId = string;
 
 /**
- * Five source colors that drive most of the shell palette through the
+ * Seven source colors that drive most of the shell palette through the
  * derivation formulas in {@link deriveAppTokens} / {@link deriveCalendarTokens}.
  *
  * - **canvas:** app background. The color visible in framing gaps and the
  *   Settings modal; also the reference the other app surfaces lift toward
  *   ink from.
  * - **ink:** text base. Default text color and the color every "lifted"
- *   surface mixes a small fraction of to tint it.
+ *   surface mixes a small fraction of to tint it. Also drives secondary
+ *   text tokens (form indicator, pomodoro idle caption, event panel text).
  * - **primary:** brand/action accent used on highlighted buttons and links.
- * - **destructive:** danger signal for delete actions and warnings.
+ * - **destructive:** danger signal. Identity-drives the destructive tile,
+ *   armed-delete state, and declined attendance status.
+ * - **confirm:** positive/success signal. Identity-drives the confirm
+ *   button (save, active scope pill) and accepted attendance status.
+ * - **warning:** caution signal. Identity-drives the tentative attendance
+ *   status today; reserved for future notification warnings and deadlines.
  * - **calCanvas:** calendar grid background; intentionally distinct from
  *   canvas so the calendar reads as a different surface from the rest of
  *   the app (both built-ins keep them apart).
@@ -31,6 +37,8 @@ export interface ThemeSources {
   ink: string;
   primary: string;
   destructive: string;
+  confirm: string;
+  warning: string;
   calCanvas: string;
 }
 
@@ -382,10 +390,10 @@ export const BASE_APP_TOKENS: Readonly<
     "--form-indicator": "#6B6F6E",
     "--action-confirm": "#059669",
     "--action-confirm-foreground": "#FFFFFF",
-    "--action-danger-armed": "#B91C1C",
-    "--status-accepted": "#10B981",
+    "--action-danger-armed": "#D93B3B",
+    "--status-accepted": "#059669",
     "--status-tentative": "#F59E0B",
-    "--status-declined": "#EF4444",
+    "--status-declined": "#D93B3B",
     "--priority-easy": "#22C55E",
     "--priority-medium": "#EAB308",
     "--priority-hard": "#F97316",
@@ -427,10 +435,10 @@ export const BASE_APP_TOKENS: Readonly<
     "--form-indicator": "#ECECF2",
     "--action-confirm": "#065F46",
     "--action-confirm-foreground": "#D1FAE5",
-    "--action-danger-armed": "#991B1B",
-    "--status-accepted": "#10B981",
+    "--action-danger-armed": "#E54545",
+    "--status-accepted": "#065F46",
     "--status-tentative": "#F59E0B",
-    "--status-declined": "#EF4444",
+    "--status-declined": "#E54545",
     "--priority-easy": "#4ADE80",
     "--priority-medium": "#FACC15",
     "--priority-hard": "#FB923C",
@@ -516,6 +524,14 @@ const APP_DERIVATION_LIGHT = {
   // recess(canvas, 0.11 / 0.17) diverges on the blue channel.
   sidebarLift: 0.1,
   sidebarAccentLift: 0.16,
+  // Form/pomodoro/event-panel text tints fitted to built-in values.
+  // Form indicator (#6B6F6E) sits between muted and foreground; pomodoro
+  // idle caption (#9CA3AF) is near the muted gray; event panel placeholder
+  // (#444746) and muted text (#646470, same as --muted-foreground) round
+  // out the surface typography.
+  formIndicatorLift: 0.61,
+  pomodoroIdleLift: 0.36,
+  eventPanelPlaceholderLift: 0.8,
 } as const;
 
 const APP_DERIVATION_DARK = {
@@ -528,6 +544,14 @@ const APP_DERIVATION_DARK = {
   ringLift: 0.289,
   sidebarRecess: 0.23,
   sidebarAccentLift: 0.101,
+  // Dark form indicator matches --foreground (identity via lift(1.0) short-
+  // circuited to `ink` directly in the derivation body). Pomodoro idle
+  // (#9CA3AF) is a mid gray; event panel text (#C4C7C5) and placeholder
+  // (#C4C7C5) are deliberately dimmer than ink so they recede on the panel
+  // surface.
+  pomodoroIdleLift: 0.63,
+  eventPanelTextLift: 0.79,
+  eventPanelPlaceholderLift: 0.79,
 } as const;
 
 const CAL_DERIVATION_LIGHT = {
@@ -559,7 +583,7 @@ export function deriveAppTokens(
   sources: ThemeSources,
   base: "light" | "dark",
 ): Record<string, string> {
-  const { canvas, ink, primary, destructive } = sources;
+  const { canvas, ink, primary, destructive, confirm, warning } = sources;
   const lift = (t: number) => liftTowardInk(canvas, ink, t);
   const recess = (t: number) => recessTowardBlack(canvas, t);
   if (base === "light") {
@@ -584,6 +608,20 @@ export function deriveAppTokens(
       "--sidebar-foreground": ink,
       "--sidebar-accent": lift(w.sidebarAccentLift),
       "--sidebar-accent-foreground": ink,
+      // Semantic signals: identity. User picks one green, one amber, one
+      // red; each source drives its action button and its status tile.
+      "--action-confirm": confirm,
+      "--status-accepted": confirm,
+      "--action-danger-armed": destructive,
+      "--status-declined": destructive,
+      "--status-tentative": warning,
+      // Ink-derived typography beyond --foreground.
+      "--form-indicator": lift(w.formIndicatorLift),
+      "--pomodoro-idle-text": lift(w.pomodoroIdleLift),
+      "--event-panel-text": ink,
+      "--event-panel-input-text": ink,
+      "--event-panel-placeholder": lift(w.eventPanelPlaceholderLift),
+      "--event-panel-muted-text": lift(w.mutedForegroundLift),
     };
   }
   const w = APP_DERIVATION_DARK;
@@ -607,6 +645,20 @@ export function deriveAppTokens(
     "--sidebar-foreground": "#FFFFFF",
     "--sidebar-accent": lift(w.sidebarAccentLift),
     "--sidebar-accent-foreground": "#FFFFFF",
+    "--action-confirm": confirm,
+    "--status-accepted": confirm,
+    "--action-danger-armed": destructive,
+    "--status-declined": destructive,
+    "--status-tentative": warning,
+    // Dark form indicator is ink itself (matches --foreground); event panel
+    // input text is near-ink (small drift absorbed by the tolerance) so we
+    // reuse ink identity rather than carry a near-1.0 weight.
+    "--form-indicator": ink,
+    "--pomodoro-idle-text": lift(w.pomodoroIdleLift),
+    "--event-panel-text": lift(w.eventPanelTextLift),
+    "--event-panel-input-text": ink,
+    "--event-panel-placeholder": lift(w.eventPanelPlaceholderLift),
+    "--event-panel-muted-text": lift(w.mutedForegroundLift),
   };
 }
 
@@ -759,6 +811,8 @@ const SOURCE_KEY_ORDER: readonly (keyof ThemeSources)[] = [
   "ink",
   "primary",
   "destructive",
+  "confirm",
+  "warning",
   "calCanvas",
 ];
 
@@ -850,7 +904,7 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     }
   }
 
-  const cleanSources = sanitizeSources(input.sources, errors);
+  const cleanSources = sanitizeSources(input.sources, errors, "sources", cleanBase);
 
   const cleanAppOverrides = sanitizeOverrides(
     input.appTokenOverrides,
@@ -884,6 +938,7 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     input.seedSources,
     errors,
     "seedSources",
+    cleanBase,
   );
   const cleanSeedAppOverrides = sanitizeOverrides(
     input.seedAppTokenOverrides,
@@ -969,10 +1024,39 @@ function sanitizeSeedPalette(
   return out;
 }
 
+/**
+ * Default value for each source channel, sampled from the base CSS tokens
+ * so legacy themes missing newer source fields (confirm, warning) pick up
+ * sensible defaults without erroring. Each channel reads from the token it
+ * identity-drives in {@link deriveAppTokens}.
+ */
+function defaultSourceValue(
+  key: keyof ThemeSources,
+  base: "light" | "dark",
+): string {
+  switch (key) {
+    case "canvas":
+      return BASE_APP_TOKENS[base]["--background"];
+    case "ink":
+      return BASE_APP_TOKENS[base]["--foreground"];
+    case "primary":
+      return BASE_APP_TOKENS[base]["--primary"];
+    case "destructive":
+      return BASE_APP_TOKENS[base]["--destructive"];
+    case "confirm":
+      return BASE_APP_TOKENS[base]["--action-confirm"];
+    case "warning":
+      return BASE_APP_TOKENS[base]["--status-tentative"];
+    case "calCanvas":
+      return BASE_CALENDAR_TOKENS[base]["--cal-bg"];
+  }
+}
+
 function sanitizeSources(
   source: unknown,
   errors: string[],
   fieldName: string = "sources",
+  base: "light" | "dark" = "dark",
 ): ThemeSources | undefined {
   if (source === undefined) return undefined;
   if (!isPlainObject(source)) {
@@ -983,6 +1067,13 @@ function sanitizeSources(
   let ok = true;
   for (const key of SOURCE_KEY_ORDER) {
     const value = (source as Record<string, unknown>)[key];
+    // Missing keys are backfilled from base defaults so legacy themes
+    // (written before a source was introduced) keep loading; only an
+    // actively-invalid hex is an error.
+    if (value === undefined) {
+      out[key] = defaultSourceValue(key, base);
+      continue;
+    }
     if (!isHexColor(value)) {
       errors.push(`${fieldName}.${key} must be a hex color`);
       ok = false;

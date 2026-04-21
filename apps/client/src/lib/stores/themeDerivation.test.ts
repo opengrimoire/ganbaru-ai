@@ -21,6 +21,8 @@ const LIGHT_SOURCES: ThemeSources = {
   ink: BASE_APP_TOKENS.light["--foreground"],
   primary: BASE_APP_TOKENS.light["--primary"],
   destructive: BASE_APP_TOKENS.light["--destructive"],
+  confirm: BASE_APP_TOKENS.light["--action-confirm"],
+  warning: BASE_APP_TOKENS.light["--status-tentative"],
   calCanvas: BASE_CALENDAR_TOKENS.light["--cal-bg"],
 };
 
@@ -29,6 +31,8 @@ const DARK_SOURCES: ThemeSources = {
   ink: BASE_APP_TOKENS.dark["--foreground"],
   primary: BASE_APP_TOKENS.dark["--primary"],
   destructive: BASE_APP_TOKENS.dark["--destructive"],
+  confirm: BASE_APP_TOKENS.dark["--action-confirm"],
+  warning: BASE_APP_TOKENS.dark["--status-tentative"],
   calCanvas: BASE_CALENDAR_TOKENS.dark["--cal-bg"],
 };
 

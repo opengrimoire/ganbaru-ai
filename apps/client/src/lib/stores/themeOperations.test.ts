@@ -81,6 +81,8 @@ describe("cloneTheme", () => {
       ink: BASE_APP_TOKENS.light["--foreground"],
       primary: BASE_APP_TOKENS.light["--primary"],
       destructive: BASE_APP_TOKENS.light["--destructive"],
+      confirm: BASE_APP_TOKENS.light["--action-confirm"],
+      warning: BASE_APP_TOKENS.light["--status-tentative"],
       calCanvas: BASE_CALENDAR_TOKENS.light["--cal-bg"],
     });
   });
@@ -106,6 +108,8 @@ describe("cloneTheme", () => {
       ink: "#eeeeee",
       primary: "#00aaff",
       destructive: "#ff0033",
+      confirm: "#00cc88",
+      warning: "#f5a524",
       calCanvas: "#0a0a0a",
     };
     const source = makeTheme({ sources: theSources });
