@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import AlertTriangle from "@lucide/svelte/icons/alert-triangle";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Copy from "@lucide/svelte/icons/copy";
@@ -9,11 +10,17 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Sun from "@lucide/svelte/icons/sun";
+  import Wand2 from "@lucide/svelte/icons/wand-2";
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { cn } from "$lib/utils";
   import { PALETTE_SIZE } from "$lib/components/calendar/types";
   import { blendHex } from "$lib/components/calendar/utils";
+  import {
+    contrastRatio,
+    pickReadableForeground,
+  } from "$lib/components/ui/colorMath";
+  import ThemePreviewPane from "./ThemePreviewPane.svelte";
   import {
     APP_TOKEN_KEYS,
     BASE_APP_TOKENS,
@@ -838,6 +845,42 @@
     themeStore.updateTheme(theme.id, patch);
   }
 
+  // WCAG body-text threshold. Rows whose effective bg/fg land below this
+  // get an amber caret with an auto-fix action so the user doesn't have to
+  // eyeball contrast across dozens of pairs.
+  const AA_BODY_TARGET = 4.5;
+
+  // Resolve a token's rendered value from the theme (override > derived >
+  // base). We re-derive on every call so the live editor reflects whatever
+  // the user just changed without a roundtrip through the DOM.
+  const resolvedApp = $derived(resolveAppTokens(theme));
+  const resolvedCal = $derived(resolveCalendarTokens(theme));
+
+  function effectiveColor(key: string, scope: "app" | "cal"): string {
+    return scope === "app" ? resolvedApp[key] : resolvedCal[key];
+  }
+
+  type PairContrast = { ratio: number; passes: boolean };
+  function pairContrast(row: GroupPairRow): PairContrast {
+    const bg = effectiveColor(row.bg, row.scope);
+    const fg = effectiveColor(row.fg, row.scope);
+    const ratio = contrastRatio(fg, bg);
+    return { ratio, passes: ratio >= AA_BODY_TARGET };
+  }
+
+  function autoFixPair(row: GroupPairRow) {
+    const bg = effectiveColor(row.bg, row.scope);
+    const ink = resolvedApp["--foreground"];
+    const canvas = resolvedApp["--background"];
+    const next = pickReadableForeground(bg, {
+      ink,
+      canvas,
+      target: AA_BODY_TARGET,
+    });
+    if (row.scope === "app") setAppToken(row.fg, next);
+    else setCalToken(row.fg, next);
+  }
+
   async function copyJsonToClipboard() {
     try {
       await navigator.clipboard.writeText(jsonDraft);
@@ -1098,9 +1141,25 @@
   {/snippet}
 
   {#snippet groupPairRow(row: GroupPairRow)}
+    {@const contrast = pairContrast(row)}
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{row.title}</div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[12px] text-foreground">{row.title}</span>
+          {#if !contrast.passes}
+            <button
+              type="button"
+              onclick={() => autoFixPair(row)}
+              aria-label="Auto-fix {row.title} text contrast"
+              title="Contrast {contrast.ratio.toFixed(2)}:1. AA requires {AA_BODY_TARGET}:1 for body text. Click to auto-pick a legible text color."
+              class="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+            >
+              <AlertTriangle size={11} strokeWidth={2.25} />
+              <span>{contrast.ratio.toFixed(1)}:1</span>
+              <Wand2 size={10} strokeWidth={2.25} />
+            </button>
+          {/if}
+        </div>
         <div class="text-[11px] text-muted-foreground">{row.description}</div>
       </div>
       <div class="flex shrink-0 flex-col items-end gap-2">
@@ -1274,6 +1333,11 @@
       </section>
     {/if}
   {:else if theme.sources}
+    <!-- Live preview: renders the theme with its own resolved tokens so the
+         editor chrome shadowing above it does not leak through. Sits above
+         everything so the user sees the downstream effect of each edit. -->
+    <ThemePreviewPane {theme} />
+
     <!-- Mode selector: Essentials keeps the editor focused on the four
          foundational sources; Accents adds confirm/warning/calCanvas;
          Advanced restores the full three-tier view with every pinnable row.
