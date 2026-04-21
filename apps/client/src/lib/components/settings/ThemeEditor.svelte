@@ -57,6 +57,10 @@
       title: "Destructive",
       description: "Color used for delete actions and warnings.",
     },
+    "--destructive-foreground": {
+      title: "Destructive text",
+      description: "Text color on destructive buttons and the title bar close hover.",
+    },
     "--ring": {
       title: "Focus ring",
       description: "Outline shown around focused inputs and buttons.",
@@ -120,17 +124,33 @@
       description:
         "Background of the delete button once it has been armed (click-again-to-confirm state).",
     },
+    "--action-danger-armed-foreground": {
+      title: "Armed delete text",
+      description: "Text color on the delete button in its armed state.",
+    },
     "--status-accepted": {
       title: "Accepted attendee",
       description: "Status tile color for accepted attendees on a calendar event.",
+    },
+    "--status-accepted-foreground": {
+      title: "Accepted attendee text",
+      description: "Text color on the accepted attendance tile.",
     },
     "--status-tentative": {
       title: "Tentative attendee",
       description: "Status tile color for tentative attendees on a calendar event.",
     },
+    "--status-tentative-foreground": {
+      title: "Tentative attendee text",
+      description: "Text color on the tentative attendance tile.",
+    },
     "--status-declined": {
       title: "Declined attendee",
       description: "Status tile color for declined attendees on a calendar event.",
+    },
+    "--status-declined-foreground": {
+      title: "Declined attendee text",
+      description: "Text color on the declined attendance tile.",
     },
     "--priority-easy": {
       title: "Easy priority",
@@ -156,6 +176,11 @@
       title: "Pomodoro idle caption",
       description:
         "Caption text shown over the dark idle overlay during a paused focus session.",
+    },
+    "--pomodoro-idle-timer": {
+      title: "Pomodoro idle timer",
+      description:
+        "Color of the large paused timer inside the idle overlay.",
     },
     "--cal-color-picker-outline": {
       title: "Event color outline",
@@ -313,6 +338,7 @@
         { kind: "single", key: "--foreground", scope: "app" },
         { kind: "single", key: "--form-indicator", scope: "app" },
         { kind: "single", key: "--pomodoro-idle-text", scope: "app" },
+        { kind: "single", key: "--pomodoro-idle-timer", scope: "app" },
       ],
     },
     {
@@ -327,9 +353,31 @@
       description:
         "Danger signal. Drives delete buttons, the armed-delete state, and the declined attendance tile.",
       rows: [
-        { kind: "single", key: "--destructive", scope: "app" },
-        { kind: "single", key: "--action-danger-armed", scope: "app" },
-        { kind: "single", key: "--status-declined", scope: "app" },
+        {
+          kind: "pair",
+          bg: "--destructive",
+          fg: "--destructive-foreground",
+          title: "Destructive button",
+          description: "Delete actions and the title bar close hover.",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--action-danger-armed",
+          fg: "--action-danger-armed-foreground",
+          title: "Armed delete",
+          description:
+            "Background and text of the delete button once armed (click-again-to-confirm state).",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--status-declined",
+          fg: "--status-declined-foreground",
+          title: "Declined attendee",
+          description: "Status tile for declined attendees on a calendar event.",
+          scope: "app",
+        },
       ],
     },
     // Tier 2: Semantic signals
@@ -348,7 +396,14 @@
             "Save button and the active scope pill on the event panel.",
           scope: "app",
         },
-        { kind: "single", key: "--status-accepted", scope: "app" },
+        {
+          kind: "pair",
+          bg: "--status-accepted",
+          fg: "--status-accepted-foreground",
+          title: "Accepted attendee",
+          description: "Status tile for accepted attendees on a calendar event.",
+          scope: "app",
+        },
       ],
     },
     {
@@ -356,7 +411,16 @@
       title: "Warning",
       description:
         "Caution signal. Drives the tentative attendance tile; reserved for future notification warnings and deadlines.",
-      rows: [{ kind: "single", key: "--status-tentative", scope: "app" }],
+      rows: [
+        {
+          kind: "pair",
+          bg: "--status-tentative",
+          fg: "--status-tentative-foreground",
+          title: "Tentative attendee",
+          description: "Status tile for tentative attendees on a calendar event.",
+          scope: "app",
+        },
+      ],
     },
     // Tier 3: Per-feature
     {

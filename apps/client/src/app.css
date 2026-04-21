@@ -20,6 +20,7 @@
   --accent: #E8E8ED;
   --accent-foreground: #141420;
   --destructive: #D93B3B;
+  --destructive-foreground: #FFFFFF;
   --border: rgba(0, 0, 20, 0.10);
   --input: rgba(0, 0, 20, 0.08);
   --ring: #8C8C98;
@@ -52,11 +53,15 @@
   --action-confirm: #059669;
   --action-confirm-foreground: #FFFFFF;
   --action-danger-armed: #B91C1C;
+  --action-danger-armed-foreground: #FFFFFF;
 
   /* Attendance status (light) */
   --status-accepted: #10B981;
+  --status-accepted-foreground: #FFFFFF;
   --status-tentative: #F59E0B;
+  --status-tentative-foreground: #FFFFFF;
   --status-declined: #EF4444;
+  --status-declined-foreground: #FFFFFF;
 
   /* Task priority (light) */
   --priority-easy: #22C55E;
@@ -66,6 +71,7 @@
 
   /* Pomodoro (light) */
   --pomodoro-idle-text: #9CA3AF;
+  --pomodoro-idle-timer: #FFFFFF;
 
   /* Calendar extras (light) */
   --cal-color-picker-outline: #141420;
@@ -89,6 +95,7 @@
   --accent: #3B3B3F;
   --accent-foreground: #ECECF2;
   --destructive: #E54545;
+  --destructive-foreground: #FFFFFF;
   --border: rgba(255, 255, 255, 0.10);
   --input: rgba(255, 255, 255, 0.08);
   --ring: #606070;
@@ -121,11 +128,15 @@
   --action-confirm: #065F46;
   --action-confirm-foreground: #D1FAE5;
   --action-danger-armed: #991B1B;
+  --action-danger-armed-foreground: #FFFFFF;
 
   /* Attendance status (dark) */
   --status-accepted: #10B981;
+  --status-accepted-foreground: #FFFFFF;
   --status-tentative: #F59E0B;
+  --status-tentative-foreground: #FFFFFF;
   --status-declined: #EF4444;
+  --status-declined-foreground: #FFFFFF;
 
   /* Task priority (dark) */
   --priority-easy: #4ADE80;
@@ -135,6 +146,7 @@
 
   /* Pomodoro (dark) */
   --pomodoro-idle-text: #9CA3AF;
+  --pomodoro-idle-timer: #FFFFFF;
 
   /* Calendar extras (dark) */
   --cal-color-picker-outline: #141420;
@@ -161,6 +173,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -183,14 +196,19 @@
   --color-action-confirm: var(--action-confirm);
   --color-action-confirm-foreground: var(--action-confirm-foreground);
   --color-action-danger-armed: var(--action-danger-armed);
+  --color-action-danger-armed-foreground: var(--action-danger-armed-foreground);
   --color-status-accepted: var(--status-accepted);
+  --color-status-accepted-foreground: var(--status-accepted-foreground);
   --color-status-tentative: var(--status-tentative);
+  --color-status-tentative-foreground: var(--status-tentative-foreground);
   --color-status-declined: var(--status-declined);
+  --color-status-declined-foreground: var(--status-declined-foreground);
   --color-priority-easy: var(--priority-easy);
   --color-priority-medium: var(--priority-medium);
   --color-priority-hard: var(--priority-hard);
   --color-priority-epic: var(--priority-epic);
   --color-pomodoro-idle-text: var(--pomodoro-idle-text);
+  --color-pomodoro-idle-timer: var(--pomodoro-idle-timer);
 }
 
 @layer base {
