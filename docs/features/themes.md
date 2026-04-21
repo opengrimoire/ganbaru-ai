@@ -18,7 +18,7 @@ A Theme is a self-contained visual package. The minimum fields:
 
 Optional fields reserved for shell theming:
 
-- **sources:** five-color palette (`canvas`, `ink`, `primary`, `destructive`, `calCanvas`) that drives the rest of the shell through the derivation engine. Omitted on both built-ins, so they resolve straight to the base CSS. See "Sources and derivation" below.
+- **sources:** seven-color palette (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`, `calCanvas`) that drives the rest of the shell through the derivation engine. Omitted on both built-ins, so they resolve straight to the base CSS. See "Sources and derivation" below.
 - **appTokenOverrides:** map of app-level CSS tokens (`--primary`, `--background`, etc.) to hex values. Applied on theme switch via `root.style.setProperty`. Pinned values here win over derivation and base CSS.
 - **calendarTokenOverrides:** same idea, scoped to calendar shell tokens (`--cal-bg`, `--cal-gridline`, etc.).
 
@@ -123,12 +123,14 @@ Unknown keys in overrides are stripped on import; only valid hex values are acce
 
 ### Sources
 
-A theme can ship a `sources` object with five hex colors:
+A theme can ship a `sources` object with seven hex colors. The first four form the **app foundation**, the next two are **semantic signals**, and the last is the **calendar canvas**:
 
 - `canvas`: app background. Lifted toward `ink` to produce the secondary, muted, and accent surfaces, and the base from which the title bar tokens tint.
-- `ink`: text base. Used directly for `--foreground` and mixed into every lifted surface.
+- `ink`: text base. Used directly for `--foreground` and mixed into every lifted surface, including the form indicator dot, the pomodoro idle caption, and the event panel's placeholder and muted captions.
 - `primary`: brand/action accent, used directly for `--primary`.
-- `destructive`: danger signal for delete actions and warnings, used directly for `--destructive`.
+- `destructive`: danger signal. Identity-drives `--destructive`, `--action-danger-armed`, and `--status-declined` so the delete button, armed-delete state, and declined attendance tile stay consistent.
+- `confirm`: positive signal. Identity-drives `--action-confirm` (save button, active scope pill) and `--status-accepted` (accepted attendance tile).
+- `warning`: caution signal. Identity-drives `--status-tentative` today; reserved for future notification warnings and deadline accents.
 - `calCanvas`: calendar grid background. Kept distinct from `canvas` in both built-ins so the calendar reads as its own surface.
 
 Editing one source color propagates through the derivation tables and shifts every non-pinned token in lockstep. Pinned overrides are untouched, so the user can let the engine drive the coherent parts of the shell while surgically fixing specific tokens (pinning `--card` to pure white, for example).
@@ -140,53 +142,69 @@ The engine uses two linear blends over sRGB hex:
 - `liftTowardInk(c, ink, t)`: blend `c` toward `ink` by fraction `t`. Produces softly tinted grays, which is how the built-in secondary, muted, accent, and ring surfaces relate to their canvas.
 - `recessTowardBlack(c, t)`: blend `c` toward pure black by fraction `t`. Used only for the dark title bar, which wants a shade darker than canvas without picking up ink hue.
 
-Weights live in `APP_DERIVATION_LIGHT`, `APP_DERIVATION_DARK`, `CAL_DERIVATION_LIGHT`, `CAL_DERIVATION_DARK` (see `stores/themes.ts`) and were fitted so that seeding the built-in themes' canvas, ink, primary, destructive, and calCanvas reproduces the built-in shell palette within a small per-channel tolerance. A golden test in `themeDerivation.test.ts` guards the reproduction on every change. Card and popover are pinned to pure white in light mode; both sidebar foregrounds are pinned to pure white in dark mode.
+Weights live in `APP_DERIVATION_LIGHT`, `APP_DERIVATION_DARK`, `CAL_DERIVATION_LIGHT`, `CAL_DERIVATION_DARK` (see `stores/themes.ts`) and were fitted so that seeding the built-in themes' seven sources reproduces the built-in shell palette within a small per-channel tolerance. A golden test in `themeDerivation.test.ts` guards the reproduction on every change. Card and popover are pinned to pure white in light mode; both sidebar foregrounds are pinned to pure white in dark mode.
+
+Alongside `--foreground`, the ink source also drives three ink-tinted captions through `liftTowardInk`: `--form-indicator` (the radio/checkbox dot inside calendar sub-sections), `--pomodoro-idle-text` (caption on the idle overlay), and the event panel's dim text (`--event-panel-placeholder`, and, in dark mode, `--event-panel-text`). In dark mode the form indicator and event-panel input text are tied to ink via identity since the built-in values match ink directly.
+
+Confirm, warning, and destructive propagate through identity derivation: one color feeds both the button state and the corresponding status tile, so users pick three semantic accents (green, amber, red) and every surface that carries that meaning stays consistent.
 
 Only the derivable subset of calendar tokens participates: `--cal-bg`, `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, `--cal-timeline-rail`. Semantic tokens (today marker, current-time line, timeline break, timeline focus) carry meaning that does not reduce to a source palette (red for "now", green for focus, a bold today circle) and always fall through to base CSS unless the user explicitly pins them.
 
 ### Editor UI
 
-Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. Shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
+Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. Groups are ordered top-to-bottom as a three-tier walkthrough: app foundation, semantic signals, then per-feature surfaces. Inside each tier, shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
 
-Groups with more than one driven row are collapsible accordion cards, starting collapsed so the editor opens scannable. The header has three parts, all on one row: the title and description on the left (non-interactive), the source `ColorField` in the center of the right cluster, and an **EXPAND** / **COLLAPSE** button on the right that shares the fixed minimum width of the Isolated edit / Link back buttons in the sub-options. Groups with exactly one driven row (Ink, Primary action) drop the EXPAND / COLLAPSE button and always render the sub-row below the header as its own line, so the single driven token is labeled on the left with its own title and short description and the control sits below the source at a matching horizontal position. Destructive has no row at all: its source feeds `--destructive` through identity derivation and nothing else consumes it, so an isolated row would just repeat the header ColorField without adding capability; the header shows the source with an invisible placeholder in the action slot to stay aligned with its peers. Whenever the current value of a source color drifts from the clone-time seed, a small reset icon appears next to its `ColorField`; clicking it restores that channel only (see "Seed snapshots" above for the details).
-
-The groups:
+**Tier 1 (App foundation)** carries the four sources every shell surface reads from:
 
 - **App canvas**: the dominant background color. Drives background, card, popover (paired with its text), secondary surface, muted surface, hover highlight, focus ring, title bar, and title bar hover. Editing it shifts the entire non-accent palette at once.
-- **Ink**: base text color, also the tint mixed into every lifted surface. Drives the default foreground.
-- **Primary action**: main accent for highlighted buttons and links. The source drives the button background directly (identity derivation) and the button text through contrast pick, so the editor exposes two controls: the source (for the background) and one row for the text. A third row for the background would just repeat the source.
-- **Destructive**: color for delete actions and warnings. Has no sub-option row: the source is the only control because `--destructive` is driven by identity derivation and no other token consumes the destructive source.
+- **Ink**: base text color, also the tint mixed into every lifted surface. Sub-rows cover `--foreground`, `--form-indicator`, and `--pomodoro-idle-text`.
+- **Primary action**: main accent for highlighted buttons and links. The source drives the button background directly (identity derivation) and the button text through contrast pick; a single sub-row exposes `--primary-foreground` for isolation.
+- **Destructive**: danger signal. Sub-rows cover `--destructive`, `--action-danger-armed`, and `--status-declined` so the user can either let the one red drive all three or isolate any tile.
+
+**Tier 2 (Semantic signals)** adds the positive and cautionary accents:
+
+- **Confirm**: drives the save button (paired bg + text), the active scope pill, and the accepted attendance tile. The pair row exposes `--action-confirm` alongside `--action-confirm-foreground`; a follow-up single row exposes `--status-accepted`.
+- **Warning**: drives the tentative attendance tile today. Ships with one sub-row (`--status-tentative`) and is reserved for future notification warnings and deadline accents.
+
+**Tier 3 (Per-feature)** keeps feature-scoped colors adjacent so nothing is scattered:
+
 - **Calendar canvas**: calendar grid background. Drives the grid, header, gridlines, time labels, and pomodoro rail track.
-- **Calendar markers**: a trailing group with no source (no spine color, neutral border). Collects semantic tokens that don't derive (today marker and its text, now line, break marker, focus marker).
+- **Calendar details**: a sourceless card that collects every non-derived calendar color. Merges the former "Calendar markers" and "Calendar extras" into one group: today marker (pair), now line, break marker, focus marker, color-picker outline, description editor tint, and the all-day drag-preview border.
+- **Event panel**: nine sub-rows painting the event creation/edit panel surface, section-header strip, outer edge, drop shadow, title divider, input text, placeholder, body text, and muted captions. Sourceless today; grouping the nine tokens together keeps them visible as a block.
+- **Task priority**: four sub-rows for the kanban priority badges (`--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`). Each token feeds both the badge background (at 20% opacity) and the label text at full opacity.
 
-Groups with a source color show it as an editable `ColorField` in the header (except Calendar markers, which has no source and leaves only the EXPAND / COLLAPSE button on the right). Driven rows render below the header with two distinct layouts.
+The header has three parts, all on one row: the title and description on the left (non-interactive), the source `ColorField` in the center of the right cluster (hidden on sourceless cards), and an **EXPAND** / **COLLAPSE** button on the right. The collapse button is gated on **source presence and at least two rows**: it exists to amortize a long list when one color at the top drives everything below, so sourceless cards (Calendar details, Event panel, Task priority) drop the button and show all sub-rows inline, and source-driven single-row cards (Primary action, Warning) drop it too and render their one sub-row as a peer of the source. Collapsible groups start collapsed so the editor opens scannable. Whenever the current value of a source color drifts from the clone-time seed, a small reset icon appears next to its `ColorField`; clicking it restores that channel only (see "Seed snapshots" above for the details).
 
-**Single-row groups** (Ink, Primary action): the sub-row uses the same bold header typography (`text-[13px] font-semibold`) so the driven token reads as a peer of its source rather than a subordinate option. The right side shows an always-editable `ColorField` followed by an optional reset icon and an invisible placeholder sized to match the header's EXPAND / COLLAPSE slot. There is no Isolated edit or Link back button: editing the field directly writes an override, and clicking the reset icon falls back through the seed (restoring the seed's override, or dropping it when the seed had none so the token re-follows its source).
+Driven rows render below the header with two distinct layouts.
 
-**Multi-row groups** (App canvas, Calendar canvas, Calendar markers): rows start collapsed and expand into a list that shares two states expressed through the HEX input and the trailing action button:
+**Peer-style rows** (used when a source-driven group has exactly one sub-row): the row uses the same bold header typography (`text-[13px] font-semibold`) so the driven token reads as a peer of its source rather than a subordinate option. The right side shows an always-editable `ColorField` followed by an optional reset icon and an invisible placeholder sized to match the header's action slot. There is no Isolated edit or Link back button: editing the field directly writes an override, and clicking the reset icon falls back through the seed (restoring the seed's override, or dropping it when the seed had none so the token re-follows its source).
+
+**Sub-option rows** (used in multi-row groups, whether or not they have a source): rows render as a list where each row shares two states expressed through the HEX input and the trailing action button:
 
 - **Linked**: the `ColorField` renders its swatch and hex input in a disabled state (reduced opacity, not-allowed cursor) showing the current derived or default value, with an **Isolated edit** action button. Clicking it captures the current auto value as an explicit override and swaps the row to the Isolated state.
 - **Isolated**: the same `ColorField` becomes fully editable (swatch opens the picker, hex input accepts input), with a **Link back** action that drops the override so the token re-follows its source.
 
-Both action buttons share a fixed minimum width so the row geometry stays stable when a user flips between states. The HEX value is always visible, which keeps the actual color number readable even for linked rows. When the row's current value differs from the clone-time seed, a small reset icon appears between the `ColorField` and the Isolated edit / Link back button; clicking it reverts that single row back to the seed value (restoring the override, or dropping it when the seed had none).
+Sourceless multi-row cards skip the Linked state entirely: every sub-row is always editable because there is no source to link back to. The HEX value is always visible, which keeps the actual color number readable even for linked rows. When a row's current value differs from the clone-time seed, a small reset icon appears between the `ColorField` and the action button; clicking it reverts that single row back to the seed value (restoring the override, or dropping it when the seed had none).
 
-Legacy user themes imported without a `sources` field show a "Set up Quick colors" card that samples the five values from the current resolved palette. After clicking, the editor switches to the grouped layout.
+Legacy user themes imported without a `sources` field show a "Set up Quick colors" card that samples the seven values from the current resolved palette. After clicking, the editor switches to the grouped layout. Themes written before `confirm` and `warning` were introduced load normally: missing source channels backfill from the base defaults so existing vault files keep working without a migration.
 
 ### Semantic tokens
 
-Beyond the derived shell, the editor exposes 24 semantic tokens for surfaces that don't reduce to a source palette. They're grouped in the editor under trailing cards (no source header) so users can reach each one individually. All default to the original hardcoded values, so installing this round is a visual no-op; only the editor surface grows.
+The editor exposes 24 tokens beyond the core shell surfaces. Most of them now sit under a source color whose change propagates to the whole group (form indicator and pomodoro idle caption under Ink, armed delete and declined status under Destructive, confirm bg + fg and accepted status under Confirm, tentative status under Warning). The remainder live under sourceless feature cards so their relationship to a feature stays obvious, but no single source drives them.
 
-- **Event panel** (9): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, `--event-panel-text`, `--event-panel-muted-text`. These paint the event creation/edit panel surface, its section header strip, outer border, drop shadow, title divider, and the text inside inputs, placeholders, the body, and muted captions.
-- **Form controls** (1): `--form-indicator` paints the filled dot inside radio/checkbox pills in the calendar sub-sections (recurrence, notifications, pomodoro).
-- **Action semantics** (3): `--action-confirm` and `--action-confirm-foreground` paint the Save button and the active scope-selector pill (Only this / Following / All). `--action-danger-armed` paints the delete button once it has been armed for the second click.
-- **Attendance status** (3): `--status-accepted`, `--status-tentative`, `--status-declined` paint the per-status tiles in the attendee list on the event panel (pending still uses `--muted-foreground`).
-- **Task priority** (4): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic` paint the kanban priority badges. Each token feeds both the background (at 20% opacity through Tailwind's `/20` modifier) and the label text at full opacity.
-- **Pomodoro** (1): `--pomodoro-idle-text` paints the caption text on the idle overlay shown when a focus session auto-pauses.
-- **Calendar extras** (3): `--cal-color-picker-outline` outlines the selected swatch in the event color picker. `--cal-description-editor-bg` tints the description editor while in edit mode. `--cal-drag-preview-border` draws the ghost tile border while dragging an all-day event. The last two carry alpha.
+Distribution across the editor:
 
-Four of these tokens (`--event-panel-edge`, `--event-panel-shadow`, `--cal-description-editor-bg`, `--cal-drag-preview-border`) carry alpha. `ColorField` accepts and emits 8-digit `#rrggbbaa` for them, with a fourth slider (A) in the picker popover and a checkerboard swatch on the trigger so transparency is visible. Alpha-bearing tokens skip the Tailwind `@theme inline` alias and are consumed via plain CSS variables in scoped styles or inline `style` attributes.
+- **Ink tints** (2): `--form-indicator` (radio/checkbox dot inside calendar sub-sections) and `--pomodoro-idle-text` (caption on the idle overlay). Both derived from ink.
+- **Destructive family** (2): `--action-danger-armed` (delete button once armed) and `--status-declined` (declined attendance tile). Both identity-derived from `destructive`.
+- **Confirm family** (3): `--action-confirm` + `--action-confirm-foreground` (save button, active scope pill) and `--status-accepted` (accepted attendance tile). Background and status identity-derive from `confirm`; the foreground falls through to the base CSS default.
+- **Warning family** (1): `--status-tentative` (tentative attendance tile), identity-derived from `warning`.
+- **Calendar details** (7, sourceless): the former Calendar markers and Calendar extras merged. Today marker (pair of circle + inner text), now line, break marker, focus marker, event-color-picker outline, description editor tint, and the all-day drag-preview border.
+- **Event panel** (9, sourceless): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, `--event-panel-text`, `--event-panel-muted-text`. In dark mode ink identity-drives the input text and a ~0.79 lift drives the placeholder, body, and muted text; in light mode the body and input text are ink identity and placeholder/muted text lift from canvas.
+- **Task priority** (4, sourceless): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`. Each token feeds both the background (at 20% opacity through Tailwind's `/20` modifier) and the label text at full opacity.
 
-The semantic tokens do not participate in derivation. They resolve through the same override/base fall-through used by the rest of the shell, so a user who never opens these rows sees the byte-for-byte default values; a user who pins one gets a surgical override that survives theme export/import.
+Four tokens carry alpha: `--event-panel-edge`, `--event-panel-shadow`, `--cal-description-editor-bg`, `--cal-drag-preview-border`. `ColorField` accepts and emits 8-digit `#rrggbbaa` for them, with a fourth slider (A) in the picker popover and a checkerboard swatch on the trigger so transparency is visible. Alpha-bearing tokens skip the Tailwind `@theme inline` alias and are consumed via plain CSS variables in scoped styles or inline `style` attributes.
+
+Sourceless semantic tokens still resolve through the same override/base fall-through used by the rest of the shell, so a user who never opens those rows sees the byte-for-byte default values; a user who pins one gets a surgical override that survives theme export/import.
 
 ## Typography and density
 
