@@ -1,17 +1,28 @@
 import { describe, it, expect } from "vitest";
 import {
+  blendHex,
   clampChannel,
   clampHue,
   clampPercent,
-  normalizeHex,
+  contrastRatio,
+  hexToHsv,
+  hexToOklab,
   hexToRgb,
   hexToRgba,
-  rgbToHex,
-  rgbaToHex,
-  rgbToHsv,
-  hsvToRgb,
-  hexToHsv,
   hsvToHex,
+  hsvToRgb,
+  meetsWcag,
+  normalizeHex,
+  oklabToHex,
+  oklabToRgb,
+  pickReadableBorder,
+  pickReadableForeground,
+  pickReadableMuted,
+  relativeLuminance,
+  rgbaToHex,
+  rgbToHex,
+  rgbToHsv,
+  rgbToOklab,
 } from "./colorMath";
 
 describe("clampChannel", () => {
@@ -216,3 +227,293 @@ describe("hexToHsv / hsvToHex", () => {
     expect(hexToHsv("not-a-color")).toBeNull();
   });
 });
+
+describe("blendHex", () => {
+  it("returns a unchanged when weightA = 1", () => {
+    expect(blendHex("#ff0000", "#0000ff", 1)).toBe("#ff0000");
+  });
+
+  it("returns b unchanged when weightA = 0", () => {
+    expect(blendHex("#ff0000", "#0000ff", 0)).toBe("#0000ff");
+  });
+
+  it("blends evenly at weightA = 0.5", () => {
+    expect(blendHex("#000000", "#ffffff", 0.5)).toBe("#808080");
+  });
+
+  it("falls back to a on bad input", () => {
+    expect(blendHex("not-a-color", "#000000", 0.5)).toBe("not-a-color");
+  });
+});
+
+describe("relativeLuminance", () => {
+  it("is 0 for pure black and 1 for pure white", () => {
+    expect(relativeLuminance("#000000")).toBeCloseTo(0, 6);
+    expect(relativeLuminance("#ffffff")).toBeCloseTo(1, 6);
+  });
+
+  it("returns values in the expected range for mid-grays", () => {
+    // Luminance is monotonically increasing with lightness, so darker
+    // grays must have strictly lower luminance than lighter ones.
+    const dark = relativeLuminance("#444444");
+    const mid = relativeLuminance("#777777");
+    const light = relativeLuminance("#bbbbbb");
+    expect(dark).toBeLessThan(mid);
+    expect(mid).toBeLessThan(light);
+    expect(dark).toBeGreaterThan(0);
+    expect(light).toBeLessThan(1);
+    // Mid-gray (#777) luminance is around 0.18 with either the 0.03928
+    // or 0.04045 threshold; allow a 1-decimal-place window.
+    expect(mid).toBeCloseTo(0.18, 1);
+  });
+
+  it("collapses to 0 on invalid hex", () => {
+    expect(relativeLuminance("not-a-color")).toBe(0);
+  });
+});
+
+describe("contrastRatio", () => {
+  it("is 21 for pure white vs pure black", () => {
+    expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21, 6);
+    expect(contrastRatio("#ffffff", "#000000")).toBeCloseTo(21, 6);
+  });
+
+  it("is 1 for identical colors", () => {
+    expect(contrastRatio("#123456", "#123456")).toBeCloseTo(1, 6);
+  });
+
+  it("is symmetric", () => {
+    const a = "#3a7bff";
+    const b = "#ffe066";
+    expect(contrastRatio(a, b)).toBeCloseTo(contrastRatio(b, a), 6);
+  });
+
+  it("matches a known WCAG worked example", () => {
+    // #777777 against #ffffff ~= 4.48:1 per WCAG Understanding SC 1.4.3.
+    expect(contrastRatio("#777777", "#ffffff")).toBeCloseTo(4.48, 1);
+  });
+});
+
+describe("meetsWcag", () => {
+  it("AA body text requires 4.5:1", () => {
+    expect(meetsWcag("#ffffff", "#595959", "AA", "body")).toBe(true);
+    expect(meetsWcag("#ffffff", "#8a8a8a", "AA", "body")).toBe(false);
+  });
+
+  it("AA large/ui requires 3:1", () => {
+    expect(meetsWcag("#ffffff", "#949494", "AA", "large")).toBe(true);
+    expect(meetsWcag("#ffffff", "#b5b5b5", "AA", "ui")).toBe(false);
+  });
+
+  it("AAA body requires 7:1", () => {
+    // #666666 vs #ffffff ~5.7:1 (fails AAA body), #404040 vs #ffffff ~10.4:1 (passes).
+    expect(meetsWcag("#ffffff", "#666666", "AAA", "body")).toBe(false);
+    expect(meetsWcag("#ffffff", "#404040", "AAA", "body")).toBe(true);
+  });
+});
+
+describe("rgbToOklab / oklabToRgb", () => {
+  it("black and white collapse to predictable L endpoints", () => {
+    const black = rgbToOklab(0, 0, 0);
+    const white = rgbToOklab(255, 255, 255);
+    expect(black.L).toBeCloseTo(0, 3);
+    expect(white.L).toBeCloseTo(1, 2);
+  });
+
+  it("pure neutral grays have near-zero a/b chroma", () => {
+    const gray = rgbToOklab(128, 128, 128);
+    expect(Math.abs(gray.a)).toBeLessThan(0.01);
+    expect(Math.abs(gray.b)).toBeLessThan(0.01);
+  });
+
+  it("round-trips RGB through OKLab within rounding tolerance", () => {
+    const samples = [
+      [0, 0, 0],
+      [255, 255, 255],
+      [17, 42, 200],
+      [240, 100, 30],
+      [200, 200, 240],
+      [80, 160, 64],
+      [128, 128, 128],
+    ] as const;
+    for (const [r, g, b] of samples) {
+      const lab = rgbToOklab(r, g, b);
+      const back = oklabToRgb(lab.L, lab.a, lab.b);
+      expect(Math.abs(back.r - r)).toBeLessThanOrEqual(1);
+      expect(Math.abs(back.g - g)).toBeLessThanOrEqual(1);
+      expect(Math.abs(back.b - b)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("hex round-trips through OKLab within 1/255 per channel", () => {
+    const hexes = [
+      "#000000",
+      "#ffffff",
+      "#123456",
+      "#a1b2c3",
+      "#fe7733",
+      "#2d6a4f",
+      "#c9184a",
+    ];
+    for (const hex of hexes) {
+      const lab = hexToOklab(hex);
+      expect(lab).not.toBeNull();
+      if (!lab) continue;
+      const back = oklabToHex(lab.L, lab.a, lab.b);
+      const original = hexToRgb(hex)!;
+      const recovered = hexToRgb(back)!;
+      expect(Math.abs(original.r - recovered.r)).toBeLessThanOrEqual(1);
+      expect(Math.abs(original.g - recovered.g)).toBeLessThanOrEqual(1);
+      expect(Math.abs(original.b - recovered.b)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("hexToOklab returns null on invalid input", () => {
+    expect(hexToOklab("not-a-color")).toBeNull();
+  });
+});
+
+describe("pickReadableForeground", () => {
+  it("returns ink when ink meets target", () => {
+    expect(
+      pickReadableForeground("#ffffff", { ink: "#000000", canvas: "#ffffff" }),
+    ).toBe("#000000");
+  });
+
+  it("returns canvas when ink fails but canvas meets target", () => {
+    const fg = pickReadableForeground("#000000", {
+      ink: "#1a1a1a",
+      canvas: "#ffffff",
+    });
+    expect(fg).toBe("#ffffff");
+  });
+
+  it("walks the higher-contrast anchor when both anchors fail", () => {
+    // Very light bg with near-matching ink and canvas: both anchors fail
+    // target contrast, but walking ink's L downward reaches AA easily.
+    const bg = "#fafafa";
+    const fg = pickReadableForeground(bg, {
+      ink: "#f0f0f0",
+      canvas: "#e8e8e8",
+    });
+    expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5 - 0.05);
+  });
+
+  it("handles the adversarial case where bg equals ink", () => {
+    const bg = "#556677";
+    const fg = pickReadableForeground(bg, {
+      ink: bg,
+      canvas: "#ffffff",
+    });
+    // White has contrast > 4.5 against #556677, so canvas should win.
+    expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5 - 0.05);
+  });
+
+  it("returns the best saturating endpoint when target is unreachable", () => {
+    // Mid-gray bg cannot carry AA body text from any anchor. Against
+    // #808080, pure black has ~5.3:1 and pure white has ~3.96:1, so the
+    // fallback should pick black.
+    const bg = "#808080";
+    const fg = pickReadableForeground(bg, {
+      ink: "#808080",
+      canvas: "#808080",
+    });
+    const blackRatio = contrastRatio(bg, "#000000");
+    const whiteRatio = contrastRatio(bg, "#ffffff");
+    const maxAchievable = Math.max(blackRatio, whiteRatio);
+    // Walking in either direction should reach target (black hits 4.5).
+    // If it doesn't, the fallback should at least match the best endpoint.
+    expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(
+      Math.min(4.5, maxAchievable) - 0.1,
+    );
+  });
+
+  it("10k fuzz: every result either meets target or saturates the gamut", () => {
+    const rand = mulberry32(0x9e3779b9);
+    for (let i = 0; i < 10000; i++) {
+      const bg = randomHex(rand);
+      const ink = randomHex(rand);
+      const canvas = randomHex(rand);
+      const fg = pickReadableForeground(bg, { ink, canvas, target: 4.5 });
+      const ratio = contrastRatio(bg, fg);
+      const maxAchievable = Math.max(
+        contrastRatio(bg, "#000000"),
+        contrastRatio(bg, "#ffffff"),
+      );
+      // Either hits target, or is the best the gamut allows at bg's luminance.
+      expect(ratio >= 4.5 - 0.05 || ratio >= maxAchievable - 0.2).toBe(true);
+    }
+  });
+});
+
+describe("pickReadableBorder", () => {
+  it("lands at roughly 3:1 vs a light bg", () => {
+    const border = pickReadableBorder("#ffffff", "#000000");
+    expect(contrastRatio("#ffffff", border)).toBeGreaterThanOrEqual(3 - 0.1);
+    expect(contrastRatio("#ffffff", border)).toBeLessThan(4.5);
+  });
+
+  it("lands at roughly 3:1 vs a dark bg", () => {
+    const border = pickReadableBorder("#1a1a1a", "#ffffff");
+    expect(contrastRatio("#1a1a1a", border)).toBeGreaterThanOrEqual(3 - 0.1);
+  });
+
+  it("falls back toward opposite base when ink is too close to bg", () => {
+    // Dark bg with dark ink: falls back to walking toward white.
+    const border = pickReadableBorder("#1a1a1a", "#202020");
+    expect(contrastRatio("#1a1a1a", border)).toBeGreaterThanOrEqual(3 - 0.1);
+  });
+
+  it("survives bg = ink degenerate input", () => {
+    const border = pickReadableBorder("#808080", "#808080");
+    // Mid gray: best achievable border is one of the endpoints.
+    const ratio = contrastRatio("#808080", border);
+    expect(ratio).toBeGreaterThan(1);
+  });
+});
+
+describe("pickReadableMuted", () => {
+  it("parks above target vs white-on-black", () => {
+    const muted = pickReadableMuted("#ffffff", "#000000");
+    const ratio = contrastRatio("#ffffff", muted);
+    expect(ratio).toBeGreaterThanOrEqual(3 - 0.05);
+    // Should be in the muted band, not full-ink dark.
+    expect(ratio).toBeLessThanOrEqual(4.5);
+  });
+
+  it("parks above target vs dark-on-light", () => {
+    const muted = pickReadableMuted("#1a1a1a", "#ffffff");
+    const ratio = contrastRatio("#1a1a1a", muted);
+    expect(ratio).toBeGreaterThanOrEqual(3 - 0.05);
+    expect(ratio).toBeLessThanOrEqual(4.5);
+  });
+
+  it("returns ink unchanged when ink is already near target", () => {
+    // Contrast ratio (#595959 vs #ffffff) = ~7.0, (#767676 vs #ffffff) = ~4.5,
+    // so we need an ink barely above 3:1 to see the short-circuit. Use #949494.
+    const muted = pickReadableMuted("#ffffff", "#949494");
+    // Contrast of ink is ~3.0, so muted should just return it.
+    expect(contrastRatio("#ffffff", muted)).toBeLessThanOrEqual(
+      contrastRatio("#ffffff", "#949494") + 0.05,
+    );
+  });
+});
+
+// Deterministic PRNG for fuzz tests so failures reproduce.
+function mulberry32(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomHex(rand: () => number): string {
+  const r = Math.floor(rand() * 256);
+  const g = Math.floor(rand() * 256);
+  const b = Math.floor(rand() * 256);
+  return rgbToHex(r, g, b);
+}

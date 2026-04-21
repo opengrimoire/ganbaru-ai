@@ -199,3 +199,307 @@ export function hsvToHex(h: number, s: number, v: number): string {
   const { r, g, b } = hsvToRgb(h, s, v);
   return rgbToHex(r, g, b);
 }
+
+/**
+ * Linearly blend two hex colors in sRGB space. Alpha is ignored and the
+ * output is always 6-digit opaque hex. `weightA` is the fraction of `a`
+ * in the result (0..1), the rest is `b`. Invalid inputs fall back to `a`.
+ *
+ * Note: sRGB-space blending is not perceptually uniform, but it matches
+ * the legacy derivation weights used by `themes.ts` and the event palette
+ * darkening in `calendar/utils.ts`. For perceptual lightness walks use
+ * the OKLab pickers below instead.
+ */
+export function blendHex(a: string, b: string, weightA: number): string {
+  const ra = hexToRgb(a);
+  const rb = hexToRgb(b);
+  if (!ra || !rb) return a;
+  const wb = 1 - weightA;
+  return rgbToHex(
+    ra.r * weightA + rb.r * wb,
+    ra.g * weightA + rb.g * wb,
+    ra.b * weightA + rb.b * wb,
+  );
+}
+
+/**
+ * Gamma-decode an sRGB channel (0..1) to linear-light (0..1). Uses the
+ * sRGB 2.1 standard 0.04045 threshold; WCAG 2.1 cites 0.03928, but
+ * either threshold lands within a sub-integer luminance of the other
+ * so contrast math is indistinguishable.
+ */
+function sRgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+/** Gamma-encode a linear-light channel (0..1) back to sRGB (0..1). */
+function linearToSRgb(c: number): number {
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+}
+
+/**
+ * WCAG 2.1 relative luminance for a hex color. Returns a value in 0..1
+ * (0 = pure black, 1 = pure white). Gamma-decodes sRGB before applying
+ * the Rec. 709 luminance coefficients, which is the WCAG-compliant
+ * formula, as opposed to the raw-sRGB approximation in the legacy
+ * `pickContrastText` in `calendar/utils.ts`.
+ */
+export function relativeLuminance(hex: string): number {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return 0;
+  const rL = sRgbToLinear(rgb.r / 255);
+  const gL = sRgbToLinear(rgb.g / 255);
+  const bL = sRgbToLinear(rgb.b / 255);
+  return 0.2126 * rL + 0.7152 * gL + 0.0722 * bL;
+}
+
+/**
+ * WCAG contrast ratio between two hex colors: `(Lmax + 0.05) / (Lmin +
+ * 0.05)`. Result is in 1..21 (1 = identical, 21 = pure black vs pure
+ * white). Invalid inputs collapse to `1` (via the luminance-0 fallback).
+ */
+export function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const lmax = Math.max(la, lb);
+  const lmin = Math.min(la, lb);
+  return (lmax + 0.05) / (lmin + 0.05);
+}
+
+/** WCAG level: minimum (AA) or enhanced (AAA). */
+export type WcagLevel = "AA" | "AAA";
+
+/**
+ * Text-size class used to pick the WCAG threshold. `body` text targets
+ * 4.5:1 at AA (7:1 at AAA); `large` text (18pt regular / 14pt bold) and
+ * structural `ui` elements target 3:1 at AA (4.5:1 at AAA).
+ */
+export type WcagSize = "body" | "large" | "ui";
+
+/** True when the contrast between `a` and `b` meets the WCAG threshold. */
+export function meetsWcag(
+  a: string,
+  b: string,
+  level: WcagLevel = "AA",
+  size: WcagSize = "body",
+): boolean {
+  const ratio = contrastRatio(a, b);
+  if (level === "AAA") return ratio >= (size === "body" ? 7 : 4.5);
+  return ratio >= (size === "body" ? 4.5 : 3);
+}
+
+/**
+ * Perceptually uniform OKLab color. `L` is lightness in 0..1; `a` and
+ * `b` are chroma components that typically fall in roughly -0.4..0.4
+ * for realistic sRGB colors (Björn Ottosson,
+ * bottosson.github.io/posts/oklab).
+ */
+export interface OklabColor {
+  L: number;
+  a: number;
+  b: number;
+}
+
+/**
+ * Convert sRGB (0..255) to OKLab. Walking lightness in OKLab produces
+ * perceptually uniform steps instead of the chunky, hue-shifting walks
+ * a raw-sRGB or HSV walk would produce, which is what the contrast
+ * pickers below rely on.
+ */
+export function rgbToOklab(r: number, g: number, b: number): OklabColor {
+  const rL = sRgbToLinear(clampChannel(r) / 255);
+  const gL = sRgbToLinear(clampChannel(g) / 255);
+  const bL = sRgbToLinear(clampChannel(b) / 255);
+  const l = 0.4122214708 * rL + 0.5363325363 * gL + 0.0514459929 * bL;
+  const m = 0.2119034982 * rL + 0.6806995451 * gL + 0.1073969566 * bL;
+  const s = 0.0883024619 * rL + 0.2817188376 * gL + 0.6299787005 * bL;
+  const lPrime = Math.cbrt(l);
+  const mPrime = Math.cbrt(m);
+  const sPrime = Math.cbrt(s);
+  return {
+    L: 0.2104542553 * lPrime + 0.793617785 * mPrime - 0.0040720468 * sPrime,
+    a: 1.9779984951 * lPrime - 2.428592205 * mPrime + 0.4505937099 * sPrime,
+    b: 0.0259040371 * lPrime + 0.7827717662 * mPrime - 0.808675766 * sPrime,
+  };
+}
+
+/**
+ * Convert OKLab back to sRGB (0..255, clamped). Out-of-gamut OKLab
+ * points are clipped at the sRGB boundary rather than gamut-mapped:
+ * every walk in this module starts from an in-gamut color and nudges
+ * only lightness, so modest clipping at the edges is tolerable.
+ */
+export function oklabToRgb(L: number, a: number, b: number): RgbColor {
+  const lPrime = L + 0.3963377774 * a + 0.2158037573 * b;
+  const mPrime = L - 0.1055613458 * a - 0.0638541728 * b;
+  const sPrime = L - 0.0894841775 * a - 1.291485548 * b;
+  const l = lPrime * lPrime * lPrime;
+  const m = mPrime * mPrime * mPrime;
+  const s = sPrime * sPrime * sPrime;
+  const rL = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  const gL = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  const bL = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+  return {
+    r: clampChannel(linearToSRgb(Math.max(0, Math.min(1, rL))) * 255),
+    g: clampChannel(linearToSRgb(Math.max(0, Math.min(1, gL))) * 255),
+    b: clampChannel(linearToSRgb(Math.max(0, Math.min(1, bL))) * 255),
+  };
+}
+
+/** Convert a hex color directly to OKLab. Returns null on bad input. */
+export function hexToOklab(hex: string): OklabColor | null {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  return rgbToOklab(rgb.r, rgb.g, rgb.b);
+}
+
+/** Convert OKLab directly to a 6-digit hex color (clipped to sRGB gamut). */
+export function oklabToHex(L: number, a: number, b: number): string {
+  const rgb = oklabToRgb(L, a, b);
+  return rgbToHex(rgb.r, rgb.g, rgb.b);
+}
+
+/**
+ * Returns whichever of `#000000` / `#ffffff` has higher contrast against
+ * `bg`. For mid-luminance bgs (around #808080) this is counterintuitive:
+ * black actually beats white because luminance is nonlinear. Using this
+ * as the saturating fallback avoids the classic "light bg gets black text,
+ * dark bg gets white text" heuristic, which is wrong at the edges.
+ */
+function bestEndpoint(bg: string): string {
+  return contrastRatio(bg, "#000000") >= contrastRatio(bg, "#ffffff")
+    ? "#000000"
+    : "#ffffff";
+}
+
+/**
+ * Walk OKLab lightness from `anchor`'s L in `direction`, preserving the
+ * anchor's a/b chroma, until contrast against `bg` hits `target`. Returns
+ * the first candidate to meet the target, or null when the walk saturates
+ * (L leaves 0..1) without reaching it.
+ */
+function stepWalk(
+  bg: string,
+  anchorLab: OklabColor,
+  direction: 1 | -1,
+  target: number,
+): string | null {
+  const step = 0.02;
+  let L = anchorLab.L;
+  for (let i = 0; i < 60; i++) {
+    const candidate = oklabToHex(L, anchorLab.a, anchorLab.b);
+    if (contrastRatio(candidate, bg) >= target) return candidate;
+    L += direction * step;
+    if (L <= 0 || L >= 1) break;
+  }
+  return null;
+}
+
+/**
+ * Walk `anchor`'s OKLab lightness until the candidate meets `target`
+ * contrast against `bg`. Tries the direction away from `bg`'s L first
+ * (the intuitive one), then the other direction; some low-chroma anchors
+ * reach target faster in the opposite direction. If both walks saturate,
+ * falls back to the best of `#000000` / `#ffffff`. Warm foregrounds stay
+ * warm and cool ones stay cool: only lightness is adjusted.
+ */
+function walkToContrast(bg: string, anchor: string, target: number): string {
+  const bgLab = hexToOklab(bg);
+  const anchorLab = hexToOklab(anchor);
+  if (!bgLab || !anchorLab) return bestEndpoint(bg);
+  const preferred: 1 | -1 = anchorLab.L >= bgLab.L ? 1 : -1;
+  const primary = stepWalk(bg, anchorLab, preferred, target);
+  if (primary) return primary;
+  const opposite: 1 | -1 = preferred === 1 ? -1 : 1;
+  const secondary = stepWalk(bg, anchorLab, opposite, target);
+  if (secondary) return secondary;
+  return bestEndpoint(bg);
+}
+
+/**
+ * Pick a foreground color that meets `target` contrast (default 4.5 =
+ * WCAG AA body text) against `bg`, preferring the theme's `ink` and
+ * `canvas` anchors first. If neither anchor meets the target, walks
+ * the higher-contrast anchor's OKLab lightness until it does. Returns
+ * the saturating endpoint (#fff or #000) only when `target` is
+ * unreachable at this bg's luminance.
+ */
+export function pickReadableForeground(
+  bg: string,
+  opts: { ink: string; canvas: string; target?: number },
+): string {
+  const target = opts.target ?? 4.5;
+  const inkRatio = contrastRatio(bg, opts.ink);
+  if (inkRatio >= target) return opts.ink;
+  const canvasRatio = contrastRatio(bg, opts.canvas);
+  if (canvasRatio >= target) return opts.canvas;
+  const anchor = inkRatio >= canvasRatio ? opts.ink : opts.canvas;
+  return walkToContrast(bg, anchor, target);
+}
+
+/**
+ * Pick a border color for `bg` that meets `target` contrast (default
+ * 3 = WCAG AA non-text). Walks from `bg` toward `ink` in OKLab,
+ * preserving ink's chroma. If ink itself is too close to bg to carry
+ * a readable border, walks toward the opposite-luminance anchor
+ * (#000 on light bgs, #fff on dark).
+ */
+export function pickReadableBorder(
+  bg: string,
+  ink: string,
+  opts: { target?: number } = {},
+): string {
+  const target = opts.target ?? 3;
+  const bgLab = hexToOklab(bg);
+  const inkLab = hexToOklab(ink);
+  if (!bgLab || !inkLab) return ink;
+  let anchorLab = inkLab;
+  if (contrastRatio(bg, ink) < target) {
+    const fallback = bestEndpoint(bg);
+    const fLab = hexToOklab(fallback);
+    if (fLab) anchorLab = fLab;
+  }
+  const direction = anchorLab.L >= bgLab.L ? 1 : -1;
+  const step = 0.02;
+  let L = bgLab.L + direction * step;
+  for (let i = 0; i < 60; i++) {
+    if (L <= 0 || L >= 1) break;
+    const candidate = oklabToHex(L, anchorLab.a, anchorLab.b);
+    if (contrastRatio(bg, candidate) >= target) return candidate;
+    L += direction * step;
+  }
+  return bestEndpoint(bg);
+}
+
+/**
+ * Pick a muted foreground for `bg` that parks at the deepest recession
+ * still meeting `target` contrast (default 3 = WCAG AA large text).
+ * Walks from `ink` toward `bg` in OKLab and stops just before contrast
+ * drops below the target. Useful for secondary captions that should
+ * recede but stay readable.
+ */
+export function pickReadableMuted(
+  bg: string,
+  ink: string,
+  opts: { target?: number } = {},
+): string {
+  const target = opts.target ?? 3;
+  const bgLab = hexToOklab(bg);
+  const inkLab = hexToOklab(ink);
+  if (!bgLab || !inkLab) return ink;
+  if (contrastRatio(bg, ink) <= target) return ink;
+  const direction = bgLab.L >= inkLab.L ? 1 : -1;
+  const step = 0.01;
+  let L = inkLab.L;
+  let lastGood = ink;
+  for (let i = 0; i < 200; i++) {
+    const nextL = L + direction * step;
+    if (nextL <= 0 || nextL >= 1) break;
+    if (direction === 1 ? nextL >= bgLab.L : nextL <= bgLab.L) break;
+    const candidate = oklabToHex(nextL, inkLab.a, inkLab.b);
+    if (contrastRatio(bg, candidate) < target) break;
+    lastGood = candidate;
+    L = nextL;
+  }
+  return lastGood;
+}

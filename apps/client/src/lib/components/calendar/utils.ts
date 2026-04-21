@@ -5,6 +5,9 @@ import type {
   PositionedEvent,
 } from "./types";
 import { FALLBACK_COLOR_INDEX, PALETTE_SIZE } from "./types";
+import { blendHex } from "$lib/components/ui/colorMath";
+
+export { blendHex };
 
 const MIN_EVENT_HEIGHT = 4;
 
@@ -734,31 +737,15 @@ const LIGHT_FLIP_ABOVE = 0.65;
 const DARK_FLIP_BELOW = 0.35;
 
 /**
- * Linearly blend two hex colors in sRGB space.
- *
- * @param a Base hex color.
- * @param b Reference hex color to blend toward.
- * @param weightA Fraction of `a` in the result (0..1). The rest is `b`.
- */
-export function blendHex(a: string, b: string, weightA: number): string {
-  const ar = parseInt(a.slice(1, 3), 16);
-  const ag = parseInt(a.slice(3, 5), 16);
-  const ab = parseInt(a.slice(5, 7), 16);
-  const br = parseInt(b.slice(1, 3), 16);
-  const bg = parseInt(b.slice(3, 5), 16);
-  const bb = parseInt(b.slice(5, 7), 16);
-  const wb = 1 - weightA;
-  const nr = Math.round(ar * weightA + br * wb);
-  const ng = Math.round(ag * weightA + bg * wb);
-  const nb = Math.round(ab * weightA + bb * wb);
-  return `#${nr.toString(16).padStart(2, "0")}${ng.toString(16).padStart(2, "0")}${nb.toString(16).padStart(2, "0")}`;
-}
-
-/**
  * Pick a readable foreground for a given background under the given theme
  * base. Rec. 709 coefficients on raw sRGB approximate perceived luminance;
- * accurate enough for contrast picking on the current palette. Themes
- * decide which alt token to use via their `base` field.
+ * calibrated for the event-palette flips, so `resolvePalette` keeps using
+ * this. New callers should prefer `pickReadableForeground` in `colorMath.ts`,
+ * which uses gamma-decoded WCAG luminance and guarantees AA contrast.
+ *
+ * @deprecated Use `pickReadableForeground` from `$lib/components/ui/colorMath`
+ * for new code. Kept because the event palette was calibrated against the
+ * threshold constants above.
  */
 function pickContrastText(bg: string, themeBase: "light" | "dark"): string {
   const r = parseInt(bg.slice(1, 3), 16);

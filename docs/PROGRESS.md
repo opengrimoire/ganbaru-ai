@@ -6,7 +6,7 @@ Phase 1: core loop (wrapping up)
 
 ## Active work
 
-- Documentation reorganization: split the legacy `PROGRESS_TRACKING.md` into granular per-concept files under `docs/features/`, `docs/data/`, and `docs/algorithms/`. Top-level markdowns moved into `docs/`. `PROGRESS_TRACKING.md` deleted. `PRODUCT_SPEC.md` retained pending full migration of unbuilt-feature detail.
+- Adaptive theme editor: rework the theme system around WCAG contrast math and OKLab perceptual lightness walks so every derived foreground, border, and muted caption adapts to its paired surface, editor chrome is decoupled from user sources, and the editor grows three progressive-disclosure modes (Essentials / Accents / Advanced) with a live preview pane, contrast warnings, and a preset picker. Phase 1 done (contrast/OKLab math + `pickReadableForeground` / `pickReadableBorder` / `pickReadableMuted` in `colorMath.ts`); phases 2a through 7 still to land.
 
 ## Blocked / needs decision
 
