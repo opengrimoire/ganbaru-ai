@@ -514,6 +514,49 @@
   // after the seed feature shipped and can be reset at the row level.
   const hasSeeds = $derived(theme.seedSources !== undefined);
 
+  // Three editor modes, ephemeral per session. Essentials keeps the row list
+  // inside each group hidden and only exposes the four foundational sources.
+  // Accents adds the three accent sources (confirm, warning, calCanvas).
+  // Advanced renders today's full three-tier view with every pinnable row.
+  // On first load we prefer Essentials unless the theme already carries
+  // meaningful overrides, in which case Advanced re-opens automatically so
+  // the user's pins are visible.
+  type EditorMode = "essentials" | "accents" | "advanced";
+  const ESSENTIALS_KEYS: ReadonlySet<string> = new Set([
+    "canvas",
+    "ink",
+    "primary",
+    "destructive",
+  ]);
+  const ACCENTS_KEYS: ReadonlySet<string> = new Set([
+    "canvas",
+    "ink",
+    "primary",
+    "destructive",
+    "confirm",
+    "warning",
+    "calCanvas",
+  ]);
+
+  function initialMode(t: Theme): EditorMode {
+    const appHasPins =
+      t.appTokenOverrides &&
+      Object.keys(t.appTokenOverrides).length > 0;
+    const calHasPins =
+      t.calendarTokenOverrides &&
+      Object.keys(t.calendarTokenOverrides).length > 0;
+    return appHasPins || calHasPins ? "advanced" : "essentials";
+  }
+
+  let mode = $state<EditorMode>(untrack(() => initialMode(theme)));
+
+  function modeIncludesGroup(m: EditorMode, group: SourceGroup): boolean {
+    if (m === "advanced") return true;
+    if (group.sourceKey === null) return false;
+    if (m === "essentials") return ESSENTIALS_KEYS.has(group.sourceKey);
+    return ACCENTS_KEYS.has(group.sourceKey);
+  }
+
   // Collapse state is ephemeral (not persisted across sessions). Only
   // source-driven multi-row groups are collapsible: the source color at the
   // header is the "change everything together" affordance that gives the
@@ -726,6 +769,73 @@
     const seed = theme.seedCalendarTokenOverrides?.[key];
     if (seed === undefined) relinkCalToken(key);
     else setCalToken(key, seed);
+  }
+
+  // "Reset all" restores every captured seed in one action: sources drift
+  // back to their clone-time values, pinned overrides collapse to the seed
+  // set, event palette and blend canvas rewind too. Gated on hasSeeds so
+  // legacy themes cloned before the seed feature cannot accidentally wipe
+  // their palette when the seed state is unknown.
+  function canResetAll(): boolean {
+    if (!hasSeeds || !theme.seedSources || !theme.sources) return false;
+    for (const key of Object.keys(theme.seedSources) as Array<
+      keyof ThemeSources
+    >) {
+      if (theme.sources[key] !== theme.seedSources[key]) return true;
+    }
+    const currentApp = theme.appTokenOverrides ?? {};
+    const seedApp = theme.seedAppTokenOverrides ?? {};
+    const appKeys = new Set<string>([
+      ...Object.keys(currentApp),
+      ...Object.keys(seedApp),
+    ]);
+    for (const k of appKeys) {
+      if (currentApp[k] !== seedApp[k]) return true;
+    }
+    const currentCal = theme.calendarTokenOverrides ?? {};
+    const seedCal = theme.seedCalendarTokenOverrides ?? {};
+    const calKeys = new Set<string>([
+      ...Object.keys(currentCal),
+      ...Object.keys(seedCal),
+    ]);
+    for (const k of calKeys) {
+      if (currentCal[k] !== seedCal[k]) return true;
+    }
+    const seedPalette = theme.seedEventPalette;
+    if (seedPalette) {
+      if (theme.eventPalette.length !== seedPalette.length) return true;
+      for (let i = 0; i < theme.eventPalette.length; i++) {
+        if (theme.eventPalette[i] !== seedPalette[i]) return true;
+      }
+    }
+    if (
+      theme.seedBlendCanvas !== undefined &&
+      theme.blendCanvas !== theme.seedBlendCanvas
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  function resetAll() {
+    if (!canResetAll()) return;
+    if (!theme.seedSources) return;
+    const patch: Partial<Omit<Theme, "id">> = {
+      sources: { ...theme.seedSources },
+      appTokenOverrides: theme.seedAppTokenOverrides
+        ? { ...theme.seedAppTokenOverrides }
+        : {},
+      calendarTokenOverrides: theme.seedCalendarTokenOverrides
+        ? { ...theme.seedCalendarTokenOverrides }
+        : {},
+    };
+    if (theme.seedEventPalette) {
+      patch.eventPalette = [...theme.seedEventPalette];
+    }
+    if (theme.seedBlendCanvas !== undefined) {
+      patch.blendCanvas = theme.seedBlendCanvas;
+    }
+    themeStore.updateTheme(theme.id, patch);
   }
 
   async function copyJsonToClipboard() {
@@ -1015,9 +1125,14 @@
   {/snippet}
 
   {#snippet groupCard(group: SourceGroup)}
-    {@const isCollapsible = group.sourceKey !== null && group.rows.length > 1}
+    {@const hideRowsForMode = mode !== "advanced"}
+    {@const isCollapsible =
+      !hideRowsForMode && group.sourceKey !== null && group.rows.length > 1}
     {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
-    {@const showRows = group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
+    {@const showRows =
+      !hideRowsForMode &&
+      group.rows.length > 0 &&
+      (!isCollapsible || !isCollapsed)}
     <section
       class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
     >
@@ -1044,7 +1159,9 @@
               canResetSource(sourceKey),
             )}
           {/if}
-          {#if isCollapsible}
+          {#if hideRowsForMode}
+            <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+          {:else if isCollapsible}
             <button
               type="button"
               onclick={() => toggleGroup(group.title)}
@@ -1157,9 +1274,67 @@
       </section>
     {/if}
   {:else if theme.sources}
-    {#each SOURCE_GROUPS as group (group.title)}
+    <!-- Mode selector: Essentials keeps the editor focused on the four
+         foundational sources; Accents adds confirm/warning/calCanvas;
+         Advanced restores the full three-tier view with every pinnable row.
+         Mode is ephemeral per session so a user who dug into Advanced for
+         one edit isn't punished with it next time they open a pristine
+         theme. -->
+    <div
+      class="flex items-center gap-1 rounded-lg border border-border bg-card p-1 dark:bg-background"
+      role="tablist"
+      aria-label="Editor detail level"
+    >
+      {#each ["essentials", "accents", "advanced"] as const as m (m)}
+        {@const label =
+          m === "essentials"
+            ? "Essentials"
+            : m === "accents"
+              ? "Accents"
+              : "Advanced"}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === m}
+          onclick={() => (mode = m)}
+          class={cn(
+            "flex-1 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
+            mode === m
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      {/each}
+    </div>
+
+    {#each SOURCE_GROUPS.filter((g) => modeIncludesGroup(mode, g)) as group (group.title)}
       {@render groupCard(group)}
     {/each}
+
+    {#if hasSeeds}
+      <div class="flex justify-end">
+        <button
+          type="button"
+          onclick={resetAll}
+          disabled={!canResetAll()}
+          aria-label="Reset every source, override, and palette slot to its clone-time value"
+          title={canResetAll()
+            ? "Restore every value to the clone-time snapshot"
+            : "Nothing has changed since this theme was cloned"}
+          class={cn(
+            "flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] font-medium transition-colors",
+            canResetAll()
+              ? "text-foreground hover:border-foreground/30 hover:bg-accent"
+              : "cursor-not-allowed text-muted-foreground opacity-50",
+          )}
+        >
+          <RotateCcw size={12} strokeWidth={2.25} />
+          <span>Reset all to seed</span>
+        </button>
+      </div>
+    {/if}
   {:else}
     <section class="flex flex-col gap-2">
       <div
