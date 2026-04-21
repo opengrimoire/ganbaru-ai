@@ -59,11 +59,19 @@ The warning is deduped across a session (Set-backed) so a bad value on a thousan
 
 The palette size is fixed at 24 (`PALETTE_SIZE`). Themes redefine what color sits at each index; they do not add or remove slots. Stored events keep their integer reference forever, so changing a theme's hex for any slot is always safe. If the palette ever needs to grow, increase `PALETTE_SIZE` and add the new positions at the end so existing indices stay valid.
 
-## Contrast text and dimmed variants
+## Contrast math across the shell
 
-Event text color is picked per event background using Rec. 709 luminance on the raw sRGB hex. Light-mode backgrounds flip to near-black text above a configured luminance threshold; dark-mode backgrounds flip to near-white text below a configured threshold. The thresholds are tuned against the built-in palette. Custom themes with unusual palettes may need to expose their own thresholds in a later iteration; for now the flip logic is shared across themes of a given base.
+Every foreground, border, and muted caption the derivation engine produces is resolved through WCAG contrast math in `components/ui/colorMath.ts`:
 
-Dimmed event variants (past events, cancelled events, transparent/free events, outside-month events in the grid) are computed by blending the event's base hex toward the theme's `blendCanvas` with a fixed weight. Text contrast is recomputed from the dimmed bg, so a heavily faded background flips to the alt text token automatically. Results are cached per (theme ID, slot, weight) tuple.
+- `relativeLuminance(hex)` implements the WCAG 2.1 gamma-decoded formula.
+- `contrastRatio(a, b)` returns the `(Lmax + 0.05) / (Lmin + 0.05)` ratio (1..21).
+- `pickReadableForeground(bg, { ink, canvas, target })` returns `ink` or `canvas` if either meets the target against `bg`; otherwise walks the higher-contrast anchor's lightness in OKLab (preserving chroma) until it does, saturating at black or white if the gamut runs out. Guaranteed AA.
+- `pickReadableBorder(bg, ink, { target })` walks from `bg` toward `ink` until the ratio hits the target (default 3:1). Falls back to pure black or white if the ink is too close to the bg.
+- `pickReadableMuted(bg, ink, { target })` walks from `ink` toward `bg` until the ratio drops to exactly the target, so muted captions sit at the deepest recession that still reads (AA-large, ~3:1).
+
+OKLab is implemented from D65 matrix math in the same file (no external dependency). A 10,000-iteration fuzz test asserts `pickReadableForeground` always meets its target; round-trip tolerance tests lock OKLab accuracy inside 1 channel out of 255.
+
+Event-tile text still uses the legacy threshold-based `pickContrastText` (Rec. 709 luminance on raw sRGB) because the event palette was calibrated against those specific thresholds. Dimmed event variants (past, cancelled, transparent, outside-month) are computed by blending the event's base hex toward the theme's `blendCanvas` with a fixed weight; text contrast is recomputed from the dimmed bg and cached per (theme ID, slot, weight).
 
 ## Persistence
 
@@ -85,23 +93,26 @@ Users can:
 2. **Duplicate and edit** any theme (built-in or user) into a new editable user theme. The duplicate is immediately applied as the active theme and the editor opens on it, so the user sees their edits live from the first change. Built-ins remain frozen.
 3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
 4. **Edit a user theme**: rename it, flip the base (light/dark), tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the five Quick colors to shift the shell in lockstep, and click Isolated edit on any driven row to break it off the source for a surgical edit (Link back re-links it). The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
-5. **Reset a single color** back to its clone-time value. Every row in the editor, both source colors in the group headers and the driven tokens below, gets a small reset icon next to the color field whenever the current value differs from the snapshot captured at clone time (see "Seed snapshots" below). Clicking it restores just that one control: a source channel goes back to its seed hex; a driven token goes back to its seed override, or, if the seed had no override for it, the token is relinked so derivation takes over again. Other rows are untouched. Legacy themes cloned before the seed feature shipped carry no seeds, so their reset affordances never appear.
-6. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
-7. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
-8. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
+5. **Reset a single color** back to its clone-time value. Every row in the editor, both source colors in the group headers and the driven tokens below, gets a small reset icon next to the color field whenever the current value differs from the snapshot captured at clone time (see "Seed snapshots" below). Clicking it restores just that one control: a source channel goes back to its seed hex; a driven token goes back to its seed override, or, if the seed had no override for it, the token is relinked so derivation takes over again. Other rows are untouched.
+6. **Reset every color** in one click via the "Reset all" button in the footer. Restores every source to its seed hex, wipes every app and calendar override, and restores the event palette and blend canvas to their seed values in a single update. The button is disabled when the theme is already at its seed state. Legacy themes cloned before the seed feature shipped have their seeds synthesized on first load (see "Seed snapshots" below) so the reset machinery works uniformly across the registry.
+7. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
+8. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
+9. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
 
 Every new user theme (created or duplicated) starts with a `sources` palette sampled from its resolved colors, so the editor opens in Quick-colors mode and source edits immediately propagate through derived tokens. Explicit overrides on the source theme are preserved as pinned tokens so surgical edits survive the duplicate.
+
+Clicking "New theme" opens a preset picker before the editor mounts (see "Preset picker" below). Picking a curated preset seeds the new theme with a pre-validated palette; "Start blank" keeps the original path that seeds from the active theme.
 
 Editing a built-in is blocked at the store level: mutators return false, `replaceTheme` rejects built-in ids, and the editor hides every input (name field, base toggle, color pickers, add-override buttons) when the target is built-in. Duplicate is the only path to a modifiable copy.
 
 ### Seed snapshots
 
-`cloneTheme` captures two snapshots on every clone, both stored on the Theme as optional fields and both persisted in the vault so per-row reset survives a relaunch:
+`cloneTheme` captures two snapshots on every clone, both stored on the Theme as optional fields and both persisted in the vault so per-row reset and "Reset all" survive a relaunch:
 
-- **Input seeds** (`seedSources`, `seedAppTokenOverrides`, `seedCalendarTokenOverrides`, `seedBlendCanvas`, `seedEventPalette`): the editable inputs the theme had immediately after cloning. Per-row reset compares the current value of each control against the matching field on these seeds, shows a reset icon when they differ, and on click restores just that control: a source channel goes back to `seedSources[key]`, a token override either reverts to `seedAppTokenOverrides[key]` / `seedCalendarTokenOverrides[key]` or, if the seed had no override for that token, is cleared so derivation takes over again.
+- **Input seeds** (`seedSources`, `seedAppTokenOverrides`, `seedCalendarTokenOverrides`, `seedBlendCanvas`, `seedEventPalette`): the editable inputs the theme had immediately after cloning. Per-row reset compares the current value of each control against the matching field on these seeds, shows a reset icon when they differ, and on click restores just that control: a source channel goes back to `seedSources[key]`, a token override either reverts to `seedAppTokenOverrides[key]` / `seedCalendarTokenOverrides[key]` or, if the seed had no override for that token, is cleared so derivation takes over again. "Reset all" restores every source, override, palette slot, and blend canvas from these seeds in a single update.
 - **Resolved seeds** (`seedAppTokens`, `seedCalendarTokens`): the fully resolved token palette at clone time. Retained for future resolved-value comparisons; nothing reads them yet.
 
-Built-in themes never carry seeds. User themes created before the input seeds were added are loaded without them; the editor treats `seedSources` as the presence gate, so those themes show no reset icons at all. The next edit persists the theme back to disk, but the input seeds remain missing until the theme is re-cloned from a fresh source.
+Built-in themes never carry seeds. User themes created before the input seeds were added are synthesized on first load by `synthesizeSeedsIfMissing`: if the stored theme has no `seedSources`, the current live values are captured as the seeds (sources come from the theme's `sources` field if present, otherwise from key channels of the resolved palette). The synthesizer is idempotent, so repeated loads produce the same seeded theme. After this one-time migration runs, "Reset all" is enabled and per-row reset icons appear exactly as they do on fresh clones.
 
 Input seeds are not exported in the JSON payload: `serializeTheme` omits every seed field so the exported file describes the theme as portable data, not as a forked snapshot with history. Reset is an install-local affordance; sharing a theme ships just the current colors.
 
@@ -111,7 +122,7 @@ The app and calendar shell are styled through CSS tokens defined in `app.css` un
 
 ### Resolution order
 
-For each token in `APP_TOKEN_KEYS` (43 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
+For each token in `APP_TOKEN_KEYS` (49 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
 
 1. **Override (pinned).** `theme.appTokenOverrides[key]` / `theme.calendarTokenOverrides[key]` if set.
 2. **Derived (auto).** If the theme carries `sources` and the token is covered by the derivation engine, the engine's value for that token.
@@ -137,22 +148,24 @@ Editing one source color propagates through the derivation tables and shifts eve
 
 ### Derivation formulas
 
-The engine uses two linear blends over sRGB hex:
+The engine combines two kinds of blends:
 
-- `liftTowardInk(c, ink, t)`: blend `c` toward `ink` by fraction `t`. Produces softly tinted grays, which is how the built-in secondary, muted, accent, and ring surfaces relate to their canvas.
-- `recessTowardBlack(c, t)`: blend `c` toward pure black by fraction `t`. Used only for the dark title bar, which wants a shade darker than canvas without picking up ink hue.
+- Surface backgrounds (card, popover, secondary, muted, accent, sidebar, timeline rail) still use two linear sRGB blends. `liftTowardInk(c, ink, t)` lifts `c` toward `ink` by fraction `t` to produce softly tinted grays (how the built-in secondary, muted, accent, and sidebar relate to their canvas). `recessTowardBlack(c, t)` recesses toward black and drives the dark sidebar. Weights live in `APP_DERIVATION_LIGHT`, `APP_DERIVATION_DARK`, `CAL_DERIVATION_LIGHT`, `CAL_DERIVATION_DARK` in `stores/themes.ts`. A golden test in `themeDerivation.test.ts` guards the built-in reproduction.
+- Every foreground, border, and muted caption is recomputed from the contrast-aware pickers (see "Contrast math across the shell" above). `pickReadableForeground` resolves `--primary-foreground`, `--popover-foreground`, `--secondary-foreground`, `--accent-foreground`, `--destructive-foreground`, `--sidebar-foreground`, `--sidebar-accent-foreground`, all three `--status-*-foreground` tokens, `--action-confirm-foreground`, `--action-danger-armed-foreground`, `--pomodoro-idle-timer`, `--event-panel-text`, and `--event-panel-input-text`. `pickReadableBorder` resolves `--ring` and `--cal-gridline`. `pickReadableMuted` resolves `--muted-foreground`, `--form-indicator`, `--pomodoro-idle-text`, `--event-panel-placeholder`, `--event-panel-muted-text`, and `--cal-time-label`.
 
-Weights live in `APP_DERIVATION_LIGHT`, `APP_DERIVATION_DARK`, `CAL_DERIVATION_LIGHT`, `CAL_DERIVATION_DARK` (see `stores/themes.ts`) and were fitted so that seeding the built-in themes' seven sources reproduces the built-in shell palette within a small per-channel tolerance. A golden test in `themeDerivation.test.ts` guards the reproduction on every change. Card and popover are pinned to pure white in light mode; both sidebar foregrounds are pinned to pure white in dark mode.
-
-Alongside `--foreground`, the ink source also drives three ink-tinted captions through `liftTowardInk`: `--form-indicator` (the radio/checkbox dot inside calendar sub-sections), `--pomodoro-idle-text` (caption on the idle overlay), and the event panel's dim text (`--event-panel-placeholder`, and, in dark mode, `--event-panel-text`). In dark mode the form indicator and event-panel input text are tied to ink via identity since the built-in values match ink directly.
-
-Confirm, warning, and destructive propagate through identity derivation: one color feeds both the button state and the corresponding status tile, so users pick three semantic accents (green, amber, red) and every surface that carries that meaning stays consistent.
+Confirm, warning, and destructive propagate through identity derivation: one color feeds both the button state and the corresponding status tile, and the contrast-picked foreground pairs with each so users pick three semantic accents (green, amber, red) and every surface that carries that meaning stays consistent and legible.
 
 Only the derivable subset of calendar tokens participates: `--cal-bg`, `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, `--cal-timeline-rail`. Semantic tokens (today marker, current-time line, timeline break, timeline focus) carry meaning that does not reduce to a source palette (red for "now", green for focus, a bold today circle) and always fall through to base CSS unless the user explicitly pins them.
 
 ### Editor UI
 
-Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. Groups are ordered top-to-bottom as a three-tier walkthrough: app foundation, semantic signals, then per-feature surfaces. Inside each tier, shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
+Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. A three-segment **mode selector** at the top of the editor body (`Essentials`, `Accents`, `Advanced`) controls which rows are visible. The mode is ephemeral per session and defaults to `Essentials` on a fresh clone, or `Advanced` if the theme already carries any app/calendar token overrides (so power-user edits stay visible).
+
+- **Essentials** shows just the four foundation sources: App canvas, Ink, Primary action, Destructive. Everything else auto-derives from them. This is the easy path: new users pick four colors and get a legible theme.
+- **Accents** adds the two semantic-signal sources (Confirm, Warning) and the Calendar canvas source. Enough levers for a themed look without surfacing per-token rows.
+- **Advanced** restores the full walkthrough below, with every driven token reachable as a sub-row that can be isolated individually.
+
+Across every mode, groups are ordered top-to-bottom as a three-tier walkthrough: app foundation, semantic signals, then per-feature surfaces. Inside each tier, shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
 
 **Tier 1 (App foundation)** carries the four sources every shell surface reads from:
 
@@ -186,21 +199,43 @@ Driven rows render below the header with two distinct layouts.
 
 Sourceless multi-row cards skip the Linked state entirely: every sub-row is always editable because there is no source to link back to. The HEX value is always visible, which keeps the actual color number readable even for linked rows. When a row's current value differs from the clone-time seed, a small reset icon appears between the `ColorField` and the action button; clicking it reverts that single row back to the seed value (restoring the override, or dropping it when the seed had none).
 
+Every pair row (source + foreground) shows a live contrast indicator (see "Contrast warnings" below) so the user can spot a failing combination and auto-fix it without leaving the editor.
+
 Legacy user themes imported without a `sources` field show a "Set up Quick colors" card that samples the seven values from the current resolved palette. After clicking, the editor switches to the grouped layout. Themes written before `confirm` and `warning` were introduced load normally: missing source channels backfill from the base defaults so existing vault files keep working without a migration.
+
+### Live preview pane
+
+`ThemePreviewPane` renders a live snapshot of the theme under the editor body (full editor height on wide viewports). It re-declares every resolved app and calendar token as inline CSS variables on its root element so the preview paints from the theme's tokens, not from the editor chrome (which shadows those variables inside its scope, see "Editor chrome decoupling" below).
+
+The pane covers the common surfaces the user needs to check at a glance: button row (primary, secondary, destructive, outline, ghost), priority badges (each computed through `blendHex` + `pickReadableForeground` so tints always stay legible), text samples (heading, body, muted caption, primary-colored link), and a 3-day calendar mini with gridlines, a now-line, and an event block painted from event palette slot 7. It re-renders immediately on every source change.
+
+### Contrast warnings
+
+On every pair row (a source and its paired foreground), the editor resolves the effective foreground/background contrast at render time. If the ratio falls below the AA body-text target (4.5:1), the editor shows a small amber warning pill next to the row with the current ratio and a wand button that calls `pickReadableForeground` and writes the result as an override. The warning disappears automatically once the pair meets the target. Warnings are non-blocking: the user can still save a theme that fails contrast.
+
+### Preset picker
+
+`ThemePresetPicker` opens as a modal when the user clicks "New theme". It renders a 2x3 grid of curated presets (Sunrise, Graphite, Sepia, Nordic, High-contrast Dark, Lavender Pastel), each validated at build time by `themePresets.test.ts` to meet AA contrast across every derived foreground, border, and gridline. Every card shows a miniature preview painted from its own sources (inline CSS variables, same technique as the preview pane). A "Start blank" affordance under the grid keeps the original path that clones from the current active theme. Picking a preset seeds the new theme with that preset's `sources`, `base`, and `displayName` before opening the editor in Essentials.
+
+### Editor chrome decoupling
+
+The editor paints its own chrome (HEX inputs, sliders, buttons, checker pattern, popovers) from a parallel set of base-only tokens prefixed `--editor-chrome-*` defined in `app.css` under `:root` and `.dark`. A `.theme-editor-chrome` CSS rule shadows the user-facing variables (`--background`, `--foreground`, `--card`, `--popover`, `--border`, `--muted-foreground`, `--accent`, `--primary`, `--primary-foreground`, `--destructive`, `--destructive-foreground`, and a handful of companions) inside that scope, so every Tailwind class rendered under the wrapper resolves to a stable chrome value regardless of what the user does to the live theme. The editor root (`ThemeEditor.svelte`) and the floating wrapper (`FloatingThemeEditor.svelte`) both carry the class; the `ColorField` popover applies it to its portaled element so the scope survives the move to `<body>`. The slider thumbs read `--editor-chrome-thumb-border` and the alpha checker reads `--editor-chrome-checker-a` / `-b` (rendered as a conic-gradient so the tokens can be CSS variables). The feedback loop never breaks: setting canvas = ink makes the app underneath unreadable, but the editor itself stays fully legible.
 
 ### Semantic tokens
 
-The editor exposes 24 tokens beyond the core shell surfaces. Most of them now sit under a source color whose change propagates to the whole group (form indicator and pomodoro idle caption under Ink, armed delete and declined status under Destructive, confirm bg + fg and accepted status under Confirm, tentative status under Warning). The remainder live under sourceless feature cards so their relationship to a feature stays obvious, but no single source drives them.
+The editor exposes the following semantic tokens beyond the core shell surfaces. Most of them sit under a source color whose change propagates to the whole group (form indicator and pomodoro idle caption under Ink, armed delete and declined status under Destructive, confirm + accepted under Confirm, tentative under Warning). The remainder live under sourceless feature cards so their relationship to a feature stays obvious, but no single source drives them.
 
 Distribution across the editor:
 
-- **Ink tints** (2): `--form-indicator` (radio/checkbox dot inside calendar sub-sections) and `--pomodoro-idle-text` (caption on the idle overlay). Both derived from ink.
-- **Destructive family** (2): `--action-danger-armed` (delete button once armed) and `--status-declined` (declined attendance tile). Both identity-derived from `destructive`.
-- **Confirm family** (3): `--action-confirm` + `--action-confirm-foreground` (save button, active scope pill) and `--status-accepted` (accepted attendance tile). Background and status identity-derive from `confirm`; the foreground falls through to the base CSS default.
-- **Warning family** (1): `--status-tentative` (tentative attendance tile), identity-derived from `warning`.
-- **Calendar details** (7, sourceless): the former Calendar markers and Calendar extras merged. Today marker (pair of circle + inner text), now line, break marker, focus marker, event-color-picker outline, description editor tint, and the all-day drag-preview border.
-- **Event panel** (9, sourceless): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, `--event-panel-text`, `--event-panel-muted-text`. In dark mode ink identity-drives the input text and a ~0.79 lift drives the placeholder, body, and muted text; in light mode the body and input text are ink identity and placeholder/muted text lift from canvas.
-- **Task priority** (4, sourceless): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`. Each token feeds both the background (at 20% opacity through Tailwind's `/20` modifier) and the label text at full opacity.
+- **Ink tints** (3): `--form-indicator` (radio/checkbox dot inside calendar sub-sections), `--pomodoro-idle-text` (caption on the idle overlay), and `--pomodoro-idle-timer` (the big countdown on the idle overlay). Form indicator and idle caption use `pickReadableMuted`; the idle timer uses `pickReadableForeground` against the overlay's black canvas.
+- **Destructive family** (4): `--action-danger-armed` + `--action-danger-armed-foreground` (delete button once armed) and `--status-declined` + `--status-declined-foreground` (declined attendance tile). Backgrounds identity-derive from `destructive`; foregrounds are contrast-picked.
+- **Confirm family** (4): `--action-confirm` + `--action-confirm-foreground` (save button, active scope pill) and `--status-accepted` + `--status-accepted-foreground` (accepted attendance tile). Backgrounds identity-derive from `confirm`; foregrounds are contrast-picked.
+- **Warning family** (2): `--status-tentative` + `--status-tentative-foreground` (tentative attendance tile). Background identity-derives from `warning`; foreground is contrast-picked.
+- **Primary foreground** (1): `--primary-foreground`. Contrast-picked from the primary source so tinted pastel primaries flip to dark text automatically.
+- **Destructive foreground core** (1): `--destructive-foreground`, same treatment for the destructive source.
+- **Calendar details** (7, sourceless): Today marker (pair of circle + inner text), now line, break marker, focus marker, event-color-picker outline, description editor tint, and the all-day drag-preview border.
+- **Event panel** (9, sourceless): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, `--event-panel-text`, `--event-panel-muted-text`. Body + input text use `pickReadableForeground` against the panel bg; placeholder + muted text use `pickReadableMuted` so the dim captions stay at AA-large (~3:1).
+- **Task priority** (4, sourceless): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`. Each token feeds both the background (tinted toward canvas) and the label text; the Kanban column reads these directly and picks legible text through `pickReadableForeground`.
 
 Four tokens carry alpha: `--event-panel-edge`, `--event-panel-shadow`, `--cal-description-editor-bg`, `--cal-drag-preview-border`. `ColorField` accepts and emits 8-digit `#rrggbbaa` for them, with a fourth slider (A) in the picker popover and a checkerboard swatch on the trigger so transparency is visible. Alpha-bearing tokens skip the Tailwind `@theme inline` alias and are consumed via plain CSS variables in scoped styles or inline `style` attributes.
 
