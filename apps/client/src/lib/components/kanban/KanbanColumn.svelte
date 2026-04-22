@@ -66,7 +66,7 @@
   }
 </script>
 
-<div class="flex h-full w-72 shrink-0 flex-col rounded-lg bg-card/50">
+<div class="flex h-full w-72 shrink-0 flex-col rounded-lg bg-card/50 text-card-foreground">
   <div class="flex items-center justify-between p-3">
     <div class="flex items-center gap-2">
       <h2 class="text-sm font-semibold">{label}</h2>

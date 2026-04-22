@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import AlertTriangle from "@lucide/svelte/icons/alert-triangle";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
+  import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Copy from "@lucide/svelte/icons/copy";
@@ -881,6 +883,54 @@
     else setCalToken(row.fg, next);
   }
 
+  // Flat list of every pair row across every source group, used by the
+  // always-visible contrast summary so users don't have to hunt for warnings
+  // across modes and collapsed sections.
+  type LocatedPair = { row: GroupPairRow; group: SourceGroup };
+  const allPairs: LocatedPair[] = (() => {
+    const out: LocatedPair[] = [];
+    for (const g of SOURCE_GROUPS) {
+      for (const r of g.rows) {
+        if (r.kind === "pair") out.push({ row: r, group: g });
+      }
+    }
+    return out;
+  })();
+
+  const failingPairs = $derived(
+    allPairs.filter(({ row }) => !pairContrast(row).passes),
+  );
+
+  let nextPairCursor = $state(0);
+
+  function pairKey(row: GroupPairRow): string {
+    return `${row.scope}:${row.bg}:${row.fg}`;
+  }
+
+  // Jump the viewport to the next failing row, cycling through the list.
+  // Switches mode to Advanced when the failing row lives in a group the
+  // current mode would hide; expands the row's group if collapsed. Without
+  // this, clicking Next on a hidden row would silently do nothing.
+  function jumpToNextFailingPair() {
+    if (failingPairs.length === 0) return;
+    const idx = nextPairCursor % failingPairs.length;
+    const target = failingPairs[idx];
+    nextPairCursor = idx + 1;
+    if (!modeIncludesGroup(mode, target.group)) mode = "advanced";
+    collapsed = { ...collapsed, [target.group.title]: false };
+    queueMicrotask(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-pair-key="${pairKey(target.row)}"]`,
+      );
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  function fixAllFailingPairs() {
+    for (const { row } of failingPairs) autoFixPair(row);
+    nextPairCursor = 0;
+  }
+
   async function copyJsonToClipboard() {
     try {
       await navigator.clipboard.writeText(jsonDraft);
@@ -1142,7 +1192,10 @@
 
   {#snippet groupPairRow(row: GroupPairRow)}
     {@const contrast = pairContrast(row)}
-    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5">
+    <div
+      data-pair-key={pairKey(row)}
+      class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5"
+    >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
           <span class="text-[12px] text-foreground">{row.title}</span>
@@ -1333,6 +1386,57 @@
       </section>
     {/if}
   {:else if theme.sources}
+    <!-- Contrast summary: always visible so edits that break contrast are
+         surfaced immediately. Jump-to-next cycles through failing rows
+         (auto-switching mode/expanding groups as needed); Fix all auto-picks
+         a legible foreground for every failing pair in one click. -->
+    <section
+      class={cn(
+        "flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[12px]",
+        failingPairs.length > 0
+          ? "border-amber-400/60 bg-amber-50 dark:bg-amber-950/30"
+          : "border-border bg-card dark:bg-background",
+      )}
+    >
+      {#if failingPairs.length > 0}
+        <div class="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+          <AlertTriangle size={13} strokeWidth={2.25} />
+          <span class="font-medium">
+            {failingPairs.length} contrast {failingPairs.length === 1
+              ? "issue"
+              : "issues"}
+          </span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button
+            type="button"
+            onclick={jumpToNextFailingPair}
+            aria-label="Jump to next failing contrast row"
+            title="Scroll to the next row below AA contrast (cycles through the list)"
+            class="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <ArrowDown size={11} strokeWidth={2.25} />
+            <span>Jump to next</span>
+          </button>
+          <button
+            type="button"
+            onclick={fixAllFailingPairs}
+            aria-label="Auto-fix every failing contrast row"
+            title="Pick a legible text color for every failing pair"
+            class="flex items-center gap-1 rounded-md border border-primary bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Wand2 size={11} strokeWidth={2.25} />
+            <span>Fix all</span>
+          </button>
+        </div>
+      {:else}
+        <div class="flex items-center gap-2 text-muted-foreground">
+          <Check size={13} strokeWidth={2.25} />
+          <span>All contrast checks pass</span>
+        </div>
+      {/if}
+    </section>
+
     <!-- Live preview: renders the theme with its own resolved tokens so the
          editor chrome shadowing above it does not leak through. Sits above
          everything so the user sees the downstream effect of each edit. -->

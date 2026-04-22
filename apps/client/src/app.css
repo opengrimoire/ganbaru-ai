@@ -9,6 +9,7 @@
   --background: #F4F4F7;
   --foreground: #141420;
   --card: #FFFFFF;
+  --card-foreground: #141420;
   --popover: #FFFFFF;
   --popover-foreground: #141420;
   --primary: #404048;
@@ -98,6 +99,7 @@
   --background: #27282A;
   --foreground: #ECECF2;
   --card: #2E2F31;
+  --card-foreground: #ECECF2;
   --popover: #353638;
   --popover-foreground: #ECECF2;
   --primary: #ECECF2;
@@ -190,6 +192,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -311,6 +314,7 @@
   --background: var(--editor-chrome-bg);
   --foreground: var(--editor-chrome-fg);
   --card: var(--editor-chrome-bg);
+  --card-foreground: var(--editor-chrome-fg);
   --popover: var(--editor-chrome-bg);
   --popover-foreground: var(--editor-chrome-fg);
   --border: var(--editor-chrome-border);

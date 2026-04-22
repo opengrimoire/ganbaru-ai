@@ -122,7 +122,7 @@ The app and calendar shell are styled through CSS tokens defined in `app.css` un
 
 ### Resolution order
 
-For each token in `APP_TOKEN_KEYS` (49 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
+For each token in `APP_TOKEN_KEYS` (50 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
 
 1. **Override (pinned).** `theme.appTokenOverrides[key]` / `theme.calendarTokenOverrides[key]` if set.
 2. **Derived (auto).** If the theme carries `sources` and the token is covered by the derivation engine, the engine's value for that token.
@@ -137,7 +137,7 @@ Unknown keys in overrides are stripped on import; only valid hex values are acce
 A theme can ship a `sources` object with seven hex colors. The first four form the **app foundation**, the next two are **semantic signals**, and the last is the **calendar canvas**:
 
 - `canvas`: app background. Lifted toward `ink` to produce the secondary, muted, and accent surfaces, and the base from which the title bar tokens tint.
-- `ink`: text base. Used directly for `--foreground` and mixed into every lifted surface, including the form indicator dot, the pomodoro idle caption, and the event panel's placeholder and muted captions.
+- `ink`: text base. Mixed into every lifted surface and used as the starting anchor for the contrast-aware pickers that drive `--foreground` (against canvas) and `--card-foreground` (against the card surface), the form indicator dot, the pomodoro idle caption, and the event panel's placeholder and muted captions. Because `--foreground` and `--card-foreground` both flow through `pickReadableForeground`, darkening canvas or tinting a card surface automatically flips the body text to the high-contrast side instead of stranding the user with black text on black.
 - `primary`: brand/action accent, used directly for `--primary`.
 - `destructive`: danger signal. Identity-drives `--destructive`, `--action-danger-armed`, and `--status-declined` so the delete button, armed-delete state, and declined attendance tile stay consistent.
 - `confirm`: positive signal. Identity-drives `--action-confirm` (save button, active scope pill) and `--status-accepted` (accepted attendance tile).
@@ -212,6 +212,8 @@ The pane covers the common surfaces the user needs to check at a glance: button 
 ### Contrast warnings
 
 On every pair row (a source and its paired foreground), the editor resolves the effective foreground/background contrast at render time. If the ratio falls below the AA body-text target (4.5:1), the editor shows a small amber warning pill next to the row with the current ratio and a wand button that calls `pickReadableForeground` and writes the result as an override. The warning disappears automatically once the pair meets the target. Warnings are non-blocking: the user can still save a theme that fails contrast.
+
+A persistent **contrast summary bar** sits above the preview pane regardless of the current mode. It aggregates every pair row across every group (including rows hidden by the current mode or collapsed inside an accordion) and reports the number of failing pairs. When the count is zero it shows a quiet "All contrast checks pass" line; when at least one pair fails it turns amber and exposes two actions: **Jump to next** cycles through the failing rows, automatically switching mode to Advanced and expanding the target row's group when needed before scrolling it into view, and **Fix all** runs the per-row auto-fix on every failing pair at once. Together they mean a warning produced by a distant edit can no longer hide behind an unopened accordion.
 
 ### Preset picker
 

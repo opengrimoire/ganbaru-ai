@@ -57,7 +57,8 @@
   <div class="absolute inset-0 bg-black/50"></div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="confirm-dialog relative z-10 rounded-md border border-black/20 bg-card px-8 py-5 dark:border-white/10 dark:bg-sidebar"
+    class="confirm-dialog relative z-10 rounded-md border border-black/20 bg-card text-card-foreground px-8 py-5 dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground"
+    style="--foreground: var(--card-foreground);"
     onclick={(e) => e.stopPropagation()}
   >
     <div class="mb-5 text-left">

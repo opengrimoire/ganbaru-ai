@@ -292,6 +292,7 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--background",
   "--foreground",
   "--card",
+  "--card-foreground",
   "--popover",
   "--popover-foreground",
   "--primary",
@@ -373,6 +374,7 @@ export const BASE_APP_TOKENS: Readonly<
     "--background": "#F4F4F7",
     "--foreground": "#141420",
     "--card": "#FFFFFF",
+    "--card-foreground": "#141420",
     "--popover": "#FFFFFF",
     "--popover-foreground": "#141420",
     "--primary": "#404048",
@@ -424,6 +426,7 @@ export const BASE_APP_TOKENS: Readonly<
     "--background": "#27282A",
     "--foreground": "#ECECF2",
     "--card": "#2E2F31",
+    "--card-foreground": "#ECECF2",
     "--popover": "#353638",
     "--popover-foreground": "#ECECF2",
     "--primary": "#ECECF2",
@@ -606,8 +609,9 @@ export function deriveAppTokens(
     const sidebarAccent = lift(w.sidebarAccentLift);
     return {
       "--background": canvas,
-      "--foreground": ink,
+      "--foreground": fg(canvas),
       "--card": card,
+      "--card-foreground": fg(card),
       "--popover": popover,
       "--popover-foreground": fg(popover),
       "--primary": primary,
@@ -656,8 +660,9 @@ export function deriveAppTokens(
   const sidebarAccent = lift(w.sidebarAccentLift);
   return {
     "--background": canvas,
-    "--foreground": ink,
+    "--foreground": fg(canvas),
     "--card": card,
+    "--card-foreground": fg(card),
     "--popover": popover,
     "--popover-foreground": fg(popover),
     "--primary": primary,

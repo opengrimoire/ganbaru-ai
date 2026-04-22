@@ -47,6 +47,7 @@ const DARK_SOURCES: ThemeSources = {
  */
 const AA_FOREGROUND_PAIRS: ReadonlyArray<[string, string]> = [
   ["--foreground", "--background"],
+  ["--card-foreground", "--card"],
   ["--popover-foreground", "--popover"],
   ["--primary-foreground", "--primary"],
   ["--secondary-foreground", "--secondary"],
@@ -153,6 +154,14 @@ describe("deriveAppTokens", () => {
     expect(derived["--secondary"]).not.toBe(
       deriveAppTokens(LIGHT_SOURCES, "light")["--secondary"],
     );
+  });
+
+  it("flips --foreground when the user darkens canvas without touching ink", () => {
+    const lightIshInk = LIGHT_SOURCES.ink;
+    const shifted: ThemeSources = { ...LIGHT_SOURCES, canvas: "#0A0A1E" };
+    const tokens = deriveAppTokens(shifted, "light");
+    expect(tokens["--foreground"]).not.toBe(lightIshInk);
+    assertAA(tokens["--foreground"], tokens["--background"], "shifted fg on bg");
   });
 
   it("stays legible when the user picks extreme canvas/ink pairs", () => {

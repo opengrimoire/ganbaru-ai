@@ -268,7 +268,8 @@
       <div class="fixed inset-0 z-40" onclick={closeMiniCalendar}></div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        class="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card p-2.5 shadow-lg"
+        class="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg"
+        style="--foreground: var(--card-foreground);"
         onwheel={handlePickerWheel}
       >
         {#if pickerMode === "days"}
@@ -412,7 +413,7 @@
       <button
         onclick={() => onViewChange(opt.mode)}
         class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {viewMode === opt.mode
-          ? 'bg-card text-foreground'
+          ? 'bg-card text-card-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
         title="{opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1)} view ('{opt.shortcut.toLowerCase()}' key)"
       >
@@ -447,7 +448,7 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
-      <div class="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card p-2.5 shadow-lg">
+      <div class="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg" style="--foreground: var(--card-foreground);">
         <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
         {#each calendarsStore.list as cal}
           {@const checked = cal.visible}

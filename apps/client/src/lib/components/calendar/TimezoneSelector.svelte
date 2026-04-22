@@ -77,8 +77,8 @@
     <div class="fixed inset-0 z-40" onclick={(e: MouseEvent) => { e.stopPropagation(); open = false; }}></div>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card p-3 shadow-xl"
-      style="font-weight: normal;"
+      class="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card text-card-foreground p-3 shadow-xl"
+      style="font-weight: normal; --foreground: var(--card-foreground);"
       onkeydown={handleKeydown}
     >
       <p class="mb-2 text-xs font-semibold text-foreground">Timezones</p>
