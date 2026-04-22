@@ -7,7 +7,7 @@
     getFreeEventColor,
   } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
-  import type { Theme } from "$lib/stores/themes";
+  import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
 
@@ -37,7 +37,7 @@
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
-  const isDark = $derived(theme.base === "dark");
+  const isDark = $derived(isThemeCalendarDark(theme));
 
   // Events with IDs starting with __ are temporary (preview/pending) and should never animate
   const isTemporaryEvent = $derived(positioned.event.id.startsWith("__"));

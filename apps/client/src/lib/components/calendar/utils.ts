@@ -713,7 +713,7 @@ export function layoutEventsForDay(
 // {bg, text} entries, applying contrast-aware text selection and caching
 // the resolved palette per theme ID so switching themes is cheap.
 
-import type { Theme } from "$lib/stores/themes";
+import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
 
 export interface ColorEntry {
   bg: string;
@@ -737,22 +737,27 @@ const LIGHT_FLIP_ABOVE = 0.65;
 const DARK_FLIP_BELOW = 0.35;
 
 /**
- * Pick a readable foreground for a given background under the given theme
- * base. Rec. 709 coefficients on raw sRGB approximate perceived luminance;
- * calibrated for the event-palette flips, so `resolvePalette` keeps using
- * this. New callers should prefer `pickReadableForeground` in `colorMath.ts`,
- * which uses gamma-decoded WCAG luminance and guarantees AA contrast.
+ * Pick a readable foreground for a given event-tile background under a
+ * light or dark calendar surface. Rec. 709 coefficients on raw sRGB
+ * approximate perceived luminance; calibrated for the event-palette
+ * flips, so `resolvePalette` keeps using this. New callers should
+ * prefer `pickReadableForeground` in `colorMath.ts`, which uses
+ * gamma-decoded WCAG luminance and guarantees AA contrast.
+ *
+ * The `darkCalendar` flag is resolved from the calendar canvas's
+ * luminance (via `isThemeCalendarDark`), not from the theme's cosmetic
+ * `base` label, so swapping the base label no longer changes tile text.
  *
  * @deprecated Use `pickReadableForeground` from `$lib/components/ui/colorMath`
  * for new code. Kept because the event palette was calibrated against the
  * threshold constants above.
  */
-function pickContrastText(bg: string, themeBase: "light" | "dark"): string {
+function pickContrastText(bg: string, darkCalendar: boolean): string {
   const r = parseInt(bg.slice(1, 3), 16);
   const g = parseInt(bg.slice(3, 5), 16);
   const b = parseInt(bg.slice(5, 7), 16);
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  if (themeBase === "dark") {
+  if (darkCalendar) {
     return luminance < DARK_FLIP_BELOW ? DARK_TEXT_ALT : DARK_TEXT;
   }
   return luminance > LIGHT_FLIP_ABOVE ? LIGHT_TEXT_ALT : LIGHT_TEXT;
@@ -767,10 +772,11 @@ const resolvedPaletteCache = new WeakMap<Theme, ColorEntry[]>();
 function resolvePalette(theme: Theme): ColorEntry[] {
   const cached = resolvedPaletteCache.get(theme);
   if (cached) return cached;
+  const darkCal = isThemeCalendarDark(theme);
   const out: ColorEntry[] = [];
   for (let i = 0; i < theme.eventPalette.length; i++) {
     const bg = theme.eventPalette[i];
-    out.push({ bg, text: pickContrastText(bg, theme.base) });
+    out.push({ bg, text: pickContrastText(bg, darkCal) });
   }
   resolvedPaletteCache.set(theme, out);
   return out;
@@ -866,7 +872,7 @@ function getDimmedEventColor(
 
   const base = getEventColor(color, theme);
   const bg = blendHex(base.bg, theme.blendCanvas, mainWeight);
-  const text = pickContrastText(bg, theme.base);
+  const text = pickContrastText(bg, isThemeCalendarDark(theme));
   const entry: ColorEntry = { bg, text };
   inner.set(key, entry);
   return entry;
@@ -881,7 +887,7 @@ export function getPastEventColor(
   color: EventColor | undefined,
   theme: Theme,
 ): ColorEntry {
-  return getDimmedEventColor(color, theme, theme.base === "dark" ? 0.5 : 0.3);
+  return getDimmedEventColor(color, theme, isThemeCalendarDark(theme) ? 0.5 : 0.3);
 }
 
 /**

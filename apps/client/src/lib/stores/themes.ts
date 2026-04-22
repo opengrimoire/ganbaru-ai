@@ -4,6 +4,7 @@ import {
   pickReadableBorder,
   pickReadableForeground,
   pickReadableMuted,
+  relativeLuminance,
 } from "$lib/components/ui/colorMath";
 
 /**
@@ -771,6 +772,52 @@ export function resolveCalendarTokens(theme: Theme): Record<string, string> {
       BASE_CALENDAR_TOKENS[theme.base][key];
   }
   return out;
+}
+
+/**
+ * Luminance cutoff below which a surface is treated as "dark" for binary
+ * decisions like applying Tailwind's `.dark` class or picking the dark
+ * event-tile palette. Sits at 0.4 so any sub-midpoint canvas is treated
+ * as dark, but a mid-gray canvas (~#888 at 0.5) still resolves as light.
+ * Only a bucket test, not a WCAG contrast check.
+ */
+const DARK_SURFACE_THRESHOLD = 0.4;
+
+/**
+ * Resolve the effective app background a theme will actually paint. Walks
+ * the same three-layer lookup the token pipeline uses (explicit override →
+ * source-derived → base default) so luminance-driven branches see the same
+ * canvas the user sees.
+ */
+export function resolveCanvas(theme: Theme): string {
+  return (
+    theme.appTokenOverrides?.["--background"] ??
+    theme.sources?.canvas ??
+    BASE_APP_TOKENS[theme.base]["--background"]
+  );
+}
+
+/**
+ * Resolve the effective calendar background. Used to pick the event-tile
+ * palette and calendar-specific outline mixes based on the actual surface
+ * rather than the theme's cosmetic `base` label.
+ */
+export function resolveCalCanvas(theme: Theme): string {
+  return (
+    theme.calendarTokenOverrides?.["--cal-bg"] ??
+    theme.sources?.calCanvas ??
+    BASE_CALENDAR_TOKENS[theme.base]["--cal-bg"]
+  );
+}
+
+/** True when the resolved app canvas crosses into dark-mode territory. */
+export function isThemeDark(theme: Theme): boolean {
+  return relativeLuminance(resolveCanvas(theme)) < DARK_SURFACE_THRESHOLD;
+}
+
+/** True when the resolved calendar canvas crosses into dark-mode territory. */
+export function isThemeCalendarDark(theme: Theme): boolean {
+  return relativeLuminance(resolveCalCanvas(theme)) < DARK_SURFACE_THRESHOLD;
 }
 
 function isHexColor(value: unknown): value is string {

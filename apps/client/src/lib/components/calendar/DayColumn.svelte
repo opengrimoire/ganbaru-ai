@@ -19,7 +19,7 @@
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
-  import type { Theme } from "$lib/stores/themes";
+  import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
 
   let {
     date,
@@ -57,7 +57,7 @@
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
   } = $props();
 
-  const isDark = $derived(theme.base === "dark");
+  const isDark = $derived(isThemeCalendarDark(theme));
 
   const panelOpen = $derived(!!editingId);
 

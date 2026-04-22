@@ -9,6 +9,10 @@ import {
   lightTheme,
   getThemeById,
   isBuiltinThemeId,
+  isThemeCalendarDark,
+  isThemeDark,
+  resolveCalCanvas,
+  resolveCanvas,
   themeIds,
   computeThemeTokenOps,
   generateThemeId,
@@ -222,6 +226,121 @@ describe("token catalogs", () => {
   it("are frozen", () => {
     expect(Object.isFrozen(APP_TOKEN_KEYS)).toBe(true);
     expect(Object.isFrozen(CALENDAR_TOKEN_KEYS)).toBe(true);
+  });
+});
+
+describe("luminance-driven base detection", () => {
+  it("resolveCanvas returns the source canvas when set", () => {
+    const theme: Theme = {
+      id: "bright",
+      displayName: "Bright",
+      base: "dark",
+      blendCanvas: "#ffffff",
+      eventPalette: Array.from({ length: PALETTE_SIZE }, () => "#abcdef"),
+      sources: {
+        canvas: "#FAF7F2",
+        ink: "#1F1B16",
+        primary: "#2563EB",
+        destructive: "#B42318",
+        confirm: "#047857",
+        warning: "#B45309",
+        calCanvas: "#FFFFFF",
+      },
+    };
+    expect(resolveCanvas(theme).toLowerCase()).toBe("#faf7f2");
+  });
+
+  it("resolveCanvas override beats source", () => {
+    const theme: Theme = {
+      id: "pinned",
+      displayName: "Pinned",
+      base: "light",
+      blendCanvas: "#000000",
+      eventPalette: Array.from({ length: PALETTE_SIZE }, () => "#abcdef"),
+      sources: {
+        canvas: "#FFFFFF",
+        ink: "#000000",
+        primary: "#2563EB",
+        destructive: "#B42318",
+        confirm: "#047857",
+        warning: "#B45309",
+        calCanvas: "#FFFFFF",
+      },
+      appTokenOverrides: { "--background": "#101010" },
+    };
+    expect(resolveCanvas(theme).toLowerCase()).toBe("#101010");
+  });
+
+  it("isThemeDark ignores the base label when sources flip", () => {
+    const theme: Theme = {
+      id: "bright",
+      displayName: "Bright (labeled dark)",
+      base: "dark",
+      blendCanvas: "#ffffff",
+      eventPalette: Array.from({ length: PALETTE_SIZE }, () => "#abcdef"),
+      sources: {
+        canvas: "#FAF7F2",
+        ink: "#1F1B16",
+        primary: "#2563EB",
+        destructive: "#B42318",
+        confirm: "#047857",
+        warning: "#B45309",
+        calCanvas: "#FFFFFF",
+      },
+    };
+    expect(isThemeDark(theme)).toBe(false);
+  });
+
+  it("isThemeDark returns true when canvas is dark regardless of label", () => {
+    const theme: Theme = {
+      id: "dim",
+      displayName: "Dim (labeled light)",
+      base: "light",
+      blendCanvas: "#000000",
+      eventPalette: Array.from({ length: PALETTE_SIZE }, () => "#abcdef"),
+      sources: {
+        canvas: "#1B1C1F",
+        ink: "#E9EAEE",
+        primary: "#90A5FF",
+        destructive: "#F06060",
+        confirm: "#44C48A",
+        warning: "#F5B143",
+        calCanvas: "#0E0F11",
+      },
+    };
+    expect(isThemeDark(theme)).toBe(true);
+  });
+
+  it("isThemeCalendarDark keys off calCanvas, not canvas", () => {
+    const theme: Theme = {
+      id: "split",
+      displayName: "Bright app, dark cal",
+      base: "light",
+      blendCanvas: "#0E0F11",
+      eventPalette: Array.from({ length: PALETTE_SIZE }, () => "#abcdef"),
+      sources: {
+        canvas: "#FAF7F2",
+        ink: "#1F1B16",
+        primary: "#2563EB",
+        destructive: "#B42318",
+        confirm: "#047857",
+        warning: "#B45309",
+        calCanvas: "#0E0F11",
+      },
+    };
+    expect(isThemeDark(theme)).toBe(false);
+    expect(isThemeCalendarDark(theme)).toBe(true);
+  });
+
+  it("falls back to base defaults when the theme has no sources", () => {
+    expect(resolveCanvas(lightTheme).toLowerCase()).toBe("#f4f4f7");
+    expect(resolveCanvas(darkTheme).toLowerCase()).toBe("#27282a");
+    expect(resolveCalCanvas(lightTheme).toLowerCase()).toBe("#ffffff");
+    expect(resolveCalCanvas(darkTheme).toLowerCase()).toBe("#131314");
+    expect(isThemeDark(lightTheme)).toBe(false);
+    expect(isThemeDark(darkTheme)).toBe(true);
+    expect(isThemeCalendarDark(lightTheme)).toBe(false);
+    expect(isThemeCalendarDark(darkTheme)).toBe(true);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   computeThemeTokenOps,
   getThemeById,
   isBuiltinThemeId,
+  isThemeDark,
   generateThemeId,
   serializeTheme,
   validateThemeJson,
@@ -69,7 +70,7 @@ function applyThemeToDom(): void {
   if (typeof document === "undefined") return;
   const theme = resolveActive();
   const root = document.documentElement;
-  root.classList.toggle("dark", theme.base === "dark");
+  root.classList.toggle("dark", isThemeDark(theme));
   const { toSet, toClear, applied } = computeThemeTokenOps(
     theme,
     appliedTokenKeys,
@@ -242,7 +243,7 @@ export function getTheme() {
       return activeId;
     },
     get isDark(): boolean {
-      return resolveActive().base === "dark";
+      return isThemeDark(resolveActive());
     },
     /** Combined registry of built-in and user themes. */
     get registry(): Readonly<Record<ThemeId, Theme>> {
