@@ -547,6 +547,8 @@ const APP_DERIVATION = {
   accentLift: 0.11,
   sidebarLift: 0.14,
   sidebarAccentLift: 0.12,
+  eventPanelBgLift: 0.03,
+  eventPanelContrastToBlack: 0.06,
 } as const;
 
 const CAL_DERIVATION = {
@@ -554,20 +556,20 @@ const CAL_DERIVATION = {
 } as const;
 
 /**
- * Derive every app-shell token from a source palette. The `base` argument
- * is retained because a handful of calendar-only tokens (`--event-panel-bg`,
- * etc.) still read from `BASE_APP_TOKENS[base]` as a starting point; the
- * surface lifts and every contrast-picked foreground ignore it.
- *
- * Every surface (card, popover, secondary, muted, accent, sidebar)
+ * Derive every app-shell token from a source palette. Every surface
+ * (card, popover, secondary, muted, accent, sidebar, event panel)
  * lifts canvas toward ink by the same fractional weight regardless of
- * base. Direction flips naturally with whichever of canvas/ink is
- * brighter. Foregrounds, borders, and muted captions are recomputed
- * from contrast math so the pairing stays legible regardless of which
- * sources the user picks: `pickReadableForeground` guarantees AA
- * 4.5:1 on body text, `pickReadableBorder` parks borders at 3:1, and
- * `pickReadableMuted` walks captions down to exactly 3:1 so they
- * recede without vanishing.
+ * the cosmetic base label. Direction flips naturally with whichever of
+ * canvas/ink is brighter. Foregrounds, borders, and muted captions are
+ * recomputed from contrast math so the pairing stays legible regardless
+ * of which sources the user picks: `pickReadableForeground` guarantees
+ * AA 4.5:1 on body text, `pickReadableBorder` parks borders at 3:1, and
+ * `pickReadableMuted` walks captions down to exactly 3:1 so they recede
+ * without vanishing.
+ *
+ * The `base` parameter is kept for call-site compatibility with the
+ * current resolver path but is intentionally unused: toggling the label
+ * on a sourced theme must not shift any derived token.
  *
  * Built-in themes carry no `sources` field and never reach this function
  * at resolve time; it is called only for user themes that have opted into
@@ -575,7 +577,7 @@ const CAL_DERIVATION = {
  */
 export function deriveAppTokens(
   sources: ThemeSources,
-  base: "light" | "dark",
+  _base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink, primary, destructive, confirm, warning } = sources;
   const w = APP_DERIVATION;
@@ -583,7 +585,6 @@ export function deriveAppTokens(
   const fg = (bg: string, target?: number) =>
     pickReadableForeground(bg, { ink, canvas, target });
   const muted = (bg: string) => pickReadableMuted(bg, ink, { target: 3 });
-  const eventPanelBg = BASE_APP_TOKENS[base]["--event-panel-bg"];
   // Pomodoro idle overlay paints a full-screen black surface; tokens over
   // it pair against pure black rather than against canvas.
   const idleBg = "#000000";
@@ -594,6 +595,17 @@ export function deriveAppTokens(
   const accent = lift(w.accentLift);
   const sidebar = lift(w.sidebarLift);
   const sidebarAccent = lift(w.sidebarAccentLift);
+  const eventPanelBg = lift(w.eventPanelBgLift);
+  // event-panel-contrast is always a touch darker than event-panel-bg.
+  // Blending toward pure black (rather than toward ink) keeps that
+  // "recessed band behind the panel" look symmetric across bases: on a
+  // light canvas it deepens toward ink; on a dark canvas it recesses
+  // past canvas toward black.
+  const eventPanelContrast = blendHex(
+    eventPanelBg,
+    "#000000",
+    w.eventPanelContrastToBlack,
+  );
   return {
     "--background": canvas,
     "--foreground": fg(canvas),
@@ -629,10 +641,16 @@ export function deriveAppTokens(
     "--form-indicator": muted(canvas),
     "--pomodoro-idle-text": muted(idleBg),
     "--pomodoro-idle-timer": fg(idleBg, 4.5),
+    "--event-panel-bg": eventPanelBg,
+    "--event-panel-contrast": eventPanelContrast,
+    "--event-panel-divider": pickReadableBorder(eventPanelBg, ink, {
+      target: 3,
+    }),
     "--event-panel-text": fg(eventPanelBg),
     "--event-panel-input-text": fg(eventPanelBg),
     "--event-panel-placeholder": muted(eventPanelBg),
     "--event-panel-muted-text": muted(eventPanelBg),
+    "--cal-drag-preview-border": pickReadableBorder(canvas, ink, { target: 3 }),
   };
 }
 
@@ -648,9 +666,10 @@ export function deriveAppTokens(
  */
 export function deriveCalendarTokens(
   sources: ThemeSources,
-  base: "light" | "dark",
+  _base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink, calCanvas } = sources;
+  const todayCircle = ink;
   return {
     "--cal-bg": calCanvas,
     "--cal-header-bg": canvas,
@@ -661,6 +680,13 @@ export function deriveCalendarTokens(
       ink,
       CAL_DERIVATION.timelineRailLift,
     ),
+    "--cal-today-circle": todayCircle,
+    "--cal-today-circle-text": pickReadableForeground(todayCircle, {
+      ink,
+      canvas,
+      target: 4.5,
+    }),
+    "--cal-timeline-break": pickReadableBorder(calCanvas, ink, { target: 3 }),
   };
 }
 

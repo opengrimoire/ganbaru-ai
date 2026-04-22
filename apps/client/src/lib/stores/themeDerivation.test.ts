@@ -60,6 +60,8 @@ const AA_FOREGROUND_PAIRS: ReadonlyArray<[string, string]> = [
   ["--status-accepted-foreground", "--status-accepted"],
   ["--status-tentative-foreground", "--status-tentative"],
   ["--status-declined-foreground", "--status-declined"],
+  ["--event-panel-text", "--event-panel-bg"],
+  ["--event-panel-input-text", "--event-panel-bg"],
 ];
 
 /**
@@ -69,10 +71,14 @@ const AA_FOREGROUND_PAIRS: ReadonlyArray<[string, string]> = [
  */
 const MUTED_BANDS: ReadonlyArray<{ fg: string; bg: string }> = [
   { fg: "--muted-foreground", bg: "--muted" },
+  { fg: "--event-panel-placeholder", bg: "--event-panel-bg" },
+  { fg: "--event-panel-muted-text", bg: "--event-panel-bg" },
 ];
 
 const BORDER_PAIRS: ReadonlyArray<{ border: string; against: string }> = [
   { border: "--ring", against: "--background" },
+  { border: "--event-panel-divider", against: "--event-panel-bg" },
+  { border: "--cal-drag-preview-border", against: "--background" },
 ];
 
 function assertAA(fgHex: string, bgHex: string, label: string) {
@@ -185,20 +191,31 @@ describe("deriveAppTokens", () => {
       assertAA(tokens[fg], tokens[bg], `extreme ${fg} on ${bg}`);
     }
   });
+
+  it("ignores the cosmetic base label when sources are provided", () => {
+    const asLight = deriveAppTokens(LIGHT_SOURCES, "light");
+    const asDark = deriveAppTokens(LIGHT_SOURCES, "dark");
+    for (const key of Object.keys(asLight)) {
+      expect(asDark[key]).toBe(asLight[key]);
+    }
+  });
 });
 
 describe("deriveCalendarTokens", () => {
-  it("returns only the derivable subset, not the semantic tokens", () => {
+  it("returns entries for every derivable key, not for the fully-semantic ones", () => {
     const derived = deriveCalendarTokens(LIGHT_SOURCES, "light");
     expect(derived["--cal-bg"]).toBeDefined();
     expect(derived["--cal-header-bg"]).toBeDefined();
     expect(derived["--cal-gridline"]).toBeDefined();
     expect(derived["--cal-time-label"]).toBeDefined();
     expect(derived["--cal-timeline-rail"]).toBeDefined();
-    expect(derived["--cal-today-circle"]).toBeUndefined();
-    expect(derived["--cal-today-circle-text"]).toBeUndefined();
+    expect(derived["--cal-today-circle"]).toBeDefined();
+    expect(derived["--cal-today-circle-text"]).toBeDefined();
+    expect(derived["--cal-timeline-break"]).toBeDefined();
+    // current-time (red "now" line) and timeline-focus (green pomodoro
+    // marker) carry hard-coded semantic meaning and stay undefined in
+    // the derivation so the base CSS defaults win.
     expect(derived["--cal-current-time"]).toBeUndefined();
-    expect(derived["--cal-timeline-break"]).toBeUndefined();
     expect(derived["--cal-timeline-focus"]).toBeUndefined();
   });
 
@@ -226,5 +243,31 @@ describe("deriveCalendarTokens", () => {
       expect(ratio).toBeGreaterThanOrEqual(3.0);
       expect(ratio).toBeLessThanOrEqual(4.5);
     });
+
+    it(`today circle pairs its text at or above 4.5:1 (${base})`, () => {
+      const tokens = deriveCalendarTokens(sources, base);
+      const ratio = contrastRatio(
+        tokens["--cal-today-circle-text"],
+        tokens["--cal-today-circle"],
+      );
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`timeline break sits at or above 3:1 against the calendar canvas (${base})`, () => {
+      const tokens = deriveCalendarTokens(sources, base);
+      const ratio = contrastRatio(
+        tokens["--cal-timeline-break"],
+        tokens["--cal-bg"],
+      );
+      expect(ratio).toBeGreaterThanOrEqual(3.0);
+    });
   }
+
+  it("ignores the cosmetic base label when sources are provided", () => {
+    const asLight = deriveCalendarTokens(LIGHT_SOURCES, "light");
+    const asDark = deriveCalendarTokens(LIGHT_SOURCES, "dark");
+    for (const key of Object.keys(asLight)) {
+      expect(asDark[key]).toBe(asLight[key]);
+    }
+  });
 });
