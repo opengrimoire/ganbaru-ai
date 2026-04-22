@@ -30,6 +30,8 @@
     CALENDAR_TOKEN_KEYS,
     deriveAppTokens,
     deriveCalendarTokens,
+    isThemeCalendarDark,
+    isThemeDark,
     resolveAppTokens,
     resolveCalendarTokens,
     type Theme,
@@ -516,7 +518,10 @@
   const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
 
   const isBuiltin = $derived(themeStore.isBuiltin(theme.id));
-  const BaseIcon = $derived(theme.base === "dark" ? Moon : Sun);
+  // The scheme icon tracks what the user actually sees (canvas luminance),
+  // not the cosmetic `theme.base` label. This keeps the indicator honest if
+  // the user inverts a theme's canvas without flipping the saved label.
+  const BaseIcon = $derived(isThemeDark(theme) ? Moon : Sun);
 
   // Input seeds drive per-token reset. They are captured on every modern
   // clone, so seedSources existing is the signal that the theme was cloned
@@ -620,13 +625,6 @@
 
   function effectiveCalBg(t: Theme): string {
     return resolveCalendarTokens(t)["--cal-bg"];
-  }
-
-  // The base toggle is purely a marker so the user remembers whether they
-  // are crafting a light or dark theme. Flipping it MUST NOT touch any
-  // colors: that would clobber edits the user already made.
-  function setBase(next: "light" | "dark") {
-    themeStore.updateTheme(theme.id, { base: next });
   }
 
   function setSlot(index: number, hex: string) {
@@ -1015,21 +1013,20 @@
           <BaseIcon
             size={15}
             strokeWidth={1.75}
-            aria-label="{theme.base} theme"
+            aria-label={isThemeDark(theme) ? "Dark theme" : "Light theme"}
             class="shrink-0 text-muted-foreground"
           />
           <span class="truncate text-[14px] font-semibold text-foreground">
             {theme.displayName}
           </span>
         {:else}
-          <button
-            type="button"
-            onclick={() => setBase(theme.base === "dark" ? "light" : "dark")}
-            aria-label="Flip scheme marker (currently {theme.base})"
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          <span
+            aria-label={isThemeDark(theme) ? "Dark theme" : "Light theme"}
+            title={isThemeDark(theme) ? "Dark theme" : "Light theme"}
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground"
           >
             <BaseIcon size={14} strokeWidth={1.75} />
-          </button>
+          </span>
           <input
             type="text"
             value={theme.displayName}
@@ -1543,7 +1540,7 @@
           {@const past = blendHex(
             base,
             effectiveCalBg(theme),
-            theme.base === "dark" ? 0.5 : 0.3,
+            isThemeCalendarDark(theme) ? 0.5 : 0.3,
           )}
           {#if isBuiltin}
             <div class="flex min-w-0 items-center gap-1.5">
