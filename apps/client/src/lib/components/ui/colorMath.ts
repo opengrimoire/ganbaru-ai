@@ -474,9 +474,15 @@ export function pickReadableBorder(
 /**
  * Pick a muted foreground for `bg` that parks at the deepest recession
  * still meeting `target` contrast (default 3 = WCAG AA large text).
- * Walks from `ink` toward `bg` in OKLab and stops just before contrast
- * drops below the target. Useful for secondary captions that should
- * recede but stay readable.
+ * Walks from the best available anchor toward `bg` in OKLab and stops
+ * just before contrast drops below the target. Useful for secondary
+ * captions that should recede but stay readable.
+ *
+ * When `ink` already clears the target, ink is the anchor and the walk
+ * recedes ink toward bg. When ink does not clear the target (e.g., a
+ * dark canvas paired with a dark ink), the anchor switches to the
+ * higher-contrast sRGB endpoint (`#ffffff` or `#000000`) so the result
+ * still lands readable instead of returning ink unchanged.
  */
 export function pickReadableMuted(
   bg: string,
@@ -485,18 +491,23 @@ export function pickReadableMuted(
 ): string {
   const target = opts.target ?? 3;
   const bgLab = hexToOklab(bg);
-  const inkLab = hexToOklab(ink);
-  if (!bgLab || !inkLab) return ink;
-  if (contrastRatio(bg, ink) <= target) return ink;
-  const direction = bgLab.L >= inkLab.L ? 1 : -1;
+  if (!bgLab) return ink;
+  let anchor = ink;
+  let anchorLab = hexToOklab(ink);
+  if (!anchorLab || contrastRatio(bg, ink) < target) {
+    anchor = bestEndpoint(bg);
+    anchorLab = hexToOklab(anchor);
+    if (!anchorLab) return anchor;
+  }
+  const direction = bgLab.L >= anchorLab.L ? 1 : -1;
   const step = 0.01;
-  let L = inkLab.L;
-  let lastGood = ink;
+  let L = anchorLab.L;
+  let lastGood = anchor;
   for (let i = 0; i < 200; i++) {
     const nextL = L + direction * step;
     if (nextL <= 0 || nextL >= 1) break;
     if (direction === 1 ? nextL >= bgLab.L : nextL <= bgLab.L) break;
-    const candidate = oklabToHex(nextL, inkLab.a, inkLab.b);
+    const candidate = oklabToHex(nextL, anchorLab.a, anchorLab.b);
     if (contrastRatio(bg, candidate) < target) break;
     lastGood = candidate;
     L = nextL;

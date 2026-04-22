@@ -497,6 +497,23 @@ describe("pickReadableMuted", () => {
       contrastRatio("#ffffff", "#949494") + 0.05,
     );
   });
+
+  it("pivots to a readable anchor when ink is too close to bg", () => {
+    // Dark canvas paired with an almost-identical ink: contrast < target.
+    // Naive impl returned ink unchanged, which vanished into the surface.
+    const muted = pickReadableMuted("#1B1C1F", "#222222");
+    expect(contrastRatio("#1B1C1F", muted)).toBeGreaterThanOrEqual(3 - 0.05);
+  });
+
+  it("flips direction when the bg crosses luminance past ink", () => {
+    // Same ink, but with a dark bg on one side and a light bg on the other.
+    // The muted walk should land on two sides of ink because the anchor
+    // direction is derived from bg, not a hardcoded assumption.
+    const onDark = pickReadableMuted("#141420", "#ECECF2");
+    const onLight = pickReadableMuted("#FAF7F2", "#1F1B16");
+    expect(contrastRatio("#141420", onDark)).toBeGreaterThanOrEqual(3 - 0.05);
+    expect(contrastRatio("#FAF7F2", onLight)).toBeGreaterThanOrEqual(3 - 0.05);
+  });
 });
 
 // Deterministic PRNG for fuzz tests so failures reproduce.
