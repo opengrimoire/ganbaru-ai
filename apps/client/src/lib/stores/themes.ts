@@ -516,70 +516,58 @@ const MAX_DISPLAY_NAME_LENGTH = 60;
 /**
  * Blend `c` toward `ink` by fraction `t`. A weight of 0 returns `c`
  * unchanged; 1 returns `ink`. Used to "lift" a base surface toward its
- * text color (slightly tinted grays), which is how the built-in secondary,
- * muted, accent, and ring surfaces relate to their canvas.
+ * text color (slightly tinted grays), which is how every derived
+ * surface relates to canvas.
  */
 function liftTowardInk(c: string, ink: string, t: number): string {
   return blendHex(c, ink, 1 - t);
 }
 
 /**
- * Blend `c` toward pure black by fraction `t`. Used for the title bar
- * surface in light mode, which is a shade darker than canvas without
- * picking up any ink hue.
+ * Unified app-shell derivation weights. Both light and dark bases run
+ * through the same table so cloning a light preset produces the same
+ * quality of surface differentiation cloning a dark preset does. Every
+ * surface lifts canvas toward ink; direction flips naturally based on
+ * whether canvas or ink is lighter, but the magnitude stays the same
+ * so symmetry holds. Foregrounds, borders, and muted captions are
+ * computed from contrast math (see `deriveAppTokens`) rather than
+ * empirical lifts.
+ *
+ * Before unification, light used smaller weights and pinned card /
+ * popover to pure white; dark used bigger weights and recessed sidebar
+ * toward black. The two tables converged on indistinguishable surfaces
+ * in light clones and clearly-layered surfaces in dark clones, which
+ * is the asymmetry this unification resolves.
  */
-function recessTowardBlack(c: string, t: number): string {
-  return blendHex(c, "#000000", 1 - t);
-}
-
-/**
- * App-shell derivation weights for surface backgrounds only. Foregrounds,
- * borders, and muted captions are now computed from contrast math (see
- * `deriveAppTokens`) rather than empirical lifts. These weights preserve
- * the tinted-gray aesthetic of the built-in palettes for card/popover/
- * secondary/muted/accent/sidebar while contrast-aware pickers handle
- * every token that needs to stay legible against its paired surface.
- */
-const APP_DERIVATION_LIGHT = {
+const APP_DERIVATION = {
+  cardLift: 0.04,
+  popoverLift: 0.07,
   secondaryLift: 0.08,
   mutedLift: 0.08,
-  accentLift: 0.05,
-  // Light sidebar is slightly inked toward foreground (a soft tinted gray),
-  // not recessed toward black: fitting against built-in #DCDCE2 / #CFCFD6
-  // showed lift(canvas, ink, 0.10 / 0.16) tracks within ~2 channels whereas
-  // recess(canvas, 0.11 / 0.17) diverges on the blue channel.
-  sidebarLift: 0.1,
-  sidebarAccentLift: 0.16,
+  accentLift: 0.11,
+  sidebarLift: 0.14,
+  sidebarAccentLift: 0.12,
 } as const;
 
-const APP_DERIVATION_DARK = {
-  cardLift: 0.035,
-  popoverLift: 0.071,
-  secondaryLift: 0.061,
-  mutedLift: 0.061,
-  accentLift: 0.101,
-  sidebarRecess: 0.23,
-  sidebarAccentLift: 0.101,
-} as const;
-
-const CAL_DERIVATION_LIGHT = {
-  timelineRailLift: 0.09,
-} as const;
-
-const CAL_DERIVATION_DARK = {
-  timelineRailLift: 0.15,
+const CAL_DERIVATION = {
+  timelineRailLift: 0.12,
 } as const;
 
 /**
- * Derive every app-shell token from a source palette for the given base.
+ * Derive every app-shell token from a source palette. The `base` argument
+ * is retained because a handful of calendar-only tokens (`--event-panel-bg`,
+ * etc.) still read from `BASE_APP_TOKENS[base]` as a starting point; the
+ * surface lifts and every contrast-picked foreground ignore it.
  *
- * Surface backgrounds (card, popover, secondary, muted, accent, sidebar)
- * still use empirical ink lifts so the tinted-gray aesthetic is preserved.
- * Every foreground, border, and muted caption is recomputed from contrast
- * math so the pairing stays legible regardless of which sources the user
- * picks: `pickReadableForeground` guarantees AA 4.5:1 on body text,
- * `pickReadableBorder` parks borders at 3:1, and `pickReadableMuted` walks
- * captions down to exactly 3:1 so they recede without vanishing.
+ * Every surface (card, popover, secondary, muted, accent, sidebar)
+ * lifts canvas toward ink by the same fractional weight regardless of
+ * base. Direction flips naturally with whichever of canvas/ink is
+ * brighter. Foregrounds, borders, and muted captions are recomputed
+ * from contrast math so the pairing stays legible regardless of which
+ * sources the user picks: `pickReadableForeground` guarantees AA
+ * 4.5:1 on body text, `pickReadableBorder` parks borders at 3:1, and
+ * `pickReadableMuted` walks captions down to exactly 3:1 so they
+ * recede without vanishing.
  *
  * Built-in themes carry no `sources` field and never reach this function
  * at resolve time; it is called only for user themes that have opted into
@@ -590,8 +578,8 @@ export function deriveAppTokens(
   base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink, primary, destructive, confirm, warning } = sources;
+  const w = APP_DERIVATION;
   const lift = (t: number) => liftTowardInk(canvas, ink, t);
-  const recess = (t: number) => recessTowardBlack(canvas, t);
   const fg = (bg: string, target?: number) =>
     pickReadableForeground(bg, { ink, canvas, target });
   const muted = (bg: string) => pickReadableMuted(bg, ink, { target: 3 });
@@ -599,65 +587,12 @@ export function deriveAppTokens(
   // Pomodoro idle overlay paints a full-screen black surface; tokens over
   // it pair against pure black rather than against canvas.
   const idleBg = "#000000";
-  if (base === "light") {
-    const w = APP_DERIVATION_LIGHT;
-    const card = "#FFFFFF";
-    const popover = "#FFFFFF";
-    const secondary = lift(w.secondaryLift);
-    const mutedBg = lift(w.mutedLift);
-    const accent = lift(w.accentLift);
-    const sidebar = lift(w.sidebarLift);
-    const sidebarAccent = lift(w.sidebarAccentLift);
-    return {
-      "--background": canvas,
-      "--foreground": fg(canvas),
-      "--card": card,
-      "--card-foreground": fg(card),
-      "--popover": popover,
-      "--popover-foreground": fg(popover),
-      "--primary": primary,
-      "--primary-foreground": fg(primary, 4.5),
-      "--secondary": secondary,
-      "--secondary-foreground": fg(secondary),
-      "--muted": mutedBg,
-      "--muted-foreground": muted(mutedBg),
-      "--accent": accent,
-      "--accent-foreground": fg(accent),
-      "--destructive": destructive,
-      "--destructive-foreground": fg(destructive),
-      "--ring": pickReadableBorder(canvas, ink, { target: 3 }),
-      "--sidebar": sidebar,
-      "--sidebar-foreground": fg(sidebar),
-      "--sidebar-accent": sidebarAccent,
-      "--sidebar-accent-foreground": fg(sidebarAccent),
-      // Semantic signals: background identity, foreground contrast-picked.
-      "--action-confirm": confirm,
-      "--action-confirm-foreground": fg(confirm),
-      "--action-danger-armed": destructive,
-      "--action-danger-armed-foreground": fg(destructive),
-      "--status-accepted": confirm,
-      "--status-accepted-foreground": fg(confirm),
-      "--status-tentative": warning,
-      "--status-tentative-foreground": fg(warning),
-      "--status-declined": destructive,
-      "--status-declined-foreground": fg(destructive),
-      // Ink-derived typography beyond --foreground.
-      "--form-indicator": muted(canvas),
-      "--pomodoro-idle-text": muted(idleBg),
-      "--pomodoro-idle-timer": fg(idleBg, 4.5),
-      "--event-panel-text": fg(eventPanelBg),
-      "--event-panel-input-text": fg(eventPanelBg),
-      "--event-panel-placeholder": muted(eventPanelBg),
-      "--event-panel-muted-text": muted(eventPanelBg),
-    };
-  }
-  const w = APP_DERIVATION_DARK;
   const card = lift(w.cardLift);
   const popover = lift(w.popoverLift);
   const secondary = lift(w.secondaryLift);
   const mutedBg = lift(w.mutedLift);
   const accent = lift(w.accentLift);
-  const sidebar = recess(w.sidebarRecess);
+  const sidebar = lift(w.sidebarLift);
   const sidebarAccent = lift(w.sidebarAccentLift);
   return {
     "--background": canvas,
@@ -716,13 +651,16 @@ export function deriveCalendarTokens(
   base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink, calCanvas } = sources;
-  const w = base === "light" ? CAL_DERIVATION_LIGHT : CAL_DERIVATION_DARK;
   return {
     "--cal-bg": calCanvas,
     "--cal-header-bg": canvas,
     "--cal-gridline": pickReadableBorder(calCanvas, ink, { target: 3 }),
     "--cal-time-label": pickReadableMuted(canvas, ink, { target: 3 }),
-    "--cal-timeline-rail": liftTowardInk(canvas, ink, w.timelineRailLift),
+    "--cal-timeline-rail": liftTowardInk(
+      canvas,
+      ink,
+      CAL_DERIVATION.timelineRailLift,
+    ),
   };
 }
 

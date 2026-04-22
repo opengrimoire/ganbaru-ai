@@ -141,10 +141,16 @@ describe("deriveAppTokens", () => {
     expect(dark["--destructive"]).toBe(DARK_SOURCES.destructive);
   });
 
-  it("fixes card and popover to pure white in light mode", () => {
+  it("lifts card and popover away from canvas toward ink", () => {
     const derived = deriveAppTokens(LIGHT_SOURCES, "light");
-    expect(derived["--card"]).toBe("#FFFFFF");
-    expect(derived["--popover"]).toBe("#FFFFFF");
+    expect(derived["--card"]).not.toBe(LIGHT_SOURCES.canvas);
+    expect(derived["--popover"]).not.toBe(LIGHT_SOURCES.canvas);
+    expect(
+      contrastRatio(derived["--card"], LIGHT_SOURCES.canvas),
+    ).toBeGreaterThan(1);
+    expect(
+      contrastRatio(derived["--popover"], derived["--card"]),
+    ).toBeGreaterThan(1);
   });
 
   it("re-derives live when canvas changes", () => {
