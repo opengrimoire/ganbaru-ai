@@ -18,20 +18,21 @@ const NAME_SUFFIX_CAP = 999;
 
 /**
  * Deep-copy a theme, replacing its identity (id + displayName) with the
- * supplied values. The clone always comes out in Quick-colors mode:
+ * supplied values. The clone always carries a `sources` palette:
  *
- * - If the source carries a `sources` palette, copy it verbatim.
+ * - If the source has one, copy it verbatim.
  * - Otherwise synthesize sources by sampling canvas, ink, primary,
- *   destructive, and calCanvas from the source's resolved tokens (base
- *   defaults filled in for any token the source did not override).
+ *   destructive, confirm, and warning from the source's resolved tokens.
+ *   Calendar canvas is not a source: it auto-derives from the app canvas
+ *   via a direction-aware OKLab ΔL offset and is pinnable through
+ *   `calendarTokenOverrides["--cal-bg"]` when the user wants to isolate it.
  *
- * Synthesizing on source-less sources makes the common path (duplicate a
- * built-in, then tweak Quick colors) behave as the user expects: edits to
- * canvas or ink propagate through the derived palette instead of being
- * silently shadowed by pinned overrides. Explicit overrides on the source
- * are preserved as pinned tokens so surgical edits do not vanish on
- * duplicate. Seeds always snapshot the full resolved set so per-row reset
- * restores what the source looked like at clone time.
+ * Explicit overrides on the source are preserved verbatim, but no new
+ * identity overrides are generated: the derivation is already calibrated
+ * to reproduce the dark built-in's surface hierarchy on any canvas, so
+ * the clone naturally tracks its sources. Editing a source (e.g. canvas)
+ * on the clone cascades through the full surface stack without fighting
+ * pinned tokens. Seeds snapshot the resolved set for per-row reset.
  */
 export function cloneTheme(
   source: Theme,
@@ -62,23 +63,23 @@ export function cloneTheme(
       destructive: resolvedApp["--destructive"],
       confirm: resolvedApp["--action-confirm"],
       warning: resolvedApp["--status-tentative"],
-      calCanvas: resolvedCal["--cal-bg"],
     };
   }
   next.seedSources = { ...next.sources };
-  if (
-    source.appTokenOverrides &&
-    Object.keys(source.appTokenOverrides).length > 0
-  ) {
-    next.appTokenOverrides = { ...source.appTokenOverrides };
-    next.seedAppTokenOverrides = { ...source.appTokenOverrides };
+
+  if (source.appTokenOverrides) {
+    const copy = { ...source.appTokenOverrides };
+    if (Object.keys(copy).length > 0) {
+      next.appTokenOverrides = copy;
+      next.seedAppTokenOverrides = { ...copy };
+    }
   }
-  if (
-    source.calendarTokenOverrides &&
-    Object.keys(source.calendarTokenOverrides).length > 0
-  ) {
-    next.calendarTokenOverrides = { ...source.calendarTokenOverrides };
-    next.seedCalendarTokenOverrides = { ...source.calendarTokenOverrides };
+  if (source.calendarTokenOverrides) {
+    const copy = { ...source.calendarTokenOverrides };
+    if (Object.keys(copy).length > 0) {
+      next.calendarTokenOverrides = copy;
+      next.seedCalendarTokenOverrides = { ...copy };
+    }
   }
   return next;
 }
@@ -182,7 +183,6 @@ export function synthesizeSeedsIfMissing(theme: Theme): Theme {
       destructive: resolvedApp["--destructive"],
       confirm: resolvedApp["--action-confirm"],
       warning: resolvedApp["--status-tentative"],
-      calCanvas: resolvedCal["--cal-bg"],
     };
   }
   if (

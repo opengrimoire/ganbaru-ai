@@ -244,7 +244,6 @@ describe("luminance-driven base detection", () => {
         destructive: "#B42318",
         confirm: "#047857",
         warning: "#B45309",
-        calCanvas: "#FFFFFF",
       },
     };
     expect(resolveCanvas(theme).toLowerCase()).toBe("#faf7f2");
@@ -264,7 +263,6 @@ describe("luminance-driven base detection", () => {
         destructive: "#B42318",
         confirm: "#047857",
         warning: "#B45309",
-        calCanvas: "#FFFFFF",
       },
       appTokenOverrides: { "--background": "#101010" },
     };
@@ -285,7 +283,6 @@ describe("luminance-driven base detection", () => {
         destructive: "#B42318",
         confirm: "#047857",
         warning: "#B45309",
-        calCanvas: "#FFFFFF",
       },
     };
     expect(isThemeDark(theme)).toBe(false);
@@ -305,13 +302,16 @@ describe("luminance-driven base detection", () => {
         destructive: "#F06060",
         confirm: "#44C48A",
         warning: "#F5B143",
-        calCanvas: "#0E0F11",
       },
     };
     expect(isThemeDark(theme)).toBe(true);
   });
 
-  it("isThemeCalendarDark keys off calCanvas, not canvas", () => {
+  it("isThemeCalendarDark keys off the pinned --cal-bg override", () => {
+    // Calendar canvas is no longer a source: by default it auto-derives
+    // from the app canvas. A user can still pin it to a divergent color
+    // via calendarTokenOverrides["--cal-bg"], which is what drives
+    // isThemeCalendarDark independently of the app canvas.
     const theme: Theme = {
       id: "split",
       displayName: "Bright app, dark cal",
@@ -325,8 +325,8 @@ describe("luminance-driven base detection", () => {
         destructive: "#B42318",
         confirm: "#047857",
         warning: "#B45309",
-        calCanvas: "#0E0F11",
       },
+      calendarTokenOverrides: { "--cal-bg": "#0E0F11" },
     };
     expect(isThemeDark(theme)).toBe(false);
     expect(isThemeCalendarDark(theme)).toBe(true);

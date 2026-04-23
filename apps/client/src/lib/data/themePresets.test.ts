@@ -76,12 +76,15 @@ describe("THEME_PRESETS", () => {
         }
       });
 
-      it("keeps calendar gridline at or above 3:1 against cal canvas", () => {
+      it("keeps calendar gridline at or above 1.4:1 against cal canvas", () => {
+        // Gridline target is 1.4:1 (not 3:1) so cloned themes inherit
+        // the built-in's subtle gridline style. Mirrors the derivation
+        // constant in `themes.ts`.
         const ratio = contrastRatio(
           resolvedCal["--cal-gridline"],
           resolvedCal["--cal-bg"],
         );
-        expect(ratio).toBeGreaterThanOrEqual(3.0);
+        expect(ratio).toBeGreaterThanOrEqual(1.4);
       });
 
       it("parks calendar time label inside [3.0, 4.5] against cal header", () => {

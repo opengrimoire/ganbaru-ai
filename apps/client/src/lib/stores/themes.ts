@@ -1,10 +1,10 @@
 import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
-  blendHex,
   pickReadableBorder,
   pickReadableForeground,
   pickReadableMuted,
   relativeLuminance,
+  shiftPerceptualL,
 } from "$lib/components/ui/colorMath";
 
 /**
@@ -14,12 +14,16 @@ import {
 export type ThemeId = string;
 
 /**
- * Seven source colors that drive most of the shell palette through the
+ * Six source colors that drive most of the shell palette through the
  * derivation formulas in {@link deriveAppTokens} / {@link deriveCalendarTokens}.
  *
  * - **canvas:** app background. The color visible in framing gaps and the
  *   Settings modal; also the reference the other app surfaces lift toward
- *   ink from.
+ *   ink from. Also drives calendar canvas by a direction-aware OKLab ΔL
+ *   (darker for dark canvases, slightly brighter for light) so the
+ *   calendar reads as a distinct surface without requiring a separate
+ *   source color. Users can still isolate `--cal-bg` through
+ *   `calendarTokenOverrides` when they want a fully independent value.
  * - **ink:** text base. Default text color and the color every "lifted"
  *   surface mixes a small fraction of to tint it. Also drives secondary
  *   text tokens (form indicator, pomodoro idle caption, event panel text).
@@ -30,9 +34,6 @@ export type ThemeId = string;
  *   button (save, active scope pill) and accepted attendance status.
  * - **warning:** caution signal. Identity-drives the tentative attendance
  *   status today; reserved for future notification warnings and deadlines.
- * - **calCanvas:** calendar grid background; intentionally distinct from
- *   canvas so the calendar reads as a different surface from the rest of
- *   the app (both built-ins keep them apart).
  *
  * Themes without `sources` fall back to the base CSS tokens unchanged;
  * sources exist purely to let a small number of color choices drive a
@@ -45,7 +46,6 @@ export interface ThemeSources {
   destructive: string;
   confirm: string;
   warning: string;
-  calCanvas: string;
 }
 
 /**
@@ -514,58 +514,79 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_DISPLAY_NAME_LENGTH = 60;
 
 /**
- * Blend `c` toward `ink` by fraction `t`. A weight of 0 returns `c`
- * unchanged; 1 returns `ink`. Used to "lift" a base surface toward its
- * text color (slightly tinted grays), which is how every derived
- * surface relates to canvas.
- */
-function liftTowardInk(c: string, ink: string, t: number): string {
-  return blendHex(c, ink, 1 - t);
-}
-
-/**
- * Unified app-shell derivation weights. Both light and dark bases run
- * through the same table so cloning a light preset produces the same
- * quality of surface differentiation cloning a dark preset does. Every
- * surface lifts canvas toward ink; direction flips naturally based on
- * whether canvas or ink is lighter, but the magnitude stays the same
- * so symmetry holds. Foregrounds, borders, and muted captions are
- * computed from contrast math (see `deriveAppTokens`) rather than
- * empirical lifts.
+ * Signed OKLab lightness offsets that drive every derived surface.
  *
- * Before unification, light used smaller weights and pinned card /
- * popover to pure white; dark used bigger weights and recessed sidebar
- * toward black. The two tables converged on indistinguishable surfaces
- * in light clones and clearly-layered surfaces in dark clones, which
- * is the asymmetry this unification resolves.
+ * Each delta is measured from the dark built-in's actual OKLab lightness
+ * diff between `canvas` (#27282A) and the corresponding surface hex
+ * (card, popover, ...). Applying these deltas to any canvas via
+ * `shiftPerceptualL` reproduces the dark built-in's surface hierarchy
+ * regardless of canvas brightness:
+ *
+ * - card / popover / accent / secondary / muted lift upward
+ * - sidebar recedes below canvas so the title bar frames the app (the
+ *   "contrarian" step that made the dark built-in read as layered)
+ * - event panel sits just above canvas, and event-panel-contrast sits
+ *   just below, keeping the panel's recessed band visible on any canvas
+ *
+ * Before this table, the derivation blended surfaces toward ink with a
+ * single positive weight (`liftTowardInk(canvas, ink, t)`), which cannot
+ * represent "sidebar moves away from ink" and collapsed the light-base
+ * clone into a flat stack. Switching to signed OKLab ΔL lets a single
+ * table describe the intent ("this surface is X steps lighter/darker
+ * than canvas") without depending on which direction ink sits.
+ *
+ * Near-white or near-black canvases clamp at the gamut boundary inside
+ * `shiftPerceptualL`, so the hierarchy degrades gracefully instead of
+ * wrapping. Foregrounds, borders, and muted captions are recomputed
+ * from contrast math so legibility survives the clamp.
  */
 const APP_DERIVATION = {
-  cardLift: 0.04,
-  popoverLift: 0.07,
-  secondaryLift: 0.08,
-  mutedLift: 0.08,
-  accentLift: 0.11,
-  sidebarLift: 0.14,
-  sidebarAccentLift: 0.12,
-  eventPanelBgLift: 0.03,
-  eventPanelContrastToBlack: 0.06,
+  cardDeltaL: +0.028,
+  popoverDeltaL: +0.056,
+  secondaryDeltaL: +0.048,
+  mutedDeltaL: +0.048,
+  accentDeltaL: +0.077,
+  sidebarDeltaL: -0.039,
+  sidebarAccentDeltaL: +0.077,
+  eventPanelBgDeltaL: +0.013,
+  eventPanelContrastDeltaL: -0.021,
 } as const;
 
+/**
+ * Calendar-surface derivation offsets.
+ *
+ * `calCanvasDarkDeltaL` / `calCanvasLightDeltaL` push `--cal-bg` away from
+ * canvas in a direction-aware way: dark canvases produce a darker calendar
+ * surface (matches the dark built-in's recessed grid), light canvases
+ * produce a slightly brighter one (matches the light built-in's paper-on-
+ * paper look). Magnitudes are asymmetric because that's what the built-ins
+ * themselves do: the dark step is nearly 4x larger than the light step.
+ *
+ * `timelineRailDarkDeltaL` / `timelineRailLightDeltaL` elevate or recede
+ * the empty-track band behind pomodoro events relative to the calendar
+ * surface (not the app canvas), so the rail inherits the same tint as
+ * `--cal-bg` and reads as a tick-mark gray instead of drifting toward
+ * the app canvas. Calibrated from the built-ins: dark cal-bg lifts the
+ * rail above the surface, light cal-bg recesses it below.
+ */
 const CAL_DERIVATION = {
-  timelineRailLift: 0.12,
+  calCanvasDarkDeltaL: -0.173,
+  calCanvasLightDeltaL: +0.044,
+  timelineRailDarkDeltaL: +0.183,
+  timelineRailLightDeltaL: -0.072,
 } as const;
 
 /**
  * Derive every app-shell token from a source palette. Every surface
  * (card, popover, secondary, muted, accent, sidebar, event panel)
- * lifts canvas toward ink by the same fractional weight regardless of
- * the cosmetic base label. Direction flips naturally with whichever of
- * canvas/ink is brighter. Foregrounds, borders, and muted captions are
- * recomputed from contrast math so the pairing stays legible regardless
- * of which sources the user picks: `pickReadableForeground` guarantees
- * AA 4.5:1 on body text, `pickReadableBorder` parks borders at 3:1, and
- * `pickReadableMuted` walks captions down to exactly 3:1 so they recede
- * without vanishing.
+ * moves canvas by a per-token OKLab ΔL offset calibrated from the dark
+ * built-in, so the same "card above canvas, sidebar below" hierarchy
+ * shows on every canvas regardless of brightness. Foregrounds, borders,
+ * and muted captions are recomputed from contrast math so the pairing
+ * stays legible regardless of which sources the user picks:
+ * `pickReadableForeground` guarantees AA 4.5:1 on body text,
+ * `pickReadableBorder` parks borders at 3:1, and `pickReadableMuted`
+ * walks captions down to exactly 3:1 so they recede without vanishing.
  *
  * The `base` parameter is kept for call-site compatibility with the
  * current resolver path but is intentionally unused: toggling the label
@@ -580,32 +601,23 @@ export function deriveAppTokens(
   _base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink, primary, destructive, confirm, warning } = sources;
-  const w = APP_DERIVATION;
-  const lift = (t: number) => liftTowardInk(canvas, ink, t);
+  const d = APP_DERIVATION;
+  const shift = (deltaL: number) => shiftPerceptualL(canvas, deltaL);
   const fg = (bg: string, target?: number) =>
     pickReadableForeground(bg, { ink, canvas, target });
   const muted = (bg: string) => pickReadableMuted(bg, ink, { target: 3 });
   // Pomodoro idle overlay paints a full-screen black surface; tokens over
   // it pair against pure black rather than against canvas.
   const idleBg = "#000000";
-  const card = lift(w.cardLift);
-  const popover = lift(w.popoverLift);
-  const secondary = lift(w.secondaryLift);
-  const mutedBg = lift(w.mutedLift);
-  const accent = lift(w.accentLift);
-  const sidebar = lift(w.sidebarLift);
-  const sidebarAccent = lift(w.sidebarAccentLift);
-  const eventPanelBg = lift(w.eventPanelBgLift);
-  // event-panel-contrast is always a touch darker than event-panel-bg.
-  // Blending toward pure black (rather than toward ink) keeps that
-  // "recessed band behind the panel" look symmetric across bases: on a
-  // light canvas it deepens toward ink; on a dark canvas it recesses
-  // past canvas toward black.
-  const eventPanelContrast = blendHex(
-    eventPanelBg,
-    "#000000",
-    w.eventPanelContrastToBlack,
-  );
+  const card = shift(d.cardDeltaL);
+  const popover = shift(d.popoverDeltaL);
+  const secondary = shift(d.secondaryDeltaL);
+  const mutedBg = shift(d.mutedDeltaL);
+  const accent = shift(d.accentDeltaL);
+  const sidebar = shift(d.sidebarDeltaL);
+  const sidebarAccent = shift(d.sidebarAccentDeltaL);
+  const eventPanelBg = shift(d.eventPanelBgDeltaL);
+  const eventPanelContrast = shift(d.eventPanelContrastDeltaL);
   return {
     "--background": canvas,
     "--foreground": fg(canvas),
@@ -657,29 +669,44 @@ export function deriveAppTokens(
 /**
  * Derive the calendar-shell tokens that can be computed from sources.
  *
- * Only returns entries for the derivable tokens (bg, header bg, gridline,
- * time label, timeline rail). The semantic tokens (today circle, current
- * time, timeline break, timeline focus) are intentionally omitted: those
- * colors carry meaning (today marker, red for "now", green for focus)
- * that does not reduce to the source palette, so the resolver falls
- * through to the base CSS defaults for them.
+ * `--cal-bg` is auto-tracked from `canvas` via a direction-aware OKLab ΔL
+ * so editing the app canvas cascades through the calendar surface by
+ * default. Users who want a calendar surface that does NOT track canvas
+ * can isolate `--cal-bg` through `calendarTokenOverrides`: the resolver
+ * walks override first, so a pinned value wins over the auto-derived one.
+ *
+ * Gridlines (and the timeline-break marker) are parked just above a
+ * minimum-visibility contrast against `--cal-bg`. The target is
+ * intentionally subtle (1.4:1) to match how the dark built-in renders its
+ * grid: a 3:1 target produces gridlines noticeably more prominent than
+ * the built-in's curated hex, which users read as "uglier" on clones.
+ *
+ * The semantic tokens (current time, timeline focus) are intentionally
+ * omitted: those colors carry hard-coded meaning (red for "now", green
+ * for focus) that does not reduce to the source palette, so the resolver
+ * falls through to the base CSS defaults for them.
  */
 export function deriveCalendarTokens(
   sources: ThemeSources,
   _base: "light" | "dark",
 ): Record<string, string> {
-  const { canvas, ink, calCanvas } = sources;
+  const { canvas, ink } = sources;
+  const canvasIsDark = relativeLuminance(canvas) < 0.5;
+  const calCanvasDelta = canvasIsDark
+    ? CAL_DERIVATION.calCanvasDarkDeltaL
+    : CAL_DERIVATION.calCanvasLightDeltaL;
+  const calCanvas = shiftPerceptualL(canvas, calCanvasDelta);
+  const calCanvasIsDark = relativeLuminance(calCanvas) < 0.5;
+  const timelineRailDelta = calCanvasIsDark
+    ? CAL_DERIVATION.timelineRailDarkDeltaL
+    : CAL_DERIVATION.timelineRailLightDeltaL;
   const todayCircle = ink;
   return {
     "--cal-bg": calCanvas,
     "--cal-header-bg": canvas,
-    "--cal-gridline": pickReadableBorder(calCanvas, ink, { target: 3 }),
+    "--cal-gridline": pickReadableBorder(calCanvas, ink, { target: 1.4 }),
     "--cal-time-label": pickReadableMuted(canvas, ink, { target: 3 }),
-    "--cal-timeline-rail": liftTowardInk(
-      canvas,
-      ink,
-      CAL_DERIVATION.timelineRailLift,
-    ),
+    "--cal-timeline-rail": shiftPerceptualL(calCanvas, timelineRailDelta),
     "--cal-today-circle": todayCircle,
     "--cal-today-circle-text": pickReadableForeground(todayCircle, {
       ink,
@@ -764,14 +791,18 @@ export function resolveCanvas(theme: Theme): string {
 /**
  * Resolve the effective calendar background. Used to pick the event-tile
  * palette and calendar-specific outline mixes based on the actual surface
- * rather than the theme's cosmetic `base` label.
+ * rather than the theme's cosmetic `base` label. Walks the same three
+ * layers the token pipeline uses: explicit override first, then the
+ * source-derived value (direction-aware shift of the app canvas), then
+ * the base CSS default.
  */
 export function resolveCalCanvas(theme: Theme): string {
-  return (
-    theme.calendarTokenOverrides?.["--cal-bg"] ??
-    theme.sources?.calCanvas ??
-    BASE_CALENDAR_TOKENS[theme.base]["--cal-bg"]
-  );
+  const override = theme.calendarTokenOverrides?.["--cal-bg"];
+  if (override) return override;
+  if (theme.sources) {
+    return deriveCalendarTokens(theme.sources, theme.base)["--cal-bg"];
+  }
+  return BASE_CALENDAR_TOKENS[theme.base]["--cal-bg"];
 }
 
 /** True when the resolved app canvas crosses into dark-mode territory. */
@@ -852,7 +883,6 @@ const SOURCE_KEY_ORDER: readonly (keyof ThemeSources)[] = [
   "destructive",
   "confirm",
   "warning",
-  "calCanvas",
 ];
 
 function orderedSources(sources: ThemeSources): Record<string, string> {
@@ -1000,6 +1030,27 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     }
   }
 
+  // Migrate legacy themes that stored calCanvas as a 7th source. In the
+  // current model calendar-bg auto-tracks canvas; a user who had explicitly
+  // picked a calCanvas before this change meant "keep the calendar surface
+  // independent of canvas", which maps cleanly to an override on --cal-bg.
+  // Only migrate when no override already exists so we don't clobber a
+  // pinned value the user set more recently. Applied to seedSources too so
+  // per-row reset still restores the clone-time value.
+  const legacyCalCanvas = extractLegacyCalCanvas(input.sources);
+  let migratedCalOverrides = cleanCalOverrides;
+  if (legacyCalCanvas && !migratedCalOverrides?.["--cal-bg"]) {
+    migratedCalOverrides = { ...(migratedCalOverrides ?? {}), "--cal-bg": legacyCalCanvas };
+  }
+  const legacySeedCalCanvas = extractLegacyCalCanvas(input.seedSources);
+  let migratedSeedCalOverrides = cleanSeedCalOverrides;
+  if (legacySeedCalCanvas && !migratedSeedCalOverrides?.["--cal-bg"]) {
+    migratedSeedCalOverrides = {
+      ...(migratedSeedCalOverrides ?? {}),
+      "--cal-bg": legacySeedCalCanvas,
+    };
+  }
+
   if (errors.length > 0) return { ok: false, errors };
 
   const theme: Theme = {
@@ -1013,8 +1064,8 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
   if (cleanAppOverrides && Object.keys(cleanAppOverrides).length > 0) {
     theme.appTokenOverrides = cleanAppOverrides;
   }
-  if (cleanCalOverrides && Object.keys(cleanCalOverrides).length > 0) {
-    theme.calendarTokenOverrides = cleanCalOverrides;
+  if (migratedCalOverrides && Object.keys(migratedCalOverrides).length > 0) {
+    theme.calendarTokenOverrides = migratedCalOverrides;
   }
   if (cleanSeedApp && Object.keys(cleanSeedApp).length > 0) {
     theme.seedAppTokens = cleanSeedApp;
@@ -1029,11 +1080,22 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
   if (cleanSeedAppOverrides && Object.keys(cleanSeedAppOverrides).length > 0) {
     theme.seedAppTokenOverrides = cleanSeedAppOverrides;
   }
-  if (cleanSeedCalOverrides && Object.keys(cleanSeedCalOverrides).length > 0) {
-    theme.seedCalendarTokenOverrides = cleanSeedCalOverrides;
+  if (migratedSeedCalOverrides && Object.keys(migratedSeedCalOverrides).length > 0) {
+    theme.seedCalendarTokenOverrides = migratedSeedCalOverrides;
   }
   if (cleanSeedBlend) theme.seedBlendCanvas = cleanSeedBlend;
   return { ok: true, theme };
+}
+
+/**
+ * Pull a legacy `calCanvas` field out of an unknown sources-shaped value.
+ * Returns the hex when valid, otherwise undefined. Used to migrate themes
+ * written before calCanvas moved from a source to an auto-derived token.
+ */
+function extractLegacyCalCanvas(source: unknown): string | undefined {
+  if (!isPlainObject(source)) return undefined;
+  const value = (source as Record<string, unknown>).calCanvas;
+  return isHexColor(value) ? value : undefined;
 }
 
 function sanitizeSeedPalette(
@@ -1086,8 +1148,6 @@ function defaultSourceValue(
       return BASE_APP_TOKENS[base]["--action-confirm"];
     case "warning":
       return BASE_APP_TOKENS[base]["--status-tentative"];
-    case "calCanvas":
-      return BASE_CALENDAR_TOKENS[base]["--cal-bg"];
   }
 }
 

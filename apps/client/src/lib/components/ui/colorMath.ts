@@ -360,6 +360,25 @@ export function oklabToHex(L: number, a: number, b: number): string {
 }
 
 /**
+ * Shift a hex color's OKLab lightness by `deltaL` (absolute, not relative).
+ * Positive values brighten, negative values darken, the color's hue and
+ * chroma are preserved. `L` is clamped to `[0, 1]`, so near-white bgs
+ * shifted positive or near-black bgs shifted negative stay in gamut
+ * instead of saturating at the endpoint. Invalid input falls back to the
+ * original hex so callers never receive `null`.
+ *
+ * Used by `deriveAppTokens` to walk canvas by per-token signed offsets
+ * calibrated from the dark built-in, producing the same surface hierarchy
+ * (card above canvas, sidebar below) on any custom canvas.
+ */
+export function shiftPerceptualL(hex: string, deltaL: number): string {
+  const lab = hexToOklab(hex);
+  if (!lab) return hex;
+  const nextL = Math.max(0, Math.min(1, lab.L + deltaL));
+  return oklabToHex(nextL, lab.a, lab.b);
+}
+
+/**
  * Returns whichever of `#000000` / `#ffffff` has higher contrast against
  * `bg`. For mid-luminance bgs (around #808080) this is counterintuitive:
  * black actually beats white because luminance is nonlinear. Using this
@@ -419,10 +438,14 @@ function walkToContrast(bg: string, anchor: string, target: number): string {
 /**
  * Pick a foreground color that meets `target` contrast (default 4.5 =
  * WCAG AA body text) against `bg`, preferring the theme's `ink` and
- * `canvas` anchors first. If neither anchor meets the target, walks
- * the higher-contrast anchor's OKLab lightness until it does. Returns
- * the saturating endpoint (#fff or #000) only when `target` is
- * unreachable at this bg's luminance.
+ * `canvas` anchors first. When neither anchor meets the target, prefer
+ * the saturating endpoint (`#000000` or `#ffffff`) if it meets target:
+ * a chroma-preserving OKLab walk from the closer anchor would land at
+ * a just-enough value still close to `bg` in luminance, which looks
+ * muddy even though it technically meets target. The endpoint snaps
+ * decisively ("switch to dark on a light surface, switch to light on a
+ * dark surface"). Only when the endpoint also fails does the walk run,
+ * preserving hue intent for gamut-limited bgs.
  */
 export function pickReadableForeground(
   bg: string,
@@ -433,6 +456,8 @@ export function pickReadableForeground(
   if (inkRatio >= target) return opts.ink;
   const canvasRatio = contrastRatio(bg, opts.canvas);
   if (canvasRatio >= target) return opts.canvas;
+  const endpoint = bestEndpoint(bg);
+  if (contrastRatio(bg, endpoint) >= target) return endpoint;
   const anchor = inkRatio >= canvasRatio ? opts.ink : opts.canvas;
   return walkToContrast(bg, anchor, target);
 }

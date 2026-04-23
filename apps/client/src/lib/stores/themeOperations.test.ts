@@ -67,7 +67,11 @@ describe("cloneTheme", () => {
     expect(copy.calendarTokenOverrides).not.toBe(source.calendarTokenOverrides);
   });
 
-  it("leaves overrides undefined when the source has none", () => {
+  it("does not invent identity overrides on a sourceless clone", () => {
+    // The clone relies on the derivation producing the same surface
+    // hierarchy as the built-in on any canvas. Pinning derived tokens
+    // would prevent canvas edits from cascading, so overrides must
+    // stay empty unless the source itself carried them.
     const source = makeTheme({ base: "dark" });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.appTokenOverrides).toBeUndefined();
@@ -84,11 +88,14 @@ describe("cloneTheme", () => {
       destructive: BASE_APP_TOKENS.light["--destructive"],
       confirm: BASE_APP_TOKENS.light["--action-confirm"],
       warning: BASE_APP_TOKENS.light["--status-tentative"],
-      calCanvas: BASE_CALENDAR_TOKENS.light["--cal-bg"],
     });
   });
 
-  it("synthesizes sources from explicit overrides when the source has them", () => {
+  it("synthesizes sources from app overrides and preserves cal-bg as a pinned override", () => {
+    // Calendar canvas is no longer a source: it auto-derives from
+    // `sources.canvas`. A user-pinned --cal-bg is preserved through
+    // `calendarTokenOverrides` so the clone keeps that surface color
+    // isolated from the cascade.
     const source = makeTheme({
       base: "dark",
       appTokenOverrides: {
@@ -100,7 +107,7 @@ describe("cloneTheme", () => {
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.sources?.canvas).toBe("#111111");
     expect(copy.sources?.ink).toBe("#eeeeee");
-    expect(copy.sources?.calCanvas).toBe("#222222");
+    expect(copy.calendarTokenOverrides?.["--cal-bg"]).toBe("#222222");
   });
 
   it("preserves sources verbatim when the source already has them", () => {
@@ -111,7 +118,6 @@ describe("cloneTheme", () => {
       destructive: "#ff0033",
       confirm: "#00cc88",
       warning: "#f5a524",
-      calCanvas: "#0a0a0a",
     };
     const source = makeTheme({ sources: theSources });
     const copy = cloneTheme(source, "fork", "Fork");
@@ -187,8 +193,17 @@ describe("cloneTheme", () => {
     );
   });
 
-  it("leaves override seeds undefined when the source has no overrides", () => {
-    const source = makeTheme();
+  it("leaves override seeds undefined when the source has sources and no overrides", () => {
+    const source = makeTheme({
+      sources: {
+        canvas: "#111111",
+        ink: "#eeeeee",
+        primary: "#00aaff",
+        destructive: "#ff0033",
+        confirm: "#00cc88",
+        warning: "#f5a524",
+      },
+    });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.seedAppTokenOverrides).toBeUndefined();
     expect(copy.seedCalendarTokenOverrides).toBeUndefined();
@@ -338,7 +353,6 @@ describe("synthesizeSeedsIfMissing", () => {
         destructive: "#ff0033",
         confirm: "#00cc88",
         warning: "#f5a524",
-        calCanvas: "#0a0a0a",
       },
       seedSources: {
         canvas: "#222222",
@@ -347,7 +361,6 @@ describe("synthesizeSeedsIfMissing", () => {
         destructive: "#ee0022",
         confirm: "#00bb77",
         warning: "#e49413",
-        calCanvas: "#090909",
       },
     });
     const result = synthesizeSeedsIfMissing(existing);
@@ -365,7 +378,6 @@ describe("synthesizeSeedsIfMissing", () => {
       destructive: BASE_APP_TOKENS.light["--destructive"],
       confirm: BASE_APP_TOKENS.light["--action-confirm"],
       warning: BASE_APP_TOKENS.light["--status-tentative"],
-      calCanvas: BASE_CALENDAR_TOKENS.light["--cal-bg"],
     });
   });
 
@@ -377,7 +389,6 @@ describe("synthesizeSeedsIfMissing", () => {
       destructive: "#ff0033",
       confirm: "#00cc88",
       warning: "#f5a524",
-      calCanvas: "#0a0a0a",
     };
     const legacy = makeTheme({ sources: src });
     const result = synthesizeSeedsIfMissing(legacy);

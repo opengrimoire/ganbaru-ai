@@ -1,7 +1,7 @@
 /**
  * Curated theme presets surfaced by the "New theme" picker.
  *
- * Each preset is a full set of sources (the seven colors that feed
+ * Each preset is a full set of sources (the six colors that feed
  * `deriveAppTokens` / `deriveCalendarTokens`) plus a base mode. A user that
  * picks a preset starts from a palette pre-validated to meet AA contrast
  * across every derived foreground / border / gridline: see
@@ -35,7 +35,6 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       destructive: "#B42318",
       confirm: "#047857",
       warning: "#B45309",
-      calCanvas: "#FFFFFF",
     },
   },
   {
@@ -50,7 +49,6 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       destructive: "#F06060",
       confirm: "#44C48A",
       warning: "#F5B143",
-      calCanvas: "#0E0F11",
     },
   },
   {
@@ -65,7 +63,6 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       destructive: "#922D18",
       confirm: "#5A6B1C",
       warning: "#B07410",
-      calCanvas: "#FBF3E0",
     },
   },
   {
@@ -80,7 +77,6 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       destructive: "#BF616A",
       confirm: "#6A8B5C",
       warning: "#B58F3C",
-      calCanvas: "#FFFFFF",
     },
   },
   {
@@ -95,7 +91,6 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       destructive: "#FF6B6B",
       confirm: "#3BD482",
       warning: "#FFD666",
-      calCanvas: "#0A0A0A",
     },
   },
   {
@@ -110,7 +105,6 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       destructive: "#C24567",
       confirm: "#4F8365",
       warning: "#AC7330",
-      calCanvas: "#FFFFFF",
     },
   },
 ];

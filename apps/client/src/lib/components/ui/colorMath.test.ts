@@ -23,6 +23,7 @@ import {
   rgbToHex,
   rgbToHsv,
   rgbToOklab,
+  shiftPerceptualL,
 } from "./colorMath";
 
 describe("clampChannel", () => {
@@ -373,6 +374,67 @@ describe("rgbToOklab / oklabToRgb", () => {
   });
 });
 
+describe("shiftPerceptualL", () => {
+  it("returns the input unchanged when delta is zero (within rounding)", () => {
+    const samples = ["#27282a", "#f4f4f7", "#123456", "#a1b2c3", "#fe7733"];
+    for (const hex of samples) {
+      const shifted = shiftPerceptualL(hex, 0);
+      const original = hexToRgb(hex)!;
+      const back = hexToRgb(shifted)!;
+      expect(Math.abs(original.r - back.r)).toBeLessThanOrEqual(1);
+      expect(Math.abs(original.g - back.g)).toBeLessThanOrEqual(1);
+      expect(Math.abs(original.b - back.b)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("clamps L at 1 when shifting bright canvases positive", () => {
+    expect(shiftPerceptualL("#ffffff", +0.5)).toBe("#ffffff");
+    // near-white clamps gracefully instead of wrapping
+    const shifted = shiftPerceptualL("#f8f8f8", +0.5);
+    expect(hexToOklab(shifted)!.L).toBeCloseTo(1, 2);
+  });
+
+  it("clamps L at 0 when shifting dark canvases negative", () => {
+    expect(shiftPerceptualL("#000000", -0.5)).toBe("#000000");
+    const shifted = shiftPerceptualL("#111111", -0.5);
+    expect(hexToOklab(shifted)!.L).toBeCloseTo(0, 2);
+  });
+
+  it("monotonically increases L for a positive delta from a mid-luminance canvas", () => {
+    const canvas = "#27282a";
+    const baseL = hexToOklab(canvas)!.L;
+    for (const d of [0.02, 0.05, 0.1, 0.2]) {
+      const shifted = shiftPerceptualL(canvas, d);
+      const shiftedL = hexToOklab(shifted)!.L;
+      expect(shiftedL).toBeGreaterThan(baseL);
+      expect(shiftedL).toBeCloseTo(baseL + d, 2);
+    }
+  });
+
+  it("monotonically decreases L for a negative delta from a mid-luminance canvas", () => {
+    const canvas = "#7a7a80";
+    const baseL = hexToOklab(canvas)!.L;
+    for (const d of [-0.02, -0.05, -0.1, -0.2]) {
+      const shifted = shiftPerceptualL(canvas, d);
+      const shiftedL = hexToOklab(shifted)!.L;
+      expect(shiftedL).toBeLessThan(baseL);
+      expect(shiftedL).toBeCloseTo(baseL + d, 2);
+    }
+  });
+
+  it("preserves hue and chroma, only lightness changes", () => {
+    const warm = "#c46a2b";
+    const lab = hexToOklab(warm)!;
+    const shifted = hexToOklab(shiftPerceptualL(warm, +0.1))!;
+    expect(shifted.a).toBeCloseTo(lab.a, 2);
+    expect(shifted.b).toBeCloseTo(lab.b, 2);
+  });
+
+  it("falls back to the input when hex is invalid", () => {
+    expect(shiftPerceptualL("not-a-color", 0.1)).toBe("not-a-color");
+  });
+});
+
 describe("pickReadableForeground", () => {
   it("returns ink when ink meets target", () => {
     expect(
@@ -388,15 +450,31 @@ describe("pickReadableForeground", () => {
     expect(fg).toBe("#ffffff");
   });
 
-  it("walks the higher-contrast anchor when both anchors fail", () => {
+  it("prefers the saturating endpoint when both anchors fail but an endpoint meets target", () => {
     // Very light bg with near-matching ink and canvas: both anchors fail
-    // target contrast, but walking ink's L downward reaches AA easily.
+    // target contrast. A chroma-preserving walk from the closer anchor
+    // would land at a just-enough gray close to bg in luminance (muddy);
+    // the endpoint flip gives decisive visual separation instead.
     const bg = "#fafafa";
     const fg = pickReadableForeground(bg, {
       ink: "#f0f0f0",
       canvas: "#e8e8e8",
     });
-    expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5 - 0.05);
+    expect(fg).toBe("#000000");
+    expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("prefers the endpoint over a chroma-preserving walk on warm pastels too", () => {
+    // Warm pastel bg with near-white canvas and a similar-tone ink: both
+    // fail 4.5:1. Endpoint snaps to #000000 rather than producing a dark
+    // warm-tinted gray that reads as murky on the pastel.
+    const bg = "#ffe5d0";
+    const fg = pickReadableForeground(bg, {
+      ink: "#e0c9b2",
+      canvas: "#ffffff",
+    });
+    expect(fg).toBe("#000000");
+    expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("handles the adversarial case where bg equals ink", () => {
