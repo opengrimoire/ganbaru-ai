@@ -1,10 +1,12 @@
 import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
+  contrastRatio,
+  pickBrightForeground,
   pickReadableBorder,
   pickReadableForeground,
-  pickReadableMuted,
   relativeLuminance,
   shiftPerceptualL,
+  walkFraction,
 } from "$lib/components/ui/colorMath";
 
 /**
@@ -517,8 +519,8 @@ const MAX_DISPLAY_NAME_LENGTH = 60;
  * Signed OKLab lightness offsets that drive every derived surface.
  *
  * Each delta is measured from the dark built-in's actual OKLab lightness
- * diff between `canvas` (#27282A) and the corresponding surface hex
- * (card, popover, ...). Applying these deltas to any canvas via
+ * diff between `canvas` (#27282A, L=0.2766) and the corresponding surface
+ * hex (card, popover, ...). Applying these deltas to any canvas via
  * `shiftPerceptualL` reproduces the dark built-in's surface hierarchy
  * regardless of canvas brightness:
  *
@@ -528,12 +530,11 @@ const MAX_DISPLAY_NAME_LENGTH = 60;
  * - event panel sits just above canvas, and event-panel-contrast sits
  *   just below, keeping the panel's recessed band visible on any canvas
  *
- * Before this table, the derivation blended surfaces toward ink with a
- * single positive weight (`liftTowardInk(canvas, ink, t)`), which cannot
- * represent "sidebar moves away from ink" and collapsed the light-base
- * clone into a flat stack. Switching to signed OKLab ΔL lets a single
- * table describe the intent ("this surface is X steps lighter/darker
- * than canvas") without depending on which direction ink sits.
+ * The identity `deriveAppTokens(darkSources) === BASE_APP_TOKENS.dark`
+ * holds on every shift-derived surface because the deltas are the
+ * measured BASE_APP_TOKENS.dark OKLab-L differences from canvas. Any
+ * custom canvas inherits the same relative surface stack by running
+ * these same deltas.
  *
  * Near-white or near-black canvases clamp at the gamut boundary inside
  * `shiftPerceptualL`, so the hierarchy degrades gracefully instead of
@@ -541,39 +542,85 @@ const MAX_DISPLAY_NAME_LENGTH = 60;
  * from contrast math so legibility survives the clamp.
  */
 const APP_DERIVATION = {
-  cardDeltaL: +0.028,
-  popoverDeltaL: +0.056,
-  secondaryDeltaL: +0.048,
-  mutedDeltaL: +0.048,
-  accentDeltaL: +0.077,
-  sidebarDeltaL: -0.039,
-  sidebarAccentDeltaL: +0.077,
-  eventPanelBgDeltaL: +0.013,
-  eventPanelContrastDeltaL: -0.021,
+  cardDeltaL: +0.028345,
+  popoverDeltaL: +0.056046,
+  secondaryDeltaL: +0.048193,
+  mutedDeltaL: +0.048193,
+  accentDeltaL: +0.077214,
+  sidebarDeltaL: -0.039433,
+  sidebarAccentDeltaL: +0.077214,
+  eventPanelBgDeltaL: +0.012636,
+  eventPanelContrastDeltaL: -0.020696,
 } as const;
 
 /**
- * Calendar-surface derivation offsets.
+ * Per-token fractional walks calibrated from the dark built-in. Each
+ * value is the fraction of the way from the chosen foreground anchor
+ * toward the paired surface's OKLab lightness where BASE_APP_TOKENS.dark
+ * sits. A contrast-target walk ("park at 3:1") cannot reproduce these
+ * hexes because their contrast sits between 3:1 and AA (e.g.,
+ * --muted-foreground at 4.9:1 is too deep for the 3:1 picker's landing
+ * and too shallow for 4.5:1), so `walkFraction(fg, bg, f)` is used to
+ * park each token at its BASE fraction.
  *
- * `calCanvasDarkDeltaL` / `calCanvasLightDeltaL` push `--cal-bg` away from
- * canvas in a direction-aware way: dark canvases produce a darker calendar
- * surface (matches the dark built-in's recessed grid), light canvases
- * produce a slightly brighter one (matches the light built-in's paper-on-
- * paper look). Magnitudes are asymmetric because that's what the built-ins
- * themselves do: the dark step is nearly 4x larger than the light step.
- *
- * `timelineRailDarkDeltaL` / `timelineRailLightDeltaL` elevate or recede
- * the empty-track band behind pomodoro events relative to the calendar
- * surface (not the app canvas), so the rail inherits the same tint as
- * `--cal-bg` and reads as a tick-mark gray instead of drifting toward
- * the app canvas. Calibrated from the built-ins: dark cal-bg lifts the
- * rail above the surface, light cal-bg recesses it below.
+ * The chroma of the result comes from the foreground anchor (walk
+ * preserves fg's `a`, `b`), which yields identity on dark for any token
+ * whose BASE chroma is close to ink's. BASE hexes that were
+ * hand-tuned with off-ink chroma (e.g., the slightly warmer
+ * --event-panel-text) land within a few rgb units of the BASE hex.
+ */
+const APP_FRACTIONS = {
+  mutedForeground: 0.442563,
+  ring: 0.673365,
+  eventPanelText: 0.180110,
+  eventPanelInputText: 0.044202,
+  eventPanelPlaceholder: 0.180110,
+  eventPanelMutedText: 0.363909,
+  eventPanelDivider: 0.839033,
+  pomodoroIdleText: 0.244651,
+} as const;
+
+/**
+ * Lightness shift that maps `confirm` (source green) to the confirm
+ * foreground. Dark BASE confirm #065F46 (L=0.4318) pairs with
+ * --action-confirm-foreground #D1FAE5 (L=0.9505), a ΔL of +0.5187.
+ * Light BASE confirm #059669 (L=0.5960) shifts to L=1.1147 which
+ * clamps to #FFFFFF, matching BASE.light's white confirm-foreground.
+ * User-picked confirm colors get a pale tint of their own hue when
+ * dark enough, or clamp to white when bright.
+ */
+const CONFIRM_FG_DELTA_L = 0.518657;
+
+/**
+ * Calendar-surface derivation offsets, measured from the built-ins.
+ * - `calCanvasDarkDeltaL`: BASE.dark --cal-bg #131314 sits at ΔL -0.0894
+ *   below canvas #27282A.
+ * - `calCanvasLightDeltaL`: BASE.light --cal-bg #FFFFFF clamps to L=1,
+ *   ΔL +0.0320 above canvas #F4F4F7 (L=0.968). Asymmetric by design:
+ *   dark pulls cal-bg into a recessed framing; light pushes it to paper
+ *   white so the app canvas reads as a tinted border around it.
+ * - `timelineRailDarkDeltaL`: BASE.dark rail #3F3F46 sits at +0.1832
+ *   above the derived cal-bg, elevating the empty track behind events.
+ * - `timelineRailLightDeltaL`: BASE.light rail #E5E7EB sits at -0.0724
+ *   below cal-bg, recessing the track on a paper-white surface.
  */
 const CAL_DERIVATION = {
-  calCanvasDarkDeltaL: -0.173,
-  calCanvasLightDeltaL: +0.044,
-  timelineRailDarkDeltaL: +0.183,
-  timelineRailLightDeltaL: -0.072,
+  calCanvasDarkDeltaL: -0.089432,
+  calCanvasLightDeltaL: +0.031968,
+  timelineRailDarkDeltaL: +0.183151,
+  timelineRailLightDeltaL: -0.072415,
+} as const;
+
+/**
+ * Fractional walks for calendar tokens that land at specific OKLab-L
+ * recessions against `cal-bg`. Calibrated from BASE_CALENDAR_TOKENS.dark.
+ * --cal-time-label matches --muted-foreground's fraction (both land at
+ * the same BASE hex #9494A0). --cal-timeline-break sits deeper toward
+ * the cal-bg.
+ */
+const CAL_FRACTIONS = {
+  calTimeLabel: 0.362173,
+  calTimelineBreak: 0.518908,
 } as const;
 
 /**
@@ -585,8 +632,9 @@ const CAL_DERIVATION = {
  * and muted captions are recomputed from contrast math so the pairing
  * stays legible regardless of which sources the user picks:
  * `pickReadableForeground` guarantees AA 4.5:1 on body text,
- * `pickReadableBorder` parks borders at 3:1, and `pickReadableMuted`
- * walks captions down to exactly 3:1 so they recede without vanishing.
+ * `pickBrightForeground` snaps to pure white (or ink, or black) on status
+ * surfaces so signal colors read consistently, and `walkFraction` parks
+ * recessed captions at the exact OKLab-L position BASE.dark uses.
  *
  * The `base` parameter is kept for call-site compatibility with the
  * current resolver path but is intentionally unused: toggling the label
@@ -602,13 +650,30 @@ export function deriveAppTokens(
 ): Record<string, string> {
   const { canvas, ink, primary, destructive, confirm, warning } = sources;
   const d = APP_DERIVATION;
+  const f = APP_FRACTIONS;
   const shift = (deltaL: number) => shiftPerceptualL(canvas, deltaL);
-  const fg = (bg: string, target?: number) =>
+  const fg = (bg: string, target = 4.5) =>
     pickReadableForeground(bg, { ink, canvas, target });
-  const muted = (bg: string) => pickReadableMuted(bg, ink, { target: 3 });
+  // Direction-aware walk anchor. Recessed tokens (muted captions, rings,
+  // event-panel hint text, form indicator) must sit between their paired
+  // surface and a *visible* foreground, not between the surface and raw
+  // ink. When the user keeps a light ink but drags canvas to white, raw
+  // ink collapses against every near-white surface and walkFraction
+  // produces invisible light-gray text. Anchoring on a contrast-picked
+  // foreground for each bg flips direction with canvas so the walk always
+  // starts from a visible point. On BASE.dark (dark canvas + light ink),
+  // `pickReadableForeground` returns ink on every app surface, so
+  // dark-BASE identity is preserved.
+  const anchorFor = (bg: string) =>
+    pickReadableForeground(bg, { ink, canvas, target: 4.5 });
+  const walk = (bg: string, fraction: number) =>
+    walkFraction(anchorFor(bg), bg, fraction);
+  const bright = (bg: string, target = 4.5) =>
+    pickBrightForeground(bg, ink, target);
   // Pomodoro idle overlay paints a full-screen black surface; tokens over
   // it pair against pure black rather than against canvas.
   const idleBg = "#000000";
+  const canvasIsDark = relativeLuminance(canvas) < 0.5;
   const card = shift(d.cardDeltaL);
   const popover = shift(d.popoverDeltaL);
   const secondary = shift(d.secondaryDeltaL);
@@ -618,6 +683,16 @@ export function deriveAppTokens(
   const sidebarAccent = shift(d.sidebarAccentDeltaL);
   const eventPanelBg = shift(d.eventPanelBgDeltaL);
   const eventPanelContrast = shift(d.eventPanelContrastDeltaL);
+  // Confirm foreground: shift by the calibrated ΔL to reproduce BASE.dark's
+  // pale-green #D1FAE5 on #065F46 and BASE.light's white on #059669. When
+  // the source confirm is too bright for the shift to produce >=3:1 (e.g.,
+  // a pure bright-green source), fall back to a contrast-aware pick so
+  // button labels stay readable.
+  const confirmShift = shiftPerceptualL(confirm, CONFIRM_FG_DELTA_L);
+  const confirmFg =
+    contrastRatio(confirmShift, confirm) >= 3
+      ? confirmShift
+      : pickReadableForeground(confirm, { ink, canvas, target: 3 });
   return {
     "--background": canvas,
     "--foreground": fg(canvas),
@@ -626,43 +701,41 @@ export function deriveAppTokens(
     "--popover": popover,
     "--popover-foreground": fg(popover),
     "--primary": primary,
-    "--primary-foreground": fg(primary, 4.5),
+    "--primary-foreground": fg(primary),
     "--secondary": secondary,
     "--secondary-foreground": fg(secondary),
     "--muted": mutedBg,
-    "--muted-foreground": muted(mutedBg),
+    "--muted-foreground": walk(mutedBg, f.mutedForeground),
     "--accent": accent,
     "--accent-foreground": fg(accent),
     "--destructive": destructive,
-    "--destructive-foreground": fg(destructive),
-    "--ring": pickReadableBorder(canvas, ink, { target: 3 }),
+    "--destructive-foreground": bright(destructive, 3),
+    "--ring": walk(canvas, f.ring),
     "--sidebar": sidebar,
-    "--sidebar-foreground": fg(sidebar),
+    "--sidebar-foreground": bright(sidebar, 4.5),
     "--sidebar-accent": sidebarAccent,
-    "--sidebar-accent-foreground": fg(sidebarAccent),
+    "--sidebar-accent-foreground": bright(sidebarAccent, 4.5),
     "--action-confirm": confirm,
-    "--action-confirm-foreground": fg(confirm),
+    "--action-confirm-foreground": confirmFg,
     "--action-danger-armed": destructive,
-    "--action-danger-armed-foreground": fg(destructive),
+    "--action-danger-armed-foreground": bright(destructive, 3),
     "--status-accepted": confirm,
-    "--status-accepted-foreground": fg(confirm),
+    "--status-accepted-foreground": bright(confirm, 3),
     "--status-tentative": warning,
-    "--status-tentative-foreground": fg(warning),
+    "--status-tentative-foreground": "#FFFFFF",
     "--status-declined": destructive,
-    "--status-declined-foreground": fg(destructive),
-    "--form-indicator": muted(canvas),
-    "--pomodoro-idle-text": muted(idleBg),
-    "--pomodoro-idle-timer": fg(idleBg, 4.5),
+    "--status-declined-foreground": bright(destructive, 3),
+    "--form-indicator": anchorFor(canvas),
+    "--pomodoro-idle-text": walk(idleBg, f.pomodoroIdleText),
+    "--pomodoro-idle-timer": bright(idleBg, 4.5),
     "--event-panel-bg": eventPanelBg,
     "--event-panel-contrast": eventPanelContrast,
-    "--event-panel-divider": pickReadableBorder(eventPanelBg, ink, {
-      target: 3,
-    }),
-    "--event-panel-text": fg(eventPanelBg),
-    "--event-panel-input-text": fg(eventPanelBg),
-    "--event-panel-placeholder": muted(eventPanelBg),
-    "--event-panel-muted-text": muted(eventPanelBg),
-    "--cal-drag-preview-border": pickReadableBorder(canvas, ink, { target: 3 }),
+    "--event-panel-divider": walk(eventPanelBg, f.eventPanelDivider),
+    "--event-panel-text": walk(eventPanelBg, f.eventPanelText),
+    "--event-panel-input-text": walk(eventPanelBg, f.eventPanelInputText),
+    "--event-panel-placeholder": walk(eventPanelBg, f.eventPanelPlaceholder),
+    "--event-panel-muted-text": walk(eventPanelBg, f.eventPanelMutedText),
+    "--cal-drag-preview-border": canvasIsDark ? "#FFFFFF80" : "#0000004D",
   };
 }
 
@@ -700,20 +773,27 @@ export function deriveCalendarTokens(
   const timelineRailDelta = calCanvasIsDark
     ? CAL_DERIVATION.timelineRailDarkDeltaL
     : CAL_DERIVATION.timelineRailLightDeltaL;
-  const todayCircle = ink;
+  // Same direction-aware anchor as deriveAppTokens: walk-fraction tokens
+  // must start from a foreground that is actually visible against the
+  // calendar surface, not from raw ink. Dark-BASE parity still holds
+  // because pickReadableForeground returns ink on BASE.dark's calCanvas.
+  const anchorFor = (bg: string) =>
+    pickReadableForeground(bg, { ink, canvas, target: 4.5 });
   return {
     "--cal-bg": calCanvas,
     "--cal-header-bg": canvas,
     "--cal-gridline": pickReadableBorder(calCanvas, ink, { target: 1.4 }),
-    "--cal-time-label": pickReadableMuted(canvas, ink, { target: 3 }),
+    "--cal-time-label": walkFraction(
+      anchorFor(calCanvas),
+      calCanvas,
+      CAL_FRACTIONS.calTimeLabel,
+    ),
     "--cal-timeline-rail": shiftPerceptualL(calCanvas, timelineRailDelta),
-    "--cal-today-circle": todayCircle,
-    "--cal-today-circle-text": pickReadableForeground(todayCircle, {
-      ink,
-      canvas,
-      target: 4.5,
-    }),
-    "--cal-timeline-break": pickReadableBorder(calCanvas, ink, { target: 3 }),
+    "--cal-timeline-break": walkFraction(
+      anchorFor(calCanvas),
+      calCanvas,
+      CAL_FRACTIONS.calTimelineBreak,
+    ),
   };
 }
 

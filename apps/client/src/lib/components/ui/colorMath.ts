@@ -379,6 +379,51 @@ export function shiftPerceptualL(hex: string, deltaL: number): string {
 }
 
 /**
+ * Blend two colors in OKLab by `fraction` (0 = return `fg`, 1 = return
+ * `bg`'s lightness on `fg`'s hue line). Blends lightness fully; chroma
+ * (`a`, `b`) stays anchored on `fg` so the result keeps `fg`'s hue even
+ * when bg has a different tint. Useful for deriving "muted caption",
+ * "recessed label", and similar tokens whose BASE hex sits at a curated
+ * fraction of the way from a foreground anchor toward a surface, because
+ * contrast-target walks cannot express "park at the curated recession"
+ * for values whose contrast sits between 3:1 and 4.5:1 without sweeping
+ * the entire gamut.
+ *
+ * Invalid input falls back to `fg` so callers never receive `null`.
+ */
+export function walkFraction(fg: string, bg: string, fraction: number): string {
+  const fgLab = hexToOklab(fg);
+  const bgLab = hexToOklab(bg);
+  if (!fgLab || !bgLab) return fg;
+  const L = fgLab.L + fraction * (bgLab.L - fgLab.L);
+  return oklabToHex(Math.max(0, Math.min(1, L)), fgLab.a, fgLab.b);
+}
+
+/**
+ * Pick a "bright signal" foreground that prefers pure `#FFFFFF` when it
+ * meets `target` contrast against `bg`, falling back to `ink`, then
+ * pure `#000000`, then `pickReadableForeground` as a last-ditch walk.
+ *
+ * Used for status-colored surfaces (destructive, confirm, declined,
+ * accepted) and sidebar foregrounds where the design convention is "white
+ * unless the bg is too bright for white to work". `pickReadableForeground`
+ * prefers the ink anchor first, which returns near-white on dark surfaces
+ * (matching BASE), but `pickBrightForeground` snaps decisively to pure
+ * white on mid-dark bgs that would otherwise land on ink's off-white
+ * #ECECF2 when the design calls for #FFFFFF.
+ */
+export function pickBrightForeground(
+  bg: string,
+  ink: string,
+  target = 4.5,
+): string {
+  if (contrastRatio(bg, "#FFFFFF") >= target) return "#FFFFFF";
+  if (contrastRatio(bg, ink) >= target) return ink;
+  if (contrastRatio(bg, "#000000") >= target) return "#000000";
+  return pickReadableForeground(bg, { ink, canvas: ink, target });
+}
+
+/**
  * Returns whichever of `#000000` / `#ffffff` has higher contrast against
  * `bg`. For mid-luminance bgs (around #808080) this is counterintuitive:
  * black actually beats white because luminance is nonlinear. Using this
