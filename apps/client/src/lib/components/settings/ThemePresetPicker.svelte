@@ -68,7 +68,7 @@
   ></div>
 
   <div
-    class="theme-editor-chrome relative flex max-h-[90vh] w-[560px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl"
+    class="relative flex max-h-[90vh] w-[560px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl"
   >
     <header class="flex items-start justify-between gap-3">
       <div class="min-w-0 flex-1">

@@ -373,7 +373,7 @@
       use:portal
       role="dialog"
       aria-label={label ? `${label} color picker` : "Color picker"}
-      class="theme-editor-chrome fixed z-[80] w-[228px] rounded-lg border border-border bg-popover p-3 shadow-xl"
+      class="fixed z-[80] w-[228px] rounded-lg border border-border bg-popover p-3 shadow-xl"
       style="top: {popoverPos.top}px; left: {popoverPos.left}px;"
     >
       <div

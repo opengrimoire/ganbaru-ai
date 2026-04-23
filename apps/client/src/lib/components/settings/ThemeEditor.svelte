@@ -22,7 +22,6 @@
     contrastRatio,
     pickReadableForeground,
   } from "$lib/components/ui/colorMath";
-  import ThemePreviewPane from "./ThemePreviewPane.svelte";
   import {
     APP_TOKEN_KEYS,
     BASE_APP_TOKENS,
@@ -253,6 +252,12 @@
     title: string;
     description: string;
     scope: "app" | "cal";
+    // WCAG contrast target for this pair's fg-against-bg check. Omit for
+    // body text (4.5:1). Set to 3 for intentionally-recessed pairs like
+    // the muted surface, whose foreground is designed to sit at AA-large
+    // so captions recede without the warning panel flagging the design
+    // intent as a bug.
+    target?: number;
   };
   type GroupRow = GroupSingleRow | GroupPairRow;
   type SourceGroup = {
@@ -310,8 +315,10 @@
           bg: "--muted",
           fg: "--muted-foreground",
           title: "Muted surface",
-          description: "Subtle wells and the default hint-text color.",
+          description:
+            "Subtle wells and the default hint-text color. Intentionally recessed: foreground is tuned to AA-large (3:1) so captions and past-day numbers fade without disappearing.",
           scope: "app",
+          target: 3,
         },
         {
           kind: "pair",
@@ -435,10 +442,10 @@
     },
     // Tier 3: Per-feature
     {
-      sourceKey: "calCanvas",
-      title: "Calendar canvas",
+      sourceKey: null,
+      title: "Calendar surface",
       description:
-        "Background of the calendar grid. Gridlines and time labels tint from it.",
+        "Calendar background, header, gridlines, and timeline. The background auto-tracks the app canvas by default; isolate --cal-bg to pin a specific surface color.",
       rows: [
         { kind: "single", key: "--cal-bg", scope: "cal" },
         { kind: "single", key: "--cal-header-bg", scope: "cal" },
@@ -528,49 +535,6 @@
   // after the seed feature shipped and can be reset at the row level.
   const hasSeeds = $derived(theme.seedSources !== undefined);
 
-  // Three editor modes, ephemeral per session. Essentials keeps the row list
-  // inside each group hidden and only exposes the four foundational sources.
-  // Accents adds the three accent sources (confirm, warning, calCanvas).
-  // Advanced renders today's full three-tier view with every pinnable row.
-  // On first load we prefer Essentials unless the theme already carries
-  // meaningful overrides, in which case Advanced re-opens automatically so
-  // the user's pins are visible.
-  type EditorMode = "essentials" | "accents" | "advanced";
-  const ESSENTIALS_KEYS: ReadonlySet<string> = new Set([
-    "canvas",
-    "ink",
-    "primary",
-    "destructive",
-  ]);
-  const ACCENTS_KEYS: ReadonlySet<string> = new Set([
-    "canvas",
-    "ink",
-    "primary",
-    "destructive",
-    "confirm",
-    "warning",
-    "calCanvas",
-  ]);
-
-  function initialMode(t: Theme): EditorMode {
-    const appHasPins =
-      t.appTokenOverrides &&
-      Object.keys(t.appTokenOverrides).length > 0;
-    const calHasPins =
-      t.calendarTokenOverrides &&
-      Object.keys(t.calendarTokenOverrides).length > 0;
-    return appHasPins || calHasPins ? "advanced" : "essentials";
-  }
-
-  let mode = $state<EditorMode>(untrack(() => initialMode(theme)));
-
-  function modeIncludesGroup(m: EditorMode, group: SourceGroup): boolean {
-    if (m === "advanced") return true;
-    if (group.sourceKey === null) return false;
-    if (m === "essentials") return ESSENTIALS_KEYS.has(group.sourceKey);
-    return ACCENTS_KEYS.has(group.sourceKey);
-  }
-
   // Collapse state is ephemeral (not persisted across sessions). Only
   // source-driven multi-row groups are collapsible: the source color at the
   // header is the "change everything together" affordance that gives the
@@ -653,15 +617,18 @@
     if (!theme.sources) return;
     const nextSources: ThemeSources = { ...theme.sources, [key]: hex };
     const updates: Partial<Omit<Theme, "id">> = { sources: nextSources };
-    // Past event variants blend against the calendar canvas; when that canvas
-    // is derived from sources.calCanvas, the blend reference has to follow.
-    if (key === "calCanvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
-      updates.blendCanvas = hex;
+    // Past event variants blend against the calendar canvas; when that
+    // canvas auto-derives from sources.canvas, the blend reference has to
+    // follow. If the user has pinned --cal-bg as an override the blend
+    // reference is already tracking the override value, so skip.
+    if (key === "canvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
+      const derived = deriveCalendarTokens(nextSources, theme.base);
+      if (derived["--cal-bg"]) updates.blendCanvas = derived["--cal-bg"];
     }
     themeStore.updateTheme(theme.id, updates);
   }
 
-  // Sample the seven source values from the theme's currently resolved
+  // Sample the six source values from the theme's currently resolved
   // tokens so turning Quick colors on does not visually change anything up
   // front; the user sees the same palette with a new relationship attached.
   // Confirm and warning sample the tokens they identity-drive so built-in
@@ -669,7 +636,6 @@
   function enableSources() {
     if (theme.sources) return;
     const resolvedApp = resolveAppTokens(theme);
-    const resolvedCal = resolveCalendarTokens(theme);
     const sources: ThemeSources = {
       canvas: resolvedApp["--background"],
       ink: resolvedApp["--foreground"],
@@ -677,7 +643,6 @@
       destructive: resolvedApp["--destructive"],
       confirm: resolvedApp["--action-confirm"],
       warning: resolvedApp["--status-tentative"],
-      calCanvas: resolvedCal["--cal-bg"],
     };
     themeStore.updateTheme(theme.id, { sources });
   }
@@ -722,8 +687,8 @@
     const next = { ...(theme.calendarTokenOverrides ?? {}) };
     delete next[key];
     const updates: Partial<Theme> = { calendarTokenOverrides: next };
-    // Relinking cal-bg means the derived calCanvas drives it; keep blendCanvas
-    // aligned so past event variants blend correctly.
+    // Relinking --cal-bg means the auto-derived calendar canvas drives it
+    // again; keep blendCanvas aligned so past event variants blend correctly.
     if (key === "--cal-bg" && theme.sources) {
       const derived = deriveCalendarTokens(theme.sources, theme.base);
       updates.blendCanvas = derived["--cal-bg"] ?? theme.blendCanvas;
@@ -746,8 +711,11 @@
     const seedValue = theme.seedSources[key];
     const nextSources: ThemeSources = { ...theme.sources, [key]: seedValue };
     const updates: Partial<Omit<Theme, "id">> = { sources: nextSources };
-    if (key === "calCanvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
-      updates.blendCanvas = seedValue;
+    // Canvas drives the derived --cal-bg; keep blendCanvas aligned when
+    // no override is pinning the calendar surface to a fixed value.
+    if (key === "canvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
+      const derived = deriveCalendarTokens(nextSources, theme.base);
+      if (derived["--cal-bg"]) updates.blendCanvas = derived["--cal-bg"];
     }
     themeStore.updateTheme(theme.id, updates);
   }
@@ -845,10 +813,15 @@
     themeStore.updateTheme(theme.id, patch);
   }
 
-  // WCAG body-text threshold. Rows whose effective bg/fg land below this
-  // get an amber caret with an auto-fix action so the user doesn't have to
-  // eyeball contrast across dozens of pairs.
+  // WCAG body-text threshold. Default target for rows that don't override
+  // it; muted surfaces tag themselves with 3 so the warning panel respects
+  // their design intent (captions and past-day numbers are supposed to
+  // recede, not pass 4.5:1).
   const AA_BODY_TARGET = 4.5;
+
+  function pairTarget(row: GroupPairRow): number {
+    return row.target ?? AA_BODY_TARGET;
+  }
 
   // Resolve a token's rendered value from the theme (override > derived >
   // base). We re-derive on every call so the live editor reflects whatever
@@ -860,12 +833,13 @@
     return scope === "app" ? resolvedApp[key] : resolvedCal[key];
   }
 
-  type PairContrast = { ratio: number; passes: boolean };
+  type PairContrast = { ratio: number; passes: boolean; target: number };
   function pairContrast(row: GroupPairRow): PairContrast {
     const bg = effectiveColor(row.bg, row.scope);
     const fg = effectiveColor(row.fg, row.scope);
     const ratio = contrastRatio(fg, bg);
-    return { ratio, passes: ratio >= AA_BODY_TARGET };
+    const target = pairTarget(row);
+    return { ratio, passes: ratio >= target, target };
   }
 
   function autoFixPair(row: GroupPairRow) {
@@ -875,7 +849,7 @@
     const next = pickReadableForeground(bg, {
       ink,
       canvas,
-      target: AA_BODY_TARGET,
+      target: pairTarget(row),
     });
     if (row.scope === "app") setAppToken(row.fg, next);
     else setCalToken(row.fg, next);
@@ -906,15 +880,14 @@
   }
 
   // Jump the viewport to the next failing row, cycling through the list.
-  // Switches mode to Advanced when the failing row lives in a group the
-  // current mode would hide; expands the row's group if collapsed. Without
-  // this, clicking Next on a hidden row would silently do nothing.
+  // Expands the row's group if collapsed so the pair is actually visible
+  // before scrolling. Without this, clicking Next on a collapsed row would
+  // silently do nothing.
   function jumpToNextFailingPair() {
     if (failingPairs.length === 0) return;
     const idx = nextPairCursor % failingPairs.length;
     const target = failingPairs[idx];
     nextPairCursor = idx + 1;
-    if (!modeIncludesGroup(mode, target.group)) mode = "advanced";
     collapsed = { ...collapsed, [target.group.title]: false };
     queueMicrotask(() => {
       const el = document.querySelector<HTMLElement>(
@@ -1002,7 +975,7 @@
   }
 </script>
 
-<div class="theme-editor-chrome flex flex-col gap-6">
+<div class="flex flex-col gap-6">
   <!-- Header -->
   <section class="flex flex-col gap-2">
     <div
@@ -1201,7 +1174,9 @@
               type="button"
               onclick={() => autoFixPair(row)}
               aria-label="Auto-fix {row.title} text contrast"
-              title="Contrast {contrast.ratio.toFixed(2)}:1. AA requires {AA_BODY_TARGET}:1 for body text. Click to auto-pick a legible text color."
+              title="Contrast {contrast.ratio.toFixed(2)}:1. This pair targets {contrast.target}:1{contrast.target >= 4.5
+                ? ' (AA body text)'
+                : ' (AA large/UI)'}. Click to auto-pick a legible text color."
               class="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
             >
               <AlertTriangle size={11} strokeWidth={2.25} />
@@ -1234,14 +1209,11 @@
   {/snippet}
 
   {#snippet groupCard(group: SourceGroup)}
-    {@const hideRowsForMode = mode !== "advanced"}
     {@const isCollapsible =
-      !hideRowsForMode && group.sourceKey !== null && group.rows.length > 1}
+      group.sourceKey !== null && group.rows.length > 1}
     {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
     {@const showRows =
-      !hideRowsForMode &&
-      group.rows.length > 0 &&
-      (!isCollapsible || !isCollapsed)}
+      group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
     <section
       class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
     >
@@ -1268,9 +1240,7 @@
               canResetSource(sourceKey),
             )}
           {/if}
-          {#if hideRowsForMode}
-            <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
-          {:else if isCollapsible}
+          {#if isCollapsible}
             <button
               type="button"
               onclick={() => toggleGroup(group.title)}
@@ -1409,7 +1379,7 @@
             type="button"
             onclick={jumpToNextFailingPair}
             aria-label="Jump to next failing contrast row"
-            title="Scroll to the next row below AA contrast (cycles through the list)"
+            title="Scroll to the next row below its contrast target (cycles through the list). Muted surfaces target 3:1; everything else targets 4.5:1."
             class="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
           >
             <ArrowDown size={11} strokeWidth={2.25} />
@@ -1419,7 +1389,7 @@
             type="button"
             onclick={fixAllFailingPairs}
             aria-label="Auto-fix every failing contrast row"
-            title="Pick a legible text color for every failing pair"
+            title="Pick a legible text color for every pair below its target"
             class="flex items-center gap-1 rounded-md border border-primary bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Wand2 size={11} strokeWidth={2.25} />
@@ -1434,47 +1404,7 @@
       {/if}
     </section>
 
-    <!-- Live preview: renders the theme with its own resolved tokens so the
-         editor chrome shadowing above it does not leak through. Sits above
-         everything so the user sees the downstream effect of each edit. -->
-    <ThemePreviewPane {theme} />
-
-    <!-- Mode selector: Essentials keeps the editor focused on the four
-         foundational sources; Accents adds confirm/warning/calCanvas;
-         Advanced restores the full three-tier view with every pinnable row.
-         Mode is ephemeral per session so a user who dug into Advanced for
-         one edit isn't punished with it next time they open a pristine
-         theme. -->
-    <div
-      class="flex items-center gap-1 rounded-lg border border-border bg-card p-1 dark:bg-background"
-      role="tablist"
-      aria-label="Editor detail level"
-    >
-      {#each ["essentials", "accents", "advanced"] as const as m (m)}
-        {@const label =
-          m === "essentials"
-            ? "Essentials"
-            : m === "accents"
-              ? "Accents"
-              : "Advanced"}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === m}
-          onclick={() => (mode = m)}
-          class={cn(
-            "flex-1 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
-            mode === m
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground",
-          )}
-        >
-          {label}
-        </button>
-      {/each}
-    </div>
-
-    {#each SOURCE_GROUPS.filter((g) => modeIncludesGroup(mode, g)) as group (group.title)}
+    {#each SOURCE_GROUPS as group (group.title)}
       {@render groupCard(group)}
     {/each}
 
