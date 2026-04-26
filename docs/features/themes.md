@@ -16,13 +16,15 @@ A Theme is a self-contained visual package. The minimum fields:
 - **eventPalette:** ordered array of 24 hex values (one per slot index). Every position must be filled, even if the theme reuses the same color across multiple slots. See "Event color palette" below.
 - **blendCanvas:** hex color the dimmed event variants blend toward. Usually the theme's canvas background.
 
-Optional fields reserved for shell theming:
+User themes additionally carry a full resolved-token snapshot and source palette:
 
-- **sources:** six-color palette (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`) that drives the rest of the shell through the derivation engine. Calendar canvas is not a source: it auto-derives from the app canvas via a direction-aware OKLab ΔL offset (see "Derivation formulas" below) and is pinnable through `calendarTokenOverrides["--cal-bg"]` when the user wants to isolate it. Omitted on both built-ins, so they resolve straight to the base CSS. See "Sources and derivation" below.
-- **appTokenOverrides:** map of app-level CSS tokens (`--primary`, `--background`, etc.) to hex values. Applied on theme switch via `root.style.setProperty`. Pinned values here win over derivation and base CSS.
-- **calendarTokenOverrides:** same idea, scoped to calendar shell tokens (`--cal-bg`, `--cal-gridline`, etc.).
+- **sources:** six-color palette (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`) that drives the rest of the shell through the derivation engine. Calendar canvas is not a source: it auto-derives from the app canvas via a direction-aware OKLab ΔL offset (see "Derivation formulas" below) and is pinnable through the per-token isolated flag on `--cal-bg` when the user wants to isolate it.
+- **appTokens / calendarTokens:** full resolved hex map for every key in `APP_TOKEN_KEYS` (50 entries) and `CALENDAR_TOKEN_KEYS` (10 entries). The snapshot is what the runtime actually paints; sources are kept as editor seeds so source edits can re-derive the snapshot in lockstep.
+- **appIsolated / calendarIsolated:** sets of token keys flagged as user-pinned. An isolated token does not participate in source-edit cascades or rebakes: it stays at whatever hex the user wrote.
+- **derivationEngineVersion:** integer stamp identifying which version of the derivation engine produced the snapshot. The editor shows a rebake banner when a stored theme's stamp trails the current code constant (see "Engine version and rebaking" below).
+- **blendCanvas:** scalar hex the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated; pinning `--cal-bg` lets the user pin `blendCanvas` indirectly.
 
-A Theme is frozen after construction. The registry itself is frozen. This prevents runtime mutation of a shipped theme by accident.
+The Theme type is a discriminated union: `BuiltinTheme` (just `id`, `displayName`, `base`, `eventPalette`, `blendCanvas`) for the code-pinned light and dark, and `UserTheme` for everything authored or duplicated. A user-theme value is frozen after construction and stored normalized in SQLite (see "Persistence" below). The registry of built-ins is frozen. This prevents runtime mutation of a shipped theme by accident.
 
 ### Why a registry, not a boolean
 
@@ -79,71 +81,88 @@ Event-tile text still uses the legacy threshold-based `pickContrastText` (Rec. 7
 
 Whether a theme "is dark" is a runtime property of its canvas, not a stored label. Two helpers in `stores/themes.ts` do the bucketing:
 
-- `isThemeDark(theme)` resolves `--background` through the standard override/sources/base fallback chain and returns true when its relative luminance sits below `DARK_SURFACE_THRESHOLD` (0.4). Used to toggle the `.dark` class on the HTML root.
-- `isThemeCalendarDark(theme)` does the same for `--cal-bg`, which either matches the auto-derived calendar canvas (the default) or a user-pinned override from `calendarTokenOverrides["--cal-bg"]`. Event tiles need to pick their palette against the surface they actually sit on, which is not always the same as the app canvas.
+- `isThemeDark(theme)` reads `--background` from the theme's snapshot (or the base CSS for built-ins) and returns true when its relative luminance sits below `DARK_SURFACE_THRESHOLD` (0.4). Used to toggle the `.dark` class on the HTML root.
+- `isThemeCalendarDark(theme)` does the same for `--cal-bg`, which either matches the auto-derived calendar canvas (the default) or a user-pinned hex when `--cal-bg` is in `calendarIsolated`. Event tiles need to pick their palette against the surface they actually sit on, which is not always the same as the app canvas.
 
 Both helpers decouple every "is it dark?" check from `theme.base`. Users can invert a theme's canvas mid-edit without fighting a stale label: the `.dark` class flips immediately, and event tiles pick the right palette on the very next frame. The 0.4 threshold is intentionally below the sRGB midpoint so a mid-gray canvas (~#888) still resolves as light.
 
 ## Persistence
 
-The active theme ID, user-authored themes, font family, and font scale all live in `vault/config.json` under dotted keys (`theme.activeId`, `themes.user`, `preferences.fontFamilyId`, `preferences.fontScale`). The vault folder defaults to `app_config_dir / "vault"` and is created on first launch. Writes are atomic: the Rust backend serializes to `config.json.tmp`, fsyncs, and renames into place, so a crash mid-write leaves either the previous good file or an ignored temp.
+User-authored themes persist in SQLite as a normalized snapshot. The active theme ID, font family, and font scale stay in `vault/config.json` under dotted keys (`theme.activeId`, `preferences.fontFamilyId`, `preferences.fontScale`); user themes have moved out of the config blob and into six tables documented in `data/schema.md` (`themes`, `theme_tokens`, `theme_event_palette`, plus seed mirrors and `theme_upgrade_dismissals`). Built-in light and dark stay code-pinned and never appear in the database. The schema's `CHECK (id NOT IN ('light', 'dark'))` defends against any malformed import shadowing them.
 
-The frontend bridge (`lib/vault/config.ts`) loads the config once at boot, exposes synchronous reads against an in-memory cache, and debounces writes (250 ms) so rapid edits coalesce into one disk write. Stores hydrate from the cache on first read, keeping first paint synchronous.
+The vault folder still defaults to `app_config_dir / "vault"` and is created on first launch. Writes to `config.json` are atomic: the Rust backend serializes to `config.json.tmp`, fsyncs, and renames into place, so a crash mid-write leaves either the previous good file or an ignored temp.
 
-The first vault load runs a one-time migration that copies the legacy `ganbaruai-theme`, `ganbaruai-font-family`, and `ganbaruai-font-scale` keys out of `localStorage` and removes them. The migration is idempotent.
+The frontend bridge (`lib/vault/config.ts`) loads the config once at boot, exposes synchronous reads against an in-memory cache, and debounces writes (250 ms) so rapid edits coalesce into one disk write. Stores hydrate from the cache on first read, keeping first paint synchronous for the small prefs that still live there. User themes load asynchronously: `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app, so first paint always matches what the user has on disk.
 
-Built-in themes are validated through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`dark`).
+The first vault load runs a one-time migration that copies the legacy `ganbaruai-theme`, `ganbaruai-font-family`, and `ganbaruai-font-scale` keys out of `localStorage` and removes them. The migration is idempotent. See "Migration from vault to SQLite" below for the second one-time migration that copies the legacy `themes.user` blob into the new tables.
+
+Built-in themes still pass through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`dark`).
 
 ## Custom theme workflow
 
-Themes are managed from the single Appearance section in Settings. The section lists every theme (built-ins first, user themes below) above the font and zoom controls. Opening one hands off to a floating theme editor: the Settings modal closes and a draggable panel appears in the top-right of the viewport. The panel has no backdrop, so the app underneath stays interactive and every edit can be verified live (switch tabs, hover rows, open dialogs) without dismissing the editor. A grip in the panel's header lets the user drag it anywhere (constrained so at least the drag handle stays on screen), and a chevron toggle next to the grip collapses the panel to just its header and footer so the rest of the app can be inspected without dismissing the editor. The sticky footer exposes two actions: Back to themes rolls the session back (restores the theme's pre-edit JSON, or deletes the theme outright when it was minted for this session through New or Duplicate and edit, then reinstates the theme that was active before the session opened) and reopens Settings on the list. Save and apply keeps the edits, leaves the edited theme active (it was activated on open for live preview), and returns to the same list. Editing a built-in swaps the primary label to Apply and return since there is nothing to save. A forced close of the app while the editor is open triggers a best-effort cancel through the close-confirm dialog; because vault writes are debounced the rollback is not guaranteed to flush.
+Themes are managed from the single Appearance section in Settings. The section lists every theme (built-ins first, user themes below) above the font and zoom controls. Opening one hands off to a floating theme editor: the Settings modal closes and a draggable panel appears in the top-right of the viewport. The panel has no backdrop, so the app underneath stays interactive and every edit can be verified live (switch tabs, hover rows, open dialogs) without dismissing the editor. A grip in the panel's header lets the user drag it anywhere (constrained so at least the drag handle stays on screen), and a chevron toggle next to the grip collapses the panel to just its header and footer so the rest of the app can be inspected without dismissing the editor.
+
+The editor follows a buffer model: every edit (color picker drag, isolate flip, palette slot, rebake, rename, preset apply) updates the in-memory theme registry and re-paints the DOM, but nothing is written to SQLite during the session. This keeps streaming color-picker drags at 60fps without per-frame DB writes and matches the user expectation that "nothing is applied unless I press Save". The sticky footer exposes two actions: Back to themes rolls the session back in memory (restores the theme's pre-edit JSON snapshot, or drops the theme entirely when it was minted for this session through New or Duplicate and edit, then reinstates the theme that was active before the session opened) and reopens Settings on the list. Save and apply flushes the in-memory theme to SQLite in one shot through `persistThemeToDb` (insert for fresh themes, content replace for existing ones, preserving any dismissal rows), leaves the edited theme active, and returns to the list. Editing a built-in swaps the primary label to Apply and return since there is nothing to save. A forced close of the app while the editor is open triggers a best-effort cancel through the close-confirm dialog; because the buffer was never written to disk, dropping the in-memory edits is enough.
 
 Users can:
 
 1. **Create a theme** by clicking "New theme". A user theme is added (seeded from the current active theme) and the editor opens on it.
 2. **Duplicate and edit** any theme (built-in or user) into a new editable user theme. The duplicate is immediately applied as the active theme and the editor opens on it, so the user sees their edits live from the first change. Built-ins remain frozen.
 3. **View a built-in**. The detail view renders the name, base label, and a read-only palette preview alongside any shell overrides the theme ships. A JSON panel shows the serialized theme with Copy and Save buttons.
-4. **Edit a user theme**: rename it, tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the six Quick sources (canvas, ink, primary, destructive, confirm, warning) to shift the shell in lockstep, and click Isolated edit on any driven row to break it off the source for a surgical edit (Link back re-links it). The sun/moon icon in the header reflects the canvas luminance and is not toggleable: crafting a dark theme is just a matter of darkening the canvas source. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
-5. **Reset a single color** back to its clone-time value. Every row in the editor, both source colors in the group headers and the driven tokens below, gets a small reset icon next to the color field whenever the current value differs from the snapshot captured at clone time (see "Seed snapshots" below). Clicking it restores just that one control: a source channel goes back to its seed hex; a driven token goes back to its seed override, or, if the seed had no override for it, the token is relinked so derivation takes over again. Other rows are untouched.
-6. **Reset every color** in one click via the "Reset all" button in the footer. Restores every source to its seed hex, wipes every app and calendar override, and restores the event palette and blend canvas to their seed values in a single update. The button is disabled when the theme is already at its seed state. Legacy themes cloned before the seed feature shipped have their seeds synthesized on first load (see "Seed snapshots" below) so the reset machinery works uniformly across the registry.
+4. **Edit a user theme**: rename it, tweak any of the 24 event-palette hexes through an in-house HSL color picker, edit the six sources (canvas, ink, primary, destructive, confirm, warning) to shift the shell in lockstep, and click Isolated edit on any driven row to flag it user-pinned and unlock direct hex input (Link back unflips it and re-derives). The sun/moon icon in the header reflects the canvas luminance and is not toggleable: crafting a dark theme is just a matter of darkening the canvas source. The same JSON panel is editable; pressing Apply changes validates the draft through `replaceTheme` and commits it in place (id locked).
+5. **Reset a single color** back to its clone-time value. Every row in the editor, both source colors in the group headers and the driven tokens below, gets a small reset icon next to the color field whenever the current value or isolated flag differs from the seed snapshot captured at clone time (see "Seed snapshots" below). Clicking it restores both the value and the isolated flag for that one row: a source channel goes back to its seed hex; a driven token's value and isolated flag both fall back to the seed snapshot. Other rows are untouched.
+6. **Reset every color** in one click via the "Reset all" button in the footer. Restores every source, every app and calendar token (value and isolated flag), the event palette, and `blendCanvas` from their seed mirrors in one in-memory pass. Like every editor mutator, the result lives in `$state` until Save and apply commits it. The button is disabled when the theme is already at its seed state.
 7. **Apply** any registered theme by clicking its row. The active theme is highlighted; switching is non-destructive (only the active ID changes).
 8. **Share** a theme by exporting it from the detail view. Copy JSON writes to the clipboard; Save to file uses the native save dialog. Import accepts pasted JSON or a file picked through the open dialog. Imported themes get a fresh slug ID if their incoming ID would collide with an existing user theme.
-9. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme.
+9. **Delete** a user theme. If the deleted theme was active, the store falls back to the default theme. The DB cascade (FK on every theme-scoped row) removes the snapshot, palette, seeds, and any dismissal rows in one statement.
 
-Every new user theme (created or duplicated) starts with a `sources` palette sampled from its resolved colors, so the editor opens in Quick-colors mode and source edits immediately propagate through derived tokens. Explicit overrides on the source theme are preserved as pinned tokens so surgical edits survive the duplicate.
-
-"Duplicate and edit" from a built-in additionally captures an **identity override** for every derived token whose value under the synthesized sources would differ from what the built-in actually rendered, so the clone starts byte-identical to the source. Those captured tokens render as Isolated rows in the editor, and the user can Link back any of them to bring the token back into the source-driven cascade. Clones of source-driven user themes skip this capture because their cascade already reproduces the source's look exactly.
+Every new user theme starts with a `sources` palette and a full token snapshot synthesized from those sources at clone time. Source edits drive the snapshot through the derivation engine; the per-token `isolated` flag controls whether a token is part of the cascade or treated as user-pinned. A clone of a built-in starts with no isolated flags set, so the first canvas edit cascades through every surface; a clone of a user theme inherits that user theme's isolated flags so surgical edits survive Duplicate and edit.
 
 Clicking "New theme" opens a preset picker before the editor mounts (see "Preset picker" below). Picking a curated preset seeds the new theme with a pre-validated palette; "Start blank" keeps the original path that seeds from the active theme.
 
-Editing a built-in is blocked at the store level: mutators return false, `replaceTheme` rejects built-in ids, and the editor hides every input (name field, color pickers, add-override buttons) when the target is built-in. Duplicate is the only path to a modifiable copy.
+Editing a built-in is blocked at the store level: mutators return false, `replaceTheme` rejects built-in ids, and the editor hides every input when the target is built-in. The schema's `CHECK (id NOT IN ('light', 'dark'))` provides defense in depth: even a malformed import cannot insert a row that shadows a built-in. Duplicate is the only path to a modifiable copy.
 
 ### Seed snapshots
 
-`cloneTheme` captures two snapshots on every clone, both stored on the Theme as optional fields and both persisted in the vault so per-row reset and "Reset all" survive a relaunch:
+Every user-theme row in `themes` carries a complete seed mirror in `theme_seed_tokens` and `theme_seed_event_palette`, plus a `seed_blend_canvas` scalar on the same row. The mirrors are written once, when the theme is created or duplicated, and capture every column that "Reset" needs: source hexes, every app and calendar token value, every isolated flag, the 24 palette slots, and `blendCanvas`. Built-in themes never appear in `themes` at all, so they never carry seeds.
 
-- **Input seeds** (`seedSources`, `seedAppTokenOverrides`, `seedCalendarTokenOverrides`, `seedBlendCanvas`, `seedEventPalette`): the editable inputs the theme had immediately after cloning. Per-row reset compares the current value of each control against the matching field on these seeds, shows a reset icon when they differ, and on click restores just that control: a source channel goes back to `seedSources[key]`, a token override either reverts to `seedAppTokenOverrides[key]` / `seedCalendarTokenOverrides[key]` or, if the seed had no override for that token, is cleared so derivation takes over again. "Reset all" restores every source, override, palette slot, and blend canvas from these seeds in a single update.
-- **Resolved seeds** (`seedAppTokens`, `seedCalendarTokens`): the fully resolved token palette at clone time. Retained for future resolved-value comparisons; nothing reads them yet.
+Per-row reset compares the live snapshot in memory against the matching seed entry on the same `UserTheme` and surfaces a reset icon whenever the value or the `isolated` flag differs. Clicking it restores both columns from the seed: a token that was pinned at clone time goes back to its seed hex with `isolated=1`; a token that was free at clone time goes back to its seed hex with `isolated=0` so derivation takes over again on the next source edit. "Reset all" runs the equivalent restore across every seed bucket (sources, app tokens, calendar tokens, palette, blend canvas) in one in-memory pass. Both flow back to SQLite only when the editor commits.
 
-Built-in themes never carry seeds. User themes created before the input seeds were added are synthesized on first load by `synthesizeSeedsIfMissing`: if the stored theme has no `seedSources`, the current live values are captured as the seeds (sources come from the theme's `sources` field if present, otherwise from key channels of the resolved palette). The synthesizer is idempotent, so repeated loads produce the same seeded theme. After this one-time migration runs, "Reset all" is enabled and per-row reset icons appear exactly as they do on fresh clones.
+Seeds are not exported in the JSON payload: `serializeTheme` emits the live snapshot only so the exported file describes the theme as portable data, not as a forked snapshot with history. Reset is an install-local affordance; sharing a theme ships just the current colors.
 
-Input seeds are not exported in the JSON payload: `serializeTheme` omits every seed field so the exported file describes the theme as portable data, not as a forked snapshot with history. Reset is an install-local affordance; sharing a theme ships just the current colors.
+## Shell token derivation
 
-## Shell token derivation and overrides
+The app and calendar shell are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). User themes paint those tokens from a stored snapshot; the derivation engine runs only at write time.
 
-The app and calendar shell are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). User themes can tint or pin those tokens through a three-layer pipeline: override, derived, base.
+### Snapshot model
 
-### Resolution order
+Every user-theme token is stored as a resolved hex snapshot in `theme_tokens`, one row per (theme, kind, key) triple covering every key in `APP_TOKEN_KEYS` (50 entries) and `CALENDAR_TOKEN_KEYS` (10 entries). Sources are kept as editor seeds in the same table under `kind='source'`; they drive multi-token derivation when the user edits one of them, but they are not consulted at paint time. The per-token `isolated` flag controls whether each token participates in the next source-edit cascade or is treated as user-pinned.
 
-For each token in `APP_TOKEN_KEYS` (50 entries) or `CALENDAR_TOKEN_KEYS` (10 entries):
+`computeThemeTokenOps` reads the snapshot directly: for built-ins it serves `BASE_APP_TOKENS[base]` and `BASE_CALENDAR_TOKENS[base]`; for user themes it serves `theme.appTokens` and `theme.calendarTokens` verbatim. The result is pushed to the root via `root.style.setProperty`. Switching themes clears tokens set by the previous theme that the next one does not cover.
 
-1. **Override (pinned).** `theme.appTokenOverrides[key]` / `theme.calendarTokenOverrides[key]` if set.
-2. **Derived (auto).** If the theme carries `sources` and the token is covered by the derivation engine, the engine's value for that token.
-3. **Default.** The base CSS rule (`:root` for light, `.dark` for dark) read from `BASE_APP_TOKENS` / `BASE_CALENDAR_TOKENS`.
+### Source-edit cascade
 
-Built-in themes ship without `sources` and without overrides, so every token resolves at layer 3, byte-identical to the pre-derivation behavior. When a theme with sources or overrides is applied, `computeThemeTokenOps` merges derived values first and then pinned overrides, pushing the result to the root via `root.style.setProperty`. Switching themes clears tokens set by the previous theme that the next one does not cover.
+Editing a source value triggers `updateSourceValue(themeId, sourceKey, hex)`. The store rebuilds the snapshot from `deriveAppTokens(newSources, base)` and `deriveCalendarTokens(newSources, base)`, then updates the in-memory theme:
 
-Unknown keys in overrides are stripped on import; only valid hex values are accepted.
+- Replace the `sources[sourceKey]` entry.
+- For each app token where the isolated flag is unset, write the new derived value into `appTokens`.
+- For each calendar token where the isolated flag is unset, write the new derived value into `calendarTokens`.
+- If `--cal-bg` is non-isolated, set `blendCanvas` to the new derived `--cal-bg` so the dimmed event-tile blend stays in sync.
+- Re-paint the DOM if the edited theme is active.
+
+The mutator never touches SQLite. Save and apply later flushes the resulting snapshot through `persistThemeToDb`, which calls `replaceThemeContent` for an existing theme (UPDATE parent, DELETE+INSERT children, preserve dismissals) or `insertTheme` for a fresh theme. Isolated tokens never receive the new derived hex; they keep whatever the user wrote. Pinning a token whose value happens to equal the current derivation is a deliberate choice to freeze that color through future source edits, so no special "ghost equality" handling is needed.
+
+### Isolated flag semantics
+
+Three mutators expose the flag:
+
+- `isolateToken(themeId, kind, key)` flips the isolated flag to 1 without touching the value. The editor only enables direct hex input on isolated rows; the snapshot already holds the auto value at the moment the user clicks Isolated edit.
+- `setTokenValue(themeId, kind, key, value)` writes a new hex without touching the flag. Combined with the editor's gating, this implicitly only happens on a pinned token.
+- `relinkToken(themeId, kind, key)` re-runs the derivation for the current sources, replaces the value in the snapshot, and flips the isolated flag to 0. This is the only path where derivation overwrites an isolated-then-unpinned token.
+
+All three mutators are pure in-memory; the buffer flushes to SQLite when the editor commits.
+
+Imported themes route unknown keys to be dropped: only keys present in `APP_TOKEN_KEYS` / `CALENDAR_TOKEN_KEYS` (and only valid hex values) survive validation.
 
 ### Sources
 
@@ -156,7 +175,7 @@ A theme can ship a `sources` object with six hex colors. The first four form the
 - `confirm`: positive signal. Identity-drives `--action-confirm` (save button, active scope pill) and `--status-accepted` (accepted attendance tile).
 - `warning`: caution signal. Identity-drives `--status-tentative` today; reserved for future notification warnings and deadline accents.
 
-Editing one source color propagates through the derivation tables and shifts every non-pinned token in lockstep. Pinned overrides are untouched, so the user can let the engine drive the coherent parts of the shell while surgically fixing specific tokens (pinning `--card` to pure white, for example). Calendar canvas sits between the two: it auto-derives from `canvas` by default, but pinning `--cal-bg` through `calendarTokenOverrides` isolates it from the cascade.
+Editing one source color propagates through the derivation tables and shifts every non-isolated token in lockstep. Isolated tokens are untouched, so the user can let the engine drive the coherent parts of the shell while surgically fixing specific tokens (pinning `--card` to pure white, for example). Calendar canvas sits between the two: it auto-derives from `canvas` by default, but flagging `--cal-bg` isolated lets the user paint the grid a different color than the app canvas.
 
 ### Derivation formulas
 
@@ -172,11 +191,11 @@ Confirm, warning, and destructive propagate through identity derivation: one sou
 
 The test suite asserts: every derivable body-text pair meets AA 4.5:1; status/destructive/confirm pairs meet AA-large 3:1 (tentative is excluded because BASE itself paints white on `#F59E0B` at 1.46:1 as an intentional low-contrast design); muted captions park in `[3.0, 5.0]` (the upper bound accommodates gamut clamping on near-white canvases); event-panel divider sits at or above 1.4:1 against the panel; calendar gridline sits at or above 1.4:1 against cal-bg; calendar time label and timeline-break sit at or above 3:1 against cal-bg; `sidebar <= canvas <= card <= popover <= accent` OKLab-L ordering holds on every canvas with headroom; feeding BASE.dark's sources reproduces BASE.dark exactly on source-driven and hardcoded tokens, and within 2 rgb-units on every shift-derived or walk-fraction token. The cosmetic `base` label has zero effect on derived tokens.
 
-The derivable calendar tokens are `--cal-bg`, `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, `--cal-timeline-rail`, and `--cal-timeline-break`. `--cal-today-circle` and `--cal-today-circle-text` are no longer derived: the today-marker's hand-tuned blue on dark and dark-gray on light carries a semantic meaning that does not reduce cleanly to the source palette, so the resolver falls through to BASE CSS for them (users can still pin them through `calendarTokenOverrides`). `--cal-current-time` (red "now" line) and `--cal-timeline-focus` (green pomodoro marker) fall through for the same reason.
+The derivable calendar tokens are `--cal-bg`, `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, `--cal-timeline-rail`, and `--cal-timeline-break`. `--cal-today-circle` and `--cal-today-circle-text` are no longer derived from sources: the today-marker's hand-tuned blue on dark and dark-gray on light carries a semantic meaning that does not reduce cleanly to the source palette, so the snapshot stores the BASE CSS hex on clone and users can isolate either token to repaint it. `--cal-current-time` (red "now" line) and `--cal-timeline-focus` (green pomodoro marker) follow the same convention.
 
 ### Editor UI
 
-Every user theme gets a `sources` palette at clone time (see "Custom theme workflow"), so the editor is always in Quick-colors mode. The body renders every group inline with no mode selector: every source color and every driven token is reachable, and source-driven multi-row groups start collapsed so the list opens scannable (one row per group header). Expanding a group reveals every pinnable sub-row that can be isolated individually.
+Every user theme carries a `sources` palette and a full token snapshot at clone time (see "Custom theme workflow"). The body renders every group inline with no mode selector: every source color and every driven token is reachable, and source-driven multi-row groups start collapsed so the list opens scannable (one row per group header). Expanding a group reveals every pinnable sub-row that can be isolated individually.
 
 Groups are ordered top-to-bottom as a three-tier walkthrough: app foundation, semantic signals, then per-feature surfaces. Inside each tier, shell tokens live under the source color that drives them, making the relationship visible without scrolling past a flat list.
 
@@ -203,18 +222,16 @@ The header has three parts, all on one row: the title and description on the lef
 
 Driven rows render below the header with two distinct layouts.
 
-**Peer-style rows** (used when a source-driven group has exactly one sub-row): the row uses the same bold header typography (`text-[13px] font-semibold`) so the driven token reads as a peer of its source rather than a subordinate option. The right side shows an always-editable `ColorField` followed by an optional reset icon and an invisible placeholder sized to match the header's action slot. There is no Isolated edit or Link back button: editing the field directly writes an override, and clicking the reset icon falls back through the seed (restoring the seed's override, or dropping it when the seed had none so the token re-follows its source).
+**Peer-style rows** (used when a source-driven group has exactly one sub-row): the row uses the same bold header typography (`text-[13px] font-semibold`) so the driven token reads as a peer of its source rather than a subordinate option. The right side shows an always-editable `ColorField` followed by an optional reset icon and an invisible placeholder sized to match the header's action slot. There is no Isolated edit or Link back button: editing the field directly calls `setTokenValue` (which implicitly flags the row isolated through the editor's gating), and clicking the reset icon restores both value and isolated flag from the seed snapshot.
 
-**Sub-option rows** (used in multi-row groups, whether or not they have a source): rows render as a list where each row shares two states expressed through the HEX input and the trailing action button:
+**Sub-option rows** (used in multi-row groups, whether or not they have a source): rows render as a list where each row reflects the value of its `isolated` flag:
 
-- **Linked**: the `ColorField` renders its swatch and hex input in a disabled state (reduced opacity, not-allowed cursor) showing the current derived or default value, with an **Isolated edit** action button. Clicking it captures the current auto value as an explicit override and swaps the row to the Isolated state.
-- **Isolated**: the same `ColorField` becomes fully editable (swatch opens the picker, hex input accepts input), with a **Link back** action that drops the override so the token re-follows its source.
+- **Linked** (`isolated=0`): the `ColorField` renders its swatch and hex input in a disabled state (reduced opacity, not-allowed cursor) showing the current snapshot value, with an **Isolated edit** action button. Clicking it calls `isolateToken`, which flips the flag to 1 without changing the value (the snapshot already holds the auto value), and swaps the row to the Isolated state.
+- **Isolated** (`isolated=1`): the same `ColorField` becomes fully editable (swatch opens the picker, hex input accepts input), with a **Link back** action that calls `relinkToken`, which re-runs derivation for the current sources, writes the result, and flips the flag back to 0.
 
-Sourceless multi-row cards skip the Linked state entirely: every sub-row is always editable because there is no source to link back to. The HEX value is always visible, which keeps the actual color number readable even for linked rows. When a row's current value differs from the clone-time seed, a small reset icon appears between the `ColorField` and the action button; clicking it reverts that single row back to the seed value (restoring the override, or dropping it when the seed had none).
+Sourceless multi-row cards skip the Linked state entirely: every sub-row is always editable because there is no source to link back to. The HEX value is always visible, which keeps the actual color number readable even for linked rows. When a row's current value or isolated flag differs from the seed snapshot, a small reset icon appears between the `ColorField` and the action button; clicking it restores both columns for that row.
 
 Every pair row (source + foreground) shows a live contrast indicator (see "Contrast warnings" below) so the user can spot a failing combination and auto-fix it without leaving the editor.
-
-Legacy user themes imported without a `sources` field show a "Set up Quick colors" card that samples the seven values from the current resolved palette. After clicking, the editor switches to the grouped layout. Themes written before `confirm` and `warning` were introduced load normally: missing source channels backfill from the base defaults so existing vault files keep working without a migration.
 
 ### Contrast warnings
 
@@ -244,13 +261,44 @@ Distribution across the editor:
 - **Warning family** (2): `--status-tentative` + `--status-tentative-foreground` (tentative attendance tile). Background identity-derives from `warning`; foreground is contrast-picked.
 - **Primary foreground** (1): `--primary-foreground`. Contrast-picked from the primary source so tinted pastel primaries flip to dark text automatically.
 - **Destructive foreground core** (1): `--destructive-foreground`, same treatment for the destructive source.
-- **Calendar details** (7, sourceless): Today marker (pair of circle + inner text), now line, break marker, focus marker, event-color-picker outline, description editor tint, and the all-day drag-preview border. The today marker, now line, and focus marker fall through to BASE CSS because their colors carry hard-coded semantic meaning that does not reduce to the source palette; the rest can be isolated through `calendarTokenOverrides`.
+- **Calendar details** (7, sourceless): Today marker (pair of circle + inner text), now line, break marker, focus marker, event-color-picker outline, description editor tint, and the all-day drag-preview border. The today marker, now line, and focus marker carry hard-coded semantic meaning that does not reduce to the source palette, so the snapshot stores the BASE CSS value on clone; users can still isolate any of them to repaint them.
 - **Event panel** (9, sourceless): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, `--event-panel-text`, `--event-panel-muted-text`. Backgrounds shift off canvas by calibrated deltas; divider, body, input, placeholder, and muted text each use `walkFraction(ink, event-panel-bg, fraction)` with BASE.dark-measured fractions so the panel reads with the dark built-in's typographic hierarchy on any canvas.
 - **Task priority** (4, sourceless): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`. Each token feeds both the background (tinted toward canvas) and the label text; the Kanban column reads these directly and picks legible text through `pickReadableForeground`.
 
 Four tokens carry alpha: `--event-panel-edge`, `--event-panel-shadow`, `--cal-description-editor-bg`, `--cal-drag-preview-border`. `ColorField` accepts and emits 8-digit `#rrggbbaa` for them, with a fourth slider (A) in the picker popover and a checkerboard swatch on the trigger so transparency is visible. Alpha-bearing tokens skip the Tailwind `@theme inline` alias and are consumed via plain CSS variables in scoped styles or inline `style` attributes.
 
-Sourceless semantic tokens still resolve through the same override/base fall-through used by the rest of the shell, so a user who never opens those rows sees the byte-for-byte default values; a user who pins one gets a surgical override that survives theme export/import.
+Sourceless semantic tokens are stored in the snapshot like every other token: their seed value matches the BASE CSS hex on clone, so a user who never opens those rows sees the byte-for-byte default values; a user who isolates one gets a surgical override that survives theme export/import.
+
+## Engine version and rebaking
+
+The derivation engine evolves over time. New shift constants, new fractions, new contrast picks, or a new token in `APP_TOKEN_KEYS` can all change what `deriveAppTokens` and `deriveCalendarTokens` produce for the same sources. To make those shifts opt-in, every user theme stores a `derivationEngineVersion` integer, and the code carries a matching `DERIVATION_ENGINE_VERSION` constant in `themes.ts`.
+
+The constant bumps whenever derivation output would change for unchanged sources. Themes stamped at the current constant render exactly the engine's current output; themes stamped at a lower number render the snapshot they were saved with, untouched by the new derivation tables.
+
+The editor surfaces an inline rebake banner when:
+
+- The loaded theme's `derivationEngineVersion` is below the code constant, AND
+- `theme_upgrade_dismissals` does not contain a row for `(theme_id, currentVersion)`.
+
+The banner offers two actions:
+
+- **Rebake** calls `rebakeTheme(themeId)`. The store re-runs `deriveAppTokens` / `deriveCalendarTokens` against the theme's current sources, overwrites every non-isolated token in the in-memory snapshot with the new derived hex, stamps `derivationEngineVersion` at the current constant, and (if `--cal-bg` is non-isolated) updates `blendCanvas` to the new derived `--cal-bg`. Isolated tokens are preserved verbatim. Like every other editor mutator the change stays in `$state` until "Save and apply" flushes through `persistThemeToDb`.
+- **Maybe later** records the dismissal in `dismissals` and, for an existing theme, immediately writes a row into `theme_upgrade_dismissals`. For a fresh theme that has not been persisted yet, the dismissal is queued in `pendingDismissals` and gets written right after the parent theme insert during commit. The banner stops appearing for this theme until the constant bumps again.
+
+Clones inherit their source's stamp verbatim (a clone of a built-in stamps at the current constant). v1 JSON imports take the file's `derivationEngineVersion`; legacy imports stamp at the current constant because the legacy import re-derives at import time. The vault-to-SQLite migration also stamps at the current constant since it runs the current derivation when synthesizing the snapshot.
+
+## Migration from vault to SQLite
+
+The shift from a `themes.user` blob in `vault/config.json` to normalized SQLite rows runs once per install. `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app; `hydrateUserThemes` calls `migrateVaultThemesIfPresent()` first, then loads every theme from the DB into the in-memory store and applies the active theme.
+
+The migration:
+
+1. Reads `themes.user` from the config cache. If it is missing or empty, exits early (idempotent on every subsequent boot).
+2. Walks each entry through `validateThemeJson`. Legacy entries lacking `sources` or seed mirrors get them synthesized from the resolved palette and the current derivation engine, stamping `derivationEngineVersion` at the current code constant.
+3. Inserts each theme through `insertTheme(theme)`, which writes the row in `themes`, every snapshot row in `theme_tokens` and `theme_event_palette`, and every seed mirror row in `theme_seed_tokens` and `theme_seed_event_palette`, all in one transaction.
+4. After every theme inserts successfully, calls `setConfigKey("themes.user", undefined)` and `flushConfig()` to commit the deletion. A second boot sees no `themes.user` and exits at step 1.
+
+The migration is idempotent because it gates on the presence of `themes.user`. If a single theme fails validation it is skipped (logged once); the rest still land. Built-in themes never touch this path: they live as code constants in `BUILTIN_THEME_REGISTRY` and are filtered out of any imported JSON before insertion.
 
 ## Typography and density
 

@@ -166,6 +166,103 @@ Code that resolves an `event_id` on a run must handle three formats:
 
 If a synthetic ID no longer expands (e.g. an UNTIL cap removed the instance and detach failed), the run is an orphan. Analytics surface orphaned runs as a data integrity warning, not silent failure.
 
+## Themes
+
+User-authored themes persist as a normalized snapshot across six tables. Built-in light and dark stay code-pinned in `apps/client/src/lib/stores/themes.ts` and never appear in the database; the schema's `CHECK (id NOT IN ('light', 'dark'))` on `themes.id` defends against any import collision. The full feature design lives in `features/themes.md`.
+
+Boot order matters: `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app. The hydrate helper runs an idempotent one-time migration that walks the legacy `themes.user` blob from `vault/config.json`, runs the current derivation engine to produce missing tokens, writes one transaction per theme, then removes `themes.user` from the config so subsequent boots load purely from SQLite.
+
+### `themes`
+
+One row per user theme. Carries identity, the active blend canvas (the bg dimmed event tiles blend toward), and the engine version stamp that drives the rebake banner.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | text | Primary key. `CHECK (id NOT IN ('light', 'dark'))` so an import cannot shadow a built-in. |
+| `display_name` | text | User-visible name. Trimmed and length-capped at 60 chars by the client. |
+| `base` | text | `'light'` or `'dark'`. Used to fill any missing token from `BASE_APP_TOKENS` / `BASE_CALENDAR_TOKENS` during legacy import. The luminance of the live `--background` is what actually drives the dark-mode class at runtime, so this column is a default, not a binding. |
+| `blend_canvas` | text | Hex bg the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated, otherwise the user pins it directly. |
+| `seed_blend_canvas` | text | Clone-time snapshot of `blend_canvas` for "Reset all". |
+| `derivation_engine_version` | integer | The `DERIVATION_ENGINE_VERSION` constant in force when the snapshot was written. The editor surfaces a rebake banner when this trails the code constant and no row in `theme_upgrade_dismissals` matches. |
+| `created_at` | integer | Unix epoch ms. |
+| `updated_at` | integer | Unix epoch ms. Bumped on every mutator transaction. |
+
+### `theme_tokens`
+
+One row per resolved color value, across three peer kinds. Sources drive multi-token derivation when one of them is edited; app and calendar tokens are the rendered shell snapshot. Source key names are bare (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`); app and calendar key names keep their `--prefixed` CSS form.
+
+| Field | Type | Description |
+|---|---|---|
+| `theme_id` | text | FK to `themes(id)` ON DELETE CASCADE. |
+| `kind` | text | `'source'`, `'app'`, or `'calendar'`. |
+| `key` | text | Source name (bare) or CSS custom-property name (`--token`). |
+| `value` | text | Hex color (`#rrggbb` or `#rrggbbaa`). |
+| `isolated` | integer | `0` (re-derive on source edits) or `1` (user-pinned, skip during cascade). |
+
+Primary key: `(theme_id, kind, key)`. Index: `(theme_id, kind)` for fast per-kind lookups.
+
+The `isolated` flag replaces the old override/derived split. `isolated=1` means "do not re-derive this token when sources change"; `isolated=0` means it participates in the next source-edit cascade. Toggling Isolated on a row does not touch `value` because the snapshot already holds the auto-derived value at the moment the user pinned it.
+
+### `theme_event_palette`
+
+The 24-slot positional event color palette. Slot indices map directly into `eventPalette[i]` on the client.
+
+| Field | Type | Description |
+|---|---|---|
+| `theme_id` | text | FK to `themes(id)` ON DELETE CASCADE. |
+| `slot` | integer | `CHECK (slot >= 0 AND slot < 24)`. |
+| `value` | text | Hex color. |
+
+Primary key: `(theme_id, slot)`.
+
+### `theme_seed_tokens`
+
+Clone-time snapshot of every `theme_tokens` row. Per-row reset reads from this table to restore both the value and the isolated flag, so a theme that was cloned with pins keeps those pins through a row reset. "Reset all" reads the entire seed snapshot in one transaction.
+
+Schema mirrors `theme_tokens` exactly:
+
+| Field | Type | Description |
+|---|---|---|
+| `theme_id` | text | FK to `themes(id)` ON DELETE CASCADE. |
+| `kind` | text | `'source'`, `'app'`, or `'calendar'`. |
+| `key` | text | Same key names as `theme_tokens`. |
+| `value` | text | Hex color at clone time. |
+| `isolated` | integer | Pinned state at clone time. |
+
+Primary key: `(theme_id, kind, key)`. Index: `(theme_id, kind)`.
+
+### `theme_seed_event_palette`
+
+Clone-time snapshot of `theme_event_palette`. Per-slot reset and "Reset all" pull from here.
+
+| Field | Type | Description |
+|---|---|---|
+| `theme_id` | text | FK to `themes(id)` ON DELETE CASCADE. |
+| `slot` | integer | `CHECK (slot >= 0 AND slot < 24)`. |
+| `value` | text | Hex color at clone time. |
+
+Primary key: `(theme_id, slot)`.
+
+### `theme_upgrade_dismissals`
+
+Tracks "Maybe later" decisions on the rebake banner so the same prompt does not return for an unchanged engine version.
+
+| Field | Type | Description |
+|---|---|---|
+| `theme_id` | text | FK to `themes(id)` ON DELETE CASCADE. |
+| `engine_version` | integer | The version the user dismissed against. |
+| `dismissed_at` | integer | Unix epoch ms. |
+
+Primary key: `(theme_id, engine_version)`.
+
+The editor only suppresses the banner when a dismissal exists for the *current* `DERIVATION_ENGINE_VERSION`. Bumping the constant invalidates older dismissals automatically because no row matches the new version yet, so users see the prompt again whenever the derivation engine actually changes.
+
+### Why a normalized snapshot rather than a JSON blob
+
+Three motivations lined up at once. First, structural changes to the token catalog (renames, additions, splits) need a row-level migration path; a JSON blob is opaque to schema migration and forces every saved theme through a tolerant validator. Second, the snapshot model decouples saved themes from the live derivation engine: a theme written today still paints the exact same colors next year, even if the engine bumps. Third, sources are no longer privileged storage; they sit as peer rows next to the app and calendar tokens, which matches the user's intuition that surface tokens like `--card` and `--popover` are not "less important" than the source palette.
+
+JSON keeps a role as the export format only: `serializeTheme` emits a v1 envelope (`schemaVersion: 1`, full snapshot, `appIsolated` / `calendarIsolated` arrays) and `validateThemeJson` accepts both v1 and the legacy `appTokenOverrides` / `calendarTokenOverrides` shape (the legacy branch re-derives at import time and folds overrides into the isolated-flag sets).
+
 ## Other features (stub)
 
 These tables are designed but their detailed shape is filled in when the feature ships. Each feature doc owns the deeper definition.
