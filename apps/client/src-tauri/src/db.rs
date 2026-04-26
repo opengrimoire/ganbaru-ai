@@ -274,5 +274,20 @@ pub fn migrations() -> Vec<Migration> {
             );
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 5,
+        description: "add scheme columns to themes (decorative day/night tag)",
+        // SQLite ALTER TABLE cannot add a NOT NULL column with a CHECK
+        // constraint to an existing table with rows, so the columns are
+        // nullable here. The frontend hydrate path backfills NULLs from
+        // canvas luminance on first read and writes them back, then every
+        // future write goes through the typed bridge which always supplies
+        // a 'light' or 'dark' value.
+        sql: "
+            ALTER TABLE themes ADD COLUMN scheme TEXT;
+            ALTER TABLE themes ADD COLUMN seed_scheme TEXT;
+        ",
+        kind: MigrationKind::Up,
     }]
 }

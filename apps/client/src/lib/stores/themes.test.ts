@@ -63,11 +63,13 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
     overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[base] };
   const appIsolated = overrides.appIsolated ?? new Set<string>();
   const calendarIsolated = overrides.calendarIsolated ?? new Set<string>();
+  const scheme = overrides.scheme ?? base;
   return {
     kind: "user",
     id: overrides.id ?? "test",
     displayName: overrides.displayName ?? "Test",
     base,
+    scheme,
     blendCanvas: overrides.blendCanvas ?? "#202020",
     eventPalette,
     derivationEngineVersion:
@@ -89,6 +91,7 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
       overrides.seedEventPalette ?? [...eventPalette],
     seedBlendCanvas:
       overrides.seedBlendCanvas ?? overrides.blendCanvas ?? "#202020",
+    seedScheme: overrides.seedScheme ?? scheme,
   };
 }
 
@@ -415,6 +418,15 @@ describe("validateThemeJson v1 branch", () => {
     }
   });
 
+  it("preserves an explicit scheme that disagrees with canvas luminance", () => {
+    const result = validateThemeJson(buildV1Input({ scheme: "light" }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.scheme).toBe("light");
+      expect(result.theme.seedScheme).toBe("light");
+    }
+  });
+
   it("rejects when sources is missing", () => {
     const input = buildV1Input();
     delete (input as Record<string, unknown>).sources;
@@ -443,6 +455,15 @@ describe("validateThemeJson legacy branch", () => {
     if (result.ok) {
       expect(result.theme.sources.canvas).toBe(BASE_APP_TOKENS.light["--background"]);
       expect(result.theme.sources.ink).toBe(BASE_APP_TOKENS.light["--foreground"]);
+    }
+  });
+
+  it("defaults scheme from canvas luminance when omitted", () => {
+    const result = validateThemeJson(buildLegacyInput({ base: "light" }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.scheme).toBe("light");
+      expect(result.theme.seedScheme).toBe("light");
     }
   });
 
@@ -553,6 +574,7 @@ describe("serializeTheme round-trip", () => {
       id: "round-trip",
       displayName: "Round Trip",
       base: "dark",
+      scheme: "light",
       blendCanvas: "#202020",
       sources: SAMPLE_SOURCES_DARK,
       appIsolated: new Set(["--primary"]),
@@ -565,6 +587,8 @@ describe("serializeTheme round-trip", () => {
       expect(reparsed.theme.id).toBe(original.id);
       expect(reparsed.theme.displayName).toBe(original.displayName);
       expect(reparsed.theme.base).toBe(original.base);
+      expect(reparsed.theme.scheme).toBe(original.scheme);
+      expect(reparsed.theme.seedScheme).toBe(original.scheme);
       expect(reparsed.theme.derivationEngineVersion).toBe(
         original.derivationEngineVersion,
       );
@@ -591,6 +615,7 @@ describe("serializeTheme round-trip", () => {
       "id",
       "displayName",
       "base",
+      "scheme",
       "blendCanvas",
       "derivationEngineVersion",
       "sources",

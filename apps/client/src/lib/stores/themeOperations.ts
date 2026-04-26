@@ -57,11 +57,16 @@ export function cloneTheme(
     source.kind === "user"
       ? new Set(source.calendarIsolated)
       : new Set<string>();
+  // Carry the source's scheme verbatim. Built-ins peg scheme to base, so
+  // a clone of "Light" starts as scheme=light. Cloning a user theme that
+  // was manually flipped preserves the flip on the clone.
+  const scheme = source.scheme;
   return {
     kind: "user",
     id,
     displayName,
     base: source.base,
+    scheme,
     blendCanvas: source.blendCanvas,
     eventPalette: palette,
     derivationEngineVersion:
@@ -80,6 +85,7 @@ export function cloneTheme(
     seedCalendarIsolated: new Set(calIsolated),
     seedEventPalette: [...palette],
     seedBlendCanvas: source.blendCanvas,
+    seedScheme: scheme,
   };
 }
 

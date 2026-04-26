@@ -8,6 +8,7 @@ import {
   DEFAULT_THEME_ID,
   DERIVATION_ENGINE_VERSION,
   computeThemeTokenOps,
+  defaultSchemeFromCanvas,
   deriveAppTokens,
   deriveCalendarTokens,
   getThemeById,
@@ -34,6 +35,7 @@ import {
 } from "./themeOperations";
 import { flushConfig, getConfigKey, setConfigKey } from "../vault/config";
 import {
+  backfillScheme,
   deleteTheme as dbDeleteTheme,
   insertTheme as dbInsertTheme,
   loadAllUserThemes,
@@ -117,6 +119,16 @@ export async function hydrateUserThemes(): Promise<void> {
   for (const read of reads) {
     const theme = userThemeFromRead(read);
     customThemes[theme.id] = theme;
+    // One-time backfill: rows created before migration v5 carry NULL
+    // scheme/seed_scheme. `userThemeFromRead` derived a value from canvas
+    // luminance; persist it so subsequent reads do not need to derive.
+    if (read.theme.scheme === null || read.theme.seed_scheme === null) {
+      try {
+        await backfillScheme(theme.id, theme.scheme);
+      } catch (err) {
+        console.error("scheme backfill failed for", theme.id, err);
+      }
+    }
   }
   const dismissalRows = await loadDismissals();
   for (const row of dismissalRows) {
@@ -228,6 +240,8 @@ function userThemeToWrite(theme: UserTheme): UserThemeWrite {
     id: theme.id,
     displayName: theme.displayName,
     base: theme.base,
+    scheme: theme.scheme,
+    seedScheme: theme.seedScheme,
     blendCanvas: theme.blendCanvas,
     seedBlendCanvas: theme.seedBlendCanvas,
     derivationEngineVersion: theme.derivationEngineVersion,
@@ -287,11 +301,23 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
   );
   const eventPalette = paletteFromRows(read.palette);
   const seedEventPalette = paletteFromRows(read.seedPalette);
+  // Rows created before migration v5 carry NULL for scheme/seed_scheme.
+  // Default both from canvas luminance so the icon picks the same value
+  // the editor used to render before this field existed.
+  const scheme: "light" | "dark" =
+    read.theme.scheme === "light" || read.theme.scheme === "dark"
+      ? read.theme.scheme
+      : defaultSchemeFromCanvas(sources.canvas);
+  const seedScheme: "light" | "dark" =
+    read.theme.seed_scheme === "light" || read.theme.seed_scheme === "dark"
+      ? read.theme.seed_scheme
+      : defaultSchemeFromCanvas(seedSources.canvas);
   return {
     kind: "user",
     id: read.theme.id,
     displayName: read.theme.display_name,
     base,
+    scheme,
     blendCanvas: read.theme.blend_canvas,
     eventPalette,
     derivationEngineVersion: read.theme.derivation_engine_version,
@@ -307,6 +333,7 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
     seedCalendarIsolated,
     seedEventPalette,
     seedBlendCanvas: read.theme.seed_blend_canvas,
+    seedScheme,
   };
 }
 
@@ -715,8 +742,23 @@ function resetThemeToSeed(id: ThemeId): boolean {
     calendarIsolated: new Set(current.seedCalendarIsolated),
     eventPalette: [...current.seedEventPalette],
     blendCanvas: current.seedBlendCanvas,
+    scheme: current.seedScheme,
   };
   if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Flip the decorative scheme tag on a user theme. Pure in-memory mutator
+ * (the buffer flushes on commit). Built-in themes have a code-pinned
+ * scheme and reject this call.
+ */
+function setThemeScheme(id: ThemeId, scheme: "light" | "dark"): boolean {
+  if (isBuiltinThemeId(id)) return false;
+  const current = customThemes[id];
+  if (!current) return false;
+  if (current.scheme === scheme) return false;
+  customThemes[id] = { ...current, scheme };
   return true;
 }
 
@@ -968,6 +1010,7 @@ export function getTheme() {
     resetTokenToSeed,
     resetPaletteSlot,
     resetThemeToSeed,
+    setThemeScheme,
     setPaletteSlot,
     setBlendCanvas,
     applyPreset,

@@ -86,6 +86,14 @@ export interface BuiltinTheme {
   id: ThemeId;
   displayName: string;
   base: "light" | "dark";
+  /**
+   * Decorative day/night annotation surfaced as the sun/moon icon. Built-in
+   * themes pin this to their base; user themes carry it as a separate
+   * editable field so the user can label a theme independently of canvas
+   * luminance. The runtime `.dark` class and event-palette pick still come
+   * from the actual canvas through `isThemeDark` / `isThemeCalendarDark`.
+   */
+  scheme: "light" | "dark";
   eventPalette: EventPaletteHexes;
   /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
   blendCanvas: string;
@@ -109,6 +117,12 @@ export interface UserTheme {
   id: ThemeId;
   displayName: string;
   base: "light" | "dark";
+  /**
+   * Decorative day/night annotation; flips the sun/moon icon in the editor
+   * header and the theme list. Has no effect on the runtime `.dark` class or
+   * the calendar event palette (both still derive from canvas luminance).
+   */
+  scheme: "light" | "dark";
   eventPalette: EventPaletteHexes;
   /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
   blendCanvas: string;
@@ -132,6 +146,8 @@ export interface UserTheme {
   seedCalendarIsolated: ReadonlySet<string>;
   seedEventPalette: EventPaletteHexes;
   seedBlendCanvas: string;
+  /** Clone-time scheme; "Reset all" restores `scheme` to this. */
+  seedScheme: "light" | "dark";
 }
 
 /**
@@ -206,6 +222,7 @@ export const lightTheme: BuiltinTheme = Object.freeze({
   id: "light",
   displayName: "Light",
   base: "light",
+  scheme: "light",
   eventPalette: LIGHT_EVENT_PALETTE,
   blendCanvas: "#ffffff",
 });
@@ -215,6 +232,7 @@ export const darkTheme: BuiltinTheme = Object.freeze({
   id: "dark",
   displayName: "Dark",
   base: "dark",
+  scheme: "dark",
   eventPalette: DARK_EVENT_PALETTE,
   blendCanvas: "#131314",
 });
@@ -874,6 +892,15 @@ export function isThemeDark(theme: Theme): boolean {
   return relativeLuminance(resolveCanvas(theme)) < DARK_SURFACE_THRESHOLD;
 }
 
+/**
+ * Pick the default decorative scheme for a canvas hex. Used by the clone
+ * path, the v1 validator's missing-scheme fallback, and the legacy DB row
+ * backfill when a row created before migration v5 is loaded.
+ */
+export function defaultSchemeFromCanvas(canvasHex: string): "light" | "dark" {
+  return relativeLuminance(canvasHex) < DARK_SURFACE_THRESHOLD ? "dark" : "light";
+}
+
 /** True when the resolved calendar canvas crosses into dark-mode territory. */
 export function isThemeCalendarDark(theme: Theme): boolean {
   return relativeLuminance(resolveCalCanvas(theme)) < DARK_SURFACE_THRESHOLD;
@@ -923,6 +950,7 @@ export function serializeTheme(theme: Theme): string {
       id: theme.id,
       displayName: theme.displayName,
       base: theme.base,
+      scheme: theme.scheme,
       blendCanvas: theme.blendCanvas,
       eventPalette: orderedPalette(theme.eventPalette),
     };
@@ -933,6 +961,7 @@ export function serializeTheme(theme: Theme): string {
     id: theme.id,
     displayName: theme.displayName,
     base: theme.base,
+    scheme: theme.scheme,
     blendCanvas: theme.blendCanvas,
     derivationEngineVersion: theme.derivationEngineVersion,
     sources: orderedSources(theme.sources),
@@ -1140,6 +1169,13 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     errors.push("derivationEngineVersion must be a number");
   }
 
+  const cleanScheme = sanitizeScheme(
+    input.scheme,
+    cleanSources?.canvas ?? cleanBlend,
+    "scheme",
+    errors,
+  );
+
   if (errors.length > 0) return { ok: false, errors };
 
   const theme: UserTheme = {
@@ -1147,6 +1183,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     id: cleanId,
     displayName: cleanDisplayName,
     base: cleanBase,
+    scheme: cleanScheme,
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
     derivationEngineVersion: cleanEngineVersion,
@@ -1162,6 +1199,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     seedCalendarIsolated: new Set(cleanCalIsolated),
     seedEventPalette: [...cleanPalette],
     seedBlendCanvas: cleanBlend,
+    seedScheme: cleanScheme,
   };
   return { ok: true, theme };
 }
@@ -1310,11 +1348,19 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
   const seedAppIsolated = new Set(Object.keys(seedAppOverrides));
   const seedCalIsolated = new Set(Object.keys(seedCalOverrides));
 
+  const cleanScheme = sanitizeScheme(
+    input.scheme,
+    cleanSources.canvas,
+    "scheme",
+    errors,
+  );
+
   const theme: UserTheme = {
     kind: "user",
     id: cleanId,
     displayName: cleanDisplayName,
     base: cleanBase,
+    scheme: cleanScheme,
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
     derivationEngineVersion: DERIVATION_ENGINE_VERSION,
@@ -1330,6 +1376,7 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     seedCalendarIsolated: seedCalIsolated,
     seedEventPalette: seedPalette,
     seedBlendCanvas: seedBlend,
+    seedScheme: cleanScheme,
   };
   return { ok: true, theme };
 }
@@ -1356,6 +1403,24 @@ function buildSnapshot(
  * shape). Unknown keys are dropped silently to match the legacy import
  * tolerance for stale token names.
  */
+/**
+ * Validate the optional `scheme` field. Defaults to canvas-derived when
+ * missing so legacy and v1-without-scheme imports always end up with a
+ * concrete value. Any value other than "light", "dark", or undefined is a
+ * hard error.
+ */
+function sanitizeScheme(
+  raw: unknown,
+  fallbackCanvasHex: string,
+  fieldName: string,
+  errors: string[],
+): "light" | "dark" {
+  if (raw === undefined) return defaultSchemeFromCanvas(fallbackCanvasHex);
+  if (raw === "light" || raw === "dark") return raw;
+  errors.push(`${fieldName} must be "light" or "dark"`);
+  return defaultSchemeFromCanvas(fallbackCanvasHex);
+}
+
 function sanitizeIsolatedList(
   source: unknown,
   allowed: ReadonlySet<string>,

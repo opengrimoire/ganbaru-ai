@@ -181,6 +181,8 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 | `id` | text | Primary key. `CHECK (id NOT IN ('light', 'dark'))` so an import cannot shadow a built-in. |
 | `display_name` | text | User-visible name. Trimmed and length-capped at 60 chars by the client. |
 | `base` | text | `'light'` or `'dark'`. Used to fill any missing token from `BASE_APP_TOKENS` / `BASE_CALENDAR_TOKENS` during legacy import. The luminance of the live `--background` is what actually drives the dark-mode class at runtime, so this column is a default, not a binding. |
+| `scheme` | text or null | `'light'` or `'dark'`. Purely decorative tag for the sun/moon indicator ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or the calendar palette pick. Nullable for backward compatibility (rows from before migration v5 are filled in on hydrate via canvas luminance). |
+| `seed_scheme` | text or null | Clone-time snapshot of `scheme` for "Reset all". Nullable on the same grounds. |
 | `blend_canvas` | text | Hex bg the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated, otherwise the user pins it directly. |
 | `seed_blend_canvas` | text | Clone-time snapshot of `blend_canvas` for "Reset all". |
 | `derivation_engine_version` | integer | The `DERIVATION_ENGINE_VERSION` constant in force when the snapshot was written. The editor surfaces a rebake banner when this trails the code constant and no row in `theme_upgrade_dismissals` matches. |

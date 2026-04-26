@@ -8,7 +8,6 @@
   import Moon from "@lucide/svelte/icons/moon";
   import { cn } from "$lib/utils";
   import {
-    isThemeDark,
     resolveAppTokens,
     resolveCalendarTokens,
     type Theme,
@@ -37,7 +36,7 @@
   // of the palette without needing all 24 swatches.
   const PREVIEW_INDICES: readonly number[] = [2, 5, 8, 11, 14, 17, 20, 23];
 
-  const BaseIcon = $derived(isThemeDark(theme) ? Moon : Sun);
+  const BaseIcon = $derived(theme.scheme === "dark" ? Moon : Sun);
   const appTokens = $derived(resolveAppTokens(theme));
   const calTokens = $derived(resolveCalendarTokens(theme));
 

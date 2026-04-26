@@ -42,11 +42,13 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
     overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[base] };
   const appIsolated = overrides.appIsolated ?? new Set<string>();
   const calendarIsolated = overrides.calendarIsolated ?? new Set<string>();
+  const scheme = overrides.scheme ?? base;
   return {
     kind: "user",
     id: overrides.id ?? "seed",
     displayName: overrides.displayName ?? "Seed",
     base,
+    scheme,
     blendCanvas: overrides.blendCanvas ?? "#101010",
     eventPalette: overrides.eventPalette ?? eventPalette,
     derivationEngineVersion:
@@ -67,6 +69,7 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
     seedEventPalette:
       overrides.seedEventPalette ?? [...(overrides.eventPalette ?? eventPalette)],
     seedBlendCanvas: overrides.seedBlendCanvas ?? overrides.blendCanvas ?? "#101010",
+    seedScheme: overrides.seedScheme ?? scheme,
   };
 }
 
@@ -234,6 +237,22 @@ describe("cloneTheme", () => {
     const source = makeUserTheme({ derivationEngineVersion: 0 });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.derivationEngineVersion).toBe(0);
+  });
+
+  it("carries the source's scheme verbatim on user clones", () => {
+    const source = makeUserTheme({ base: "dark", scheme: "light" });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.scheme).toBe("light");
+    expect(copy.seedScheme).toBe("light");
+  });
+
+  it("pegs scheme to base on built-in clones", () => {
+    const fromLight = cloneTheme(lightTheme, "fork-light", "Fork Light");
+    const fromDark = cloneTheme(darkTheme, "fork-dark", "Fork Dark");
+    expect(fromLight.scheme).toBe("light");
+    expect(fromLight.seedScheme).toBe("light");
+    expect(fromDark.scheme).toBe("dark");
+    expect(fromDark.seedScheme).toBe("dark");
   });
 });
 
