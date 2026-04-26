@@ -320,7 +320,7 @@
     onclick={toggleOpen}
     class={cn(
       "relative shrink-0 overflow-hidden rounded-md border border-border shadow-sm transition-shadow",
-      readOnly ? "cursor-not-allowed opacity-60" : "hover:shadow-md",
+      readOnly ? "cursor-not-allowed" : "hover:shadow-md",
     )}
     style="width: {swatchSize}px; height: {swatchSize}px;{alpha < 255 ? ` background: ${CHECKER_BG};` : ''}"
   >
