@@ -775,6 +775,7 @@ describe("getEventColor", () => {
     const customPalette = [...darkTheme.eventPalette];
     customPalette[2] = "#123456";
     const customTheme: Theme = {
+      kind: "builtin",
       id: "custom-test",
       displayName: "Custom Test",
       base: "dark",

@@ -51,9 +51,9 @@
   // a JSON snapshot so cancel can roll back the edits. Built-ins carry no
   // snapshot: they cannot be mutated while the editor is open, so there is
   // nothing to restore.
-  function handleDuplicate(id: ThemeId) {
+  async function handleDuplicate(id: ThemeId) {
     const previousActiveId = themeStore.id;
-    const newId = themeStore.duplicateTheme(id);
+    const newId = await themeStore.duplicateTheme(id);
     if (!newId) return;
     themeStore.setTheme(newId);
     themeEditor.open(newId, { createdFresh: true, previousActiveId });
@@ -71,15 +71,12 @@
     presetPickerOpen = true;
   }
 
-  function openEditorForNew(preset?: ThemePreset) {
+  async function openEditorForNew(preset?: ThemePreset) {
     const previousActiveId = themeStore.id;
-    const newId = themeStore.createTheme();
+    const newId = await themeStore.createTheme();
     if (preset) {
-      themeStore.updateTheme(newId, {
-        base: preset.base,
-        sources: { ...preset.sources },
-        displayName: preset.displayName,
-      });
+      await themeStore.applyPreset(newId, preset);
+      await themeStore.renameTheme(newId, preset.displayName);
     }
     themeStore.setTheme(newId);
     themeEditor.open(newId, { createdFresh: true, previousActiveId });
@@ -87,12 +84,12 @@
 
   function handlePresetPicked(preset: ThemePreset) {
     presetPickerOpen = false;
-    openEditorForNew(preset);
+    void openEditorForNew(preset);
   }
 
   function handlePresetBlank() {
     presetPickerOpen = false;
-    openEditorForNew();
+    void openEditorForNew();
   }
 
   function handlePresetClose() {
@@ -124,7 +121,7 @@
       });
       if (!picked || typeof picked !== "string") return;
       const text = await invoke<string>("vault_read_text", { path: picked });
-      const result = themeStore.importTheme(text);
+      const result = await themeStore.importTheme(text);
       if (!result.ok) {
         importErrors = result.errors;
         importDraft = text;
@@ -142,12 +139,12 @@
     }
   }
 
-  function handleImport() {
+  async function handleImport() {
     if (importDraft.trim().length === 0) {
       importErrors = ["Paste a theme JSON object first."];
       return;
     }
-    const result = themeStore.importTheme(importDraft);
+    const result = await themeStore.importTheme(importDraft);
     if (!result.ok) {
       importErrors = result.errors;
       return;
@@ -164,7 +161,7 @@
 
   function confirmDelete() {
     if (!pendingDelete) return;
-    themeStore.deleteTheme(pendingDelete);
+    void themeStore.deleteTheme(pendingDelete);
     pendingDelete = undefined;
   }
 

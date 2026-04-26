@@ -65,55 +65,81 @@ export interface ThemeSources {
 export type EventPaletteHexes = readonly string[];
 
 /**
- * A theme is a self-contained visual package. The minimum a theme must
- * carry is an id, a user-visible display name, a base (light or dark, used
- * for shell inheritance and contrast-text math), a complete event palette,
- * and the reference canvas used when blending dimmed event variants.
- *
- * The optional token-override fields are reserved for when themes also
- * recolor the app and calendar shell beyond the built-in light/dark CSS.
- * They are empty on the built-in themes today; adding a new theme that
- * overrides shell tokens later is a data-only change.
+ * Engine version stamp written onto every user theme at create, clone, or
+ * import time. Bump whenever the derivation engine (APP_DERIVATION,
+ * APP_FRACTIONS, CAL_DERIVATION, CAL_FRACTIONS, or any token-key list)
+ * changes such that derived output shifts. The editor uses the gap between
+ * a stored theme's stamp and this constant to render an opt-in "rebake"
+ * banner so non-pinned colors do not silently drift across app updates.
  */
-export interface Theme {
+export const DERIVATION_ENGINE_VERSION = 1;
+
+/**
+ * A built-in theme ships with the app, never persists to SQLite, and paints
+ * nothing onto the DOM beyond the base CSS rules. Built-ins carry the
+ * minimum a theme needs: an id, display name, base (light or dark, used for
+ * the base CSS lookup), a complete event palette, and the blend canvas the
+ * dimmed event variants reference.
+ */
+export interface BuiltinTheme {
+  kind: "builtin";
   id: ThemeId;
   displayName: string;
   base: "light" | "dark";
   eventPalette: EventPaletteHexes;
   /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
   blendCanvas: string;
-  /**
-   * Optional five-color source palette that drives the rest of the shell
-   * through the derivation formulas. When set, the token resolver uses
-   * overrides first, then derivation, then base CSS defaults. Built-ins do
-   * not ship sources: they resolve straight to base CSS tokens.
-   */
-  sources?: ThemeSources;
-  /** Optional overrides for app-shell CSS tokens (--primary, etc). */
-  appTokenOverrides?: Readonly<Record<string, string>>;
-  /** Optional overrides for calendar-shell CSS tokens (--cal-bg, etc). */
-  calendarTokenOverrides?: Readonly<Record<string, string>>;
-  /**
-   * Snapshot of the source theme's resolved tokens at clone time. Drives
-   * per-token lookups (future per-row reset) by recording what each token
-   * looked like when the clone was created, regardless of derivation.
-   */
-  seedAppTokens?: Readonly<Record<string, string>>;
-  seedCalendarTokens?: Readonly<Record<string, string>>;
-  seedEventPalette?: EventPaletteHexes;
-  /**
-   * Snapshot of the clone-time editable inputs (sources, overrides, blend
-   * canvas). Drives the theme-level "Reset to original" affordance: restoring
-   * these fields rewinds the theme to how it looked right after cloning.
-   * Separate from the resolved-token seeds above because reset restores the
-   * inputs the derivation reads, not the outputs. Only set on user themes;
-   * built-ins never carry seeds.
-   */
-  seedSources?: ThemeSources;
-  seedAppTokenOverrides?: Readonly<Record<string, string>>;
-  seedCalendarTokenOverrides?: Readonly<Record<string, string>>;
-  seedBlendCanvas?: string;
 }
+
+/**
+ * A user-authored theme persists in SQLite as a normalized snapshot. Every
+ * shell token is stored as a resolved hex; the per-token `isolated` flag
+ * controls whether each token participates in the next source-edit cascade
+ * or is treated as user-pinned. Sources drive multi-token derivation only
+ * at write time (source edits, rebake, clone, preset apply); at runtime the
+ * snapshot is the source of truth, which makes saved themes stable across
+ * derivation-engine changes.
+ *
+ * Seeds capture the live state at clone time so per-row and "Reset all"
+ * restore correctly. Seed isolated flags mirror the live flags so a clone
+ * of a user theme keeps its pins through resets.
+ */
+export interface UserTheme {
+  kind: "user";
+  id: ThemeId;
+  displayName: string;
+  base: "light" | "dark";
+  eventPalette: EventPaletteHexes;
+  /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
+  blendCanvas: string;
+  /** Engine version stamp; drives the rebake banner. */
+  derivationEngineVersion: number;
+  /** Six-color palette that powers source-edit derivation. */
+  sources: ThemeSources;
+  /** Full snapshot of every app-shell CSS token. */
+  appTokens: Readonly<Record<string, string>>;
+  /** Full snapshot of every calendar-shell CSS token. */
+  calendarTokens: Readonly<Record<string, string>>;
+  /** Keys of `appTokens` the user has pinned against future derivations. */
+  appIsolated: ReadonlySet<string>;
+  /** Keys of `calendarTokens` the user has pinned against future derivations. */
+  calendarIsolated: ReadonlySet<string>;
+  /** Clone-time snapshots used for per-row reset and "Reset all". */
+  seedSources: ThemeSources;
+  seedAppTokens: Readonly<Record<string, string>>;
+  seedCalendarTokens: Readonly<Record<string, string>>;
+  seedAppIsolated: ReadonlySet<string>;
+  seedCalendarIsolated: ReadonlySet<string>;
+  seedEventPalette: EventPaletteHexes;
+  seedBlendCanvas: string;
+}
+
+/**
+ * A theme is either a code-pinned built-in or a user-authored entry. The
+ * `kind` discriminator picks which shape applies; built-ins are
+ * synchronously available, user themes hydrate from SQLite at boot.
+ */
+export type Theme = BuiltinTheme | UserTheme;
 
 // Built-in event palettes. Stored as positional arrays so the slot index
 // (the value events save on disk) maps directly into the array. Additional
@@ -175,7 +201,8 @@ const DARK_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
   "#A5998C",
 ]);
 
-export const lightTheme: Theme = Object.freeze({
+export const lightTheme: BuiltinTheme = Object.freeze({
+  kind: "builtin",
   id: "light",
   displayName: "Light",
   base: "light",
@@ -183,7 +210,8 @@ export const lightTheme: Theme = Object.freeze({
   blendCanvas: "#ffffff",
 });
 
-export const darkTheme: Theme = Object.freeze({
+export const darkTheme: BuiltinTheme = Object.freeze({
+  kind: "builtin",
   id: "dark",
   displayName: "Dark",
   base: "dark",
@@ -196,10 +224,11 @@ export const darkTheme: Theme = Object.freeze({
  * mutated at runtime; user-authored themes live in the store layer and are
  * merged with this registry when the active theme is resolved.
  */
-export const BUILTIN_THEME_REGISTRY: Readonly<Record<ThemeId, Theme>> = Object.freeze({
-  [lightTheme.id]: lightTheme,
-  [darkTheme.id]: darkTheme,
-});
+export const BUILTIN_THEME_REGISTRY: Readonly<Record<ThemeId, BuiltinTheme>> =
+  Object.freeze({
+    [lightTheme.id]: lightTheme,
+    [darkTheme.id]: darkTheme,
+  });
 
 /**
  * Theme ID used on first launch and when the stored ID is unknown. Kept as
@@ -245,10 +274,12 @@ export function themeIds(
  * Compute the CSS custom property changes needed to apply a theme when
  * `previouslyApplied` tokens were set by the last theme.
  *
- * Without this, switching from a theme that painted `--primary` to a theme
- * without overrides would leave the previous value stuck on the root. The
- * result tells the caller which tokens to set and which leftover keys to
- * remove, plus the new set of applied keys to remember for the next switch.
+ * User themes paint their full token snapshot; built-ins paint nothing and
+ * let the base CSS rules show through. The result tells the caller which
+ * tokens to set, which leftover keys to clear, and the new set of applied
+ * keys to remember for the next switch (without this bookkeeping, switching
+ * from a user theme to a built-in would leave the previous theme's values
+ * stuck on the root).
  */
 export function computeThemeTokenOps(
   theme: Theme,
@@ -260,24 +291,16 @@ export function computeThemeTokenOps(
 } {
   const toSet = new Map<string, string>();
   const applied = new Set<string>();
-  const merge = (overrides?: Readonly<Record<string, string>>) => {
-    if (!overrides) return;
-    for (const [key, value] of Object.entries(overrides)) {
+  if (theme.kind === "user") {
+    for (const [key, value] of Object.entries(theme.appTokens)) {
       toSet.set(key, value);
       applied.add(key);
     }
-  };
-  // Derived values go first so explicit overrides layered on top win. Both
-  // derived AND overridden tokens need to be pushed to the DOM; if derived
-  // values were omitted, clearing the previous theme's override would drop
-  // the token back to the base CSS rule instead of the new theme's derived
-  // value.
-  if (theme.sources) {
-    merge(deriveAppTokens(theme.sources, theme.base));
-    merge(deriveCalendarTokens(theme.sources, theme.base));
+    for (const [key, value] of Object.entries(theme.calendarTokens)) {
+      toSet.set(key, value);
+      applied.add(key);
+    }
   }
-  merge(theme.appTokenOverrides);
-  merge(theme.calendarTokenOverrides);
   const toClear = new Set<string>();
   for (const key of previouslyApplied) {
     if (!applied.has(key)) toClear.add(key);
@@ -798,51 +821,23 @@ export function deriveCalendarTokens(
 }
 
 /**
- * Resolve every app-shell token for a theme using the three-layer lookup:
- *
- * 1. Explicit override in `theme.appTokenOverrides` wins.
- * 2. Else, if the theme carries `sources`, the derivation engine's value
- *    for this token (when defined) is used.
- * 3. Else, the CSS base default for the theme's `base` is used.
- *
- * Used at clone time so the duplicate is self-contained, and by the
- * token-apply pipeline so `root.style.setProperty` pushes both pinned
- * overrides AND derived values to the DOM (otherwise derived values
- * would stay at their base CSS defaults instead of tracking sources).
+ * Resolve every app-shell token for a theme. User themes paint from the
+ * stored snapshot directly; built-ins fall through to the base CSS rules.
+ * The three-layer fall-through (override, derived, base) is gone: the
+ * snapshot is computed at write time and stays stable at runtime.
  */
 export function resolveAppTokens(theme: Theme): Record<string, string> {
-  const out: Record<string, string> = {};
-  const derived = theme.sources
-    ? deriveAppTokens(theme.sources, theme.base)
-    : undefined;
-  for (const key of APP_TOKEN_KEYS) {
-    out[key] =
-      theme.appTokenOverrides?.[key] ??
-      derived?.[key] ??
-      BASE_APP_TOKENS[theme.base][key];
-  }
-  return out;
+  if (theme.kind === "user") return { ...theme.appTokens };
+  return { ...BASE_APP_TOKENS[theme.base] };
 }
 
 /**
- * Calendar-shell counterpart to {@link resolveAppTokens}. The derivation
- * engine only returns entries for derivable tokens (cal-bg, cal-header-bg,
- * cal-gridline, cal-time-label, cal-timeline-rail); semantic tokens
- * (today marker, current time, timeline break / focus) fall through to
- * the base CSS defaults automatically.
+ * Calendar-shell counterpart to {@link resolveAppTokens}. User themes paint
+ * from the stored snapshot; built-ins fall through to the base CSS.
  */
 export function resolveCalendarTokens(theme: Theme): Record<string, string> {
-  const out: Record<string, string> = {};
-  const derived = theme.sources
-    ? deriveCalendarTokens(theme.sources, theme.base)
-    : undefined;
-  for (const key of CALENDAR_TOKEN_KEYS) {
-    out[key] =
-      theme.calendarTokenOverrides?.[key] ??
-      derived?.[key] ??
-      BASE_CALENDAR_TOKENS[theme.base][key];
-  }
-  return out;
+  if (theme.kind === "user") return { ...theme.calendarTokens };
+  return { ...BASE_CALENDAR_TOKENS[theme.base] };
 }
 
 /**
@@ -855,33 +850,22 @@ export function resolveCalendarTokens(theme: Theme): Record<string, string> {
 const DARK_SURFACE_THRESHOLD = 0.4;
 
 /**
- * Resolve the effective app background a theme will actually paint. Walks
- * the same three-layer lookup the token pipeline uses (explicit override →
- * source-derived → base default) so luminance-driven branches see the same
- * canvas the user sees.
+ * Resolve the effective app background a theme will actually paint. Reads
+ * the token snapshot for user themes and the base CSS rule for built-ins.
+ * Used to drive luminance-aware decisions (dark-mode class, event-tile
+ * palette) from the actual painted color rather than the cosmetic label.
  */
 export function resolveCanvas(theme: Theme): string {
-  return (
-    theme.appTokenOverrides?.["--background"] ??
-    theme.sources?.canvas ??
-    BASE_APP_TOKENS[theme.base]["--background"]
-  );
+  if (theme.kind === "user") return theme.appTokens["--background"];
+  return BASE_APP_TOKENS[theme.base]["--background"];
 }
 
 /**
  * Resolve the effective calendar background. Used to pick the event-tile
- * palette and calendar-specific outline mixes based on the actual surface
- * rather than the theme's cosmetic `base` label. Walks the same three
- * layers the token pipeline uses: explicit override first, then the
- * source-derived value (direction-aware shift of the app canvas), then
- * the base CSS default.
+ * palette and calendar outline mixes based on the actual painted surface.
  */
 export function resolveCalCanvas(theme: Theme): string {
-  const override = theme.calendarTokenOverrides?.["--cal-bg"];
-  if (override) return override;
-  if (theme.sources) {
-    return deriveCalendarTokens(theme.sources, theme.base)["--cal-bg"];
-  }
+  if (theme.kind === "user") return theme.calendarTokens["--cal-bg"];
   return BASE_CALENDAR_TOKENS[theme.base]["--cal-bg"];
 }
 
@@ -925,31 +909,51 @@ export function generateThemeId(
  * Serialize a theme to a stable, pretty-printed JSON string suitable for
  * clipboard or file export. Keys are emitted in a deterministic order so
  * exported files diff cleanly across saves.
+ *
+ * Built-ins emit a minimal read-only payload (id, name, base, palette,
+ * blendCanvas) used by the editor's "View JSON" affordance; built-ins are
+ * never round-tripped through import. User themes emit `schemaVersion: 1`
+ * with the full token snapshot, sources, isolated-flag arrays, engine
+ * version stamp, and palette. Seeds are install-local reset state and are
+ * intentionally omitted from the export.
  */
 export function serializeTheme(theme: Theme): string {
+  if (theme.kind === "builtin") {
+    const ordered: Record<string, unknown> = {
+      id: theme.id,
+      displayName: theme.displayName,
+      base: theme.base,
+      blendCanvas: theme.blendCanvas,
+      eventPalette: orderedPalette(theme.eventPalette),
+    };
+    return JSON.stringify(ordered, null, 2);
+  }
   const ordered: Record<string, unknown> = {
+    schemaVersion: 1,
     id: theme.id,
     displayName: theme.displayName,
     base: theme.base,
     blendCanvas: theme.blendCanvas,
+    derivationEngineVersion: theme.derivationEngineVersion,
+    sources: orderedSources(theme.sources),
+    appTokens: orderedTokens(theme.appTokens, APP_TOKEN_KEYS),
+    calendarTokens: orderedTokens(theme.calendarTokens, CALENDAR_TOKEN_KEYS),
+    appIsolated: orderedIsolated(theme.appIsolated, APP_TOKEN_KEYS),
+    calendarIsolated: orderedIsolated(theme.calendarIsolated, CALENDAR_TOKEN_KEYS),
     eventPalette: orderedPalette(theme.eventPalette),
   };
-  if (theme.sources) {
-    ordered.sources = orderedSources(theme.sources);
-  }
-  if (theme.appTokenOverrides && Object.keys(theme.appTokenOverrides).length > 0) {
-    ordered.appTokenOverrides = orderedTokens(theme.appTokenOverrides, APP_TOKEN_KEYS);
-  }
-  if (
-    theme.calendarTokenOverrides &&
-    Object.keys(theme.calendarTokenOverrides).length > 0
-  ) {
-    ordered.calendarTokenOverrides = orderedTokens(
-      theme.calendarTokenOverrides,
-      CALENDAR_TOKEN_KEYS,
-    );
-  }
   return JSON.stringify(ordered, null, 2);
+}
+
+function orderedIsolated(
+  set: ReadonlySet<string>,
+  order: readonly string[],
+): string[] {
+  const out: string[] = [];
+  for (const key of order) {
+    if (set.has(key)) out.push(key);
+  }
+  return out;
 }
 
 function orderedPalette(palette: EventPaletteHexes): string[] {
@@ -983,21 +987,46 @@ function orderedTokens(
 }
 
 export type ThemeValidationResult =
-  | { ok: true; theme: Theme }
+  | { ok: true; theme: UserTheme }
   | { ok: false; errors: string[] };
 
 /**
  * Validate an unknown JSON-parsed value as a Theme suitable for import.
- * Returns the cleaned theme on success; on failure returns a list of all
- * problems found so the UI can surface them at once instead of one round-trip
- * per error. Unknown override keys are stripped silently because dropping a
- * stale token name should not block an otherwise valid theme.
+ * Returns a {@link UserTheme} on success (built-ins are never imported);
+ * on failure returns a list of all problems found so the UI can surface
+ * them at once instead of one round-trip per error. Unknown token keys
+ * are stripped silently because dropping a stale token name should not
+ * block an otherwise valid theme.
+ *
+ * Two import paths share validation of common identity fields:
+ * * - **v1** (`schemaVersion: 1`): expects full token snapshots, source
+ *   palette, isolated-flag arrays, and an engine version stamp. Used by
+ *   exports written by this app version onward.
+ * - **Legacy** (no schemaVersion): walks the old `sources?` /
+ *   `appTokenOverrides?` / `calendarTokenOverrides?` shape. The current
+ *   derivation engine runs at import time to compute the missing tokens,
+ *   overrides layer on top to produce the snapshot, and the engine
+ *   version stamp is set to the current code constant. Pinned tokens map
+ *   to the new `appIsolated` / `calendarIsolated` flag sets.
  */
 export function validateThemeJson(input: unknown): ThemeValidationResult {
-  const errors: string[] = [];
   if (!isPlainObject(input)) {
     return { ok: false, errors: ["theme must be a JSON object"] };
   }
+  if (input.schemaVersion === 1) return validateV1(input);
+  return validateLegacy(input);
+}
+
+function validateIdentity(
+  input: Record<string, unknown>,
+  errors: string[],
+): {
+  cleanId: string;
+  cleanDisplayName: string;
+  cleanBase: "light" | "dark";
+  cleanBlend: string;
+  cleanPalette: string[];
+} {
   const { id, displayName, base, blendCanvas, eventPalette } = input;
 
   let cleanId = "";
@@ -1007,6 +1036,8 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
     errors.push(
       "id must be a slug (lowercase letters, digits, and hyphens; must start with a letter or digit)",
     );
+  } else if (id === "light" || id === "dark") {
+    errors.push("id must not collide with a built-in theme");
   } else {
     cleanId = id;
   }
@@ -1052,119 +1083,350 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
       }
     }
   }
+  return { cleanId, cleanDisplayName, cleanBase, cleanBlend, cleanPalette };
+}
+
+function validateV1(input: Record<string, unknown>): ThemeValidationResult {
+  const errors: string[] = [];
+  const { cleanId, cleanDisplayName, cleanBase, cleanBlend, cleanPalette } =
+    validateIdentity(input, errors);
 
   const cleanSources = sanitizeSources(input.sources, errors, "sources", cleanBase);
+  if (!cleanSources && !errors.some((e) => e.startsWith("sources"))) {
+    errors.push("sources is required on v1 themes");
+  }
 
-  const cleanAppOverrides = sanitizeOverrides(
-    input.appTokenOverrides,
+  const cleanAppTokens = sanitizeFullTokenSnapshot(
+    input.appTokens,
+    APP_TOKEN_KEYS,
     APP_TOKEN_KEY_SET,
-    "appTokenOverrides",
+    BASE_APP_TOKENS[cleanBase],
+    "appTokens",
     errors,
   );
-  const cleanCalOverrides = sanitizeOverrides(
-    input.calendarTokenOverrides,
+  const cleanCalTokens = sanitizeFullTokenSnapshot(
+    input.calendarTokens,
+    CALENDAR_TOKEN_KEYS,
     CALENDAR_TOKEN_KEY_SET,
-    "calendarTokenOverrides",
+    BASE_CALENDAR_TOKENS[cleanBase],
+    "calendarTokens",
     errors,
   );
-  const cleanSeedApp = sanitizeOverrides(
-    input.seedAppTokens,
+
+  const cleanAppIsolated = sanitizeIsolatedList(
+    input.appIsolated,
     APP_TOKEN_KEY_SET,
-    "seedAppTokens",
+    "appIsolated",
     errors,
   );
-  const cleanSeedCal = sanitizeOverrides(
-    input.seedCalendarTokens,
+  const cleanCalIsolated = sanitizeIsolatedList(
+    input.calendarIsolated,
     CALENDAR_TOKEN_KEY_SET,
-    "seedCalendarTokens",
+    "calendarIsolated",
     errors,
   );
-  const cleanSeedPalette = sanitizeSeedPalette(
-    input.seedEventPalette,
-    errors,
-  );
-  const cleanSeedSources = sanitizeSources(
-    input.seedSources,
-    errors,
-    "seedSources",
-    cleanBase,
-  );
-  const cleanSeedAppOverrides = sanitizeOverrides(
-    input.seedAppTokenOverrides,
-    APP_TOKEN_KEY_SET,
-    "seedAppTokenOverrides",
-    errors,
-  );
-  const cleanSeedCalOverrides = sanitizeOverrides(
-    input.seedCalendarTokenOverrides,
-    CALENDAR_TOKEN_KEY_SET,
-    "seedCalendarTokenOverrides",
-    errors,
-  );
-  let cleanSeedBlend: string | undefined;
-  if (input.seedBlendCanvas !== undefined) {
-    if (!isHexColor(input.seedBlendCanvas)) {
-      errors.push("seedBlendCanvas must be a hex color (#RRGGBB or #RRGGBBAA)");
+
+  let cleanEngineVersion = DERIVATION_ENGINE_VERSION;
+  if (typeof input.derivationEngineVersion === "number") {
+    if (
+      Number.isInteger(input.derivationEngineVersion) &&
+      input.derivationEngineVersion >= 0
+    ) {
+      cleanEngineVersion = input.derivationEngineVersion;
     } else {
-      cleanSeedBlend = input.seedBlendCanvas;
+      errors.push("derivationEngineVersion must be a non-negative integer");
     }
-  }
-
-  // Migrate legacy themes that stored calCanvas as a 7th source. In the
-  // current model calendar-bg auto-tracks canvas; a user who had explicitly
-  // picked a calCanvas before this change meant "keep the calendar surface
-  // independent of canvas", which maps cleanly to an override on --cal-bg.
-  // Only migrate when no override already exists so we don't clobber a
-  // pinned value the user set more recently. Applied to seedSources too so
-  // per-row reset still restores the clone-time value.
-  const legacyCalCanvas = extractLegacyCalCanvas(input.sources);
-  let migratedCalOverrides = cleanCalOverrides;
-  if (legacyCalCanvas && !migratedCalOverrides?.["--cal-bg"]) {
-    migratedCalOverrides = { ...(migratedCalOverrides ?? {}), "--cal-bg": legacyCalCanvas };
-  }
-  const legacySeedCalCanvas = extractLegacyCalCanvas(input.seedSources);
-  let migratedSeedCalOverrides = cleanSeedCalOverrides;
-  if (legacySeedCalCanvas && !migratedSeedCalOverrides?.["--cal-bg"]) {
-    migratedSeedCalOverrides = {
-      ...(migratedSeedCalOverrides ?? {}),
-      "--cal-bg": legacySeedCalCanvas,
-    };
+  } else if (input.derivationEngineVersion !== undefined) {
+    errors.push("derivationEngineVersion must be a number");
   }
 
   if (errors.length > 0) return { ok: false, errors };
 
-  const theme: Theme = {
+  const theme: UserTheme = {
+    kind: "user",
     id: cleanId,
     displayName: cleanDisplayName,
     base: cleanBase,
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
+    derivationEngineVersion: cleanEngineVersion,
+    sources: cleanSources as ThemeSources,
+    appTokens: cleanAppTokens,
+    calendarTokens: cleanCalTokens,
+    appIsolated: cleanAppIsolated,
+    calendarIsolated: cleanCalIsolated,
+    seedSources: { ...(cleanSources as ThemeSources) },
+    seedAppTokens: { ...cleanAppTokens },
+    seedCalendarTokens: { ...cleanCalTokens },
+    seedAppIsolated: new Set(cleanAppIsolated),
+    seedCalendarIsolated: new Set(cleanCalIsolated),
+    seedEventPalette: [...cleanPalette],
+    seedBlendCanvas: cleanBlend,
   };
-  if (cleanSources) theme.sources = cleanSources;
-  if (cleanAppOverrides && Object.keys(cleanAppOverrides).length > 0) {
-    theme.appTokenOverrides = cleanAppOverrides;
-  }
-  if (migratedCalOverrides && Object.keys(migratedCalOverrides).length > 0) {
-    theme.calendarTokenOverrides = migratedCalOverrides;
-  }
-  if (cleanSeedApp && Object.keys(cleanSeedApp).length > 0) {
-    theme.seedAppTokens = cleanSeedApp;
-  }
-  if (cleanSeedCal && Object.keys(cleanSeedCal).length > 0) {
-    theme.seedCalendarTokens = cleanSeedCal;
-  }
-  if (cleanSeedPalette) {
-    theme.seedEventPalette = cleanSeedPalette;
-  }
-  if (cleanSeedSources) theme.seedSources = cleanSeedSources;
-  if (cleanSeedAppOverrides && Object.keys(cleanSeedAppOverrides).length > 0) {
-    theme.seedAppTokenOverrides = cleanSeedAppOverrides;
-  }
-  if (migratedSeedCalOverrides && Object.keys(migratedSeedCalOverrides).length > 0) {
-    theme.seedCalendarTokenOverrides = migratedSeedCalOverrides;
-  }
-  if (cleanSeedBlend) theme.seedBlendCanvas = cleanSeedBlend;
   return { ok: true, theme };
+}
+
+function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
+  const errors: string[] = [];
+  const { cleanId, cleanDisplayName, cleanBase, cleanBlend, cleanPalette } =
+    validateIdentity(input, errors);
+
+  const cleanSourcesPartial = sanitizeSources(
+    input.sources,
+    errors,
+    "sources",
+    cleanBase,
+  );
+  // Legacy files without `sources` resolve to defaults derived from BASE.
+  // The new model always carries sources, so synthesize a valid set here.
+  const cleanSources: ThemeSources =
+    cleanSourcesPartial ?? defaultSources(cleanBase);
+
+  const cleanAppOverrides =
+    sanitizeOverrides(
+      input.appTokenOverrides,
+      APP_TOKEN_KEY_SET,
+      "appTokenOverrides",
+      errors,
+    ) ?? {};
+  const cleanCalOverrides =
+    sanitizeOverrides(
+      input.calendarTokenOverrides,
+      CALENDAR_TOKEN_KEY_SET,
+      "calendarTokenOverrides",
+      errors,
+    ) ?? {};
+
+  // Legacy themes that stored calCanvas as a 7th source meant "keep the
+  // calendar surface independent of canvas", which maps to an isolated
+  // override on --cal-bg. Only apply when no override already exists.
+  const legacyCalCanvas = extractLegacyCalCanvas(input.sources);
+  if (legacyCalCanvas && !cleanCalOverrides["--cal-bg"]) {
+    cleanCalOverrides["--cal-bg"] = legacyCalCanvas;
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+
+  // Run the current derivation engine to produce the missing tokens,
+  // then layer the overrides on top to produce the full snapshot.
+  const derivedApp = deriveAppTokens(cleanSources, cleanBase);
+  const derivedCal = deriveCalendarTokens(cleanSources, cleanBase);
+  const appTokens = buildSnapshot(
+    APP_TOKEN_KEYS,
+    BASE_APP_TOKENS[cleanBase],
+    derivedApp,
+    cleanAppOverrides,
+  );
+  const calTokens = buildSnapshot(
+    CALENDAR_TOKEN_KEYS,
+    BASE_CALENDAR_TOKENS[cleanBase],
+    derivedCal,
+    cleanCalOverrides,
+  );
+  const appIsolated = new Set(Object.keys(cleanAppOverrides));
+  const calIsolated = new Set(Object.keys(cleanCalOverrides));
+
+  // Legacy seed fields, if any, follow the same shape.
+  const seedSourcesPartial = sanitizeSources(
+    input.seedSources,
+    errors,
+    "seedSources",
+    cleanBase,
+  );
+  const seedSources: ThemeSources = seedSourcesPartial ?? { ...cleanSources };
+  const seedAppOverrides =
+    sanitizeOverrides(
+      input.seedAppTokenOverrides,
+      APP_TOKEN_KEY_SET,
+      "seedAppTokenOverrides",
+      errors,
+    ) ?? { ...cleanAppOverrides };
+  const seedCalOverrides =
+    sanitizeOverrides(
+      input.seedCalendarTokenOverrides,
+      CALENDAR_TOKEN_KEY_SET,
+      "seedCalendarTokenOverrides",
+      errors,
+    ) ?? { ...cleanCalOverrides };
+  const legacySeedCalCanvas = extractLegacyCalCanvas(input.seedSources);
+  if (legacySeedCalCanvas && !seedCalOverrides["--cal-bg"]) {
+    seedCalOverrides["--cal-bg"] = legacySeedCalCanvas;
+  }
+  const seedAppTokensProvided = sanitizeOverrides(
+    input.seedAppTokens,
+    APP_TOKEN_KEY_SET,
+    "seedAppTokens",
+    errors,
+  );
+  const seedCalTokensProvided = sanitizeOverrides(
+    input.seedCalendarTokens,
+    CALENDAR_TOKEN_KEY_SET,
+    "seedCalendarTokens",
+    errors,
+  );
+  const seedPalette =
+    sanitizeSeedPalette(input.seedEventPalette, errors) ?? [...cleanPalette];
+  let seedBlend = cleanBlend;
+  if (input.seedBlendCanvas !== undefined) {
+    if (!isHexColor(input.seedBlendCanvas)) {
+      errors.push("seedBlendCanvas must be a hex color (#RRGGBB or #RRGGBBAA)");
+    } else {
+      seedBlend = input.seedBlendCanvas;
+    }
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+
+  // Build seed snapshots: prefer explicit seedAppTokens when provided, else
+  // re-derive from seedSources and layer seed overrides.
+  const seedDerivedApp = deriveAppTokens(seedSources, cleanBase);
+  const seedDerivedCal = deriveCalendarTokens(seedSources, cleanBase);
+  const seedAppTokens = seedAppTokensProvided
+    ? buildSnapshot(
+        APP_TOKEN_KEYS,
+        BASE_APP_TOKENS[cleanBase],
+        seedDerivedApp,
+        { ...seedAppTokensProvided, ...seedAppOverrides },
+      )
+    : buildSnapshot(
+        APP_TOKEN_KEYS,
+        BASE_APP_TOKENS[cleanBase],
+        seedDerivedApp,
+        seedAppOverrides,
+      );
+  const seedCalTokens = seedCalTokensProvided
+    ? buildSnapshot(
+        CALENDAR_TOKEN_KEYS,
+        BASE_CALENDAR_TOKENS[cleanBase],
+        seedDerivedCal,
+        { ...seedCalTokensProvided, ...seedCalOverrides },
+      )
+    : buildSnapshot(
+        CALENDAR_TOKEN_KEYS,
+        BASE_CALENDAR_TOKENS[cleanBase],
+        seedDerivedCal,
+        seedCalOverrides,
+      );
+  const seedAppIsolated = new Set(Object.keys(seedAppOverrides));
+  const seedCalIsolated = new Set(Object.keys(seedCalOverrides));
+
+  const theme: UserTheme = {
+    kind: "user",
+    id: cleanId,
+    displayName: cleanDisplayName,
+    base: cleanBase,
+    blendCanvas: cleanBlend,
+    eventPalette: cleanPalette,
+    derivationEngineVersion: DERIVATION_ENGINE_VERSION,
+    sources: cleanSources,
+    appTokens,
+    calendarTokens: calTokens,
+    appIsolated,
+    calendarIsolated: calIsolated,
+    seedSources,
+    seedAppTokens,
+    seedCalendarTokens: seedCalTokens,
+    seedAppIsolated,
+    seedCalendarIsolated: seedCalIsolated,
+    seedEventPalette: seedPalette,
+    seedBlendCanvas: seedBlend,
+  };
+  return { ok: true, theme };
+}
+
+/**
+ * Build a full token snapshot by layering derived values over base CSS,
+ * then overrides over derived. Every key in `order` ends up in the result.
+ */
+function buildSnapshot(
+  order: readonly string[],
+  base: Readonly<Record<string, string>>,
+  derived: Readonly<Record<string, string>>,
+  overrides: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of order) {
+    out[key] = overrides[key] ?? derived[key] ?? base[key];
+  }
+  return out;
+}
+
+/**
+ * Validate an array-of-key-strings (the v1 `appIsolated` / `calendarIsolated`
+ * shape). Unknown keys are dropped silently to match the legacy import
+ * tolerance for stale token names.
+ */
+function sanitizeIsolatedList(
+  source: unknown,
+  allowed: ReadonlySet<string>,
+  fieldName: string,
+  errors: string[],
+): Set<string> {
+  if (source === undefined) return new Set();
+  if (!Array.isArray(source)) {
+    errors.push(`${fieldName} must be an array of token-key strings`);
+    return new Set();
+  }
+  const out = new Set<string>();
+  for (let i = 0; i < source.length; i++) {
+    const value = source[i];
+    if (typeof value !== "string") {
+      errors.push(`${fieldName}[${i}] must be a string`);
+      continue;
+    }
+    if (!allowed.has(value)) continue;
+    out.add(value);
+  }
+  return out;
+}
+
+/**
+ * Validate a v1 full token snapshot. Every key in `order` must be present
+ * and a valid hex; missing keys backfill from `base` with a non-fatal note
+ * (drift across app versions should not block import).
+ */
+function sanitizeFullTokenSnapshot(
+  source: unknown,
+  order: readonly string[],
+  allowed: ReadonlySet<string>,
+  base: Readonly<Record<string, string>>,
+  fieldName: string,
+  errors: string[],
+): Record<string, string> {
+  if (!isPlainObject(source)) {
+    errors.push(`${fieldName} must be an object of token-hex pairs`);
+    return { ...base };
+  }
+  const out: Record<string, string> = {};
+  for (const key of order) {
+    const value = (source as Record<string, unknown>)[key];
+    if (value === undefined) {
+      out[key] = base[key];
+      continue;
+    }
+    if (!isHexColor(value)) {
+      errors.push(`${fieldName}.${key} must be a hex color`);
+      continue;
+    }
+    if (!allowed.has(key)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Synthesize a default sources palette from base CSS for legacy imports
+ * that don't carry a `sources` block.
+ */
+function defaultSources(base: "light" | "dark"): ThemeSources {
+  return {
+    canvas: defaultSourceValue("canvas", base),
+    ink: defaultSourceValue("ink", base),
+    primary: defaultSourceValue("primary", base),
+    destructive: defaultSourceValue("destructive", base),
+    confirm: defaultSourceValue("confirm", base),
+    warning: defaultSourceValue("warning", base),
+  };
 }
 
 /**

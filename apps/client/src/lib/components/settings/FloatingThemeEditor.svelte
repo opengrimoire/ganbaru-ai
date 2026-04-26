@@ -111,13 +111,13 @@
   // Back rolls the session back to its pre-edit state and returns to the
   // Settings list. Save keeps the edits as the committed state. Both close
   // the panel through the same callback into TitleBar.
-  function onCancel() {
-    themeEditor.cancel();
+  async function onCancel() {
+    await themeEditor.cancel();
     onBackToList();
   }
 
-  function onCommit() {
-    themeEditor.commit();
+  async function onCommit() {
+    await themeEditor.commit();
     onBackToList();
   }
 </script>

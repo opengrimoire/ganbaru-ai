@@ -205,5 +205,74 @@ pub fn migrations() -> Vec<Migration> {
             ALTER TABLE calendar_event_overrides ADD COLUMN color INTEGER;
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 4,
+        description: "user-theme storage (themes, tokens, palette, seeds, dismissals)",
+        // User themes move out of vault/config.json into normalized SQLite
+        // rows. Built-in light/dark stay code-pinned and are forbidden
+        // from this table by the CHECK on themes.id. The "snapshot" model
+        // stores every resolved token as its own row: derivation runs at
+        // write time, never at read time, so saved themes are stable
+        // across derivation-engine changes. The seed_* tables mirror the
+        // live tables at clone time and feed per-row reset / "Reset all".
+        sql: "
+            PRAGMA foreign_keys=ON;
+
+            CREATE TABLE IF NOT EXISTS themes (
+                id TEXT PRIMARY KEY CHECK (id NOT IN ('light', 'dark')),
+                display_name TEXT NOT NULL,
+                base TEXT NOT NULL CHECK (base IN ('light', 'dark')),
+                blend_canvas TEXT NOT NULL,
+                seed_blend_canvas TEXT NOT NULL,
+                derivation_engine_version INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS theme_tokens (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL CHECK (kind IN ('source', 'app', 'calendar')),
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                isolated INTEGER NOT NULL DEFAULT 0 CHECK (isolated IN (0, 1)),
+                PRIMARY KEY (theme_id, kind, key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_theme_tokens_kind
+                ON theme_tokens(theme_id, kind);
+
+            CREATE TABLE IF NOT EXISTS theme_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 24),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+
+            CREATE TABLE IF NOT EXISTS theme_seed_tokens (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL CHECK (kind IN ('source', 'app', 'calendar')),
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                isolated INTEGER NOT NULL DEFAULT 0 CHECK (isolated IN (0, 1)),
+                PRIMARY KEY (theme_id, kind, key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_theme_seed_tokens_kind
+                ON theme_seed_tokens(theme_id, kind);
+
+            CREATE TABLE IF NOT EXISTS theme_seed_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 24),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+
+            CREATE TABLE IF NOT EXISTS theme_upgrade_dismissals (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                engine_version INTEGER NOT NULL,
+                dismissed_at INTEGER NOT NULL,
+                PRIMARY KEY (theme_id, engine_version)
+            );
+        ",
+        kind: MigrationKind::Up,
     }]
 }

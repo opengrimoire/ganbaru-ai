@@ -1,9 +1,15 @@
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
   type Theme,
   type ThemeId,
+  type ThemeSources,
+  type UserTheme,
   BUILTIN_THEME_REGISTRY,
   DEFAULT_THEME_ID,
+  DERIVATION_ENGINE_VERSION,
   computeThemeTokenOps,
+  deriveAppTokens,
+  deriveCalendarTokens,
   getThemeById,
   isBuiltinThemeId,
   isThemeDark,
@@ -12,55 +18,71 @@ import {
   validateThemeJson,
   darkTheme,
   lightTheme,
+  resolveCalendarTokens,
+  APP_TOKEN_KEYS,
+  CALENDAR_TOKEN_KEYS,
+  BASE_APP_TOKENS,
+  BASE_CALENDAR_TOKENS,
 } from "./themes";
 import {
   cloneTheme,
   mergeThemePatch,
   nextUniqueDisplayName,
   normalizeDisplayName,
-  synthesizeSeedsIfMissing,
+  synthesizeSourcesFromResolved,
+  type UserThemePatch,
 } from "./themeOperations";
-import { getConfigKey, setConfigKey } from "../vault/config";
+import { flushConfig, getConfigKey, setConfigKey } from "../vault/config";
+import {
+  deleteTheme as dbDeleteTheme,
+  insertTheme as dbInsertTheme,
+  loadAllUserThemes,
+  loadDismissals,
+  recordDismissal,
+  replaceThemeContent,
+  type TokenKind,
+  type UserThemeRead,
+  type UserThemeWrite,
+} from "../api/themes";
+import type { ThemePreset } from "$lib/data/themePresets";
 
 const ACTIVE_KEY = "theme.activeId";
-const CUSTOM_KEY = "themes.user";
+const LEGACY_CUSTOM_KEY = "themes.user";
 
-function loadSavedCustomThemes(): Record<ThemeId, Theme> {
-  const saved = getConfigKey<Record<string, unknown> | undefined>(
-    CUSTOM_KEY,
-    undefined,
-  );
-  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
-  const out: Record<ThemeId, Theme> = {};
-  for (const key of Object.keys(saved)) {
-    if (!Object.hasOwn(saved, key)) continue;
-    if (isBuiltinThemeId(key)) continue;
-    const value = saved[key];
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const result = validateThemeJson({ ...(value as Record<string, unknown>), id: key });
-    if (result.ok) out[key] = synthesizeSeedsIfMissing(result.theme);
-  }
-  return out;
-}
+let customThemes = $state<Record<ThemeId, UserTheme>>({});
+let dismissals = $state<Record<ThemeId, number>>({});
+let activeId = $state<ThemeId>(DEFAULT_THEME_ID);
+let appliedTokenKeys = new Set<string>();
+let hydrated = false;
 
-let customThemes = $state<Record<ThemeId, Theme>>(loadSavedCustomThemes());
+/**
+ * Themes that exist in memory but have not been written to SQLite yet.
+ * `createTheme` and `duplicateTheme` add the new id here; `persistThemeToDb`
+ * removes it after a successful INSERT. The buffer model means the editor
+ * runs on this in-memory state until the user clicks Save, at which point
+ * `persistThemeToDb` flushes the entire snapshot in one shot. Cancel just
+ * deletes the entry without ever touching the DB.
+ */
+const freshThemes = new Set<ThemeId>();
+
+/**
+ * Dismissals queued during an editor session for a fresh theme. The
+ * `theme_upgrade_dismissals` table FKs back to `themes.id`, so we cannot
+ * call `recordDismissal` until the parent row exists. `persistThemeToDb`
+ * drains this map after the INSERT lands. For non-fresh themes the
+ * dismissal goes straight to disk and never enters this map.
+ */
+const pendingDismissals = new Map<ThemeId, number>();
 
 function combinedRegistry(): Readonly<Record<ThemeId, Theme>> {
   return { ...BUILTIN_THEME_REGISTRY, ...customThemes };
 }
 
-function loadSavedThemeId(): ThemeId {
+function loadActiveIdFromConfig(): ThemeId {
   const saved = getConfigKey<string | undefined>(ACTIVE_KEY, undefined);
   if (saved && getThemeById(saved, combinedRegistry())) return saved;
   return DEFAULT_THEME_ID;
 }
-
-let activeId = $state<ThemeId>(loadSavedThemeId());
-
-// Tracks which CSS custom properties the active theme injected. When the
-// user switches, any key set by the previous theme but not the new one is
-// removed from the root so stale colors do not leak across switches.
-let appliedTokenKeys = new Set<string>();
 
 function resolveActive(): Theme {
   return getThemeById(activeId, combinedRegistry()) ?? darkTheme;
@@ -80,14 +102,257 @@ function applyThemeToDom(): void {
   appliedTokenKeys = applied;
 }
 
-// Apply the initial theme on module load so first paint matches the stored
-// preference (no FOUC on light-mode boot).
-if (typeof document !== "undefined") {
+/**
+ * Boot-time hydration: load user themes from SQLite, run the one-time vault
+ * migration if a legacy `themes.user` blob is present, resolve the active
+ * theme from config, and paint the first frame.
+ *
+ * Idempotent. main.ts awaits this between `ensureConfigLoaded` and the App
+ * import so first paint matches what the user has on disk (no FOUC).
+ */
+export async function hydrateUserThemes(): Promise<void> {
+  if (hydrated) return;
+  await migrateVaultThemesIfPresent();
+  const reads = await loadAllUserThemes();
+  for (const read of reads) {
+    const theme = userThemeFromRead(read);
+    customThemes[theme.id] = theme;
+  }
+  const dismissalRows = await loadDismissals();
+  for (const row of dismissalRows) {
+    const prev = dismissals[row.theme_id] ?? 0;
+    if (row.engine_version > prev) dismissals[row.theme_id] = row.engine_version;
+  }
+  activeId = loadActiveIdFromConfig();
+  hydrated = true;
   applyThemeToDom();
 }
 
-function persistCustomThemes(): void {
-  setConfigKey(CUSTOM_KEY, $state.snapshot(customThemes));
+/**
+ * One-time migration: read the legacy `themes.user` JSON blob from
+ * vault/config.json, walk each entry through `validateThemeJson` (legacy
+ * branch), insert into SQLite, then delete the key from config and flush.
+ * Idempotent because a second pass sees no `themes.user` and returns early.
+ */
+async function migrateVaultThemesIfPresent(): Promise<void> {
+  const saved = getConfigKey<Record<string, unknown> | undefined>(
+    LEGACY_CUSTOM_KEY,
+    undefined,
+  );
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return;
+  const ids = Object.keys(saved);
+  if (ids.length === 0) {
+    setConfigKey(LEGACY_CUSTOM_KEY, undefined);
+    await flushConfig();
+    return;
+  }
+  for (const key of ids) {
+    if (!Object.hasOwn(saved, key)) continue;
+    if (isBuiltinThemeId(key)) continue;
+    const value = saved[key];
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const result = validateThemeJson({
+      ...(value as Record<string, unknown>),
+      id: key,
+    });
+    if (!result.ok) {
+      console.error("vault theme migration: skipped invalid theme", key, result.errors);
+      continue;
+    }
+    try {
+      await dbInsertTheme(userThemeToWrite(result.theme));
+    } catch (err) {
+      console.error("vault theme migration: insert failed for", key, err);
+    }
+  }
+  setConfigKey(LEGACY_CUSTOM_KEY, undefined);
+  await flushConfig();
+}
+
+/**
+ * Shape a {@link UserTheme} into the row groups the DB layer expects.
+ */
+function userThemeToWrite(theme: UserTheme): UserThemeWrite {
+  type TokenWrite = {
+    kind: TokenKind;
+    key: string;
+    value: string;
+    isolated: boolean;
+  };
+  const tokens: TokenWrite[] = [];
+  for (const [key, value] of Object.entries(theme.sources)) {
+    tokens.push({ kind: "source", key, value, isolated: false });
+  }
+  for (const key of APP_TOKEN_KEYS) {
+    tokens.push({
+      kind: "app",
+      key,
+      value: theme.appTokens[key],
+      isolated: theme.appIsolated.has(key),
+    });
+  }
+  for (const key of CALENDAR_TOKEN_KEYS) {
+    tokens.push({
+      kind: "calendar",
+      key,
+      value: theme.calendarTokens[key],
+      isolated: theme.calendarIsolated.has(key),
+    });
+  }
+  const palette = theme.eventPalette.map((value, slot) => ({ slot, value }));
+  const seedTokens: TokenWrite[] = [];
+  for (const [key, value] of Object.entries(theme.seedSources)) {
+    seedTokens.push({ kind: "source", key, value, isolated: false });
+  }
+  for (const key of APP_TOKEN_KEYS) {
+    seedTokens.push({
+      kind: "app",
+      key,
+      value: theme.seedAppTokens[key],
+      isolated: theme.seedAppIsolated.has(key),
+    });
+  }
+  for (const key of CALENDAR_TOKEN_KEYS) {
+    seedTokens.push({
+      kind: "calendar",
+      key,
+      value: theme.seedCalendarTokens[key],
+      isolated: theme.seedCalendarIsolated.has(key),
+    });
+  }
+  const seedPalette = theme.seedEventPalette.map((value, slot) => ({
+    slot,
+    value,
+  }));
+  return {
+    id: theme.id,
+    displayName: theme.displayName,
+    base: theme.base,
+    blendCanvas: theme.blendCanvas,
+    seedBlendCanvas: theme.seedBlendCanvas,
+    derivationEngineVersion: theme.derivationEngineVersion,
+    tokens,
+    palette,
+    seedTokens,
+    seedPalette,
+  };
+}
+
+/**
+ * Build a {@link UserTheme} from row groups returned by `loadAllUserThemes`.
+ * Missing tokens are backfilled from BASE so a partial DB write or a
+ * mid-migration race never crashes the UI.
+ */
+function userThemeFromRead(read: UserThemeRead): UserTheme {
+  const base = read.theme.base;
+  const sources = sourcesFromRows(
+    read.tokens.filter((t) => t.kind === "source"),
+    base,
+  );
+  const seedSources = sourcesFromRows(
+    read.seedTokens.filter((t) => t.kind === "source"),
+    base,
+  );
+  const appTokens = snapshotFromRows(
+    read.tokens.filter((t) => t.kind === "app"),
+    APP_TOKEN_KEYS,
+    BASE_APP_TOKENS[base],
+  );
+  const calendarTokens = snapshotFromRows(
+    read.tokens.filter((t) => t.kind === "calendar"),
+    CALENDAR_TOKEN_KEYS,
+    BASE_CALENDAR_TOKENS[base],
+  );
+  const seedAppTokens = snapshotFromRows(
+    read.seedTokens.filter((t) => t.kind === "app"),
+    APP_TOKEN_KEYS,
+    BASE_APP_TOKENS[base],
+  );
+  const seedCalendarTokens = snapshotFromRows(
+    read.seedTokens.filter((t) => t.kind === "calendar"),
+    CALENDAR_TOKEN_KEYS,
+    BASE_CALENDAR_TOKENS[base],
+  );
+  const appIsolated = isolatedFromRows(
+    read.tokens.filter((t) => t.kind === "app"),
+  );
+  const calendarIsolated = isolatedFromRows(
+    read.tokens.filter((t) => t.kind === "calendar"),
+  );
+  const seedAppIsolated = isolatedFromRows(
+    read.seedTokens.filter((t) => t.kind === "app"),
+  );
+  const seedCalendarIsolated = isolatedFromRows(
+    read.seedTokens.filter((t) => t.kind === "calendar"),
+  );
+  const eventPalette = paletteFromRows(read.palette);
+  const seedEventPalette = paletteFromRows(read.seedPalette);
+  return {
+    kind: "user",
+    id: read.theme.id,
+    displayName: read.theme.display_name,
+    base,
+    blendCanvas: read.theme.blend_canvas,
+    eventPalette,
+    derivationEngineVersion: read.theme.derivation_engine_version,
+    sources,
+    appTokens,
+    calendarTokens,
+    appIsolated,
+    calendarIsolated,
+    seedSources,
+    seedAppTokens,
+    seedCalendarTokens,
+    seedAppIsolated,
+    seedCalendarIsolated,
+    seedEventPalette,
+    seedBlendCanvas: read.theme.seed_blend_canvas,
+  };
+}
+
+function sourcesFromRows(
+  rows: ReadonlyArray<{ key: string; value: string }>,
+  base: "light" | "dark",
+): ThemeSources {
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  return {
+    canvas: map.get("canvas") ?? BASE_APP_TOKENS[base]["--background"],
+    ink: map.get("ink") ?? BASE_APP_TOKENS[base]["--foreground"],
+    primary: map.get("primary") ?? BASE_APP_TOKENS[base]["--primary"],
+    destructive:
+      map.get("destructive") ?? BASE_APP_TOKENS[base]["--destructive"],
+    confirm: map.get("confirm") ?? BASE_APP_TOKENS[base]["--action-confirm"],
+    warning: map.get("warning") ?? BASE_APP_TOKENS[base]["--status-tentative"],
+  };
+}
+
+function snapshotFromRows(
+  rows: ReadonlyArray<{ key: string; value: string }>,
+  order: readonly string[],
+  fallback: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const out: Record<string, string> = {};
+  for (const key of order) out[key] = map.get(key) ?? fallback[key];
+  return out;
+}
+
+function isolatedFromRows(
+  rows: ReadonlyArray<{ key: string; isolated: number }>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const r of rows) if (r.isolated) out.add(r.key);
+  return out;
+}
+
+function paletteFromRows(
+  rows: ReadonlyArray<{ slot: number; value: string }>,
+): string[] {
+  const out: string[] = new Array(PALETTE_SIZE).fill("#000000");
+  for (const r of rows) {
+    if (r.slot >= 0 && r.slot < PALETTE_SIZE) out[r.slot] = r.value;
+  }
+  return out;
 }
 
 function setTheme(id: ThemeId): void {
@@ -101,6 +366,79 @@ function existingDisplayNames(): string[] {
   return Object.values(combinedRegistry()).map((t) => t.displayName);
 }
 
+/**
+ * Flush the in-memory state of a theme to SQLite. Called by the editor's
+ * Save path. Fresh themes go through `dbInsertTheme`; existing themes
+ * use `replaceThemeContent` so dismissal rows survive. Pending dismissals
+ * for the theme are recorded after the INSERT lands.
+ */
+async function persistThemeToDb(id: ThemeId): Promise<void> {
+  const current = customThemes[id];
+  if (!current) return;
+  const write = userThemeToWrite(current);
+  if (freshThemes.has(id)) {
+    await dbInsertTheme(write);
+    freshThemes.delete(id);
+    const pending = pendingDismissals.get(id);
+    if (pending !== undefined) {
+      await recordDismissal(id, pending);
+      pendingDismissals.delete(id);
+    }
+  } else {
+    await replaceThemeContent(write);
+  }
+}
+
+/**
+ * Drop a freshly-created theme that the user backed out of without saving.
+ * The theme was never inserted into SQLite, so the cleanup is purely
+ * in-memory: registry entry, fresh-theme flag, queued dismissal, and the
+ * active-id pointer if it was pointing here.
+ */
+function discardFreshTheme(id: ThemeId): void {
+  if (!freshThemes.has(id)) return;
+  delete customThemes[id];
+  delete dismissals[id];
+  freshThemes.delete(id);
+  pendingDismissals.delete(id);
+  if (id === activeId) {
+    activeId = DEFAULT_THEME_ID;
+    applyThemeToDom();
+    setConfigKey(ACTIVE_KEY, activeId);
+  }
+}
+
+/**
+ * Restore an existing user theme to a JSON snapshot taken at editor-open.
+ * Used by the Cancel path to revert in-memory edits without touching the
+ * DB (which never received them in the buffer model). The id is locked
+ * to the existing slot so the snapshot cannot accidentally fork a new
+ * theme.
+ */
+function restoreThemeFromSnapshot(id: ThemeId, json: string): boolean {
+  if (isBuiltinThemeId(id)) return false;
+  if (!Object.hasOwn(customThemes, id)) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return false;
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    (parsed as Record<string, unknown>).id = id;
+  }
+  const result = validateThemeJson(parsed);
+  if (!result.ok) return false;
+  customThemes[id] = { ...result.theme, id };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Create a brand-new user theme cloned from the active theme (or the
+ * given seed). The clone lands in memory only; `freshThemes` records that
+ * the editor's Save path needs an INSERT rather than a content replace.
+ */
 function createTheme(seedFromId?: ThemeId): ThemeId {
   const registry = combinedRegistry();
   const seed = seedFromId
@@ -108,11 +446,17 @@ function createTheme(seedFromId?: ThemeId): ThemeId {
     : (registry[activeId] ?? darkTheme);
   const id = generateThemeId(registry);
   const displayName = nextUniqueDisplayName("New theme", existingDisplayNames());
-  customThemes[id] = cloneTheme(seed, id, displayName);
-  persistCustomThemes();
+  const clone = cloneTheme(seed, id, displayName);
+  customThemes[id] = clone;
+  freshThemes.add(id);
   return id;
 }
 
+/**
+ * Duplicate an existing theme (built-in or user) into a new in-memory
+ * user theme. Same buffer-model contract as `createTheme`: the row is
+ * not in SQLite until the editor commits.
+ */
 function duplicateTheme(sourceId: ThemeId): ThemeId | undefined {
   const registry = combinedRegistry();
   const source = registry[sourceId];
@@ -122,32 +466,32 @@ function duplicateTheme(sourceId: ThemeId): ThemeId | undefined {
     `${source.displayName} copy`,
     existingDisplayNames(),
   );
-  customThemes[id] = cloneTheme(source, id, displayName);
-  persistCustomThemes();
+  const clone = cloneTheme(source, id, displayName);
+  customThemes[id] = clone;
+  freshThemes.add(id);
   return id;
 }
 
-function updateTheme(id: ThemeId, patch: Partial<Omit<Theme, "id">>): boolean {
+function renameTheme(id: ThemeId, displayName: string): boolean {
   if (isBuiltinThemeId(id)) return false;
   const current = customThemes[id];
   if (!current) return false;
-  customThemes[id] = mergeThemePatch(current, patch);
-  persistCustomThemes();
-  if (id === activeId) applyThemeToDom();
+  const normalized = normalizeDisplayName(displayName);
+  if (normalized === undefined) return false;
+  customThemes[id] = mergeThemePatch(current, { displayName: normalized });
   return true;
 }
 
-function renameTheme(id: ThemeId, displayName: string): boolean {
-  const normalized = normalizeDisplayName(displayName);
-  if (normalized === undefined) return false;
-  return updateTheme(id, { displayName: normalized });
-}
-
-function deleteTheme(id: ThemeId): boolean {
+async function deleteTheme(id: ThemeId): Promise<boolean> {
   if (isBuiltinThemeId(id)) return false;
   if (!Object.hasOwn(customThemes, id)) return false;
+  if (!freshThemes.has(id)) {
+    await dbDeleteTheme(id);
+  }
+  freshThemes.delete(id);
+  pendingDismissals.delete(id);
   delete customThemes[id];
-  persistCustomThemes();
+  delete dismissals[id];
   if (id === activeId) {
     activeId = DEFAULT_THEME_ID;
     applyThemeToDom();
@@ -156,11 +500,348 @@ function deleteTheme(id: ThemeId): boolean {
   return true;
 }
 
+/**
+ * Edit a single source value and cascade derivation through every
+ * non-isolated app/calendar token. Pure in-memory: the editor buffer
+ * persists only when the user clicks Save, so a streaming drag stays at
+ * 60fps without a single SQLite write per pointer move.
+ */
+function updateSourceValue(
+  id: ThemeId,
+  sourceKey: keyof ThemeSources,
+  value: string,
+): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  const nextSources: ThemeSources = { ...current.sources, [sourceKey]: value };
+  const derivedApp = deriveAppTokens(nextSources, current.base);
+  const derivedCal = deriveCalendarTokens(nextSources, current.base);
+  const calBgIsolated = current.calendarIsolated.has("--cal-bg");
+  const nextBlendCanvas =
+    !calBgIsolated && derivedCal["--cal-bg"]
+      ? derivedCal["--cal-bg"]
+      : undefined;
+  const nextAppTokens: Record<string, string> = { ...current.appTokens };
+  for (const key of APP_TOKEN_KEYS) {
+    if (current.appIsolated.has(key)) continue;
+    if (derivedApp[key] !== undefined) nextAppTokens[key] = derivedApp[key];
+  }
+  const nextCalTokens: Record<string, string> = { ...current.calendarTokens };
+  for (const key of CALENDAR_TOKEN_KEYS) {
+    if (current.calendarIsolated.has(key)) continue;
+    if (derivedCal[key] !== undefined) nextCalTokens[key] = derivedCal[key];
+  }
+  customThemes[id] = {
+    ...current,
+    sources: nextSources,
+    appTokens: nextAppTokens,
+    calendarTokens: nextCalTokens,
+    blendCanvas: nextBlendCanvas ?? current.blendCanvas,
+  };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Pin a token against future derivations. The stored hex stays unchanged
+ * (it already equals the current derived value); only the flag flips.
+ */
+function isolateToken(
+  id: ThemeId,
+  kind: "app" | "calendar",
+  key: string,
+): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  const set = kind === "app" ? current.appIsolated : current.calendarIsolated;
+  if (set.has(key)) return false;
+  const nextSet = new Set(set);
+  nextSet.add(key);
+  customThemes[id] = {
+    ...current,
+    appIsolated: kind === "app" ? nextSet : current.appIsolated,
+    calendarIsolated:
+      kind === "calendar" ? nextSet : current.calendarIsolated,
+  };
+  return true;
+}
+
+/**
+ * Re-run the current derivation for a token, write the result back, and
+ * flip `isolated` to 0. Used by the "Link back" affordance.
+ */
+function relinkToken(
+  id: ThemeId,
+  kind: "app" | "calendar",
+  key: string,
+): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  const set = kind === "app" ? current.appIsolated : current.calendarIsolated;
+  if (!set.has(key)) return false;
+  const derived =
+    kind === "app"
+      ? deriveAppTokens(current.sources, current.base)
+      : deriveCalendarTokens(current.sources, current.base);
+  const baseTokens =
+    kind === "app" ? BASE_APP_TOKENS[current.base] : BASE_CALENDAR_TOKENS[current.base];
+  const nextValue = derived[key] ?? baseTokens[key];
+  const nextSet = new Set(set);
+  nextSet.delete(key);
+  const nextSnapshot =
+    kind === "app"
+      ? { ...current.appTokens, [key]: nextValue }
+      : { ...current.calendarTokens, [key]: nextValue };
+  const nextBlendCanvas =
+    kind === "calendar" && key === "--cal-bg" ? nextValue : current.blendCanvas;
+  customThemes[id] = {
+    ...current,
+    appTokens: kind === "app" ? nextSnapshot : current.appTokens,
+    calendarTokens:
+      kind === "calendar" ? nextSnapshot : current.calendarTokens,
+    appIsolated: kind === "app" ? nextSet : current.appIsolated,
+    calendarIsolated:
+      kind === "calendar" ? nextSet : current.calendarIsolated,
+    blendCanvas: nextBlendCanvas,
+  };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Write a new hex to a token without changing its isolated flag. The
+ * editor only enables direct hex input on isolated rows, so this in
+ * practice always writes onto a pinned token. When the token is
+ * `--cal-bg`, also update `blendCanvas` so dimmed past-event variants
+ * keep blending against the current calendar surface.
+ */
+function setTokenValue(
+  id: ThemeId,
+  kind: "app" | "calendar",
+  key: string,
+  value: string,
+): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  const nextBlendCanvas =
+    kind === "calendar" && key === "--cal-bg" ? value : current.blendCanvas;
+  const nextSnapshot =
+    kind === "app"
+      ? { ...current.appTokens, [key]: value }
+      : { ...current.calendarTokens, [key]: value };
+  customThemes[id] = {
+    ...current,
+    appTokens: kind === "app" ? nextSnapshot : current.appTokens,
+    calendarTokens:
+      kind === "calendar" ? nextSnapshot : current.calendarTokens,
+    blendCanvas: nextBlendCanvas,
+  };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Reset a single token to its seed value AND seed isolated flag.
+ * Source resets re-run the current derivation through `updateSourceValue`
+ * so non-pinned dependents follow the seed canvas/ink/etc.
+ */
+function resetTokenToSeed(
+  id: ThemeId,
+  kind: TokenKind,
+  key: string,
+): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  if (kind === "source") {
+    const seedValue = current.seedSources[key as keyof ThemeSources];
+    if (seedValue === undefined) return true;
+    updateSourceValue(id, key as keyof ThemeSources, seedValue);
+    return true;
+  }
+  const seedSnapshot =
+    kind === "app" ? current.seedAppTokens : current.seedCalendarTokens;
+  const seedIsolatedSet =
+    kind === "app" ? current.seedAppIsolated : current.seedCalendarIsolated;
+  const nextValue = seedSnapshot[key];
+  if (nextValue === undefined) return true;
+  const nextIsolatedFlag = seedIsolatedSet.has(key);
+  const liveSnapshot =
+    kind === "app"
+      ? { ...current.appTokens, [key]: nextValue }
+      : { ...current.calendarTokens, [key]: nextValue };
+  const liveIsolatedSet =
+    kind === "app"
+      ? new Set(current.appIsolated)
+      : new Set(current.calendarIsolated);
+  if (nextIsolatedFlag) liveIsolatedSet.add(key);
+  else liveIsolatedSet.delete(key);
+  customThemes[id] = {
+    ...current,
+    appTokens: kind === "app" ? liveSnapshot : current.appTokens,
+    calendarTokens:
+      kind === "calendar" ? liveSnapshot : current.calendarTokens,
+    appIsolated: kind === "app" ? liveIsolatedSet : current.appIsolated,
+    calendarIsolated:
+      kind === "calendar" ? liveIsolatedSet : current.calendarIsolated,
+  };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+function resetPaletteSlot(id: ThemeId, slot: number): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  if (slot < 0 || slot >= current.seedEventPalette.length) return false;
+  const nextPalette = [...current.eventPalette];
+  nextPalette[slot] = current.seedEventPalette[slot];
+  customThemes[id] = { ...current, eventPalette: nextPalette };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Restore every token, palette slot, and blend canvas to their seed
+ * values.
+ */
+function resetThemeToSeed(id: ThemeId): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  customThemes[id] = {
+    ...current,
+    sources: { ...current.seedSources },
+    appTokens: { ...current.seedAppTokens },
+    calendarTokens: { ...current.seedCalendarTokens },
+    appIsolated: new Set(current.seedAppIsolated),
+    calendarIsolated: new Set(current.seedCalendarIsolated),
+    eventPalette: [...current.seedEventPalette],
+    blendCanvas: current.seedBlendCanvas,
+  };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+function setPaletteSlot(id: ThemeId, slot: number, value: string): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  if (slot < 0 || slot >= current.eventPalette.length) return false;
+  const nextPalette = [...current.eventPalette];
+  nextPalette[slot] = value;
+  customThemes[id] = { ...current, eventPalette: nextPalette };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Pin the blend canvas, decoupling it from `--cal-bg`. Used when the user
+ * explicitly types a different value for the dimmed-event reference.
+ */
+function setBlendCanvas(id: ThemeId, value: string): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  customThemes[id] = { ...current, blendCanvas: value };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Replace a freshly-created clone's content with the given preset's
+ * palette. Used by the "New theme" preset picker: the call site has just
+ * created a clone in memory and now overwrites it with the preset's
+ * sources, re-derived snapshot, and matching seeds.
+ */
+function applyPreset(id: ThemeId, preset: ThemePreset): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  const sources: ThemeSources = { ...preset.sources };
+  const derivedApp = deriveAppTokens(sources, preset.base);
+  const derivedCal = deriveCalendarTokens(sources, preset.base);
+  const appTokens: Record<string, string> = { ...BASE_APP_TOKENS[preset.base] };
+  for (const [k, v] of Object.entries(derivedApp)) appTokens[k] = v;
+  const calTokens: Record<string, string> = {
+    ...BASE_CALENDAR_TOKENS[preset.base],
+  };
+  for (const [k, v] of Object.entries(derivedCal)) calTokens[k] = v;
+  const next: UserTheme = {
+    ...current,
+    base: preset.base,
+    sources,
+    appTokens,
+    calendarTokens: calTokens,
+    appIsolated: new Set(),
+    calendarIsolated: new Set(),
+    blendCanvas: derivedCal["--cal-bg"] ?? appTokens["--background"],
+    seedSources: { ...sources },
+    seedAppTokens: { ...appTokens },
+    seedCalendarTokens: { ...calTokens },
+    seedAppIsolated: new Set(),
+    seedCalendarIsolated: new Set(),
+    seedBlendCanvas: derivedCal["--cal-bg"] ?? appTokens["--background"],
+  };
+  customThemes[id] = next;
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Re-run the current derivation engine on every non-isolated token and
+ * stamp the new engine version. Pinned tokens keep their hex and stay
+ * isolated.
+ */
+function rebakeTheme(id: ThemeId): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  const derivedApp = deriveAppTokens(current.sources, current.base);
+  const derivedCal = deriveCalendarTokens(current.sources, current.base);
+  const calBgIsolated = current.calendarIsolated.has("--cal-bg");
+  const nextBlendCanvas =
+    !calBgIsolated && derivedCal["--cal-bg"]
+      ? derivedCal["--cal-bg"]
+      : undefined;
+  const nextApp: Record<string, string> = { ...current.appTokens };
+  for (const key of APP_TOKEN_KEYS) {
+    if (current.appIsolated.has(key)) continue;
+    if (derivedApp[key] !== undefined) nextApp[key] = derivedApp[key];
+  }
+  const nextCal: Record<string, string> = { ...current.calendarTokens };
+  for (const key of CALENDAR_TOKEN_KEYS) {
+    if (current.calendarIsolated.has(key)) continue;
+    if (derivedCal[key] !== undefined) nextCal[key] = derivedCal[key];
+  }
+  customThemes[id] = {
+    ...current,
+    appTokens: nextApp,
+    calendarTokens: nextCal,
+    blendCanvas: nextBlendCanvas ?? current.blendCanvas,
+    derivationEngineVersion: DERIVATION_ENGINE_VERSION,
+  };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+/**
+ * Mark a (theme, engine_version) pair as dismissed. The in-memory state
+ * updates immediately so the banner hides. For non-fresh themes the row
+ * is recorded straight away. Fresh themes defer the write until the
+ * editor commit lands the parent themes row, since the dismissal table
+ * has a foreign key to it.
+ */
+async function dismissUpgrade(id: ThemeId): Promise<boolean> {
+  const current = customThemes[id];
+  if (!current) return false;
+  dismissals[id] = DERIVATION_ENGINE_VERSION;
+  if (freshThemes.has(id)) {
+    pendingDismissals.set(id, DERIVATION_ENGINE_VERSION);
+  } else {
+    await recordDismissal(id, DERIVATION_ENGINE_VERSION);
+  }
+  return true;
+}
+
 export type ImportThemeResult =
   | { ok: true; id: ThemeId }
   | { ok: false; errors: string[] };
 
-function importTheme(json: string): ImportThemeResult {
+async function importTheme(json: string): Promise<ImportThemeResult> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -178,8 +859,9 @@ function importTheme(json: string): ImportThemeResult {
     isBuiltinThemeId(incomingId) || Object.hasOwn(registry, incomingId)
       ? generateThemeId(registry, incomingId)
       : incomingId;
-  customThemes[finalId] = { ...result.theme, id: finalId };
-  persistCustomThemes();
+  const next: UserTheme = { ...result.theme, id: finalId };
+  await dbInsertTheme(userThemeToWrite(next));
+  customThemes[finalId] = next;
   return { ok: true, id: finalId };
 }
 
@@ -198,7 +880,10 @@ export type ReplaceThemeResult =
  * existing slot so the editor's "Apply changes" path cannot accidentally
  * fork into a new theme. Built-in ids and unknown ids are rejected.
  */
-function replaceTheme(id: ThemeId, json: string): ReplaceThemeResult {
+async function replaceTheme(
+  id: ThemeId,
+  json: string,
+): Promise<ReplaceThemeResult> {
   if (isBuiltinThemeId(id)) {
     return { ok: false, errors: ["built-in themes cannot be edited"] };
   }
@@ -223,10 +908,21 @@ function replaceTheme(id: ThemeId, json: string): ReplaceThemeResult {
   }
   const result = validateThemeJson(parsed);
   if (!result.ok) return result;
-  customThemes[id] = { ...result.theme, id };
-  persistCustomThemes();
+  const next: UserTheme = { ...result.theme, id };
+  customThemes[id] = next;
   if (id === activeId) applyThemeToDom();
+  await persistThemeToDb(id);
   return { ok: true };
+}
+
+/**
+ * Returns true when the current engine version differs from the theme's
+ * stamp AND the user has not dismissed an upgrade prompt for that pair.
+ */
+function shouldOfferRebake(theme: UserTheme): boolean {
+  if (theme.derivationEngineVersion >= DERIVATION_ENGINE_VERSION) return false;
+  const dismissed = dismissals[theme.id] ?? 0;
+  return dismissed < DERIVATION_ENGINE_VERSION;
 }
 
 /**
@@ -250,21 +946,36 @@ export function getTheme() {
       return combinedRegistry();
     },
     /** Snapshot of just the user-authored themes. */
-    get customThemes(): Readonly<Record<ThemeId, Theme>> {
+    get customThemes(): Readonly<Record<ThemeId, UserTheme>> {
       return customThemes;
     },
     isBuiltin(id: ThemeId): boolean {
       return isBuiltinThemeId(id);
     },
+    shouldOfferRebake,
     setTheme,
     createTheme,
     duplicateTheme,
-    updateTheme,
     renameTheme,
     deleteTheme,
     importTheme,
     exportTheme,
     replaceTheme,
+    updateSourceValue,
+    isolateToken,
+    relinkToken,
+    setTokenValue,
+    resetTokenToSeed,
+    resetPaletteSlot,
+    resetThemeToSeed,
+    setPaletteSlot,
+    setBlendCanvas,
+    applyPreset,
+    rebakeTheme,
+    dismissUpgrade,
+    persistThemeToDb,
+    discardFreshTheme,
+    restoreThemeFromSnapshot,
     /**
      * Cycle between the two built-in themes. Used by the title bar
      * sun/moon toggle. For the full multi-theme selector, use setTheme.

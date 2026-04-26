@@ -7,122 +7,123 @@
  */
 
 import {
+  DERIVATION_ENGINE_VERSION,
   resolveAppTokens,
   resolveCalendarTokens,
   type Theme,
   type ThemeId,
+  type ThemeSources,
+  type UserTheme,
 } from "./themes";
 
 const MAX_DISPLAY_NAME_LENGTH = 60;
 const NAME_SUFFIX_CAP = 999;
 
 /**
- * Deep-copy a theme, replacing its identity (id + displayName) with the
- * supplied values. The clone always carries a `sources` palette:
+ * Deep-copy a theme into a new {@link UserTheme} with a fresh identity.
  *
- * - If the source has one, copy it verbatim.
- * - Otherwise synthesize sources by sampling canvas, ink, primary,
- *   destructive, confirm, and warning from the source's resolved tokens.
- *   Calendar canvas is not a source: it auto-derives from the app canvas
- *   via a direction-aware OKLab ΔL offset and is pinnable through
- *   `calendarTokenOverrides["--cal-bg"]` when the user wants to isolate it.
+ * The clone always carries a `sources` palette:
+ * - User-theme source: copy the existing sources, isolated flags, snapshots.
+ * - Built-in source: synthesize sources by sampling canvas, ink, primary,
+ *   destructive, confirm, and warning from the resolved tokens. Calendar
+ *   canvas is not a source: it auto-derives from the app canvas via a
+ *   direction-aware OKLab ΔL offset and is pinnable through the
+ *   `calendarIsolated` flag set on `--cal-bg` when the user wants to
+ *   isolate it from the app canvas.
  *
- * Explicit overrides on the source are preserved verbatim, but no new
- * identity overrides are generated: the derivation is already calibrated
- * to reproduce the dark built-in's surface hierarchy on any canvas, so
- * the clone naturally tracks its sources. Editing a source (e.g. canvas)
- * on the clone cascades through the full surface stack without fighting
- * pinned tokens. Seeds snapshot the resolved set for per-row reset.
+ * Identity overrides for derived tokens are NOT captured: the derivation
+ * is calibrated to reproduce the dark built-in's surface hierarchy on any
+ * canvas, so the clone naturally tracks its sources. Editing canvas on the
+ * clone cascades through every non-isolated surface. Seeds snapshot the
+ * live state at clone time for per-row reset and "Reset all".
  */
 export function cloneTheme(
   source: Theme,
   id: ThemeId,
   displayName: string,
-): Theme {
+): UserTheme {
   const resolvedApp = resolveAppTokens(source);
   const resolvedCal = resolveCalendarTokens(source);
   const palette = [...source.eventPalette];
-  const next: Theme = {
+  const sources: ThemeSources =
+    source.kind === "user"
+      ? { ...source.sources }
+      : synthesizeSourcesFromResolved(resolvedApp);
+  const appIsolated =
+    source.kind === "user"
+      ? new Set(source.appIsolated)
+      : new Set<string>();
+  const calIsolated =
+    source.kind === "user"
+      ? new Set(source.calendarIsolated)
+      : new Set<string>();
+  return {
+    kind: "user",
     id,
     displayName,
     base: source.base,
     blendCanvas: source.blendCanvas,
     eventPalette: palette,
+    derivationEngineVersion:
+      source.kind === "user"
+        ? source.derivationEngineVersion
+        : DERIVATION_ENGINE_VERSION,
+    sources,
+    appTokens: { ...resolvedApp },
+    calendarTokens: { ...resolvedCal },
+    appIsolated,
+    calendarIsolated: calIsolated,
+    seedSources: { ...sources },
     seedAppTokens: { ...resolvedApp },
     seedCalendarTokens: { ...resolvedCal },
+    seedAppIsolated: new Set(appIsolated),
+    seedCalendarIsolated: new Set(calIsolated),
     seedEventPalette: [...palette],
     seedBlendCanvas: source.blendCanvas,
   };
-  if (source.sources) {
-    next.sources = { ...source.sources };
-  } else {
-    next.sources = {
-      canvas: resolvedApp["--background"],
-      ink: resolvedApp["--foreground"],
-      primary: resolvedApp["--primary"],
-      destructive: resolvedApp["--destructive"],
-      confirm: resolvedApp["--action-confirm"],
-      warning: resolvedApp["--status-tentative"],
-    };
-  }
-  next.seedSources = { ...next.sources };
-
-  if (source.appTokenOverrides) {
-    const copy = { ...source.appTokenOverrides };
-    if (Object.keys(copy).length > 0) {
-      next.appTokenOverrides = copy;
-      next.seedAppTokenOverrides = { ...copy };
-    }
-  }
-  if (source.calendarTokenOverrides) {
-    const copy = { ...source.calendarTokenOverrides };
-    if (Object.keys(copy).length > 0) {
-      next.calendarTokenOverrides = copy;
-      next.seedCalendarTokenOverrides = { ...copy };
-    }
-  }
-  return next;
 }
 
 /**
- * Apply a partial patch to a theme, returning a new Theme.
- *
- * - The id is preserved (callers cannot rename ids through a patch).
- * - eventPalette is an array; passing it replaces the palette wholesale,
- *   so callers should spread the current palette and overwrite the slots
- *   they want to change before handing it in.
- * - appTokenOverrides / calendarTokenOverrides REPLACE the existing block
- *   when present (the editor manages the full override set), and an empty
- *   object collapses to `undefined` so the on-disk JSON stays minimal.
+ * Synthesize a six-color sources palette from a resolved app-token
+ * snapshot. Used when cloning a built-in theme into a user theme: every
+ * UserTheme requires sources, and the resolved tokens carry the right
+ * starting points (canvas = --background, ink = --foreground, etc.).
  */
+export function synthesizeSourcesFromResolved(
+  resolvedApp: Readonly<Record<string, string>>,
+): ThemeSources {
+  return {
+    canvas: resolvedApp["--background"],
+    ink: resolvedApp["--foreground"],
+    primary: resolvedApp["--primary"],
+    destructive: resolvedApp["--destructive"],
+    confirm: resolvedApp["--action-confirm"],
+    warning: resolvedApp["--status-tentative"],
+  };
+}
+
+/**
+ * Merge a small subset of fields onto a user theme. Most patches now go
+ * through targeted store mutators (updateSourceValue, isolateToken, etc.);
+ * this helper survives only for fields that don't fit the targeted paths:
+ * displayName rename, eventPalette replacement, blendCanvas pin.
+ */
+export type UserThemePatch = Partial<
+  Pick<UserTheme, "displayName" | "eventPalette" | "blendCanvas">
+>;
+
 export function mergeThemePatch(
-  current: Theme,
-  patch: Partial<Omit<Theme, "id">>,
-): Theme {
-  const next: Theme = {
+  current: UserTheme,
+  patch: UserThemePatch,
+): UserTheme {
+  return {
     ...current,
-    ...patch,
-    id: current.id,
+    displayName: patch.displayName ?? current.displayName,
     eventPalette: patch.eventPalette
       ? [...patch.eventPalette]
       : current.eventPalette,
+    blendCanvas: patch.blendCanvas ?? current.blendCanvas,
   };
-  if ("sources" in patch) {
-    next.sources = patch.sources ? { ...patch.sources } : undefined;
-  }
-  if (patch.appTokenOverrides !== undefined) {
-    next.appTokenOverrides =
-      Object.keys(patch.appTokenOverrides).length > 0
-        ? { ...patch.appTokenOverrides }
-        : undefined;
-  }
-  if (patch.calendarTokenOverrides !== undefined) {
-    next.calendarTokenOverrides =
-      Object.keys(patch.calendarTokenOverrides).length > 0
-        ? { ...patch.calendarTokenOverrides }
-        : undefined;
-  }
-  return next;
 }
 
 /**
@@ -152,50 +153,4 @@ export function normalizeDisplayName(input: string): string | undefined {
   const trimmed = input.trim();
   if (trimmed.length === 0) return undefined;
   return trimmed.slice(0, MAX_DISPLAY_NAME_LENGTH);
-}
-
-/**
- * Fill in `seed*` snapshots for a theme that predates the seed feature.
- *
- * A legacy user theme (cloned before seeds landed) may carry `sources` but
- * no `seedSources`, which disables row-level reset and "Reset all". This
- * helper copies the current live values as the synthetic seed set: the
- * theme's present state is treated as the reset target. It is a no-op for
- * themes that already have seeds, so loading is safely idempotent across
- * app restarts.
- */
-export function synthesizeSeedsIfMissing(theme: Theme): Theme {
-  if (theme.seedSources !== undefined) return theme;
-  const resolvedApp = resolveAppTokens(theme);
-  const resolvedCal = resolveCalendarTokens(theme);
-  const next: Theme = { ...theme };
-  next.seedAppTokens = { ...resolvedApp };
-  next.seedCalendarTokens = { ...resolvedCal };
-  next.seedEventPalette = [...theme.eventPalette];
-  next.seedBlendCanvas = theme.blendCanvas;
-  if (theme.sources) {
-    next.seedSources = { ...theme.sources };
-  } else {
-    next.seedSources = {
-      canvas: resolvedApp["--background"],
-      ink: resolvedApp["--foreground"],
-      primary: resolvedApp["--primary"],
-      destructive: resolvedApp["--destructive"],
-      confirm: resolvedApp["--action-confirm"],
-      warning: resolvedApp["--status-tentative"],
-    };
-  }
-  if (
-    theme.appTokenOverrides &&
-    Object.keys(theme.appTokenOverrides).length > 0
-  ) {
-    next.seedAppTokenOverrides = { ...theme.appTokenOverrides };
-  }
-  if (
-    theme.calendarTokenOverrides &&
-    Object.keys(theme.calendarTokenOverrides).length > 0
-  ) {
-    next.seedCalendarTokenOverrides = { ...theme.calendarTokenOverrides };
-  }
-  return next;
 }

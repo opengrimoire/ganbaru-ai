@@ -23,18 +23,14 @@
     pickReadableForeground,
   } from "$lib/components/ui/colorMath";
   import {
-    APP_TOKEN_KEYS,
-    BASE_APP_TOKENS,
-    BASE_CALENDAR_TOKENS,
-    CALENDAR_TOKEN_KEYS,
-    deriveAppTokens,
-    deriveCalendarTokens,
+    DERIVATION_ENGINE_VERSION,
     isThemeCalendarDark,
     isThemeDark,
     resolveAppTokens,
     resolveCalendarTokens,
     type Theme,
     type ThemeSources,
+    type UserTheme,
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
   import ColorField from "$lib/components/ui/ColorField.svelte";
@@ -508,32 +504,25 @@
     },
   ];
 
-  // Calendar tokens the derivation engine can compute from sources.
-  // Semantic tokens (today marker, current time, rail break/focus) are not
-  // in this set and fall through to overrides or base CSS.
-  const CAL_DERIVED_KEYS: ReadonlySet<string> = new Set([
-    "--cal-bg",
-    "--cal-header-bg",
-    "--cal-gridline",
-    "--cal-time-label",
-    "--cal-timeline-rail",
-  ]);
-
   let { theme }: { theme: Theme } = $props();
 
   const themeStore = getTheme();
   const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
 
-  const isBuiltin = $derived(themeStore.isBuiltin(theme.id));
+  const isBuiltin = $derived(theme.kind === "builtin");
+  const userTheme = $derived(
+    theme.kind === "user" ? (theme as UserTheme) : undefined,
+  );
   // The scheme icon tracks what the user actually sees (canvas luminance),
   // not the cosmetic `theme.base` label. This keeps the indicator honest if
   // the user inverts a theme's canvas without flipping the saved label.
   const BaseIcon = $derived(isThemeDark(theme) ? Moon : Sun);
-
-  // Input seeds drive per-token reset. They are captured on every modern
-  // clone, so seedSources existing is the signal that the theme was cloned
-  // after the seed feature shipped and can be reset at the row level.
-  const hasSeeds = $derived(theme.seedSources !== undefined);
+  // The rebake banner appears when the saved theme's engine version trails
+  // the current code constant AND the user hasn't dismissed an upgrade
+  // prompt for that pair.
+  const offerRebake = $derived(
+    userTheme ? themeStore.shouldOfferRebake(userTheme) : false,
+  );
 
   // Collapse state is ephemeral (not persisted across sessions). Only
   // source-driven multi-row groups are collapsible: the source color at the
@@ -584,7 +573,7 @@
   }
 
   function setName(next: string) {
-    themeStore.renameTheme(theme.id, next);
+    void themeStore.renameTheme(theme.id, next);
   }
 
   function effectiveCalBg(t: Theme): string {
@@ -592,225 +581,143 @@
   }
 
   function setSlot(index: number, hex: string) {
-    const next = [...theme.eventPalette];
-    next[index] = hex;
-    themeStore.updateTheme(theme.id, { eventPalette: next });
+    void themeStore.setPaletteSlot(theme.id, index, hex);
   }
 
   const paletteIndices = Array.from({ length: PALETTE_SIZE }, (_, i) => i);
 
   function setAppToken(key: string, hex: string) {
-    const next = { ...(theme.appTokenOverrides ?? {}), [key]: hex };
-    themeStore.updateTheme(theme.id, { appTokenOverrides: next });
+    void themeStore.setTokenValue(theme.id, "app", key, hex);
   }
 
   function setCalToken(key: string, hex: string) {
-    const next = { ...(theme.calendarTokenOverrides ?? {}), [key]: hex };
-    const updates: Partial<Theme> = { calendarTokenOverrides: next };
-    // Past event variants blend toward --cal-bg, so keep the cached
-    // blendCanvas in lockstep with whatever the user picks.
-    if (key === "--cal-bg") updates.blendCanvas = hex;
-    themeStore.updateTheme(theme.id, updates);
+    void themeStore.setTokenValue(theme.id, "calendar", key, hex);
   }
 
   function setSource(key: keyof ThemeSources, hex: string) {
-    if (!theme.sources) return;
-    const nextSources: ThemeSources = { ...theme.sources, [key]: hex };
-    const updates: Partial<Omit<Theme, "id">> = { sources: nextSources };
-    // Past event variants blend against the calendar canvas; when that
-    // canvas auto-derives from sources.canvas, the blend reference has to
-    // follow. If the user has pinned --cal-bg as an override the blend
-    // reference is already tracking the override value, so skip.
-    if (key === "canvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
-      const derived = deriveCalendarTokens(nextSources, theme.base);
-      if (derived["--cal-bg"]) updates.blendCanvas = derived["--cal-bg"];
-    }
-    themeStore.updateTheme(theme.id, updates);
+    void themeStore.updateSourceValue(theme.id, key, hex);
   }
 
-  // Sample the six source values from the theme's currently resolved
-  // tokens so turning Quick colors on does not visually change anything up
-  // front; the user sees the same palette with a new relationship attached.
-  // Confirm and warning sample the tokens they identity-drive so built-in
-  // clones keep their accepted/tentative colors intact.
-  function enableSources() {
-    if (theme.sources) return;
-    const resolvedApp = resolveAppTokens(theme);
-    const sources: ThemeSources = {
-      canvas: resolvedApp["--background"],
-      ink: resolvedApp["--foreground"],
-      primary: resolvedApp["--primary"],
-      destructive: resolvedApp["--destructive"],
-      confirm: resolvedApp["--action-confirm"],
-      warning: resolvedApp["--status-tentative"],
-    };
-    themeStore.updateTheme(theme.id, { sources });
-  }
-
-  // Auto value for a token: what it resolves to when no override is set.
-  // Matches the three-layer resolver's bottom two layers (derived or
-  // default), skipping the override layer the caller is comparing against.
-  function autoValueApp(key: string): string {
-    if (theme.sources) {
-      const derived = deriveAppTokens(theme.sources, theme.base);
-      if (derived[key] !== undefined) return derived[key];
-    }
-    return BASE_APP_TOKENS[theme.base][key];
-  }
-
-  function autoValueCal(key: string): string {
-    if (theme.sources) {
-      const derived = deriveCalendarTokens(theme.sources, theme.base);
-      if (derived[key] !== undefined) return derived[key];
-    }
-    return BASE_CALENDAR_TOKENS[theme.base][key];
-  }
-
-  // Isolating a token captures the current auto value as an explicit override
-  // so the user can edit it independently of the source. Visually the row
-  // swaps its readonly swatch + Isolated-edit button for a ColorField + Link-back.
+  // Isolating a token pins the current snapshot value against future
+  // source-edit cascades. Visually the row swaps its readonly swatch +
+  // Isolated-edit button for a ColorField + Link-back. The hex itself
+  // does not change at the moment of pinning; the snapshot already holds
+  // the auto-derived value.
   function isolateAppToken(key: string) {
-    setAppToken(key, autoValueApp(key));
+    void themeStore.isolateToken(theme.id, "app", key);
   }
 
   function isolateCalToken(key: string) {
-    setCalToken(key, autoValueCal(key));
+    void themeStore.isolateToken(theme.id, "calendar", key);
   }
 
   function relinkAppToken(key: string) {
-    const next = { ...(theme.appTokenOverrides ?? {}) };
-    delete next[key];
-    themeStore.updateTheme(theme.id, { appTokenOverrides: next });
+    void themeStore.relinkToken(theme.id, "app", key);
   }
 
   function relinkCalToken(key: string) {
-    const next = { ...(theme.calendarTokenOverrides ?? {}) };
-    delete next[key];
-    const updates: Partial<Theme> = { calendarTokenOverrides: next };
-    // Relinking --cal-bg means the auto-derived calendar canvas drives it
-    // again; keep blendCanvas aligned so past event variants blend correctly.
-    if (key === "--cal-bg" && theme.sources) {
-      const derived = deriveCalendarTokens(theme.sources, theme.base);
-      updates.blendCanvas = derived["--cal-bg"] ?? theme.blendCanvas;
-    }
-    themeStore.updateTheme(theme.id, updates);
+    void themeStore.relinkToken(theme.id, "calendar", key);
   }
 
-  // Per-token reset restores a single control back to the value it had when
-  // the theme was cloned. A source channel is reset to its seed value; an
-  // app/cal token is either reset to its seed override or relinked when the
-  // seed had no override for it. Gating on hasSeeds keeps legacy themes
-  // (cloned before the seed feature) without reset affordances.
+  // Per-token reset restores a single control back to the value (and
+  // isolated flag) it had when the theme was cloned. Sources/app/cal all
+  // round-trip through the same DB mutator since seeds carry both the
+  // value and the pinned-state.
   function canResetSource(key: keyof ThemeSources): boolean {
-    if (!theme.sources || !theme.seedSources) return false;
-    return theme.sources[key] !== theme.seedSources[key];
+    if (!userTheme) return false;
+    return userTheme.sources[key] !== userTheme.seedSources[key];
   }
 
   function resetSource(key: keyof ThemeSources) {
-    if (!theme.sources || !theme.seedSources) return;
-    const seedValue = theme.seedSources[key];
-    const nextSources: ThemeSources = { ...theme.sources, [key]: seedValue };
-    const updates: Partial<Omit<Theme, "id">> = { sources: nextSources };
-    // Canvas drives the derived --cal-bg; keep blendCanvas aligned when
-    // no override is pinning the calendar surface to a fixed value.
-    if (key === "canvas" && !theme.calendarTokenOverrides?.["--cal-bg"]) {
-      const derived = deriveCalendarTokens(nextSources, theme.base);
-      if (derived["--cal-bg"]) updates.blendCanvas = derived["--cal-bg"];
-    }
-    themeStore.updateTheme(theme.id, updates);
+    if (!userTheme) return;
+    void themeStore.resetTokenToSeed(theme.id, "source", key);
   }
 
   function canResetAppToken(key: string): boolean {
-    if (!hasSeeds) return false;
-    const current = theme.appTokenOverrides?.[key];
-    const seed = theme.seedAppTokenOverrides?.[key];
-    return current !== seed;
+    if (!userTheme) return false;
+    if (userTheme.appTokens[key] !== userTheme.seedAppTokens[key]) return true;
+    return (
+      userTheme.appIsolated.has(key) !== userTheme.seedAppIsolated.has(key)
+    );
   }
 
   function resetAppToken(key: string) {
-    const seed = theme.seedAppTokenOverrides?.[key];
-    if (seed === undefined) relinkAppToken(key);
-    else setAppToken(key, seed);
+    void themeStore.resetTokenToSeed(theme.id, "app", key);
   }
 
   function canResetCalToken(key: string): boolean {
-    if (!hasSeeds) return false;
-    const current = theme.calendarTokenOverrides?.[key];
-    const seed = theme.seedCalendarTokenOverrides?.[key];
-    return current !== seed;
-  }
-
-  function resetCalToken(key: string) {
-    const seed = theme.seedCalendarTokenOverrides?.[key];
-    if (seed === undefined) relinkCalToken(key);
-    else setCalToken(key, seed);
-  }
-
-  // "Reset all" restores every captured seed in one action: sources drift
-  // back to their clone-time values, pinned overrides collapse to the seed
-  // set, event palette and blend canvas rewind too. Gated on hasSeeds so
-  // legacy themes cloned before the seed feature cannot accidentally wipe
-  // their palette when the seed state is unknown.
-  function canResetAll(): boolean {
-    if (!hasSeeds || !theme.seedSources || !theme.sources) return false;
-    for (const key of Object.keys(theme.seedSources) as Array<
-      keyof ThemeSources
-    >) {
-      if (theme.sources[key] !== theme.seedSources[key]) return true;
-    }
-    const currentApp = theme.appTokenOverrides ?? {};
-    const seedApp = theme.seedAppTokenOverrides ?? {};
-    const appKeys = new Set<string>([
-      ...Object.keys(currentApp),
-      ...Object.keys(seedApp),
-    ]);
-    for (const k of appKeys) {
-      if (currentApp[k] !== seedApp[k]) return true;
-    }
-    const currentCal = theme.calendarTokenOverrides ?? {};
-    const seedCal = theme.seedCalendarTokenOverrides ?? {};
-    const calKeys = new Set<string>([
-      ...Object.keys(currentCal),
-      ...Object.keys(seedCal),
-    ]);
-    for (const k of calKeys) {
-      if (currentCal[k] !== seedCal[k]) return true;
-    }
-    const seedPalette = theme.seedEventPalette;
-    if (seedPalette) {
-      if (theme.eventPalette.length !== seedPalette.length) return true;
-      for (let i = 0; i < theme.eventPalette.length; i++) {
-        if (theme.eventPalette[i] !== seedPalette[i]) return true;
-      }
-    }
+    if (!userTheme) return false;
     if (
-      theme.seedBlendCanvas !== undefined &&
-      theme.blendCanvas !== theme.seedBlendCanvas
+      userTheme.calendarTokens[key] !== userTheme.seedCalendarTokens[key]
     ) {
       return true;
     }
+    return (
+      userTheme.calendarIsolated.has(key) !==
+      userTheme.seedCalendarIsolated.has(key)
+    );
+  }
+
+  function resetCalToken(key: string) {
+    void themeStore.resetTokenToSeed(theme.id, "calendar", key);
+  }
+
+  // "Reset all" restores every snapshot value AND every isolated flag back
+  // to clone-time. Sources drift back to their seeds, pinned tokens that
+  // weren't pinned originally unpin (and vice-versa), event palette and
+  // blend canvas rewind, all in one transaction.
+  function canResetAll(): boolean {
+    if (!userTheme) return false;
+    for (const key of Object.keys(userTheme.seedSources) as Array<
+      keyof ThemeSources
+    >) {
+      if (userTheme.sources[key] !== userTheme.seedSources[key]) return true;
+    }
+    for (const k of Object.keys(userTheme.seedAppTokens)) {
+      if (userTheme.appTokens[k] !== userTheme.seedAppTokens[k]) return true;
+    }
+    for (const k of Object.keys(userTheme.seedCalendarTokens)) {
+      if (userTheme.calendarTokens[k] !== userTheme.seedCalendarTokens[k]) {
+        return true;
+      }
+    }
+    if (
+      !setsEqual(userTheme.appIsolated, userTheme.seedAppIsolated) ||
+      !setsEqual(userTheme.calendarIsolated, userTheme.seedCalendarIsolated)
+    ) {
+      return true;
+    }
+    if (userTheme.eventPalette.length !== userTheme.seedEventPalette.length) {
+      return true;
+    }
+    for (let i = 0; i < userTheme.eventPalette.length; i++) {
+      if (userTheme.eventPalette[i] !== userTheme.seedEventPalette[i]) {
+        return true;
+      }
+    }
+    if (userTheme.blendCanvas !== userTheme.seedBlendCanvas) return true;
     return false;
+  }
+
+  function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+    if (a.size !== b.size) return false;
+    for (const v of a) if (!b.has(v)) return false;
+    return true;
   }
 
   function resetAll() {
     if (!canResetAll()) return;
-    if (!theme.seedSources) return;
-    const patch: Partial<Omit<Theme, "id">> = {
-      sources: { ...theme.seedSources },
-      appTokenOverrides: theme.seedAppTokenOverrides
-        ? { ...theme.seedAppTokenOverrides }
-        : {},
-      calendarTokenOverrides: theme.seedCalendarTokenOverrides
-        ? { ...theme.seedCalendarTokenOverrides }
-        : {},
-    };
-    if (theme.seedEventPalette) {
-      patch.eventPalette = [...theme.seedEventPalette];
-    }
-    if (theme.seedBlendCanvas !== undefined) {
-      patch.blendCanvas = theme.seedBlendCanvas;
-    }
-    themeStore.updateTheme(theme.id, patch);
+    void themeStore.resetThemeToSeed(theme.id);
+  }
+
+  function rebake() {
+    if (!userTheme) return;
+    void themeStore.rebakeTheme(theme.id);
+  }
+
+  function dismissRebake() {
+    if (!userTheme) return;
+    void themeStore.dismissUpgrade(theme.id);
   }
 
   // WCAG body-text threshold. Default target for rows that don't override
@@ -823,9 +730,10 @@
     return row.target ?? AA_BODY_TARGET;
   }
 
-  // Resolve a token's rendered value from the theme (override > derived >
-  // base). We re-derive on every call so the live editor reflects whatever
-  // the user just changed without a roundtrip through the DOM.
+  // Resolve a token's rendered value from the theme. For user themes the
+  // snapshot is the source of truth; built-ins return BASE. We re-read on
+  // every call so the live editor reflects whatever the user just changed
+  // without a roundtrip through the DOM.
   const resolvedApp = $derived(resolveAppTokens(theme));
   const resolvedCal = $derived(resolveCalendarTokens(theme));
 
@@ -927,8 +835,8 @@
     }
   }
 
-  function applyJsonChanges() {
-    const result = themeStore.replaceTheme(theme.id, jsonDraft);
+  async function applyJsonChanges() {
+    const result = await themeStore.replaceTheme(theme.id, jsonDraft);
     if (!result.ok) {
       jsonErrors = result.errors;
       return;
@@ -949,24 +857,6 @@
     jsonDirty = true;
     jsonErrors = [];
   }
-
-  // Built-in detail view shows only overrides that the seed theme actually
-  // ships with, otherwise the empty list of all app tokens would dwarf the
-  // meaningful content.
-  const populatedAppTokens = $derived(
-    theme.appTokenOverrides
-      ? Object.keys(theme.appTokenOverrides).filter((k) =>
-          (APP_TOKEN_KEYS as readonly string[]).includes(k),
-        )
-      : [],
-  );
-  const populatedCalTokens = $derived(
-    theme.calendarTokenOverrides
-      ? Object.keys(theme.calendarTokenOverrides).filter((k) =>
-          (CALENDAR_TOKEN_KEYS as readonly string[]).includes(k),
-        )
-      : [],
-  );
 
   function tokenInfo(row: GroupSingleRow): TokenInfo {
     const lookup =
@@ -1040,15 +930,18 @@
     scope: "app" | "cal",
     ariaLabel: string,
   )}
-    {@const overrideMap =
-      scope === "app" ? theme.appTokenOverrides : theme.calendarTokenOverrides}
-    {@const pinnedVal = overrideMap?.[key]}
-    {@const isLinked = pinnedVal === undefined}
-    {@const displayVal = isLinked
+    {@const isolatedSet = userTheme
       ? scope === "app"
-        ? autoValueApp(key)
-        : autoValueCal(key)
-      : pinnedVal}
+        ? userTheme.appIsolated
+        : userTheme.calendarIsolated
+      : undefined}
+    {@const isLinked = !(isolatedSet?.has(key) ?? false)}
+    {@const snapshot = userTheme
+      ? scope === "app"
+        ? userTheme.appTokens
+        : userTheme.calendarTokens
+      : undefined}
+    {@const displayVal = snapshot?.[key] ?? ""}
     {@const canResetRow =
       scope === "app" ? canResetAppToken(key) : canResetCalToken(key)}
     <div class="flex items-center gap-1.5">
@@ -1120,15 +1013,12 @@
        shared per-row reset semantics. -->
   {#snippet groupHeaderStyleRow(row: GroupSingleRow)}
     {@const info = tokenInfo(row)}
-    {@const overrideMap =
-      row.scope === "app" ? theme.appTokenOverrides : theme.calendarTokenOverrides}
-    {@const pinnedVal = overrideMap?.[row.key]}
-    {@const isLinked = pinnedVal === undefined}
-    {@const displayVal = isLinked
+    {@const snapshot = userTheme
       ? row.scope === "app"
-        ? autoValueApp(row.key)
-        : autoValueCal(row.key)
-      : pinnedVal}
+        ? userTheme.appTokens
+        : userTheme.calendarTokens
+      : undefined}
+    {@const displayVal = snapshot?.[row.key] ?? ""}
     {@const canResetRow =
       row.scope === "app"
         ? canResetAppToken(row.key)
@@ -1227,10 +1117,10 @@
           </div>
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
-          {#if group.sourceKey !== null && theme.sources}
+          {#if group.sourceKey !== null && userTheme}
             {@const sourceKey = group.sourceKey}
             <ColorField
-              value={theme.sources[sourceKey]}
+              value={userTheme.sources[sourceKey]}
               onChange={(hex) => setSource(sourceKey, hex)}
               label="{group.title} source"
             />
@@ -1283,76 +1173,44 @@
     </section>
   {/snippet}
 
-  {#snippet appBuiltinSwatch(key: string)}
-    {@const value = theme.appTokenOverrides?.[key] ?? ""}
-    {@const info =
-      APP_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-      <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{info.title}</div>
-        <div class="text-[11px] text-muted-foreground">{info.description}</div>
-      </div>
-      <span
-        class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
-        style="background-color: {value};"
-        title={value}
-      ></span>
-    </div>
-  {/snippet}
-
-  {#snippet calBuiltinSwatch(key: string)}
-    {@const value = theme.calendarTokenOverrides?.[key] ?? ""}
-    {@const info =
-      CALENDAR_TOKEN_INFO[key] ?? { title: humanize(key), description: "" }}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
-      <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{info.title}</div>
-        <div class="text-[11px] text-muted-foreground">{info.description}</div>
-      </div>
-      <span
-        class="h-[26px] w-[26px] shrink-0 rounded-md border border-border shadow-sm"
-        style="background-color: {value};"
-        title={value}
-      ></span>
-    </div>
-  {/snippet}
-
-  <!-- Body: built-in swatches, grouped editor for source-bearing user themes,
-       or a Set up Quick colors CTA for legacy source-less user themes. -->
-  {#if isBuiltin}
-    {#if populatedAppTokens.length > 0}
-      <section class="flex flex-col gap-2">
-        <div class="flex items-center justify-between gap-3 px-1">
-          <h2 class="text-[13px] font-semibold text-foreground">
-            App shell overrides
-          </h2>
+  <!-- Body: grouped editor for user themes, JSON-only readout for built-ins. -->
+  {#if userTheme}
+    {#if offerRebake}
+      <!-- Rebake banner: prompt the user to refresh non-isolated tokens
+           through the current derivation engine. Pinned tokens stay
+           untouched; the engine version stamp updates on accept. -->
+      <section
+        class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-[12px] dark:bg-amber-950/30"
+      >
+        <div class="flex min-w-0 flex-1 items-start gap-2 text-amber-800 dark:text-amber-300">
+          <AlertTriangle size={13} strokeWidth={2.25} class="mt-[2px] shrink-0" />
+          <span class="leading-snug">
+            This theme was saved against an older derivation engine
+            (v{userTheme.derivationEngineVersion}, current
+            v{DERIVATION_ENGINE_VERSION}). Rebake to refresh non-pinned
+            colors.
+          </span>
         </div>
-        <div
-          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-        >
-          {#each populatedAppTokens as key}
-            {@render appBuiltinSwatch(key)}
-          {/each}
+        <div class="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onclick={dismissRebake}
+            class="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            Maybe later
+          </button>
+          <button
+            type="button"
+            onclick={rebake}
+            class="flex items-center gap-1 rounded-md border border-primary bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Wand2 size={11} strokeWidth={2.25} />
+            <span>Rebake</span>
+          </button>
         </div>
       </section>
     {/if}
-    {#if populatedCalTokens.length > 0}
-      <section class="flex flex-col gap-2">
-        <div class="flex items-center justify-between gap-3 px-1">
-          <h2 class="text-[13px] font-semibold text-foreground">
-            Calendar overrides
-          </h2>
-        </div>
-        <div
-          class="flex flex-col divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-        >
-          {#each populatedCalTokens as key}
-            {@render calBuiltinSwatch(key)}
-          {/each}
-        </div>
-      </section>
-    {/if}
-  {:else if theme.sources}
+
     <!-- Contrast summary: always visible so edits that break contrast are
          surfaced immediately. Jump-to-next cycles through failing rows
          (auto-switching mode/expanding groups as needed); Fix all auto-picks
@@ -1408,46 +1266,26 @@
       {@render groupCard(group)}
     {/each}
 
-    {#if hasSeeds}
-      <div class="flex justify-end">
-        <button
-          type="button"
-          onclick={resetAll}
-          disabled={!canResetAll()}
-          aria-label="Reset every source, override, and palette slot to its clone-time value"
-          title={canResetAll()
-            ? "Restore every value to the clone-time snapshot"
-            : "Nothing has changed since this theme was cloned"}
-          class={cn(
-            "flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] font-medium transition-colors",
-            canResetAll()
-              ? "text-foreground hover:border-foreground/30 hover:bg-accent"
-              : "cursor-not-allowed text-muted-foreground opacity-50",
-          )}
-        >
-          <RotateCcw size={12} strokeWidth={2.25} />
-          <span>Reset all to seed</span>
-        </button>
-      </div>
-    {/if}
-  {:else}
-    <section class="flex flex-col gap-2">
-      <div
-        class="flex items-center justify-between gap-3 rounded-lg bg-card px-4 py-3 dark:bg-background"
+    <div class="flex justify-end">
+      <button
+        type="button"
+        onclick={resetAll}
+        disabled={!canResetAll()}
+        aria-label="Reset every source, override, and palette slot to its clone-time value"
+        title={canResetAll()
+          ? "Restore every value to the clone-time snapshot"
+          : "Nothing has changed since this theme was cloned"}
+        class={cn(
+          "flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] font-medium transition-colors",
+          canResetAll()
+            ? "text-foreground hover:border-foreground/30 hover:bg-accent"
+            : "cursor-not-allowed text-muted-foreground opacity-50",
+        )}
       >
-        <div class="min-w-0 flex-1 text-[11px] text-muted-foreground">
-          This theme has no Quick colors set up. Enable them to use the color
-          editor, or edit the JSON directly below.
-        </div>
-        <button
-          type="button"
-          onclick={enableSources}
-          class="shrink-0 rounded-md border border-border bg-card px-3 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
-        >
-          Set up Quick colors
-        </button>
-      </div>
-    </section>
+        <RotateCcw size={12} strokeWidth={2.25} />
+        <span>Reset all to seed</span>
+      </button>
+    </div>
   {/if}
 
   <!-- Event palette -->
