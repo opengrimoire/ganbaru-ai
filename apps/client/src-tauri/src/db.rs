@@ -289,5 +289,15 @@ pub fn migrations() -> Vec<Migration> {
             ALTER TABLE themes ADD COLUMN seed_scheme TEXT;
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 6,
+        description: "drop base column from themes (snapshot makes it dead at paint time)",
+        // The frontend now derives any required light/dark fallback from
+        // canvas luminance at hydrate time, so the stored `base` field is
+        // dead weight. SQLite supports DROP COLUMN since 3.35.0; the
+        // bundled libsqlite3-sys is well above that.
+        sql: "ALTER TABLE themes DROP COLUMN base;",
+        kind: MigrationKind::Up,
     }]
 }

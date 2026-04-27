@@ -239,7 +239,6 @@ function userThemeToWrite(theme: UserTheme): UserThemeWrite {
   return {
     id: theme.id,
     displayName: theme.displayName,
-    base: theme.base,
     scheme: theme.scheme,
     seedScheme: theme.seedScheme,
     blendCanvas: theme.blendCanvas,
@@ -255,37 +254,38 @@ function userThemeToWrite(theme: UserTheme): UserThemeWrite {
 /**
  * Build a {@link UserTheme} from row groups returned by `loadAllUserThemes`.
  * Missing tokens are backfilled from BASE so a partial DB write or a
- * mid-migration race never crashes the UI.
+ * mid-migration race never crashes the UI. The fallback BASE table is
+ * picked from the canvas-row luminance, so a user theme recovers consistent
+ * defaults regardless of which built-in family it originally came from.
  */
 function userThemeFromRead(read: UserThemeRead): UserTheme {
-  const base = read.theme.base;
   const sources = sourcesFromRows(
     read.tokens.filter((t) => t.kind === "source"),
-    base,
   );
   const seedSources = sourcesFromRows(
     read.seedTokens.filter((t) => t.kind === "source"),
-    base,
   );
+  const fallbackBase = defaultSchemeFromCanvas(sources.canvas);
+  const seedFallbackBase = defaultSchemeFromCanvas(seedSources.canvas);
   const appTokens = snapshotFromRows(
     read.tokens.filter((t) => t.kind === "app"),
     APP_TOKEN_KEYS,
-    BASE_APP_TOKENS[base],
+    BASE_APP_TOKENS[fallbackBase],
   );
   const calendarTokens = snapshotFromRows(
     read.tokens.filter((t) => t.kind === "calendar"),
     CALENDAR_TOKEN_KEYS,
-    BASE_CALENDAR_TOKENS[base],
+    BASE_CALENDAR_TOKENS[fallbackBase],
   );
   const seedAppTokens = snapshotFromRows(
     read.seedTokens.filter((t) => t.kind === "app"),
     APP_TOKEN_KEYS,
-    BASE_APP_TOKENS[base],
+    BASE_APP_TOKENS[seedFallbackBase],
   );
   const seedCalendarTokens = snapshotFromRows(
     read.seedTokens.filter((t) => t.kind === "calendar"),
     CALENDAR_TOKEN_KEYS,
-    BASE_CALENDAR_TOKENS[base],
+    BASE_CALENDAR_TOKENS[seedFallbackBase],
   );
   const appIsolated = isolatedFromRows(
     read.tokens.filter((t) => t.kind === "app"),
@@ -307,16 +307,15 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
   const scheme: "light" | "dark" =
     read.theme.scheme === "light" || read.theme.scheme === "dark"
       ? read.theme.scheme
-      : defaultSchemeFromCanvas(sources.canvas);
+      : fallbackBase;
   const seedScheme: "light" | "dark" =
     read.theme.seed_scheme === "light" || read.theme.seed_scheme === "dark"
       ? read.theme.seed_scheme
-      : defaultSchemeFromCanvas(seedSources.canvas);
+      : seedFallbackBase;
   return {
     kind: "user",
     id: read.theme.id,
     displayName: read.theme.display_name,
-    base,
     scheme,
     blendCanvas: read.theme.blend_canvas,
     eventPalette,
@@ -339,17 +338,21 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
 
 function sourcesFromRows(
   rows: ReadonlyArray<{ key: string; value: string }>,
-  base: "light" | "dark",
 ): ThemeSources {
   const map = new Map(rows.map((r) => [r.key, r.value]));
+  // If the canvas row is missing entirely, fall back to the dark BASE
+  // canvas; otherwise pick a fallback table from the canvas luminance.
+  const canvas = map.get("canvas") ?? BASE_APP_TOKENS.dark["--background"];
+  const fallback = defaultSchemeFromCanvas(canvas);
   return {
-    canvas: map.get("canvas") ?? BASE_APP_TOKENS[base]["--background"],
-    ink: map.get("ink") ?? BASE_APP_TOKENS[base]["--foreground"],
-    primary: map.get("primary") ?? BASE_APP_TOKENS[base]["--primary"],
+    canvas,
+    ink: map.get("ink") ?? BASE_APP_TOKENS[fallback]["--foreground"],
+    primary: map.get("primary") ?? BASE_APP_TOKENS[fallback]["--primary"],
     destructive:
-      map.get("destructive") ?? BASE_APP_TOKENS[base]["--destructive"],
-    confirm: map.get("confirm") ?? BASE_APP_TOKENS[base]["--action-confirm"],
-    warning: map.get("warning") ?? BASE_APP_TOKENS[base]["--status-tentative"],
+      map.get("destructive") ?? BASE_APP_TOKENS[fallback]["--destructive"],
+    confirm: map.get("confirm") ?? BASE_APP_TOKENS[fallback]["--action-confirm"],
+    warning:
+      map.get("warning") ?? BASE_APP_TOKENS[fallback]["--status-tentative"],
   };
 }
 
@@ -541,8 +544,8 @@ function updateSourceValue(
   const current = customThemes[id];
   if (!current) return false;
   const nextSources: ThemeSources = { ...current.sources, [sourceKey]: value };
-  const derivedApp = deriveAppTokens(nextSources, current.base);
-  const derivedCal = deriveCalendarTokens(nextSources, current.base);
+  const derivedApp = deriveAppTokens(nextSources);
+  const derivedCal = deriveCalendarTokens(nextSources);
   const calBgIsolated = current.calendarIsolated.has("--cal-bg");
   const nextBlendCanvas =
     !calBgIsolated && derivedCal["--cal-bg"]
@@ -608,10 +611,11 @@ function relinkToken(
   if (!set.has(key)) return false;
   const derived =
     kind === "app"
-      ? deriveAppTokens(current.sources, current.base)
-      : deriveCalendarTokens(current.sources, current.base);
+      ? deriveAppTokens(current.sources)
+      : deriveCalendarTokens(current.sources);
+  const fallbackBase = defaultSchemeFromCanvas(current.sources.canvas);
   const baseTokens =
-    kind === "app" ? BASE_APP_TOKENS[current.base] : BASE_CALENDAR_TOKENS[current.base];
+    kind === "app" ? BASE_APP_TOKENS[fallbackBase] : BASE_CALENDAR_TOKENS[fallbackBase];
   const nextValue = derived[key] ?? baseTokens[key];
   const nextSet = new Set(set);
   nextSet.delete(key);
@@ -795,8 +799,8 @@ function applyPreset(id: ThemeId, preset: ThemePreset): boolean {
   const current = customThemes[id];
   if (!current) return false;
   const sources: ThemeSources = { ...preset.sources };
-  const derivedApp = deriveAppTokens(sources, preset.base);
-  const derivedCal = deriveCalendarTokens(sources, preset.base);
+  const derivedApp = deriveAppTokens(sources);
+  const derivedCal = deriveCalendarTokens(sources);
   const appTokens: Record<string, string> = { ...BASE_APP_TOKENS[preset.base] };
   for (const [k, v] of Object.entries(derivedApp)) appTokens[k] = v;
   const calTokens: Record<string, string> = {
@@ -805,7 +809,6 @@ function applyPreset(id: ThemeId, preset: ThemePreset): boolean {
   for (const [k, v] of Object.entries(derivedCal)) calTokens[k] = v;
   const next: UserTheme = {
     ...current,
-    base: preset.base,
     sources,
     appTokens,
     calendarTokens: calTokens,
@@ -832,8 +835,8 @@ function applyPreset(id: ThemeId, preset: ThemePreset): boolean {
 function rebakeTheme(id: ThemeId): boolean {
   const current = customThemes[id];
   if (!current) return false;
-  const derivedApp = deriveAppTokens(current.sources, current.base);
-  const derivedCal = deriveCalendarTokens(current.sources, current.base);
+  const derivedApp = deriveAppTokens(current.sources);
+  const derivedCal = deriveCalendarTokens(current.sources);
   const calBgIsolated = current.calendarIsolated.has("--cal-bg");
   const nextBlendCanvas =
     !calBgIsolated && derivedCal["--cal-bg"]

@@ -53,22 +53,20 @@ function paletteOf(hex: string): string[] {
 }
 
 function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
-  const base = overrides.base ?? "dark";
+  const scheme = overrides.scheme ?? "dark";
   const sources =
-    overrides.sources ?? (base === "dark" ? SAMPLE_SOURCES_DARK : SAMPLE_SOURCES_LIGHT);
+    overrides.sources ?? (scheme === "dark" ? SAMPLE_SOURCES_DARK : SAMPLE_SOURCES_LIGHT);
   const eventPalette = overrides.eventPalette ?? paletteOf("#abcdef");
   const appTokens =
-    overrides.appTokens ?? { ...BASE_APP_TOKENS[base] };
+    overrides.appTokens ?? { ...BASE_APP_TOKENS[scheme] };
   const calendarTokens =
-    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[base] };
+    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[scheme] };
   const appIsolated = overrides.appIsolated ?? new Set<string>();
   const calendarIsolated = overrides.calendarIsolated ?? new Set<string>();
-  const scheme = overrides.scheme ?? base;
   return {
     kind: "user",
     id: overrides.id ?? "test",
     displayName: overrides.displayName ?? "Test",
-    base,
     scheme,
     blendCanvas: overrides.blendCanvas ?? "#202020",
     eventPalette,
@@ -111,7 +109,6 @@ function buildV1Input(overrides: Record<string, unknown> = {}): Record<string, u
     schemaVersion: 1,
     id: "custom-theme",
     displayName: "Custom Theme",
-    base: "dark",
     blendCanvas: "#202020",
     derivationEngineVersion: DERIVATION_ENGINE_VERSION,
     sources: SAMPLE_SOURCES_DARK,
@@ -289,27 +286,25 @@ describe("token catalogs", () => {
   });
 });
 
-describe("luminance-driven base detection", () => {
+describe("luminance-driven canvas resolution", () => {
   it("resolveCanvas returns the snapshot --background for user themes", () => {
     const theme = makeUserTheme({
-      base: "dark",
       sources: SAMPLE_SOURCES_LIGHT,
       appTokens: { ...BASE_APP_TOKENS.dark, "--background": "#FAF7F2" },
     });
     expect(resolveCanvas(theme).toLowerCase()).toBe("#faf7f2");
   });
 
-  it("isThemeDark ignores the base label when the snapshot canvas is light", () => {
+  it("isThemeDark returns false when the snapshot canvas is light", () => {
     const theme = makeUserTheme({
-      base: "dark",
       appTokens: { ...BASE_APP_TOKENS.dark, "--background": "#FAF7F2" },
     });
     expect(isThemeDark(theme)).toBe(false);
   });
 
-  it("isThemeDark returns true when the snapshot canvas is dark regardless of label", () => {
+  it("isThemeDark returns true when the snapshot canvas is dark", () => {
     const theme = makeUserTheme({
-      base: "light",
+      scheme: "light",
       appTokens: { ...BASE_APP_TOKENS.light, "--background": "#1B1C1F" },
     });
     expect(isThemeDark(theme)).toBe(true);
@@ -317,7 +312,7 @@ describe("luminance-driven base detection", () => {
 
   it("isThemeCalendarDark keys off the snapshot --cal-bg", () => {
     const theme = makeUserTheme({
-      base: "light",
+      scheme: "light",
       appTokens: { ...BASE_APP_TOKENS.light, "--background": "#FAF7F2" },
       calendarTokens: { ...BASE_CALENDAR_TOKENS.light, "--cal-bg": "#0E0F11" },
     });
@@ -364,7 +359,6 @@ describe("validateThemeJson v1 branch", () => {
       expect(result.theme.kind).toBe("user");
       expect(result.theme.id).toBe("custom-theme");
       expect(result.theme.displayName).toBe("Custom Theme");
-      expect(result.theme.base).toBe("dark");
       expect(result.theme.eventPalette).toHaveLength(PALETTE_SIZE);
       expect(result.theme.derivationEngineVersion).toBe(
         DERIVATION_ENGINE_VERSION,
@@ -573,7 +567,6 @@ describe("serializeTheme round-trip", () => {
     const original = makeUserTheme({
       id: "round-trip",
       displayName: "Round Trip",
-      base: "dark",
       scheme: "light",
       blendCanvas: "#202020",
       sources: SAMPLE_SOURCES_DARK,
@@ -586,7 +579,6 @@ describe("serializeTheme round-trip", () => {
     if (reparsed.ok) {
       expect(reparsed.theme.id).toBe(original.id);
       expect(reparsed.theme.displayName).toBe(original.displayName);
-      expect(reparsed.theme.base).toBe(original.base);
       expect(reparsed.theme.scheme).toBe(original.scheme);
       expect(reparsed.theme.seedScheme).toBe(original.scheme);
       expect(reparsed.theme.derivationEngineVersion).toBe(
@@ -614,7 +606,6 @@ describe("serializeTheme round-trip", () => {
       "schemaVersion",
       "id",
       "displayName",
-      "base",
       "scheme",
       "blendCanvas",
       "derivationEngineVersion",

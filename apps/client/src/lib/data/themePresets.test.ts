@@ -49,8 +49,8 @@ const MUTED_BANDS: ReadonlyArray<{ fg: string; bg: string }> = [
 describe("THEME_PRESETS", () => {
   for (const preset of THEME_PRESETS) {
     describe(preset.displayName, () => {
-      const app = deriveAppTokens(preset.sources, preset.base);
-      const cal = deriveCalendarTokens(preset.sources, preset.base);
+      const app = deriveAppTokens(preset.sources);
+      const cal = deriveCalendarTokens(preset.sources);
       const baseApp = BASE_APP_TOKENS[preset.base];
       const baseCal = BASE_CALENDAR_TOKENS[preset.base];
       const resolvedApp = { ...baseApp, ...app };

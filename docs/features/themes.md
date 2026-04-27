@@ -12,7 +12,7 @@ A Theme is a self-contained visual package. The minimum fields:
 
 - **id:** stable string used in storage and lookups. Built-in IDs are `light` and `dark`. Custom themes use slugs or UUIDs.
 - **displayName:** user-visible name in the theme picker.
-- **base:** `light` or `dark`. A data field used by built-in themes (which carry no `sources`) and as the starting point for preset defaults. It has no effect on derived colors or on the `.dark` class, both of which are driven by the actual canvas luminance (see "Luminance-driven base detection" below).
+- **base:** `light` or `dark`. Carried only by `BuiltinTheme` (the code-pinned light and dark) and by preset definitions, where it picks the BASE token table the preset's sources are layered on top of. User themes do not carry it: the v1 snapshot already holds every resolved token, so any required fallback is computed from the snapshot's canvas luminance via `defaultSchemeFromCanvas`.
 - **scheme:** `light` or `dark`. Purely decorative tag answering "was this theme meant for day or night use?". Surfaced as the sun/moon indicator in the theme list and editor header. Built-ins peg the scheme to their `base`. User themes can flip the indicator independently with one click; the flip is persisted but never affects the runtime `.dark` class or the calendar palette pick (those still derive from canvas luminance via `isThemeDark` / `isThemeCalendarDark`).
 - **eventPalette:** ordered array of 24 hex values (one per slot index). Every position must be filled, even if the theme reuses the same color across multiple slots. See "Event color palette" below.
 - **blendCanvas:** hex color the dimmed event variants blend toward. Usually the theme's canvas background.
@@ -25,7 +25,7 @@ User themes additionally carry a full resolved-token snapshot and source palette
 - **derivationEngineVersion:** integer stamp identifying which version of the derivation engine produced the snapshot. The editor shows a rebake banner when a stored theme's stamp trails the current code constant (see "Engine version and rebaking" below).
 - **blendCanvas:** scalar hex the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated; pinning `--cal-bg` lets the user pin `blendCanvas` indirectly.
 
-The Theme type is a discriminated union: `BuiltinTheme` (just `id`, `displayName`, `base`, `eventPalette`, `blendCanvas`) for the code-pinned light and dark, and `UserTheme` for everything authored or duplicated. A user-theme value is frozen after construction and stored normalized in SQLite (see "Persistence" below). The registry of built-ins is frozen. This prevents runtime mutation of a shipped theme by accident.
+The Theme type is a discriminated union: `BuiltinTheme` (just `id`, `displayName`, `base`, `scheme`, `eventPalette`, `blendCanvas`) for the code-pinned light and dark, and `UserTheme` (no `base`) for everything authored or duplicated. A user-theme value is frozen after construction and stored normalized in SQLite (see "Persistence" below). The registry of built-ins is frozen. This prevents runtime mutation of a shipped theme by accident.
 
 ### Why a registry, not a boolean
 
@@ -78,14 +78,14 @@ OKLab is implemented from D65 matrix math in the same file (no external dependen
 
 Event-tile text still uses the legacy threshold-based `pickContrastText` (Rec. 709 luminance on raw sRGB) because the event palette was calibrated against those specific thresholds. Dimmed event variants (past, cancelled, transparent, outside-month) are computed by blending the event's base hex toward the theme's `blendCanvas` with a fixed weight; text contrast is recomputed from the dimmed bg and cached per (theme ID, slot, weight).
 
-## Luminance-driven base detection
+## Luminance-driven canvas resolution
 
 Whether a theme "is dark" is a runtime property of its canvas, not a stored label. Two helpers in `stores/themes.ts` do the bucketing:
 
 - `isThemeDark(theme)` reads `--background` from the theme's snapshot (or the base CSS for built-ins) and returns true when its relative luminance sits below `DARK_SURFACE_THRESHOLD` (0.4). Used to toggle the `.dark` class on the HTML root.
 - `isThemeCalendarDark(theme)` does the same for `--cal-bg`, which either matches the auto-derived calendar canvas (the default) or a user-pinned hex when `--cal-bg` is in `calendarIsolated`. Event tiles need to pick their palette against the surface they actually sit on, which is not always the same as the app canvas.
 
-Both helpers decouple every "is it dark?" check from `theme.base`. Users can invert a theme's canvas mid-edit without fighting a stale label: the `.dark` class flips immediately, and event tiles pick the right palette on the very next frame. The 0.4 threshold is intentionally below the sRGB midpoint so a mid-gray canvas (~#888) still resolves as light.
+User themes carry no `base` field at all, so there is no stored label to fall out of sync with. A separate helper, `defaultSchemeFromCanvas(canvasHex)`, classifies an arbitrary canvas as `light` or `dark` for the few places that still need a BASE table to fall back to (legacy import, partial-row recovery during DB hydrate). Users can invert a theme's canvas mid-edit without fighting any stale label: the `.dark` class flips immediately, and event tiles pick the right palette on the very next frame. The 0.4 threshold is intentionally below the sRGB midpoint so a mid-gray canvas (~#888) still resolves as light.
 
 ## Persistence
 
@@ -143,7 +143,7 @@ Every user-theme token is stored as a resolved hex snapshot in `theme_tokens`, o
 
 ### Source-edit cascade
 
-Editing a source value triggers `updateSourceValue(themeId, sourceKey, hex)`. The store rebuilds the snapshot from `deriveAppTokens(newSources, base)` and `deriveCalendarTokens(newSources, base)`, then updates the in-memory theme:
+Editing a source value triggers `updateSourceValue(themeId, sourceKey, hex)`. The store rebuilds the snapshot from `deriveAppTokens(newSources)` and `deriveCalendarTokens(newSources)`, then updates the in-memory theme:
 
 - Replace the `sources[sourceKey]` entry.
 - For each app token where the isolated flag is unset, write the new derived value into `appTokens`.
@@ -190,7 +190,7 @@ The engine combines three kinds of computations:
 
 Confirm, warning, and destructive propagate through identity derivation: one source color feeds both the button state and the corresponding status tile, so users pick three semantic accents (green, amber, red) and every surface that carries that meaning stays consistent.
 
-The test suite asserts: every derivable body-text pair meets AA 4.5:1; status/destructive/confirm pairs meet AA-large 3:1 (tentative is excluded because BASE itself paints white on `#F59E0B` at 1.46:1 as an intentional low-contrast design); muted captions park in `[3.0, 5.0]` (the upper bound accommodates gamut clamping on near-white canvases); event-panel divider sits at or above 1.4:1 against the panel; calendar gridline sits at or above 1.4:1 against cal-bg; calendar time label and timeline-break sit at or above 3:1 against cal-bg; `sidebar <= canvas <= card <= popover <= accent` OKLab-L ordering holds on every canvas with headroom; feeding BASE.dark's sources reproduces BASE.dark exactly on source-driven and hardcoded tokens, and within 2 rgb-units on every shift-derived or walk-fraction token. The cosmetic `base` label has zero effect on derived tokens.
+The test suite asserts: every derivable body-text pair meets AA 4.5:1; status/destructive/confirm pairs meet AA-large 3:1 (tentative is excluded because BASE itself paints white on `#F59E0B` at 1.46:1 as an intentional low-contrast design); muted captions park in `[3.0, 5.0]` (the upper bound accommodates gamut clamping on near-white canvases); event-panel divider sits at or above 1.4:1 against the panel; calendar gridline sits at or above 1.4:1 against cal-bg; calendar time label and timeline-break sit at or above 3:1 against cal-bg; `sidebar <= canvas <= card <= popover <= accent` OKLab-L ordering holds on every canvas with headroom; feeding BASE.dark's sources reproduces BASE.dark exactly on source-driven and hardcoded tokens, and within 2 rgb-units on every shift-derived or walk-fraction token.
 
 The derivable calendar tokens are `--cal-bg`, `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, `--cal-timeline-rail`, and `--cal-timeline-break`. `--cal-today-circle` and `--cal-today-circle-text` are no longer derived from sources: the today-marker's hand-tuned blue on dark and dark-gray on light carries a semantic meaning that does not reduce cleanly to the source palette, so the snapshot stores the BASE CSS hex on clone and users can isolate either token to repaint it. `--cal-current-time` (red "now" line) and `--cal-timeline-focus` (green pomodoro marker) follow the same convention.
 

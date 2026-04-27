@@ -116,7 +116,6 @@ export interface UserTheme {
   kind: "user";
   id: ThemeId;
   displayName: string;
-  base: "light" | "dark";
   /**
    * Decorative day/night annotation; flips the sun/moon icon in the editor
    * header and the theme list. Has no effect on the runtime `.dark` class or
@@ -687,7 +686,6 @@ const CAL_FRACTIONS = {
  */
 export function deriveAppTokens(
   sources: ThemeSources,
-  _base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink, primary, destructive, confirm, warning } = sources;
   const d = APP_DERIVATION;
@@ -802,7 +800,6 @@ export function deriveAppTokens(
  */
 export function deriveCalendarTokens(
   sources: ThemeSources,
-  _base: "light" | "dark",
 ): Record<string, string> {
   const { canvas, ink } = sources;
   const canvasIsDark = relativeLuminance(canvas) < 0.5;
@@ -960,7 +957,6 @@ export function serializeTheme(theme: Theme): string {
     schemaVersion: 1,
     id: theme.id,
     displayName: theme.displayName,
-    base: theme.base,
     scheme: theme.scheme,
     blendCanvas: theme.blendCanvas,
     derivationEngineVersion: theme.derivationEngineVersion,
@@ -1052,11 +1048,10 @@ function validateIdentity(
 ): {
   cleanId: string;
   cleanDisplayName: string;
-  cleanBase: "light" | "dark";
   cleanBlend: string;
   cleanPalette: string[];
 } {
-  const { id, displayName, base, blendCanvas, eventPalette } = input;
+  const { id, displayName, blendCanvas, eventPalette } = input;
 
   let cleanId = "";
   if (typeof id !== "string" || id.length === 0) {
@@ -1078,13 +1073,6 @@ function validateIdentity(
     errors.push(`displayName must be ${MAX_DISPLAY_NAME_LENGTH} characters or fewer`);
   } else {
     cleanDisplayName = displayName;
-  }
-
-  let cleanBase: "light" | "dark" = "dark";
-  if (base !== "light" && base !== "dark") {
-    errors.push('base must be "light" or "dark"');
-  } else {
-    cleanBase = base;
   }
 
   let cleanBlend = "";
@@ -1112,15 +1100,46 @@ function validateIdentity(
       }
     }
   }
-  return { cleanId, cleanDisplayName, cleanBase, cleanBlend, cleanPalette };
+  return { cleanId, cleanDisplayName, cleanBlend, cleanPalette };
+}
+
+/**
+ * Legacy-only base sanitizer. Pre-v1 imports needed an explicit base because
+ * they shipped without a full token snapshot, so missing tokens fell back to
+ * `BASE_APP_TOKENS[base]`. v1 themes carry the snapshot directly and pick
+ * any fallback from the sources canvas via `defaultSchemeFromCanvas`, so
+ * they no longer require this field.
+ */
+function sanitizeLegacyBase(
+  raw: unknown,
+  errors: string[],
+): "light" | "dark" {
+  if (raw !== "light" && raw !== "dark") {
+    errors.push('base must be "light" or "dark"');
+    return "dark";
+  }
+  return raw;
 }
 
 function validateV1(input: Record<string, unknown>): ThemeValidationResult {
   const errors: string[] = [];
-  const { cleanId, cleanDisplayName, cleanBase, cleanBlend, cleanPalette } =
+  const { cleanId, cleanDisplayName, cleanBlend, cleanPalette } =
     validateIdentity(input, errors);
 
-  const cleanSources = sanitizeSources(input.sources, errors, "sources", cleanBase);
+  // v1 fallback strategy: classify the theme as light/dark from its canvas
+  // hex (or from blendCanvas if sources is invalid) so missing/corrupt rows
+  // recover from a sensible BASE table. This replaces the old `cleanBase`
+  // field which v1 no longer carries.
+  const rawCanvas =
+    isPlainObject(input.sources) &&
+    typeof (input.sources as Record<string, unknown>).canvas === "string"
+      ? ((input.sources as Record<string, unknown>).canvas as string)
+      : cleanBlend;
+  const fallbackBase: "light" | "dark" = isHexColor(rawCanvas)
+    ? defaultSchemeFromCanvas(rawCanvas)
+    : "dark";
+
+  const cleanSources = sanitizeSources(input.sources, errors, "sources", fallbackBase);
   if (!cleanSources && !errors.some((e) => e.startsWith("sources"))) {
     errors.push("sources is required on v1 themes");
   }
@@ -1129,7 +1148,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     input.appTokens,
     APP_TOKEN_KEYS,
     APP_TOKEN_KEY_SET,
-    BASE_APP_TOKENS[cleanBase],
+    BASE_APP_TOKENS[fallbackBase],
     "appTokens",
     errors,
   );
@@ -1137,7 +1156,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     input.calendarTokens,
     CALENDAR_TOKEN_KEYS,
     CALENDAR_TOKEN_KEY_SET,
-    BASE_CALENDAR_TOKENS[cleanBase],
+    BASE_CALENDAR_TOKENS[fallbackBase],
     "calendarTokens",
     errors,
   );
@@ -1182,7 +1201,6 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     kind: "user",
     id: cleanId,
     displayName: cleanDisplayName,
-    base: cleanBase,
     scheme: cleanScheme,
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
@@ -1206,8 +1224,9 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
 
 function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
   const errors: string[] = [];
-  const { cleanId, cleanDisplayName, cleanBase, cleanBlend, cleanPalette } =
+  const { cleanId, cleanDisplayName, cleanBlend, cleanPalette } =
     validateIdentity(input, errors);
+  const cleanBase = sanitizeLegacyBase(input.base, errors);
 
   const cleanSourcesPartial = sanitizeSources(
     input.sources,
@@ -1247,8 +1266,8 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
 
   // Run the current derivation engine to produce the missing tokens,
   // then layer the overrides on top to produce the full snapshot.
-  const derivedApp = deriveAppTokens(cleanSources, cleanBase);
-  const derivedCal = deriveCalendarTokens(cleanSources, cleanBase);
+  const derivedApp = deriveAppTokens(cleanSources);
+  const derivedCal = deriveCalendarTokens(cleanSources);
   const appTokens = buildSnapshot(
     APP_TOKEN_KEYS,
     BASE_APP_TOKENS[cleanBase],
@@ -1317,8 +1336,8 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
 
   // Build seed snapshots: prefer explicit seedAppTokens when provided, else
   // re-derive from seedSources and layer seed overrides.
-  const seedDerivedApp = deriveAppTokens(seedSources, cleanBase);
-  const seedDerivedCal = deriveCalendarTokens(seedSources, cleanBase);
+  const seedDerivedApp = deriveAppTokens(seedSources);
+  const seedDerivedCal = deriveCalendarTokens(seedSources);
   const seedAppTokens = seedAppTokensProvided
     ? buildSnapshot(
         APP_TOKEN_KEYS,
@@ -1359,7 +1378,6 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     kind: "user",
     id: cleanId,
     displayName: cleanDisplayName,
-    base: cleanBase,
     scheme: cleanScheme,
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,

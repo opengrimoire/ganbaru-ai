@@ -35,19 +35,17 @@ function paletteOf(hex: string): string[] {
 function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
   const eventPalette = paletteOf("#abcdef");
   const sources = overrides.sources ?? { ...DEFAULT_SOURCES_DARK };
-  const base = overrides.base ?? "dark";
+  const scheme = overrides.scheme ?? "dark";
   const appTokens =
-    overrides.appTokens ?? { ...BASE_APP_TOKENS[base] };
+    overrides.appTokens ?? { ...BASE_APP_TOKENS[scheme] };
   const calendarTokens =
-    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[base] };
+    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[scheme] };
   const appIsolated = overrides.appIsolated ?? new Set<string>();
   const calendarIsolated = overrides.calendarIsolated ?? new Set<string>();
-  const scheme = overrides.scheme ?? base;
   return {
     kind: "user",
     id: overrides.id ?? "seed",
     displayName: overrides.displayName ?? "Seed",
-    base,
     scheme,
     blendCanvas: overrides.blendCanvas ?? "#101010",
     eventPalette: overrides.eventPalette ?? eventPalette,
@@ -85,10 +83,9 @@ describe("cloneTheme", () => {
     expect(copy.kind).toBe("user");
   });
 
-  it("copies base and blendCanvas verbatim", () => {
-    const source = makeUserTheme({ base: "light", blendCanvas: "#fafafa" });
+  it("copies blendCanvas verbatim", () => {
+    const source = makeUserTheme({ scheme: "light", blendCanvas: "#fafafa" });
     const copy = cloneTheme(source, "fork", "Fork");
-    expect(copy.base).toBe("light");
     expect(copy.blendCanvas).toBe("#fafafa");
   });
 
@@ -154,7 +151,6 @@ describe("cloneTheme", () => {
   it("snapshots appTokens from the resolved source palette", () => {
     const customApp = { ...BASE_APP_TOKENS.dark, "--primary": "#abc123" };
     const source = makeUserTheme({
-      base: "dark",
       appTokens: customApp,
     });
     const copy = cloneTheme(source, "fork", "Fork");
@@ -168,7 +164,6 @@ describe("cloneTheme", () => {
   it("snapshots calendarTokens from the resolved source palette", () => {
     const customCal = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#202020" };
     const source = makeUserTheme({
-      base: "dark",
       calendarTokens: customCal,
     });
     const copy = cloneTheme(source, "fork", "Fork");
@@ -187,7 +182,7 @@ describe("cloneTheme", () => {
   });
 
   it("snapshots seedSources matching the clone's sources", () => {
-    const source = makeUserTheme({ base: "light" });
+    const source = makeUserTheme({ scheme: "light" });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.seedSources).toEqual(copy.sources);
     expect(copy.seedSources).not.toBe(copy.sources);
@@ -201,7 +196,7 @@ describe("cloneTheme", () => {
 
   it("snapshots seedAppTokens equal to live appTokens at clone time", () => {
     const customApp = { ...BASE_APP_TOKENS.dark, "--primary": "#abc123" };
-    const source = makeUserTheme({ base: "dark", appTokens: customApp });
+    const source = makeUserTheme({ appTokens: customApp });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.seedAppTokens).toEqual(copy.appTokens);
     expect(copy.seedAppTokens).not.toBe(copy.appTokens);
@@ -209,7 +204,7 @@ describe("cloneTheme", () => {
 
   it("snapshots seedCalendarTokens equal to live calendarTokens at clone time", () => {
     const customCal = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#202020" };
-    const source = makeUserTheme({ base: "dark", calendarTokens: customCal });
+    const source = makeUserTheme({ calendarTokens: customCal });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.seedCalendarTokens).toEqual(copy.calendarTokens);
     expect(copy.seedCalendarTokens).not.toBe(copy.calendarTokens);
@@ -240,7 +235,7 @@ describe("cloneTheme", () => {
   });
 
   it("carries the source's scheme verbatim on user clones", () => {
-    const source = makeUserTheme({ base: "dark", scheme: "light" });
+    const source = makeUserTheme({ scheme: "light" });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.scheme).toBe("light");
     expect(copy.seedScheme).toBe("light");

@@ -31,8 +31,8 @@
     sources: ThemeSources,
     base: "light" | "dark",
   ): Record<string, string> {
-    const app = deriveAppTokens(sources, base);
-    const cal = deriveCalendarTokens(sources, base);
+    const app = deriveAppTokens(sources);
+    const cal = deriveCalendarTokens(sources);
     return { ...BASE_APP_TOKENS[base], ...BASE_CALENDAR_TOKENS[base], ...app, ...cal };
   }
 

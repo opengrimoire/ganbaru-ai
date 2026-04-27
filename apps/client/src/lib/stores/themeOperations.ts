@@ -65,7 +65,6 @@ export function cloneTheme(
     kind: "user",
     id,
     displayName,
-    base: source.base,
     scheme,
     blendCanvas: source.blendCanvas,
     eventPalette: palette,

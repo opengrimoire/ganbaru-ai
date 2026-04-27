@@ -113,8 +113,8 @@ function assertAALarge(fgHex: string, bgHex: string, label: string) {
 
 describe("deriveAppTokens", () => {
   it("returns values for every derivable key in both bases", () => {
-    const light = deriveAppTokens(LIGHT_SOURCES, "light");
-    const dark = deriveAppTokens(DARK_SOURCES, "dark");
+    const light = deriveAppTokens(LIGHT_SOURCES);
+    const dark = deriveAppTokens(DARK_SOURCES);
     for (const key of Object.keys(light)) {
       expect(light[key]).toBeDefined();
       expect(dark[key]).toBeDefined();
@@ -127,21 +127,21 @@ describe("deriveAppTokens", () => {
     const sources = base === "light" ? LIGHT_SOURCES : DARK_SOURCES;
 
     it(`meets AA 4.5:1 on every body-text pair (${base})`, () => {
-      const tokens = deriveAppTokens(sources, base);
+      const tokens = deriveAppTokens(sources);
       for (const [fg, bg] of AA_BODY_PAIRS) {
         assertAA(tokens[fg], tokens[bg], `${base} ${fg} on ${bg}`);
       }
     });
 
     it(`meets AA-large 3:1 on every status pair (${base})`, () => {
-      const tokens = deriveAppTokens(sources, base);
+      const tokens = deriveAppTokens(sources);
       for (const [fg, bg] of AA_LARGE_PAIRS) {
         assertAALarge(tokens[fg], tokens[bg], `${base} ${fg} on ${bg}`);
       }
     });
 
     it(`parks muted captions inside [3.0, 5.0] (${base})`, () => {
-      const tokens = deriveAppTokens(sources, base);
+      const tokens = deriveAppTokens(sources);
       for (const { fg, bg } of MUTED_BANDS) {
         const ratio = contrastRatio(tokens[fg], tokens[bg]);
         expect(ratio).toBeGreaterThanOrEqual(3.0);
@@ -150,7 +150,7 @@ describe("deriveAppTokens", () => {
     });
 
     it(`event-panel divider sits at or above 1.4:1 against its panel (${base})`, () => {
-      const tokens = deriveAppTokens(sources, base);
+      const tokens = deriveAppTokens(sources);
       const ratio = contrastRatio(
         tokens["--event-panel-divider"],
         tokens["--event-panel-bg"],
@@ -160,7 +160,7 @@ describe("deriveAppTokens", () => {
   }
 
   it("pins the source colors to the tokens they represent", () => {
-    const light = deriveAppTokens(LIGHT_SOURCES, "light");
+    const light = deriveAppTokens(LIGHT_SOURCES);
     expect(light["--background"]).toBe(LIGHT_SOURCES.canvas);
     expect(light["--foreground"]).toBe(LIGHT_SOURCES.ink);
     expect(light["--primary"]).toBe(LIGHT_SOURCES.primary);
@@ -168,7 +168,7 @@ describe("deriveAppTokens", () => {
     expect(light["--action-confirm"]).toBe(LIGHT_SOURCES.confirm);
     expect(light["--status-tentative"]).toBe(LIGHT_SOURCES.warning);
 
-    const dark = deriveAppTokens(DARK_SOURCES, "dark");
+    const dark = deriveAppTokens(DARK_SOURCES);
     expect(dark["--background"]).toBe(DARK_SOURCES.canvas);
     expect(dark["--foreground"]).toBe(DARK_SOURCES.ink);
     expect(dark["--primary"]).toBe(DARK_SOURCES.primary);
@@ -176,7 +176,7 @@ describe("deriveAppTokens", () => {
   });
 
   it("lifts card and popover away from canvas toward ink", () => {
-    const derived = deriveAppTokens(LIGHT_SOURCES, "light");
+    const derived = deriveAppTokens(LIGHT_SOURCES);
     expect(derived["--card"]).not.toBe(LIGHT_SOURCES.canvas);
     expect(derived["--popover"]).not.toBe(LIGHT_SOURCES.canvas);
     expect(
@@ -202,7 +202,7 @@ describe("deriveAppTokens", () => {
     const sources = base === "light" ? LIGHT_SOURCES : DARK_SOURCES;
 
     it(`preserves the surface hierarchy sidebar <= canvas <= card <= popover <= accent (${base})`, () => {
-      const tokens = deriveAppTokens(sources, base);
+      const tokens = deriveAppTokens(sources);
       const L = (hex: string) => hexToOklab(hex)!.L;
       const sidebarL = L(tokens["--sidebar"]);
       const canvasL = L(tokens["--background"]);
@@ -216,7 +216,7 @@ describe("deriveAppTokens", () => {
     });
 
     it(`places event-panel-contrast <= canvas and event-panel-bg >= canvas (${base})`, () => {
-      const tokens = deriveAppTokens(sources, base);
+      const tokens = deriveAppTokens(sources);
       const L = (hex: string) => hexToOklab(hex)!.L;
       expect(L(tokens["--event-panel-contrast"])).toBeLessThanOrEqual(
         L(tokens["--background"]),
@@ -233,7 +233,7 @@ describe("deriveAppTokens", () => {
     // user creating a new custom theme typically lands on; the dark
     // built-in itself (~0.28 L) is the other end of the same space.
     const pastel: ThemeSources = { ...LIGHT_SOURCES, canvas: "#F4E9D3" };
-    const tokens = deriveAppTokens(pastel, "light");
+    const tokens = deriveAppTokens(pastel);
     const L = (hex: string) => hexToOklab(hex)!.L;
     expect(L(tokens["--sidebar"])).toBeLessThan(L(tokens["--background"]));
     expect(L(tokens["--background"])).toBeLessThan(L(tokens["--card"]));
@@ -243,17 +243,17 @@ describe("deriveAppTokens", () => {
 
   it("re-derives live when canvas changes", () => {
     const shifted: ThemeSources = { ...LIGHT_SOURCES, canvas: "#FFEEDD" };
-    const derived = deriveAppTokens(shifted, "light");
+    const derived = deriveAppTokens(shifted);
     expect(derived["--background"]).toBe("#FFEEDD");
     expect(derived["--secondary"]).not.toBe(
-      deriveAppTokens(LIGHT_SOURCES, "light")["--secondary"],
+      deriveAppTokens(LIGHT_SOURCES)["--secondary"],
     );
   });
 
   it("flips --foreground when the user darkens canvas without touching ink", () => {
     const lightIshInk = LIGHT_SOURCES.ink;
     const shifted: ThemeSources = { ...LIGHT_SOURCES, canvas: "#0A0A1E" };
-    const tokens = deriveAppTokens(shifted, "light");
+    const tokens = deriveAppTokens(shifted);
     expect(tokens["--foreground"]).not.toBe(lightIshInk);
     assertAA(tokens["--foreground"], tokens["--background"], "shifted fg on bg");
   });
@@ -275,7 +275,7 @@ describe("deriveAppTokens", () => {
     // must clear AA-large 3:1; ring shares the "visible as a focus
     // indicator" band at >= 2.9.
     const inverted: ThemeSources = { ...DARK_SOURCES, canvas: "#FFFFFF" };
-    const tokens = deriveAppTokens(inverted, "dark");
+    const tokens = deriveAppTokens(inverted);
     const strictPairs: ReadonlyArray<[string, string]> = [
       ["--muted-foreground", "--muted"],
       ["--form-indicator", "--background"],
@@ -305,20 +305,12 @@ describe("deriveAppTokens", () => {
       confirm: "#00FF7F",
       warning: "#FFA500",
     };
-    const tokens = deriveAppTokens(extreme, "dark");
+    const tokens = deriveAppTokens(extreme);
     for (const [fg, bg] of AA_BODY_PAIRS) {
       assertAA(tokens[fg], tokens[bg], `extreme ${fg} on ${bg}`);
     }
     for (const [fg, bg] of AA_LARGE_PAIRS) {
       assertAALarge(tokens[fg], tokens[bg], `extreme ${fg} on ${bg}`);
-    }
-  });
-
-  it("ignores the cosmetic base label when sources are provided", () => {
-    const asLight = deriveAppTokens(LIGHT_SOURCES, "light");
-    const asDark = deriveAppTokens(LIGHT_SOURCES, "dark");
-    for (const key of Object.keys(asLight)) {
-      expect(asDark[key]).toBe(asLight[key]);
     }
   });
 
@@ -331,7 +323,7 @@ describe("deriveAppTokens", () => {
    * derivation anchor's chroma produce a 1-2 rgb-unit drift.
    */
   it("reproduces BASE.dark exactly on source-driven and hardcoded tokens", () => {
-    const derived = deriveAppTokens(DARK_SOURCES, "dark");
+    const derived = deriveAppTokens(DARK_SOURCES);
     const exactKeys = [
       "--background",
       "--foreground",
@@ -367,7 +359,7 @@ describe("deriveAppTokens", () => {
   });
 
   it("lands within 2 OKLab-L units of BASE.dark on shift-derived surfaces", () => {
-    const derived = deriveAppTokens(DARK_SOURCES, "dark");
+    const derived = deriveAppTokens(DARK_SOURCES);
     const L = (hex: string) => hexToOklab(hex)!.L;
     const approxKeys = [
       "--card",
@@ -386,7 +378,7 @@ describe("deriveAppTokens", () => {
   });
 
   it("lands within 2 OKLab-L units of BASE.dark on walk-fraction tokens", () => {
-    const derived = deriveAppTokens(DARK_SOURCES, "dark");
+    const derived = deriveAppTokens(DARK_SOURCES);
     const L = (hex: string) => hexToOklab(hex)!.L;
     const walkKeys = [
       "--muted-foreground",
@@ -405,7 +397,7 @@ describe("deriveAppTokens", () => {
   });
 
   it("covers every app token key through derive or BASE fallthrough", () => {
-    const derived = deriveAppTokens(DARK_SOURCES, "dark");
+    const derived = deriveAppTokens(DARK_SOURCES);
     for (const key of APP_TOKEN_KEYS) {
       const hasDerived = derived[key] !== undefined;
       const hasBase = BASE_APP_TOKENS.dark[key] !== undefined;
@@ -416,7 +408,7 @@ describe("deriveAppTokens", () => {
 
 describe("deriveCalendarTokens", () => {
   it("returns entries for every derivable key, not for the fully-semantic ones", () => {
-    const derived = deriveCalendarTokens(LIGHT_SOURCES, "light");
+    const derived = deriveCalendarTokens(LIGHT_SOURCES);
     expect(derived["--cal-bg"]).toBeDefined();
     expect(derived["--cal-header-bg"]).toBeDefined();
     expect(derived["--cal-gridline"]).toBeDefined();
@@ -434,7 +426,7 @@ describe("deriveCalendarTokens", () => {
   });
 
   it("pins the calendar header to the app canvas and derives cal-bg from it", () => {
-    const light = deriveCalendarTokens(LIGHT_SOURCES, "light");
+    const light = deriveCalendarTokens(LIGHT_SOURCES);
     expect(light["--cal-header-bg"]).toBe(LIGHT_SOURCES.canvas);
     // cal-bg is no longer a source: on a light canvas it lifts slightly
     // above canvas, so the two should diverge but stay close.
@@ -442,8 +434,8 @@ describe("deriveCalendarTokens", () => {
   });
 
   it("auto-derives cal-bg in opposite directions based on canvas luminance", () => {
-    const light = deriveCalendarTokens(LIGHT_SOURCES, "light");
-    const dark = deriveCalendarTokens(DARK_SOURCES, "dark");
+    const light = deriveCalendarTokens(LIGHT_SOURCES);
+    const dark = deriveCalendarTokens(DARK_SOURCES);
     const canvasL = (hex: string) => hexToOklab(hex)!.L;
     // Light canvas: cal-bg lifts above canvas (positive ΔL).
     expect(canvasL(light["--cal-bg"])).toBeGreaterThan(
@@ -460,8 +452,8 @@ describe("deriveCalendarTokens", () => {
     // it up. This confirms the `< 0.5 relativeLuminance` branch.
     const darkish: ThemeSources = { ...LIGHT_SOURCES, canvas: "#404040" };
     const lightish: ThemeSources = { ...LIGHT_SOURCES, canvas: "#E0E0E0" };
-    const darkTokens = deriveCalendarTokens(darkish, "dark");
-    const lightTokens = deriveCalendarTokens(lightish, "light");
+    const darkTokens = deriveCalendarTokens(darkish);
+    const lightTokens = deriveCalendarTokens(lightish);
     expect(relativeLuminance(darkish.canvas)).toBeLessThan(0.5);
     expect(relativeLuminance(lightish.canvas)).toBeGreaterThanOrEqual(0.5);
     expect(hexToOklab(darkTokens["--cal-bg"])!.L).toBeLessThan(
@@ -479,7 +471,7 @@ describe("deriveCalendarTokens", () => {
       // Gridline target was lowered from 3 to 1.4 so cloned themes
       // inherit the built-in's subtle gridline style (~1.5:1) instead
       // of the previous prominent 3:1 lines.
-      const tokens = deriveCalendarTokens(sources, base);
+      const tokens = deriveCalendarTokens(sources);
       const ratio = contrastRatio(tokens["--cal-gridline"], tokens["--cal-bg"]);
       expect(ratio).toBeGreaterThanOrEqual(1.4);
     });
@@ -489,13 +481,13 @@ describe("deriveCalendarTokens", () => {
       // but muted enough not to compete with event tiles. BASE.dark
       // parks the label at ~6:1 against cal-bg; the walk-fraction
       // derivation reproduces that position on any canvas.
-      const tokens = deriveCalendarTokens(sources, base);
+      const tokens = deriveCalendarTokens(sources);
       const ratio = contrastRatio(tokens["--cal-time-label"], tokens["--cal-bg"]);
       expect(ratio).toBeGreaterThanOrEqual(3.0);
     });
 
     it(`timeline break sits at or above 3:1 against the calendar canvas (${base})`, () => {
-      const tokens = deriveCalendarTokens(sources, base);
+      const tokens = deriveCalendarTokens(sources);
       const ratio = contrastRatio(
         tokens["--cal-timeline-break"],
         tokens["--cal-bg"],
@@ -504,17 +496,9 @@ describe("deriveCalendarTokens", () => {
     });
   }
 
-  it("ignores the cosmetic base label when sources are provided", () => {
-    const asLight = deriveCalendarTokens(LIGHT_SOURCES, "light");
-    const asDark = deriveCalendarTokens(LIGHT_SOURCES, "dark");
-    for (const key of Object.keys(asLight)) {
-      expect(asDark[key]).toBe(asLight[key]);
-    }
-  });
-
   it("flips time label and timeline break dark when canvas goes light but ink stays light", () => {
     const inverted: ThemeSources = { ...DARK_SOURCES, canvas: "#FFFFFF" };
-    const tokens = deriveCalendarTokens(inverted, "dark");
+    const tokens = deriveCalendarTokens(inverted);
     for (const key of ["--cal-time-label", "--cal-timeline-break"] as const) {
       const ratio = contrastRatio(tokens[key], tokens["--cal-bg"]);
       if (ratio < 3) {
@@ -533,14 +517,14 @@ describe("deriveCalendarTokens", () => {
    * from ink anchor).
    */
   it("reproduces BASE.dark exactly on cal-header-bg", () => {
-    const derived = deriveCalendarTokens(DARK_SOURCES, "dark");
+    const derived = deriveCalendarTokens(DARK_SOURCES);
     expect(derived["--cal-header-bg"]?.toLowerCase()).toBe(
       BASE_CALENDAR_TOKENS.dark["--cal-header-bg"].toLowerCase(),
     );
   });
 
   it("lands within 2 OKLab-L units of BASE.dark on derived calendar tokens", () => {
-    const derived = deriveCalendarTokens(DARK_SOURCES, "dark");
+    const derived = deriveCalendarTokens(DARK_SOURCES);
     const L = (hex: string) => hexToOklab(hex)!.L;
     const approxKeys = [
       "--cal-bg",
@@ -558,7 +542,7 @@ describe("deriveCalendarTokens", () => {
   });
 
   it("covers every calendar token key through derive or BASE fallthrough", () => {
-    const derived = deriveCalendarTokens(DARK_SOURCES, "dark");
+    const derived = deriveCalendarTokens(DARK_SOURCES);
     for (const key of CALENDAR_TOKEN_KEYS) {
       const hasDerived = derived[key] !== undefined;
       const hasBase = BASE_CALENDAR_TOKENS.dark[key] !== undefined;

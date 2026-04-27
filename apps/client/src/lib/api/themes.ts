@@ -44,7 +44,6 @@ export interface PaletteRow {
 export interface ThemeRow {
   id: string;
   display_name: string;
-  base: "light" | "dark";
   blend_canvas: string;
   seed_blend_canvas: string;
   derivation_engine_version: number;
@@ -74,7 +73,6 @@ export interface DismissalRow {
 export interface UserThemeWrite {
   id: string;
   displayName: string;
-  base: "light" | "dark";
   scheme: "light" | "dark";
   seedScheme: "light" | "dark";
   blendCanvas: string;
@@ -143,13 +141,12 @@ export async function insertTheme(write: UserThemeWrite): Promise<void> {
   try {
     await execute(
       `INSERT INTO themes
-        (id, display_name, base, scheme, seed_scheme, blend_canvas,
+        (id, display_name, scheme, seed_scheme, blend_canvas,
          seed_blend_canvas, derivation_engine_version, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
       [
         write.id,
         write.displayName,
-        write.base,
         write.scheme,
         write.seedScheme,
         write.blendCanvas,
@@ -215,17 +212,15 @@ export async function replaceThemeContent(write: UserThemeWrite): Promise<void> 
   await execute(
     `UPDATE themes
         SET display_name = $1,
-            base = $2,
-            scheme = $3,
-            seed_scheme = $4,
-            blend_canvas = $5,
-            seed_blend_canvas = $6,
-            derivation_engine_version = $7,
-            updated_at = $8
-      WHERE id = $9`,
+            scheme = $2,
+            seed_scheme = $3,
+            blend_canvas = $4,
+            seed_blend_canvas = $5,
+            derivation_engine_version = $6,
+            updated_at = $7
+      WHERE id = $8`,
     [
       write.displayName,
-      write.base,
       write.scheme,
       write.seedScheme,
       write.blendCanvas,
