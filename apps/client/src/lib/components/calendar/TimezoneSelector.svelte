@@ -2,6 +2,7 @@
   import {
     getTimezoneAbbr,
     getTimezoneOffset,
+    formatColumnHeaderAbbr,
     formatTimezoneName,
     searchTimezones,
   } from "./utils";
@@ -67,7 +68,7 @@
       class="flex items-center justify-center"
       style=""
     >
-      {getTimezoneAbbr(tz)}
+      {formatColumnHeaderAbbr(tz)}
     </span>
   {/each}
 
