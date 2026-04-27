@@ -39,6 +39,7 @@
     onScrollChange,
     onAddTimezone,
     onRemoveTimezone,
+    onReorderTimezone,
     onWheelNavigate,
     onDayHeaderClick,
   }: {
@@ -55,6 +56,7 @@
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
+    onReorderTimezone?: (from: number, to: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: (date: Date) => void;
   } = $props();
@@ -400,6 +402,7 @@
           tzCount={tzCount}
           onAdd={(tz) => onAddTimezone?.(tz)}
           onRemove={(i) => onRemoveTimezone?.(i)}
+          onReorder={(from, to) => onReorderTimezone?.(from, to)}
         />
 
         <div

@@ -34,6 +34,7 @@
     onScrollChange,
     onAddTimezone,
     onRemoveTimezone,
+    onReorderTimezone,
     onWheelNavigate,
     onDayHeaderClick,
   }: {
@@ -50,6 +51,7 @@
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
+    onReorderTimezone?: (from: number, to: number) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: () => void;
   } = $props();
@@ -310,6 +312,7 @@
           {tzCount}
           onAdd={(tz) => onAddTimezone?.(tz)}
           onRemove={(i) => onRemoveTimezone?.(i)}
+          onReorder={(from, to) => onReorderTimezone?.(from, to)}
         />
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div

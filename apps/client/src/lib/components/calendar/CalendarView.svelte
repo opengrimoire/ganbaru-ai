@@ -230,6 +230,16 @@
     }
   }
 
+  function reorderTimezone(from: number, to: number) {
+    if (from <= 0 || to <= 0) return;
+    if (from >= timezones.length || to >= timezones.length) return;
+    if (from === to) return;
+    const next = [...timezones];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    timezones = next;
+  }
+
   // Event undo/redo (capped at 20)
   const UNDO_LIMIT = 20;
   type UndoAction =
@@ -1020,6 +1030,7 @@
         onEventCreate={handleEventCreate}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
+        onReorderTimezone={reorderTimezone}
         onWheelNavigate={handleWheelNavigate}
         onDayHeaderClick={handleWeekDayHeaderClick}
       />
@@ -1038,6 +1049,7 @@
         onEventCreate={handleEventCreate}
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
+        onReorderTimezone={reorderTimezone}
         onWheelNavigate={handleWheelNavigate}
         onDayHeaderClick={handleDayHeaderClick}
       />

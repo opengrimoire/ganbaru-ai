@@ -7,17 +7,21 @@
     searchTimezones,
   } from "./utils";
   import X from "@lucide/svelte/icons/x";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
 
   let {
     timezones,
     tzCount = 1,
     onAdd,
     onRemove,
+    onReorder,
   }: {
     timezones: string[];
     tzCount?: number;
     onAdd: (tz: string) => void;
     onRemove: (index: number) => void;
+    onReorder?: (from: number, to: number) => void;
   } = $props();
 
   let open = $state(false);
@@ -96,12 +100,31 @@
               {/if}
             </div>
             {#if i > 0}
-              <button
-                onclick={(e: MouseEvent) => { e.stopPropagation(); onRemove(i); }}
-                class="shrink-0 text-muted-foreground hover:text-foreground"
-              >
-                <X size={12} />
-              </button>
+              <div class="flex shrink-0 items-center gap-1">
+                <button
+                  onclick={(e: MouseEvent) => { e.stopPropagation(); onReorder?.(i, i - 1); }}
+                  disabled={i === 1}
+                  class="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                  title="Move up"
+                >
+                  <ChevronUp size={12} />
+                </button>
+                <button
+                  onclick={(e: MouseEvent) => { e.stopPropagation(); onReorder?.(i, i + 1); }}
+                  disabled={i === timezones.length - 1}
+                  class="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                  title="Move down"
+                >
+                  <ChevronDown size={12} />
+                </button>
+                <button
+                  onclick={(e: MouseEvent) => { e.stopPropagation(); onRemove(i); }}
+                  class="text-muted-foreground hover:text-foreground"
+                  title="Remove"
+                >
+                  <X size={12} />
+                </button>
+              </div>
             {/if}
           </div>
         {/each}
