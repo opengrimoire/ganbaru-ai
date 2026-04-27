@@ -55,8 +55,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="relative grid cursor-pointer self-stretch rounded text-[11px] font-bold leading-tight transition-colors hover:bg-accent"
-  style="color: var(--cal-time-label); grid-column: span {tzCount}; grid-template-columns: subgrid;"
+  class="relative grid cursor-pointer self-stretch rounded text-[13px] transition-colors hover:bg-accent"
+  style="color: var(--foreground); grid-column: span {tzCount}; grid-template-columns: subgrid;"
   onclick={handleToggle}
   role="button"
   tabindex="0"
