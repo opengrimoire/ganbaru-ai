@@ -246,6 +246,123 @@ export function formatTimezoneName(tz: string): string {
   return tz.replace(/_/g, " ").replace(/\//g, " / ");
 }
 
+/**
+ * Full standard-time long name via Intl ("Iran Standard Time", "Pacific
+ * Standard Time"). Falls back to the formatted IANA ID when Intl yields
+ * nothing for the zone.
+ */
+export function getTimezoneLongName(tz: string, date?: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    timeZoneName: "long",
+  }).formatToParts(date ?? new Date());
+  return parts.find((p) => p.type === "timeZoneName")?.value ?? formatTimezoneName(tz);
+}
+
+/**
+ * Last segment of an IANA ID with underscores converted to spaces. For
+ * "Asia/Tehran" returns "Tehran"; for "America/Argentina/Buenos_Aires"
+ * returns "Buenos Aires". Single-segment IDs return themselves.
+ */
+export function getTimezoneCity(tz: string): string {
+  const segments = tz.split("/");
+  const last = segments[segments.length - 1] ?? tz;
+  return last.replace(/_/g, " ");
+}
+
+/**
+ * First segment of an IANA ID. For "Asia/Tehran" returns "Asia"; for
+ * "America/Argentina/Buenos_Aires" returns "America". Single-segment IDs
+ * return an empty string.
+ */
+export function getTimezoneRegion(tz: string): string {
+  const segments = tz.split("/");
+  if (segments.length < 2) return "";
+  return segments[0] ?? "";
+}
+
+/**
+ * Numeric offset in minutes east of UTC at the given instant. Positive for
+ * zones ahead of UTC (Tokyo +540, Kolkata +330), negative for zones behind
+ * (Anchorage -540). "GMT" alone parses to 0.
+ */
+export function getTimezoneOffsetMinutes(tz: string, date?: Date): number {
+  const raw = getTimezoneOffset(tz, date);
+  if (!raw || raw === "GMT") return 0;
+  const match = raw.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  if (!match) return 0;
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2] ?? "0");
+  const minutes = Number(match[3] ?? "0");
+  return sign * (hours * 60 + minutes);
+}
+
+/**
+ * Strips the leading "GMT" from offset-form abbrevs so they fit a 46px
+ * column. "GMT-10" becomes "-10", "GMT+5:30" becomes "+5:30", "PST" stays
+ * "PST". Real abbrevs without a GMT prefix pass through unchanged.
+ */
+export function formatColumnHeaderAbbr(tz: string, date?: Date): string {
+  const abbr = getTimezoneAbbr(tz, date);
+  const stripped = abbr.replace(/^GMT(?=[+-])/, "");
+  return stripped || abbr;
+}
+
+const DEPRECATED_TIMEZONE_IDS = new Set([
+  "GMT",
+  "UTC",
+  "Universal",
+  "Zulu",
+  "GB",
+  "GB-Eire",
+  "NZ",
+  "NZ-CHAT",
+  "PRC",
+  "ROK",
+  "ROC",
+  "W-SU",
+  "EST",
+  "MST",
+  "HST",
+  "EST5EDT",
+  "CST6CDT",
+  "MST7MDT",
+  "PST8PDT",
+  "Iran",
+  "Israel",
+  "Egypt",
+  "Cuba",
+  "Jamaica",
+  "Libya",
+  "Navajo",
+  "Poland",
+  "Portugal",
+  "Singapore",
+  "Turkey",
+  "Hongkong",
+  "Japan",
+  "Eire",
+  "Greenwich",
+  "UCT",
+]);
+
+let _filteredTimezones: string[] | null = null;
+
+/**
+ * All IANA zones excluding `Etc/*` (POSIX-inverted signs) and known
+ * deprecated single-segment aliases. Cached after first call.
+ */
+export function listAllTimezones(): string[] {
+  if (_filteredTimezones) return _filteredTimezones;
+  const all = getIanaTimezones();
+  _filteredTimezones = all.filter((tz) => {
+    if (tz.startsWith("Etc/")) return false;
+    if (DEPRECATED_TIMEZONE_IDS.has(tz)) return false;
+    return true;
+  });
+  return _filteredTimezones;
+}
+
 // Maps common city names, country names, and abbreviations to IANA timezone IDs.
 // Only entries that aren't already discoverable via the IANA ID itself.
 const TIMEZONE_ALIASES: Record<string, string[]> = {

@@ -29,6 +29,11 @@ import {
   getCancelledEventColor,
   getFreeEventColor,
   getOutsideMonthEventColor,
+  getTimezoneCity,
+  getTimezoneRegion,
+  getTimezoneOffsetMinutes,
+  formatColumnHeaderAbbr,
+  listAllTimezones,
 } from "./utils";
 import type { CalendarEvent } from "./types";
 import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
@@ -815,5 +820,109 @@ describe("dimmed color variants", () => {
   it("falls back to the dimmed fallback slot when color is undefined", () => {
     assertColorEntry(getPastEventColor(undefined, lightTheme));
     assertColorEntry(getCancelledEventColor(undefined, darkTheme));
+  });
+});
+
+describe("getTimezoneCity", () => {
+  it("returns the last segment with underscores converted to spaces", () => {
+    expect(getTimezoneCity("Asia/Tehran")).toBe("Tehran");
+    expect(getTimezoneCity("America/New_York")).toBe("New York");
+    expect(getTimezoneCity("America/Argentina/Buenos_Aires")).toBe("Buenos Aires");
+  });
+
+  it("returns the input itself for single-segment IDs", () => {
+    expect(getTimezoneCity("UTC")).toBe("UTC");
+  });
+});
+
+describe("getTimezoneRegion", () => {
+  it("returns the first segment of an IANA ID", () => {
+    expect(getTimezoneRegion("Asia/Tehran")).toBe("Asia");
+    expect(getTimezoneRegion("America/Argentina/Buenos_Aires")).toBe("America");
+    expect(getTimezoneRegion("Europe/London")).toBe("Europe");
+  });
+
+  it("returns an empty string for single-segment IDs", () => {
+    expect(getTimezoneRegion("UTC")).toBe("");
+  });
+});
+
+describe("getTimezoneOffsetMinutes", () => {
+  it("handles whole-hour positive offsets", () => {
+    expect(getTimezoneOffsetMinutes("Asia/Tokyo")).toBe(9 * 60);
+  });
+
+  it("handles whole-hour negative offsets", () => {
+    expect(getTimezoneOffsetMinutes("Pacific/Honolulu")).toBe(-10 * 60);
+  });
+
+  it("handles half-hour zones", () => {
+    expect(getTimezoneOffsetMinutes("Asia/Kolkata")).toBe(5 * 60 + 30);
+  });
+
+  it("handles 45-minute zones", () => {
+    expect(getTimezoneOffsetMinutes("Asia/Kathmandu")).toBe(5 * 60 + 45);
+  });
+
+  it("returns 0 for UTC", () => {
+    expect(getTimezoneOffsetMinutes("UTC")).toBe(0);
+  });
+});
+
+describe("formatColumnHeaderAbbr", () => {
+  it("never returns a string starting with GMT followed by a sign", () => {
+    const zones = [
+      "Asia/Tokyo",
+      "Europe/London",
+      "Asia/Kolkata",
+      "Pacific/Honolulu",
+      "Australia/Sydney",
+      "America/Los_Angeles",
+      "Asia/Tehran",
+    ];
+    for (const tz of zones) {
+      expect(formatColumnHeaderAbbr(tz)).not.toMatch(/^GMT[+-]/);
+    }
+  });
+
+  it("returns either a named abbrev or a stripped offset for any zone", () => {
+    const zones = [
+      "Asia/Tokyo",
+      "Europe/London",
+      "Pacific/Honolulu",
+      "Asia/Kolkata",
+    ];
+    for (const tz of zones) {
+      const out = formatColumnHeaderAbbr(tz);
+      expect(out.length).toBeGreaterThan(0);
+      expect(out).toMatch(/^([A-Z]{2,5}|[+-]\d{1,2}(:\d{2})?)$/);
+    }
+  });
+
+  it("never returns an empty string", () => {
+    expect(formatColumnHeaderAbbr("Asia/Tehran").length).toBeGreaterThan(0);
+  });
+});
+
+describe("listAllTimezones", () => {
+  it("excludes Etc/* zones", () => {
+    const list = listAllTimezones();
+    expect(list.every((tz) => !tz.startsWith("Etc/"))).toBe(true);
+  });
+
+  it("includes common multi-segment zones", () => {
+    const list = listAllTimezones();
+    expect(list).toContain("Asia/Tehran");
+    expect(list).toContain("America/New_York");
+    expect(list).toContain("Europe/London");
+  });
+
+  it("excludes deprecated single-segment aliases", () => {
+    const list = listAllTimezones();
+    expect(list).not.toContain("EST");
+    expect(list).not.toContain("PST8PDT");
+    expect(list).not.toContain("Iran");
+    expect(list).not.toContain("Japan");
+    expect(list).not.toContain("UTC");
   });
 });
