@@ -35,18 +35,18 @@ function paletteOf(hex: string): string[] {
 function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
   const eventPalette = paletteOf("#abcdef");
   const sources = overrides.sources ?? { ...DEFAULT_SOURCES_DARK };
-  const scheme = overrides.scheme ?? "dark";
+  const iconLabel = overrides.iconLabel ?? "dark";
   const appTokens =
-    overrides.appTokens ?? { ...BASE_APP_TOKENS[scheme] };
+    overrides.appTokens ?? { ...BASE_APP_TOKENS[iconLabel] };
   const calendarTokens =
-    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[scheme] };
+    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[iconLabel] };
   const appIsolated = overrides.appIsolated ?? new Set<string>();
   const calendarIsolated = overrides.calendarIsolated ?? new Set<string>();
   return {
     kind: "user",
     id: overrides.id ?? "seed",
     displayName: overrides.displayName ?? "Seed",
-    scheme,
+    iconLabel,
     blendCanvas: overrides.blendCanvas ?? "#101010",
     eventPalette: overrides.eventPalette ?? eventPalette,
     derivationEngineVersion:
@@ -67,7 +67,7 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
     seedEventPalette:
       overrides.seedEventPalette ?? [...(overrides.eventPalette ?? eventPalette)],
     seedBlendCanvas: overrides.seedBlendCanvas ?? overrides.blendCanvas ?? "#101010",
-    seedScheme: overrides.seedScheme ?? scheme,
+    seedIconLabel: overrides.seedIconLabel ?? iconLabel,
   };
 }
 
@@ -84,7 +84,7 @@ describe("cloneTheme", () => {
   });
 
   it("copies blendCanvas verbatim", () => {
-    const source = makeUserTheme({ scheme: "light", blendCanvas: "#fafafa" });
+    const source = makeUserTheme({ iconLabel: "light", blendCanvas: "#fafafa" });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.blendCanvas).toBe("#fafafa");
   });
@@ -182,7 +182,7 @@ describe("cloneTheme", () => {
   });
 
   it("snapshots seedSources matching the clone's sources", () => {
-    const source = makeUserTheme({ scheme: "light" });
+    const source = makeUserTheme({ iconLabel: "light" });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.seedSources).toEqual(copy.sources);
     expect(copy.seedSources).not.toBe(copy.sources);
@@ -234,20 +234,20 @@ describe("cloneTheme", () => {
     expect(copy.derivationEngineVersion).toBe(0);
   });
 
-  it("carries the source's scheme verbatim on user clones", () => {
-    const source = makeUserTheme({ scheme: "light" });
+  it("carries the source's iconLabel verbatim on user clones", () => {
+    const source = makeUserTheme({ iconLabel: "light" });
     const copy = cloneTheme(source, "fork", "Fork");
-    expect(copy.scheme).toBe("light");
-    expect(copy.seedScheme).toBe("light");
+    expect(copy.iconLabel).toBe("light");
+    expect(copy.seedIconLabel).toBe("light");
   });
 
-  it("pegs scheme to base on built-in clones", () => {
+  it("pegs iconLabel to base on built-in clones", () => {
     const fromLight = cloneTheme(lightTheme, "fork-light", "Fork Light");
     const fromDark = cloneTheme(darkTheme, "fork-dark", "Fork Dark");
-    expect(fromLight.scheme).toBe("light");
-    expect(fromLight.seedScheme).toBe("light");
-    expect(fromDark.scheme).toBe("dark");
-    expect(fromDark.seedScheme).toBe("dark");
+    expect(fromLight.iconLabel).toBe("light");
+    expect(fromLight.seedIconLabel).toBe("light");
+    expect(fromDark.iconLabel).toBe("dark");
+    expect(fromDark.seedIconLabel).toBe("dark");
   });
 });
 

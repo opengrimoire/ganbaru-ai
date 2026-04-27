@@ -53,21 +53,21 @@ function paletteOf(hex: string): string[] {
 }
 
 function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
-  const scheme = overrides.scheme ?? "dark";
+  const iconLabel = overrides.iconLabel ?? "dark";
   const sources =
-    overrides.sources ?? (scheme === "dark" ? SAMPLE_SOURCES_DARK : SAMPLE_SOURCES_LIGHT);
+    overrides.sources ?? (iconLabel === "dark" ? SAMPLE_SOURCES_DARK : SAMPLE_SOURCES_LIGHT);
   const eventPalette = overrides.eventPalette ?? paletteOf("#abcdef");
   const appTokens =
-    overrides.appTokens ?? { ...BASE_APP_TOKENS[scheme] };
+    overrides.appTokens ?? { ...BASE_APP_TOKENS[iconLabel] };
   const calendarTokens =
-    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[scheme] };
+    overrides.calendarTokens ?? { ...BASE_CALENDAR_TOKENS[iconLabel] };
   const appIsolated = overrides.appIsolated ?? new Set<string>();
   const calendarIsolated = overrides.calendarIsolated ?? new Set<string>();
   return {
     kind: "user",
     id: overrides.id ?? "test",
     displayName: overrides.displayName ?? "Test",
-    scheme,
+    iconLabel,
     blendCanvas: overrides.blendCanvas ?? "#202020",
     eventPalette,
     derivationEngineVersion:
@@ -89,7 +89,7 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
       overrides.seedEventPalette ?? [...eventPalette],
     seedBlendCanvas:
       overrides.seedBlendCanvas ?? overrides.blendCanvas ?? "#202020",
-    seedScheme: overrides.seedScheme ?? scheme,
+    seedIconLabel: overrides.seedIconLabel ?? iconLabel,
   };
 }
 
@@ -304,7 +304,7 @@ describe("luminance-driven canvas resolution", () => {
 
   it("isThemeDark returns true when the snapshot canvas is dark", () => {
     const theme = makeUserTheme({
-      scheme: "light",
+      iconLabel: "light",
       appTokens: { ...BASE_APP_TOKENS.light, "--background": "#1B1C1F" },
     });
     expect(isThemeDark(theme)).toBe(true);
@@ -312,7 +312,7 @@ describe("luminance-driven canvas resolution", () => {
 
   it("isThemeCalendarDark keys off the snapshot --cal-bg", () => {
     const theme = makeUserTheme({
-      scheme: "light",
+      iconLabel: "light",
       appTokens: { ...BASE_APP_TOKENS.light, "--background": "#FAF7F2" },
       calendarTokens: { ...BASE_CALENDAR_TOKENS.light, "--cal-bg": "#0E0F11" },
     });
@@ -412,12 +412,21 @@ describe("validateThemeJson v1 branch", () => {
     }
   });
 
-  it("preserves an explicit scheme that disagrees with canvas luminance", () => {
+  it("preserves an explicit iconLabel that disagrees with canvas luminance", () => {
+    const result = validateThemeJson(buildV1Input({ iconLabel: "light" }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.iconLabel).toBe("light");
+      expect(result.theme.seedIconLabel).toBe("light");
+    }
+  });
+
+  it("accepts the legacy `scheme` JSON key as iconLabel", () => {
     const result = validateThemeJson(buildV1Input({ scheme: "light" }));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.theme.scheme).toBe("light");
-      expect(result.theme.seedScheme).toBe("light");
+      expect(result.theme.iconLabel).toBe("light");
+      expect(result.theme.seedIconLabel).toBe("light");
     }
   });
 
@@ -452,12 +461,12 @@ describe("validateThemeJson legacy branch", () => {
     }
   });
 
-  it("defaults scheme from canvas luminance when omitted", () => {
+  it("defaults iconLabel from canvas luminance when omitted", () => {
     const result = validateThemeJson(buildLegacyInput({ base: "light" }));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.theme.scheme).toBe("light");
-      expect(result.theme.seedScheme).toBe("light");
+      expect(result.theme.iconLabel).toBe("light");
+      expect(result.theme.seedIconLabel).toBe("light");
     }
   });
 
@@ -567,7 +576,7 @@ describe("serializeTheme round-trip", () => {
     const original = makeUserTheme({
       id: "round-trip",
       displayName: "Round Trip",
-      scheme: "light",
+      iconLabel: "light",
       blendCanvas: "#202020",
       sources: SAMPLE_SOURCES_DARK,
       appIsolated: new Set(["--primary"]),
@@ -579,8 +588,8 @@ describe("serializeTheme round-trip", () => {
     if (reparsed.ok) {
       expect(reparsed.theme.id).toBe(original.id);
       expect(reparsed.theme.displayName).toBe(original.displayName);
-      expect(reparsed.theme.scheme).toBe(original.scheme);
-      expect(reparsed.theme.seedScheme).toBe(original.scheme);
+      expect(reparsed.theme.iconLabel).toBe(original.iconLabel);
+      expect(reparsed.theme.seedIconLabel).toBe(original.iconLabel);
       expect(reparsed.theme.derivationEngineVersion).toBe(
         original.derivationEngineVersion,
       );
@@ -606,7 +615,7 @@ describe("serializeTheme round-trip", () => {
       "schemaVersion",
       "id",
       "displayName",
-      "scheme",
+      "iconLabel",
       "blendCanvas",
       "derivationEngineVersion",
       "sources",

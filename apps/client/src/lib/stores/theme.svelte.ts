@@ -8,7 +8,7 @@ import {
   DEFAULT_THEME_ID,
   DERIVATION_ENGINE_VERSION,
   computeThemeTokenOps,
-  defaultSchemeFromCanvas,
+  defaultIconLabelFromCanvas,
   deriveAppTokens,
   deriveCalendarTokens,
   getThemeById,
@@ -35,7 +35,7 @@ import {
 } from "./themeOperations";
 import { flushConfig, getConfigKey, setConfigKey } from "../vault/config";
 import {
-  backfillScheme,
+  backfillIconLabel,
   deleteTheme as dbDeleteTheme,
   insertTheme as dbInsertTheme,
   loadAllUserThemes,
@@ -120,13 +120,16 @@ export async function hydrateUserThemes(): Promise<void> {
     const theme = userThemeFromRead(read);
     customThemes[theme.id] = theme;
     // One-time backfill: rows created before migration v5 carry NULL
-    // scheme/seed_scheme. `userThemeFromRead` derived a value from canvas
-    // luminance; persist it so subsequent reads do not need to derive.
-    if (read.theme.scheme === null || read.theme.seed_scheme === null) {
+    // icon_label/seed_icon_label. `userThemeFromRead` derived a value from
+    // canvas luminance; persist it so subsequent reads do not need to derive.
+    if (
+      read.theme.icon_label === null ||
+      read.theme.seed_icon_label === null
+    ) {
       try {
-        await backfillScheme(theme.id, theme.scheme);
+        await backfillIconLabel(theme.id, theme.iconLabel);
       } catch (err) {
-        console.error("scheme backfill failed for", theme.id, err);
+        console.error("icon_label backfill failed for", theme.id, err);
       }
     }
   }
@@ -239,8 +242,8 @@ function userThemeToWrite(theme: UserTheme): UserThemeWrite {
   return {
     id: theme.id,
     displayName: theme.displayName,
-    scheme: theme.scheme,
-    seedScheme: theme.seedScheme,
+    iconLabel: theme.iconLabel,
+    seedIconLabel: theme.seedIconLabel,
     blendCanvas: theme.blendCanvas,
     seedBlendCanvas: theme.seedBlendCanvas,
     derivationEngineVersion: theme.derivationEngineVersion,
@@ -265,8 +268,8 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
   const seedSources = sourcesFromRows(
     read.seedTokens.filter((t) => t.kind === "source"),
   );
-  const fallbackBase = defaultSchemeFromCanvas(sources.canvas);
-  const seedFallbackBase = defaultSchemeFromCanvas(seedSources.canvas);
+  const fallbackBase = defaultIconLabelFromCanvas(sources.canvas);
+  const seedFallbackBase = defaultIconLabelFromCanvas(seedSources.canvas);
   const appTokens = snapshotFromRows(
     read.tokens.filter((t) => t.kind === "app"),
     APP_TOKEN_KEYS,
@@ -301,22 +304,23 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
   );
   const eventPalette = paletteFromRows(read.palette);
   const seedEventPalette = paletteFromRows(read.seedPalette);
-  // Rows created before migration v5 carry NULL for scheme/seed_scheme.
-  // Default both from canvas luminance so the icon picks the same value
-  // the editor used to render before this field existed.
-  const scheme: "light" | "dark" =
-    read.theme.scheme === "light" || read.theme.scheme === "dark"
-      ? read.theme.scheme
+  // Rows created before migration v5 carry NULL for icon_label/
+  // seed_icon_label. Default both from canvas luminance so the icon picks
+  // the same value the editor used to render before this field existed.
+  const iconLabel: "light" | "dark" =
+    read.theme.icon_label === "light" || read.theme.icon_label === "dark"
+      ? read.theme.icon_label
       : fallbackBase;
-  const seedScheme: "light" | "dark" =
-    read.theme.seed_scheme === "light" || read.theme.seed_scheme === "dark"
-      ? read.theme.seed_scheme
+  const seedIconLabel: "light" | "dark" =
+    read.theme.seed_icon_label === "light" ||
+    read.theme.seed_icon_label === "dark"
+      ? read.theme.seed_icon_label
       : seedFallbackBase;
   return {
     kind: "user",
     id: read.theme.id,
     displayName: read.theme.display_name,
-    scheme,
+    iconLabel,
     blendCanvas: read.theme.blend_canvas,
     eventPalette,
     derivationEngineVersion: read.theme.derivation_engine_version,
@@ -332,7 +336,7 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
     seedCalendarIsolated,
     seedEventPalette,
     seedBlendCanvas: read.theme.seed_blend_canvas,
-    seedScheme,
+    seedIconLabel,
   };
 }
 
@@ -343,7 +347,7 @@ function sourcesFromRows(
   // If the canvas row is missing entirely, fall back to the dark BASE
   // canvas; otherwise pick a fallback table from the canvas luminance.
   const canvas = map.get("canvas") ?? BASE_APP_TOKENS.dark["--background"];
-  const fallback = defaultSchemeFromCanvas(canvas);
+  const fallback = defaultIconLabelFromCanvas(canvas);
   return {
     canvas,
     ink: map.get("ink") ?? BASE_APP_TOKENS[fallback]["--foreground"],
@@ -613,7 +617,7 @@ function relinkToken(
     kind === "app"
       ? deriveAppTokens(current.sources)
       : deriveCalendarTokens(current.sources);
-  const fallbackBase = defaultSchemeFromCanvas(current.sources.canvas);
+  const fallbackBase = defaultIconLabelFromCanvas(current.sources.canvas);
   const baseTokens =
     kind === "app" ? BASE_APP_TOKENS[fallbackBase] : BASE_CALENDAR_TOKENS[fallbackBase];
   const nextValue = derived[key] ?? baseTokens[key];
@@ -746,23 +750,23 @@ function resetThemeToSeed(id: ThemeId): boolean {
     calendarIsolated: new Set(current.seedCalendarIsolated),
     eventPalette: [...current.seedEventPalette],
     blendCanvas: current.seedBlendCanvas,
-    scheme: current.seedScheme,
+    iconLabel: current.seedIconLabel,
   };
   if (id === activeId) applyThemeToDom();
   return true;
 }
 
 /**
- * Flip the decorative scheme tag on a user theme. Pure in-memory mutator
- * (the buffer flushes on commit). Built-in themes have a code-pinned
- * scheme and reject this call.
+ * Flip the decorative iconLabel tag on a user theme. Pure in-memory
+ * mutator (the buffer flushes on commit). Built-in themes have a
+ * code-pinned iconLabel and reject this call.
  */
-function setThemeScheme(id: ThemeId, scheme: "light" | "dark"): boolean {
+function setThemeIconLabel(id: ThemeId, iconLabel: "light" | "dark"): boolean {
   if (isBuiltinThemeId(id)) return false;
   const current = customThemes[id];
   if (!current) return false;
-  if (current.scheme === scheme) return false;
-  customThemes[id] = { ...current, scheme };
+  if (current.iconLabel === iconLabel) return false;
+  customThemes[id] = { ...current, iconLabel };
   return true;
 }
 
@@ -1013,7 +1017,7 @@ export function getTheme() {
     resetTokenToSeed,
     resetPaletteSlot,
     resetThemeToSeed,
-    setThemeScheme,
+    setThemeIconLabel,
     setPaletteSlot,
     setBlendCanvas,
     applyPreset,

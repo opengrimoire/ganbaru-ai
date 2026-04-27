@@ -299,5 +299,19 @@ pub fn migrations() -> Vec<Migration> {
         // bundled libsqlite3-sys is well above that.
         sql: "ALTER TABLE themes DROP COLUMN base;",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 7,
+        description: "rename scheme columns to icon_label (purely a sun/moon tag)",
+        // The field is decorative: it picks the sun/moon icon shown on the
+        // theme card, nothing else. The old name `scheme` suggested it
+        // changed something fundamental about how the theme renders, which
+        // it does not. Rename keeps the data shape identical. SQLite has
+        // RENAME COLUMN since 3.25.0.
+        sql: "
+            ALTER TABLE themes RENAME COLUMN scheme TO icon_label;
+            ALTER TABLE themes RENAME COLUMN seed_scheme TO seed_icon_label;
+        ",
+        kind: MigrationKind::Up,
     }]
 }

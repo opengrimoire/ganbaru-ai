@@ -779,7 +779,7 @@ describe("getEventColor", () => {
       id: "custom-test",
       displayName: "Custom Test",
       base: "dark",
-      scheme: "dark",
+      iconLabel: "dark",
       blendCanvas: "#000000",
       eventPalette: customPalette,
     };

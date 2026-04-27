@@ -48,12 +48,12 @@ export interface ThemeRow {
   seed_blend_canvas: string;
   derivation_engine_version: number;
   /**
-   * Decorative day/night tag for the theme list and editor icon. Nullable
+   * Decorative sun/moon tag for the theme list and editor icon. Nullable
    * because rows created before migration v5 do not carry it; the hydrate
    * path backfills NULLs from canvas luminance.
    */
-  scheme: "light" | "dark" | null;
-  seed_scheme: "light" | "dark" | null;
+  icon_label: "light" | "dark" | null;
+  seed_icon_label: "light" | "dark" | null;
   created_at: number;
   updated_at: number;
 }
@@ -73,8 +73,8 @@ export interface DismissalRow {
 export interface UserThemeWrite {
   id: string;
   displayName: string;
-  scheme: "light" | "dark";
-  seedScheme: "light" | "dark";
+  iconLabel: "light" | "dark";
+  seedIconLabel: "light" | "dark";
   blendCanvas: string;
   seedBlendCanvas: string;
   derivationEngineVersion: number;
@@ -141,14 +141,14 @@ export async function insertTheme(write: UserThemeWrite): Promise<void> {
   try {
     await execute(
       `INSERT INTO themes
-        (id, display_name, scheme, seed_scheme, blend_canvas,
+        (id, display_name, icon_label, seed_icon_label, blend_canvas,
          seed_blend_canvas, derivation_engine_version, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
       [
         write.id,
         write.displayName,
-        write.scheme,
-        write.seedScheme,
+        write.iconLabel,
+        write.seedIconLabel,
         write.blendCanvas,
         write.seedBlendCanvas,
         write.derivationEngineVersion,
@@ -212,8 +212,8 @@ export async function replaceThemeContent(write: UserThemeWrite): Promise<void> 
   await execute(
     `UPDATE themes
         SET display_name = $1,
-            scheme = $2,
-            seed_scheme = $3,
+            icon_label = $2,
+            seed_icon_label = $3,
             blend_canvas = $4,
             seed_blend_canvas = $5,
             derivation_engine_version = $6,
@@ -221,8 +221,8 @@ export async function replaceThemeContent(write: UserThemeWrite): Promise<void> 
       WHERE id = $8`,
     [
       write.displayName,
-      write.scheme,
-      write.seedScheme,
+      write.iconLabel,
+      write.seedIconLabel,
       write.blendCanvas,
       write.seedBlendCanvas,
       write.derivationEngineVersion,
@@ -514,17 +514,17 @@ export async function resetThemeToSeed(id: string): Promise<void> {
 }
 
 /**
- * Backfill a NULL scheme/seed_scheme on a legacy row created before
+ * Backfill a NULL icon_label/seed_icon_label on a legacy row created before
  * migration v5. Called once per affected theme during hydrate; subsequent
  * writes go through `replaceThemeContent` which always supplies a value.
  */
-export async function backfillScheme(
+export async function backfillIconLabel(
   id: string,
-  scheme: "light" | "dark",
+  iconLabel: "light" | "dark",
 ): Promise<void> {
   await execute(
-    "UPDATE themes SET scheme = $1, seed_scheme = $1 WHERE id = $2",
-    [scheme, id],
+    "UPDATE themes SET icon_label = $1, seed_icon_label = $1 WHERE id = $2",
+    [iconLabel, id],
   );
 }
 

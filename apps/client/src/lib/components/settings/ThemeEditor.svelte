@@ -512,10 +512,11 @@
   const userTheme = $derived(
     theme.kind === "user" ? (theme as UserTheme) : undefined,
   );
-  // The scheme icon is purely decorative ("was this for me to use on day or
-  // night?"). It does not drive the runtime `.dark` class or palette pick.
-  // Built-ins peg the icon to their pinned scheme; user themes can flip it.
-  const BaseIcon = $derived(theme.scheme === "dark" ? Moon : Sun);
+  // The iconLabel icon is purely decorative ("was this for me to use on day
+  // or night?"). It does not drive the runtime `.dark` class or palette
+  // pick. Built-ins peg the icon to their pinned iconLabel; user themes
+  // can flip it.
+  const BaseIcon = $derived(theme.iconLabel === "dark" ? Moon : Sun);
   // The rebake banner appears when the saved theme's engine version trails
   // the current code constant AND the user hasn't dismissed an upgrade
   // prompt for that pair.
@@ -875,7 +876,7 @@
           <BaseIcon
             size={15}
             strokeWidth={1.75}
-            aria-label={theme.scheme === "dark" ? "Dark theme" : "Light theme"}
+            aria-label={theme.iconLabel === "dark" ? "Dark theme" : "Light theme"}
             class="shrink-0 text-muted-foreground"
           />
           <span class="truncate text-[14px] font-semibold text-foreground">
@@ -885,12 +886,12 @@
           <button
             type="button"
             onclick={() =>
-              themeStore.setThemeScheme(
+              themeStore.setThemeIconLabel(
                 theme.id,
-                theme.scheme === "dark" ? "light" : "dark",
+                theme.iconLabel === "dark" ? "light" : "dark",
               )}
-            aria-label={`Scheme tag: ${theme.scheme === "dark" ? "night" : "day"} (decorative, click to flip)`}
-            title={`Decorative tag for ${theme.scheme === "dark" ? "night" : "day"} use. Click to flip.`}
+            aria-label={`Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"} (decorative, click to flip)`}
+            title={`Decorative tag for ${theme.iconLabel === "dark" ? "night" : "day"} use. Click to flip.`}
             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <BaseIcon size={14} strokeWidth={1.75} />

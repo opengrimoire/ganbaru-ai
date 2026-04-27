@@ -12,8 +12,8 @@ A Theme is a self-contained visual package. The minimum fields:
 
 - **id:** stable string used in storage and lookups. Built-in IDs are `light` and `dark`. Custom themes use slugs or UUIDs.
 - **displayName:** user-visible name in the theme picker.
-- **base:** `light` or `dark`. Carried only by `BuiltinTheme` (the code-pinned light and dark) and by preset definitions, where it picks the BASE token table the preset's sources are layered on top of. User themes do not carry it: the v1 snapshot already holds every resolved token, so any required fallback is computed from the snapshot's canvas luminance via `defaultSchemeFromCanvas`.
-- **scheme:** `light` or `dark`. Purely decorative tag answering "was this theme meant for day or night use?". Surfaced as the sun/moon indicator in the theme list and editor header. Built-ins peg the scheme to their `base`. User themes can flip the indicator independently with one click; the flip is persisted but never affects the runtime `.dark` class or the calendar palette pick (those still derive from canvas luminance via `isThemeDark` / `isThemeCalendarDark`).
+- **base:** `light` or `dark`. Carried only by `BuiltinTheme` (the code-pinned light and dark) and by preset definitions, where it picks the BASE token table the preset's sources are layered on top of. User themes do not carry it: the v1 snapshot already holds every resolved token, so any required fallback is computed from the snapshot's canvas luminance via `defaultIconLabelFromCanvas`.
+- **iconLabel:** `light` or `dark`. Purely decorative sun/moon tag answering "was this theme meant for day or night use?". Surfaced as the indicator next to the theme name in the theme list and editor header. Built-ins peg the iconLabel to their `base`. User themes can flip the indicator independently with one click; the flip is persisted but never affects the runtime `.dark` class or the calendar palette pick (those still derive from canvas luminance via `isThemeDark` / `isThemeCalendarDark`).
 - **eventPalette:** ordered array of 24 hex values (one per slot index). Every position must be filled, even if the theme reuses the same color across multiple slots. See "Event color palette" below.
 - **blendCanvas:** hex color the dimmed event variants blend toward. Usually the theme's canvas background.
 
@@ -25,7 +25,7 @@ User themes additionally carry a full resolved-token snapshot and source palette
 - **derivationEngineVersion:** integer stamp identifying which version of the derivation engine produced the snapshot. The editor shows a rebake banner when a stored theme's stamp trails the current code constant (see "Engine version and rebaking" below).
 - **blendCanvas:** scalar hex the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated; pinning `--cal-bg` lets the user pin `blendCanvas` indirectly.
 
-The Theme type is a discriminated union: `BuiltinTheme` (just `id`, `displayName`, `base`, `scheme`, `eventPalette`, `blendCanvas`) for the code-pinned light and dark, and `UserTheme` (no `base`) for everything authored or duplicated. A user-theme value is frozen after construction and stored normalized in SQLite (see "Persistence" below). The registry of built-ins is frozen. This prevents runtime mutation of a shipped theme by accident.
+The Theme type is a discriminated union: `BuiltinTheme` (just `id`, `displayName`, `base`, `iconLabel`, `eventPalette`, `blendCanvas`) for the code-pinned light and dark, and `UserTheme` (no `base`) for everything authored or duplicated. A user-theme value is frozen after construction and stored normalized in SQLite (see "Persistence" below). The registry of built-ins is frozen. This prevents runtime mutation of a shipped theme by accident.
 
 ### Why a registry, not a boolean
 
@@ -85,7 +85,7 @@ Whether a theme "is dark" is a runtime property of its canvas, not a stored labe
 - `isThemeDark(theme)` reads `--background` from the theme's snapshot (or the base CSS for built-ins) and returns true when its relative luminance sits below `DARK_SURFACE_THRESHOLD` (0.4). Used to toggle the `.dark` class on the HTML root.
 - `isThemeCalendarDark(theme)` does the same for `--cal-bg`, which either matches the auto-derived calendar canvas (the default) or a user-pinned hex when `--cal-bg` is in `calendarIsolated`. Event tiles need to pick their palette against the surface they actually sit on, which is not always the same as the app canvas.
 
-User themes carry no `base` field at all, so there is no stored label to fall out of sync with. A separate helper, `defaultSchemeFromCanvas(canvasHex)`, classifies an arbitrary canvas as `light` or `dark` for the few places that still need a BASE table to fall back to (legacy import, partial-row recovery during DB hydrate). Users can invert a theme's canvas mid-edit without fighting any stale label: the `.dark` class flips immediately, and event tiles pick the right palette on the very next frame. The 0.4 threshold is intentionally below the sRGB midpoint so a mid-gray canvas (~#888) still resolves as light.
+User themes carry no `base` field at all, so there is no stored label to fall out of sync with. A separate helper, `defaultIconLabelFromCanvas(canvasHex)`, classifies an arbitrary canvas as `light` or `dark` for the few places that still need a BASE table to fall back to (legacy import, partial-row recovery during DB hydrate). Users can invert a theme's canvas mid-edit without fighting any stale label: the `.dark` class flips immediately, and event tiles pick the right palette on the very next frame. The 0.4 threshold is intentionally below the sRGB midpoint so a mid-gray canvas (~#888) still resolves as light.
 
 ## Persistence
 

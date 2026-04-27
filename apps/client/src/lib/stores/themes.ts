@@ -87,13 +87,14 @@ export interface BuiltinTheme {
   displayName: string;
   base: "light" | "dark";
   /**
-   * Decorative day/night annotation surfaced as the sun/moon icon. Built-in
-   * themes pin this to their base; user themes carry it as a separate
-   * editable field so the user can label a theme independently of canvas
-   * luminance. The runtime `.dark` class and event-palette pick still come
-   * from the actual canvas through `isThemeDark` / `isThemeCalendarDark`.
+   * Decorative sun/moon tag surfaced as the icon next to the theme name.
+   * Built-in themes pin this to their base; user themes carry it as a
+   * separate editable label so the user can mark a theme for "day" or
+   * "night" use independently of canvas luminance. The runtime `.dark`
+   * class and event-palette pick still come from the actual canvas through
+   * `isThemeDark` / `isThemeCalendarDark`.
    */
-  scheme: "light" | "dark";
+  iconLabel: "light" | "dark";
   eventPalette: EventPaletteHexes;
   /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
   blendCanvas: string;
@@ -117,11 +118,11 @@ export interface UserTheme {
   id: ThemeId;
   displayName: string;
   /**
-   * Decorative day/night annotation; flips the sun/moon icon in the editor
-   * header and the theme list. Has no effect on the runtime `.dark` class or
-   * the calendar event palette (both still derive from canvas luminance).
+   * Decorative sun/moon tag; flips the icon in the editor header and the
+   * theme list. Has no effect on the runtime `.dark` class or the calendar
+   * event palette (both still derive from canvas luminance).
    */
-  scheme: "light" | "dark";
+  iconLabel: "light" | "dark";
   eventPalette: EventPaletteHexes;
   /** Reference bg dimmed event variants blend toward. Usually canvas bg. */
   blendCanvas: string;
@@ -145,8 +146,8 @@ export interface UserTheme {
   seedCalendarIsolated: ReadonlySet<string>;
   seedEventPalette: EventPaletteHexes;
   seedBlendCanvas: string;
-  /** Clone-time scheme; "Reset all" restores `scheme` to this. */
-  seedScheme: "light" | "dark";
+  /** Clone-time iconLabel; "Reset all" restores `iconLabel` to this. */
+  seedIconLabel: "light" | "dark";
 }
 
 /**
@@ -221,7 +222,7 @@ export const lightTheme: BuiltinTheme = Object.freeze({
   id: "light",
   displayName: "Light",
   base: "light",
-  scheme: "light",
+  iconLabel: "light",
   eventPalette: LIGHT_EVENT_PALETTE,
   blendCanvas: "#ffffff",
 });
@@ -231,7 +232,7 @@ export const darkTheme: BuiltinTheme = Object.freeze({
   id: "dark",
   displayName: "Dark",
   base: "dark",
-  scheme: "dark",
+  iconLabel: "dark",
   eventPalette: DARK_EVENT_PALETTE,
   blendCanvas: "#131314",
 });
@@ -890,11 +891,13 @@ export function isThemeDark(theme: Theme): boolean {
 }
 
 /**
- * Pick the default decorative scheme for a canvas hex. Used by the clone
- * path, the v1 validator's missing-scheme fallback, and the legacy DB row
- * backfill when a row created before migration v5 is loaded.
+ * Pick the default decorative iconLabel for a canvas hex. Used by the clone
+ * path, the v1 validator's missing-iconLabel fallback, and the legacy DB
+ * row backfill when a row created before migration v5 is loaded.
  */
-export function defaultSchemeFromCanvas(canvasHex: string): "light" | "dark" {
+export function defaultIconLabelFromCanvas(
+  canvasHex: string,
+): "light" | "dark" {
   return relativeLuminance(canvasHex) < DARK_SURFACE_THRESHOLD ? "dark" : "light";
 }
 
@@ -947,7 +950,7 @@ export function serializeTheme(theme: Theme): string {
       id: theme.id,
       displayName: theme.displayName,
       base: theme.base,
-      scheme: theme.scheme,
+      iconLabel: theme.iconLabel,
       blendCanvas: theme.blendCanvas,
       eventPalette: orderedPalette(theme.eventPalette),
     };
@@ -957,7 +960,7 @@ export function serializeTheme(theme: Theme): string {
     schemaVersion: 1,
     id: theme.id,
     displayName: theme.displayName,
-    scheme: theme.scheme,
+    iconLabel: theme.iconLabel,
     blendCanvas: theme.blendCanvas,
     derivationEngineVersion: theme.derivationEngineVersion,
     sources: orderedSources(theme.sources),
@@ -1107,7 +1110,7 @@ function validateIdentity(
  * Legacy-only base sanitizer. Pre-v1 imports needed an explicit base because
  * they shipped without a full token snapshot, so missing tokens fell back to
  * `BASE_APP_TOKENS[base]`. v1 themes carry the snapshot directly and pick
- * any fallback from the sources canvas via `defaultSchemeFromCanvas`, so
+ * any fallback from the sources canvas via `defaultIconLabelFromCanvas`, so
  * they no longer require this field.
  */
 function sanitizeLegacyBase(
@@ -1136,7 +1139,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
       ? ((input.sources as Record<string, unknown>).canvas as string)
       : cleanBlend;
   const fallbackBase: "light" | "dark" = isHexColor(rawCanvas)
-    ? defaultSchemeFromCanvas(rawCanvas)
+    ? defaultIconLabelFromCanvas(rawCanvas)
     : "dark";
 
   const cleanSources = sanitizeSources(input.sources, errors, "sources", fallbackBase);
@@ -1188,10 +1191,10 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     errors.push("derivationEngineVersion must be a number");
   }
 
-  const cleanScheme = sanitizeScheme(
-    input.scheme,
+  const cleanIconLabel = sanitizeIconLabel(
+    input.iconLabel ?? input.scheme,
     cleanSources?.canvas ?? cleanBlend,
-    "scheme",
+    "iconLabel",
     errors,
   );
 
@@ -1201,7 +1204,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     kind: "user",
     id: cleanId,
     displayName: cleanDisplayName,
-    scheme: cleanScheme,
+    iconLabel: cleanIconLabel,
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
     derivationEngineVersion: cleanEngineVersion,
@@ -1217,7 +1220,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     seedCalendarIsolated: new Set(cleanCalIsolated),
     seedEventPalette: [...cleanPalette],
     seedBlendCanvas: cleanBlend,
-    seedScheme: cleanScheme,
+    seedIconLabel: cleanIconLabel,
   };
   return { ok: true, theme };
 }
@@ -1367,10 +1370,10 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
   const seedAppIsolated = new Set(Object.keys(seedAppOverrides));
   const seedCalIsolated = new Set(Object.keys(seedCalOverrides));
 
-  const cleanScheme = sanitizeScheme(
-    input.scheme,
+  const cleanIconLabel = sanitizeIconLabel(
+    input.iconLabel ?? input.scheme,
     cleanSources.canvas,
-    "scheme",
+    "iconLabel",
     errors,
   );
 
@@ -1378,7 +1381,7 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     kind: "user",
     id: cleanId,
     displayName: cleanDisplayName,
-    scheme: cleanScheme,
+    iconLabel: cleanIconLabel,
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
     derivationEngineVersion: DERIVATION_ENGINE_VERSION,
@@ -1394,7 +1397,7 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     seedCalendarIsolated: seedCalIsolated,
     seedEventPalette: seedPalette,
     seedBlendCanvas: seedBlend,
-    seedScheme: cleanScheme,
+    seedIconLabel: cleanIconLabel,
   };
   return { ok: true, theme };
 }
@@ -1422,21 +1425,21 @@ function buildSnapshot(
  * tolerance for stale token names.
  */
 /**
- * Validate the optional `scheme` field. Defaults to canvas-derived when
- * missing so legacy and v1-without-scheme imports always end up with a
+ * Validate the optional `iconLabel` field. Defaults to canvas-derived when
+ * missing so legacy and v1-without-iconLabel imports always end up with a
  * concrete value. Any value other than "light", "dark", or undefined is a
- * hard error.
+ * hard error. Tolerates the older `scheme` JSON key for backward compat.
  */
-function sanitizeScheme(
+function sanitizeIconLabel(
   raw: unknown,
   fallbackCanvasHex: string,
   fieldName: string,
   errors: string[],
 ): "light" | "dark" {
-  if (raw === undefined) return defaultSchemeFromCanvas(fallbackCanvasHex);
+  if (raw === undefined) return defaultIconLabelFromCanvas(fallbackCanvasHex);
   if (raw === "light" || raw === "dark") return raw;
   errors.push(`${fieldName} must be "light" or "dark"`);
-  return defaultSchemeFromCanvas(fallbackCanvasHex);
+  return defaultIconLabelFromCanvas(fallbackCanvasHex);
 }
 
 function sanitizeIsolatedList(
