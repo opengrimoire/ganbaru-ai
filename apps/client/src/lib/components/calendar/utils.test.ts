@@ -34,6 +34,7 @@ import {
   getTimezoneOffsetMinutes,
   formatColumnHeaderAbbr,
   listAllTimezones,
+  searchTimezones,
 } from "./utils";
 import type { CalendarEvent } from "./types";
 import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
@@ -924,5 +925,82 @@ describe("listAllTimezones", () => {
     expect(list).not.toContain("Iran");
     expect(list).not.toContain("Japan");
     expect(list).not.toContain("UTC");
+  });
+});
+
+describe("searchTimezones", () => {
+  it("returns the full filtered list for an empty query", () => {
+    const result = searchTimezones("", []);
+    const filtered = listAllTimezones();
+    expect(result.length).toBe(filtered.length);
+  });
+
+  it("sorts the empty-query result by UTC offset ascending", () => {
+    const result = searchTimezones("", []);
+    for (let i = 1; i < result.length; i++) {
+      const prev = getTimezoneOffsetMinutes(result[i - 1]);
+      const curr = getTimezoneOffsetMinutes(result[i]);
+      expect(prev).toBeLessThanOrEqual(curr);
+    }
+  });
+
+  it("excludes already-active zones from results", () => {
+    const result = searchTimezones("", ["Asia/Tehran", "America/New_York"]);
+    expect(result).not.toContain("Asia/Tehran");
+    expect(result).not.toContain("America/New_York");
+  });
+
+  it("excludes Etc/* zones from any query", () => {
+    const empty = searchTimezones("", []);
+    expect(empty.every((tz) => !tz.startsWith("Etc/"))).toBe(true);
+    const named = searchTimezones("gmt", []);
+    expect(named.every((tz) => !tz.startsWith("Etc/"))).toBe(true);
+  });
+
+  it("excludes deprecated single-segment aliases from any query", () => {
+    const result = searchTimezones("", []);
+    expect(result).not.toContain("EST");
+    expect(result).not.toContain("Japan");
+    expect(result).not.toContain("UTC");
+  });
+
+  it("finds zones by IANA city name", () => {
+    expect(searchTimezones("tehran", [])).toContain("Asia/Tehran");
+    expect(searchTimezones("chicago", [])).toContain("America/Chicago");
+    expect(searchTimezones("tokyo", [])).toContain("Asia/Tokyo");
+  });
+
+  it("finds zones by region prefix", () => {
+    const result = searchTimezones("asia", []);
+    expect(result.some((tz) => tz.startsWith("Asia/"))).toBe(true);
+    expect(result.length).toBeGreaterThan(10);
+  });
+
+  it("finds zones by Intl long-name match", () => {
+    // "Iran Standard Time" matches Asia/Tehran via long name; the
+    // deprecated "Iran" IANA alias has been filtered out so this can
+    // only succeed via the long-name tier.
+    expect(searchTimezones("iran", [])).toContain("Asia/Tehran");
+  });
+
+  it("ranks city-prefix matches above region-only matches", () => {
+    // Tokyo's city prefix-matches at tier 2; many Asia/* zones only
+    // match via the region "Asia" (tier 4-5) for longer queries. With
+    // "tokyo" the only candidate is Asia/Tokyo so it must be first.
+    const result = searchTimezones("tokyo", []);
+    expect(result[0]).toBe("Asia/Tokyo");
+  });
+
+  it("returns matches with case-insensitive query", () => {
+    const lower = searchTimezones("tehran", []);
+    const upper = searchTimezones("TEHRAN", []);
+    const mixed = searchTimezones("Tehran", []);
+    expect(lower).toEqual(upper);
+    expect(lower).toEqual(mixed);
+  });
+
+  it("returns an empty list for a query that matches nothing", () => {
+    const result = searchTimezones("zzzzzqqqxxxnomatch", []);
+    expect(result).toEqual([]);
   });
 });

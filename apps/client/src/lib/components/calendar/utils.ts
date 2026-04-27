@@ -363,130 +363,6 @@ export function listAllTimezones(): string[] {
   return _filteredTimezones;
 }
 
-// Maps common city names, country names, and abbreviations to IANA timezone IDs.
-// Only entries that aren't already discoverable via the IANA ID itself.
-const TIMEZONE_ALIASES: Record<string, string[]> = {
-  // Countries -> representative timezone(s)
-  japan: ["Asia/Tokyo"],
-  russia: ["Europe/Moscow", "Asia/Yekaterinburg", "Asia/Vladivostok", "Asia/Novosibirsk"],
-  china: ["Asia/Shanghai"],
-  india: ["Asia/Kolkata"],
-  australia: ["Australia/Sydney", "Australia/Perth", "Australia/Adelaide"],
-  brazil: ["America/Sao_Paulo", "America/Manaus"],
-  canada: ["America/Toronto", "America/Vancouver", "America/Edmonton", "America/Halifax"],
-  germany: ["Europe/Berlin"],
-  france: ["Europe/Paris"],
-  uk: ["Europe/London"],
-  "united kingdom": ["Europe/London"],
-  england: ["Europe/London"],
-  spain: ["Europe/Madrid"],
-  italy: ["Europe/Rome"],
-  netherlands: ["Europe/Amsterdam"],
-  sweden: ["Europe/Stockholm"],
-  norway: ["Europe/Oslo"],
-  finland: ["Europe/Helsinki"],
-  denmark: ["Europe/Copenhagen"],
-  switzerland: ["Europe/Zurich"],
-  portugal: ["Europe/Lisbon"],
-  greece: ["Europe/Athens"],
-  turkey: ["Europe/Istanbul"],
-  egypt: ["Africa/Cairo"],
-  "south africa": ["Africa/Johannesburg"],
-  nigeria: ["Africa/Lagos"],
-  kenya: ["Africa/Nairobi"],
-  morocco: ["Africa/Casablanca"],
-  israel: ["Asia/Jerusalem"],
-  "south korea": ["Asia/Seoul"],
-  korea: ["Asia/Seoul"],
-  thailand: ["Asia/Bangkok"],
-  vietnam: ["Asia/Ho_Chi_Minh"],
-  philippines: ["Asia/Manila"],
-  singapore: ["Asia/Singapore"],
-  malaysia: ["Asia/Kuala_Lumpur"],
-  indonesia: ["Asia/Jakarta"],
-  pakistan: ["Asia/Karachi"],
-  bangladesh: ["Asia/Dhaka"],
-  "new zealand": ["Pacific/Auckland"],
-  argentina: ["America/Argentina/Buenos_Aires"],
-  chile: ["America/Santiago"],
-  colombia: ["America/Bogota"],
-  peru: ["America/Lima"],
-  venezuela: ["America/Caracas"],
-  cuba: ["America/Havana"],
-  // Mexico cities and states
-  mexico: ["America/Mexico_City", "America/Cancun", "America/Tijuana", "America/Chihuahua", "America/Monterrey"],
-  monterrey: ["America/Monterrey"],
-  guadalajara: ["America/Mexico_City"],
-  cancun: ["America/Cancun"],
-  tijuana: ["America/Tijuana"],
-  chihuahua: ["America/Chihuahua"],
-  merida: ["America/Merida"],
-  mazatlan: ["America/Mazatlan"],
-  hermosillo: ["America/Hermosillo"],
-  // US cities
-  "new york": ["America/New_York"],
-  "los angeles": ["America/Los_Angeles"],
-  chicago: ["America/Chicago"],
-  denver: ["America/Denver"],
-  phoenix: ["America/Phoenix"],
-  houston: ["America/Chicago"],
-  miami: ["America/New_York"],
-  seattle: ["America/Los_Angeles"],
-  "san francisco": ["America/Los_Angeles"],
-  boston: ["America/New_York"],
-  dallas: ["America/Chicago"],
-  atlanta: ["America/New_York"],
-  detroit: ["America/Detroit"],
-  honolulu: ["Pacific/Honolulu"],
-  anchorage: ["America/Anchorage"],
-  // Other major cities
-  london: ["Europe/London"],
-  paris: ["Europe/Paris"],
-  berlin: ["Europe/Berlin"],
-  moscow: ["Europe/Moscow"],
-  tokyo: ["Asia/Tokyo"],
-  beijing: ["Asia/Shanghai"],
-  shanghai: ["Asia/Shanghai"],
-  mumbai: ["Asia/Kolkata"],
-  delhi: ["Asia/Kolkata"],
-  bangalore: ["Asia/Kolkata"],
-  dubai: ["Asia/Dubai"],
-  "hong kong": ["Asia/Hong_Kong"],
-  taipei: ["Asia/Taipei"],
-  seoul: ["Asia/Seoul"],
-  bangkok: ["Asia/Bangkok"],
-  jakarta: ["Asia/Jakarta"],
-  sydney: ["Australia/Sydney"],
-  melbourne: ["Australia/Melbourne"],
-  auckland: ["Pacific/Auckland"],
-  "buenos aires": ["America/Argentina/Buenos_Aires"],
-  santiago: ["America/Santiago"],
-  bogota: ["America/Bogota"],
-  lima: ["America/Lima"],
-  "sao paulo": ["America/Sao_Paulo"],
-  rio: ["America/Sao_Paulo"],
-  toronto: ["America/Toronto"],
-  vancouver: ["America/Vancouver"],
-  hawaii: ["Pacific/Honolulu"],
-  alaska: ["America/Anchorage"],
-  // Common abbreviations
-  est: ["America/New_York"],
-  cst: ["America/Chicago"],
-  mst: ["America/Denver"],
-  pst: ["America/Los_Angeles"],
-  gmt: ["Europe/London"],
-  utc: ["Etc/UTC"],
-  cet: ["Europe/Berlin"],
-  eet: ["Europe/Athens"],
-  ist: ["Asia/Kolkata"],
-  jst: ["Asia/Tokyo"],
-  kst: ["Asia/Seoul"],
-  hkt: ["Asia/Hong_Kong"],
-  sgt: ["Asia/Singapore"],
-  aest: ["Australia/Sydney"],
-  nzst: ["Pacific/Auckland"],
-};
-
 let _ianaTimezones: string[] | null = null;
 
 function getIanaTimezones(): string[] {
@@ -499,39 +375,78 @@ function getIanaTimezones(): string[] {
   return _ianaTimezones;
 }
 
+/**
+ * Search timezones with ranked multi-field matching.
+ *
+ * Empty query returns the full filtered list (Etc/* and deprecated aliases
+ * already removed by `listAllTimezones`) sorted by UTC offset ascending,
+ * then long name ascending. This powers the browse-when-empty popover.
+ *
+ * Non-empty query ranks each candidate by where the query first matches.
+ * Tiers (lower is better): long-name prefix, long-name contains, city
+ * prefix, city contains, region prefix, region contains, abbrev prefix,
+ * abbrev contains, IANA-id prefix, IANA-id contains. Within a tier,
+ * candidates sort by UTC offset then long name. Excluded zones never
+ * appear in results.
+ */
 export function searchTimezones(
   query: string,
   exclude: string[],
-  limit: number = 10,
 ): string[] {
+  const all = listAllTimezones();
+  const excludeSet = new Set(exclude);
+  const candidates = all.filter((tz) => !excludeSet.has(tz));
+
   const q = query.toLowerCase().trim();
-  if (!q) return [];
 
-  const results = new Set<string>();
+  if (!q) {
+    return candidates.slice().sort((a, b) => {
+      const offA = getTimezoneOffsetMinutes(a);
+      const offB = getTimezoneOffsetMinutes(b);
+      if (offA !== offB) return offA - offB;
+      return getTimezoneLongName(a).localeCompare(getTimezoneLongName(b));
+    });
+  }
 
-  // Check aliases first (country names, city names, abbreviations)
-  for (const [alias, tzIds] of Object.entries(TIMEZONE_ALIASES)) {
-    if (alias.includes(q)) {
-      for (const tz of tzIds) {
-        if (!exclude.includes(tz)) results.add(tz);
-      }
+  type Scored = { tz: string; tier: number; offset: number; longName: string };
+  const scored: Scored[] = [];
+
+  for (const tz of candidates) {
+    const longName = getTimezoneLongName(tz).toLowerCase();
+    const city = getTimezoneCity(tz).toLowerCase();
+    const region = getTimezoneRegion(tz).toLowerCase();
+    const abbr = getTimezoneAbbr(tz).toLowerCase();
+    const iana = tz.toLowerCase();
+
+    let tier = Infinity;
+    if (longName.startsWith(q)) tier = Math.min(tier, 0);
+    else if (longName.includes(q)) tier = Math.min(tier, 1);
+    if (city.startsWith(q)) tier = Math.min(tier, 2);
+    else if (city.includes(q)) tier = Math.min(tier, 3);
+    if (region.startsWith(q)) tier = Math.min(tier, 4);
+    else if (region.includes(q)) tier = Math.min(tier, 5);
+    if (abbr.startsWith(q)) tier = Math.min(tier, 6);
+    else if (abbr.includes(q)) tier = Math.min(tier, 7);
+    if (iana.startsWith(q)) tier = Math.min(tier, 8);
+    else if (iana.includes(q)) tier = Math.min(tier, 9);
+
+    if (tier !== Infinity) {
+      scored.push({
+        tz,
+        tier,
+        offset: getTimezoneOffsetMinutes(tz),
+        longName: getTimezoneLongName(tz),
+      });
     }
   }
 
-  // Then search IANA timezone IDs and formatted names
-  const all = getIanaTimezones();
-  for (const tz of all) {
-    if (results.size >= limit) break;
-    if (exclude.includes(tz)) continue;
-    if (
-      tz.toLowerCase().includes(q) ||
-      formatTimezoneName(tz).toLowerCase().includes(q)
-    ) {
-      results.add(tz);
-    }
-  }
+  scored.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    if (a.offset !== b.offset) return a.offset - b.offset;
+    return a.longName.localeCompare(b.longName);
+  });
 
-  return [...results].slice(0, limit);
+  return scored.map((s) => s.tz);
 }
 
 export function snapToGrid(minute: number, gridMinutes: number = 10): number {
