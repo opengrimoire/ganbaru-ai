@@ -17,12 +17,13 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@ganbaruai/shared-types": "workspace:*",
+    "@js-temporal/polyfill": "^0.5.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-global-shortcut": "^2.3.1",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.3.2",
-    "@js-temporal/polyfill": "^0.5.0"
+    "ical.js": "^2.2.1"
   },
   "devDependencies": {
     "@lucide/svelte": "^0.577.0",

@@ -41,6 +41,9 @@ importers:
       '@tauri-apps/plugin-sql':
         specifier: ^2.3.2
         version: 2.3.2
+      ical.js:
+        specifier: ^2.2.1
+        version: 2.2.1
     devDependencies:
       '@lucide/svelte':
         specifier: ^0.577.0
@@ -775,6 +778,9 @@ packages:
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
+
+  ical.js@2.2.1:
+    resolution: {integrity: sha512-yK/UlPbEs316igb/tjRgbFA8ZV75rCsBJp/hWOatpyaPNlgw0dGDmU+FoicOcwX4xXkeXOkYiOmCqNPFpNPkQg==}
 
   is-reference@3.0.3:
     resolution: {integrity: sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw==}
@@ -1672,6 +1678,8 @@ snapshots:
   has-flag@4.0.0: {}
 
   html-escaper@2.0.2: {}
+
+  ical.js@2.2.1: {}
 
   is-reference@3.0.3:
     dependencies:
