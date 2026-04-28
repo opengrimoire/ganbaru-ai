@@ -56,17 +56,21 @@ Situations most likely to produce bugs, data corruption, or confusing UX. Every 
 
 ## 5. DST transitions and timezone boundary cases
 
-**Why it's dangerous:** all timestamps are stored in UTC, but the user sees local time. A DST transition can make a 60-minute event appear as 0 minutes or 120 minutes in local time. The 2 AM hour can repeat (fall back) or vanish (spring forward).
+**Why it's dangerous:** all timestamps are stored in UTC, but the user sees local time. A DST transition can make a 60-minute event appear as 0 minutes or 120 minutes in local time. The 2 AM hour can repeat (fall back) or vanish (spring forward). A recurring "9 AM daily" event must keep firing at 9 AM local even though its UTC offset shifts by an hour.
 
-**Scenario, spring forward.** The user has an event from 01:30 to 03:30 local time. At 02:00, clocks jump to 03:00. In UTC, the event is still 2 hours. In local display, it looks like a 1-hour event (01:30-02:00, then 03:00-03:30). The rail must render based on UTC duration (2 hours of rail space), not local-time appearance. The pixel mapping uses UTC elapsed time.
+**Mitigation.** Storage is UTC ISO 8601 plus an IANA home zone per event. Recurrence walks dates in zone-free `Temporal.PlainDate` arithmetic anchored to the home zone, then reattaches the original wall-clock time, so the wall clock survives DST without drift. Render zone tracks the device's current IANA zone via visibility, focus, and a 60s sanity poll, refreshing without app restart. Notifications schedule against UTC instants, so they fire correctly even if the user's zone changes between scheduling and firing. Ambiguous wall-clock cases (the second 1:30 AM during fall-back) resolve via Temporal's `compatible` disambiguation, matching RFC 5545 expectations.
+
+**Scenario, spring forward.** The user has an event from 01:30 to 03:30 local time. At 02:00, clocks jump to 03:00. In UTC, the event is still 2 hours. In local display, it looks like a 1-hour event (01:30-02:00, then 03:00-03:30). The rail renders based on UTC duration (2 hours of rail space), not local-time appearance. The pixel mapping uses UTC elapsed time.
 
 **Scenario, fall back.** The user has an event from 01:00 to 03:00. At 02:00, clocks fall back to 01:00. The UTC duration is still 2 hours. Display might show 01:00-01:00-02:00-03:00 (the 01:00-02:00 hour appears twice). The rail must not duplicate bands for the repeated hour. UTC is the authority.
 
-**Scenario, user travels.** The user creates an event in EST, flies to PST during the day. The event times are stored in UTC. The display shifts by 3 hours, but the data is intact. No recalculation needed.
+**Scenario, recurring 9 AM through spring-forward.** A daily 09:00 event in `America/New_York` starting 2026-03-07 (the day before DST starts). On 2026-03-08 the rendered time stays 09:00; the UTC instant shifts from 14:00Z to 13:00Z. The expansion engine walks `PlainDate` in the home zone and reattaches `09:00`, so no occurrence is skipped or duplicated.
+
+**Scenario, user travels.** The user creates an event in EST, flies to PST during the day. The event times are stored in UTC. Within 60s of opening the laptop in PST (or instantly on focus), the display shifts by 3 hours, but the data is intact. No reload, no recalculation needed.
 
 **Assumption: the system clock is reasonably accurate.** UTC protects against timezone and DST issues, but all timestamps ultimately come from the OS clock. If the clock jumps (NTP correction after boot with a dead CMOS battery, VM resume drift, dual-boot clock mismatch), timestamps within an active session can become logically inconsistent (e.g. a heartbeat before the previous one). This does not corrupt the database at the SQLite level, but it produces bad data for that session. The system does not defend against this because the scenarios are rare, the drift is usually small, and reliable countermeasures (monotonic clocks) do not survive reboots. If a user notices wrong session data, a clock issue is the likely cause.
 
-**Governed by:** `data/schema.md` (UTC timestamps), all rendering logic.
+**Governed by:** `data/schema.md` (UTC timestamps + home zone), `algorithms/recurrence-expansion.md` (home-zone walk), all rendering logic.
 
 ## 6. Sub-second and rapid-succession actions
 

@@ -29,7 +29,7 @@ The current view persists across app restarts. Switching views never changes the
 A calendar event is a structured record (see `data/schema.md` for the table). The user-visible properties:
 
 - **Title:** plain text, required.
-- **Start and end:** stored in UTC, displayed in the user's local timezone (or the event's timezone if the event was imported with one). All-day events use the user's local day boundaries.
+- **Start and end:** stored as UTC ISO 8601 instants. The render zone defaults to the device's current IANA zone and updates without app restart on visibility, focus, and a 60s sanity poll, so a user who travels from NYC to Tokyo sees the wall clock shift accordingly. An opt-in preference (`preferences.eventTimezoneDisplay = "homeZone"`) pins display to the event's home zone instead. All-day events are floating dates: they render on the same calendar day in any zone.
 - **All-day flag:** when true, time pickers hide and the event renders as a chip in the all-day band rather than a block in the day column.
 - **Color:** one of 24 palette slots. Events store the slot index (an integer 0..23); each theme owns the hex it resolves to, so themes can recolor slots without rewriting events. The index is internal only; the picker shows hex codes. Unknown values fall back to the theme's fallback slot. See `features/themes.md` for the full palette, the two-layer color model, and the custom-theme workflow.
 - **Description:** rich text (markdown source under the hood). Used for context, links, agendas.
@@ -37,7 +37,7 @@ A calendar event is a structured record (see `data/schema.md` for the table). Th
 - **Meeting:** a unified section that groups location (plain text with optional geo coordinates), call link (URL), and attendees (RFC 5545 ATTENDEE shape with RSVP status and guest permissions). The section is collapsible in the event panel and shares the same header pattern as pomodoro, notifications, and recurrence. It is considered enabled when any of its fields has content, so there is no separate on/off flag. Attendee sync behavior for shared and team events is described in `data/sync.md` once collaboration ships.
 - **Pomodoro config:** optional. When present, the event participates in the pomodoro system. See `features/pomodoro.md`.
 - **Recurrence:** optional RRULE. See `features/calendar-recurrence.md`.
-- **Timezone:** IANA name. Stored alongside the UTC times so a meeting created in one timezone displays correctly when the user travels.
+- **Timezone:** IANA home zone. Required and non-empty. Anchors recurrence math (so "9 AM daily" stays 9 AM through DST) and is the `TZID` on `.ics` re-export. Independent of the render zone: changing your device zone does not rewrite this field.
 
 Events without a pomodoro config are still first-class citizens. They appear in the calendar, drive notifications, and trigger work-environment activation. They simply do not show a rail and do not contribute to focus stats.
 

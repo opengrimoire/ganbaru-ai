@@ -2,7 +2,7 @@
 
 Every table in `app.db`, with the rationale behind subtle columns and constraints. New tables are added here as features land. Stub headings exist for tables that are designed but not yet implemented; fill them in when the feature ships.
 
-All timestamps are ISO 8601 in UTC with a `Z` suffix. The UI converts to local time for display. Storing in UTC is the only thing that survives DST transitions, timezone changes, and user travel without rewriting historical data.
+All timestamps are ISO 8601 in UTC with a `Z` suffix. The UI converts to the device's current IANA zone for display, recomputing on visibility, focus, and a 60s sanity poll so a user who travels from NYC to Tokyo sees their events shift to the correct local wall clock without reloading the app. Storing in UTC is the only thing that survives DST transitions, timezone changes, and user travel without rewriting historical data.
 
 UUIDs are the primary key for all user-data tables. Auto-incrementing integers are avoided because they leak insertion order and complicate sync. UUIDs are generated client-side at write time.
 
@@ -18,8 +18,8 @@ The active calendar. One row per event (or per recurring template, with instance
 | `user_id` | UUID | Owner. Defaults to the local UUID in single-user mode. |
 | `title` | text | Display title. |
 | `description` | text or null | Rich text (markdown source). |
-| `start_time` | ISO datetime | Event start (UTC). |
-| `end_time` | ISO datetime | Event end (UTC). For all-day, midnight to midnight in the user's timezone, converted to UTC. |
+| `start_time` | ISO datetime | Event start as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). |
+| `end_time` | ISO datetime | Event end as a UTC ISO 8601 instant. All-day events use `YYYY-MM-DD` floating dates without zone conversion (matching iCalendar `VALUE=DATE` semantics) so they stay anchored to the calendar day across zones. |
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |
 | `color` | integer or null | Slot index (0..23) into the active theme's 24-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
@@ -28,7 +28,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `pomodoro_config` | JSON or null | Per-event pomodoro settings (see "Pomodoro config"). Null means pomodoro is disabled for this event. |
 | `notification_config` | JSON or null | Notification offsets and channels. Null means no notifications. |
 | `attendees` | JSON or null | Placeholder. Designed for shared/team events. |
-| `timezone` | text | IANA timezone name (`America/Los_Angeles`). Stored alongside UTC for display correctness across DST. |
+| `timezone` | text | IANA home zone (`America/Los_Angeles`). Required and non-empty. Used as the anchor for recurrence math (so "9 AM daily" stays 9 AM through DST, walked via `Temporal.PlainDate` arithmetic), and as the `TZID` on `.ics` re-export. The render zone (what the UI shows) is independent: it tracks the device's current zone by default, with an opt-in preference (`preferences.eventTimezoneDisplay`) to pin display to this home zone instead. |
 | `environment_id` | UUID or null | FK to `work_environments` (planned). Null when no environment is attached. |
 | `created_at` | ISO datetime | Row creation time. |
 | `updated_at` | ISO datetime | Last modification. Bumped on any column change. |
@@ -36,6 +36,8 @@ The active calendar. One row per event (or per recurring template, with instance
 Indexes: `(user_id, start_time)`, `(user_id, recurrence_parent_id)`, `(end_time)` for archival sweeps.
 
 Why `recurrence_rule` is plain text (the RRULE string) instead of decomposed columns: the RRULE format is the lingua franca for calendar interop. Storing it intact means import/export from iCalendar, Google Calendar, or other RFC 5545 sources is trivial. Decomposed columns would force a translation layer at every boundary.
+
+Per-instance overrides live in `calendar_event_overrides` (one row per detached or modified instance). The `recurrence_id` column is a UTC ISO 8601 instant identifying the original DTSTART of the overridden occurrence (the iCalendar `RECURRENCE-ID` field). Matching is by instant, not by wall clock, so an override survives DST transitions and zone changes intact.
 
 Why `pomodoro_config` is JSON instead of FK to a `pomodoro_configs` table: the config is per-event, immutable after the event is created (changing it ends the active run, see `algorithms/pomodoro-state-machine.md`), and small. A separate table earns no normalization benefit and adds a join to every event read.
 
