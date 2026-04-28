@@ -37,7 +37,31 @@
     // Prevent default Ctrl+scroll behavior (used for calendar zoom)
     const blockCtrlWheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
     document.addEventListener("wheel", blockCtrlWheel, { passive: false, capture: true });
-    return () => document.removeEventListener("wheel", blockCtrlWheel, { capture: true });
+
+    // Track device timezone changes (travel, OS-level update). On change,
+    // reload calendar events so wall-clock strings reflect the new zone.
+    // Re-resolves on visibility change (returning from suspend/lock screen),
+    // window focus, and a cheap 60s sanity poll for cases where neither
+    // event fires (background tab, multi-window).
+    let knownZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const checkZone = () => {
+      const current = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (current !== knownZone) {
+        knownZone = current;
+        calendar.load().catch((e) => console.error("Failed to reload calendar after zone change:", e));
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === "visible") checkZone(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", checkZone);
+    const zoneIntervalId = setInterval(checkZone, 60_000);
+
+    return () => {
+      document.removeEventListener("wheel", blockCtrlWheel, { capture: true });
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", checkZone);
+      clearInterval(zoneIntervalId);
+    };
   });
 
   $effect(() => {

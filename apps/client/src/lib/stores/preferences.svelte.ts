@@ -11,6 +11,10 @@ import { getConfigKey, setConfigKey } from "../vault/config";
 
 const FONT_FAMILY_CONFIG_KEY = "preferences.fontFamilyId";
 const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
+const EVENT_TZ_DISPLAY_KEY = "preferences.eventTimezoneDisplay";
+
+export type EventTimezoneDisplay = "device" | "homeZone";
+const DEFAULT_EVENT_TZ_DISPLAY: EventTimezoneDisplay = "device";
 
 function loadSavedFontFamilyId(): FontFamilyId {
   const saved = getConfigKey<string | undefined>(FONT_FAMILY_CONFIG_KEY, undefined);
@@ -24,8 +28,15 @@ function loadSavedFontScale(): number {
   return clampFontScale(saved);
 }
 
+function loadSavedEventTzDisplay(): EventTimezoneDisplay {
+  const saved = getConfigKey<string | undefined>(EVENT_TZ_DISPLAY_KEY, undefined);
+  if (saved === "device" || saved === "homeZone") return saved;
+  return DEFAULT_EVENT_TZ_DISPLAY;
+}
+
 let fontFamilyId = $state<FontFamilyId>(loadSavedFontFamilyId());
 let fontScale = $state<number>(loadSavedFontScale());
+let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTzDisplay());
 
 function applyPreferencesToDom(): void {
   if (typeof document === "undefined") return;
@@ -54,6 +65,11 @@ function setFontScale(value: number): void {
   setConfigKey(FONT_SCALE_CONFIG_KEY, clamped);
 }
 
+function setEventTimezoneDisplay(value: EventTimezoneDisplay): void {
+  eventTimezoneDisplay = value;
+  setConfigKey(EVENT_TZ_DISPLAY_KEY, value);
+}
+
 /**
  * Access app-wide user preferences (font family, font scale). Returns
  * getters so Svelte's reactivity picks up changes in consuming components.
@@ -70,13 +86,20 @@ export function getPreferences() {
     get fontFamilies(): readonly (typeof FONT_FAMILIES)[number][] {
       return FONT_FAMILIES;
     },
+    get eventTimezoneDisplay(): EventTimezoneDisplay {
+      return eventTimezoneDisplay;
+    },
     setFontFamily,
     setFontScale,
+    setEventTimezoneDisplay,
     resetFontFamily() {
       setFontFamily(DEFAULT_FONT_FAMILY_ID);
     },
     resetFontScale() {
       setFontScale(DEFAULT_FONT_SCALE);
+    },
+    resetEventTimezoneDisplay() {
+      setEventTimezoneDisplay(DEFAULT_EVENT_TZ_DISPLAY);
     },
   };
 }

@@ -377,7 +377,10 @@
     onwheel={(e) => e.stopPropagation()}
   >
     <div class="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
-      <p class="text-xs font-semibold text-foreground">Timezones</p>
+      <div class="flex flex-col">
+        <p class="text-xs font-semibold text-foreground">Timezones</p>
+        <p class="text-[10px] text-muted-foreground">Device: {localTz}</p>
+      </div>
       <div
         class="flex items-center gap-0.5 rounded border border-border bg-background p-0.5 text-[10px]"
         role="group"
