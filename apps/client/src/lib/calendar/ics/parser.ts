@@ -102,12 +102,15 @@ function isIanaZone(tzid: string): boolean {
  * Convert an `ICAL.Time` to a UTC ISO 8601 instant ending in `Z`.
  *
  * - All-day (date-only) inputs become `YYYY-MM-DDT00:00:00Z` (RFC 5545 floating).
- * - Floating wall-clock inputs (no TZID, no Z) are interpreted in the device's
- *   IANA zone via the Temporal polyfill.
- * - Zoned inputs are converted via `Time.toJSDate()`, which honors the
- *   VTIMEZONE rules registered by `ical.js` itself.
+ * - When `tzidHint` is supplied (from the property's TZID parameter), the
+ *   wall-clock is interpreted in that IANA zone via Temporal, regardless of
+ *   what `ical.js` reports for `time.zone`. This matters because `ical.js`
+ *   reports `floating` for any TZID it has not been pre-registered with via
+ *   a VTIMEZONE block, dropping otherwise-valid IANA hints.
+ * - Otherwise, floating wall-clock inputs (no TZID, no Z) are interpreted in
+ *   the device's IANA zone, and zoned inputs are converted via `toJSDate()`.
  */
-function timeToUtcIso(time: ICAL.Time, deviceZone: string): string {
+function timeToUtcIso(time: ICAL.Time, deviceZone: string, tzidHint?: string | null): string {
 	if (time.isDate) {
 		const y = String(time.year).padStart(4, "0");
 		const m = String(time.month).padStart(2, "0");
@@ -115,14 +118,22 @@ function timeToUtcIso(time: ICAL.Time, deviceZone: string): string {
 		return `${y}-${m}-${d}T00:00:00Z`;
 	}
 	const zone = time.zone;
-	const tzid = (zone as ICAL.Timezone | null)?.tzid;
-	const isFloating = !tzid || tzid === "floating";
+	const zoneTzid = (zone as ICAL.Timezone | null)?.tzid;
+	// A `Z`-suffixed value is unambiguously UTC per RFC 5545. RFC 5545 also
+	// disallows mixing TZID with Z, so any inherited hint must be ignored.
+	if (zoneTzid === "UTC") {
+		return Temporal.Instant.from(time.toJSDate().toISOString()).toString();
+	}
+	if (tzidHint) {
+		const wall = formatWallClock(time);
+		return wallClockToUtcIso(wall, tzidHint);
+	}
+	const isFloating = !zoneTzid || zoneTzid === "floating";
 	if (isFloating) {
 		const wall = formatWallClock(time);
 		return wallClockToUtcIso(wall, deviceZone);
 	}
-	const date = time.toJSDate();
-	return date.toISOString();
+	return Temporal.Instant.from(time.toJSDate().toISOString()).toString();
 }
 
 function formatWallClock(time: ICAL.Time): string {
@@ -284,12 +295,18 @@ function defaultGuestPermissions(): GuestPermissions {
 	return { canModify: false, canInviteOthers: true, canSeeOtherGuests: true };
 }
 
-function parseExdates(component: ICAL.Component, deviceZone: string): string[] {
+function parseExdates(
+	component: ICAL.Component,
+	deviceZone: string,
+	warnings: string[],
+): string[] {
 	const out: string[] = [];
 	for (const prop of component.getAllProperties("exdate")) {
+		const tzidParam = prop.getFirstParameter("tzid");
+		const hint = tzidParam ? resolveTimezone(tzidParam, warnings) : undefined;
 		for (const value of prop.getValues()) {
 			if (value instanceof ICAL.Time) {
-				const utc = timeToUtcIso(value, deviceZone);
+				const utc = timeToUtcIso(value, deviceZone, hint);
 				out.push(utc.slice(0, 10));
 			}
 		}
@@ -297,12 +314,18 @@ function parseExdates(component: ICAL.Component, deviceZone: string): string[] {
 	return out;
 }
 
-function parseRdates(component: ICAL.Component, deviceZone: string): string[] {
+function parseRdates(
+	component: ICAL.Component,
+	deviceZone: string,
+	warnings: string[],
+): string[] {
 	const out: string[] = [];
 	for (const prop of component.getAllProperties("rdate")) {
+		const tzidParam = prop.getFirstParameter("tzid");
+		const hint = tzidParam ? resolveTimezone(tzidParam, warnings) : undefined;
 		for (const value of prop.getValues()) {
 			if (value instanceof ICAL.Time) {
-				out.push(timeToUtcIso(value, deviceZone));
+				out.push(timeToUtcIso(value, deviceZone, hint));
 			}
 		}
 	}
@@ -321,13 +344,14 @@ function calendarEventBaseFromComponent(
 	if (!(dtstartValue instanceof ICAL.Time)) return null;
 
 	const isAllDay = dtstartValue.isDate;
-	const startUtc = timeToUtcIso(dtstartValue, deviceZone);
-
 	const dtstartTzid = dtstartProp.getFirstParameter("tzid");
+	const dtstartHint = dtstartTzid ? resolveTimezone(dtstartTzid, warnings) : undefined;
+	const startUtc = timeToUtcIso(dtstartValue, deviceZone, dtstartHint);
+
 	const homeZone = isAllDay
 		? deviceZone
-		: dtstartTzid
-			? resolveTimezone(dtstartTzid, warnings)
+		: dtstartHint
+			? dtstartHint
 			: dtstartValue.zone && (dtstartValue.zone as ICAL.Timezone).tzid === "UTC"
 				? "UTC"
 				: deviceZone;
@@ -338,7 +362,9 @@ function calendarEventBaseFromComponent(
 	if (dtendProp) {
 		const dtendValue = dtendProp.getFirstValue();
 		if (dtendValue instanceof ICAL.Time) {
-			endUtc = timeToUtcIso(dtendValue, deviceZone);
+			const dtendTzid = dtendProp.getFirstParameter("tzid");
+			const dtendHint = dtendTzid ? resolveTimezone(dtendTzid, warnings) : dtstartHint;
+			endUtc = timeToUtcIso(dtendValue, deviceZone, dtendHint);
 		} else {
 			endUtc = startUtc;
 		}
@@ -361,8 +387,12 @@ function calendarEventBaseFromComponent(
 		);
 	}
 
-	const start = isAllDay ? startUtc.slice(0, 10) + " 00:00" : utcIsoToWallClock(startUtc, homeZone);
-	const end = isAllDay ? endUtc.slice(0, 10) + " 00:00" : utcIsoToWallClock(endUtc, homeZone);
+	// In-memory wall-clock is anchored to the device zone (matching `mapRow`
+	// in the calendar store). The home zone is preserved in `event.timezone`
+	// for recurrence anchoring; the serializer reverses through `deviceZone`
+	// so the round trip is lossless.
+	const start = isAllDay ? startUtc.slice(0, 10) + " 00:00" : utcIsoToWallClock(startUtc, deviceZone);
+	const end = isAllDay ? endUtc.slice(0, 10) + " 00:00" : utcIsoToWallClock(endUtc, deviceZone);
 
 	const sourceUid = (component.getFirstPropertyValue("uid") as string | null) ?? undefined;
 	const summary = (component.getFirstPropertyValue("summary") as string | null) ?? "";
@@ -397,8 +427,8 @@ function calendarEventBaseFromComponent(
 		.map((c) => parseAlarm(c, warnings))
 		.filter((a): a is EventAlarm => a !== null);
 
-	const exceptions = parseExdates(component, deviceZone);
-	const rdate = parseRdates(component, deviceZone);
+	const exceptions = parseExdates(component, deviceZone, warnings);
+	const rdate = parseRdates(component, deviceZone, warnings);
 
 	const rruleValue = component.getFirstPropertyValue("rrule");
 	let rruleString: string | undefined;
@@ -420,7 +450,9 @@ function calendarEventBaseFromComponent(
 	if (recurrenceIdProp) {
 		const value = recurrenceIdProp.getFirstValue();
 		if (value instanceof ICAL.Time) {
-			recurrenceId = timeToUtcIso(value, deviceZone);
+			const ridTzid = recurrenceIdProp.getFirstParameter("tzid");
+			const ridHint = ridTzid ? resolveTimezone(ridTzid, warnings) : dtstartHint;
+			recurrenceId = timeToUtcIso(value, deviceZone, ridHint);
 		}
 	}
 

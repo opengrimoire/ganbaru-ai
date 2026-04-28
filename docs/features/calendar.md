@@ -116,6 +116,22 @@ For events without an active session but with past tracking data, the protection
 
 **Switching from week to month.** The user is in week view with a session running. They switch to month view. The session keeps running; the title bar ring (see `features/pomodoro-progress-displays.md`) continues to show focus progress. Switching back to week view re-renders the rail with all the segments that accumulated during the month-view interval.
 
+## Import and export
+
+The Settings modal exposes a "Calendars" section (under the "Data" group) that lists every calendar (built-in `local` plus every imported one) and offers three actions:
+
+- **Import .ics file.** Opens a native file picker filtered to `.ics`. The file is read through the existing vault command, parsed via `lib/calendar/ics/parser.ts`, and bulk-upserted by `(calendar_id, source_uid)`. The destination calendar is found-or-created from the filename: re-importing the same file always lands in the same `Imported from <basename> (YYYY-MM-DD)` row, so events deduplicate by UID instead of stacking. The toast summarizes counters as "N new, M updated, K older skipped" and warnings (lossy fields, unknown TZIDs, malformed events) print to the console.
+- **Export to .ics.** Per-calendar. Opens a save dialog, serializes every event in that calendar through `lib/calendar/ics/serializer.ts`, and writes the result through the vault command.
+- **Delete calendar.** Per-row, with a confirm dialog. The schema's `ON DELETE CASCADE` on `calendar_events.calendar_id` (and the cascading child tables) means deleting an imported calendar wipes every event, override, attendee, and alarm that came from that file. The built-in `local` calendar can never be deleted.
+
+Re-import idempotence is driven by RFC 5545 `SEQUENCE`. On a re-import, an event with a lower sequence than the stored row is skipped, equal-or-higher overwrites in place (replacing all child rows in lockstep). Events without a `SEQUENCE` default to 0 on both sides, so the behavior degrades to "always overwrite on re-import", which is what the major calendars do anyway.
+
+What is preserved end-to-end through parse → serialize → parse: title, start, end, all-day flag, IANA home zone, RRULE, EXDATE (date-only), RDATE, RECURRENCE-ID overrides (with their own per-instance title / start / end / description / location / status / transparency / visibility / extended properties), STATUS, CLASS, TRANSP, PRIORITY, SEQUENCE, CATEGORIES, GEO, ORGANIZER, ATTENDEE rows, VALARM rows, X-* extended properties, and Google's guest-permissions X-properties.
+
+What is lossy or dropped: VALARM `REPEAT` and `DURATION` (no schema columns; one deduped warning); EXDATE time-of-day exclusions are coerced to date-only (matches our recurrence-engine's exception model); `METHOD` and meeting-invitation semantics are ignored (every import is treated as the user's own copy); `DTSTAMP` / `LAST-MODIFIED` / `CREATED` are not threaded into the database (we keep our own `created_at` / `updated_at`); unknown TZIDs fall back to UTC with one deduped warning; full DST rule blocks inside foreign VTIMEZONE definitions are ignored on import (we re-anchor to the IANA name).
+
+The mental model: an `.ics` import is a separate calendar that the user can delete in one click. The title-bar reset-database button still wipes everything, including imported calendars. Re-importing the same file is always safe.
+
 ## What this doc does not cover
 
 Recurring instance expansion and structural operations are in `features/calendar-recurrence.md`. The pomodoro timer, break screen, and idle behavior are in their own docs under `features/`. Rail rendering and band computation are in `features/pomodoro-progress-displays.md`. Conflict tiebreakers are in `algorithms/time-conflict-detection.md`.

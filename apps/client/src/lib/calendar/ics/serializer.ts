@@ -278,19 +278,24 @@ function buildOverrideVevent(
 	dtStamp: string,
 	useTzid: boolean,
 ): string[] {
+	// Only `title`/`start`/`end` fall back to the parent so the emitted VEVENT
+	// always has the RFC-required SUMMARY/DTSTART/DTEND. Optional fields keep
+	// the override's exact value (including `undefined`) so a round trip is
+	// lossless: an override that "explicitly clears" the parent's location
+	// must not re-inherit the parent's location during export.
 	const childEvent: CalendarEvent = {
 		...parent,
 		title: override.title ?? parent.title,
 		start: override.start ?? parent.start,
 		end: override.end ?? parent.end,
-		description: override.description ?? parent.description,
-		location: override.location ?? parent.location,
-		url: override.url ?? parent.url,
-		color: override.color ?? parent.color,
-		status: override.status ?? parent.status,
-		transparency: override.transparency ?? parent.transparency,
-		visibility: override.visibility ?? parent.visibility,
-		extendedProperties: override.extendedProperties ?? parent.extendedProperties,
+		description: override.description,
+		location: override.location,
+		url: override.url,
+		color: override.color,
+		status: override.status,
+		transparency: override.transparency,
+		visibility: override.visibility,
+		extendedProperties: override.extendedProperties,
 		recurrence: undefined,
 		exceptions: undefined,
 		rdate: undefined,

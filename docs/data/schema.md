@@ -8,6 +8,25 @@ UUIDs are the primary key for all user-data tables. Auto-incrementing integers a
 
 ## Calendar
 
+### `calendars`
+
+Top-level grouping for events. Lets the user keep their local data in `local` while imported `.ics` files land in their own deletable rows so a tester can re-import the same Google export repeatedly without polluting the main calendar.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | text | Primary key. The built-in row uses `'local'`. Imported rows get a fresh UUID. |
+| `name` | text | Display name. Imported calendars are auto-named `Imported from <basename> (YYYY-MM-DD)` from the `.ics` filename. |
+| `color` | text | Per-calendar color hex (`''` to inherit from theme). Reserved for future per-calendar UI. |
+| `source` | text | `'local'` for the built-in calendar, `'ics'` for `.ics` imports. Future values: `'subscription'`, `'google'`, `'caldav'`. |
+| `visible` | integer | 0 or 1. Toggled per calendar in the (planned) calendars panel. |
+| `read_only` | integer | 0 or 1. Reserved for read-only sources (subscriptions, shared). Imported `.ics` rows are writable today. |
+| `source_url` | text or null | Origin of the calendar. For `.ics` imports, the file's basename (used to dedupe re-imports of the same file). For future subscriptions, the URL. |
+| `last_synced` | ISO datetime or null | When the calendar last fetched from its source. Reserved for subscriptions. |
+| `created_at` | ISO datetime | Row creation time. |
+| `updated_at` | ISO datetime | Last modification. |
+
+The `local` row is seeded on first boot (`INSERT OR IGNORE`) and can never be deleted from the UI. Deleting an imported calendar runs at the application layer (`stores/calendars.svelte.ts.remove`): events are removed first (`DELETE FROM calendar_events WHERE calendar_id = $1`), which cascades through `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms` via their FK `ON DELETE CASCADE` on `calendar_events.id`; the `calendars` row is then deleted.
+
 ### `calendar_events`
 
 The active calendar. One row per event (or per recurring template, with instances expanded on read).

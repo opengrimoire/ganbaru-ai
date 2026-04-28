@@ -232,8 +232,8 @@ describe("parseIcs", () => {
 			const result = parseIcs(ics);
 			expect(result.events).toHaveLength(1);
 			expect(result.events[0].rdate).toEqual([
-				"2026-07-05T10:00:00.000Z",
-				"2026-07-12T10:00:00.000Z",
+				"2026-07-05T10:00:00Z",
+				"2026-07-12T10:00:00Z",
 			]);
 		});
 
@@ -261,7 +261,7 @@ describe("parseIcs", () => {
 			const overrides = result.events[0].overrides;
 			expect(overrides).toHaveLength(1);
 			expect(overrides![0].title).toBe("Override");
-			expect(overrides![0].recurrenceId).toBe("2026-06-03T14:00:00.000Z");
+			expect(overrides![0].recurrenceId).toBe("2026-06-03T14:00:00Z");
 		});
 
 		it("warns when an override has no matching master", () => {
