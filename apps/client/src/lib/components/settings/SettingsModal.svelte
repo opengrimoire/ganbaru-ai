@@ -2,7 +2,9 @@
   import { onMount, type Component } from "svelte";
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import AppearanceSection from "./AppearanceSection.svelte";
+  import CalendarsSection from "./CalendarsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
@@ -15,7 +17,7 @@
     if (themeEditor.editingId) onClose();
   });
 
-  type SectionId = "appearance";
+  type SectionId = "appearance" | "calendars";
 
   interface SectionMeta {
     id: SectionId;
@@ -30,6 +32,10 @@
     {
       heading: "Options",
       items: [{ id: "appearance", label: "Appearance", icon: Palette }],
+    },
+    {
+      heading: "Data",
+      items: [{ id: "calendars", label: "Calendars", icon: CalendarDays }],
     },
   ];
 
@@ -105,6 +111,8 @@
     >
       {#if activeSection === "appearance"}
         <AppearanceSection />
+      {:else if activeSection === "calendars"}
+        <CalendarsSection />
       {/if}
     </section>
   </div>

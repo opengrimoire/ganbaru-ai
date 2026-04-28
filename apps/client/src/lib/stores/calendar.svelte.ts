@@ -1,16 +1,18 @@
 import { execute, select } from "$lib/api/db";
 import type {
-  CalendarEvent, EventAlarm, EventAttendee, EventColor, EventOverride,
+  Calendar, CalendarEvent, EventAlarm, EventAttendee, EventColor, EventOverride,
   EventOrganizer, EventStatus, EventTransparency, EventVisibility,
   GeoCoordinates, GuestPermissions, PomodoroConfig, RecurrenceConfig,
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
-import { sanitizeCalendarTime } from "$lib/components/calendar/utils";
+import { sanitizeCalendarTime, wallClockToUtcIso } from "$lib/components/calendar/utils";
 import {
   mapRow, mapAttendee, mapAlarm, mapOverride, toDbTime,
   type DbCalendarEvent, type DbAttendee, type DbAlarm, type DbOverride,
 } from "./map-row";
+import { serializeCalendarToIcs } from "$lib/calendar/ics/serializer";
+import type { IcsImportSummary } from "$lib/calendar/ics/types";
 
 export { expandRecurring, parseYMD, fmtYMD };
 
@@ -114,6 +116,54 @@ async function saveAttendees(eventId: string, attendees: EventAttendee[]): Promi
       `INSERT INTO calendar_event_attendees (id, event_id, name, email, role, status, rsvp, sort_order)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [att.id, eventId, att.name ?? null, att.email, att.role, att.status, att.rsvp ? 1 : 0, i],
+    );
+  }
+}
+
+/**
+ * Replace all alarms for an event (delete + insert).
+ */
+async function saveAlarms(eventId: string, alarms: EventAlarm[]): Promise<void> {
+  await execute("DELETE FROM calendar_event_alarms WHERE event_id = $1", [eventId]);
+  for (let i = 0; i < alarms.length; i++) {
+    const a = alarms[i];
+    await execute(
+      `INSERT INTO calendar_event_alarms
+         (id, event_id, action, trigger_type, trigger_value, description, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [a.id, eventId, a.action, a.triggerType, a.triggerValue, a.description ?? null, i],
+    );
+  }
+}
+
+/**
+ * Replace all per-instance overrides for an event (delete + insert). Override
+ * start/end are stored as UTC ISO 8601; the caller passes wall-clock plus the
+ * event's home zone so the round-trip is lossless.
+ */
+async function saveOverrides(
+  eventId: string,
+  overrides: EventOverride[],
+  zone: string,
+): Promise<void> {
+  await execute("DELETE FROM calendar_event_overrides WHERE parent_event_id = $1", [eventId]);
+  for (const o of overrides) {
+    const startTime = o.start ? wallClockToUtcIso(o.start, zone) : null;
+    const endTime = o.end ? wallClockToUtcIso(o.end, zone) : null;
+    await execute(
+      `INSERT INTO calendar_event_overrides
+         (id, parent_event_id, recurrence_id, title, start_time, end_time,
+          description, location, url, color, status, transparency, visibility,
+          extended_properties)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [
+        o.id, eventId, o.recurrenceId, o.title ?? null,
+        startTime, endTime,
+        o.description ?? null, o.location ?? null, o.url ?? null,
+        o.color ?? null, o.status ?? null, o.transparency ?? null,
+        o.visibility ?? null,
+        o.extendedProperties ? JSON.stringify(o.extendedProperties) : null,
+      ],
     );
   }
 }
@@ -736,6 +786,145 @@ export function getCalendar() {
       await execute("DELETE FROM calendar_events");
       rawBlocks = [];
       blocks = [];
+    },
+
+    /**
+     * Insert or update a batch of events into a target calendar, deduplicated
+     * by (calendar_id, source_uid). Newer revisions (higher SEQUENCE) win;
+     * equal SEQUENCE counts as an update so re-importing the same file leaves
+     * the DB clean. Child rows (attendees, alarms, overrides) are replaced.
+     */
+    async bulkImport(
+      events: CalendarEvent[],
+      targetCalendarId: string,
+    ): Promise<IcsImportSummary> {
+      let added = 0;
+      let updated = 0;
+      let skippedOlder = 0;
+      const warnings: string[] = [];
+      const now = nowLocal();
+
+      for (const event of events) {
+        if (!event.sourceUid) {
+          warnings.push("Event without UID skipped.");
+          continue;
+        }
+
+        const homeZone = event.timezone || localTimezone();
+        const startUtc = toDbTime(event.start, homeZone, event.allDay);
+        const endUtc = toDbTime(event.end, homeZone, event.allDay);
+        const rrule = event.recurrence ? recurrenceToRrule(event.recurrence) : null;
+        const repeatUntil = event.recurrence?.end.type === "until"
+          ? event.recurrence.end.date : null;
+        const notifJson = event.notifications && event.notifications.length > 0
+          ? JSON.stringify(event.notifications) : null;
+        const exceptionsJson = event.exceptions && event.exceptions.length > 0
+          ? JSON.stringify(event.exceptions) : null;
+        const importedSequence = event.sequence ?? 0;
+
+        const existing = await select<{ id: string; sequence: number }>(
+          "SELECT id, sequence FROM calendar_events WHERE calendar_id = $1 AND source_uid = $2",
+          [targetCalendarId, event.sourceUid],
+        );
+
+        let eventId: string;
+        if (existing.length === 0) {
+          eventId = crypto.randomUUID();
+          await execute(
+            `INSERT INTO calendar_events
+               (id, title, start_time, end_time, timezone, calendar_id,
+                color, description, rrule, notifications, exceptions, repeat_until,
+                all_day, location, url, transparency, status,
+                source_uid, visibility, priority, categories, geo,
+                sequence, rdate, extended_properties, organizer,
+                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+                created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                     $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+                     $23, $24, $25, $26, $27, $28, $29, $30, $31)`,
+            [
+              eventId, event.title, startUtc, endUtc, homeZone, targetCalendarId,
+              event.color ?? null, event.description ?? "",
+              rrule, notifJson, exceptionsJson, repeatUntil,
+              event.allDay ? 1 : 0, event.location ?? "", event.url ?? "",
+              event.transparency ?? "opaque", event.status ?? "confirmed",
+              event.sourceUid,
+              event.visibility ?? "public",
+              event.priority ?? null,
+              event.categories ? JSON.stringify(event.categories) : null,
+              event.geo ? JSON.stringify(event.geo) : null,
+              importedSequence,
+              event.rdate ? JSON.stringify(event.rdate) : null,
+              event.extendedProperties ? JSON.stringify(event.extendedProperties) : null,
+              event.organizer ? JSON.stringify(event.organizer) : null,
+              event.guestPermissions?.canModify ? 1 : 0,
+              event.guestPermissions?.canInviteOthers === false ? 0 : 1,
+              event.guestPermissions?.canSeeOtherGuests === false ? 0 : 1,
+              now, now,
+            ],
+          );
+          added++;
+        } else {
+          eventId = existing[0].id;
+          const existingSequence = existing[0].sequence ?? 0;
+          if (importedSequence < existingSequence) {
+            skippedOlder++;
+            continue;
+          }
+          await execute(
+            `UPDATE calendar_events
+             SET title = $1, start_time = $2, end_time = $3, timezone = $4,
+                 color = $5, description = $6,
+                 rrule = $7, notifications = $8, exceptions = $9, repeat_until = $10,
+                 all_day = $11, location = $12, url = $13,
+                 transparency = $14, status = $15,
+                 visibility = $16, priority = $17,
+                 categories = $18, geo = $19,
+                 sequence = $20, rdate = $21,
+                 extended_properties = $22, organizer = $23,
+                 guest_can_modify = $24, guest_can_invite_others = $25,
+                 guest_can_see_other_guests = $26,
+                 updated_at = $27
+             WHERE id = $28`,
+            [
+              event.title, startUtc, endUtc, homeZone,
+              event.color ?? null, event.description ?? "",
+              rrule, notifJson, exceptionsJson, repeatUntil,
+              event.allDay ? 1 : 0, event.location ?? "", event.url ?? "",
+              event.transparency ?? "opaque", event.status ?? "confirmed",
+              event.visibility ?? "public",
+              event.priority ?? null,
+              event.categories ? JSON.stringify(event.categories) : null,
+              event.geo ? JSON.stringify(event.geo) : null,
+              importedSequence,
+              event.rdate ? JSON.stringify(event.rdate) : null,
+              event.extendedProperties ? JSON.stringify(event.extendedProperties) : null,
+              event.organizer ? JSON.stringify(event.organizer) : null,
+              event.guestPermissions?.canModify ? 1 : 0,
+              event.guestPermissions?.canInviteOthers === false ? 0 : 1,
+              event.guestPermissions?.canSeeOtherGuests === false ? 0 : 1,
+              now, eventId,
+            ],
+          );
+          updated++;
+        }
+
+        await saveAttendees(eventId, event.attendees ?? []);
+        await saveAlarms(eventId, event.alarms ?? []);
+        await saveOverrides(eventId, event.overrides ?? [], homeZone);
+      }
+
+      await store.load();
+      return { added, updated, skippedOlder, warnings };
+    },
+
+    /**
+     * Serialize every event of `calendar` (template + child rows already
+     * merged via `load()`) into a `.ics` string ready to write to disk.
+     */
+    exportCalendarAsIcs(calendar: Calendar): string {
+      const calendarEvents = rawBlocks.filter((e) => e.calendarId === calendar.id);
+      return serializeCalendarToIcs(calendar, calendarEvents);
     },
 
     /**

@@ -68,7 +68,7 @@ export function getCalendars() {
       );
     },
 
-    async add(cal: Omit<Calendar, "visible" | "readOnly"> & { id?: string; visible?: boolean; readOnly?: boolean }): Promise<Calendar> {
+    async add(cal: Omit<Calendar, "id" | "visible" | "readOnly"> & { id?: string; visible?: boolean; readOnly?: boolean }): Promise<Calendar> {
       const id = cal.id ?? crypto.randomUUID();
       const now = nowLocal();
       await execute(
@@ -101,6 +101,47 @@ export function getCalendars() {
       await execute("DELETE FROM calendar_events WHERE calendar_id = $1", [id]);
       await execute("DELETE FROM calendars WHERE id = $1", [id]);
       calendars = calendars.filter((c) => c.id !== id);
+    },
+
+    /**
+     * Find an existing imported calendar that originated from `filename`, or
+     * create a new one. Used by the .ics import flow so that re-importing the
+     * same file keeps a single calendar grouping (whose deletion cascades to
+     * every event from that file).
+     */
+    async findOrCreateImported(filename: string): Promise<Calendar> {
+      const rows = await select<DbCalendar>(
+        "SELECT id, name, color, source, visible, read_only, source_url, last_synced FROM calendars WHERE source = 'ics' AND source_url = $1 LIMIT 1",
+        [filename],
+      );
+      if (rows.length > 0) {
+        const cal = mapRow(rows[0]);
+        if (!calendars.some((c) => c.id === cal.id)) {
+          calendars = [...calendars, cal];
+        }
+        return cal;
+      }
+      const today = new Date();
+      const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const baseName = filename.replace(/\.ics$/i, "");
+      return this.add({
+        name: `Imported from ${baseName} (${stamp})`,
+        color: "",
+        source: "ics",
+        sourceUrl: filename,
+      });
+    },
+
+    /**
+     * Count events in a calendar without loading their full rows (used by the
+     * settings panel listing).
+     */
+    async countEvents(calendarId: string): Promise<number> {
+      const rows = await select<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM calendar_events WHERE calendar_id = $1",
+        [calendarId],
+      );
+      return rows[0]?.cnt ?? 0;
     },
 
     isReadOnly(calendarId: string): boolean {
