@@ -5,6 +5,7 @@
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import { addDays, getLocalTimezone, parseCalendarDate, formatDatePart } from "./utils";
+  import type { TimezoneAbbrMode } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -37,6 +38,7 @@
   let viewMode: CalendarViewMode = $state("week");
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
+  let tzAbbrMode: TimezoneAbbrMode = $state("acronym");
 
   // Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.)
   const session = createEditSession();
@@ -218,20 +220,25 @@
     isNavigatingHistory = false;
   }
 
+  // The picker enforces this same cap; keep them in sync if you change one.
+  const MAX_TIMEZONES = 5;
+
   function addTimezone(tz: string) {
-    if (timezones.length < 3 && !timezones.includes(tz)) {
+    if (timezones.length < MAX_TIMEZONES && !timezones.includes(tz)) {
       timezones = [...timezones, tz];
     }
   }
 
   function removeTimezone(index: number) {
-    if (index > 0) {
-      timezones = timezones.filter((_, i) => i !== index);
-    }
+    // The device timezone (resolved at render time) is the only one that
+    // can't be removed; other rows are free to leave regardless of index.
+    if (index < 0 || index >= timezones.length) return;
+    if (timezones[index] === getLocalTimezone()) return;
+    timezones = timezones.filter((_, i) => i !== index);
   }
 
   function reorderTimezone(from: number, to: number) {
-    if (from <= 0 || to <= 0) return;
+    if (from < 0 || to < 0) return;
     if (from >= timezones.length || to >= timezones.length) return;
     if (from === to) return;
     const next = [...timezones];
@@ -1021,6 +1028,7 @@
         events={visibleEvents}
         theme={theme.current}
         {timezones}
+        {tzAbbrMode}
         editingId={editingId}
         {previewedIds}
         initialScrollMinute={scrollMinute}
@@ -1031,6 +1039,7 @@
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onReorderTimezone={reorderTimezone}
+        onTzAbbrModeChange={(m) => { tzAbbrMode = m; }}
         onWheelNavigate={handleWheelNavigate}
         onDayHeaderClick={handleWeekDayHeaderClick}
       />
@@ -1040,6 +1049,7 @@
         events={visibleEvents}
         theme={theme.current}
         {timezones}
+        {tzAbbrMode}
         editingId={editingId}
         {previewedIds}
         initialScrollMinute={scrollMinute}
@@ -1050,6 +1060,7 @@
         onAddTimezone={addTimezone}
         onRemoveTimezone={removeTimezone}
         onReorderTimezone={reorderTimezone}
+        onTzAbbrModeChange={(m) => { tzAbbrMode = m; }}
         onWheelNavigate={handleWheelNavigate}
         onDayHeaderClick={handleDayHeaderClick}
       />

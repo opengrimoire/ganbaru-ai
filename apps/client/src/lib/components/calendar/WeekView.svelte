@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CalendarEvent, PositionedAllDayEvent } from "./types";
-  import type { DayNameFormat } from "./utils";
+  import type { DayNameFormat, TimezoneAbbrMode } from "./utils";
   import {
     getWeekDays,
     formatDayName,
@@ -30,6 +30,7 @@
     events,
     theme,
     timezones = [] as string[],
+    tzAbbrMode = "acronym" as TimezoneAbbrMode,
     onEventClick,
     onEventUpdate,
     onEventCreate,
@@ -40,6 +41,7 @@
     onAddTimezone,
     onRemoveTimezone,
     onReorderTimezone,
+    onTzAbbrModeChange,
     onWheelNavigate,
     onDayHeaderClick,
   }: {
@@ -47,6 +49,7 @@
     events: CalendarEvent[];
     theme: Theme;
     timezones?: string[];
+    tzAbbrMode?: TimezoneAbbrMode;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string, allDay?: boolean) => void;
@@ -57,6 +60,7 @@
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onReorderTimezone?: (from: number, to: number) => void;
+    onTzAbbrModeChange?: (mode: TimezoneAbbrMode) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: (date: Date) => void;
   } = $props();
@@ -400,9 +404,11 @@
         <TimezoneSelector
           {timezones}
           tzCount={tzCount}
+          abbrMode={tzAbbrMode}
           onAdd={(tz) => onAddTimezone?.(tz)}
           onRemove={(i) => onRemoveTimezone?.(i)}
           onReorder={(from, to) => onReorderTimezone?.(from, to)}
+          onAbbrModeChange={(m) => onTzAbbrModeChange?.(m)}
         />
 
         <div

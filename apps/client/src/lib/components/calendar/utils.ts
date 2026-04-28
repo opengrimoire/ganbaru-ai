@@ -376,6 +376,201 @@ function getIanaTimezones(): string[] {
 }
 
 /**
+ * Which form of timezone tag the calendar shows in the gutter column
+ * header and as the trailing label in picker rows. The popover offset
+ * always renders with a `UTC` prefix regardless of mode.
+ *
+ * - `acronym`: always show a letter form (Intl-provided when CLDR exposes
+ *   one, e.g. `PST`/`CST`; long-name-derived otherwise, e.g. `KST`/`JST`/
+ *   `AEST`/`ACWST`); falls through to numeric only for the handful of
+ *   zones whose long name is itself `GMT+XX:00`.
+ * - `utc`: always numeric (`-6`, `+9`, `+5:30`, `+14`), even for zones
+ *   where Intl exposes a named short. The "UTC only" mode.
+ * - `utc-fallback`: Intl's named short when available (`CST`, `PST`),
+ *   numeric otherwise (`+9`, `+3:30`). Mirrors what Google Calendar does
+ *   today; never derives an acronym, only uses what Intl ships.
+ */
+export type TimezoneAbbrMode = "acronym" | "utc" | "utc-fallback";
+
+const ACRONYM_STOP_WORDS = new Set(["of", "the", "and"]);
+
+/**
+ * Derive a 2-5 letter acronym from a timezone's Intl long name. Used as
+ * a fallback when Intl returns a `GMT±N` form for `timeZoneName: "short"`,
+ * so users see e.g. "KST" / "JST" / "AEST" / "ACWST" instead of "+9" /
+ * "+10" / "+8:45" for the many zones CLDR doesn't expose a short code
+ * for. Returns null when the long name is itself an offset form (Intl
+ * has no name for the zone, e.g., `Asia/Amman`'s long name is just
+ * "GMT+03:00") or when the derivation produces fewer than 2 or more
+ * than 5 letters. Lowercase mid-name particles (`de`, `la`, `del`,
+ * `der`, `du`, etc.) and ampersand boundaries are skipped so names like
+ * "Fernando de Noronha Standard Time" yield FNST and "Wallis & Futuna
+ * Time" yields WFT.
+ */
+export function deriveAcronymFromLongName(longName: string): string | null {
+  const trimmed = longName.trim();
+  if (!trimmed) return null;
+  if (/^(GMT|UTC|Coordinated)/.test(trimmed)) return null;
+  const words = trimmed
+    .split(/[\s\-&]+/)
+    .filter((w) => {
+      if (w.length === 0) return false;
+      if (ACRONYM_STOP_WORDS.has(w.toLowerCase())) return false;
+      // Drop mid-name particles ("de", "la", etc.) by skipping any token
+      // that starts with a lowercase letter; significant zone words are
+      // always capitalized in Intl long names.
+      const head = w[0];
+      if (head !== head.toUpperCase()) return false;
+      // Token must start with a Latin letter; drops "&", "(", numerics,
+      // etc. that survive the split.
+      if (!/^[A-Za-z]/.test(w)) return false;
+      return true;
+    });
+  if (words.length === 0) return null;
+  const initials = words
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+  if (!/^[A-Z]+$/.test(initials)) return null;
+  if (initials.length < 2 || initials.length > 5) return null;
+  return initials;
+}
+
+/**
+ * Compact-numeric form of a long offset. Drops the `GMT` prefix, the
+ * leading zero in the hour, and the `:00` minutes when zero. Used by the
+ * "UTC only" trigger mode where every zone (including those Intl exposes
+ * as `CST`/`PST`) shows a pure numeric offset for visual consistency.
+ *
+ * Examples: `GMT-06:00` -> `-6`, `GMT+05:30` -> `+5:30`, `GMT+14:00` ->
+ * `+14`, `GMT` (UTC itself) -> `+0`. Strings that don't match the
+ * `GMT±HH:MM` shape are returned with `GMT` stripped if present, else
+ * passed through, so callers always receive a non-empty string.
+ */
+export function compactOffsetFromLong(longOffset: string): string {
+  if (!longOffset || longOffset === "GMT") return "+0";
+  const m = longOffset.match(/^GMT([+-])(\d{1,2}):(\d{2})$/);
+  if (!m) {
+    const stripped = longOffset.replace(/^GMT/, "");
+    return stripped || "+0";
+  }
+  const sign = m[1];
+  const hours = String(parseInt(m[2], 10));
+  const minutes = m[3];
+  return minutes === "00" ? `${sign}${hours}` : `${sign}${hours}:${minutes}`;
+}
+
+/**
+ * Display- and search-ready snapshot of a timezone, baked once and reused
+ * by the picker. The popover never calls Intl during render or per
+ * keystroke; it reads from this object via `getTimezoneInfo`. Lowercase
+ * mirrors of the search fields avoid per-keystroke `.toLowerCase()` allocs
+ * inside the search loop.
+ */
+export interface TimezoneInfo {
+  tz: string;
+  abbr: string;
+  columnAbbr: string;
+  acronym: string;
+  numericOffset: string;
+  offset: string;
+  offsetUtc: string;
+  offsetMinutes: number;
+  longName: string;
+  city: string;
+  region: string;
+  longNameLower: string;
+  cityLower: string;
+  regionLower: string;
+  abbrLower: string;
+  ianaLower: string;
+}
+
+const timezoneInfoCache = new Map<string, TimezoneInfo>();
+
+function buildTimezoneInfo(tz: string): TimezoneInfo {
+  const abbr = getTimezoneAbbr(tz);
+  const stripped = abbr.replace(/^GMT(?=[+-])/, "");
+  const columnAbbr = stripped || abbr;
+  const rawOffset = getTimezoneOffset(tz);
+  // Normalize empty / GMT-only zones so callers always have a non-empty
+  // string to render. Without this, "Africa/Abidjan" would render as ""
+  // in the popover offset column.
+  const offset = rawOffset || "GMT";
+  const offsetUtc = offset.replace(/^GMT/, "UTC");
+  const numericOffset = compactOffsetFromLong(offset);
+  const offsetMinutes = getTimezoneOffsetMinutes(tz);
+  const longName = getTimezoneLongName(tz);
+  const city = getTimezoneCity(tz);
+  const region = getTimezoneRegion(tz);
+  // Acronym: prefer Intl's named form when it isn't the offset fallback,
+  // else derive from the long name, else fall through to the stripped
+  // numeric form so the column header always has something to show.
+  let acronym: string;
+  if (!/^GMT/.test(abbr)) {
+    acronym = abbr;
+  } else {
+    const derived = deriveAcronymFromLongName(longName);
+    acronym = derived ?? columnAbbr;
+  }
+  return {
+    tz,
+    abbr,
+    columnAbbr,
+    acronym,
+    numericOffset,
+    offset,
+    offsetUtc,
+    offsetMinutes,
+    longName,
+    city,
+    region,
+    longNameLower: longName.toLowerCase(),
+    cityLower: city.toLowerCase(),
+    regionLower: region.toLowerCase(),
+    abbrLower: abbr.toLowerCase(),
+    ianaLower: tz.toLowerCase(),
+  };
+}
+
+/**
+ * Cached, fully-resolved metadata for a timezone. First call for a given
+ * zone runs three Intl.DateTimeFormat constructions; subsequent calls are
+ * O(1) Map lookups. Safe to call from render paths.
+ */
+export function getTimezoneInfo(tz: string): TimezoneInfo {
+  const cached = timezoneInfoCache.get(tz);
+  if (cached) return cached;
+  const info = buildTimezoneInfo(tz);
+  timezoneInfoCache.set(tz, info);
+  return info;
+}
+
+let _sortedByOffset: TimezoneInfo[] | null = null;
+
+function getSortedByOffset(): TimezoneInfo[] {
+  if (_sortedByOffset) return _sortedByOffset;
+  const list = listAllTimezones().map(getTimezoneInfo);
+  list.sort((a, b) => {
+    if (a.offsetMinutes !== b.offsetMinutes) {
+      return a.offsetMinutes - b.offsetMinutes;
+    }
+    return a.longName.localeCompare(b.longName);
+  });
+  _sortedByOffset = list;
+  return list;
+}
+
+/**
+ * Pre-bake metadata for every filtered IANA zone. Call from an idle
+ * callback shortly after mount so the first popover open finds the cache
+ * warm. Idempotent: re-runs are O(n) Map lookups with no new work.
+ */
+export function prewarmTimezoneSearch(): void {
+  getSortedByOffset();
+}
+
+/**
  * Search timezones with ranked multi-field matching.
  *
  * Empty query returns the full filtered list (Etc/* and deprecated aliases
@@ -393,60 +588,58 @@ export function searchTimezones(
   query: string,
   exclude: string[],
 ): string[] {
-  const all = listAllTimezones();
+  const sorted = getSortedByOffset();
   const excludeSet = new Set(exclude);
-  const candidates = all.filter((tz) => !excludeSet.has(tz));
-
   const q = query.toLowerCase().trim();
 
   if (!q) {
-    return candidates.slice().sort((a, b) => {
-      const offA = getTimezoneOffsetMinutes(a);
-      const offB = getTimezoneOffsetMinutes(b);
-      if (offA !== offB) return offA - offB;
-      return getTimezoneLongName(a).localeCompare(getTimezoneLongName(b));
-    });
+    const out: string[] = [];
+    for (const info of sorted) {
+      if (!excludeSet.has(info.tz)) out.push(info.tz);
+    }
+    return out;
   }
 
-  type Scored = { tz: string; tier: number; offset: number; longName: string };
+  type Scored = { info: TimezoneInfo; tier: number };
   const scored: Scored[] = [];
 
-  for (const tz of candidates) {
-    const longName = getTimezoneLongName(tz).toLowerCase();
-    const city = getTimezoneCity(tz).toLowerCase();
-    const region = getTimezoneRegion(tz).toLowerCase();
-    const abbr = getTimezoneAbbr(tz).toLowerCase();
-    const iana = tz.toLowerCase();
+  for (const info of sorted) {
+    if (excludeSet.has(info.tz)) continue;
 
     let tier = Infinity;
-    if (longName.startsWith(q)) tier = Math.min(tier, 0);
-    else if (longName.includes(q)) tier = Math.min(tier, 1);
-    if (city.startsWith(q)) tier = Math.min(tier, 2);
-    else if (city.includes(q)) tier = Math.min(tier, 3);
-    if (region.startsWith(q)) tier = Math.min(tier, 4);
-    else if (region.includes(q)) tier = Math.min(tier, 5);
-    if (abbr.startsWith(q)) tier = Math.min(tier, 6);
-    else if (abbr.includes(q)) tier = Math.min(tier, 7);
-    if (iana.startsWith(q)) tier = Math.min(tier, 8);
-    else if (iana.includes(q)) tier = Math.min(tier, 9);
+    if (info.longNameLower.startsWith(q)) tier = 0;
+    else if (info.longNameLower.includes(q)) tier = 1;
+    if (tier > 2) {
+      if (info.cityLower.startsWith(q)) tier = Math.min(tier, 2);
+      else if (info.cityLower.includes(q)) tier = Math.min(tier, 3);
+    }
+    if (tier > 4) {
+      if (info.regionLower.startsWith(q)) tier = Math.min(tier, 4);
+      else if (info.regionLower.includes(q)) tier = Math.min(tier, 5);
+    }
+    if (tier > 6) {
+      if (info.abbrLower.startsWith(q)) tier = Math.min(tier, 6);
+      else if (info.abbrLower.includes(q)) tier = Math.min(tier, 7);
+    }
+    if (tier > 8) {
+      if (info.ianaLower.startsWith(q)) tier = Math.min(tier, 8);
+      else if (info.ianaLower.includes(q)) tier = Math.min(tier, 9);
+    }
 
     if (tier !== Infinity) {
-      scored.push({
-        tz,
-        tier,
-        offset: getTimezoneOffsetMinutes(tz),
-        longName: getTimezoneLongName(tz),
-      });
+      scored.push({ info, tier });
     }
   }
 
   scored.sort((a, b) => {
     if (a.tier !== b.tier) return a.tier - b.tier;
-    if (a.offset !== b.offset) return a.offset - b.offset;
-    return a.longName.localeCompare(b.longName);
+    if (a.info.offsetMinutes !== b.info.offsetMinutes) {
+      return a.info.offsetMinutes - b.info.offsetMinutes;
+    }
+    return a.info.longName.localeCompare(b.info.longName);
   });
 
-  return scored.map((s) => s.tz);
+  return scored.map((s) => s.info.tz);
 }
 
 export function snapToGrid(minute: number, gridMinutes: number = 10): number {

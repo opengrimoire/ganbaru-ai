@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CalendarEvent } from "./types";
-  import type { DayNameFormat } from "./utils";
+  import type { DayNameFormat, TimezoneAbbrMode } from "./utils";
   import {
     formatDatePart,
     formatDayName,
@@ -25,6 +25,7 @@
     events,
     theme,
     timezones = [] as string[],
+    tzAbbrMode = "acronym" as TimezoneAbbrMode,
     onEventClick,
     onEventUpdate,
     onEventCreate,
@@ -35,6 +36,7 @@
     onAddTimezone,
     onRemoveTimezone,
     onReorderTimezone,
+    onTzAbbrModeChange,
     onWheelNavigate,
     onDayHeaderClick,
   }: {
@@ -42,6 +44,7 @@
     events: CalendarEvent[];
     theme: Theme;
     timezones?: string[];
+    tzAbbrMode?: TimezoneAbbrMode;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string, allDay?: boolean) => void;
@@ -52,6 +55,7 @@
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onReorderTimezone?: (from: number, to: number) => void;
+    onTzAbbrModeChange?: (mode: TimezoneAbbrMode) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: () => void;
   } = $props();
@@ -310,9 +314,11 @@
         <TimezoneSelector
           {timezones}
           {tzCount}
+          abbrMode={tzAbbrMode}
           onAdd={(tz) => onAddTimezone?.(tz)}
           onRemove={(i) => onRemoveTimezone?.(i)}
           onReorder={(from, to) => onReorderTimezone?.(from, to)}
+          onAbbrModeChange={(m) => onTzAbbrModeChange?.(m)}
         />
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div

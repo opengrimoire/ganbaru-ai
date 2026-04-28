@@ -35,6 +35,8 @@ import {
   formatColumnHeaderAbbr,
   listAllTimezones,
   searchTimezones,
+  deriveAcronymFromLongName,
+  compactOffsetFromLong,
 } from "./utils";
 import type { CalendarEvent } from "./types";
 import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
@@ -902,6 +904,110 @@ describe("formatColumnHeaderAbbr", () => {
 
   it("never returns an empty string", () => {
     expect(formatColumnHeaderAbbr("Asia/Tehran").length).toBeGreaterThan(0);
+  });
+});
+
+describe("deriveAcronymFromLongName", () => {
+  it("derives standard 3-letter acronyms from typical names", () => {
+    expect(deriveAcronymFromLongName("Korean Standard Time")).toBe("KST");
+    expect(deriveAcronymFromLongName("Japan Standard Time")).toBe("JST");
+    expect(deriveAcronymFromLongName("Iran Standard Time")).toBe("IST");
+    expect(deriveAcronymFromLongName("West Africa Time")).toBe("WAT");
+    expect(deriveAcronymFromLongName("British Summer Time")).toBe("BST");
+  });
+
+  it("derives 4-letter acronyms for compound names", () => {
+    expect(deriveAcronymFromLongName("Australian Eastern Standard Time")).toBe(
+      "AEST",
+    );
+    expect(deriveAcronymFromLongName("Central European Summer Time")).toBe(
+      "CEST",
+    );
+    expect(deriveAcronymFromLongName("New Zealand Standard Time")).toBe("NZST");
+    expect(deriveAcronymFromLongName("South Africa Standard Time")).toBe(
+      "SAST",
+    );
+  });
+
+  it("derives 5-letter acronyms when needed", () => {
+    expect(
+      deriveAcronymFromLongName("Australian Central Western Standard Time"),
+    ).toBe("ACWST");
+  });
+
+  it("treats hyphenated regions as separate words", () => {
+    expect(deriveAcronymFromLongName("Hawaii-Aleutian Standard Time")).toBe(
+      "HAST",
+    );
+  });
+
+  it("treats ampersand as a word boundary, not a letter", () => {
+    expect(deriveAcronymFromLongName("Wallis & Futuna Time")).toBe("WFT");
+    expect(deriveAcronymFromLongName("French Southern & Antarctic Time")).toBe(
+      "FSAT",
+    );
+    expect(
+      deriveAcronymFromLongName("St. Pierre & Miquelon Daylight Time"),
+    ).toBe("SPMDT");
+  });
+
+  it("skips lowercase mid-name particles like 'de'", () => {
+    expect(
+      deriveAcronymFromLongName("Fernando de Noronha Standard Time"),
+    ).toBe("FNST");
+  });
+
+  it("returns null when the long name is itself an offset form", () => {
+    expect(deriveAcronymFromLongName("GMT+5:30")).toBeNull();
+    expect(deriveAcronymFromLongName("UTC+14")).toBeNull();
+    expect(deriveAcronymFromLongName("Coordinated Universal Time")).toBeNull();
+  });
+
+  it("returns null for empty or whitespace-only input", () => {
+    expect(deriveAcronymFromLongName("")).toBeNull();
+    expect(deriveAcronymFromLongName("   ")).toBeNull();
+  });
+
+  it("returns null when the derivation produces fewer than 2 letters", () => {
+    expect(deriveAcronymFromLongName("Time")).toBeNull();
+  });
+
+  it("returns null when the derivation would exceed 5 letters", () => {
+    expect(
+      deriveAcronymFromLongName("Some Very Long Made Up Time Zone Name"),
+    ).toBeNull();
+  });
+
+  it("skips the stop words 'of', 'the', 'and'", () => {
+    expect(deriveAcronymFromLongName("Time of the East")).toBe("TE");
+  });
+});
+
+describe("compactOffsetFromLong", () => {
+  it("strips GMT prefix and leading zero hours", () => {
+    expect(compactOffsetFromLong("GMT-06:00")).toBe("-6");
+    expect(compactOffsetFromLong("GMT+09:00")).toBe("+9");
+  });
+
+  it("preserves non-zero minutes", () => {
+    expect(compactOffsetFromLong("GMT+05:30")).toBe("+5:30");
+    expect(compactOffsetFromLong("GMT+08:45")).toBe("+8:45");
+    expect(compactOffsetFromLong("GMT-09:30")).toBe("-9:30");
+  });
+
+  it("keeps the sign on two-digit-hour offsets", () => {
+    expect(compactOffsetFromLong("GMT+14:00")).toBe("+14");
+    expect(compactOffsetFromLong("GMT-12:00")).toBe("-12");
+  });
+
+  it("returns +0 for the UTC zero point", () => {
+    expect(compactOffsetFromLong("GMT")).toBe("+0");
+    expect(compactOffsetFromLong("")).toBe("+0");
+  });
+
+  it("falls back to a stripped form for anything unexpected", () => {
+    expect(compactOffsetFromLong("UTC+05:30")).toBe("UTC+05:30");
+    expect(compactOffsetFromLong("GMT+5:30")).toBe("+5:30");
   });
 });
 
