@@ -2,6 +2,12 @@
  * Pure recurrence expansion utilities. No Svelte runes, safe for unit tests.
  * Extracted from calendar.svelte.ts so display-events.ts can import without
  * pulling in $state/$derived.
+ *
+ * Date arithmetic runs on `Temporal.PlainDate` (zone-free) so day-counting
+ * never drifts across DST transitions, and the wall-clock time-of-day
+ * (`HH:MM`) is reattached verbatim. That keeps "9 AM daily" anchored to
+ * 9 AM through spring-forward and fall-back: the UTC instant shifts, but
+ * the stored wall clock in the home zone does not.
  */
 
 import type { CalendarEvent, EventOverride, OrdinalWeekday, RecurrenceConfig, Weekday } from "./types";
@@ -18,36 +24,57 @@ export function fmtYMD(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function plainDateFromYMD(s: string): Temporal.PlainDate {
+  return Temporal.PlainDate.from(s);
+}
+
+function ymdFromPlainDate(d: Temporal.PlainDate): string {
+  return d.toString();
+}
+
 const DAY_INDEX: Record<Weekday, number> = {
   SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6,
 };
 
 /**
+ * Convert a JS-style weekday index (0=Sun..6=Sat) to Temporal's
+ * (1=Mon..7=Sun).
+ */
+function jsWeekdayToTemporal(jsDay: number): number {
+  return jsDay === 0 ? 7 : jsDay;
+}
+
+/**
  * Find the Nth occurrence of a weekday in a given month/year.
+ * `month` is 0-based (matching Date semantics on the public API).
+ * `weekday` is 0=Sun..6=Sat.
  * ordinal > 0: 1st, 2nd, 3rd, etc.
  * ordinal < 0: -1 = last, -2 = second-to-last, etc.
  * Returns the day-of-month (1-based) or null if not found.
  */
 export function findOrdinalWeekday(year: number, month: number, weekday: number, ordinal: number): number | null {
   if (ordinal === 0) return null;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const target = jsWeekdayToTemporal(weekday);
+  const firstOfMonth = Temporal.PlainDate.from({ year, month: month + 1, day: 1 });
+  const daysInMonth = firstOfMonth.daysInMonth;
 
   if (ordinal > 0) {
     let count = 0;
     for (let day = 1; day <= daysInMonth; day++) {
-      if (new Date(year, month, day).getDay() === weekday) {
+      const d = firstOfMonth.with({ day });
+      if (d.dayOfWeek === target) {
         count++;
         if (count === ordinal) return day;
       }
     }
-    return null; // ordinal exceeds occurrences in this month
+    return null;
   }
 
-  // Negative ordinal: count from end
   const absOrd = -ordinal;
   let count = 0;
   for (let day = daysInMonth; day >= 1; day--) {
-    if (new Date(year, month, day).getDay() === weekday) {
+    const d = firstOfMonth.with({ day });
+    if (d.dayOfWeek === target) {
       count++;
       if (count === absOrd) return day;
     }
@@ -61,129 +88,115 @@ export function findOrdinalWeekday(year: number, month: number, weekday: number,
  * returns the next date. For complex patterns (BYMONTHDAY, ordinal BYDAY,
  * BYSETPOS), generates candidates and picks the next valid one.
  */
-function advanceDate(from: Date, config: RecurrenceConfig): Date {
-  const d = new Date(from);
-
+function advanceDate(from: Temporal.PlainDate, config: RecurrenceConfig): Temporal.PlainDate {
   // Weekly with simple BYDAY
   if (config.frequency === "weekly" && config.weekdays && config.weekdays.length > 0) {
-    const allowedDays = new Set(config.weekdays.map((w) => DAY_INDEX[w]));
-    const startDay = d.getDay();
-    const sortedDays = [...allowedDays].sort((a, b) => a - b);
+    const allowedTemporal = new Set(config.weekdays.map((w) => jsWeekdayToTemporal(DAY_INDEX[w])));
+    const sortedDays = [...allowedTemporal].sort((a, b) => a - b);
+    const startDay = from.dayOfWeek; // 1..7
     const nextInWeek = sortedDays.find((day) => day > startDay);
     if (nextInWeek !== undefined) {
-      d.setDate(d.getDate() + (nextInWeek - startDay));
-    } else {
-      const daysUntilEndOfWeek = 7 - startDay;
-      const skipWeeks = (config.interval - 1) * 7;
-      d.setDate(d.getDate() + daysUntilEndOfWeek + skipWeeks + sortedDays[0]);
+      return from.add({ days: nextInWeek - startDay });
     }
-    return d;
+    const daysUntilEndOfWeek = 7 - startDay;
+    const skipWeeks = (config.interval - 1) * 7;
+    return from.add({ days: daysUntilEndOfWeek + skipWeeks + sortedDays[0] });
   }
 
   // Monthly with ordinal BYDAY (e.g. "2nd Tuesday", "last Friday")
   if (config.frequency === "monthly" && config.ordinalWeekdays && config.ordinalWeekdays.length > 0) {
-    return advanceMonthlyOrdinal(d, config.interval, config.ordinalWeekdays);
+    return advanceMonthlyOrdinal(from, config.interval, config.ordinalWeekdays);
   }
 
   // Monthly with BYMONTHDAY (e.g. "15th of every month")
   if (config.frequency === "monthly" && config.byMonthDay && config.byMonthDay.length > 0) {
-    return advanceMonthlyByDay(d, config.interval, config.byMonthDay);
+    return advanceMonthlyByDay(from, config.interval, config.byMonthDay);
   }
 
   // Yearly with ordinal BYDAY + BYMONTH
   if (config.frequency === "yearly" && config.ordinalWeekdays && config.ordinalWeekdays.length > 0) {
-    return advanceYearlyOrdinal(d, config.interval, config.ordinalWeekdays, config.byMonth);
+    return advanceYearlyOrdinal(from, config.interval, config.ordinalWeekdays, config.byMonth);
   }
 
   // Yearly with BYMONTH + BYMONTHDAY
   if (config.frequency === "yearly" && config.byMonth && config.byMonth.length > 0 && config.byMonthDay && config.byMonthDay.length > 0) {
-    return advanceYearlyByMonthDay(d, config.interval, config.byMonth, config.byMonthDay);
+    return advanceYearlyByMonthDay(from, config.interval, config.byMonth, config.byMonthDay);
   }
 
   // Simple frequency advancement
   switch (config.frequency) {
     case "daily":
-      d.setDate(d.getDate() + config.interval);
-      return d;
+      return from.add({ days: config.interval });
     case "weekly":
-      d.setDate(d.getDate() + 7 * config.interval);
-      return d;
+      return from.add({ weeks: config.interval });
     case "monthly":
-      d.setMonth(d.getMonth() + config.interval);
-      return d;
+      return from.add({ months: config.interval });
     case "yearly":
-      d.setFullYear(d.getFullYear() + config.interval);
-      return d;
+      return from.add({ years: config.interval });
   }
 }
 
-function advanceMonthlyOrdinal(from: Date, interval: number, ordWeekdays: OrdinalWeekday[]): Date {
-  let year = from.getFullYear();
-  let month = from.getMonth() + interval;
-  const maxIter = 120; // safety: max 10 years of monthly checks
+function advanceMonthlyOrdinal(
+  from: Temporal.PlainDate,
+  interval: number,
+  ordWeekdays: OrdinalWeekday[],
+): Temporal.PlainDate {
+  const maxIter = 120;
+  let probe = from.add({ months: interval }).with({ day: 1 });
 
   for (let i = 0; i < maxIter; i++) {
-    year += Math.floor(month / 12);
-    month = month % 12;
-    if (month < 0) { month += 12; year--; }
-
     for (const ow of ordWeekdays) {
       const ordinal = ow.ordinal ?? 1;
-      const dayOfMonth = findOrdinalWeekday(year, month, DAY_INDEX[ow.day], ordinal);
+      const dayOfMonth = findOrdinalWeekday(probe.year, probe.month - 1, DAY_INDEX[ow.day], ordinal);
       if (dayOfMonth != null) {
-        const candidate = new Date(year, month, dayOfMonth);
-        if (candidate > from) return candidate;
+        const candidate = probe.with({ day: dayOfMonth });
+        if (Temporal.PlainDate.compare(candidate, from) > 0) return candidate;
       }
     }
-    month += interval;
+    probe = probe.add({ months: interval });
   }
-  // Fallback: just advance by interval months
-  const fallback = new Date(from);
-  fallback.setMonth(fallback.getMonth() + interval);
-  return fallback;
+  return from.add({ months: interval });
 }
 
-function advanceMonthlyByDay(from: Date, interval: number, byMonthDay: number[]): Date {
-  let year = from.getFullYear();
-  let month = from.getMonth();
+function advanceMonthlyByDay(
+  from: Temporal.PlainDate,
+  interval: number,
+  byMonthDay: number[],
+): Temporal.PlainDate {
   const sorted = [...byMonthDay].sort((a, b) => a - b);
   const maxIter = 120;
 
   // Check remaining days in current month first
-  const daysInCurrent = new Date(year, month + 1, 0).getDate();
+  const daysInCurrent = from.daysInMonth;
   for (const d of sorted) {
     const actual = d > 0 ? d : daysInCurrent + d + 1;
-    if (actual > 0 && actual <= daysInCurrent && actual > from.getDate()) {
-      return new Date(year, month, actual);
+    if (actual > 0 && actual <= daysInCurrent && actual > from.day) {
+      return from.with({ day: actual });
     }
   }
 
-  // Move to next month(s)
-  month += interval;
+  let probe = from.add({ months: interval }).with({ day: 1 });
   for (let i = 0; i < maxIter; i++) {
-    year += Math.floor(month / 12);
-    month = month % 12;
-    if (month < 0) { month += 12; year--; }
-
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInMonth = probe.daysInMonth;
     for (const d of sorted) {
       const actual = d > 0 ? d : daysInMonth + d + 1;
       if (actual > 0 && actual <= daysInMonth) {
-        return new Date(year, month, actual);
+        return probe.with({ day: actual });
       }
     }
-    month += interval;
+    probe = probe.add({ months: interval });
   }
-  const fallback = new Date(from);
-  fallback.setMonth(fallback.getMonth() + interval);
-  return fallback;
+  return from.add({ months: interval });
 }
 
 function advanceYearlyOrdinal(
-  from: Date, interval: number, ordWeekdays: OrdinalWeekday[], byMonth?: number[],
-): Date {
-  const months = byMonth ?? [from.getMonth() + 1]; // 1-based
-  let year = from.getFullYear();
+  from: Temporal.PlainDate,
+  interval: number,
+  ordWeekdays: OrdinalWeekday[],
+  byMonth?: number[],
+): Temporal.PlainDate {
+  const months = byMonth ?? [from.month];
+  let year = from.year;
   const maxIter = 50;
 
   // Check remaining months in current year
@@ -192,13 +205,12 @@ function advanceYearlyOrdinal(
       const ordinal = ow.ordinal ?? 1;
       const dayOfMonth = findOrdinalWeekday(year, m - 1, DAY_INDEX[ow.day], ordinal);
       if (dayOfMonth != null) {
-        const candidate = new Date(year, m - 1, dayOfMonth);
-        if (candidate > from) return candidate;
+        const candidate = Temporal.PlainDate.from({ year, month: m, day: dayOfMonth });
+        if (Temporal.PlainDate.compare(candidate, from) > 0) return candidate;
       }
     }
   }
 
-  // Advance by interval years
   year += interval;
   for (let i = 0; i < maxIter; i++) {
     for (const m of months) {
@@ -206,33 +218,34 @@ function advanceYearlyOrdinal(
         const ordinal = ow.ordinal ?? 1;
         const dayOfMonth = findOrdinalWeekday(year, m - 1, DAY_INDEX[ow.day], ordinal);
         if (dayOfMonth != null) {
-          return new Date(year, m - 1, dayOfMonth);
+          return Temporal.PlainDate.from({ year, month: m, day: dayOfMonth });
         }
       }
     }
     year += interval;
   }
-  const fallback = new Date(from);
-  fallback.setFullYear(fallback.getFullYear() + interval);
-  return fallback;
+  return from.add({ years: interval });
 }
 
 function advanceYearlyByMonthDay(
-  from: Date, interval: number, byMonth: number[], byMonthDay: number[],
-): Date {
-  let year = from.getFullYear();
+  from: Temporal.PlainDate,
+  interval: number,
+  byMonth: number[],
+  byMonthDay: number[],
+): Temporal.PlainDate {
+  let year = from.year;
   const sortedMonths = [...byMonth].sort((a, b) => a - b);
   const sortedDays = [...byMonthDay].sort((a, b) => a - b);
   const maxIter = 50;
 
-  // Check remaining months in current year
   for (const m of sortedMonths) {
-    const daysInMonth = new Date(year, m, 0).getDate();
+    const probe = Temporal.PlainDate.from({ year, month: m, day: 1 });
+    const daysInMonth = probe.daysInMonth;
     for (const d of sortedDays) {
       const actual = d > 0 ? d : daysInMonth + d + 1;
       if (actual > 0 && actual <= daysInMonth) {
-        const candidate = new Date(year, m - 1, actual);
-        if (candidate > from) return candidate;
+        const candidate = probe.with({ day: actual });
+        if (Temporal.PlainDate.compare(candidate, from) > 0) return candidate;
       }
     }
   }
@@ -240,19 +253,18 @@ function advanceYearlyByMonthDay(
   year += interval;
   for (let i = 0; i < maxIter; i++) {
     for (const m of sortedMonths) {
-      const daysInMonth = new Date(year, m, 0).getDate();
+      const probe = Temporal.PlainDate.from({ year, month: m, day: 1 });
+      const daysInMonth = probe.daysInMonth;
       for (const d of sortedDays) {
         const actual = d > 0 ? d : daysInMonth + d + 1;
         if (actual > 0 && actual <= daysInMonth) {
-          return new Date(year, m - 1, actual);
+          return probe.with({ day: actual });
         }
       }
     }
     year += interval;
   }
-  const fallback = new Date(from);
-  fallback.setFullYear(fallback.getFullYear() + interval);
-  return fallback;
+  return from.add({ years: interval });
 }
 
 // Expansion
@@ -268,7 +280,7 @@ function buildOverrideMap(overrides: EventOverride[] | undefined): Map<string, E
   if (!overrides || overrides.length === 0) return null;
   const map = new Map<string, EventOverride>();
   for (const ovr of overrides) {
-    // recurrenceId may be "2026-04-15" or "2026-04-15 09:00" or "2026-04-15T09:00:00"
+    // recurrenceId may be "2026-04-15", "2026-04-15 09:00", or "2026-04-15T09:00:00Z"
     const dateKey = ovr.recurrenceId.split(/[ T]/)[0];
     map.set(dateKey, ovr);
   }
@@ -297,22 +309,16 @@ function applyOverride(instance: CalendarEvent, override: EventOverride): Calend
 
 /**
  * Compare a date string against an UNTIL value that may include time.
+ * Both date-only and datetime UNTIL are reduced to date-only comparison
+ * because instances are date-keyed in the expansion loop.
  */
 function isPastUntil(occDateStr: string, untilDate: string): boolean {
-  if (!untilDate.includes("T")) {
-    // Date-only comparison
-    return occDateStr > untilDate;
-  }
-  // UNTIL has time: compare the date portion only for the expansion loop
-  // (the time precision matters for boundary cases, but our instances are date-keyed)
-  const untilDatePart = untilDate.split("T")[0];
-  return occDateStr > untilDatePart;
+  if (!untilDate.includes("T")) return occDateStr > untilDate;
+  return occDateStr > untilDate.split("T")[0];
 }
 
 export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
-  const horizon = new Date();
-  horizon.setDate(horizon.getDate() + EXPANSION_DAYS);
-
+  const horizon = Temporal.Now.plainDateISO().add({ days: EXPANSION_DAYS });
   const result: CalendarEvent[] = [];
 
   for (const evt of templates) {
@@ -326,7 +332,6 @@ export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
       result.push(evt);
     }
     if (!config) {
-      // Non-recurring: also add RDATE instances as standalone copies
       if (evt.rdate && evt.rdate.length > 0) {
         addRdateInstances(evt, result, horizon);
       }
@@ -336,21 +341,21 @@ export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
     const startTimeStr = evt.start.split(" ")[1];
     const endDateStr = evt.end.split(" ")[0];
     const endTimeStr = evt.end.split(" ")[1];
-    const origStart = parseYMD(startDateStr);
-    const origEnd = parseYMD(endDateStr);
-    const daySpan = Math.round((origEnd.getTime() - origStart.getTime()) / 86400000);
+    const origStart = plainDateFromYMD(startDateStr);
+    const origEnd = plainDateFromYMD(endDateStr);
+    const daySpan = origStart.until(origEnd, { largestUnit: "days" }).days;
 
     const exceptionsSet = evt.exceptions ? new Set(evt.exceptions) : null;
     const overrideMap = buildOverrideMap(evt.overrides);
     const maxCount = config.end.type === "count" ? config.end.count : MAX_INSTANCES;
-    const rdateSet = new Set<string>(); // track generated dates to dedup with RDATE
+    const rdateSet = new Set<string>();
 
     let cursor = advanceDate(origStart, config);
     let generated = 1;
     rdateSet.add(startDateStr);
 
-    while (cursor <= horizon && generated < maxCount) {
-      const occStartStr = fmtYMD(cursor);
+    while (Temporal.PlainDate.compare(cursor, horizon) <= 0 && generated < maxCount) {
+      const occStartStr = ymdFromPlainDate(cursor);
 
       if (untilDate && isPastUntil(occStartStr, untilDate)) break;
 
@@ -361,9 +366,7 @@ export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
         continue;
       }
 
-      const occEndDate = new Date(cursor);
-      occEndDate.setDate(occEndDate.getDate() + daySpan);
-      const occEndStr = fmtYMD(occEndDate);
+      const occEndStr = ymdFromPlainDate(cursor.add({ days: daySpan }));
 
       let instance: CalendarEvent = {
         ...evt,
@@ -373,7 +376,6 @@ export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
         recurringParentId: evt.id,
       };
 
-      // Apply per-instance override if available
       const override = overrideMap?.get(occStartStr);
       if (override) {
         instance = applyOverride(instance, override);
@@ -385,23 +387,22 @@ export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
       generated++;
     }
 
-    // Add RDATE instances (extra dates beyond the RRULE pattern)
     if (evt.rdate && evt.rdate.length > 0) {
       for (const rdateStr of evt.rdate) {
         const rdate = rdateStr.split(/[ T]/)[0];
-        if (rdateSet.has(rdate)) continue; // already generated by RRULE
+        if (rdateSet.has(rdate)) continue;
         if (exceptionsSet?.has(rdate)) continue;
-        if (parseYMD(rdate) > horizon) continue;
+        const rdatePlain = plainDateFromYMD(rdate);
+        if (Temporal.PlainDate.compare(rdatePlain, horizon) > 0) continue;
         if (untilDate && isPastUntil(rdate, untilDate)) continue;
 
-        const occEndDate = new Date(parseYMD(rdate));
-        occEndDate.setDate(occEndDate.getDate() + daySpan);
+        const occEndStr = ymdFromPlainDate(rdatePlain.add({ days: daySpan }));
 
         let instance: CalendarEvent = {
           ...evt,
           id: `${evt.id}::${rdate}`,
           start: `${rdate} ${startTimeStr}`,
-          end: `${fmtYMD(occEndDate)} ${endTimeStr}`,
+          end: `${occEndStr} ${endTimeStr}`,
           recurringParentId: evt.id,
         };
 
@@ -418,28 +419,28 @@ export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
   return result;
 }
 
-function addRdateInstances(evt: CalendarEvent, result: CalendarEvent[], horizon: Date): void {
+function addRdateInstances(evt: CalendarEvent, result: CalendarEvent[], horizon: Temporal.PlainDate): void {
   const startTimeStr = evt.start.split(" ")[1];
   const endTimeStr = evt.end.split(" ")[1];
   const startDateStr = evt.start.split(" ")[0];
   const endDateStr = evt.end.split(" ")[0];
-  const origStart = parseYMD(startDateStr);
-  const origEnd = parseYMD(endDateStr);
-  const daySpan = Math.round((origEnd.getTime() - origStart.getTime()) / 86400000);
+  const origStart = plainDateFromYMD(startDateStr);
+  const origEnd = plainDateFromYMD(endDateStr);
+  const daySpan = origStart.until(origEnd, { largestUnit: "days" }).days;
 
   for (const rdateStr of evt.rdate!) {
     const rdate = rdateStr.split(/[ T]/)[0];
     if (rdate === startDateStr) continue;
-    if (parseYMD(rdate) > horizon) continue;
+    const rdatePlain = plainDateFromYMD(rdate);
+    if (Temporal.PlainDate.compare(rdatePlain, horizon) > 0) continue;
 
-    const occEndDate = new Date(parseYMD(rdate));
-    occEndDate.setDate(occEndDate.getDate() + daySpan);
+    const occEndStr = ymdFromPlainDate(rdatePlain.add({ days: daySpan }));
 
     result.push({
       ...evt,
       id: `${evt.id}::${rdate}`,
       start: `${rdate} ${startTimeStr}`,
-      end: `${fmtYMD(occEndDate)} ${endTimeStr}`,
+      end: `${occEndStr} ${endTimeStr}`,
       recurringParentId: evt.id,
     });
   }

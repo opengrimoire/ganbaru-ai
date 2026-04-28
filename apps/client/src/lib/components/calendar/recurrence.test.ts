@@ -524,3 +524,72 @@ describe("expandRecurring - events without new fields", () => {
     }
   });
 });
+
+describe("expandRecurring - DST anchoring", () => {
+  // 2026 spring-forward in America/New_York is on March 8 at 02:00 local.
+  // A daily 09:00 event must keep its 09:00 wall clock in the home zone.
+  // Date arithmetic on Temporal.PlainDate is zone-free, so day-counting
+  // never slips by one across DST. The wall-clock string is reattached
+  // verbatim, so 09:00 stays 09:00.
+  it("preserves 09:00 wall clock through US spring-forward (Mar 7 to Mar 9)", () => {
+    const evt = makeEvent({
+      timezone: "America/New_York",
+      start: "2026-03-07 09:00",
+      end: "2026-03-07 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 4 } },
+    });
+    const result = expandRecurring([evt]);
+    expect(result.map((e) => e.start)).toEqual([
+      "2026-03-07 09:00",
+      "2026-03-08 09:00",
+      "2026-03-09 09:00",
+      "2026-03-10 09:00",
+    ]);
+    expect(result.map((e) => e.end)).toEqual([
+      "2026-03-07 10:00",
+      "2026-03-08 10:00",
+      "2026-03-09 10:00",
+      "2026-03-10 10:00",
+    ]);
+  });
+
+  it("preserves 18:30 wall clock for half-hour zone (Asia/Kolkata, weekly)", () => {
+    const evt = makeEvent({
+      timezone: "Asia/Kolkata",
+      start: "2026-03-15 18:30",
+      end: "2026-03-15 19:30",
+      recurrence: { frequency: "weekly", interval: 1, end: { type: "count", count: 3 } },
+    });
+    const result = expandRecurring([evt]);
+    expect(result.map((e) => e.start)).toEqual([
+      "2026-03-15 18:30",
+      "2026-03-22 18:30",
+      "2026-03-29 18:30",
+    ]);
+  });
+
+  it("walks BYDAY in the home zone through spring-forward without skipping", () => {
+    // Weekly on TU/TH starting Tue 2026-03-03; DST kicks in Mar 8 (Sun).
+    const evt = makeEvent({
+      timezone: "America/New_York",
+      start: "2026-03-03 09:00", // Tuesday
+      end: "2026-03-03 10:00",
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["TU", "TH"],
+        end: { type: "count", count: 4 },
+      },
+    });
+    const result = expandRecurring([evt]);
+    expect(collectDates(result)).toEqual([
+      "2026-03-03", // Tue
+      "2026-03-05", // Thu
+      "2026-03-10", // Tue (after DST)
+      "2026-03-12", // Thu
+    ]);
+    for (const inst of result) {
+      expect(inst.start.endsWith("09:00")).toBe(true);
+    }
+  });
+});

@@ -15,4 +15,13 @@ import type { Temporal as TemporalPolyfill } from "@js-temporal/polyfill";
 declare global {
   // eslint-disable-next-line no-var
   var Temporal: typeof TemporalPolyfill;
+  // Expose as a namespace alias too, so call sites can write
+  // `Temporal.PlainDate` for both the value and the type.
+  namespace Temporal {
+    export type PlainDate = TemporalPolyfill.PlainDate;
+    export type PlainDateTime = TemporalPolyfill.PlainDateTime;
+    export type ZonedDateTime = TemporalPolyfill.ZonedDateTime;
+    export type Instant = TemporalPolyfill.Instant;
+    export type Duration = TemporalPolyfill.Duration;
+  }
 }

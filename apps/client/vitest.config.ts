@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
+    setupFiles: ["./test-setup.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
