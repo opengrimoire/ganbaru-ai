@@ -148,7 +148,7 @@ async function loadAlarms(eventIds: string[]): Promise<Map<string, EventAlarm[]>
   return map;
 }
 
-async function loadOverrides(eventIds: string[]): Promise<Map<string, EventOverride[]>> {
+async function loadOverrides(eventIds: string[], renderZone: string): Promise<Map<string, EventOverride[]>> {
   const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
   const rows = await select<DbOverride>(
     `SELECT * FROM calendar_event_overrides WHERE parent_event_id IN (${placeholders})`,
@@ -157,7 +157,7 @@ async function loadOverrides(eventIds: string[]): Promise<Map<string, EventOverr
   const map = new Map<string, EventOverride[]>();
   for (const r of rows) {
     const list = map.get(r.parent_event_id) ?? [];
-    list.push(mapOverride(r));
+    list.push(mapOverride(r, renderZone));
     map.set(r.parent_event_id, list);
   }
   return map;
@@ -180,6 +180,7 @@ export function getCalendar() {
     async load() {
       console.log("[calendar] load() called");
       try {
+        const renderZone = localTimezone();
         const rows = await select<DbCalendarEvent>(
           `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
                   ce.calendar_id, ce.color, ce.description, ce.rrule,
@@ -198,7 +199,7 @@ export function getCalendar() {
            ORDER BY ce.start_time ASC`,
         );
         console.log(`[calendar] loaded ${rows.length} blocks from DB`, rows);
-        const mapped = rows.map(mapRow);
+        const mapped = rows.map((r) => mapRow(r, renderZone));
 
         // Load related tables and merge into events
         if (mapped.length > 0) {
@@ -206,7 +207,7 @@ export function getCalendar() {
           const [attendeeMap, alarmMap, overrideMap] = await Promise.all([
             loadAttendees(ids),
             loadAlarms(ids),
-            loadOverrides(ids),
+            loadOverrides(ids, renderZone),
           ]);
           for (const evt of mapped) {
             const att = attendeeMap.get(evt.id);
@@ -283,7 +284,9 @@ export function getCalendar() {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
                  $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
                  $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
-        [id, opts.title, toDbTime(sanitizedStart), toDbTime(sanitizedEnd),
+        [id, opts.title,
+         toDbTime(sanitizedStart, timezone, opts.allDay),
+         toDbTime(sanitizedEnd, timezone, opts.allDay),
          timezone, calendarId, opts.color ?? null, opts.description ?? "",
          rrule, notifJson, repeatUntil,
          opts.allDay ? 1 : 0, opts.location ?? "", opts.url ?? "",
@@ -381,8 +384,8 @@ export function getCalendar() {
          WHERE id = $26`,
         [
           toUpdate.title,
-          toDbTime(String(toUpdate.start)),
-          toDbTime(String(toUpdate.end)),
+          toDbTime(String(toUpdate.start), toUpdate.timezone || localTimezone(), toUpdate.allDay),
+          toDbTime(String(toUpdate.end), toUpdate.timezone || localTimezone(), toUpdate.allDay),
           toUpdate.color ?? null,
           toUpdate.description ?? "",
           rrule,
@@ -484,7 +487,8 @@ export function getCalendar() {
                  $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
         [
           newId, instanceEvent.title,
-          toDbTime(instanceEvent.start), toDbTime(instanceEvent.end),
+          toDbTime(instanceEvent.start, timezone, parent.allDay),
+          toDbTime(instanceEvent.end, timezone, parent.allDay),
           timezone, parent.calendarId,
           instanceEvent.color ?? null,
           instanceEvent.description ?? "",
@@ -662,8 +666,8 @@ export function getCalendar() {
                  $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
         [
           newId, merged.title ?? parent.title,
-          toDbTime(newStart),
-          toDbTime(newEnd),
+          toDbTime(newStart, parent.timezone || localTimezone(), merged.allDay),
+          toDbTime(newEnd, parent.timezone || localTimezone(), merged.allDay),
           parent.timezone, parent.calendarId,
           merged.color ?? null,
           merged.description ?? "",

@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import { mapRow, type DbCalendarEvent } from "./map-row";
+import { mapRow as mapRowImpl, type DbCalendarEvent } from "./map-row";
+
+// Tests fix the render zone so legacy-format inputs round-trip 1:1 with the
+// stored wall-clock string (the conversion path only kicks in for UTC ISO
+// values, which these tests don't exercise — see utils.test.ts for those).
+const TEST_ZONE = "America/New_York";
+function mapRow(r: DbCalendarEvent) {
+  return mapRowImpl(r, TEST_ZONE);
+}
 
 function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
   return {

@@ -4,7 +4,12 @@ import type {
   EventTransparency, EventVisibility, GeoCoordinates, GuestPermissions,
 } from "$lib/components/calendar/types";
 import { rruleToRecurrence } from "$lib/components/calendar/rrule";
-import { normalizeEventColor } from "$lib/components/calendar/utils";
+import {
+  isUtcIso,
+  normalizeEventColor,
+  utcIsoToWallClock,
+  wallClockToUtcIso,
+} from "$lib/components/calendar/utils";
 
 export interface DbCalendarEvent {
   id: string;
@@ -93,20 +98,57 @@ export function safeJsonParse<T>(json: string | null): T | undefined {
   }
 }
 
-export function toCalendarDate(dbTime: string): string {
-  return dbTime.substring(0, 16).replace("T", " ");
+/**
+ * Convert a DB-stored datetime to a wall clock string for the in-memory
+ * `CalendarEvent.start`/`end`. The new canonical form is UTC ISO 8601;
+ * rendering happens in `renderZone` (the device zone by default). Legacy
+ * non-Z rows still in the DB after the boot hydrator missed a row are
+ * passed through as-is so the calendar still displays them at their
+ * original wall clock.
+ *
+ * For all-day events, the caller is expected to skip this and use the
+ * date portion of `dbTime` directly: zone conversion would shift the date
+ * across midnight in zones east/west of UTC, which is not what an all-day
+ * event means. Pass `allDay = true` to short-circuit that case here.
+ */
+export function toCalendarDate(
+  dbTime: string,
+  renderZone: string,
+  allDay = false,
+): string {
+  if (allDay) {
+    return `${dbTime.substring(0, 10)} 00:00`;
+  }
+  if (!isUtcIso(dbTime)) {
+    return dbTime.substring(0, 16).replace("T", " ");
+  }
+  return utcIsoToWallClock(dbTime, renderZone);
 }
 
-export function toDbTime(calendarDate: string): string {
-  return calendarDate + ":00";
+/**
+ * Convert a wall clock "YYYY-MM-DD HH:MM" in `zone` back to a DB-storable
+ * UTC ISO 8601 instant. For all-day events, store `YYYY-MM-DDT00:00:00Z`
+ * (UTC midnight) so the row is stable across zones; the `all_day` column
+ * is what tells consumers to treat the date portion as floating.
+ */
+export function toDbTime(
+  calendarDate: string,
+  zone: string,
+  allDay = false,
+): string {
+  if (allDay) {
+    return `${calendarDate.substring(0, 10)}T00:00:00Z`;
+  }
+  return wallClockToUtcIso(calendarDate, zone);
 }
 
-export function mapRow(r: DbCalendarEvent): CalendarEvent {
+export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
+  const allDay = r.all_day === 1;
   return {
     id: r.id,
     title: r.title,
-    start: toCalendarDate(r.start_time),
-    end: toCalendarDate(r.end_time),
+    start: toCalendarDate(r.start_time, renderZone, allDay),
+    end: toCalendarDate(r.end_time, renderZone, allDay),
     timezone: r.timezone,
     calendarId: r.calendar_id,
     color: normalizeEventColor(r.color),
@@ -165,14 +207,14 @@ export function mapAlarm(r: DbAlarm): EventAlarm {
   };
 }
 
-export function mapOverride(r: DbOverride): EventOverride {
+export function mapOverride(r: DbOverride, renderZone: string): EventOverride {
   return {
     id: r.id,
     parentEventId: r.parent_event_id,
     recurrenceId: r.recurrence_id,
     title: r.title || undefined,
-    start: r.start_time ? toCalendarDate(r.start_time) : undefined,
-    end: r.end_time ? toCalendarDate(r.end_time) : undefined,
+    start: r.start_time ? toCalendarDate(r.start_time, renderZone) : undefined,
+    end: r.end_time ? toCalendarDate(r.end_time, renderZone) : undefined,
     description: r.description || undefined,
     location: r.location || undefined,
     url: r.url || undefined,

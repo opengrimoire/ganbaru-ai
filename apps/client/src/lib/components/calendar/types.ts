@@ -118,7 +118,7 @@ export interface GeoCoordinates {
 export interface EventOverride {
   id: string;
   parentEventId: string;
-  /** Original DTSTART of the overridden instance (ISO datetime). */
+  /** Original DTSTART of the overridden instance as a UTC ISO 8601 instant. */
   recurrenceId: string;
   title?: string;
   start?: string;
@@ -149,8 +149,17 @@ export interface GuestPermissions {
 export interface CalendarEvent {
   id: string;
   title: string;
-  start: string; // "YYYY-MM-DD HH:MM"
-  end: string; // "YYYY-MM-DD HH:MM"
+  /**
+   * Wall clock "YYYY-MM-DD HH:MM" in the current render zone (device zone by
+   * default). The DB source of truth is `start_time` as a UTC ISO 8601
+   * instant. `mapRow` converts UTC to render-zone wall clock at load time;
+   * round-trip on save uses the event's home zone (`timezone`) to convert
+   * back to UTC.
+   */
+  start: string;
+  /** Wall clock "YYYY-MM-DD HH:MM" in the current render zone. See `start`. */
+  end: string;
+  /** IANA zone (e.g. "America/New_York") used for recurrence math and ICS re-export. */
   timezone: string;
   calendarId: string;
   color?: EventColor;

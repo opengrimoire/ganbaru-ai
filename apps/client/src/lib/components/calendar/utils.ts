@@ -38,6 +38,46 @@ export function formatDatePart(date: Date): string {
 }
 
 /**
+ * Detect that a stored datetime string is already in UTC ISO 8601 form
+ * (ends with Z, with or without seconds and millis). Used by the io
+ * round-trip to fall back to legacy parsing for unmigrated rows.
+ */
+export function isUtcIso(value: string): boolean {
+  return typeof value === "string" && value.endsWith("Z") && value.includes("T");
+}
+
+/**
+ * Convert a wall clock string ("YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS")
+ * interpreted in `zone` to a UTC ISO 8601 instant ending in Z. DST ambiguity
+ * resolves with `disambiguation: "compatible"`: in fall-back ambiguity (the
+ * 1:30 AM that happens twice) pick the earlier instant; in spring-forward
+ * gaps shift forward by the gap. Matches RFC 5545 conventions.
+ */
+export function wallClockToUtcIso(wallClock: string, zone: string): string {
+  const normalized = wallClock.includes("T") ? wallClock : wallClock.replace(" ", "T");
+  const padded = /T\d{2}:\d{2}$/.test(normalized) ? `${normalized}:00` : normalized;
+  const plain = Temporal.PlainDateTime.from(padded);
+  const zoned = plain.toZonedDateTime(zone, { disambiguation: "compatible" });
+  return zoned.toInstant().toString();
+}
+
+/**
+ * Convert a UTC ISO 8601 instant to a "YYYY-MM-DD HH:MM" wall clock in
+ * `zone`. The seconds and sub-second components are dropped; the calendar
+ * UI works at minute granularity.
+ */
+export function utcIsoToWallClock(utcIso: string, zone: string): string {
+  const instant = Temporal.Instant.from(utcIso);
+  const zoned = instant.toZonedDateTimeISO(zone);
+  const y = String(zoned.year).padStart(4, "0");
+  const m = String(zoned.month).padStart(2, "0");
+  const d = String(zoned.day).padStart(2, "0");
+  const h = String(zoned.hour).padStart(2, "0");
+  const min = String(zoned.minute).padStart(2, "0");
+  return `${y}-${m}-${d} ${h}:${min}`;
+}
+
+/**
  * Validate that a calendar time string is in the correct format.
  * Expected: "YYYY-MM-DD HH:MM" with integer hours (0-23) and minutes (0-59).
  */
