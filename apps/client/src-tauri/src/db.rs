@@ -313,5 +313,21 @@ pub fn migrations() -> Vec<Migration> {
             ALTER TABLE themes RENAME COLUMN seed_scheme TO seed_icon_label;
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 8,
+        description: "backfill empty event timezones with 'UTC' as a defensive default",
+        // After this migration, calendar_events.start_time and end_time are
+        // UTC ISO 8601 with a Z suffix, and calendar_events.timezone is the
+        // event's IANA home zone (used for recurrence math and re-export to
+        // .ics with TZID=). The actual wall-clock-to-UTC rewrite happens in
+        // the JS hydrator at boot (`hydrateCalendarEventTimezones`) because
+        // SQLite has no IANA tz database. This SQL step only ensures the
+        // timezone column is never empty so the parser cannot trip over a
+        // row written before the column had a meaning.
+        sql: "
+            UPDATE calendar_events SET timezone = 'UTC' WHERE timezone = '';
+        ",
+        kind: MigrationKind::Up,
     }]
 }
