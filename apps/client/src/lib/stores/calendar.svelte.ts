@@ -8,6 +8,11 @@ import type {
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
 import {
+  buildExpansionIndex,
+  eventsInWindowFromIndex,
+  type ExpansionIndex,
+} from "$lib/components/calendar/calendar-index";
+import {
   sanitizeCalendarTime, utcIsoToWallClock, wallClockToUtcIso,
 } from "$lib/components/calendar/utils";
 import {
@@ -79,25 +84,36 @@ let rawBlocks = $state<CalendarEvent[]>([]);
 let batchDepth = 0;
 
 /**
- * LRU of expanded windows keyed by `${windowStart}|${windowEnd}`. Plain Map,
- * not $state, so cache hits don't trigger Svelte tracking on the underlying
- * structure. Reactivity is driven by `cacheVersion` instead, which is
- * bumped whenever the cache is invalidated.
+ * Sorted lookup over `rawBlocks`, rebuilt lazily after each invalidate. The
+ * non-recurring events are sorted ascending by start so window queries can
+ * bisect-and-walk in `O(log N + K)` instead of scanning every template.
+ * Recurring templates stay in a small list and are walked exhaustively per
+ * query (count is bounded; cost dominated by per-template RRULE walks).
  */
-const windowCache = new Map<string, CalendarEvent[]>();
-const WINDOW_CACHE_LIMIT = 16;
-let cacheVersion = $state(0);
+let expansionIndex: ExpansionIndex | null = null;
 
 /**
- * Drop every cached expansion and bump the reactivity token so any
+ * Reactivity token. `eventsInWindow` and `events` read it so any
+ * `$derived` / `$effect` that depends on them re-runs after a mutation.
+ * Bumped from `invalidate()`.
+ */
+let indexVersion = $state(0);
+
+/**
+ * Drop the cached index and bump the reactivity token so any
  * `$derived` / `$effect` reading `events` or `eventsInWindow` re-runs.
- * Mutations call this rather than re-expanding eagerly because the
- * expansion is now cheap when the active window stays small.
+ * The next read rebuilds the index lazily; mutations are rare relative
+ * to reads so eager rebuild would just waste work.
  */
 function invalidate() {
   if (batchDepth > 0) return;
-  windowCache.clear();
-  cacheVersion++;
+  expansionIndex = null;
+  indexVersion++;
+}
+
+function getIndex(): ExpansionIndex {
+  if (!expansionIndex) expansionIndex = buildExpansionIndex(rawBlocks);
+  return expansionIndex;
 }
 
 /**
@@ -238,40 +254,9 @@ async function loadOverrides(eventIds: string[], renderZone: string): Promise<Ma
 }
 
 /**
- * Look up (or expand and cache) every event overlapping the inclusive
- * `[windowStart, windowEnd]` range. Reads `cacheVersion` so consumers
- * registered as Svelte effects track invalidations. The LRU evicts the
- * oldest entry once the cache exceeds `WINDOW_CACHE_LIMIT`.
- */
-function expandWindow(
-  windowStart: Temporal.PlainDate,
-  windowEnd: Temporal.PlainDate,
-): CalendarEvent[] {
-  // Reactivity dependency: re-runs when invalidate() bumps cacheVersion.
-  void cacheVersion;
-  const key = `${windowStart.toString()}|${windowEnd.toString()}`;
-  const hit = windowCache.get(key);
-  if (hit) {
-    // Refresh LRU position by re-inserting.
-    windowCache.delete(key);
-    windowCache.set(key, hit);
-    return hit;
-  }
-  const expanded = expandRecurring(rawBlocks, windowStart, windowEnd);
-  windowCache.set(key, expanded);
-  while (windowCache.size > WINDOW_CACHE_LIMIT) {
-    const oldest = windowCache.keys().next().value;
-    if (oldest === undefined) break;
-    windowCache.delete(oldest);
-  }
-  return expanded;
-}
-
-/**
  * Wide fallback window (anchor +/- 1 year) used by the legacy `events`
- * getter and any consumer that needs a non-view-scoped read. Documented in
- * the perf plan: callers that still need full-universe scanning accept this
- * bound. View-scoped consumers should use `eventsInWindow` directly.
+ * getter for callers that have not yet migrated to a viewport-scoped
+ * read. View-scoped consumers should use `eventsInWindow` directly.
  */
 function defaultEventsWindow(): { start: Temporal.PlainDate; end: Temporal.PlainDate } {
   const today = Temporal.Now.plainDateISO();
@@ -284,19 +269,32 @@ function defaultEventsWindow(): { start: Temporal.PlainDate; end: Temporal.Plain
 export function getCalendar() {
   const store = {
     get events(): CalendarEvent[] {
+      void indexVersion;
       const { start, end } = defaultEventsWindow();
-      return expandWindow(start, end);
+      return eventsInWindowFromIndex(getIndex(), start, end);
     },
 
     /**
-     * View-scoped expansion. Pass the visible date range; cached internally
-     * so repeated reads of the same window are free.
+     * View-scoped expansion. Pass the visible date range; the underlying
+     * sorted index makes per-call cost bounded by the visible event count
+     * rather than the full template count, so repeated calls stay cheap
+     * even during held-arrow navigation.
      */
     eventsInWindow(
       windowStart: Temporal.PlainDate,
       windowEnd: Temporal.PlainDate,
     ): CalendarEvent[] {
-      return expandWindow(windowStart, windowEnd);
+      void indexVersion;
+      return eventsInWindowFromIndex(getIndex(), windowStart, windowEnd);
+    },
+
+    /**
+     * Reactivity token; consumers can `void store.indexVersion` inside an
+     * `$effect` to re-run on any mutation without paying a wide-window
+     * expansion just to subscribe.
+     */
+    get indexVersion(): number {
+      return indexVersion;
     },
 
     get rawBlocks(): CalendarEvent[] {

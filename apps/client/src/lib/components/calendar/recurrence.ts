@@ -366,7 +366,16 @@ export function expandRecurring(
   return result;
 }
 
-function expandTemplate(
+/**
+ * Expand a single template into all its instances overlapping
+ * `[windowStart, windowEnd]` and append them to `result`. Handles
+ * recurrence rules, EXDATE exceptions, RDATE additions, and per-instance
+ * overrides. Exported for callers that already partition templates by
+ * recurrence (the calendar store's sorted index does this once at build
+ * time and walks each recurring template directly, avoiding the linear
+ * scan over every non-recurring event that `expandRecurring` would do).
+ */
+export function expandTemplate(
   evt: CalendarEvent,
   windowStart: Temporal.PlainDate,
   windowEnd: Temporal.PlainDate,
