@@ -5,7 +5,7 @@
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import {
-    addDays, adjacentAnchor, computeViewWindow, formatDatePart,
+    addDays, computeViewWindow, formatDatePart,
     getLocalTimezone, parseCalendarDate,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
@@ -471,39 +471,6 @@
       window.removeEventListener("keyup", handleKeyup);
       window.removeEventListener("blur", stopArrowScroll);
     };
-  });
-
-  /**
-   * Schedule a callback during browser idle time, falling back to a 0ms
-   * timer in environments without `requestIdleCallback` (Safari, some
-   * Tauri webview builds). Used for adjacent-window prewarm; never
-   * blocks the input loop.
-   */
-  function whenIdle(cb: () => void): void {
-    if (typeof globalThis.requestIdleCallback === "function") {
-      globalThis.requestIdleCallback(() => cb(), { timeout: 500 });
-    } else {
-      setTimeout(cb, 0);
-    }
-  }
-
-  // Prewarm adjacent windows so held-arrow nav lands on cache hits. The
-  // cache already dedupes within its LRU, so this effect fires on every
-  // anchor / mode / template-set change and lets repeat reads be no-ops.
-  // The realistic forward path is one viewport in each direction; with
-  // an LRU of 16 the user can wander a few weeks back and forth without
-  // ever recomputing.
-  $effect(() => {
-    const prev = adjacentAnchor(anchorDate, viewMode, -1);
-    const next = adjacentAnchor(anchorDate, viewMode, 1);
-    const prevWindow = computeViewWindow(prev, viewMode);
-    const nextWindow = computeViewWindow(next, viewMode);
-    // Track template-set changes so post-load / post-import re-prewarms.
-    void calendarStore.rawBlocks.length;
-    whenIdle(() => {
-      calendarStore.eventsInWindow(prevWindow.start, prevWindow.end);
-      calendarStore.eventsInWindow(nextWindow.start, nextWindow.end);
-    });
   });
 
   // Held-arrow keyrepeat fires at ~30Hz on Linux; without coalescing each

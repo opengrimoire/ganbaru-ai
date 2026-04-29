@@ -38,7 +38,6 @@ import {
   deriveAcronymFromLongName,
   compactOffsetFromLong,
   computeViewWindow,
-  adjacentAnchor,
 } from "./utils";
 import type { CalendarEvent } from "./types";
 import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
@@ -1151,32 +1150,3 @@ describe("computeViewWindow", () => {
   });
 });
 
-describe("adjacentAnchor", () => {
-  it("day mode: shifts by 1 day", () => {
-    const prev = adjacentAnchor(new Date(2026, 3, 29), "day", -1);
-    const next = adjacentAnchor(new Date(2026, 3, 29), "day", 1);
-    expect(formatDatePart(prev)).toBe("2026-04-28");
-    expect(formatDatePart(next)).toBe("2026-04-30");
-  });
-
-  it("week mode: shifts by 7 days", () => {
-    const prev = adjacentAnchor(new Date(2026, 3, 29), "week", -1);
-    const next = adjacentAnchor(new Date(2026, 3, 29), "week", 1);
-    expect(formatDatePart(prev)).toBe("2026-04-22");
-    expect(formatDatePart(next)).toBe("2026-05-06");
-  });
-
-  it("month mode: shifts by 1 month, anchored on day 1", () => {
-    const prev = adjacentAnchor(new Date(2026, 3, 29), "month", -1);
-    const next = adjacentAnchor(new Date(2026, 3, 29), "month", 1);
-    expect(formatDatePart(prev)).toBe("2026-03-01");
-    expect(formatDatePart(next)).toBe("2026-05-01");
-  });
-
-  it("month mode: handles year rollover", () => {
-    const dec = adjacentAnchor(new Date(2026, 11, 15), "month", 1);
-    const jan = adjacentAnchor(new Date(2026, 0, 15), "month", -1);
-    expect(formatDatePart(dec)).toBe("2027-01-01");
-    expect(formatDatePart(jan)).toBe("2025-12-01");
-  });
-});

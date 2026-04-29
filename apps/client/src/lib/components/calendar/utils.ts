@@ -241,25 +241,6 @@ export function computeViewWindow(
   };
 }
 
-/**
- * Anchor date for the previous (`-1`) or next (`+1`) viewport in a given
- * mode. Used for idle prewarm of adjacent windows: while the user reads the
- * current week / month, the next two are expanded and cached so a key press
- * lands on a hit.
- */
-export function adjacentAnchor(
-  anchor: Date,
-  mode: "day" | "week" | "month",
-  direction: -1 | 1,
-): Date {
-  if (mode === "day") return addDays(anchor, direction);
-  if (mode === "week") return addDays(anchor, 7 * direction);
-  const d = new Date(anchor);
-  d.setDate(1);
-  d.setMonth(d.getMonth() + direction);
-  return d;
-}
-
 // Time helpers
 
 export function minuteOfDay(dateStr: string): number {
