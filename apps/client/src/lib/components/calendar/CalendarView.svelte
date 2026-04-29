@@ -601,7 +601,7 @@
 
     if (isRecurring(event)) {
       // Resolve the original instance before drag modified its position
-      const originalInstance = calendarStore.events.find((e) => e.id === event.id);
+      const originalInstance = visibleEvents.find((e) => e.id === event.id);
       if (!originalInstance) return;
 
       // If session is dirty, ask to discard before switching
@@ -1007,7 +1007,7 @@
       }
     } else {
       // Non-recurring: delete directly
-      const event = calendarStore.getTemplate({ id } as CalendarEvent) ?? calendarStore.events.find((e) => e.id === id);
+      const event = calendarStore.getTemplate({ id } as CalendarEvent) ?? visibleEvents.find((e) => e.id === id);
       await calendarStore.deleteBlock(id);
       if (event) {
         pushUndo({ type: "delete", event: { ...event } });

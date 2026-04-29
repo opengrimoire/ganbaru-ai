@@ -93,17 +93,18 @@ let batchDepth = 0;
 let expansionIndex: ExpansionIndex | null = null;
 
 /**
- * Reactivity token. `eventsInWindow` and `events` read it so any
- * `$derived` / `$effect` that depends on them re-runs after a mutation.
- * Bumped from `invalidate()`.
+ * Reactivity token. `eventsInWindow` reads it so any `$derived` / `$effect`
+ * that depends on the visible-event set re-runs after a mutation. Bumped
+ * from `invalidate()`. External callers that need to react to mutations
+ * without forcing an expansion subscribe via `void indexVersion`.
  */
 let indexVersion = $state(0);
 
 /**
  * Drop the cached index and bump the reactivity token so any
- * `$derived` / `$effect` reading `events` or `eventsInWindow` re-runs.
- * The next read rebuilds the index lazily; mutations are rare relative
- * to reads so eager rebuild would just waste work.
+ * `$derived` / `$effect` reading `eventsInWindow` re-runs. The next read
+ * rebuilds the index lazily; mutations are rare relative to reads so
+ * eager rebuild would just waste work.
  */
 function invalidate() {
   if (batchDepth > 0) return;
@@ -253,27 +254,8 @@ async function loadOverrides(eventIds: string[], renderZone: string): Promise<Ma
   return map;
 }
 
-/**
- * Wide fallback window (anchor +/- 1 year) used by the legacy `events`
- * getter for callers that have not yet migrated to a viewport-scoped
- * read. View-scoped consumers should use `eventsInWindow` directly.
- */
-function defaultEventsWindow(): { start: Temporal.PlainDate; end: Temporal.PlainDate } {
-  const today = Temporal.Now.plainDateISO();
-  return {
-    start: today.subtract({ years: 1 }),
-    end: today.add({ years: 1 }),
-  };
-}
-
 export function getCalendar() {
   const store = {
-    get events(): CalendarEvent[] {
-      void indexVersion;
-      const { start, end } = defaultEventsWindow();
-      return eventsInWindowFromIndex(getIndex(), start, end);
-    },
-
     /**
      * View-scoped expansion. Pass the visible date range; the underlying
      * sorted index makes per-call cost bounded by the visible event count

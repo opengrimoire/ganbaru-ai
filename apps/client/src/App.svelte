@@ -6,6 +6,7 @@
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
+  import { Temporal } from "@js-temporal/polyfill";
   import { hydrateCalendarEventTimezones } from "$lib/stores/timezone-migration";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -151,7 +152,12 @@
 
   function findActiveBlock() {
     const now = new Date();
-    const active = calendar.events.filter((event) => {
+    const today = Temporal.Now.plainDateISO();
+    const events = calendar.eventsInWindow(
+      today.subtract({ days: 1 }),
+      today.add({ days: 1 }),
+    );
+    const active = events.filter((event) => {
       if (!event.pomodoroConfig) return false;
       const start = parseCalendarDate(event.start);
       const end = parseCalendarDate(event.end);
@@ -251,7 +257,7 @@
 
   // React to calendar event changes and block expiry immediately
   $effect(() => {
-    const _events = calendar.events;
+    const _v = calendar.indexVersion;
     const _expired = pomodoro.blockExpired;
     checkActiveBlock();
   });
@@ -267,7 +273,12 @@
 
   function checkEventNotifications() {
     const now = new Date();
-    for (const event of calendar.events) {
+    const today = Temporal.Now.plainDateISO();
+    const events = calendar.eventsInWindow(
+      today.subtract({ days: 1 }),
+      today.add({ days: 7 }),
+    );
+    for (const event of events) {
       if (!event.notifications || event.notifications.length === 0) continue;
 
       const startTime = parseCalendarDate(event.start);
@@ -297,7 +308,7 @@
 
   // Check notifications on event changes and every 30s
   $effect(() => {
-    const _events = calendar.events;
+    const _v = calendar.indexVersion;
     checkEventNotifications();
   });
 
