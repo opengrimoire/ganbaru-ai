@@ -209,11 +209,17 @@ async function saveOverrides(
   }
 }
 
-async function loadAttendees(eventIds: string[]): Promise<Map<string, EventAttendee[]>> {
-  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+/**
+ * Load every attendee row in one unfiltered query and group by event id.
+ * The earlier `WHERE event_id IN ($1, ..., $N)` shape forced one IPC parameter
+ * per event, which dominates load time on calendars with thousands of events
+ * even when the attendee table itself is small. SQLite has to parse a query
+ * with N placeholders and Tauri has to serialize N parameters; loading the
+ * whole table costs less than that overhead.
+ */
+async function loadAttendees(): Promise<Map<string, EventAttendee[]>> {
   const rows = await select<DbAttendee>(
-    `SELECT * FROM calendar_event_attendees WHERE event_id IN (${placeholders}) ORDER BY sort_order ASC`,
-    eventIds,
+    `SELECT * FROM calendar_event_attendees ORDER BY sort_order ASC`,
   );
   const map = new Map<string, EventAttendee[]>();
   for (const r of rows) {
@@ -224,11 +230,9 @@ async function loadAttendees(eventIds: string[]): Promise<Map<string, EventAtten
   return map;
 }
 
-async function loadAlarms(eventIds: string[]): Promise<Map<string, EventAlarm[]>> {
-  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+async function loadAlarms(): Promise<Map<string, EventAlarm[]>> {
   const rows = await select<DbAlarm>(
-    `SELECT * FROM calendar_event_alarms WHERE event_id IN (${placeholders}) ORDER BY sort_order ASC`,
-    eventIds,
+    `SELECT * FROM calendar_event_alarms ORDER BY sort_order ASC`,
   );
   const map = new Map<string, EventAlarm[]>();
   for (const r of rows) {
@@ -239,11 +243,9 @@ async function loadAlarms(eventIds: string[]): Promise<Map<string, EventAlarm[]>
   return map;
 }
 
-async function loadOverrides(eventIds: string[], renderZone: string): Promise<Map<string, EventOverride[]>> {
-  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+async function loadOverrides(renderZone: string): Promise<Map<string, EventOverride[]>> {
   const rows = await select<DbOverride>(
-    `SELECT * FROM calendar_event_overrides WHERE parent_event_id IN (${placeholders})`,
-    eventIds,
+    `SELECT * FROM calendar_event_overrides`,
   );
   const map = new Map<string, EventOverride[]>();
   for (const r of rows) {
@@ -288,7 +290,7 @@ export function getCalendar() {
     endBatch() { if (--batchDepth <= 0) { batchDepth = 0; invalidate(); } },
 
     async load() {
-      console.log("[calendar] load() called");
+      const t0 = performance.now();
       try {
         const renderZone = localTimezone();
         const rows = await select<DbCalendarEvent>(
@@ -308,16 +310,15 @@ export function getCalendar() {
            LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
            ORDER BY ce.start_time ASC`,
         );
-        console.log(`[calendar] loaded ${rows.length} blocks from DB`, rows);
+        const tSql = performance.now();
         const mapped = rows.map((r) => mapRow(r, renderZone));
+        const tMap = performance.now();
 
-        // Load related tables and merge into events
         if (mapped.length > 0) {
-          const ids = mapped.map((e) => e.id);
           const [attendeeMap, alarmMap, overrideMap] = await Promise.all([
-            loadAttendees(ids),
-            loadAlarms(ids),
-            loadOverrides(ids, renderZone),
+            loadAttendees(),
+            loadAlarms(),
+            loadOverrides(renderZone),
           ]);
           for (const evt of mapped) {
             const att = attendeeMap.get(evt.id);
@@ -328,10 +329,16 @@ export function getCalendar() {
             if (ovr?.length) evt.overrides = ovr;
           }
         }
+        const tChild = performance.now();
 
         rawBlocks = mapped;
         invalidate();
-        console.log(`[calendar] templates loaded: ${rawBlocks.length}`);
+        const tDone = performance.now();
+        console.log(
+          `[calendar] load: ${rawBlocks.length} events in ${(tDone - t0).toFixed(0)}ms ` +
+            `(sql=${(tSql - t0).toFixed(0)} map=${(tMap - tSql).toFixed(0)} ` +
+            `child=${(tChild - tMap).toFixed(0)} commit=${(tDone - tChild).toFixed(0)})`,
+        );
       } catch (e) {
         console.error("[calendar] load() failed:", e);
         throw e;
