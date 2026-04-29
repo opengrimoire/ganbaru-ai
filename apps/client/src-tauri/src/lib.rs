@@ -1,6 +1,7 @@
 use tauri::Manager;
 
 mod db;
+mod db_batch;
 mod notification;
 mod tray;
 mod vault;
@@ -300,6 +301,7 @@ pub fn run() {
             vault::vault_write_config,
             vault::vault_read_text,
             vault::vault_write_text,
+            db_batch::db_execute_batch,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;

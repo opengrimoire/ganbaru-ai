@@ -1,4 +1,5 @@
-import { execute, select } from "$lib/api/db";
+import { invoke } from "@tauri-apps/api/core";
+import { dbUrl, execute, select } from "$lib/api/db";
 import type {
   Calendar, CalendarEvent, EventAlarm, EventAttendee, EventColor, EventOverride,
   EventOrganizer, EventStatus, EventTransparency, EventVisibility,
@@ -6,11 +7,18 @@ import type {
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
-import { sanitizeCalendarTime, wallClockToUtcIso } from "$lib/components/calendar/utils";
+import {
+  sanitizeCalendarTime, utcIsoToWallClock, wallClockToUtcIso,
+} from "$lib/components/calendar/utils";
 import {
   mapRow, mapAttendee, mapAlarm, mapOverride, toDbTime,
   type DbCalendarEvent, type DbAttendee, type DbAlarm, type DbOverride,
 } from "./map-row";
+import {
+  buildBulkImportStatements,
+  classifyImportEvents,
+  type ExistingEventRow,
+} from "./calendar-bulk-import";
 import { serializeCalendarToIcs } from "$lib/calendar/ics/serializer";
 import type { IcsImportSummary } from "$lib/calendar/ics/types";
 
@@ -865,129 +873,113 @@ export function getCalendar() {
      * by (calendar_id, source_uid). Newer revisions (higher SEQUENCE) win;
      * equal SEQUENCE counts as an update so re-importing the same file leaves
      * the DB clean. Child rows (attendees, alarms, overrides) are replaced.
+     *
+     * The whole batch ships as a single SQLite transaction via the Rust
+     * `db_execute_batch` command. SQLite auto-commits one statement at a time
+     * when called through `tauri-plugin-sql`'s pool; that fsynced every
+     * statement, turning a few-thousand-row import into a multi-minute job.
+     * One transaction means one fsync at commit, even for ~5k events.
      */
     async bulkImport(
       events: CalendarEvent[],
       targetCalendarId: string,
     ): Promise<IcsImportSummary> {
-      let added = 0;
-      let updated = 0;
-      let skippedOlder = 0;
-      const warnings: string[] = [];
       const now = nowLocal();
+      const fallbackZone = localTimezone();
 
-      for (const event of events) {
-        if (!event.sourceUid) {
-          warnings.push("Event without UID skipped.");
-          continue;
-        }
-
-        const homeZone = event.timezone || localTimezone();
-        const startUtc = toDbTime(event.start, homeZone, event.allDay);
-        const endUtc = toDbTime(event.end, homeZone, event.allDay);
-        const rrule = event.recurrence ? recurrenceToRrule(event.recurrence) : null;
-        const repeatUntil = event.recurrence?.end.type === "until"
-          ? event.recurrence.end.date : null;
-        const notifJson = event.notifications && event.notifications.length > 0
-          ? JSON.stringify(event.notifications) : null;
-        const exceptionsJson = event.exceptions && event.exceptions.length > 0
-          ? JSON.stringify(event.exceptions) : null;
-        const importedSequence = event.sequence ?? 0;
-
-        const existing = await select<{ id: string; sequence: number }>(
-          "SELECT id, sequence FROM calendar_events WHERE calendar_id = $1 AND source_uid = $2",
-          [targetCalendarId, event.sourceUid],
+      // Pre-fetch existing rows for every imported sourceUid so we can
+      // classify add/update/skip without per-event SELECT roundtrips.
+      const SELECT_CHUNK = 500;
+      const uniqueUids = [...new Set(
+        events.map((e) => e.sourceUid).filter((u): u is string => Boolean(u)),
+      )];
+      const existing: ExistingEventRow[] = [];
+      for (let i = 0; i < uniqueUids.length; i += SELECT_CHUNK) {
+        const slice = uniqueUids.slice(i, i + SELECT_CHUNK);
+        const placeholders = slice.map((_, idx) => `$${idx + 2}`).join(",");
+        const rows = await select<{ id: string; source_uid: string; sequence: number | null }>(
+          `SELECT id, source_uid, sequence FROM calendar_events
+           WHERE calendar_id = $1 AND source_uid IN (${placeholders})`,
+          [targetCalendarId, ...slice],
         );
-
-        let eventId: string;
-        if (existing.length === 0) {
-          eventId = crypto.randomUUID();
-          await execute(
-            `INSERT INTO calendar_events
-               (id, title, start_time, end_time, timezone, calendar_id,
-                color, description, rrule, notifications, exceptions, repeat_until,
-                all_day, location, url, transparency, status,
-                source_uid, visibility, priority, categories, geo,
-                sequence, rdate, extended_properties, organizer,
-                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-                created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                     $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-                     $23, $24, $25, $26, $27, $28, $29, $30, $31)`,
-            [
-              eventId, event.title, startUtc, endUtc, homeZone, targetCalendarId,
-              event.color ?? null, event.description ?? "",
-              rrule, notifJson, exceptionsJson, repeatUntil,
-              event.allDay ? 1 : 0, event.location ?? "", event.url ?? "",
-              event.transparency ?? "opaque", event.status ?? "confirmed",
-              event.sourceUid,
-              event.visibility ?? "public",
-              event.priority ?? null,
-              event.categories ? JSON.stringify(event.categories) : null,
-              event.geo ? JSON.stringify(event.geo) : null,
-              importedSequence,
-              event.rdate ? JSON.stringify(event.rdate) : null,
-              event.extendedProperties ? JSON.stringify(event.extendedProperties) : null,
-              event.organizer ? JSON.stringify(event.organizer) : null,
-              event.guestPermissions?.canModify ? 1 : 0,
-              event.guestPermissions?.canInviteOthers === false ? 0 : 1,
-              event.guestPermissions?.canSeeOtherGuests === false ? 0 : 1,
-              now, now,
-            ],
-          );
-          added++;
-        } else {
-          eventId = existing[0].id;
-          const existingSequence = existing[0].sequence ?? 0;
-          if (importedSequence < existingSequence) {
-            skippedOlder++;
-            continue;
-          }
-          await execute(
-            `UPDATE calendar_events
-             SET title = $1, start_time = $2, end_time = $3, timezone = $4,
-                 color = $5, description = $6,
-                 rrule = $7, notifications = $8, exceptions = $9, repeat_until = $10,
-                 all_day = $11, location = $12, url = $13,
-                 transparency = $14, status = $15,
-                 visibility = $16, priority = $17,
-                 categories = $18, geo = $19,
-                 sequence = $20, rdate = $21,
-                 extended_properties = $22, organizer = $23,
-                 guest_can_modify = $24, guest_can_invite_others = $25,
-                 guest_can_see_other_guests = $26,
-                 updated_at = $27
-             WHERE id = $28`,
-            [
-              event.title, startUtc, endUtc, homeZone,
-              event.color ?? null, event.description ?? "",
-              rrule, notifJson, exceptionsJson, repeatUntil,
-              event.allDay ? 1 : 0, event.location ?? "", event.url ?? "",
-              event.transparency ?? "opaque", event.status ?? "confirmed",
-              event.visibility ?? "public",
-              event.priority ?? null,
-              event.categories ? JSON.stringify(event.categories) : null,
-              event.geo ? JSON.stringify(event.geo) : null,
-              importedSequence,
-              event.rdate ? JSON.stringify(event.rdate) : null,
-              event.extendedProperties ? JSON.stringify(event.extendedProperties) : null,
-              event.organizer ? JSON.stringify(event.organizer) : null,
-              event.guestPermissions?.canModify ? 1 : 0,
-              event.guestPermissions?.canInviteOthers === false ? 0 : 1,
-              event.guestPermissions?.canSeeOtherGuests === false ? 0 : 1,
-              now, eventId,
-            ],
-          );
-          updated++;
+        for (const r of rows) {
+          existing.push({ id: r.id, source_uid: r.source_uid, sequence: r.sequence ?? 0 });
         }
-
-        await saveAttendees(eventId, event.attendees ?? []);
-        await saveAlarms(eventId, event.alarms ?? []);
-        await saveOverrides(eventId, event.overrides ?? [], homeZone);
       }
 
-      await store.load();
-      return { added, updated, skippedOlder, warnings };
+      const classification = classifyImportEvents(
+        events, existing, () => crypto.randomUUID(),
+      );
+
+      // Skip the IPC roundtrip entirely when there is nothing to write
+      // (every event was either missing a UID or had an older sequence).
+      if (classification.toAdd.length === 0 && classification.toUpdate.length === 0) {
+        return {
+          added: 0,
+          updated: 0,
+          skippedOlder: classification.skippedOlder,
+          warnings: classification.warnings,
+        };
+      }
+
+      const statements = buildBulkImportStatements(
+        classification, targetCalendarId, now, fallbackZone,
+      );
+      await invoke("db_execute_batch", { dbUrl: dbUrl(), statements });
+
+      // In-memory state update: the previous implementation called
+      // `store.load()` to re-read the universe from disk. Now that we know
+      // exactly which rows we touched, splice them into `rawBlocks` directly
+      // and run one invalidate at the end so cached window expansions drop.
+      store.beginBatch();
+      try {
+        const reZone = (wallClock: string, sourceZone: string): string => {
+          if (sourceZone === fallbackZone) return wallClock;
+          return utcIsoToWallClock(wallClockToUtcIso(wallClock, sourceZone), fallbackZone);
+        };
+        const idToIdx = new Map<string, number>();
+        const next = [...rawBlocks];
+        for (let i = 0; i < next.length; i++) idToIdx.set(next[i].id, i);
+
+        for (const { event, newId } of classification.toAdd) {
+          const homeZone = event.timezone || fallbackZone;
+          next.push({
+            ...event,
+            id: newId,
+            calendarId: targetCalendarId,
+            timezone: homeZone,
+            start: event.allDay ? event.start : reZone(event.start, homeZone),
+            end: event.allDay ? event.end : reZone(event.end, homeZone),
+          });
+        }
+
+        for (const { event, existingId } of classification.toUpdate) {
+          const homeZone = event.timezone || fallbackZone;
+          const idx = idToIdx.get(existingId);
+          const merged: CalendarEvent = {
+            ...(idx !== undefined ? next[idx] : {}),
+            ...event,
+            id: existingId,
+            calendarId: targetCalendarId,
+            timezone: homeZone,
+            start: event.allDay ? event.start : reZone(event.start, homeZone),
+            end: event.allDay ? event.end : reZone(event.end, homeZone),
+          };
+          if (idx !== undefined) next[idx] = merged;
+          else next.push(merged);
+        }
+
+        rawBlocks = next;
+      } finally {
+        store.endBatch();
+      }
+
+      return {
+        added: classification.added,
+        updated: classification.updated,
+        skippedOlder: classification.skippedOlder,
+        warnings: classification.warnings,
+      };
     },
 
     /**
