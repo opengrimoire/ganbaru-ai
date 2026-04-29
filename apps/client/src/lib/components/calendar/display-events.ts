@@ -230,9 +230,11 @@ export function applyAll(
     recurringParentId: undefined,
   };
 
-  // Re-expand with patched template
-  const patchedRaw = rawBlocks.map((b) => b.id === templateId ? patched : b);
-  const expanded = expandRecurring(patchedRaw, window.start, window.end);
+  // Re-expand only the patched template. The other (non-edited) events in
+  // the visible window come from `storeEvents` below; the recurring sibling
+  // instances of this series are filtered out via `belongsToSeries` and
+  // re-added from this single-template expansion.
+  const expanded = expandRecurring([patched], window.start, window.end);
 
   // Separate series instances by past vs. today+future
   const belongsToSeries = (e: CalendarEvent) =>
@@ -401,9 +403,11 @@ export function applyFollowing(
     exceptions: undefined,
   };
 
-  // Re-expand both old capped + new virtual
-  const patchedRaw = rawBlocks.map((b) => b.id === templateId ? cappedTemplate : b);
-  const expanded = expandRecurring([...patchedRaw, virtualTemplate], window.start, window.end);
+  // Re-expand only the two affected templates. Non-series events in the
+  // visible window come from `storeEvents`; sibling instances of the
+  // edited series are stripped via the `templateId` / `virtualId` filter
+  // below and re-added from this expansion.
+  const expanded = expandRecurring([cappedTemplate, virtualTemplate], window.start, window.end);
 
   // Collect preview IDs: all from old capped template + all from virtual template
   const previewedIds = new Set<string>();
