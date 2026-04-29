@@ -37,6 +37,8 @@ import {
   searchTimezones,
   deriveAcronymFromLongName,
   compactOffsetFromLong,
+  computeViewWindow,
+  adjacentAnchor,
 } from "./utils";
 import type { CalendarEvent } from "./types";
 import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
@@ -1108,5 +1110,73 @@ describe("searchTimezones", () => {
   it("returns an empty list for a query that matches nothing", () => {
     const result = searchTimezones("zzzzzqqqxxxnomatch", []);
     expect(result).toEqual([]);
+  });
+});
+
+describe("computeViewWindow", () => {
+  it("day mode: returns anchor day with 1-day margin", () => {
+    const w = computeViewWindow(new Date(2026, 3, 29), "day");
+    expect(w.start.toString()).toBe("2026-04-28");
+    expect(w.end.toString()).toBe("2026-04-30");
+  });
+
+  it("week mode: returns Monday-Sunday plus margin", () => {
+    // 2026-04-29 is a Wednesday. Monday = 04-27, Sunday = 05-03.
+    const w = computeViewWindow(new Date(2026, 3, 29), "week");
+    expect(w.start.toString()).toBe("2026-04-26");
+    expect(w.end.toString()).toBe("2026-05-04");
+  });
+
+  it("week mode: anchor on Sunday yields the same week (Mon..Sun)", () => {
+    // 2026-05-03 is a Sunday. startOfWeek -> 2026-04-27.
+    const w = computeViewWindow(new Date(2026, 4, 3), "week");
+    expect(w.start.toString()).toBe("2026-04-26");
+    expect(w.end.toString()).toBe("2026-05-04");
+  });
+
+  it("month mode: returns 6x7 month grid plus margin", () => {
+    // April 2026 grid: starts Mon 2026-03-30, ends Sun 2026-05-10.
+    const w = computeViewWindow(new Date(2026, 3, 15), "month");
+    expect(w.start.toString()).toBe("2026-03-29");
+    expect(w.end.toString()).toBe("2026-05-11");
+  });
+
+  it("month mode: window reflects target month, not anchor day", () => {
+    // Anchor on April 30 vs April 1 should produce identical windows
+    // because both fall in April 2026.
+    const a = computeViewWindow(new Date(2026, 3, 30), "month");
+    const b = computeViewWindow(new Date(2026, 3, 1), "month");
+    expect(a.start.toString()).toBe(b.start.toString());
+    expect(a.end.toString()).toBe(b.end.toString());
+  });
+});
+
+describe("adjacentAnchor", () => {
+  it("day mode: shifts by 1 day", () => {
+    const prev = adjacentAnchor(new Date(2026, 3, 29), "day", -1);
+    const next = adjacentAnchor(new Date(2026, 3, 29), "day", 1);
+    expect(formatDatePart(prev)).toBe("2026-04-28");
+    expect(formatDatePart(next)).toBe("2026-04-30");
+  });
+
+  it("week mode: shifts by 7 days", () => {
+    const prev = adjacentAnchor(new Date(2026, 3, 29), "week", -1);
+    const next = adjacentAnchor(new Date(2026, 3, 29), "week", 1);
+    expect(formatDatePart(prev)).toBe("2026-04-22");
+    expect(formatDatePart(next)).toBe("2026-05-06");
+  });
+
+  it("month mode: shifts by 1 month, anchored on day 1", () => {
+    const prev = adjacentAnchor(new Date(2026, 3, 29), "month", -1);
+    const next = adjacentAnchor(new Date(2026, 3, 29), "month", 1);
+    expect(formatDatePart(prev)).toBe("2026-03-01");
+    expect(formatDatePart(next)).toBe("2026-05-01");
+  });
+
+  it("month mode: handles year rollover", () => {
+    const dec = adjacentAnchor(new Date(2026, 11, 15), "month", 1);
+    const jan = adjacentAnchor(new Date(2026, 0, 15), "month", -1);
+    expect(formatDatePart(dec)).toBe("2027-01-01");
+    expect(formatDatePart(jan)).toBe("2025-12-01");
   });
 });

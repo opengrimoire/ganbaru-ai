@@ -206,6 +206,60 @@ export function getMonthGrid(year: number, month: number): Date[][] {
   return weeks;
 }
 
+/**
+ * Visible date range for a given view mode anchored on `anchor`. Returns
+ * Temporal.PlainDate bounds with a 1-day margin on each side so off-by-one
+ * edges (DST, week boundaries) don't drop overlapping events. Used by the
+ * calendar store's window-scoped expansion cache.
+ *
+ * - `day`: anchor day, plus margin.
+ * - `week`: 7 days starting from week-start of anchor (Monday), plus margin.
+ * - `month`: the 6x7 month grid, plus margin.
+ */
+export function computeViewWindow(
+  anchor: Date,
+  mode: "day" | "week" | "month",
+): { start: Temporal.PlainDate; end: Temporal.PlainDate } {
+  if (mode === "day") {
+    const d = Temporal.PlainDate.from(formatDatePart(anchor));
+    return { start: d.subtract({ days: 1 }), end: d.add({ days: 1 }) };
+  }
+  if (mode === "week") {
+    const monday = startOfWeek(anchor);
+    const sunday = addDays(monday, 6);
+    return {
+      start: Temporal.PlainDate.from(formatDatePart(monday)).subtract({ days: 1 }),
+      end: Temporal.PlainDate.from(formatDatePart(sunday)).add({ days: 1 }),
+    };
+  }
+  const grid = getMonthGrid(anchor.getFullYear(), anchor.getMonth());
+  const first = grid[0][0];
+  const last = grid[5][6];
+  return {
+    start: Temporal.PlainDate.from(formatDatePart(first)).subtract({ days: 1 }),
+    end: Temporal.PlainDate.from(formatDatePart(last)).add({ days: 1 }),
+  };
+}
+
+/**
+ * Anchor date for the previous (`-1`) or next (`+1`) viewport in a given
+ * mode. Used for idle prewarm of adjacent windows: while the user reads the
+ * current week / month, the next two are expanded and cached so a key press
+ * lands on a hit.
+ */
+export function adjacentAnchor(
+  anchor: Date,
+  mode: "day" | "week" | "month",
+  direction: -1 | 1,
+): Date {
+  if (mode === "day") return addDays(anchor, direction);
+  if (mode === "week") return addDays(anchor, 7 * direction);
+  const d = new Date(anchor);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + direction);
+  return d;
+}
+
 // Time helpers
 
 export function minuteOfDay(dateStr: string): number {

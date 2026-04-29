@@ -4,7 +4,10 @@
     EventTransparency, EventVisibility, GuestPermissions,
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
-  import { addDays, getLocalTimezone, parseCalendarDate, formatDatePart } from "./utils";
+  import {
+    addDays, adjacentAnchor, computeViewWindow, formatDatePart,
+    getLocalTimezone, parseCalendarDate,
+  } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
@@ -48,21 +51,19 @@
   // (store updates before session closes, so preview would briefly conflict)
   let suppressEditPreview = $state(false);
 
-  // Window threaded through edit-flow expansion. Step 2 will narrow this to
-  // the actual visible grid for held-arrow nav perf; for now a wide window
-  // matches the legacy "expand the universe" semantics so previews stay
-  // identical to the pre-refactor experience.
-  const editWindow = (() => {
-    const today = Temporal.Now.plainDateISO();
-    return { start: today.subtract({ years: 1 }), end: today.add({ years: 1 }) };
-  })();
+  // Visible-viewport window. Drives both the store's expansion cache and
+  // the edit-flow preview. Held-arrow nav stays cheap because the cache
+  // hits on adjacent windows pre-warmed during idle time.
+  const viewWindow = $derived(computeViewWindow(anchorDate, viewMode));
 
   const displayResult = $derived.by(() => {
     const visIds = calendarsStore.visibleIds;
-    const storeEvents = calendarStore.events.filter((e) => visIds.has(e.calendarId));
+    const storeEvents = calendarStore
+      .eventsInWindow(viewWindow.start, viewWindow.end)
+      .filter((e) => visIds.has(e.calendarId));
     const s = session.state;
     if (s.mode === "closed") return closedDisplay(storeEvents);
-    if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes, editWindow);
+    if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes, viewWindow);
     // mode === "edit": if saving, skip preview and use store directly
     if (suppressEditPreview) return closedDisplay(storeEvents);
     // Compute active date for hybrid preview (active session keeps original start)
@@ -77,7 +78,7 @@
       { originalEvent: s.originalEvent, instanceEvent: s.instanceEvent, templateId: s.templateId },
       session.changes,
       session.scope,
-      editWindow,
+      viewWindow,
       activeDate,
     );
   });
@@ -461,30 +462,91 @@
     window.addEventListener("blur", stopArrowScroll);
     return () => {
       stopArrowScroll();
+      if (anchorRaf !== 0) {
+        cancelAnimationFrame(anchorRaf);
+        anchorRaf = 0;
+      }
+      pendingAnchor = null;
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("keyup", handleKeyup);
       window.removeEventListener("blur", stopArrowScroll);
     };
   });
 
+  /**
+   * Schedule a callback during browser idle time, falling back to a 0ms
+   * timer in environments without `requestIdleCallback` (Safari, some
+   * Tauri webview builds). Used for adjacent-window prewarm; never
+   * blocks the input loop.
+   */
+  function whenIdle(cb: () => void): void {
+    if (typeof globalThis.requestIdleCallback === "function") {
+      globalThis.requestIdleCallback(() => cb(), { timeout: 500 });
+    } else {
+      setTimeout(cb, 0);
+    }
+  }
+
+  // Prewarm adjacent windows so held-arrow nav lands on cache hits. The
+  // cache already dedupes within its LRU, so this effect fires on every
+  // anchor / mode / template-set change and lets repeat reads be no-ops.
+  // The realistic forward path is one viewport in each direction; with
+  // an LRU of 16 the user can wander a few weeks back and forth without
+  // ever recomputing.
+  $effect(() => {
+    const prev = adjacentAnchor(anchorDate, viewMode, -1);
+    const next = adjacentAnchor(anchorDate, viewMode, 1);
+    const prevWindow = computeViewWindow(prev, viewMode);
+    const nextWindow = computeViewWindow(next, viewMode);
+    // Track template-set changes so post-load / post-import re-prewarms.
+    void calendarStore.rawBlocks.length;
+    whenIdle(() => {
+      calendarStore.eventsInWindow(prevWindow.start, prevWindow.end);
+      calendarStore.eventsInWindow(nextWindow.start, nextWindow.end);
+    });
+  });
+
+  // Held-arrow keyrepeat fires at ~30Hz on Linux; without coalescing each
+  // tick re-derives `displayResult`, mutates the DOM, and the queue keeps
+  // draining for several frames after the user releases the key. The
+  // coalescer collapses N anchor mutations per frame down to one paint
+  // while preserving the final landing position. Reads of the latest
+  // pending value (via `currentAnchor()`) keep the per-tick math in step
+  // with the user's intent rather than the last committed value.
+  let pendingAnchor: Date | null = null;
+  let anchorRaf = 0;
+  function currentAnchor(): Date {
+    return pendingAnchor ?? anchorDate;
+  }
+  function commitAnchor(next: Date) {
+    pendingAnchor = next;
+    if (anchorRaf !== 0) return;
+    anchorRaf = requestAnimationFrame(() => {
+      anchorRaf = 0;
+      if (pendingAnchor) anchorDate = pendingAnchor;
+      pendingAnchor = null;
+    });
+  }
+
   function navigate(direction: "today" | "back" | "forward") {
     if (direction === "today") {
-      anchorDate = new Date();
+      commitAnchor(new Date());
       return;
     }
 
     const delta = direction === "forward" ? 1 : -1;
+    const base = currentAnchor();
 
     if (viewMode === "week") {
-      anchorDate = addDays(anchorDate, 7 * delta);
+      commitAnchor(addDays(base, 7 * delta));
     } else if (viewMode === "day") {
-      anchorDate = addDays(anchorDate, delta);
+      commitAnchor(addDays(base, delta));
     } else {
-      const d = new Date(anchorDate);
+      const d = new Date(base);
       const targetMonth = d.getMonth() + delta;
       d.setDate(1);
       d.setMonth(targetMonth);
-      anchorDate = d;
+      commitAnchor(d);
     }
   }
 
