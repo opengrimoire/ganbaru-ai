@@ -6,6 +6,7 @@
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
+  import { hydrateCalendarEventTimezones } from "$lib/stores/timezone-migration";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import TitleBar from "$lib/components/TitleBar.svelte";
@@ -27,7 +28,15 @@
 
   onMount(() => {
     calendars.load().catch((e) => console.error("Failed to load calendars:", e));
-    calendar.load().catch((e) => console.error("Failed to load calendar:", e));
+    // The legacy wall-clock to UTC ISO migration runs here instead of in
+    // main.ts so first paint is not blocked by a per-event UPDATE pass on
+    // first boot after the migration shipped. The hydrator is idempotent:
+    // it short-circuits via a config marker once the migration succeeds,
+    // so on every subsequent boot this is a single config read. Calendar
+    // load is gated on it so the renderer never reads half-migrated rows.
+    hydrateCalendarEventTimezones()
+      .then(() => calendar.load())
+      .catch((e) => console.error("Failed to migrate or load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));
     invoke<number>("get_startup_elapsed_ms").then((ms) => {
