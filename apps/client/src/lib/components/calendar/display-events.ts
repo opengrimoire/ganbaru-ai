@@ -7,6 +7,16 @@ import type { CalendarEvent, RecurrenceConfig, RecurringScope } from "./types";
 import type { CreatePreview } from "./edit-session.svelte";
 import { expandRecurring, parseYMD, fmtYMD } from "./recurrence";
 
+/**
+ * Inclusive date window used by recurrence expansion. Edit-flow consumers
+ * thread the active calendar viewport here so previews honor the same
+ * windowed expansion the store uses.
+ */
+export interface ExpansionWindow {
+  start: Temporal.PlainDate;
+  end: Temporal.PlainDate;
+}
+
 export interface DisplayResult {
   events: CalendarEvent[];
   previewedIds: Set<string>;
@@ -31,6 +41,7 @@ export function buildCreateDisplay(
   storeEvents: CalendarEvent[],
   preview: CreatePreview | null,
   changes: Partial<CalendarEvent>,
+  window: ExpansionWindow,
 ): DisplayResult {
   if (!preview) {
     return {
@@ -79,7 +90,9 @@ export function buildCreateDisplay(
     allDay: isAllDay || undefined,
   };
 
-  const expanded = template.recurrence ? expandRecurring([template]) : [template];
+  const expanded = template.recurrence
+    ? expandRecurring([template], window.start, window.end)
+    : [template];
   const ids = new Set(expanded.map((e) => e.id));
 
   return {
@@ -99,6 +112,7 @@ export function computeEditDisplay(
   session: { originalEvent: CalendarEvent; instanceEvent: CalendarEvent; templateId: string },
   changes: Partial<CalendarEvent>,
   scope: RecurringScope,
+  window: ExpansionWindow,
   activeDate?: string,
 ): DisplayResult {
   const { originalEvent, instanceEvent, templateId } = session;
@@ -112,9 +126,9 @@ export function computeEditDisplay(
     case "this":
       return applyThis(storeEvents, originalEvent, instanceEvent, changes);
     case "all":
-      return applyAll(rawBlocks, storeEvents, templateId, instanceEvent, changes, activeDate);
+      return applyAll(rawBlocks, storeEvents, templateId, instanceEvent, changes, window, activeDate);
     case "following":
-      return applyFollowing(rawBlocks, storeEvents, templateId, instanceEvent, changes);
+      return applyFollowing(rawBlocks, storeEvents, templateId, instanceEvent, changes, window);
   }
 }
 
@@ -183,6 +197,7 @@ export function applyAll(
   templateId: string,
   instanceEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
+  window: ExpansionWindow,
   activeDate?: string,
 ): DisplayResult {
   const template = rawBlocks.find((b) => b.id === templateId);
@@ -217,7 +232,7 @@ export function applyAll(
 
   // Re-expand with patched template
   const patchedRaw = rawBlocks.map((b) => b.id === templateId ? patched : b);
-  const expanded = expandRecurring(patchedRaw);
+  const expanded = expandRecurring(patchedRaw, window.start, window.end);
 
   // Separate series instances by past vs. today+future
   const belongsToSeries = (e: CalendarEvent) =>
@@ -343,6 +358,7 @@ export function applyFollowing(
   templateId: string,
   instanceEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
+  window: ExpansionWindow,
 ): DisplayResult {
   const template = rawBlocks.find((b) => b.id === templateId);
   if (!template) return closedDisplay(storeEvents);
@@ -387,7 +403,7 @@ export function applyFollowing(
 
   // Re-expand both old capped + new virtual
   const patchedRaw = rawBlocks.map((b) => b.id === templateId ? cappedTemplate : b);
-  const expanded = expandRecurring([...patchedRaw, virtualTemplate]);
+  const expanded = expandRecurring([...patchedRaw, virtualTemplate], window.start, window.end);
 
   // Collect preview IDs: all from old capped template + all from virtual template
   const previewedIds = new Set<string>();

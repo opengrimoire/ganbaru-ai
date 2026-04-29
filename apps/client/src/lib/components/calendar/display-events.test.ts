@@ -12,6 +12,11 @@ import {
   PENDING_CREATE_ID,
 } from "./display-events";
 
+const TEST_WINDOW = {
+  start: Temporal.PlainDate.from("2025-01-01"),
+  end: Temporal.PlainDate.from("2028-12-31"),
+};
+
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
     id: "evt1",
@@ -90,7 +95,7 @@ describe("buildCreateDisplay", () => {
     const events = [makeEvent()];
     // Use different time than makeEvent() (10:00-11:00) to avoid realEventExists check
     const preview = { dateStr: "2026-03-20", startMinute: 720, endMinute: 780 };
-    const result = buildCreateDisplay(events, preview, {});
+    const result = buildCreateDisplay(events, preview, {}, TEST_WINDOW);
     expect(result.events.length).toBe(2);
     expect(result.editingId).toBe(PENDING_CREATE_ID);
     expect(result.previewedIds.has(PENDING_CREATE_ID)).toBe(true);
@@ -109,7 +114,7 @@ describe("buildCreateDisplay", () => {
       endMinute: 660,
       recurrence: { frequency: "daily" as const, interval: 1, end: { type: "never" as const } },
     };
-    const result = buildCreateDisplay(events, preview, {});
+    const result = buildCreateDisplay(events, preview, {}, TEST_WINDOW);
     // Template + expanded instances
     expect(result.events.length).toBeGreaterThan(1);
     expect(result.previewedIds.size).toBeGreaterThan(1);
@@ -175,6 +180,7 @@ describe("applyAll", () => {
     const result = applyAll(
       [template], events, template.id, inst,
       { title: "All changed" },
+      TEST_WINDOW,
     );
 
     expect(result.previewedIds.size).toBeGreaterThan(1);
@@ -195,6 +201,7 @@ describe("applyAll", () => {
     const result = applyAll(
       [template], events, template.id, inst,
       { start: `${shiftedDate} 09:00`, end: `${shiftedDate} 09:30` },
+      TEST_WINDOW,
     );
 
     // Template should have shifted by +2 days
@@ -220,6 +227,7 @@ describe("applyAll", () => {
     const result = applyAll(
       [template], events, template.id, futInst,
       { title: "Changed" },
+      TEST_WINDOW,
     );
 
     // Past instance should keep its original title
@@ -251,6 +259,7 @@ describe("applyFollowing", () => {
     const result = applyFollowing(
       [template], events, template.id, inst20,
       { title: "Future changed" },
+      TEST_WINDOW,
     );
 
     // Old template should be capped at 2026-03-19
@@ -279,6 +288,7 @@ describe("applyFollowing", () => {
     const result = applyFollowing(
       [template], events, template.id, inst20,
       { title: "Future" },
+      TEST_WINDOW,
     );
 
     // editingId should reference a virtual event on 2026-03-20
@@ -296,6 +306,7 @@ describe("applyFollowing", () => {
     const result = applyFollowing(
       [template], events, template.id, inst20,
       {},
+      TEST_WINDOW,
     );
 
     const virtualInstances = result.events.filter((e) =>
@@ -325,6 +336,7 @@ describe("applyFollowing", () => {
     const result = applyFollowing(
       [template], events, template.id, inst20,
       {},
+      TEST_WINDOW,
     );
 
     const virtualTemplate = result.events.find((e) => e.id === `__vf__${template.id}`);

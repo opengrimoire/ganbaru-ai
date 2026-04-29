@@ -2,6 +2,20 @@ import { describe, it, expect } from "vitest";
 import type { CalendarEvent, RecurrenceConfig } from "./types";
 import { expandRecurring, findOrdinalWeekday, fmtYMD, parseYMD } from "./recurrence";
 
+// A window wide enough to keep most legacy assertions intact while still
+// exercising the new windowed signature. Tests that probe window boundaries
+// pass explicit dates instead.
+const TEST_WINDOW_START = Temporal.PlainDate.from("2025-01-01");
+const TEST_WINDOW_END = Temporal.PlainDate.from("2028-12-31");
+
+function expand(
+  events: CalendarEvent[],
+  start: Temporal.PlainDate = TEST_WINDOW_START,
+  end: Temporal.PlainDate = TEST_WINDOW_END,
+): CalendarEvent[] {
+  return expandRecurring(events, start, end);
+}
+
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
     id: "evt-1",
@@ -75,7 +89,7 @@ describe("expandRecurring - backward compatibility", () => {
     const evt = makeEvent({
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 3 } },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(result).toHaveLength(3);
     const dates = collectDates(result);
     expect(dates).toEqual(["2026-03-15", "2026-03-16", "2026-03-17"]);
@@ -85,7 +99,7 @@ describe("expandRecurring - backward compatibility", () => {
     const evt = makeEvent({
       recurrence: { frequency: "weekly", interval: 1, end: { type: "count", count: 3 } },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(result).toHaveLength(3);
     const dates = collectDates(result);
     expect(dates).toEqual(["2026-03-15", "2026-03-22", "2026-03-29"]);
@@ -102,7 +116,7 @@ describe("expandRecurring - backward compatibility", () => {
         end: { type: "count", count: 6 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).toEqual([
       "2026-03-16", // Mon
@@ -119,7 +133,7 @@ describe("expandRecurring - backward compatibility", () => {
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 5 } },
       exceptions: ["2026-03-17"],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).not.toContain("2026-03-17");
     // Exceptions skip dates but don't count against COUNT, so the engine
@@ -132,7 +146,7 @@ describe("expandRecurring - backward compatibility", () => {
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 3 } },
       exceptions: ["2026-03-15"],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).not.toContain("2026-03-15");
     expect(result).toHaveLength(2);
@@ -142,7 +156,7 @@ describe("expandRecurring - backward compatibility", () => {
     const evt = makeEvent({
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 2 } },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     // First is the template itself, no recurringParentId
     expect(result[0].recurringParentId).toBeUndefined();
     // Second is generated
@@ -156,14 +170,14 @@ describe("expandRecurring - backward compatibility", () => {
       end: "2026-03-17 10:00", // 2-day event
       recurrence: { frequency: "weekly", interval: 1, end: { type: "count", count: 2 } },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(result[1].start).toBe("2026-03-22 09:00");
     expect(result[1].end).toBe("2026-03-24 10:00");
   });
 
   it("includes non-recurring events as-is", () => {
     const evt = makeEvent();
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(result).toHaveLength(1);
     expect(result[0]).toBe(evt);
   });
@@ -178,7 +192,7 @@ describe("expandRecurring - UNTIL", () => {
         end: { type: "until", date: "2026-03-18" },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).toEqual(["2026-03-15", "2026-03-16", "2026-03-17", "2026-03-18"]);
   });
@@ -191,7 +205,7 @@ describe("expandRecurring - UNTIL", () => {
         end: { type: "until", date: "2026-03-17T23:59:59Z" },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).toContain("2026-03-17");
     expect(dates).not.toContain("2026-03-18");
@@ -207,7 +221,7 @@ describe("expandRecurring - UNTIL", () => {
         end: { type: "until", date: "2026-03-18" },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(result).toHaveLength(0);
   });
 });
@@ -224,7 +238,7 @@ describe("expandRecurring - monthly ordinal BYDAY", () => {
         end: { type: "count", count: 3 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     // Mar 10, Apr 14, May 12 are 2nd Tuesdays
     expect(dates).toEqual(["2026-03-10", "2026-04-14", "2026-05-12"]);
@@ -241,7 +255,7 @@ describe("expandRecurring - monthly ordinal BYDAY", () => {
         end: { type: "count", count: 3 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     // Mar 27, Apr 24, May 29 are last Fridays
     expect(dates).toEqual(["2026-03-27", "2026-04-24", "2026-05-29"]);
@@ -260,7 +274,7 @@ describe("expandRecurring - monthly BYMONTHDAY", () => {
         end: { type: "count", count: 3 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).toEqual(["2026-03-15", "2026-04-15", "2026-05-15"]);
   });
@@ -276,7 +290,7 @@ describe("expandRecurring - monthly BYMONTHDAY", () => {
         end: { type: "count", count: 4 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     // Jan 31, Mar 31, May 31, Jul 31 (skips Feb 28, Apr 30, Jun 30)
     expect(dates).toEqual(["2026-01-31", "2026-03-31", "2026-05-31", "2026-07-31"]);
@@ -293,7 +307,7 @@ describe("expandRecurring - monthly BYMONTHDAY", () => {
         end: { type: "count", count: 5 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).toEqual([
       "2026-03-01",
@@ -319,13 +333,11 @@ describe("expandRecurring - yearly ordinal BYDAY", () => {
         end: { type: "count", count: 3 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
-    // Apr 6 2026, Jul 6 2026 (1st Mon of Jul), then Apr 5 2027 (beyond horizon)
-    // Only first two are within the 180-day horizon from ~Mar 27 2026
-    expect(dates).toContain("2026-04-06");
-    expect(dates).toContain("2026-07-06");
-    expect(dates.length).toBeGreaterThanOrEqual(2);
+    // 1st Mon of Apr 2026 is Apr 6, of Jul 2026 is Jul 6, of Apr 2027 is Apr 5.
+    // The default test window (2025..2028) captures all three for COUNT=3.
+    expect(dates).toEqual(["2026-04-06", "2026-07-06", "2027-04-05"]);
   });
 });
 
@@ -335,7 +347,7 @@ describe("expandRecurring - RDATE", () => {
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 2 } },
       rdate: ["2026-04-01"],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).toContain("2026-03-15");
     expect(dates).toContain("2026-03-16");
@@ -348,7 +360,7 @@ describe("expandRecurring - RDATE", () => {
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 3 } },
       rdate: ["2026-03-16"], // already generated by RRULE
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     const march16Count = dates.filter((d) => d === "2026-03-16").length;
     expect(march16Count).toBe(1);
@@ -360,7 +372,7 @@ describe("expandRecurring - RDATE", () => {
       rdate: ["2026-04-01"],
       exceptions: ["2026-04-01"],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).not.toContain("2026-04-01");
   });
@@ -369,7 +381,7 @@ describe("expandRecurring - RDATE", () => {
     const evt = makeEvent({
       rdate: ["2026-04-01", "2026-05-01"],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).toContain("2026-03-15"); // original
     expect(dates).toContain("2026-04-01");
@@ -382,7 +394,7 @@ describe("expandRecurring - RDATE", () => {
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 2 } },
       rdate: ["2026-04-01"],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const rdateInstance = result.find((e) => e.start.startsWith("2026-04-01"));
     expect(rdateInstance).toBeDefined();
     expect(rdateInstance!.recurringParentId).toBe("evt-1");
@@ -403,7 +415,7 @@ describe("expandRecurring - overrides", () => {
         },
       ],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const march16 = result.find((e) => e.start.startsWith("2026-03-16"));
     expect(march16).toBeDefined();
     expect(march16!.title).toBe("Changed title");
@@ -423,7 +435,7 @@ describe("expandRecurring - overrides", () => {
         },
       ],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const march16 = result.find((e) => e.start.startsWith("2026-03-16"));
     expect(march16!.title).toBe("New title");
     expect(march16!.description).toBe("Description");
@@ -442,7 +454,7 @@ describe("expandRecurring - overrides", () => {
         },
       ],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const april1 = result.find((e) => e.start.startsWith("2026-04-01"));
     expect(april1).toBeDefined();
     expect(april1!.title).toBe("RDATE override");
@@ -460,7 +472,7 @@ describe("expandRecurring - overrides", () => {
         },
       ],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const march16 = result.find((e) => e.start.startsWith("2026-03-16"));
     expect(march16!.title).toBe("Datetime override");
   });
@@ -478,7 +490,7 @@ describe("expandRecurring - overrides", () => {
         },
       ],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const march16 = result.find((e) => e.start.startsWith("2026-03-16"));
     expect(march16!.color).toBe(2);
     expect(march16!.status).toBe("tentative");
@@ -499,7 +511,7 @@ describe("expandRecurring - exceptions + overrides together", () => {
         },
       ],
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     const dates = collectDates(result);
     expect(dates).not.toContain("2026-03-16");
   });
@@ -515,7 +527,7 @@ describe("expandRecurring - events without new fields", () => {
         end: { type: "count", count: 4 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     // All instances should have the basic properties
     for (const instance of result) {
       expect(instance.overrides).toBeUndefined();
@@ -538,7 +550,7 @@ describe("expandRecurring - DST anchoring", () => {
       end: "2026-03-07 10:00",
       recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 4 } },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(result.map((e) => e.start)).toEqual([
       "2026-03-07 09:00",
       "2026-03-08 09:00",
@@ -560,7 +572,7 @@ describe("expandRecurring - DST anchoring", () => {
       end: "2026-03-15 19:30",
       recurrence: { frequency: "weekly", interval: 1, end: { type: "count", count: 3 } },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(result.map((e) => e.start)).toEqual([
       "2026-03-15 18:30",
       "2026-03-22 18:30",
@@ -581,7 +593,7 @@ describe("expandRecurring - DST anchoring", () => {
         end: { type: "count", count: 4 },
       },
     });
-    const result = expandRecurring([evt]);
+    const result = expand([evt]);
     expect(collectDates(result)).toEqual([
       "2026-03-03", // Tue
       "2026-03-05", // Thu
@@ -591,5 +603,102 @@ describe("expandRecurring - DST anchoring", () => {
     for (const inst of result) {
       expect(inst.start.endsWith("09:00")).toBe(true);
     }
+  });
+});
+
+describe("expandRecurring - window scoping", () => {
+  it("emits only instances overlapping the window for an indefinite recurrence", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00",
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "weekly", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-27");
+    const end = Temporal.PlainDate.from("2026-05-03");
+    const result = expandRecurring([evt], start, end);
+    const dates = collectDates(result);
+    // Original was a Wednesday; weekly cadence places one instance every
+    // Wednesday inside the week. There is exactly one Wednesday in this
+    // 7-day range: 2026-04-29.
+    expect(dates).toEqual(["2026-04-29"]);
+  });
+
+  it("emits indefinite recurrences far in the future when the window asks for them", () => {
+    const evt = makeEvent({
+      start: "2026-01-01 09:00",
+      end: "2026-01-01 10:00",
+      recurrence: { frequency: "monthly", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2030-01-01");
+    const end = Temporal.PlainDate.from("2030-12-31");
+    const result = expandRecurring([evt], start, end);
+    const dates = collectDates(result);
+    expect(dates).toHaveLength(12);
+    expect(dates[0]).toBe("2030-01-01");
+    expect(dates[11]).toBe("2030-12-01");
+  });
+
+  it("returns nothing when the window is entirely before the first occurrence", () => {
+    const evt = makeEvent({
+      recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 3 } },
+    });
+    const start = Temporal.PlainDate.from("2020-01-01");
+    const end = Temporal.PlainDate.from("2020-12-31");
+    expect(expandRecurring([evt], start, end)).toHaveLength(0);
+  });
+
+  it("respects COUNT even when most occurrences are before the window", () => {
+    const evt = makeEvent({
+      start: "2026-03-15 09:00",
+      end: "2026-03-15 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 5 } },
+    });
+    const start = Temporal.PlainDate.from("2026-03-18");
+    const end = Temporal.PlainDate.from("2030-01-01");
+    const result = expandRecurring([evt], start, end);
+    const dates = collectDates(result);
+    // COUNT=5 means 5 instances ever exist (15..19). The window starts on
+    // the 18th, so only 18 and 19 should be emitted.
+    expect(dates).toEqual(["2026-03-18", "2026-03-19"]);
+  });
+
+  it("includes a multi-day occurrence whose start is before the window if it ends inside", () => {
+    const evt = makeEvent({
+      start: "2026-04-25 09:00",
+      end: "2026-04-30 10:00", // 5-day event
+      recurrence: { frequency: "weekly", interval: 1, end: { type: "count", count: 3 } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-28");
+    const end = Temporal.PlainDate.from("2026-05-02");
+    const result = expandRecurring([evt], start, end);
+    // Original event (Apr 25..30) overlaps the window even though its start
+    // is before windowStart.
+    const dates = collectDates(result);
+    expect(dates).toContain("2026-04-25");
+  });
+
+  it("non-recurring events outside the window are excluded", () => {
+    const inWindow = makeEvent({ id: "in", start: "2026-04-29 09:00", end: "2026-04-29 10:00" });
+    const past = makeEvent({ id: "past", start: "2020-01-01 09:00", end: "2020-01-01 10:00" });
+    const future = makeEvent({ id: "future", start: "2030-01-01 09:00", end: "2030-01-01 10:00" });
+    const start = Temporal.PlainDate.from("2026-04-01");
+    const end = Temporal.PlainDate.from("2026-04-30");
+    const result = expandRecurring([inWindow, past, future], start, end);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("in");
+  });
+
+  it("RDATEs outside the window are dropped, RDATEs inside the window are kept", () => {
+    const evt = makeEvent({
+      start: "2026-04-01 09:00",
+      end: "2026-04-01 10:00",
+      rdate: ["2026-04-15", "2030-01-01"],
+    });
+    const start = Temporal.PlainDate.from("2026-04-01");
+    const end = Temporal.PlainDate.from("2026-04-30");
+    const result = expandRecurring([evt], start, end);
+    const dates = collectDates(result);
+    expect(dates).toContain("2026-04-15");
+    expect(dates).not.toContain("2030-01-01");
   });
 });

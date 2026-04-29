@@ -68,12 +68,28 @@ function hasStructuralChanges(
 
 /** DB-backed template events (no virtual instances). */
 let rawBlocks = $state<CalendarEvent[]>([]);
-/** Expanded events including virtual recurring instances. */
-let blocks = $state<CalendarEvent[]>([]);
 let batchDepth = 0;
-function reexpand() {
+
+/**
+ * LRU of expanded windows keyed by `${windowStart}|${windowEnd}`. Plain Map,
+ * not $state, so cache hits don't trigger Svelte tracking on the underlying
+ * structure. Reactivity is driven by `cacheVersion` instead, which is
+ * bumped whenever the cache is invalidated.
+ */
+const windowCache = new Map<string, CalendarEvent[]>();
+const WINDOW_CACHE_LIMIT = 16;
+let cacheVersion = $state(0);
+
+/**
+ * Drop every cached expansion and bump the reactivity token so any
+ * `$derived` / `$effect` reading `events` or `eventsInWindow` re-runs.
+ * Mutations call this rather than re-expanding eagerly because the
+ * expansion is now cheap when the active window stays small.
+ */
+function invalidate() {
   if (batchDepth > 0) return;
-  blocks = expandRecurring(rawBlocks);
+  windowCache.clear();
+  cacheVersion++;
 }
 
 /**
@@ -213,19 +229,75 @@ async function loadOverrides(eventIds: string[], renderZone: string): Promise<Ma
   return map;
 }
 
+/**
+ * Look up (or expand and cache) every event overlapping the inclusive
+ * `[windowStart, windowEnd]` range. Reads `cacheVersion` so consumers
+ * registered as Svelte effects track invalidations. The LRU evicts the
+ * oldest entry once the cache exceeds `WINDOW_CACHE_LIMIT`.
+ */
+function expandWindow(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): CalendarEvent[] {
+  // Reactivity dependency: re-runs when invalidate() bumps cacheVersion.
+  void cacheVersion;
+  const key = `${windowStart.toString()}|${windowEnd.toString()}`;
+  const hit = windowCache.get(key);
+  if (hit) {
+    // Refresh LRU position by re-inserting.
+    windowCache.delete(key);
+    windowCache.set(key, hit);
+    return hit;
+  }
+  const expanded = expandRecurring(rawBlocks, windowStart, windowEnd);
+  windowCache.set(key, expanded);
+  while (windowCache.size > WINDOW_CACHE_LIMIT) {
+    const oldest = windowCache.keys().next().value;
+    if (oldest === undefined) break;
+    windowCache.delete(oldest);
+  }
+  return expanded;
+}
+
+/**
+ * Wide fallback window (anchor +/- 1 year) used by the legacy `events`
+ * getter and any consumer that needs a non-view-scoped read. Documented in
+ * the perf plan: callers that still need full-universe scanning accept this
+ * bound. View-scoped consumers should use `eventsInWindow` directly.
+ */
+function defaultEventsWindow(): { start: Temporal.PlainDate; end: Temporal.PlainDate } {
+  const today = Temporal.Now.plainDateISO();
+  return {
+    start: today.subtract({ years: 1 }),
+    end: today.add({ years: 1 }),
+  };
+}
+
 export function getCalendar() {
   const store = {
     get events(): CalendarEvent[] {
-      return blocks;
+      const { start, end } = defaultEventsWindow();
+      return expandWindow(start, end);
+    },
+
+    /**
+     * View-scoped expansion. Pass the visible date range; cached internally
+     * so repeated reads of the same window are free.
+     */
+    eventsInWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): CalendarEvent[] {
+      return expandWindow(windowStart, windowEnd);
     },
 
     get rawBlocks(): CalendarEvent[] {
       return rawBlocks;
     },
 
-    /** Suppress reexpand() during multi-step mutations. */
+    /** Suppress invalidate() during multi-step mutations. */
     beginBatch() { batchDepth++; },
-    endBatch() { if (--batchDepth <= 0) { batchDepth = 0; reexpand(); } },
+    endBatch() { if (--batchDepth <= 0) { batchDepth = 0; invalidate(); } },
 
     async load() {
       console.log("[calendar] load() called");
@@ -270,8 +342,8 @@ export function getCalendar() {
         }
 
         rawBlocks = mapped;
-        reexpand();
-        console.log(`[calendar] blocks set, count: ${blocks.length} (${rawBlocks.length} templates)`);
+        invalidate();
+        console.log(`[calendar] templates loaded: ${rawBlocks.length}`);
       } catch (e) {
         console.error("[calendar] load() failed:", e);
         throw e;
@@ -385,7 +457,7 @@ export function getCalendar() {
         guestPermissions: opts.guestPermissions,
       };
       rawBlocks = [...rawBlocks, event];
-      reexpand();
+      invalidate();
       return event;
     },
 
@@ -480,7 +552,7 @@ export function getCalendar() {
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, ...toUpdate, id: parentId } : b,
       );
-      reexpand();
+      invalidate();
     },
 
     async deleteBlock(id: string) {
@@ -488,7 +560,7 @@ export function getCalendar() {
       const parentId = id.includes("::") ? id.split("::")[0] : id;
       await execute("DELETE FROM calendar_events WHERE id = $1", [parentId]);
       rawBlocks = rawBlocks.filter((b) => b.id !== parentId);
-      reexpand();
+      invalidate();
     },
 
     /**
@@ -605,7 +677,7 @@ export function getCalendar() {
         guestPermissions: parent.guestPermissions,
       };
       rawBlocks = [...rawBlocks, standalone];
-      reexpand();
+      invalidate();
       return standalone;
     },
 
@@ -625,7 +697,7 @@ export function getCalendar() {
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
       );
-      reexpand();
+      invalidate();
     },
 
     /**
@@ -648,7 +720,7 @@ export function getCalendar() {
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, recurrence: updatedRecurrence } : b,
       );
-      reexpand();
+      invalidate();
     },
 
     /**
@@ -778,14 +850,14 @@ export function getCalendar() {
         guestPermissions: parent.guestPermissions,
       };
       rawBlocks = [...rawBlocks, newTemplate];
-      reexpand();
+      invalidate();
       return newTemplate;
     },
 
     async clearAll() {
       await execute("DELETE FROM calendar_events");
       rawBlocks = [];
-      blocks = [];
+      invalidate();
     },
 
     /**

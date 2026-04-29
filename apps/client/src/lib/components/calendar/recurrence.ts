@@ -269,8 +269,14 @@ function advanceYearlyByMonthDay(
 
 // Expansion
 
-const EXPANSION_DAYS = 180;
-const MAX_INSTANCES = 500;
+/**
+ * Cap on cursor iterations per template. Shields against pathological
+ * RRULEs (huge COUNT, very old `DTSTART` with daily frequency seen far in
+ * the future). The window does the real bounding; this is just a runaway
+ * guard. 10000 daily steps is roughly 27 years, ample for any realistic
+ * recurrence.
+ */
+const MAX_INSTANCES = 10000;
 
 /**
  * Build an override lookup map keyed by date string (YYYY-MM-DD)
@@ -317,131 +323,149 @@ function isPastUntil(occDateStr: string, untilDate: string): boolean {
   return occDateStr > untilDate.split("T")[0];
 }
 
-export function expandRecurring(templates: CalendarEvent[]): CalendarEvent[] {
-  const horizon = Temporal.Now.plainDateISO().add({ days: EXPANSION_DAYS });
+/**
+ * Inclusive overlap test between an occurrence (start/end as PlainDate, both
+ * inclusive) and the requested window. An event whose end touches
+ * `windowStart` still counts as overlapping the window.
+ */
+function overlapsWindow(
+  occStart: Temporal.PlainDate,
+  occEnd: Temporal.PlainDate,
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): boolean {
+  if (Temporal.PlainDate.compare(occEnd, windowStart) < 0) return false;
+  if (Temporal.PlainDate.compare(occStart, windowEnd) > 0) return false;
+  return true;
+}
+
+/**
+ * Expand templates into concrete event instances that overlap the
+ * `[windowStart, windowEnd]` range. Both bounds are inclusive PlainDates.
+ *
+ * Non-recurring templates pass through if they overlap the window.
+ * Recurring templates walk their RRULE cursor between origin and `windowEnd`,
+ * skipping emission for instances entirely before `windowStart`. RDATE
+ * instances are merged in afterwards. EXDATE drops emission without
+ * counting against COUNT, mirroring how RFC 5545 treats EXDATE as a
+ * subtraction from the recurrence set.
+ *
+ * The cursor walk is bounded by `MAX_INSTANCES` iterations as a safety
+ * guard; the window bound is what should naturally terminate the loop in
+ * normal use.
+ */
+export function expandRecurring(
+  templates: CalendarEvent[],
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): CalendarEvent[] {
   const result: CalendarEvent[] = [];
-
   for (const evt of templates) {
-    const startDateStr = evt.start.split(" ")[0];
-    const config = evt.recurrence;
-    const untilDate = config?.end.type === "until" ? config.end.date : undefined;
+    expandTemplate(evt, windowStart, windowEnd, result);
+  }
+  return result;
+}
 
-    if (untilDate && isPastUntil(startDateStr, untilDate)) continue;
+function expandTemplate(
+  evt: CalendarEvent,
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  result: CalendarEvent[],
+): void {
+  const startDateStr = evt.start.split(" ")[0];
+  const endDateStr = evt.end.split(" ")[0];
+  const config = evt.recurrence;
+  const untilDate = config?.end.type === "until" ? config.end.date : undefined;
 
-    if (!evt.exceptions?.includes(startDateStr)) {
-      result.push(evt);
-    }
-    if (!config) {
-      if (evt.rdate && evt.rdate.length > 0) {
-        addRdateInstances(evt, result, horizon);
-      }
-      continue;
-    }
+  if (untilDate && isPastUntil(startDateStr, untilDate)) return;
 
-    const startTimeStr = evt.start.split(" ")[1];
-    const endDateStr = evt.end.split(" ")[0];
-    const endTimeStr = evt.end.split(" ")[1];
-    const origStart = plainDateFromYMD(startDateStr);
-    const origEnd = plainDateFromYMD(endDateStr);
-    const daySpan = origStart.until(origEnd, { largestUnit: "days" }).days;
+  const origStart = plainDateFromYMD(startDateStr);
+  const origEnd = plainDateFromYMD(endDateStr);
+  const daySpan = origStart.until(origEnd, { largestUnit: "days" }).days;
 
-    const exceptionsSet = evt.exceptions ? new Set(evt.exceptions) : null;
-    const overrideMap = buildOverrideMap(evt.overrides);
-    const maxCount = config.end.type === "count" ? config.end.count : MAX_INSTANCES;
-    const rdateSet = new Set<string>();
+  const exceptionsSet = evt.exceptions ? new Set(evt.exceptions) : null;
+  const overrideMap = buildOverrideMap(evt.overrides);
 
+  // Emit the original template as the first occurrence when it overlaps the
+  // window and is not itself excepted. Pushed without an `::date` suffix so
+  // the primary event id is preserved (matching legacy behavior).
+  const origInWindow = overlapsWindow(origStart, origEnd, windowStart, windowEnd);
+  if (origInWindow && !exceptionsSet?.has(startDateStr)) {
+    result.push(evt);
+  }
+
+  if (!config && (!evt.rdate || evt.rdate.length === 0)) return;
+
+  const startTimeStr = evt.start.split(" ")[1];
+  const endTimeStr = evt.end.split(" ")[1];
+  const rdateSet = new Set<string>([startDateStr]);
+
+  if (config) {
+    const maxCount = config.end.type === "count" ? config.end.count : Infinity;
     let cursor = advanceDate(origStart, config);
     let generated = 1;
-    rdateSet.add(startDateStr);
+    let iter = 0;
 
-    while (Temporal.PlainDate.compare(cursor, horizon) <= 0 && generated < maxCount) {
+    while (generated < maxCount && iter < MAX_INSTANCES) {
+      iter++;
       const occStartStr = ymdFromPlainDate(cursor);
 
       if (untilDate && isPastUntil(occStartStr, untilDate)) break;
+      if (Temporal.PlainDate.compare(cursor, windowEnd) > 0) break;
 
       rdateSet.add(occStartStr);
 
+      // EXDATE: skip emission and do NOT count toward COUNT, matching the
+      // legacy behavior validated by the "respects exceptions" test.
       if (exceptionsSet?.has(occStartStr)) {
         cursor = advanceDate(cursor, config);
         continue;
       }
 
-      const occEndStr = ymdFromPlainDate(cursor.add({ days: daySpan }));
+      const occEnd = cursor.add({ days: daySpan });
 
-      let instance: CalendarEvent = {
-        ...evt,
-        id: `${evt.id}::${occStartStr}`,
-        start: `${occStartStr} ${startTimeStr}`,
-        end: `${occEndStr} ${endTimeStr}`,
-        recurringParentId: evt.id,
-      };
-
-      const override = overrideMap?.get(occStartStr);
-      if (override) {
-        instance = applyOverride(instance, override);
+      // The instance "exists" for COUNT purposes even if entirely before the
+      // window; we just don't emit it.
+      if (Temporal.PlainDate.compare(occEnd, windowStart) >= 0) {
+        const occEndStr = ymdFromPlainDate(occEnd);
+        let instance: CalendarEvent = {
+          ...evt,
+          id: `${evt.id}::${occStartStr}`,
+          start: `${occStartStr} ${startTimeStr}`,
+          end: `${occEndStr} ${endTimeStr}`,
+          recurringParentId: evt.id,
+        };
+        const override = overrideMap?.get(occStartStr);
+        if (override) instance = applyOverride(instance, override);
+        result.push(instance);
       }
-
-      result.push(instance);
 
       cursor = advanceDate(cursor, config);
       generated++;
     }
-
-    if (evt.rdate && evt.rdate.length > 0) {
-      for (const rdateStr of evt.rdate) {
-        const rdate = rdateStr.split(/[ T]/)[0];
-        if (rdateSet.has(rdate)) continue;
-        if (exceptionsSet?.has(rdate)) continue;
-        const rdatePlain = plainDateFromYMD(rdate);
-        if (Temporal.PlainDate.compare(rdatePlain, horizon) > 0) continue;
-        if (untilDate && isPastUntil(rdate, untilDate)) continue;
-
-        const occEndStr = ymdFromPlainDate(rdatePlain.add({ days: daySpan }));
-
-        let instance: CalendarEvent = {
-          ...evt,
-          id: `${evt.id}::${rdate}`,
-          start: `${rdate} ${startTimeStr}`,
-          end: `${occEndStr} ${endTimeStr}`,
-          recurringParentId: evt.id,
-        };
-
-        const override = overrideMap?.get(rdate);
-        if (override) {
-          instance = applyOverride(instance, override);
-        }
-
-        result.push(instance);
-      }
-    }
   }
 
-  return result;
-}
+  if (evt.rdate && evt.rdate.length > 0) {
+    for (const rdateStr of evt.rdate) {
+      const rdate = rdateStr.split(/[ T]/)[0];
+      if (rdateSet.has(rdate)) continue;
+      if (exceptionsSet?.has(rdate)) continue;
+      const rdatePlain = plainDateFromYMD(rdate);
+      const rdateEndPlain = rdatePlain.add({ days: daySpan });
+      if (!overlapsWindow(rdatePlain, rdateEndPlain, windowStart, windowEnd)) continue;
+      if (untilDate && isPastUntil(rdate, untilDate)) continue;
 
-function addRdateInstances(evt: CalendarEvent, result: CalendarEvent[], horizon: Temporal.PlainDate): void {
-  const startTimeStr = evt.start.split(" ")[1];
-  const endTimeStr = evt.end.split(" ")[1];
-  const startDateStr = evt.start.split(" ")[0];
-  const endDateStr = evt.end.split(" ")[0];
-  const origStart = plainDateFromYMD(startDateStr);
-  const origEnd = plainDateFromYMD(endDateStr);
-  const daySpan = origStart.until(origEnd, { largestUnit: "days" }).days;
-
-  for (const rdateStr of evt.rdate!) {
-    const rdate = rdateStr.split(/[ T]/)[0];
-    if (rdate === startDateStr) continue;
-    const rdatePlain = plainDateFromYMD(rdate);
-    if (Temporal.PlainDate.compare(rdatePlain, horizon) > 0) continue;
-
-    const occEndStr = ymdFromPlainDate(rdatePlain.add({ days: daySpan }));
-
-    result.push({
-      ...evt,
-      id: `${evt.id}::${rdate}`,
-      start: `${rdate} ${startTimeStr}`,
-      end: `${occEndStr} ${endTimeStr}`,
-      recurringParentId: evt.id,
-    });
+      const occEndStr = ymdFromPlainDate(rdateEndPlain);
+      let instance: CalendarEvent = {
+        ...evt,
+        id: `${evt.id}::${rdate}`,
+        start: `${rdate} ${startTimeStr}`,
+        end: `${occEndStr} ${endTimeStr}`,
+        recurringParentId: evt.id,
+      };
+      const override = overrideMap?.get(rdate);
+      if (override) instance = applyOverride(instance, override);
+      result.push(instance);
+    }
   }
 }

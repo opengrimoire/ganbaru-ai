@@ -48,12 +48,21 @@
   // (store updates before session closes, so preview would briefly conflict)
   let suppressEditPreview = $state(false);
 
+  // Window threaded through edit-flow expansion. Step 2 will narrow this to
+  // the actual visible grid for held-arrow nav perf; for now a wide window
+  // matches the legacy "expand the universe" semantics so previews stay
+  // identical to the pre-refactor experience.
+  const editWindow = (() => {
+    const today = Temporal.Now.plainDateISO();
+    return { start: today.subtract({ years: 1 }), end: today.add({ years: 1 }) };
+  })();
+
   const displayResult = $derived.by(() => {
     const visIds = calendarsStore.visibleIds;
     const storeEvents = calendarStore.events.filter((e) => visIds.has(e.calendarId));
     const s = session.state;
     if (s.mode === "closed") return closedDisplay(storeEvents);
-    if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes);
+    if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes, editWindow);
     // mode === "edit": if saving, skip preview and use store directly
     if (suppressEditPreview) return closedDisplay(storeEvents);
     // Compute active date for hybrid preview (active session keeps original start)
@@ -68,6 +77,7 @@
       { originalEvent: s.originalEvent, instanceEvent: s.instanceEvent, templateId: s.templateId },
       session.changes,
       session.scope,
+      editWindow,
       activeDate,
     );
   });
@@ -693,7 +703,7 @@
 
       if (isRec && scope) {
         if (scope === "this") {
-          // Batch so reexpand() only runs once after both operations complete
+          // Batch so invalidate() only runs once after both operations complete
           calendarStore.beginBatch();
           try {
             const standalone = await calendarStore.detachInstance(instanceEvent);
@@ -780,7 +790,7 @@
               || (sessionStopPending && activeOnToday && splitDate === todayStr);
 
             if (shouldSplit) {
-              // Batch all mutations so only one reexpand fires at the end
+              // Batch all mutations so only one invalidate fires at the end
               calendarStore.beginBatch();
               try {
                 if (activeOnToday) {
