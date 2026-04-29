@@ -1,5 +1,40 @@
 # Performance
 
+## Calendar event expansion
+
+The calendar's hot path is `eventsInWindow(start, end)`: every viewport render and every reactive consumer (active pomodoro lookup, notification scheduler, edit-mode preview, etc.) calls it. Per-call cost has to stay flat for any reasonable event count, since week-view navigation and edit-mode keystrokes call it on every frame.
+
+### Architecture
+
+`lib/components/calendar/calendar-index.ts` builds a sorted index once per mutation:
+
+- `recurring: CalendarEvent[]`: events with `recurrence` or non-empty `rdate`. Bounded in practice (tens, even for power users) and walked exhaustively per query.
+- `nonRecurringSorted: CalendarEvent[]`: every other event, sorted ascending by `start` (lexicographic order on `YYYY-MM-DD HH:MM` matches chronological order).
+- `nonRecurringStarts: string[]`: parallel `start` strings for allocation-free binary search in the hot path.
+- `maxNonRecurringSpanDays: number`: largest `(end - start)` in days across non-recurring events. Bounds the walk-back so day-spanning events whose `start` lies before the window are still discovered.
+
+`eventsInWindowFromIndex(index, windowStart, windowEnd)`:
+
+1. Bisect `nonRecurringStarts` for the upper bound (`start > windowEnd`).
+2. Walk backward from the upper bound, emitting events whose `end >= windowStart`. Stop once `start < windowStart - maxNonRecurringSpanDays`.
+3. For each `recurring` template, call `expandTemplate(evt, windowStart, windowEnd, result)` from `recurrence.ts`.
+
+Per-call cost is `O(log N + K)` where `K` is the number of events in the window plus the bounded walk-back, plus the recurring template count times their per-template expansion cost. For a typical week-view window over thousands of non-recurring events, the non-recurring path is sub-millisecond and recurring expansion runs in roughly one millisecond.
+
+### Reactivity
+
+`stores/calendar.svelte.ts` exposes `eventsInWindow(start, end)` and an `indexVersion` $state token. Mutations call `invalidate()`, which drops the cached index and bumps `indexVersion`; the next read rebuilds the index lazily. Effects that need to react to mutations without forcing a wide expansion subscribe via `void calendar.indexVersion`. There is no longer a wide-window `events` getter or window cache.
+
+### What was removed
+
+- The LRU `windowCache` plus `WINDOW_CACHE_LIMIT` plus `expandWindow` plus `defaultEventsWindow`. With per-call expansion in the millisecond range the cache never paid for itself: sliding navigation produces a fresh window every frame, so the cache key never hits.
+- The adjacent-window prewarm `$effect` in `CalendarView.svelte` (and its `whenIdle` / `adjacentAnchor` helpers). Each `anchorDate` change scheduled idle prev / next expansions; held arrow-key navigation queued hundreds of them that drained after release.
+- `App.svelte`'s reads of the wide-window `events` getter at mount and on every mutation. `findActiveBlock` and `checkEventNotifications` now scope to the date range each actually needs (one day around now, seven days around now respectively).
+
+### Edit-mode preview
+
+`display-events.ts` `applyAll` and `applyFollowing` previously expanded the entire `rawBlocks` array on every keystroke during recurring edits. They now expand only the patched template (and the capped / virtual templates for "following" splits); sibling instances are stripped from `storeEvents` via `belongsToSeries` and re-added from this single-template expansion. Preview cost is now constant regardless of total event count.
+
 ## How to read performance data
 
 Click the gauge icon in the title bar to open the performance panel. It shows a per-process memory breakdown (updated every 5 seconds) and the startup time captured when the app launched. The "Copy" button copies all values as plain text.
