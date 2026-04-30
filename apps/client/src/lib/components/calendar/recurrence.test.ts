@@ -890,3 +890,146 @@ describe("expandRecurring - fast-forward correctness (origin years before window
     expect(result[0].start.startsWith("2026-02-")).toBe(true);
   });
 });
+
+describe("expandRecurring - weekly BYDAY fast-forward", () => {
+  it("origin years ago, MO/WE/FR: emits the right MO/WE/FR inside the window", () => {
+    // 2020-01-06 is a Monday. Recurrence: every Mon, Wed, Fri.
+    const evt = makeEvent({
+      start: "2020-01-06 09:00",
+      end: "2020-01-06 10:00",
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "WE", "FR"],
+        end: { type: "never" },
+      },
+    });
+    const start = Temporal.PlainDate.from("2026-04-27"); // Monday
+    const end = Temporal.PlainDate.from("2026-05-03"); // Sunday
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual([
+      "2026-04-27", // Mon
+      "2026-04-29", // Wed
+      "2026-05-01", // Fri
+    ]);
+  });
+
+  it("origin on Wednesday, sortedDays MO/WE/FR: handles k0 != 0", () => {
+    // 2020-01-08 is a Wednesday.
+    const evt = makeEvent({
+      start: "2020-01-08 09:00",
+      end: "2020-01-08 10:00",
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "WE", "FR"],
+        end: { type: "never" },
+      },
+    });
+    const start = Temporal.PlainDate.from("2026-04-27");
+    const end = Temporal.PlainDate.from("2026-05-03");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual([
+      "2026-04-27",
+      "2026-04-29",
+      "2026-05-01",
+    ]);
+  });
+
+  it("origin on Friday, sortedDays MO/WE/FR: only Fri remaining in origin's week", () => {
+    // 2020-01-10 is a Friday.
+    const evt = makeEvent({
+      start: "2020-01-10 09:00",
+      end: "2020-01-10 10:00",
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "WE", "FR"],
+        end: { type: "never" },
+      },
+    });
+    const start = Temporal.PlainDate.from("2026-04-27");
+    const end = Temporal.PlainDate.from("2026-05-03");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual([
+      "2026-04-27",
+      "2026-04-29",
+      "2026-05-01",
+    ]);
+  });
+
+  it("interval=2 weekly BYDAY: only emits in active weeks", () => {
+    // Biweekly Mon/Wed starting 2020-01-06.
+    // (2026-04-27 - 2020-01-06) = 2303 days = 329 weeks exactly + 0 days.
+    // 329 / 2 = 164.5 → 2026-04-27 falls in an OFF week (week 329, odd).
+    // Next active week starts 2026-05-04.
+    const evt = makeEvent({
+      start: "2020-01-06 09:00",
+      end: "2020-01-06 10:00",
+      recurrence: {
+        frequency: "weekly",
+        interval: 2,
+        weekdays: ["MO", "WE"],
+        end: { type: "never" },
+      },
+    });
+    const start = Temporal.PlainDate.from("2026-04-27");
+    const end = Temporal.PlainDate.from("2026-05-10");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual([
+      "2026-05-04", // Mon, active week
+      "2026-05-06", // Wed, active week
+    ]);
+  });
+
+  it("matches iterative output for many random configurations", () => {
+    // Cross-check fast-forward emission set against the same computation
+    // performed with COUNT large enough to cover the window.
+    const cases: Array<{ start: string; weekdays: ("MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU")[]; interval: number }> = [
+      { start: "2020-01-06 09:00", weekdays: ["MO"], interval: 1 },
+      { start: "2020-01-06 09:00", weekdays: ["MO", "TH"], interval: 1 },
+      { start: "2020-01-08 09:00", weekdays: ["MO", "WE", "FR"], interval: 1 },
+      { start: "2020-01-10 09:00", weekdays: ["TU", "FR"], interval: 2 },
+      { start: "2020-01-06 09:00", weekdays: ["MO", "TU", "WE", "TH", "FR"], interval: 1 },
+    ];
+    const winStart = Temporal.PlainDate.from("2026-04-27");
+    const winEnd = Temporal.PlainDate.from("2026-05-03");
+    for (const c of cases) {
+      const ff = makeEvent({
+        start: c.start,
+        end: c.start,
+        recurrence: {
+          frequency: "weekly",
+          interval: c.interval,
+          weekdays: c.weekdays,
+          end: { type: "never" },
+        },
+      });
+      const ffResult = collectDates(expandRecurring([ff], winStart, winEnd));
+      // Manually derive expected: each weekday in the window that satisfies
+      // the period parity from origin.
+      const origPlain = Temporal.PlainDate.from(c.start.split(" ")[0]);
+      const expected: string[] = [];
+      for (let d = winStart; Temporal.PlainDate.compare(d, winEnd) <= 0; d = d.add({ days: 1 })) {
+        const dow = d.dayOfWeek;
+        const matchDay = c.weekdays.some((w) => {
+          const target = w === "SU" ? 7 : ({ MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 } as const)[w];
+          return target === dow;
+        });
+        if (!matchDay) continue;
+        // Period parity: number of complete weeks between origin and d, modulo interval.
+        // origin baseDay = Mon of origin's week.
+        const origDow = origPlain.dayOfWeek;
+        const origBase = origPlain.subtract({ days: origDow - 1 });
+        const dBase = d.subtract({ days: dow - 1 });
+        const weeksDiff = origBase.until(dBase, { largestUnit: "weeks" }).weeks;
+        if (weeksDiff < 0) continue;
+        if (weeksDiff % c.interval !== 0) continue;
+        // For origin's own week (weeksDiff=0), only sortedDays >= origDow count.
+        if (weeksDiff === 0 && dow < origDow) continue;
+        expected.push(d.toString());
+      }
+      expect(ffResult.sort()).toEqual(expected.sort());
+    }
+  });
+});

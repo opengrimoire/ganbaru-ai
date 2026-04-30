@@ -362,6 +362,59 @@ function isComplexConfig(config: RecurrenceConfig): boolean {
 }
 
 /**
+ * Fast-forward for weekly recurrence with BYDAY. Within a period of
+ * `interval` weeks the recurrence visits each day in `sortedDays` once, in
+ * order; after the last day in the period the cursor jumps to the first day
+ * of the next period. Advance count `N` from the origin maps to
+ * `period = floor((N + k0) / M)` and `dayIndex = (N + k0) % M`, where `k0`
+ * is `origStart`'s position in `sortedDays` and `M = sortedDays.length`.
+ *
+ * Returns `null` when `origStart`'s day-of-week is not in `sortedDays` (the
+ * advance function still handles that case correctly via the iterative
+ * walk; iCal exports do not produce this shape in practice).
+ */
+function fastForwardWeeklyByDay(
+  origStart: Temporal.PlainDate,
+  windowStart: Temporal.PlainDate,
+  config: RecurrenceConfig,
+): { cursor: Temporal.PlainDate; generated: number } | null {
+  if (Temporal.PlainDate.compare(origStart, windowStart) >= 0) return null;
+  if (!config.weekdays || config.weekdays.length === 0) return null;
+  const interval = config.interval;
+  if (interval <= 0) return null;
+
+  const sortedDays = [...new Set(config.weekdays.map((w) => jsWeekdayToTemporal(DAY_INDEX[w])))];
+  sortedDays.sort((a, b) => a - b);
+  const M = sortedDays.length;
+  if (M === 0) return null;
+
+  const origDow = origStart.dayOfWeek;
+  const k0 = sortedDays.indexOf(origDow);
+  if (k0 === -1) return null;
+
+  const baseDay = origStart.subtract({ days: origDow - sortedDays[0] });
+  const baseToWindow = baseDay.until(windowStart, { largestUnit: "days" }).days;
+  const periodLengthDays = interval * 7;
+
+  let bestN = Number.POSITIVE_INFINITY;
+  let bestCursor: Temporal.PlainDate | null = null;
+
+  for (let k = 0; k < M; k++) {
+    const dayOffset = sortedDays[k] - sortedDays[0];
+    const numerator = baseToWindow - dayOffset;
+    const p = numerator <= 0 ? 0 : Math.ceil(numerator / periodLengthDays);
+    const N = p * M + k - k0;
+    if (N <= 0) continue;
+    if (N >= bestN) continue;
+    bestN = N;
+    bestCursor = baseDay.add({ days: p * periodLengthDays + dayOffset });
+  }
+
+  if (bestCursor === null) return null;
+  return { cursor: bestCursor, generated: bestN };
+}
+
+/**
  * Build an override lookup map keyed by date string (YYYY-MM-DD)
  * extracted from the recurrenceId (which may be an ISO datetime).
  */
@@ -494,13 +547,20 @@ export function expandTemplate(
 
   if (config) {
     const maxCount = config.end.type === "count" ? config.end.count : Infinity;
-    // Fast-forward past instances entirely before `windowStart` for simple
-    // frequencies. For Google-Calendar-style imports with origins years in
-    // the past, this skips thousands of cursor advances per `eventsInWindow`
-    // call. Complex BY- rules fall back to the iterative cursor walk because
-    // their advance step does internal probing that does not compose
-    // linearly with naive addition.
-    const ff = !isComplexConfig(config) ? fastForwardSimple(origStart, windowStart, config) : null;
+    // Fast-forward past instances entirely before `windowStart`. Closed-form
+    // for simple frequencies and weekly+BYDAY (the dominant patterns in
+    // typical iCal exports). Other complex BY- rules fall back to the
+    // iterative cursor walk because their advance step does internal probing
+    // that does not compose linearly with naive addition.
+    let ff: { cursor: Temporal.PlainDate; generated: number } | null;
+    if (!isComplexConfig(config)) {
+      ff = fastForwardSimple(origStart, windowStart, config);
+    } else if (config.frequency === "weekly" && config.weekdays && config.weekdays.length > 0
+      && !config.ordinalWeekdays?.length && !config.byMonthDay?.length && !config.byMonth?.length) {
+      ff = fastForwardWeeklyByDay(origStart, windowStart, config);
+    } else {
+      ff = null;
+    }
     let cursor: Temporal.PlainDate;
     let generated: number;
     if (ff) {
