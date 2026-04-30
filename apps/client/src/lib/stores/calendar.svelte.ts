@@ -128,26 +128,6 @@ function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
 }
 
 /**
- * When a recurring instance is edited (e.g. via drag), merge its changes
- * into the template: keep the template's date, take the instance's time-of-day
- * and all non-positional fields.
- */
-function mergeIntoTemplate(template: CalendarEvent, changes: CalendarEvent): CalendarEvent {
-  const templateStartDate = template.start.split(" ")[0];
-  const templateEndDate = template.end.split(" ")[0];
-  const newStartTime = changes.start.split(" ")[1];
-  const newEndTime = changes.end.split(" ")[1];
-  return {
-    ...template,
-    ...changes,
-    id: template.id,
-    start: `${templateStartDate} ${newStartTime}`,
-    end: `${templateEndDate} ${newEndTime}`,
-    recurringParentId: undefined,
-  };
-}
-
-/**
  * Replace all attendees for an event (delete + insert).
  */
 async function saveAttendees(eventId: string, attendees: EventAttendee[]): Promise<void> {
@@ -452,96 +432,210 @@ export function getCalendar() {
       return event;
     },
 
-    async updateBlock(event: CalendarEvent) {
-      // Resolve recurring instance to its template
-      const parentId = event.recurringParentId ?? event.id;
-      let toUpdate = event;
-      if (event.recurringParentId) {
+    /**
+     * Apply a partial event patch. Only columns whose keys are present in
+     * the patch are written; unrelated fields stay as-is. Callers can pass a
+     * full event (every column rewritten, original behavior) or a narrow
+     * patch like `{ id, start, end }` for drag commits.
+     *
+     * Child rows (attendees, alarms, pomodoroConfig) are touched only when
+     * their key is explicitly present in the patch, so passing a slim
+     * in-memory event without those keys preserves their existing rows.
+     */
+    async updateBlock(patch: Partial<CalendarEvent> & { id: string }): Promise<void> {
+      const parentId = patch.recurringParentId ?? patch.id;
+      let toUpdate: Partial<CalendarEvent> & { id: string };
+
+      if (patch.recurringParentId) {
         const template = rawBlocks.find((b) => b.id === parentId);
+        toUpdate = { ...patch, id: parentId };
+        delete toUpdate.recurringParentId;
         if (template) {
-          toUpdate = mergeIntoTemplate(template, event);
+          // Merge instance-level changes onto the template's start/end date
+          // so the template's wall-clock anchor stays put.
+          if (patch.start) {
+            const templateStartDate = template.start.split(" ")[0];
+            toUpdate.start = `${templateStartDate} ${String(patch.start).split(" ")[1]}`;
+          }
+          if (patch.end) {
+            const templateEndDate = template.end.split(" ")[0];
+            toUpdate.end = `${templateEndDate} ${String(patch.end).split(" ")[1]}`;
+          }
+        }
+      } else {
+        toUpdate = { ...patch };
+        delete toUpdate.recurringParentId;
+      }
+
+      if (toUpdate.start !== undefined) {
+        const sanitized = sanitizeCalendarTime(String(toUpdate.start));
+        if (!sanitized) {
+          throw new Error(`Invalid calendar time format: start="${toUpdate.start}"`);
+        }
+        toUpdate.start = sanitized;
+      }
+      if (toUpdate.end !== undefined) {
+        const sanitized = sanitizeCalendarTime(String(toUpdate.end));
+        if (!sanitized) {
+          throw new Error(`Invalid calendar time format: end="${toUpdate.end}"`);
+        }
+        toUpdate.end = sanitized;
+      }
+
+      const existing = rawBlocks.find((b) => b.id === parentId);
+      const homeZone = toUpdate.timezone ?? existing?.timezone ?? localTimezone();
+      const allDayForDb = "allDay" in toUpdate ? !!toUpdate.allDay : !!existing?.allDay;
+
+      const sets: string[] = [];
+      const binds: unknown[] = [];
+      let p = 1;
+      const addSet = (column: string, value: unknown) => {
+        sets.push(`${column} = $${p++}`);
+        binds.push(value);
+      };
+
+      const presentKeys = new Set(Object.keys(toUpdate));
+
+      for (const key of presentKeys) {
+        switch (key) {
+          case "id":
+          case "recurringParentId":
+          case "pomodoroConfig":
+          case "attendees":
+          case "alarms":
+          case "overrides":
+            break;
+          case "title":
+            addSet("title", toUpdate.title ?? "");
+            break;
+          case "start":
+            addSet("start_time", toDbTime(String(toUpdate.start), homeZone, allDayForDb));
+            break;
+          case "end":
+            addSet("end_time", toDbTime(String(toUpdate.end), homeZone, allDayForDb));
+            break;
+          case "timezone":
+            addSet("timezone", toUpdate.timezone ?? "");
+            break;
+          case "calendarId":
+            addSet("calendar_id", toUpdate.calendarId ?? "local");
+            break;
+          case "color":
+            addSet("color", toUpdate.color ?? null);
+            break;
+          case "description":
+            addSet("description", toUpdate.description ?? "");
+            break;
+          case "recurrence": {
+            const rrule = toUpdate.recurrence ? recurrenceToRrule(toUpdate.recurrence) : null;
+            const repeatUntil = toUpdate.recurrence?.end.type === "until"
+              ? toUpdate.recurrence.end.date : null;
+            addSet("rrule", rrule);
+            addSet("repeat_until", repeatUntil);
+            break;
+          }
+          case "notifications": {
+            const notifJson = toUpdate.notifications && toUpdate.notifications.length > 0
+              ? JSON.stringify(toUpdate.notifications) : null;
+            addSet("notifications", notifJson);
+            break;
+          }
+          case "exceptions": {
+            const exceptionsJson = toUpdate.exceptions && toUpdate.exceptions.length > 0
+              ? JSON.stringify(toUpdate.exceptions) : null;
+            addSet("exceptions", exceptionsJson);
+            break;
+          }
+          case "allDay":
+            addSet("all_day", toUpdate.allDay ? 1 : 0);
+            break;
+          case "location":
+            addSet("location", toUpdate.location ?? "");
+            break;
+          case "url":
+            addSet("url", toUpdate.url ?? "");
+            break;
+          case "transparency":
+            addSet("transparency", toUpdate.transparency ?? "opaque");
+            break;
+          case "status":
+            addSet("status", toUpdate.status ?? "confirmed");
+            break;
+          case "sourceUid":
+            addSet("source_uid", toUpdate.sourceUid ?? null);
+            break;
+          case "visibility":
+            addSet("visibility", toUpdate.visibility ?? "public");
+            break;
+          case "priority":
+            addSet("priority", toUpdate.priority ?? null);
+            break;
+          case "categories":
+            addSet("categories",
+              toUpdate.categories ? JSON.stringify(toUpdate.categories) : null);
+            break;
+          case "geo":
+            addSet("geo", toUpdate.geo ? JSON.stringify(toUpdate.geo) : null);
+            break;
+          case "sequence":
+            addSet("sequence", toUpdate.sequence ?? 0);
+            break;
+          case "rdate":
+            addSet("rdate", toUpdate.rdate ? JSON.stringify(toUpdate.rdate) : null);
+            break;
+          case "extendedProperties":
+            addSet("extended_properties",
+              toUpdate.extendedProperties ? JSON.stringify(toUpdate.extendedProperties) : null);
+            break;
+          case "organizer":
+            addSet("organizer",
+              toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null);
+            break;
+          case "guestPermissions": {
+            const gp = toUpdate.guestPermissions;
+            addSet("guest_can_modify", gp?.canModify ? 1 : 0);
+            addSet("guest_can_invite_others", gp?.canInviteOthers === false ? 0 : 1);
+            addSet("guest_can_see_other_guests", gp?.canSeeOtherGuests === false ? 0 : 1);
+            break;
+          }
         }
       }
-      toUpdate = { ...toUpdate, recurringParentId: undefined };
-
-      // Sanitize times to ensure clean integer minutes
-      const sanitizedStart = sanitizeCalendarTime(toUpdate.start);
-      const sanitizedEnd = sanitizeCalendarTime(toUpdate.end);
-      if (!sanitizedStart || !sanitizedEnd) {
-        throw new Error(`Invalid calendar time format: start="${toUpdate.start}", end="${toUpdate.end}"`);
-      }
-      toUpdate = { ...toUpdate, start: sanitizedStart, end: sanitizedEnd };
 
       const now = nowLocal();
-      const rrule = toUpdate.recurrence ? recurrenceToRrule(toUpdate.recurrence) : null;
-      const repeatUntil = toUpdate.recurrence?.end.type === "until"
-        ? toUpdate.recurrence.end.date : null;
-      const notifJson = toUpdate.notifications && toUpdate.notifications.length > 0
-        ? JSON.stringify(toUpdate.notifications) : null;
-      const gp = toUpdate.guestPermissions;
+      addSet("updated_at", now);
+
       await execute(
-        `UPDATE calendar_events
-         SET title = $1, start_time = $2, end_time = $3,
-             color = $4, description = $5,
-             rrule = $6, notifications = $7,
-             repeat_until = $8,
-             all_day = $9, location = $10, url = $11,
-             transparency = $12, status = $13,
-             visibility = $14, priority = $15,
-             categories = $16, geo = $17,
-             sequence = $18, rdate = $19,
-             extended_properties = $20, organizer = $21,
-             guest_can_modify = $22, guest_can_invite_others = $23,
-             guest_can_see_other_guests = $24,
-             updated_at = $25
-         WHERE id = $26`,
-        [
-          toUpdate.title,
-          toDbTime(String(toUpdate.start), toUpdate.timezone || localTimezone(), toUpdate.allDay),
-          toDbTime(String(toUpdate.end), toUpdate.timezone || localTimezone(), toUpdate.allDay),
-          toUpdate.color ?? null,
-          toUpdate.description ?? "",
-          rrule,
-          notifJson,
-          repeatUntil,
-          toUpdate.allDay ? 1 : 0,
-          toUpdate.location ?? "",
-          toUpdate.url ?? "",
-          toUpdate.transparency ?? "opaque",
-          toUpdate.status ?? "confirmed",
-          toUpdate.visibility ?? "public",
-          toUpdate.priority ?? null,
-          toUpdate.categories ? JSON.stringify(toUpdate.categories) : null,
-          toUpdate.geo ? JSON.stringify(toUpdate.geo) : null,
-          toUpdate.sequence ?? 0,
-          toUpdate.rdate ? JSON.stringify(toUpdate.rdate) : null,
-          toUpdate.extendedProperties ? JSON.stringify(toUpdate.extendedProperties) : null,
-          toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null,
-          gp?.canModify ? 1 : 0,
-          gp?.canInviteOthers === false ? 0 : 1,
-          gp?.canSeeOtherGuests === false ? 0 : 1,
-          now,
-          parentId,
-        ],
+        `UPDATE calendar_events SET ${sets.join(", ")} WHERE id = $${p}`,
+        [...binds, parentId],
       );
-      // Sync attendees
-      await saveAttendees(parentId, toUpdate.attendees ?? []);
-      if (toUpdate.pomodoroConfig) {
-        await execute(
-          `INSERT OR REPLACE INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [parentId, toUpdate.pomodoroConfig.focusDurationMinutes,
-           toUpdate.pomodoroConfig.shortBreakMinutes,
-           toUpdate.pomodoroConfig.longBreakMinutes,
-           toUpdate.pomodoroConfig.pomodoroCount,
-           toUpdate.pomodoroConfig.idleTimeoutMinutes],
-        );
-      } else {
-        await execute("DELETE FROM pomodoro_configs WHERE event_id = $1", [parentId]);
+
+      if (presentKeys.has("attendees")) {
+        await saveAttendees(parentId, toUpdate.attendees ?? []);
       }
+      if (presentKeys.has("alarms")) {
+        await saveAlarms(parentId, toUpdate.alarms ?? []);
+      }
+      if (presentKeys.has("pomodoroConfig")) {
+        if (toUpdate.pomodoroConfig) {
+          await execute(
+            `INSERT OR REPLACE INTO pomodoro_configs
+               (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [parentId, toUpdate.pomodoroConfig.focusDurationMinutes,
+             toUpdate.pomodoroConfig.shortBreakMinutes,
+             toUpdate.pomodoroConfig.longBreakMinutes,
+             toUpdate.pomodoroConfig.pomodoroCount,
+             toUpdate.pomodoroConfig.idleTimeoutMinutes],
+          );
+        } else {
+          await execute("DELETE FROM pomodoro_configs WHERE event_id = $1", [parentId]);
+        }
+      }
+
       rawBlocks = rawBlocks.map((b) =>
-        b.id === parentId ? { ...b, ...toUpdate, id: parentId } : b,
+        b.id === parentId
+          ? { ...b, ...toUpdate, id: parentId, recurringParentId: undefined }
+          : b,
       );
       invalidate();
     },
