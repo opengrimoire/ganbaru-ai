@@ -23,6 +23,7 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { createEditSession } from "./edit-session.svelte";
   import type { PanelAnchor } from "./edit-session.svelte";
+  import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import {
     closedDisplay,
     buildCreateDisplay,
@@ -460,6 +461,13 @@
     window.addEventListener("keydown", handleKeydown);
     window.addEventListener("keyup", handleKeyup);
     window.addEventListener("blur", stopArrowScroll);
+
+    tick().then(() => {
+      requestAnimationFrame(() => {
+        perfMark("boot.first-paint", { count: visibleEvents.length });
+      });
+    });
+
     return () => {
       stopArrowScroll();
       if (anchorRaf !== 0) {
@@ -492,10 +500,16 @@
       anchorRaf = 0;
       if (pendingAnchor) anchorDate = pendingAnchor;
       pendingAnchor = null;
+      perfMark("nav.anchor-committed");
+      tick().then(() => {
+        perfMark("nav.display-ready", { count: visibleEvents.length });
+        requestAnimationFrame(() => perfMark("nav.paint-done"));
+      });
     });
   }
 
   function navigate(direction: "today" | "back" | "forward") {
+    perfMark("nav.start", { dir: direction });
     if (direction === "today") {
       commitAnchor(new Date());
       return;
@@ -522,8 +536,13 @@
   }
 
   function changeView(mode: CalendarViewMode) {
+    perfMark("view.start", { from: viewMode, to: mode });
     pushHistory(mode, anchorDate);
     viewMode = mode;
+    tick().then(() => {
+      perfMark("view.mounted", { count: visibleEvents.length });
+      requestAnimationFrame(() => perfMark("view.paint-done"));
+    });
   }
 
   function handleEventCreate(start: string, end: string, allDay?: boolean) {

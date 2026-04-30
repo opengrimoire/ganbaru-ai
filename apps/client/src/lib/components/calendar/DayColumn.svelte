@@ -14,6 +14,7 @@
   import { PENDING_CREATE_ID } from "./display-events";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { select } from "$lib/api/db";
+  import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import EventBlock from "./EventBlock.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
@@ -163,11 +164,18 @@
 
   $effect(() => {
     void pomodoro.segmentVersion; // re-fetch when segments are written to DB
+    const tStart = performance.now();
     const eventIds = positioned
       .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId && p.event.id !== draggingEventId)
       .map((p) => p.event.id);
+    perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
     if (eventIds.length === 0) {
       persistedSegmentsMap = new Map();
+      perfMark("col.effect-done", {
+        date: dateStr,
+        ms: Math.round((performance.now() - tStart) * 10) / 10,
+        skipped: 1,
+      });
       return;
     }
     const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
@@ -201,6 +209,11 @@
         map.set(seg.eventId, arr);
       }
       persistedSegmentsMap = map;
+      perfMark("col.effect-done", {
+        date: dateStr,
+        ms: Math.round((performance.now() - tStart) * 10) / 10,
+        rows: rows.length,
+      });
     }).catch((e) => console.warn("[DayColumn] Failed to load segments:", e));
   });
 

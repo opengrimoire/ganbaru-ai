@@ -26,6 +26,7 @@
   import SettingsModal from "$lib/components/settings/SettingsModal.svelte";
   import FloatingThemeEditor from "$lib/components/settings/FloatingThemeEditor.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import { perfLog, formatEntry, clear as clearPerfLog } from "$lib/stores/perflog.svelte";
 
   interface ProcessMemory {
     name: string;
@@ -136,21 +137,35 @@
     };
   });
 
+  const recentEntries = $derived(perfLog.entries.slice(-100));
+  const baselineT = $derived(perfLog.entries.length > 0 ? perfLog.entries[0].t : 0);
+
   function copyPerformanceData() {
     const report = displayReport;
-    if (!report) return;
-    const mode = perfLive ? "Live" : "Snapshot (10s)";
-    const lines = [`Performance ${mode} (${report.platform})`];
-    lines.push("");
-    lines.push("RAM by process:");
-    for (const p of report.processes) {
-      lines.push(`  ${p.name}: ${p.mb.toFixed(1)} MB`);
-    }
-    lines.push(`  Total PSS: ${Math.round(report.total_mb)} MB`);
-    if (startupMs !== null) {
+    const lines: string[] = [];
+    if (report) {
+      const mode = perfLive ? "Live" : "Snapshot (10s)";
+      lines.push(`Performance ${mode} (${report.platform})`);
       lines.push("");
+      lines.push("RAM by process:");
+      for (const p of report.processes) {
+        lines.push(`  ${p.name}: ${p.mb.toFixed(1)} MB`);
+      }
+      lines.push(`  Total PSS: ${Math.round(report.total_mb)} MB`);
+    }
+    if (startupMs !== null) {
+      if (lines.length > 0) lines.push("");
       lines.push(`Launch time: ${startupMs} ms`);
     }
+    if (perfLog.entries.length > 0) {
+      if (lines.length > 0) lines.push("");
+      lines.push(`Diagnostics (${perfLog.entries.length} entries):`);
+      const base = perfLog.entries[0].t;
+      for (const entry of perfLog.entries) {
+        lines.push(`  ${formatEntry(entry, base)}`);
+      }
+    }
+    if (lines.length === 0) return;
     navigator.clipboard.writeText(lines.join("\n"));
     copied = true;
     setTimeout(() => { copied = false; }, 2000);
@@ -449,6 +464,25 @@
             <div class="flex items-baseline justify-between">
               <span class="text-[10px] uppercase tracking-wider text-foreground">Launch time</span>
               <span class="text-[11px] tabular-nums text-foreground">{startupMs.toLocaleString("en")} ms</span>
+            </div>
+          {/if}
+          <!-- Diagnostics -->
+          {#if recentEntries.length > 0}
+            <div class="mx-0 my-3 h-px bg-border"></div>
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] uppercase tracking-wider text-foreground">
+                Diagnostics ({perfLog.entries.length})
+              </span>
+              <button
+                onclick={clearPerfLog}
+                class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground"
+                title="Clear diagnostics buffer"
+              >Clear</button>
+            </div>
+            <div class="mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">
+              {#each recentEntries as entry (entry)}
+                <div class="text-muted-foreground tabular-nums whitespace-nowrap">{formatEntry(entry, baselineT)}</div>
+              {/each}
             </div>
           {/if}
           <!-- Copy -->

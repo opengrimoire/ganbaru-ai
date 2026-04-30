@@ -15,7 +15,10 @@
   import KanbanView from "$lib/components/kanban/KanbanView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import IdleOverlay from "$lib/components/pomodoro/IdleOverlay.svelte";
+  import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import { onMount } from "svelte";
+
+  perfMark("boot.script-start");
 
   const appWindow = getCurrentWindow();
   const nav = getNavigation();
@@ -28,6 +31,7 @@
   let startupMs = $state<number | null>(null);
 
   onMount(() => {
+    perfMark("boot.app-mount");
     calendars.load().catch((e) => console.error("Failed to load calendars:", e));
     // The legacy wall-clock to UTC ISO migration runs here instead of in
     // main.ts so first paint is not blocked by a per-event UPDATE pass on
@@ -36,7 +40,10 @@
     // so on every subsequent boot this is a single config read. Calendar
     // load is gated on it so the renderer never reads half-migrated rows.
     hydrateCalendarEventTimezones()
-      .then(() => calendar.load())
+      .then(() => {
+        perfMark("boot.tz-hydrated");
+        return calendar.load();
+      })
       .catch((e) => console.error("Failed to migrate or load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));

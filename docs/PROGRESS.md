@@ -6,7 +6,7 @@ Phase 1: core loop (wrapping up)
 
 ## Active work
 
-(none)
+- Calendar performance: production diagnostic ring buffer wired into the performance panel (boot, navigation, view switch, per-column SQL marks). User captures traces from a release `.deb`; targeted fixes land after measurements (branch dev).
 
 ## Blocked / needs decision
 

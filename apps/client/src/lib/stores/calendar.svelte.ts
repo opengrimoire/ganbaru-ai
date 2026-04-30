@@ -26,6 +26,7 @@ import {
 } from "./calendar-bulk-import";
 import { serializeCalendarToIcs } from "$lib/calendar/ics/serializer";
 import type { IcsImportSummary } from "$lib/calendar/ics/types";
+import { mark as perfMark } from "$lib/stores/perflog.svelte";
 
 export { expandRecurring, parseYMD, fmtYMD };
 
@@ -290,7 +291,7 @@ export function getCalendar() {
     endBatch() { if (--batchDepth <= 0) { batchDepth = 0; invalidate(); } },
 
     async load() {
-      const t0 = performance.now();
+      perfMark("boot.sql-start");
       try {
         const renderZone = localTimezone();
         const rows = await select<DbCalendarEvent>(
@@ -310,9 +311,9 @@ export function getCalendar() {
            LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
            ORDER BY ce.start_time ASC`,
         );
-        const tSql = performance.now();
+        perfMark("boot.sql-main-done", { rows: rows.length });
         const mapped = rows.map((r) => mapRow(r, renderZone));
-        const tMap = performance.now();
+        perfMark("boot.maprow-done");
 
         if (mapped.length > 0) {
           const [attendeeMap, alarmMap, overrideMap] = await Promise.all([
@@ -329,16 +330,11 @@ export function getCalendar() {
             if (ovr?.length) evt.overrides = ovr;
           }
         }
-        const tChild = performance.now();
+        perfMark("boot.sql-children-done");
 
         rawBlocks = mapped;
         invalidate();
-        const tDone = performance.now();
-        console.log(
-          `[calendar] load: ${rawBlocks.length} events in ${(tDone - t0).toFixed(0)}ms ` +
-            `(sql=${(tSql - t0).toFixed(0)} map=${(tMap - tSql).toFixed(0)} ` +
-            `child=${(tChild - tMap).toFixed(0)} commit=${(tDone - tChild).toFixed(0)})`,
-        );
+        perfMark("boot.rawblocks-set", { events: rawBlocks.length });
       } catch (e) {
         console.error("[calendar] load() failed:", e);
         throw e;
