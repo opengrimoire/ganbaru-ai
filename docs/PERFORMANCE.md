@@ -35,6 +35,14 @@ Per-call cost is `O(log N + K)` where `K` is the number of events in the window 
 
 `display-events.ts` `applyAll` and `applyFollowing` previously expanded the entire `rawBlocks` array on every keystroke during recurring edits. They now expand only the patched template (and the capped / virtual templates for "following" splits); sibling instances are stripped from `storeEvents` via `belongsToSeries` and re-added from this single-template expansion. Preview cost is now constant regardless of total event count.
 
+### Fast-forward for far-past origins
+
+Imported templates often have origins years before the current viewport (a daily standup with `DTSTART=2020-01-15` viewed in 2026). The cursor walk in `expandTemplate` would advance from `origStart` to `windowEnd` one interval at a time, allocating Temporal.PlainDate objects on each step. For a 6-year-old daily template, that is ~2200 cursor advances per `eventsInWindow` call, dominating the per-frame cost during held-arrow navigation.
+
+`fastForwardSimple` in `recurrence.ts` jumps the cursor directly to the first instance at or after `windowStart` using closed-form arithmetic, then sets the `generated` counter so COUNT semantics are preserved. It runs only for simple frequencies (no BYDAY / BYMONTHDAY / BYMONTH / ordinal selectors) and bails when day-of-month or month-day combinations would drift under all-at-once addition (monthly day > 28, yearly Feb 29). Complex BY- rules fall back to the iterative walk; their per-step cost is the same but their effective cadence is sparser, so the wasted iterations are a smaller share of the total.
+
+EXDATE, RDATE, COUNT, and UNTIL semantics are preserved: the loop body that follows the fast-forward is unchanged, and instances skipped by fast-forward are by construction entirely before `windowStart`, so they never would have been emitted.
+
 ## How to read performance data
 
 Click the gauge icon in the title bar to open the performance panel. It shows a per-process memory breakdown (updated every 5 seconds) and the startup time captured when the app launched. The "Copy" button copies all values as plain text.
