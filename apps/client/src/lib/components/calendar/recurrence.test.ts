@@ -702,3 +702,191 @@ describe("expandRecurring - window scoping", () => {
     expect(dates).not.toContain("2030-01-01");
   });
 });
+
+describe("expandRecurring - fast-forward correctness (origin years before window)", () => {
+  it("daily: emits the first in-window instance with correct id and ::date suffix", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00",
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-29");
+    const end = Temporal.PlainDate.from("2026-05-05");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual([
+      "2026-04-29",
+      "2026-04-30",
+      "2026-05-01",
+      "2026-05-02",
+      "2026-05-03",
+      "2026-05-04",
+      "2026-05-05",
+    ]);
+    expect(result[0].id).toBe("evt-1::2026-04-29");
+    expect(result[0].recurringParentId).toBe("evt-1");
+  });
+
+  it("daily with interval=3: emits only valid stride dates inside the window", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00",
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "daily", interval: 3, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-29");
+    const end = Temporal.PlainDate.from("2026-05-05");
+    const result = expandRecurring([evt], start, end);
+    // 2020-01-01 + N*3 days. Find the first such date >= 2026-04-29.
+    // (2026-04-29 - 2020-01-01) = 2310 days. ceil(2310/3) = 770 → +2310 days = 2026-04-29.
+    expect(collectDates(result)).toEqual(["2026-04-29", "2026-05-02", "2026-05-05"]);
+  });
+
+  it("weekly without BYDAY: jumps to the same dayOfWeek inside the window", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00", // Wednesday
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "weekly", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-27");
+    const end = Temporal.PlainDate.from("2026-05-03");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual(["2026-04-29"]); // Wed 2026-04-29
+  });
+
+  it("weekly interval=2: lands on the correct biweekly Wednesday", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00", // Wednesday
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "weekly", interval: 2, end: { type: "never" } },
+    });
+    // 2026-04-29 is 2310 days after 2020-01-01. 2310 / 14 = 165.0 exactly,
+    // so the biweekly cadence lands on 2026-04-29.
+    const start = Temporal.PlainDate.from("2026-04-27");
+    const end = Temporal.PlainDate.from("2026-05-10");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual(["2026-04-29"]);
+  });
+
+  it("monthly with safe day-of-month: jumps to first in-window month", () => {
+    const evt = makeEvent({
+      start: "2020-01-15 09:00",
+      end: "2020-01-15 10:00",
+      recurrence: { frequency: "monthly", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-01");
+    const end = Temporal.PlainDate.from("2026-04-30");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual(["2026-04-15"]);
+  });
+
+  it("yearly: jumps to first in-window year", () => {
+    const evt = makeEvent({
+      start: "2010-06-15 09:00",
+      end: "2010-06-15 10:00",
+      recurrence: { frequency: "yearly", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-01-01");
+    const end = Temporal.PlainDate.from("2026-12-31");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual(["2026-06-15"]);
+  });
+
+  it("daily with COUNT exhausted before window: emits nothing", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00",
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 100 } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-29");
+    const end = Temporal.PlainDate.from("2026-05-05");
+    expect(expandRecurring([evt], start, end)).toHaveLength(0);
+  });
+
+  it("daily with COUNT straddling window start: emits remaining instances", () => {
+    // origin 2026-04-25, COUNT=10 → instances 2026-04-25..2026-05-04
+    const evt = makeEvent({
+      start: "2026-04-25 09:00",
+      end: "2026-04-25 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 10 } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-29");
+    const end = Temporal.PlainDate.from("2026-05-10");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual([
+      "2026-04-29",
+      "2026-04-30",
+      "2026-05-01",
+      "2026-05-02",
+      "2026-05-03",
+      "2026-05-04",
+    ]);
+  });
+
+  it("daily with UNTIL exhausted before window: emits nothing", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00",
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "until", date: "2025-12-31" } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-29");
+    const end = Temporal.PlainDate.from("2026-05-05");
+    expect(expandRecurring([evt], start, end)).toHaveLength(0);
+  });
+
+  it("daily honors EXDATE on the first in-window instance", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00",
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+      exceptions: ["2026-04-29"],
+    });
+    const start = Temporal.PlainDate.from("2026-04-29");
+    const end = Temporal.PlainDate.from("2026-05-01");
+    const result = expandRecurring([evt], start, end);
+    expect(collectDates(result)).toEqual(["2026-04-30", "2026-05-01"]);
+  });
+
+  it("daily honors RDATE inside the window without duplicating the recurring instance", () => {
+    const evt = makeEvent({
+      start: "2020-01-01 09:00",
+      end: "2020-01-01 10:00",
+      recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+      rdate: ["2026-04-30"], // also generated by RRULE on this date
+    });
+    const start = Temporal.PlainDate.from("2026-04-29");
+    const end = Temporal.PlainDate.from("2026-05-01");
+    const result = expandRecurring([evt], start, end);
+    const apr30 = result.filter((e) => e.start.startsWith("2026-04-30"));
+    expect(apr30).toHaveLength(1);
+  });
+
+  it("monthly day=31: falls back to iterative path (skip-fast-forward path)", () => {
+    // Day-31 origins drift under all-at-once month addition. The fast-forward
+    // helper bails on origDay > 28 so behavior matches the iterative loop.
+    const evt = makeEvent({
+      start: "2020-01-31 09:00",
+      end: "2020-01-31 10:00",
+      recurrence: { frequency: "monthly", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-04-01");
+    const end = Temporal.PlainDate.from("2026-04-30");
+    const result = expandRecurring([evt], start, end);
+    // Iterative drift over 6+ years lands somewhere on the late days of
+    // months without a 31st. Just assert one instance is emitted in April.
+    expect(result).toHaveLength(1);
+    expect(result[0].start.startsWith("2026-04")).toBe(true);
+  });
+
+  it("yearly Feb 29 origin: falls back to iterative path", () => {
+    const evt = makeEvent({
+      start: "2020-02-29 09:00",
+      end: "2020-02-29 10:00",
+      recurrence: { frequency: "yearly", interval: 1, end: { type: "never" } },
+    });
+    const start = Temporal.PlainDate.from("2026-01-01");
+    const end = Temporal.PlainDate.from("2026-12-31");
+    const result = expandRecurring([evt], start, end);
+    // 2026 is non-leap; iterative add({years:1}) constrains to Feb 28.
+    expect(result).toHaveLength(1);
+    expect(result[0].start.startsWith("2026-02-")).toBe(true);
+  });
+});

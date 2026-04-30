@@ -279,6 +279,89 @@ function advanceYearlyByMonthDay(
 const MAX_INSTANCES = 10000;
 
 /**
+ * Skip recurrence instances whose dates are entirely before `windowStart`
+ * using closed-form arithmetic, avoiding the O(N) cursor walk from a
+ * far-past origin. Returns the cursor and 1-indexed iteration position
+ * (`generated`) where the loop should resume so subsequent instances are
+ * processed normally. Returns `null` for rules where additive jumps would
+ * not match the iterative `advanceDate` behavior (e.g., monthly on day 31
+ * which constrains differently when added all-at-once vs. one-at-a-time).
+ *
+ * Only invoked for simple frequencies (no BYDAY/BYMONTHDAY/BYMONTH/ordinal
+ * selectors). Complex rules fall back to the original cursor walk.
+ */
+function fastForwardSimple(
+  origStart: Temporal.PlainDate,
+  windowStart: Temporal.PlainDate,
+  config: RecurrenceConfig,
+): { cursor: Temporal.PlainDate; generated: number } | null {
+  if (Temporal.PlainDate.compare(origStart, windowStart) >= 0) return null;
+  const interval = config.interval;
+  if (interval <= 0) return null;
+
+  if (config.frequency === "daily") {
+    const daysDiff = origStart.until(windowStart, { largestUnit: "days" }).days;
+    const skipIntervals = Math.ceil(daysDiff / interval);
+    return {
+      cursor: origStart.add({ days: skipIntervals * interval }),
+      generated: skipIntervals,
+    };
+  }
+
+  if (config.frequency === "weekly") {
+    const daysDiff = origStart.until(windowStart, { largestUnit: "days" }).days;
+    const skipIntervals = Math.ceil(daysDiff / (7 * interval));
+    return {
+      cursor: origStart.add({ weeks: skipIntervals * interval }),
+      generated: skipIntervals,
+    };
+  }
+
+  if (config.frequency === "monthly") {
+    // Day-of-month must be safe under all-at-once month addition. For
+    // origDay <= 28 every month has the requested day, so K monthly steps
+    // applied as `add({months: K * interval})` matches K calls of
+    // `add({months: interval})` exactly.
+    if (origStart.day > 28) return null;
+    const daysDiff = origStart.until(windowStart, { largestUnit: "days" }).days;
+    const estMonths = Math.floor(daysDiff / 31);
+    let skipIntervals = Math.max(0, Math.floor(estMonths / interval));
+    let cursor = origStart.add({ months: skipIntervals * interval });
+    while (Temporal.PlainDate.compare(cursor, windowStart) < 0) {
+      cursor = cursor.add({ months: interval });
+      skipIntervals++;
+    }
+    return { cursor, generated: skipIntervals };
+  }
+
+  if (config.frequency === "yearly") {
+    // Feb 29 origins drift under year addition (constrained to Feb 28 in
+    // non-leap years). Skip fast-forward; the iterative path handles it.
+    if (origStart.month === 2 && origStart.day === 29) return null;
+    const daysDiff = origStart.until(windowStart, { largestUnit: "days" }).days;
+    const estYears = Math.floor(daysDiff / 366);
+    let skipIntervals = Math.max(0, Math.floor(estYears / interval));
+    let cursor = origStart.add({ years: skipIntervals * interval });
+    while (Temporal.PlainDate.compare(cursor, windowStart) < 0) {
+      cursor = cursor.add({ years: interval });
+      skipIntervals++;
+    }
+    return { cursor, generated: skipIntervals };
+  }
+
+  return null;
+}
+
+function isComplexConfig(config: RecurrenceConfig): boolean {
+  return Boolean(
+    (config.weekdays && config.weekdays.length > 0) ||
+    (config.ordinalWeekdays && config.ordinalWeekdays.length > 0) ||
+    (config.byMonthDay && config.byMonthDay.length > 0) ||
+    (config.byMonth && config.byMonth.length > 0),
+  );
+}
+
+/**
  * Build an override lookup map keyed by date string (YYYY-MM-DD)
  * extracted from the recurrenceId (which may be an ISO datetime).
  */
@@ -411,8 +494,22 @@ export function expandTemplate(
 
   if (config) {
     const maxCount = config.end.type === "count" ? config.end.count : Infinity;
-    let cursor = advanceDate(origStart, config);
-    let generated = 1;
+    // Fast-forward past instances entirely before `windowStart` for simple
+    // frequencies. For Google-Calendar-style imports with origins years in
+    // the past, this skips thousands of cursor advances per `eventsInWindow`
+    // call. Complex BY- rules fall back to the iterative cursor walk because
+    // their advance step does internal probing that does not compose
+    // linearly with naive addition.
+    const ff = !isComplexConfig(config) ? fastForwardSimple(origStart, windowStart, config) : null;
+    let cursor: Temporal.PlainDate;
+    let generated: number;
+    if (ff) {
+      cursor = ff.cursor;
+      generated = ff.generated;
+    } else {
+      cursor = advanceDate(origStart, config);
+      generated = 1;
+    }
     let iter = 0;
 
     while (generated < maxCount && iter < MAX_INSTANCES) {
