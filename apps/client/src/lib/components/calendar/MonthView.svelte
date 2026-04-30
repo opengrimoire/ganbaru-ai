@@ -4,11 +4,11 @@
   import {
     getMonthGrid,
     isPastDay,
-    allEventsForDay,
     getEventColor,
     getPastEventColor,
     getOutsideMonthEventColor,
     formatDayName,
+    formatDatePart,
   } from "./utils";
   import type { Theme } from "$lib/stores/themes";
   import { resolveAppTokens, resolveCalendarTokens } from "$lib/stores/themes";
@@ -16,19 +16,49 @@
 
   let {
     anchorDate,
-    events,
+    eventsByDay,
     theme,
     onDayClick,
     onEventClick,
     onWheelNavigate,
   }: {
     anchorDate: Date;
-    events: CalendarEvent[];
+    eventsByDay: Map<string, CalendarEvent[]>;
     theme: Theme;
     onDayClick: (date: Date) => void;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
   } = $props();
+
+  /** Stable empty fallback for days with no events. */
+  const EMPTY_DAY: CalendarEvent[] = [];
+
+  /**
+   * Per-cell ordering: all-day events first, sorted by title then start;
+   * timed events second, sorted by start. Reproduces the contract of the
+   * old `allEventsForDay` helper, but on the pre-bucketed day slice instead
+   * of scanning the full visible-event array per cell.
+   */
+  function sortDayCellEvents(arr: CalendarEvent[]): CalendarEvent[] {
+    if (arr.length === 0) return arr;
+    const allDay: CalendarEvent[] = [];
+    const timed: CalendarEvent[] = [];
+    for (const e of arr) (e.allDay ? allDay : timed).push(e);
+    if (allDay.length > 1) {
+      allDay.sort((a, b) => {
+        const at = (a.title || "").toLowerCase();
+        const bt = (b.title || "").toLowerCase();
+        if (at !== bt) return at < bt ? -1 : 1;
+        return a.start.localeCompare(b.start);
+      });
+    }
+    if (timed.length > 1) {
+      timed.sort((a, b) => a.start.localeCompare(b.start));
+    }
+    if (allDay.length === 0) return timed;
+    if (timed.length === 0) return allDay;
+    return allDay.concat(timed);
+  }
 
   let wheelCooldown = false;
 
@@ -128,7 +158,7 @@
             inMonth,
             past,
           )}
-          {@const dayEvts = allEventsForDay(events, day)}
+          {@const dayEvts = sortDayCellEvents(eventsByDay.get(formatDatePart(day)) ?? EMPTY_DAY)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div

@@ -23,6 +23,7 @@
   let {
     anchorDate,
     events,
+    eventsByDay,
     theme,
     timezones = [] as string[],
     tzAbbrMode = "acronym" as TimezoneAbbrMode,
@@ -42,6 +43,7 @@
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
+    eventsByDay: Map<string, CalendarEvent[]>;
     theme: Theme;
     timezones?: string[];
     tzAbbrMode?: TimezoneAbbrMode;
@@ -59,6 +61,9 @@
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: () => void;
   } = $props();
+
+  /** Stable empty fallback so the day column keeps a consistent prop reference. */
+  const EMPTY_DAY: CalendarEvent[] = [];
 
   let scrollContainer: HTMLDivElement | undefined = $state();
   let wheelCooldown = false;
@@ -113,7 +118,8 @@
   const today = $derived(formatDatePart(anchorDate) === todayStr);
   const past = $derived(formatDatePart(anchorDate) < todayStr);
   const dateStr = $derived(formatDatePart(anchorDate));
-  const allDayEvents = $derived(allDayEventsForDay(events, anchorDate));
+  const dayBucket = $derived(eventsByDay.get(dateStr) ?? EMPTY_DAY);
+  const allDayEvents = $derived(allDayEventsForDay(dayBucket, anchorDate));
 
   let allDayExpanded = $state(false);
   const allDayCollapsible = $derived(allDayEvents.length > ALL_DAY_MAX_VISIBLE);
@@ -126,7 +132,6 @@
   let stickyAllDayBannerHeight = $state(0);
   $effect(() => { if (allDayEvents.length === 0) stickyAllDayBannerHeight = 0; });
   const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayBannerHeight);
-  const timedEvents = $derived(events.filter((e) => !e.allDay));
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) 1fr`,
@@ -410,7 +415,7 @@
       <div class="min-w-0" style="border-left: 1px solid var(--cal-gridline);">
         <DayColumn
           date={anchorDate}
-          events={timedEvents}
+          events={dayBucket}
           {theme}
           isToday={today}
           isPast={past}

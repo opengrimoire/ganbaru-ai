@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { CalendarEvent, PositionedEvent, PersistedSegment } from "./types";
   import {
-    eventsForDay,
     layoutEventsForDay,
     effectiveMinuteRange,
     formatDatePart,
@@ -65,7 +64,9 @@
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   const dateStr = $derived(formatDatePart(date));
-  const dayEvents = $derived(eventsForDay(events, date));
+  // `events` arrives pre-bucketed per day from CalendarView, so the only
+  // remaining concern is to drop all-day rows which render in the banner.
+  const dayEvents = $derived(events.filter((e) => !e.allDay));
   const positioned = $derived(layoutEventsForDay(dayEvents, dateStr));
 
   // Layout-aware preview: include drag/create preview in layout computation
@@ -168,16 +169,13 @@
     const eventIds = positioned
       .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId && p.event.id !== draggingEventId)
       .map((p) => p.event.id);
-    perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
+    // Skip mark emission for the no-pomodoro path so a 1Hz effect on a column
+    // with no pomodoro events does not flood the diagnostics ring buffer.
     if (eventIds.length === 0) {
       persistedSegmentsMap = new Map();
-      perfMark("col.effect-done", {
-        date: dateStr,
-        ms: Math.round((performance.now() - tStart) * 10) / 10,
-        skipped: 1,
-      });
       return;
     }
+    perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
     const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
     select<DbSegmentRow>(
       `SELECT id, event_id, event_date, run_id, cycle_number, phase,

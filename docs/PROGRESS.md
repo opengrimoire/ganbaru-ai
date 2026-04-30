@@ -6,7 +6,7 @@ Phase 1: core loop (wrapping up)
 
 ## Active work
 
-- Calendar performance: production diagnostic ring buffer wired into the performance panel (boot, navigation, view switch, per-column SQL marks). User captures traces from a release `.deb`; targeted fixes land after measurements (branch dev).
+- Calendar performance: production diagnostic ring buffer wired into the performance panel (boot, navigation, view switch, per-column SQL marks). User captures traces from a release `.deb`; targeted fixes land after measurements (branch dev). First fix landed: per-day event bucket built once per `visibleEvents` recompute in `CalendarView.svelte` and threaded into WeekView, DayView, MonthView so DayColumn stops scanning the full visible-event array per column and MonthView stops doing it per cell. The empty-pomodoro path in DayColumn no longer emits diagnostic marks so a 1Hz idle effect on a column without pomodoro events cannot rotate the ring buffer past actually interesting boot or nav entries.
 
 ## Blocked / needs decision
 

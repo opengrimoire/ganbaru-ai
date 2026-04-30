@@ -39,6 +39,22 @@
   const calZoom = getCalendarZoom();
   const theme = getTheme();
 
+  /**
+   * Advance a `YYYY-MM-DD` string by one calendar day. Inlined to keep
+   * `eventsByDay` allocation-free of Temporal objects in the hot path.
+   */
+  function nextDayStr(s: string): string {
+    const y = Number(s.substring(0, 4));
+    const m = Number(s.substring(5, 7));
+    const d = Number(s.substring(8, 10));
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + 1);
+    const ny = dt.getFullYear();
+    const nm = String(dt.getMonth() + 1).padStart(2, "0");
+    const nd = String(dt.getDate()).padStart(2, "0");
+    return `${ny}-${nm}-${nd}`;
+  }
+
   let viewMode: CalendarViewMode = $state("week");
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
@@ -85,6 +101,37 @@
   });
 
   const visibleEvents = $derived(displayResult.events);
+
+  /**
+   * Per-day bucket built once per `visibleEvents` recompute. Replaces
+   * `eventsForDay`/`allEventsForDay` linear scans inside DayColumn and
+   * MonthView, which previously cost O(views x columns x N) per nav. The
+   * walk mirrors the old filter logic exactly: an event lands on every day
+   * `d` where `e.end > "${d} 00:00"` for timed events, and on every day in
+   * `[startDay, endDay]` (inclusive) for all-day events.
+   */
+  const eventsByDay = $derived.by(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    for (const e of visibleEvents) {
+      let d = e.start.substring(0, 10);
+      if (e.allDay) {
+        const endDay = e.end.substring(0, 10);
+        while (d <= endDay) {
+          const arr = map.get(d);
+          if (arr) arr.push(e); else map.set(d, [e]);
+          d = nextDayStr(d);
+        }
+      } else {
+        while (e.end > `${d} 00:00`) {
+          const arr = map.get(d);
+          if (arr) arr.push(e); else map.set(d, [e]);
+          d = nextDayStr(d);
+        }
+      }
+    }
+    return map;
+  });
+
   let suppressEditingGlow = $state(false);
   const previewedIds = $derived(suppressEditingGlow ? new Set<string>() : displayResult.previewedIds);
   const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
@@ -1084,6 +1131,7 @@
       <WeekView
         {anchorDate}
         events={visibleEvents}
+        {eventsByDay}
         theme={theme.current}
         {timezones}
         {tzAbbrMode}
@@ -1105,6 +1153,7 @@
       <DayView
         {anchorDate}
         events={visibleEvents}
+        {eventsByDay}
         theme={theme.current}
         {timezones}
         {tzAbbrMode}
@@ -1125,7 +1174,7 @@
     {:else}
       <MonthView
         {anchorDate}
-        events={visibleEvents}
+        {eventsByDay}
         theme={theme.current}
         onDayClick={handleDayClickFromMonth}
         onEventClick={handleEventClick}

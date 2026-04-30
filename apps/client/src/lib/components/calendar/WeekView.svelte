@@ -28,6 +28,7 @@
   let {
     anchorDate,
     events,
+    eventsByDay,
     theme,
     timezones = [] as string[],
     tzAbbrMode = "acronym" as TimezoneAbbrMode,
@@ -47,6 +48,7 @@
   }: {
     anchorDate: Date;
     events: CalendarEvent[];
+    eventsByDay: Map<string, CalendarEvent[]>;
     theme: Theme;
     timezones?: string[];
     tzAbbrMode?: TimezoneAbbrMode;
@@ -64,6 +66,9 @@
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: (date: Date) => void;
   } = $props();
+
+  /** Stable empty fallback so day columns without events keep a consistent prop reference. */
+  const EMPTY_DAY: CalendarEvent[] = [];
 
   const ALL_DAY_ROW_H = 21;
   const ALL_DAY_GAP = 1;
@@ -103,7 +108,6 @@
     return stable;
   });
   const allDayMaxRow = $derived(allDayPositioned.length > 0 ? Math.max(...allDayPositioned.map((p) => p.row)) + 1 : 0);
-  const timedEvents = $derived(events.filter((e) => !e.allDay));
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
     `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) repeat(7, 1fr)`,
@@ -609,7 +613,7 @@
           <div class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">
             <DayColumn
               date={day}
-              events={timedEvents}
+              events={eventsByDay.get(dateStr) ?? EMPTY_DAY}
               {theme}
               isToday={formatDatePart(day) === todayStr}
               isPast={formatDatePart(day) < todayStr}
