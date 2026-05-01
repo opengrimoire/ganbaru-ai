@@ -16,8 +16,8 @@ import {
   sanitizeCalendarTime, utcIsoToWallClock, wallClockToUtcIso,
 } from "$lib/components/calendar/utils";
 import {
-  mapRow, mapOverride, toDbTime,
-  type DbCalendarEvent, type DbOverride,
+  mapAlarm, mapAttendee, mapOverride, mapRow, safeJsonParse, toDbTime,
+  type DbAlarm, type DbAttendee, type DbCalendarEvent, type DbOverride,
 } from "./map-row";
 import {
   buildBulkImportStatements,
@@ -311,6 +311,121 @@ export function getCalendar() {
         console.error("[calendar] load() failed:", e);
         throw e;
       }
+    },
+
+    /**
+     * Fetch the full DB row for one event id and return a fully populated
+     * `CalendarEvent`. The boot path holds only a slim subset of columns in
+     * `rawBlocks`; this is what EventPanel and the ICS exporter call when
+     * they need the heavy fields (description, url, organizer, attendees,
+     * alarms, visibility, priority, categories, geo, sequence,
+     * extendedProperties, guestPermissions, plus heavy override columns).
+     *
+     * Four queries run in parallel: the main row joined with its pomodoro
+     * config, plus attendees / alarms / overrides keyed by event_id /
+     * parent_event_id. All four hit indexed PK or FK columns, so the cost
+     * over Tauri IPC is a few milliseconds even on the release build.
+     */
+    async loadFullEvent(id: string): Promise<CalendarEvent | undefined> {
+      const renderZone = localTimezone();
+      type DbFullEvent = DbCalendarEvent & {
+        description: string | null;
+        url: string | null;
+        source_uid: string | null;
+        visibility: string;
+        priority: number | null;
+        categories: string | null;
+        geo: string | null;
+        sequence: number;
+        extended_properties: string | null;
+        organizer: string | null;
+        guest_can_modify: number;
+        guest_can_invite_others: number;
+        guest_can_see_other_guests: number;
+      };
+      type DbFullOverride = DbOverride & {
+        description: string | null;
+        location: string | null;
+        url: string | null;
+        visibility: string | null;
+        extended_properties: string | null;
+      };
+      const [rows, attendeeRows, alarmRows, overrideRows] = await Promise.all([
+        select<DbFullEvent>(
+          `SELECT ce.*,
+                  pc.focus_duration_minutes, pc.short_break_minutes,
+                  pc.long_break_minutes, pc.pomodoro_count,
+                  pc.idle_timeout_minutes
+           FROM calendar_events ce
+           LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
+           WHERE ce.id = $1`,
+          [id],
+        ),
+        select<DbAttendee>(
+          `SELECT * FROM calendar_event_attendees WHERE event_id = $1
+           ORDER BY sort_order ASC`,
+          [id],
+        ),
+        select<DbAlarm>(
+          `SELECT * FROM calendar_event_alarms WHERE event_id = $1
+           ORDER BY sort_order ASC`,
+          [id],
+        ),
+        select<DbFullOverride>(
+          `SELECT * FROM calendar_event_overrides WHERE parent_event_id = $1`,
+          [id],
+        ),
+      ]);
+      if (rows.length === 0) return undefined;
+      const row = rows[0];
+      const event = mapRow(row, renderZone);
+
+      if (row.description) event.description = row.description;
+      if (row.url) event.url = row.url;
+      if (row.source_uid) event.sourceUid = row.source_uid;
+      if (row.visibility && row.visibility !== "public") {
+        event.visibility = row.visibility as EventVisibility;
+      }
+      if (row.priority != null) event.priority = row.priority;
+      const categories = safeJsonParse<string[]>(row.categories);
+      if (categories) event.categories = categories;
+      const geo = safeJsonParse<GeoCoordinates>(row.geo);
+      if (geo) event.geo = geo;
+      if (row.sequence) event.sequence = row.sequence;
+      const extendedProperties =
+        safeJsonParse<Record<string, string>>(row.extended_properties);
+      if (extendedProperties) event.extendedProperties = extendedProperties;
+      const organizer = safeJsonParse<EventOrganizer>(row.organizer);
+      if (organizer) event.organizer = organizer;
+      if (row.guest_can_modify === 1
+        || row.guest_can_invite_others === 0
+        || row.guest_can_see_other_guests === 0) {
+        event.guestPermissions = {
+          canModify: row.guest_can_modify === 1,
+          canInviteOthers: row.guest_can_invite_others !== 0,
+          canSeeOtherGuests: row.guest_can_see_other_guests !== 0,
+        };
+      }
+
+      if (attendeeRows.length > 0) {
+        event.attendees = attendeeRows.map(mapAttendee);
+      }
+      if (alarmRows.length > 0) {
+        event.alarms = alarmRows.map(mapAlarm);
+      }
+      if (overrideRows.length > 0) {
+        event.overrides = overrideRows.map((r) => {
+          const slim = mapOverride(r, renderZone);
+          if (r.description) slim.description = r.description;
+          if (r.location) slim.location = r.location;
+          if (r.url) slim.url = r.url;
+          if (r.visibility) slim.visibility = r.visibility as EventVisibility;
+          const ep = safeJsonParse<Record<string, string>>(r.extended_properties);
+          if (ep) slim.extendedProperties = ep;
+          return slim;
+        });
+      }
+      return event;
     },
 
     async addBlock(opts: {

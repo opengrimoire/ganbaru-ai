@@ -45,6 +45,7 @@
     externalDirty = false,
     readOnly = false,
     skipInlineDeleteConfirm = false,
+    loadFullEvent,
     onSave,
     onDelete,
     onClose,
@@ -61,6 +62,13 @@
     externalDirty?: boolean;
     readOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
+    /**
+     * Fetches the full DB row (heavy fields like description, attendees,
+     * organizer) for an event id. The boot path keeps a slim subset in
+     * memory so the panel header can paint instantly; this loads the rest
+     * asynchronously and the heavy sections gate on its arrival.
+     */
+    loadFullEvent?: (id: string) => Promise<CalendarEvent | undefined>;
     onSave: (data: {
       title: string;
       start: string;
@@ -332,7 +340,37 @@
   );
 
   // ─── Initialization ─────────────────────────────────────────────
+  // Two-phase init in edit mode: the slim event prop carries enough to paint
+  // the header (title, time, color, recurrence, pomodoro, notifications)
+  // synchronously on the same frame as the open click; heavy fields
+  // (description, url, attendees, organizer, geo, guestPermissions,
+  // visibility) arrive when `fullEvent` resolves a few ms later and the
+  // gated sections render.
   let lastInitKey = "";
+  let lastFullKey = "";
+  let fullEvent = $state<CalendarEvent | null>(null);
+
+  // Trigger the heavy-field fetch whenever a different event opens. The
+  // resolver checks `lastFullKey` again at completion so a stale promise
+  // for an event the user already navigated away from can't clobber the
+  // current panel.
+  $effect(() => {
+    if (mode !== "edit" || !event?.id || !loadFullEvent) {
+      fullEvent = null;
+      lastFullKey = "";
+      return;
+    }
+    const id = event.id;
+    if (id === lastFullKey) return;
+    lastFullKey = id;
+    fullEvent = null;
+    const lookupId = event.recurringParentId ?? id;
+    loadFullEvent(lookupId).then((full) => {
+      if (lastFullKey === id && full) fullEvent = full;
+    }).catch((e) => {
+      console.error("[EventPanel] loadFullEvent failed:", e);
+    });
+  });
 
   $effect(() => {
     const key = mode === "edit" ? (event?.id ?? "") : "create";
@@ -346,24 +384,30 @@
       endDate = event.end.split(" ")[0] ?? "";
       endTime = event.end.split(" ")[1] ?? "";
       color = event.color;
-      description = event.description ?? "";
       recurrence = event.recurrence ? { ...event.recurrence } : undefined;
       allDay = event.allDay ?? false;
       stashedStartTime = "";
       stashedEndTime = "";
       location = event.location ?? "";
-      eventUrl = event.url ?? "";
       transparency = event.transparency ?? "opaque";
       eventStatus = event.status ?? "confirmed";
-      visibility = event.visibility ?? "public";
-      organizer = event.organizer;
-      attendees = event.attendees ?? [];
-      guestCanModify = event.guestPermissions?.canModify ?? false;
-      guestCanInviteOthers = event.guestPermissions?.canInviteOthers ?? true;
-      guestCanSeeOtherGuests = event.guestPermissions?.canSeeOtherGuests ?? true;
-      meetingEnabled = !!(event.attendees && event.attendees.length > 0) || !!event.location || !!event.url;
-      geo = event.geo;
       rdate = event.rdate;
+      // Heavy fields default to empty until loadFullEvent resolves; the
+      // sections that render them are gated below so the user cannot edit
+      // them in this window.
+      description = "";
+      eventUrl = "";
+      visibility = "public";
+      organizer = undefined;
+      attendees = [];
+      guestCanModify = false;
+      guestCanInviteOthers = true;
+      guestCanSeeOtherGuests = true;
+      geo = undefined;
+      // Best guess until heavy fields arrive: the slim event keeps location,
+      // so a location-only meeting still shows. Attendees and url flip the
+      // flag in the heavy-init effect once they're loaded.
+      meetingEnabled = !!event.location;
 
       const pc = event.pomodoroConfig;
       pomodoroEnabled = !!pc;
@@ -426,6 +470,7 @@
       eventUrl = "";
       transparency = "opaque";
       eventStatus = "confirmed";
+      visibility = "public";
       attendees = [];
       guestCanModify = false;
       guestCanInviteOthers = true;
@@ -450,6 +495,34 @@
     // clean session, and the panel can be closed silently (no "Discard
     // unsaved changes?" prompt).
     (onInitialSync ?? onChange)?.(buildChangesPayload());
+  });
+
+  // Heavy-field init: runs once per fullEvent arrival. The setInitialChanges
+  // pattern merges these keys into both `changes` and `baseline` on the
+  // session, so a subsequent emitChange that re-emits the same heavy values
+  // does not flip dirty. Since the heavy sections are gated on `fullEvent`,
+  // the user cannot have edited any of them before this runs, so overwriting
+  // their state is safe.
+  let lastHeavyAppliedKey = "";
+  $effect(() => {
+    if (!fullEvent) return;
+    if (mode !== "edit") return;
+    if (fullEvent.id === lastHeavyAppliedKey) return;
+    lastHeavyAppliedKey = fullEvent.id;
+
+    description = fullEvent.description ?? "";
+    eventUrl = fullEvent.url ?? "";
+    visibility = fullEvent.visibility ?? "public";
+    organizer = fullEvent.organizer;
+    attendees = fullEvent.attendees ? [...fullEvent.attendees] : [];
+    guestCanModify = fullEvent.guestPermissions?.canModify ?? false;
+    guestCanInviteOthers = fullEvent.guestPermissions?.canInviteOthers ?? true;
+    guestCanSeeOtherGuests = fullEvent.guestPermissions?.canSeeOtherGuests ?? true;
+    geo = fullEvent.geo;
+    meetingEnabled = !!(fullEvent.attendees && fullEvent.attendees.length > 0)
+      || !!fullEvent.location || !!fullEvent.url;
+
+    (onInitialSync ?? onChange)?.(buildHeavyInitPayload());
   });
 
   // Sync date/time from event prop when block is dragged/resized externally.
@@ -539,6 +612,23 @@
       url: meetingEnabled && eventUrl ? eventUrl : undefined,
       transparency: transparency !== "opaque" ? transparency : undefined,
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
+      visibility: visibility !== "public" ? visibility : undefined,
+      attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
+    };
+  }
+
+  /**
+   * Initial sync payload restricted to the keys that arrive with the full
+   * event row. The heavy sections are gated on `fullEvent`, so by the time
+   * this fires the user has not been able to edit any of these fields in
+   * the panel; merging them straight into `changes` and `baseline` won't
+   * flip dirty. Slim keys are deliberately omitted so they don't overwrite
+   * an in-progress slim edit that happened during the load window.
+   */
+  function buildHeavyInitPayload(): Partial<CalendarEvent> {
+    return {
+      description,
+      url: meetingEnabled && eventUrl ? eventUrl : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
       attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
     };
@@ -987,37 +1077,42 @@
         {/if}
       </div>
 
-      <!-- Visibility -->
-      <div class="relative">
-        <button
-          onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
-          disabled={readOnly}
-          class="flex items-center gap-1 rounded-none px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
-            {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
-          title="Visibility"
-        >
-          {#if visibility === "public"}
-            <Shield size={12} class="shrink-0" />
-          {:else}
-            <Lock size={12} class="shrink-0" />
+      <!-- Visibility (heavy field; gated until fullEvent loads to avoid the
+           race where a user click between slim init and heavy arrival is
+           overwritten by the DB value). In create mode there is no fullEvent
+           and the field is editable from the first frame. -->
+      {#if mode === "create" || fullEvent}
+        <div class="relative">
+          <button
+            onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+            disabled={readOnly}
+            class="flex items-center gap-1 rounded-none px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+              {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
+            title="Visibility"
+          >
+            {#if visibility === "public"}
+              <Shield size={12} class="shrink-0" />
+            {:else}
+              <Lock size={12} class="shrink-0" />
+            {/if}
+            <span class="{visibility !== 'public' ? 'text-foreground' : ''}">{visibility}</span>
+          </button>
+          {#if visibilityPicker}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="fixed inset-0 z-[19]" onclick={() => { visibilityPicker = false; }}></div>
+            <div class="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
+              {#each (["public", "private", "confidential"] as const) as v}
+                <button
+                  onclick={() => { visibility = v; visibilityPicker = false; emitChange(); }}
+                  class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                    {visibility === v ? 'text-foreground font-medium' : 'text-muted-foreground'}"
+                >{v}</button>
+              {/each}
+            </div>
           {/if}
-          <span class="{visibility !== 'public' ? 'text-foreground' : ''}">{visibility}</span>
-        </button>
-        {#if visibilityPicker}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-[19]" onclick={() => { visibilityPicker = false; }}></div>
-          <div class="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
-            {#each (["public", "private", "confidential"] as const) as v}
-              <button
-                onclick={() => { visibility = v; visibilityPicker = false; emitChange(); }}
-                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
-                  {visibility === v ? 'text-foreground font-medium' : 'text-muted-foreground'}"
-              >{v}</button>
-            {/each}
-          </div>
-        {/if}
-      </div>
+        </div>
+      {/if}
     </div>
 
   </div>
@@ -1025,24 +1120,28 @@
   <!-- Fixed bottom: feature sections (always visible) -->
   <div class="shrink-0 flex flex-col gap-1.5 px-3.5 py-1.5">
 
-      <!-- 1) Meeting -->
-      <MeetingSection
-        enabled={meetingEnabled}
-        bind:url={eventUrl}
-        bind:location
-        {geo}
-        bind:attendees
-        bind:guestCanModify
-        bind:guestCanInviteOthers
-        bind:guestCanSeeOtherGuests
-        {organizer}
-        {description}
-        {readOnly}
-        expanded={openSection === "meeting"}
-        ontoggle={() => handleToggle("meeting")}
-        onexpand={() => handleExpand("meeting")}
-        onchange={emitChange}
-        ondescriptionchange={(html) => { description = html; emitChange(); }} />
+      <!-- 1) Meeting (heavy: description, url, attendees, organizer, geo,
+           guestPermissions). Gated on fullEvent in edit mode so the user
+           cannot type into description before the DB value lands. -->
+      {#if mode === "create" || fullEvent}
+        <MeetingSection
+          enabled={meetingEnabled}
+          bind:url={eventUrl}
+          bind:location
+          {geo}
+          bind:attendees
+          bind:guestCanModify
+          bind:guestCanInviteOthers
+          bind:guestCanSeeOtherGuests
+          {organizer}
+          {description}
+          {readOnly}
+          expanded={openSection === "meeting"}
+          ontoggle={() => handleToggle("meeting")}
+          onexpand={() => handleExpand("meeting")}
+          onchange={emitChange}
+          ondescriptionchange={(html) => { description = html; emitChange(); }} />
+      {/if}
 
       <!-- 2) Pomodoro -->
       <PomodoroSection

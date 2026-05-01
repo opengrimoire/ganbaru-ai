@@ -1221,6 +1221,7 @@
         externalDirty={session.dirty}
         readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
         skipInlineDeleteConfirm={deleteWouldStopSession}
+        loadFullEvent={calendarStore.loadFullEvent}
         onSave={handlePanelSave}
         onDelete={handleDelete}
         onChange={handlePanelChange}
