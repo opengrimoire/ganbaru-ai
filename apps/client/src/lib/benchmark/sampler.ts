@@ -12,7 +12,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { snapshot as perfSnapshot, type PerfLogEntry } from "$lib/stores/perflog.svelte";
 import type { BootTimings, SampleLabel, SamplePoint } from "./types";
-import { STRESS_PEAK_INTERVAL_MS, SAMPLE_OFFSETS_MS } from "./types";
+import { STRESS_PEAK_INTERVAL_MS, SAMPLE_OFFSETS_MS, formatOffsetLabel } from "./types";
 
 interface MemoryReportProcess {
   name: string;
@@ -97,8 +97,6 @@ export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
   };
 }
 
-const OFFSET_LABELS: SampleLabel[] = ["+30s"];
-
 /**
  * Run the post-stress idle-curve schedule. Each entry in `SAMPLE_OFFSETS_MS`
  * gets one reading; the resulting array is in chronological order. Aborts
@@ -127,7 +125,7 @@ export function sampleIdleCurve(opts: {
           resolve(samples);
           return;
         }
-        const label = OFFSET_LABELS[i];
+        const label = formatOffsetLabel(targetMs);
         try {
           const s = await readMemorySample(label, targetMs);
           if (!opts.signal.aborted) {

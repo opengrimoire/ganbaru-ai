@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { formatBenchmarkMarkdown, formatSampleCell } from "./output";
+import {
+  SAMPLE_OFFSETS_MS,
+  STRESS_DURATION_MS,
+  STRESS_PEAK_INTERVAL_MS,
+  formatOffsetProse,
+} from "./types";
 import type { BenchmarkResult, PhaseResult, SamplePoint } from "./types";
 
 function sample(label: SamplePoint["label"], total: number, frontend: number): SamplePoint {
@@ -74,8 +80,9 @@ describe("formatBenchmarkMarkdown", () => {
       env: "Linux Ubuntu 25.10, WebKitGTK 2.46",
     });
     expect(md.startsWith("## Benchmark 2026-05-01 (build 9815ea5, Linux Ubuntu 25.10, WebKitGTK 2.46)")).toBe(true);
-    expect(md.includes("3000 ms programmatic stress")).toBe(true);
-    expect(md.includes("once at +30 s post-stress")).toBe(true);
+    expect(md.includes(`${STRESS_DURATION_MS} ms programmatic stress`)).toBe(true);
+    expect(md.includes(`sampled at ${STRESS_PEAK_INTERVAL_MS} ms during stress`)).toBe(true);
+    expect(md.includes(`once at ${formatOffsetProse(SAMPLE_OFFSETS_MS[0])} post-stress`)).toBe(true);
     expect(md.includes("dataset benchmark-synth-v1 (1000 events)")).toBe(true);
     expect(md.includes("### Boot (ms from process start)")).toBe(true);
     expect(md.includes("launch-total")).toBe(true);

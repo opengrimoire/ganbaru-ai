@@ -46,9 +46,31 @@ export const HARNESS_VERSION = "2";
 /** Synth dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const SYNTH_VERSION = "v1";
 
-export type SampleLabel = "peak" | "t0" | "+30s";
+export type SampleLabel = string;
 
-export const SAMPLE_LABELS: SampleLabel[] = ["peak", "t0", "+30s"];
+/**
+ * Compact form like `+30s` used as a `SampleLabel` and as a column header
+ * in the markdown output. Derived from a `SAMPLE_OFFSETS_MS` entry so the
+ * label cannot drift away from the offset that produced it.
+ */
+export function formatOffsetLabel(ms: number): string {
+  return `+${Math.round(ms / 1000)}s`;
+}
+
+/**
+ * Human-readable form like `+30 s` used in the prose methodology line of
+ * the markdown output. Same source of truth as `formatOffsetLabel`, with a
+ * space so the rendered sentence reads naturally.
+ */
+export function formatOffsetProse(ms: number): string {
+  return `+${Math.round(ms / 1000)} s`;
+}
+
+export const SAMPLE_LABELS: SampleLabel[] = [
+  "peak",
+  "t0",
+  ...SAMPLE_OFFSETS_MS.map(formatOffsetLabel),
+];
 
 /** Single memory reading at one sample point. MB units, PSS on Linux, RSS on Windows. */
 export interface SamplePoint {

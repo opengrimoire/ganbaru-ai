@@ -9,7 +9,13 @@
  * See the spec doc for the rationale and a worked example.
  */
 import type { BenchmarkResult, PhaseResult, SamplePoint, SampleLabel } from "./types";
-import { SAMPLE_LABELS } from "./types";
+import {
+  SAMPLE_LABELS,
+  STRESS_DURATION_MS,
+  STRESS_PEAK_INTERVAL_MS,
+  SAMPLE_OFFSETS_MS,
+  formatOffsetProse,
+} from "./types";
 
 /**
  * Boot marks emitted in the order they appear in the markdown table. The
@@ -156,8 +162,11 @@ export function formatBenchmarkMarkdown(result: BenchmarkResult, opts: {
   lines.push(
     `Scenario: ${result.scenarioId}, dataset benchmark-synth-${result.synthVersion} (${result.phaseB.eventCountAtStart} events).`,
   );
+  const offsetsClause = SAMPLE_OFFSETS_MS.length === 1
+    ? `once at ${formatOffsetProse(SAMPLE_OFFSETS_MS[0])}`
+    : `at ${SAMPLE_OFFSETS_MS.map(formatOffsetProse).join(", ")}`;
   lines.push(
-    "Methodology: cold-cold against an isolated benchmark DB; 3000 ms programmatic stress; sampled at 200 ms during stress, then once at +30 s post-stress.",
+    `Methodology: cold-cold against an isolated benchmark DB; ${STRESS_DURATION_MS} ms programmatic stress; sampled at ${STRESS_PEAK_INTERVAL_MS} ms during stress, then ${offsetsClause} post-stress.`,
   );
   lines.push("");
   lines.push("### Boot (ms from process start)");
