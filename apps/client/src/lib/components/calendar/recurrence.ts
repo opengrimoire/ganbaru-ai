@@ -430,8 +430,9 @@ function buildOverrideMap(overrides: EventOverride[] | undefined): Map<string, E
 }
 
 /**
- * Apply an override to a generated recurring instance.
- * Only non-undefined override fields replace the instance fields.
+ * Apply an override to a generated recurring instance. Only the slim
+ * override fields are merged: description, location, url, and visibility
+ * stay in the DB and are loaded on demand by `loadFullEvent`.
  */
 function applyOverride(instance: CalendarEvent, override: EventOverride): CalendarEvent {
   return {
@@ -439,13 +440,9 @@ function applyOverride(instance: CalendarEvent, override: EventOverride): Calend
     title: override.title ?? instance.title,
     start: override.start ?? instance.start,
     end: override.end ?? instance.end,
-    description: override.description ?? instance.description,
-    location: override.location ?? instance.location,
-    url: override.url ?? instance.url,
     color: override.color ?? instance.color,
     status: override.status ?? instance.status,
     transparency: override.transparency ?? instance.transparency,
-    visibility: override.visibility ?? instance.visibility,
   };
 }
 

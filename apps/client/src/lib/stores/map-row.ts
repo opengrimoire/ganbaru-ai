@@ -1,7 +1,6 @@
 import type {
   AlarmAction, AttendeeRole, AttendeeStatus, CalendarEvent, EventAlarm,
-  EventAttendee, EventOverride, EventOrganizer, EventStatus,
-  EventTransparency, EventVisibility, GeoCoordinates, GuestPermissions,
+  EventAttendee, EventOverride, EventStatus, EventTransparency,
 } from "$lib/components/calendar/types";
 import { rruleToRecurrence } from "$lib/components/calendar/rrule";
 import {
@@ -11,6 +10,13 @@ import {
   wallClockToUtcIso,
 } from "$lib/components/calendar/utils";
 
+/**
+ * Row shape returned by the boot SELECT in `calendar.svelte.ts:load()`.
+ * Only the columns the slim in-memory `CalendarEvent` reads. Heavy columns
+ * (description, url, organizer, geo, extendedProperties, categories, priority,
+ * sequence, sourceUid, visibility, guest_can_*) stay in the DB and are loaded
+ * on demand by `loadFullEvent` when the EventPanel or ICS export needs them.
+ */
 export interface DbCalendarEvent {
   id: string;
   title: string;
@@ -19,30 +25,15 @@ export interface DbCalendarEvent {
   timezone: string;
   calendar_id: string;
   color: number | null;
-  description: string;
   rrule: string | null;
   notifications: string | null;
   exceptions: string | null;
   repeat_until: string | null;
   all_day: number;
   location: string;
-  url: string;
   transparency: string;
   status: string;
-  // migration 3: icalendar import readiness
-  source_uid: string | null;
-  visibility: string;
-  priority: number | null;
-  categories: string | null;
-  geo: string | null;
-  sequence: number;
   rdate: string | null;
-  extended_properties: string | null;
-  organizer: string | null;
-  // migration 4: guest permissions
-  guest_can_modify: number;
-  guest_can_invite_others: number;
-  guest_can_see_other_guests: number;
   // LEFT JOIN pomodoro_configs
   focus_duration_minutes: number | null;
   short_break_minutes: number | null;
@@ -72,6 +63,11 @@ export interface DbAlarm {
   sort_order: number;
 }
 
+/**
+ * Slim override row: only the columns that drive render/expansion. The
+ * description, location, url, extended_properties, and visibility columns
+ * stay in the DB but are not loaded into memory.
+ */
 export interface DbOverride {
   id: string;
   parent_event_id: string;
@@ -79,14 +75,9 @@ export interface DbOverride {
   title: string | null;
   start_time: string | null;
   end_time: string | null;
-  description: string | null;
-  location: string | null;
-  url: string | null;
   color: number | null;
   status: string | null;
   transparency: string | null;
-  visibility: string | null;
-  extended_properties: string | null;
 }
 
 export function safeJsonParse<T>(json: string | null): T | undefined {
@@ -142,48 +133,47 @@ export function toDbTime(
   return wallClockToUtcIso(calendarDate, zone);
 }
 
+/**
+ * Build the slim in-memory `CalendarEvent`. Only keys with meaningful values
+ * are assigned (no `key: undefined`); this keeps the V8 hidden class compact
+ * and prevents the patch-based `updateBlock` from receiving spurious keys
+ * that would clear heavy DB columns when callers spread `{...slimEvent}`.
+ */
 export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
   const allDay = r.all_day === 1;
-  return {
+  const slim: CalendarEvent = {
     id: r.id,
     title: r.title,
     start: toCalendarDate(r.start_time, renderZone, allDay),
     end: toCalendarDate(r.end_time, renderZone, allDay),
     timezone: r.timezone,
     calendarId: r.calendar_id,
-    color: normalizeEventColor(r.color),
-    description: r.description || undefined,
-    recurrence: r.rrule ? rruleToRecurrence(r.rrule, r.repeat_until ?? undefined) : undefined,
-    notifications: safeJsonParse<number[]>(r.notifications),
-    exceptions: safeJsonParse<string[]>(r.exceptions),
-    allDay: r.all_day === 1 ? true : undefined,
-    location: r.location || undefined,
-    url: r.url || undefined,
-    transparency: r.transparency === "transparent" ? "transparent" as EventTransparency : undefined,
-    status: r.status !== "confirmed" ? r.status as EventStatus : undefined,
-    sourceUid: r.source_uid || undefined,
-    visibility: r.visibility !== "public" ? r.visibility as EventVisibility : undefined,
-    priority: r.priority ?? undefined,
-    categories: safeJsonParse<string[]>(r.categories),
-    geo: safeJsonParse<GeoCoordinates>(r.geo),
-    sequence: r.sequence || undefined,
-    rdate: safeJsonParse<string[]>(r.rdate),
-    extendedProperties: safeJsonParse<Record<string, string>>(r.extended_properties),
-    organizer: safeJsonParse<EventOrganizer>(r.organizer),
-    guestPermissions: (r.guest_can_modify !== 0 || r.guest_can_invite_others !== 1 || r.guest_can_see_other_guests !== 1)
-      ? {
-        canModify: r.guest_can_modify === 1,
-        canInviteOthers: r.guest_can_invite_others === 1,
-        canSeeOtherGuests: r.guest_can_see_other_guests === 1,
-      } : undefined,
-    pomodoroConfig: r.focus_duration_minutes != null ? {
+  };
+  const color = normalizeEventColor(r.color);
+  if (color !== undefined) slim.color = color;
+  if (r.rrule) {
+    slim.recurrence = rruleToRecurrence(r.rrule, r.repeat_until ?? undefined);
+  }
+  const notifications = safeJsonParse<number[]>(r.notifications);
+  if (notifications) slim.notifications = notifications;
+  const exceptions = safeJsonParse<string[]>(r.exceptions);
+  if (exceptions) slim.exceptions = exceptions;
+  if (allDay) slim.allDay = true;
+  if (r.location) slim.location = r.location;
+  if (r.transparency === "transparent") slim.transparency = "transparent";
+  if (r.status !== "confirmed") slim.status = r.status as EventStatus;
+  const rdate = safeJsonParse<string[]>(r.rdate);
+  if (rdate) slim.rdate = rdate;
+  if (r.focus_duration_minutes != null) {
+    slim.pomodoroConfig = {
       focusDurationMinutes: r.focus_duration_minutes,
       shortBreakMinutes: r.short_break_minutes!,
       longBreakMinutes: r.long_break_minutes!,
       pomodoroCount: r.pomodoro_count!,
       idleTimeoutMinutes: r.idle_timeout_minutes,
-    } : undefined,
-  };
+    };
+  }
+  return slim;
 }
 
 export function mapAttendee(r: DbAttendee): EventAttendee {
@@ -207,21 +197,22 @@ export function mapAlarm(r: DbAlarm): EventAlarm {
   };
 }
 
+/**
+ * Build the slim in-memory `EventOverride`. Description, location, url,
+ * extended_properties, and visibility live in the DB but are not loaded.
+ */
 export function mapOverride(r: DbOverride, renderZone: string): EventOverride {
-  return {
+  const slim: EventOverride = {
     id: r.id,
     parentEventId: r.parent_event_id,
     recurrenceId: r.recurrence_id,
-    title: r.title || undefined,
-    start: r.start_time ? toCalendarDate(r.start_time, renderZone) : undefined,
-    end: r.end_time ? toCalendarDate(r.end_time, renderZone) : undefined,
-    description: r.description || undefined,
-    location: r.location || undefined,
-    url: r.url || undefined,
-    color: normalizeEventColor(r.color),
-    status: r.status ? r.status as EventStatus : undefined,
-    transparency: r.transparency ? r.transparency as EventTransparency : undefined,
-    visibility: r.visibility ? r.visibility as EventVisibility : undefined,
-    extendedProperties: safeJsonParse<Record<string, string>>(r.extended_properties),
   };
+  if (r.title) slim.title = r.title;
+  if (r.start_time) slim.start = toCalendarDate(r.start_time, renderZone);
+  if (r.end_time) slim.end = toCalendarDate(r.end_time, renderZone);
+  const color = normalizeEventColor(r.color);
+  if (color !== undefined) slim.color = color;
+  if (r.status) slim.status = r.status as EventStatus;
+  if (r.transparency) slim.transparency = r.transparency as EventTransparency;
+  return slim;
 }

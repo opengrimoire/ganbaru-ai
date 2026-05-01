@@ -16,8 +16,8 @@ import {
   sanitizeCalendarTime, utcIsoToWallClock, wallClockToUtcIso,
 } from "$lib/components/calendar/utils";
 import {
-  mapRow, mapAttendee, mapAlarm, mapOverride, toDbTime,
-  type DbCalendarEvent, type DbAttendee, type DbAlarm, type DbOverride,
+  mapRow, mapOverride, toDbTime,
+  type DbCalendarEvent, type DbOverride,
 } from "./map-row";
 import {
   buildBulkImportStatements,
@@ -191,42 +191,16 @@ async function saveOverrides(
 }
 
 /**
- * Load every attendee row in one unfiltered query and group by event id.
- * The earlier `WHERE event_id IN ($1, ..., $N)` shape forced one IPC parameter
- * per event, which dominates load time on calendars with thousands of events
- * even when the attendee table itself is small. SQLite has to parse a query
- * with N placeholders and Tauri has to serialize N parameters; loading the
- * whole table costs less than that overhead.
+ * Load slim per-instance overrides in one unfiltered query and group by
+ * parent id. Heavy override columns (description, location, url,
+ * extended_properties, visibility) stay in the DB and ride along with the
+ * parent through `loadFullEvent` when EventPanel or ICS export needs them.
  */
-async function loadAttendees(): Promise<Map<string, EventAttendee[]>> {
-  const rows = await select<DbAttendee>(
-    `SELECT * FROM calendar_event_attendees ORDER BY sort_order ASC`,
-  );
-  const map = new Map<string, EventAttendee[]>();
-  for (const r of rows) {
-    const list = map.get(r.event_id) ?? [];
-    list.push(mapAttendee(r));
-    map.set(r.event_id, list);
-  }
-  return map;
-}
-
-async function loadAlarms(): Promise<Map<string, EventAlarm[]>> {
-  const rows = await select<DbAlarm>(
-    `SELECT * FROM calendar_event_alarms ORDER BY sort_order ASC`,
-  );
-  const map = new Map<string, EventAlarm[]>();
-  for (const r of rows) {
-    const list = map.get(r.event_id) ?? [];
-    list.push(mapAlarm(r));
-    map.set(r.event_id, list);
-  }
-  return map;
-}
-
 async function loadOverrides(renderZone: string): Promise<Map<string, EventOverride[]>> {
   const rows = await select<DbOverride>(
-    `SELECT * FROM calendar_event_overrides`,
+    `SELECT id, parent_event_id, recurrence_id, title, start_time, end_time,
+            color, status, transparency
+     FROM calendar_event_overrides`,
   );
   const map = new Map<string, EventOverride[]>();
   for (const r of rows) {
@@ -235,6 +209,36 @@ async function loadOverrides(renderZone: string): Promise<Map<string, EventOverr
     map.set(r.parent_event_id, list);
   }
   return map;
+}
+
+/**
+ * Build a slim copy of `e` containing only the keys the in-memory render,
+ * expansion, and notification scheduler care about. Used at the boundary
+ * where heavy events (ICS imports, addBlock opts) are pushed into
+ * `rawBlocks`, so heavy fields stay in the DB and out of long-lived RAM.
+ */
+function slimEvent(e: CalendarEvent): CalendarEvent {
+  const slim: CalendarEvent = {
+    id: e.id,
+    title: e.title,
+    start: e.start,
+    end: e.end,
+    timezone: e.timezone,
+    calendarId: e.calendarId,
+  };
+  if (e.color !== undefined) slim.color = e.color;
+  if (e.recurrence) slim.recurrence = e.recurrence;
+  if (e.notifications && e.notifications.length > 0) slim.notifications = e.notifications;
+  if (e.exceptions && e.exceptions.length > 0) slim.exceptions = e.exceptions;
+  if (e.recurringParentId) slim.recurringParentId = e.recurringParentId;
+  if (e.allDay) slim.allDay = true;
+  if (e.location) slim.location = e.location;
+  if (e.transparency === "transparent") slim.transparency = "transparent";
+  if (e.status && e.status !== "confirmed") slim.status = e.status;
+  if (e.pomodoroConfig) slim.pomodoroConfig = e.pomodoroConfig;
+  if (e.rdate && e.rdate.length > 0) slim.rdate = e.rdate;
+  if (e.overrides && e.overrides.length > 0) slim.overrides = e.overrides;
+  return slim;
 }
 
 export function getCalendar() {
@@ -276,14 +280,10 @@ export function getCalendar() {
         const renderZone = localTimezone();
         const rows = await select<DbCalendarEvent>(
           `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
-                  ce.calendar_id, ce.color, ce.description, ce.rrule,
+                  ce.calendar_id, ce.color, ce.rrule,
                   ce.notifications, ce.exceptions, ce.repeat_until,
-                  ce.all_day, ce.location, ce.url, ce.transparency, ce.status,
-                  ce.source_uid, ce.visibility, ce.priority, ce.categories,
-                  ce.geo, ce.sequence, ce.rdate, ce.extended_properties,
-                  ce.organizer,
-                  ce.guest_can_modify, ce.guest_can_invite_others,
-                  ce.guest_can_see_other_guests,
+                  ce.all_day, ce.location, ce.transparency, ce.status,
+                  ce.rdate,
                   pc.focus_duration_minutes, pc.short_break_minutes,
                   pc.long_break_minutes, pc.pomodoro_count,
                   pc.idle_timeout_minutes
@@ -296,16 +296,8 @@ export function getCalendar() {
         perfMark("boot.maprow-done");
 
         if (mapped.length > 0) {
-          const [attendeeMap, alarmMap, overrideMap] = await Promise.all([
-            loadAttendees(),
-            loadAlarms(),
-            loadOverrides(renderZone),
-          ]);
+          const overrideMap = await loadOverrides(renderZone);
           for (const evt of mapped) {
-            const att = attendeeMap.get(evt.id);
-            if (att?.length) evt.attendees = att;
-            const alm = alarmMap.get(evt.id);
-            if (alm?.length) evt.alarms = alm;
             const ovr = overrideMap.get(evt.id);
             if (ovr?.length) evt.overrides = ovr;
           }
@@ -411,22 +403,15 @@ export function getCalendar() {
       if (opts.attendees && opts.attendees.length > 0) {
         await saveAttendees(id, opts.attendees);
       }
-      const event: CalendarEvent = {
+      const event: CalendarEvent = slimEvent({
         id, title: opts.title, start: sanitizedStart, end: sanitizedEnd,
         timezone, calendarId,
-        color: opts.color, description: opts.description,
+        color: opts.color,
         recurrence: opts.recurrence, notifications: opts.notifications,
         pomodoroConfig: opts.pomodoroConfig,
-        allDay: opts.allDay, location: opts.location, url: opts.url,
+        allDay: opts.allDay, location: opts.location,
         transparency: opts.transparency, status: opts.status,
-        sourceUid: opts.sourceUid, visibility: opts.visibility,
-        priority: opts.priority, categories: opts.categories,
-        geo: opts.geo, sequence: opts.sequence,
-        rdate: opts.rdate, extendedProperties: opts.extendedProperties,
-        organizer: opts.organizer,
-        attendees: opts.attendees,
-        guestPermissions: opts.guestPermissions,
-      };
+      });
       rawBlocks = [...rawBlocks, event];
       invalidate();
       return event;
@@ -675,47 +660,48 @@ export function getCalendar() {
         [JSON.stringify(exceptions), now, parentId],
       );
 
-      // Create standalone event
+      // Create standalone event by copying heavy columns straight from the
+      // parent's DB row. Identity, time, color, notifications, and the
+      // recurrence-related columns come in as bind params; everything the
+      // slim in-memory parent no longer carries (description, url,
+      // organizer, geo, categories, extended_properties, guest_can_*,
+      // visibility, priority, sequence) flows through the INSERT...SELECT.
       const newId = crypto.randomUUID();
       const timezone = parent.timezone || localTimezone();
       const notifJson = parent.notifications && parent.notifications.length > 0
         ? JSON.stringify(parent.notifications) : null;
-      const gpD = parent.guestPermissions;
       await execute(
-        `INSERT INTO calendar_events
-           (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, notifications,
-            all_day, location, url, transparency, status,
-            visibility, priority, categories, geo,
-            sequence, extended_properties, organizer,
-            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-            created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                 $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
+        `INSERT INTO calendar_events (
+           id, title, start_time, end_time, timezone, calendar_id,
+           color, notifications, rrule, repeat_until, exceptions, rdate,
+           all_day, location, transparency, status,
+           source_uid,
+           description, url, visibility, priority, categories, geo,
+           sequence, extended_properties, organizer,
+           guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+           created_at, updated_at
+         )
+         SELECT $1, $2, $3, $4, $5, $6,
+                $7, $8, NULL, NULL, NULL, NULL,
+                $9, $10, $11, $12,
+                NULL,
+                description, url, visibility, priority, categories, geo,
+                sequence, extended_properties, organizer,
+                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+                $13, $14
+         FROM calendar_events WHERE id = $15`,
         [
           newId, instanceEvent.title,
           toDbTime(instanceEvent.start, timezone, parent.allDay),
           toDbTime(instanceEvent.end, timezone, parent.allDay),
           timezone, parent.calendarId,
-          instanceEvent.color ?? null,
-          instanceEvent.description ?? "",
-          notifJson,
+          instanceEvent.color ?? null, notifJson,
           parent.allDay ? 1 : 0,
           parent.location ?? "",
-          parent.url ?? "",
           parent.transparency ?? "opaque",
           parent.status ?? "confirmed",
-          parent.visibility ?? "public",
-          parent.priority ?? null,
-          parent.categories ? JSON.stringify(parent.categories) : null,
-          parent.geo ? JSON.stringify(parent.geo) : null,
-          parent.sequence ?? 0,
-          parent.extendedProperties ? JSON.stringify(parent.extendedProperties) : null,
-          parent.organizer ? JSON.stringify(parent.organizer) : null,
-          gpD?.canModify ? 1 : 0,
-          gpD?.canInviteOthers === false ? 0 : 1,
-          gpD?.canSeeOtherGuests === false ? 0 : 1,
           now, now,
+          parentId,
         ],
       );
       if (parent.pomodoroConfig) {
@@ -731,11 +717,15 @@ export function getCalendar() {
         );
       }
 
-      // Copy attendees from parent
-      if (parent.attendees && parent.attendees.length > 0) {
-        const cloned = parent.attendees.map((a) => ({ ...a, id: crypto.randomUUID() }));
-        await saveAttendees(newId, cloned);
-      }
+      // Copy attendees from parent's DB row. lower(hex(randomblob(16)))
+      // gives 32 hex chars; the schema PK is TEXT, no UUID format required.
+      await execute(
+        `INSERT INTO calendar_event_attendees
+           (id, event_id, name, email, role, status, rsvp, sort_order)
+         SELECT lower(hex(randomblob(16))), $1, name, email, role, status, rsvp, sort_order
+         FROM calendar_event_attendees WHERE event_id = $2`,
+        [newId, parentId],
+      );
 
       // Migrate pomodoro segments from parent template to the new standalone event
       // Segments may be stored with event_id = parentId or event_id = parentId::date
@@ -749,18 +739,21 @@ export function getCalendar() {
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
       );
-      const standalone: CalendarEvent = {
-        ...instanceEvent,
+      const standalone: CalendarEvent = slimEvent({
         id: newId,
+        title: instanceEvent.title,
+        start: instanceEvent.start,
+        end: instanceEvent.end,
         timezone,
         calendarId: parent.calendarId,
-        recurrence: undefined,
-        recurringParentId: undefined,
-        exceptions: undefined,
+        color: instanceEvent.color,
+        allDay: parent.allDay,
+        location: parent.location,
+        transparency: parent.transparency,
+        status: parent.status,
+        notifications: parent.notifications,
         pomodoroConfig: parent.pomodoroConfig,
-        attendees: parent.attendees,
-        guestPermissions: parent.guestPermissions,
-      };
+      });
       rawBlocks = [...rawBlocks, standalone];
       invalidate();
       return standalone;
@@ -859,43 +852,55 @@ export function getCalendar() {
 
       const splitNotifJson = merged.notifications && merged.notifications.length > 0
         ? JSON.stringify(merged.notifications) : null;
-      const gpS = parent.guestPermissions;
+      const homeZone = parent.timezone || localTimezone();
+      // description and url are heavy columns. If `changes` carries them
+      // (user edited via EventPanel after Step 3 lands), bind the new
+      // value; COALESCE then prefers it. Otherwise bind NULL and the
+      // parent's column wins. Other heavy columns (visibility, priority,
+      // categories, geo, sequence, extended_properties, organizer,
+      // guest_can_*) preserve current behavior: parent's row, never
+      // overridden by `changes`.
+      const descriptionPatch = "description" in changes
+        ? (changes.description ?? "") : null;
+      const urlPatch = "url" in changes ? (changes.url ?? "") : null;
       await execute(
-        `INSERT INTO calendar_events
-           (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, rrule, notifications,
-            all_day, location, url, transparency, status,
-            visibility, priority, categories, geo,
-            sequence, extended_properties, organizer,
-            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-            created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
+        `INSERT INTO calendar_events (
+           id, title, start_time, end_time, timezone, calendar_id,
+           color, notifications, rrule, repeat_until, exceptions, rdate,
+           all_day, location, transparency, status,
+           source_uid,
+           description, url, visibility, priority, categories, geo,
+           sequence, extended_properties, organizer,
+           guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+           created_at, updated_at
+         )
+         SELECT $1, $2, $3, $4, $5, $6,
+                $7, $8, $9, NULL, NULL, NULL,
+                $10, $11, $12, $13,
+                NULL,
+                COALESCE($14, description),
+                COALESCE($15, url),
+                visibility, priority, categories, geo,
+                sequence, extended_properties, organizer,
+                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+                $16, $17
+         FROM calendar_events WHERE id = $18`,
         [
           newId, merged.title ?? parent.title,
-          toDbTime(newStart, parent.timezone || localTimezone(), merged.allDay),
-          toDbTime(newEnd, parent.timezone || localTimezone(), merged.allDay),
-          parent.timezone, parent.calendarId,
+          toDbTime(newStart, homeZone, merged.allDay),
+          toDbTime(newEnd, homeZone, merged.allDay),
+          homeZone, parent.calendarId,
           merged.color ?? null,
-          merged.description ?? "",
-          rrule,
           splitNotifJson,
+          rrule,
           merged.allDay ? 1 : 0,
           merged.location ?? "",
-          merged.url ?? "",
           merged.transparency ?? "opaque",
           merged.status ?? "confirmed",
-          parent.visibility ?? "public",
-          parent.priority ?? null,
-          parent.categories ? JSON.stringify(parent.categories) : null,
-          parent.geo ? JSON.stringify(parent.geo) : null,
-          parent.sequence ?? 0,
-          parent.extendedProperties ? JSON.stringify(parent.extendedProperties) : null,
-          parent.organizer ? JSON.stringify(parent.organizer) : null,
-          gpS?.canModify ? 1 : 0,
-          gpS?.canInviteOthers === false ? 0 : 1,
-          gpS?.canSeeOtherGuests === false ? 0 : 1,
+          descriptionPatch,
+          urlPatch,
           now, now,
+          parentId,
         ],
       );
 
@@ -911,29 +916,31 @@ export function getCalendar() {
         );
       }
 
-      // Copy attendees from parent
-      if (parent.attendees && parent.attendees.length > 0) {
-        const cloned = parent.attendees.map((a) => ({ ...a, id: crypto.randomUUID() }));
-        await saveAttendees(newId, cloned);
-      }
+      // Copy attendees from parent's DB row
+      await execute(
+        `INSERT INTO calendar_event_attendees
+           (id, event_id, name, email, role, status, rsvp, sort_order)
+         SELECT lower(hex(randomblob(16))), $1, name, email, role, status, rsvp, sort_order
+         FROM calendar_event_attendees WHERE event_id = $2`,
+        [newId, parentId],
+      );
 
       // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, recurrence: cappedRecurrence } : b,
       );
-      const newTemplate: CalendarEvent = {
+      const newTemplate: CalendarEvent = slimEvent({
         ...parent,
         ...changes,
         id: newId,
         start: newStart,
         end: newEnd,
+        timezone: homeZone,
         recurrence: newRecurrence,
         recurringParentId: undefined,
         exceptions: undefined,
         pomodoroConfig: pomConfig,
-        attendees: parent.attendees,
-        guestPermissions: parent.guestPermissions,
-      };
+      });
       rawBlocks = [...rawBlocks, newTemplate];
       invalidate();
       return newTemplate;
@@ -1020,28 +1027,28 @@ export function getCalendar() {
 
         for (const { event, newId } of classification.toAdd) {
           const homeZone = event.timezone || fallbackZone;
-          next.push({
+          next.push(slimEvent({
             ...event,
             id: newId,
             calendarId: targetCalendarId,
             timezone: homeZone,
             start: event.allDay ? event.start : reZone(event.start, homeZone),
             end: event.allDay ? event.end : reZone(event.end, homeZone),
-          });
+          }));
         }
 
         for (const { event, existingId } of classification.toUpdate) {
           const homeZone = event.timezone || fallbackZone;
           const idx = idToIdx.get(existingId);
-          const merged: CalendarEvent = {
-            ...(idx !== undefined ? next[idx] : {}),
+          const merged: CalendarEvent = slimEvent({
+            ...(idx !== undefined ? next[idx] : {} as CalendarEvent),
             ...event,
             id: existingId,
             calendarId: targetCalendarId,
             timezone: homeZone,
             start: event.allDay ? event.start : reZone(event.start, homeZone),
             end: event.allDay ? event.end : reZone(event.end, homeZone),
-          };
+          });
           if (idx !== undefined) next[idx] = merged;
           else next.push(merged);
         }
