@@ -135,3 +135,21 @@ Record the installer size after each milestone build. Run `ls -lh target/release
 | Date | Phase | What changed | .deb (MB) | Platform |
 |---|---|---|---|---|
 | 2026-04-02 | Phase 1 | Baseline: calendar, pomodoro, kanban, performance panel | 7.0 | Linux (Ubuntu) |
+
+## Benchmark harness rows
+
+Each row below is the markdown block emitted by the in-app benchmark harness (TitleBar performance panel, Run button under "Copy all"). The harness is documented in `docs/features/performance-benchmark.md`. Always run a release `.deb`, on a fresh boot, with no other heavy apps open and no dev tools attached.
+
+The harness has shipped two formats. v1 runs are not directly comparable to v2 runs: v1 ran Phase A inline against whatever was in the user's database (not an empty baseline, not isolated) and sampled out to +5 m. v2 runs both phases cold against an isolated benchmark database, with Phase A always empty and one +30 s sample.
+
+### V2 baseline (harness v2)
+
+`HARNESS_VERSION = "2"`. Cold-cold isolated benchmark DB. Phase A is the empty baseline, Phase B is the synth-1000 dataset. Sampling at peak + t0 + +30 s. Boot table includes `launch-total` (process-spawn-anchored).
+
+(no rows yet, paste v2 markdown blocks from release-build runs here.)
+
+### V1 baseline (harness v1)
+
+`HARNESS_VERSION = "1"`. Phase A ran inline against the user's data, Phase B was a cold restart against the synth-1000 dataset seeded into the user's database. Sampling at peak / t0 / +5s / +30s / +60s / +3m / +5m. Kept here as historical context only; the format is not directly comparable to v2.
+
+(no rows yet, paste any v1 markdown blocks recorded before the v2 cutover here.)
