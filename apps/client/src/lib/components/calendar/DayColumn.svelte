@@ -162,19 +162,35 @@
   }
 
   let persistedSegmentsMap = $state(new Map<string, PersistedSegment[]>());
+  // Snapshot key of the last fetch we kicked off. Plain `let`, not `$state`,
+  // so reading or writing it does not participate in reactivity. The effect
+  // still subscribes to its real deps (segmentVersion, positioned,
+  // activeBlockId, draggingEventId), but parents that recreate `events`
+  // every frame during a drag (CalendarView's displayResult re-runs on every
+  // createPreview update) no longer cause hundreds of redundant SQL queries
+  // per gesture. Both the segment version and the eventId set are checked,
+  // so a real DB write or a real event-set change still triggers a refetch.
+  let lastFetchKey = "";
 
   $effect(() => {
-    void pomodoro.segmentVersion; // re-fetch when segments are written to DB
-    const tStart = performance.now();
+    const segVer = pomodoro.segmentVersion;
     const eventIds = positioned
       .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId && p.event.id !== draggingEventId)
-      .map((p) => p.event.id);
+      .map((p) => p.event.id)
+      .sort();
     // Skip mark emission for the no-pomodoro path so a 1Hz effect on a column
     // with no pomodoro events does not flood the diagnostics ring buffer.
     if (eventIds.length === 0) {
-      persistedSegmentsMap = new Map();
+      const emptyKey = `${segVer}|`;
+      if (lastFetchKey === emptyKey) return;
+      lastFetchKey = emptyKey;
+      if (persistedSegmentsMap.size > 0) persistedSegmentsMap = new Map();
       return;
     }
+    const fetchKey = `${segVer}|${eventIds.join(",")}`;
+    if (fetchKey === lastFetchKey) return;
+    lastFetchKey = fetchKey;
+    const tStart = performance.now();
     perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
     const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
     select<DbSegmentRow>(
