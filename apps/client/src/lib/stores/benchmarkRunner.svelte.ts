@@ -1,14 +1,39 @@
 /**
- * Cross-component runner state for the in-app benchmark harness.
+ * Cross-component runner state for the in-app benchmark harness (v2).
  *
  * Mounted once in `TitleBar.svelte` (the same place as the floating theme
  * editor and settings modal). Settings panels call `request()` to ask for
  * a run; the overlay reacts to status transitions.
  *
- * The runner walks: confirming -> running Phase A -> seeding -> persisting
- * -> restart_app (Rust never returns) -> on next boot, App.svelte's
- * `checkAndResume()` picks the state up and walks: running Phase B ->
- * cleanup -> summary -> idle.
+ * V2 flow (cold-cold against an isolated benchmark DB):
+ *
+ *   idle
+ *     -> user clicks Run
+ *   confirming
+ *     -> user confirms
+ *     -> prepare_benchmark_db (idempotent delete of any prior file)
+ *     -> persistPhaseAPending(...)
+ *     -> restart_app                                         # restart 1
+ *   [boot, vaultMode=benchmark, stage=phase-a-pending]
+ *     -> SQL plugin opens ganbaruai-benchmark.db (empty)
+ *     -> checkAndResume runs Phase A
+ *     -> scenario.seed(synth)
+ *     -> persistPhaseBPending(...)
+ *     -> restart_app                                         # restart 2
+ *   [boot, vaultMode=benchmark, stage=phase-b-pending]
+ *     -> SQL plugin opens ganbaruai-benchmark.db (now seeded)
+ *     -> checkAndResume runs Phase B
+ *     -> show summary
+ *   summary
+ *     -> user clicks Close
+ *     -> teardown_benchmark_db (delete files)
+ *     -> clear_benchmark_state
+ *     -> restart_app                                         # restart 3
+ *   [boot, no state, default]
+ *     -> SQL plugin opens user DB (untouched throughout)
+ *   idle
+ *
+ * The user's real DB and vault are never opened during the run.
  */
 import { invoke } from "@tauri-apps/api/core";
 import { getCalendar } from "./calendar.svelte";
@@ -22,7 +47,8 @@ import {
 } from "$lib/benchmark/types";
 import {
   createRunner,
-  persistPhaseA,
+  persistPhaseAPending,
+  persistPhaseBPending,
   restartApp,
   loadPersistedState,
   clearPersistedState,
@@ -49,7 +75,6 @@ class BenchmarkRunnerStore {
   pendingScenarioId = $state<string | undefined>(undefined);
 
   #abort: AbortController | null = null;
-  #seedHandle: { calendarId: string; eventCount: number } | null = null;
 
   /** Open the confirmation dialog for `scenarioId`. */
   request(scenarioId: string) {
@@ -64,6 +89,11 @@ class BenchmarkRunnerStore {
     this.status = "idle";
   }
 
+  /**
+   * The user accepted the dialog. Wipe any stale benchmark DB, write the
+   * `phase-a-pending` marker, and restart. Phase A itself runs after the
+   * restart against the freshly-opened isolated DB.
+   */
   async confirm() {
     if (this.status !== "confirming") return;
     const scenarioId = this.pendingScenarioId;
@@ -75,25 +105,38 @@ class BenchmarkRunnerStore {
       return;
     }
     this.pendingScenarioId = undefined;
-    await this.#runPhaseA(scenario);
+
+    this.status = "running";
+    this.running = {
+      phase: "A",
+      scenarioId: scenario.id,
+      scenarioLabel: scenario.label,
+      step: "Restarting for Phase A",
+    };
+
+    try {
+      await invoke("prepare_benchmark_db");
+      const platform = await this.#detectPlatform();
+      await persistPhaseAPending({ scenarioId: scenario.id, platform });
+    } catch (e) {
+      this.#failWith(`Setup failed: ${this.#errMsg(e)}`);
+      return;
+    }
+
+    restartApp();
   }
 
   /**
-   * Aborts whatever is running, removes any seeded synth data, and clears
-   * the state file. Safe to call from any non-idle status.
+   * Aborts whatever is running, deletes the benchmark DB, clears state,
+   * and restarts the app so the user lands back on their real DB. Safe to
+   * call from any non-idle status.
    */
   async cancel() {
     this.#abort?.abort();
-    if (this.#seedHandle) {
-      const scenario = this.#currentScenario();
-      if (scenario) {
-        try {
-          await scenario.cleanup({ calendarId: this.#seedHandle.calendarId });
-        } catch (e) {
-          console.error("benchmark cleanup failed", e);
-        }
-      }
-      this.#seedHandle = null;
+    try {
+      await invoke("teardown_benchmark_db");
+    } catch (e) {
+      console.error("benchmark teardown failed", e);
     }
     try {
       await clearPersistedState();
@@ -101,17 +144,40 @@ class BenchmarkRunnerStore {
       console.error("benchmark clear state failed", e);
     }
     this.#reset();
-  }
-
-  closeSummary() {
-    if (this.status !== "summary" && this.status !== "error") return;
-    this.#reset();
+    // Restart so the next boot opens the user DB. Without this the SQL
+    // plugin keeps the now-deleted benchmark DB connection alive for the
+    // rest of the session.
+    restartApp();
   }
 
   /**
-   * Boot-time entry point. Reads the persisted state file; if a Phase A is
-   * waiting and still valid, runs Phase B against the seeded data. If the
-   * file is stale or the scenario no longer exists, clears it silently.
+   * The summary is a final-state UI; closing it tears down the benchmark
+   * DB and restarts so the user resumes against their real DB.
+   */
+  closeSummary() {
+    if (this.status !== "summary" && this.status !== "error") return;
+    void this.#finishAndRestart();
+  }
+
+  async #finishAndRestart() {
+    try {
+      await invoke("teardown_benchmark_db");
+    } catch (e) {
+      console.error("benchmark teardown failed", e);
+    }
+    try {
+      await clearPersistedState();
+    } catch (e) {
+      console.error("benchmark clear state failed", e);
+    }
+    this.#reset();
+    restartApp();
+  }
+
+  /**
+   * Boot-time entry point. Reads the persisted state file and dispatches
+   * on `state.stage`. Stale or invalid state is silently cleaned up; if
+   * no state exists, this is a no-op and the app behaves as a normal boot.
    */
   async checkAndResume() {
     if (this.status !== "idle") return;
@@ -123,15 +189,45 @@ class BenchmarkRunnerStore {
       return;
     }
     if (!state) return;
+
+    // `loadPersistedState` already wipes the benchmark DB and clears state
+    // on TTL or version mismatch. Anything that reaches here has a fresh
+    // state file pointing at a valid stage; we still defend against a
+    // scenario that has been removed and against a `phase-b-pending` state
+    // that is missing the data needed to run it.
     const scenario = getScenarioById(state.scenarioId);
     if (!scenario) {
-      await clearPersistedState();
+      await this.#abandonStale();
       return;
     }
-    await this.#runPhaseB(scenario, state);
+
+    if (state.stage === "phase-a-pending") {
+      await this.#runPhaseAThenSeed(scenario, state);
+    } else if (state.stage === "phase-b-pending") {
+      if (!state.phaseA || !state.seedHandle) {
+        await this.#abandonStale();
+        return;
+      }
+      await this.#runPhaseB(scenario, state, state.phaseA, state.seedHandle);
+    } else {
+      await this.#abandonStale();
+    }
   }
 
-  async #runPhaseA(scenario: BenchmarkScenario) {
+  async #abandonStale() {
+    try {
+      await invoke("teardown_benchmark_db");
+    } catch (e) {
+      console.error("benchmark teardown failed", e);
+    }
+    try {
+      await clearPersistedState();
+    } catch (e) {
+      console.error("benchmark clear state failed", e);
+    }
+  }
+
+  async #runPhaseAThenSeed(scenario: BenchmarkScenario, state: BenchmarkState) {
     this.status = "running";
     this.errorMessage = undefined;
     this.running = {
@@ -169,15 +265,14 @@ class BenchmarkRunnerStore {
       this.#failWith(`Seeding failed: ${this.#errMsg(e)}`);
       return;
     }
-    this.#seedHandle = seedHandle;
     if (this.#abort?.signal.aborted) return;
 
-    this.#updateStep("Restarting app");
+    this.#updateStep("Restarting for Phase B");
     try {
-      const platform = await this.#detectPlatform();
-      await persistPhaseA({
+      await persistPhaseBPending({
         scenarioId: scenario.id,
-        platform,
+        platform: state.platform,
+        startedAt: state.startedAt,
         phaseA,
         seedHandle,
       });
@@ -186,12 +281,15 @@ class BenchmarkRunnerStore {
       return;
     }
 
-    // restartApp() does not return; the new process picks up Phase B via
-    // App.svelte's checkAndResume() once boot.first-paint settles.
     restartApp();
   }
 
-  async #runPhaseB(scenario: BenchmarkScenario, state: BenchmarkState) {
+  async #runPhaseB(
+    scenario: BenchmarkScenario,
+    state: BenchmarkState,
+    phaseA: PhaseResult,
+    seedHandle: { calendarId: string; eventCount: number },
+  ) {
     this.status = "running";
     this.errorMessage = undefined;
     this.running = {
@@ -201,7 +299,6 @@ class BenchmarkRunnerStore {
       step: "Setting up",
     };
     this.#abort = new AbortController();
-    this.#seedHandle = state.seedHandle;
     const calendarStore = getCalendar();
     const runner = createRunner(() => calendarStore.rawBlocks.length);
 
@@ -222,20 +319,12 @@ class BenchmarkRunnerStore {
     }
     if (this.#abort?.signal.aborted) return;
 
-    this.#updateStep("Cleaning up synth data", /* clearCurve */ true);
-    try {
-      await scenario.cleanup({ calendarId: state.seedHandle.calendarId });
-    } catch (e) {
-      console.error("benchmark cleanup failed", e);
-    }
-    this.#seedHandle = null;
-    try {
-      await clearPersistedState();
-    } catch (e) {
-      console.error("benchmark clear state failed", e);
-    }
+    // The benchmark DB is about to be torn down on summary close, so
+    // per-calendar cleanup is redundant. Keep `seedHandle` referenced so
+    // the type stays load-bearing for future scenarios that need it.
+    void seedHandle;
 
-    const peakA = Math.max(0, ...state.phaseA.peakSamples.map((s) => s.totalMb));
+    const peakA = Math.max(0, ...phaseA.peakSamples.map((s) => s.totalMb));
     const peakB = Math.max(0, ...phaseB.peakSamples.map((s) => s.totalMb));
 
     this.result = {
@@ -244,7 +333,7 @@ class BenchmarkRunnerStore {
       synthVersion: state.synthVersion,
       harnessVersion: state.harnessVersion,
       platform: state.platform,
-      phaseA: state.phaseA,
+      phaseA,
       phaseB,
       peakTotalMb: Math.max(peakA, peakB),
     };
@@ -270,11 +359,6 @@ class BenchmarkRunnerStore {
     this.status = "error";
   }
 
-  #currentScenario(): BenchmarkScenario | undefined {
-    if (!this.running) return undefined;
-    return getScenarioById(this.running.scenarioId);
-  }
-
   #reset() {
     this.status = "idle";
     this.running = undefined;
@@ -282,7 +366,6 @@ class BenchmarkRunnerStore {
     this.errorMessage = undefined;
     this.pendingScenarioId = undefined;
     this.#abort = null;
-    this.#seedHandle = null;
   }
 
   #isAbort(e: unknown): boolean {

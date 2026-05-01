@@ -2,9 +2,9 @@
  * Phase orchestration for the benchmark harness.
  *
  * Public surface:
- * - `runPhaseA(scenario)`: drive the stress on the user's current data.
- * - `persistPhaseA(scenarioId, phaseA, seedHandle)`: save state and trigger restart.
- * - `runPhaseB(scenario, persisted)`: drive the stress on the seeded synth data.
+ * - `runPhaseA(scenario)` / `runPhaseB(scenario)`: drive the stress for one phase.
+ * - `persistPhaseAPending(...)`: write state file before the first restart.
+ * - `persistPhaseBPending(...)`: write state file between Phase A and Phase B.
  * - `loadPersistedState()` / `clearPersistedState()`: state file plumbing.
  *
  * The scenario module owns `setup()`, `runStress()`, `seed()`, and
@@ -112,22 +112,48 @@ export function createRunner(getEventCount: () => number) {
 }
 
 /**
- * Persist Phase A across the restart bridge. The state file lives in
- * `app_config_dir/benchmark-state.json` (NOT vault), so a `reset_database`
- * call only deletes DB files and never touches the harness's bridge.
+ * Persist `phase-a-pending` state, written right after the user confirms.
+ * The next cold boot opens the isolated benchmark DB (because
+ * `vaultMode === "benchmark"`) and the runner picks up Phase A from
+ * `checkAndResume`. State file lives in `app_config_dir/benchmark-state.json`,
+ * not the vault.
  */
-export async function persistPhaseA(opts: {
+export async function persistPhaseAPending(opts: {
   scenarioId: string;
   platform: string;
+}): Promise<void> {
+  const state: BenchmarkState = {
+    scenarioId: opts.scenarioId,
+    startedAt: new Date().toISOString(),
+    harnessVersion: HARNESS_VERSION,
+    synthVersion: SYNTH_VERSION,
+    platform: opts.platform,
+    vaultMode: "benchmark",
+    stage: "phase-a-pending",
+  };
+  await invoke("write_benchmark_state", { json: JSON.stringify(state) });
+}
+
+/**
+ * Persist `phase-b-pending` state, written between Phase A finishing and
+ * the second restart. Carries the captured Phase A result and the seed
+ * handle so Phase B can reference both after the next cold boot.
+ */
+export async function persistPhaseBPending(opts: {
+  scenarioId: string;
+  platform: string;
+  startedAt: string;
   phaseA: PhaseResult;
   seedHandle: { calendarId: string; eventCount: number };
 }): Promise<void> {
   const state: BenchmarkState = {
     scenarioId: opts.scenarioId,
-    startedAt: opts.phaseA.startedAt,
+    startedAt: opts.startedAt,
     harnessVersion: HARNESS_VERSION,
     synthVersion: SYNTH_VERSION,
     platform: opts.platform,
+    vaultMode: "benchmark",
+    stage: "phase-b-pending",
     phaseA: opts.phaseA,
     seedHandle: opts.seedHandle,
   };
@@ -146,8 +172,10 @@ export function restartApp(): void {
 /**
  * Read the persisted state file from `app_config_dir/benchmark-state.json`.
  * Validates harness version, synth version, and TTL; if any check fails,
- * clears the file silently and returns `null`. Callers that get a non-null
- * value can safely treat it as a Phase A result waiting for Phase B.
+ * deletes the benchmark DB and clears the file silently before returning
+ * `null`. The DB teardown matters because a stale state file usually
+ * implies a stale benchmark DB sitting next to the user's real DB; we
+ * want both gone before the next normal boot.
  */
 export async function loadPersistedState(): Promise<BenchmarkState | null> {
   const json = await invoke<string | null>("read_benchmark_state");
@@ -156,23 +184,32 @@ export async function loadPersistedState(): Promise<BenchmarkState | null> {
   try {
     parsed = JSON.parse(json) as BenchmarkState;
   } catch {
-    await clearPersistedState();
+    await discardStaleArtifacts();
     return null;
   }
   if (parsed.harnessVersion !== HARNESS_VERSION) {
-    await clearPersistedState();
+    await discardStaleArtifacts();
     return null;
   }
   if (parsed.synthVersion !== SYNTH_VERSION) {
-    await clearPersistedState();
+    await discardStaleArtifacts();
     return null;
   }
   const ageMs = Date.now() - new Date(parsed.startedAt).getTime();
   if (Number.isNaN(ageMs) || ageMs > STATE_TTL_MS) {
-    await clearPersistedState();
+    await discardStaleArtifacts();
     return null;
   }
   return parsed;
+}
+
+async function discardStaleArtifacts(): Promise<void> {
+  try {
+    await invoke("teardown_benchmark_db");
+  } catch (e) {
+    console.error("benchmark teardown (stale) failed", e);
+  }
+  await clearPersistedState();
 }
 
 export async function clearPersistedState(): Promise<void> {

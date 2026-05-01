@@ -38,8 +38,9 @@
     >
       <h2 class="text-[14px] font-semibold text-foreground">Run benchmark?</h2>
       <p class="text-[12px] text-foreground">
-        This drives roughly 11 minutes of programmatic work and restarts the app once. Do not close
-        the app or interact with it while it runs. Continue?
+        This runs against an isolated benchmark database, restarts the app a few times to keep both
+        phases on cold boots, and takes several minutes. Your real calendar data is not touched. Do
+        not close the app or interact with it while it runs. Continue?
       </p>
       <div class="flex justify-end gap-2">
         <button
@@ -86,8 +87,8 @@
       </div>
 
       <p class="text-[12px] text-muted-foreground">
-        Do not interact with the app while sampling runs. Cancel discards the partial run and
-        removes any seeded synthetic data.
+        Do not interact with the app while sampling runs. Cancel discards the partial run, deletes
+        the benchmark database, and restarts the app on your real data.
       </p>
 
       <div class="flex justify-end">

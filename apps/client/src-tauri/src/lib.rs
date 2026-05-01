@@ -58,6 +58,48 @@ fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(p)
 }
 
+/// Path to the isolated SQLite file the benchmark harness uses for both
+/// phases. Lives next to the user's real DB but is never opened during
+/// normal app operation. The harness deletes it before each run and after
+/// the summary is closed.
+fn benchmark_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut p = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    p.push("ganbaruai-benchmark.db");
+    Ok(p)
+}
+
+/// Delete the benchmark DB file together with its WAL and SHM sidecars.
+/// SQLite on Linux unlinks open files cleanly; on Windows the SQL plugin
+/// opens with `FILE_SHARE_DELETE`, so unlinking succeeds even while a
+/// connection is held. The space is reclaimed when the process exits.
+fn delete_benchmark_db_files(app: &tauri::AppHandle) -> Result<(), String> {
+    let base = benchmark_db_path(app)?;
+    for suffix in &["", "-wal", "-shm"] {
+        let mut path = base.clone();
+        let name = format!("{}{}", path.file_name().unwrap().to_string_lossy(), suffix);
+        path.set_file_name(name);
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Idempotent cleanup of any prior benchmark DB before a new run begins.
+/// Called from the runner when the user confirms a benchmark, so a crashed
+/// previous run does not feed stale data into Phase A.
+#[tauri::command]
+fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
+    delete_benchmark_db_files(&app)
+}
+
+/// Same operation as `prepare_benchmark_db`. Separate command for intent
+/// clarity at the call site (run-finished cleanup vs run-starting cleanup).
+#[tauri::command]
+fn teardown_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
+    delete_benchmark_db_files(&app)
+}
+
 #[tauri::command]
 fn read_benchmark_state(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let path = benchmark_state_path(&app)?;
@@ -326,13 +368,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin({
-            let db_name = if cfg!(debug_assertions) {
+            let user_db = if cfg!(debug_assertions) {
                 "sqlite:ganbaruai-dev.db"
             } else {
                 "sqlite:ganbaruai.db"
             };
+            // The benchmark DB shares the schema with the user DB so the
+            // harness exercises the same code paths. Migrations are keyed
+            // per URL by the SQL plugin, so register both up front; whichever
+            // file the JS opens first will run them on demand.
             tauri_plugin_sql::Builder::default()
-                .add_migrations(db_name, db::migrations())
+                .add_migrations(user_db, db::migrations())
+                .add_migrations("sqlite:ganbaruai-benchmark.db", db::migrations())
                 .build()
         })
         .invoke_handler(tauri::generate_handler![
@@ -348,6 +395,8 @@ pub fn run() {
             read_benchmark_state,
             write_benchmark_state,
             clear_benchmark_state,
+            prepare_benchmark_db,
+            teardown_benchmark_db,
             restart_app,
             get_memory_report,
             get_startup_elapsed_ms,

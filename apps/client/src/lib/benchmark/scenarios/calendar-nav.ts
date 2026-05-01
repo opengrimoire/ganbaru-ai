@@ -4,9 +4,10 @@
  * automation can get to the user's "hold right arrow" measurement loop
  * without depending on real keyboard input timing.
  *
- * Seeding lays down a versioned synthetic calendar so Phase B compares
- * across builds. `cleanup` removes that calendar; the cascade in
- * `calendarsStore.remove` drops every seeded event in one transaction.
+ * Seeding lays down a versioned synthetic calendar in the isolated
+ * benchmark DB so Phase B compares across builds. `cleanup` is a no-op
+ * for v2: the entire benchmark DB file is deleted on summary close, so
+ * per-calendar deletion would be redundant.
  */
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
 import { getCalendar } from "$lib/stores/calendar.svelte";
@@ -62,7 +63,7 @@ export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
   label: "Calendar week-view nav",
   description:
-    "Drives forward week-view navigation for 3 seconds, then samples memory across the 5-minute idle decay window. Phase A runs against your current data; Phase B re-runs after a restart on a 1000-event synthetic calendar.",
+    "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. Phase A runs against an empty baseline; Phase B re-runs after a restart on a 1000-event synthetic calendar. Both phases run against an isolated benchmark DB; your real calendar is never touched.",
   defaultSeedSize: 1000,
 
   async setup(): Promise<void> {
@@ -127,8 +128,11 @@ export const calendarNavScenario: BenchmarkScenario = {
     return { calendarId: cal.id, eventCount: events.length };
   },
 
-  async cleanup(seedHandle: { calendarId: string }): Promise<void> {
-    const calendarsStore = getCalendars();
-    await calendarsStore.remove(seedHandle.calendarId);
+  async cleanup(_seedHandle: { calendarId: string }): Promise<void> {
+    // No-op for the v2 cold-cold flow. The whole benchmark DB file is
+    // deleted on summary close, so per-calendar deletion would just be
+    // an extra round-trip against a DB that is about to disappear. The
+    // parameter stays in the signature for forward compatibility with
+    // scenarios that need finer-grained cleanup.
   },
 };
