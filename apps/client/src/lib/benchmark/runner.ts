@@ -17,6 +17,7 @@ import {
   STRESS_DURATION_MS,
   HARNESS_VERSION,
   SYNTH_VERSION,
+  SAMPLE_OFFSETS_MS,
   type BenchmarkScenario,
   type BenchmarkState,
   type PhaseResult,
@@ -56,25 +57,31 @@ async function runPhase(opts: {
   if (opts.signal.aborted) throw new DOMException("aborted", "AbortError");
 
   const t0 = await readMemorySample("t0", 0);
-  // The idle curve starts from `t0`; but `t0` itself is also part of the
-  // curve, so prepend it before kicking the scheduled offsets.
   const restCurve = await sampleIdleCurve({
     signal: opts.signal,
     onProgress: (label, samples) => {
-      opts.onCurveProgress?.(label, 6, samples.length);
+      opts.onCurveProgress?.(label, SAMPLE_OFFSETS_MS.length, samples.length);
     },
   });
-  // The first scheduled offset is 0 ms (also "t0" semantically). Drop the
-  // duplicate label from the scheduler output so the curve has each label once.
-  const dedup = restCurve.filter((s, i) => !(i === 0 && s.label === "t0"));
+
+  // Process-spawn-anchored launch time, captured once per phase. Read after
+  // the curve so any post-stress noise has already settled into the boot
+  // mark snapshot. A failed read is non-fatal: the formatter renders "n/a".
+  let startupMs: number | undefined;
+  try {
+    startupMs = await invoke<number>("get_startup_elapsed_ms");
+  } catch {
+    startupMs = undefined;
+  }
 
   return {
     phase: opts.phase,
     startedAt,
     stressDurationMs,
     peakSamples,
-    curve: [t0, ...dedup],
+    curve: [t0, ...restCurve],
     boot: captureBootTimings(),
+    startupMs,
     eventCountAtStart: opts.eventCountAtStart,
   };
 }

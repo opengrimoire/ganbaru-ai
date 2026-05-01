@@ -19,8 +19,16 @@ import type { PerfLogEntry } from "$lib/stores/perflog.svelte";
  */
 export const STRESS_DURATION_MS = 3000;
 export const STRESS_PEAK_INTERVAL_MS = 200;
-/** Offsets in milliseconds, measured from the moment `runStress` resolves. */
-export const SAMPLE_OFFSETS_MS = [0, 5_000, 30_000, 60_000, 180_000, 300_000];
+/**
+ * Offsets in milliseconds, measured from the moment `runStress` resolves.
+ *
+ * v2 cuts the curve to a single +30s reading. Empirically (2026-05-01) the
+ * GC sweep that drops 60-100 MB lands between t0 and +30s; everything
+ * after +30s sits in a flat ~10 MB jitter band. The +30s point preserves
+ * the cross-build comparable signal at a fraction of the wall time. See
+ * the spec doc for the data and the "bounded-window asymptote" caveat.
+ */
+export const SAMPLE_OFFSETS_MS = [30_000];
 /** Stale state older than this on boot is discarded silently. */
 export const STATE_TTL_MS = 60 * 60 * 1000;
 
@@ -38,9 +46,9 @@ export const HARNESS_VERSION = "2";
 /** Synth dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const SYNTH_VERSION = "v1";
 
-export type SampleLabel = "peak" | "t0" | "+5s" | "+30s" | "+60s" | "+3m" | "+5m";
+export type SampleLabel = "peak" | "t0" | "+30s";
 
-export const SAMPLE_LABELS: SampleLabel[] = ["peak", "t0", "+5s", "+30s", "+60s", "+3m", "+5m"];
+export const SAMPLE_LABELS: SampleLabel[] = ["peak", "t0", "+30s"];
 
 /** Single memory reading at one sample point. MB units, PSS on Linux, RSS on Windows. */
 export interface SamplePoint {
@@ -78,6 +86,15 @@ export interface PhaseResult {
   curve: SamplePoint[];
   /** Filtered slice of perflog entries scoped to boot of the run that produced this phase. */
   boot: BootTimings;
+  /**
+   * Wall-clock launch time, in ms, captured from `get_startup_elapsed_ms`
+   * right after the boot marks are lifted. Anchored to the Rust process
+   * spawn (`PROCESS_START`), which fires before WebKit even loads the
+   * document, so a build that improves Tauri/WebKit shell startup shows
+   * here even when JS-anchored marks stay flat. Optional because older
+   * runs may not have captured it.
+   */
+  startupMs?: number;
   /** Number of events in `rawBlocks` at the moment the phase started. */
   eventCountAtStart: number;
 }

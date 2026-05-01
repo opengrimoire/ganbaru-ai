@@ -1,32 +1,27 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing changes are intentional 1`] = `
-"## Benchmark 2026-04-30 (build ae2c02b, Linux Ubuntu 25.10, WebKitGTK 2.46)
+"## Benchmark 2026-05-01 (build 9815ea5, Linux Ubuntu 25.10, WebKitGTK 2.46)
 
 Scenario: calendar-nav, dataset benchmark-synth-v1 (1000 events).
-Methodology: 3000 ms programmatic stress; sampled at 200 ms during stress, then at fixed offsets.
+Methodology: cold-cold against an isolated benchmark DB; 3000 ms programmatic stress; sampled at 200 ms during stress, then once at +30 s post-stress.
 
 ### Boot (ms from process start)
 
-| Mark              | Phase A (empty) | Phase B (synth)      |
-|-------------------|-----------------|----------------------|
-| sql-main-done     | 412             | 609                  |
-| maprow-done       | 415             | 783                  |
-| sql-children-done | 418             | 817                  |
-| first-paint       | 542             | 921                  |
-| rawblocks-set     | 545             | 924                  |
+| Mark              | Phase A (0 events) | Phase B (1000 events) |
+|-------------------|--------------------|-----------------------|
+| launch-total      | 1430               | 1612                  |
+| sql-main-done     | 412                | 609                   |
+| maprow-done       | 415                | 783                   |
+| first-paint       | 542                | 921                   |
 
 ### Memory PSS, MB (backend / frontend / network / total)
 
-| t     | Phase A (empty)             | Phase B (synth)             |
+| t     | Phase A (0 events)          | Phase B (1000 events)       |
 |-------|-----------------------------|-----------------------------|
 | peak  | 87.0 / 261.0 / 16.0 / 348   | 87.0 / 430.0 / 16.0 / 517   |
 | t0    | 87.0 / 231.0 / 16.0 / 318   | 87.0 / 400.0 / 16.0 / 487   |
-| +5s   | 87.0 / 226.0 / 16.0 / 313   | 87.0 / 395.0 / 16.0 / 482   |
-| +30s  | 87.0 / 201.0 / 16.0 / 288   | 87.0 / 370.0 / 16.0 / 457   |
-| +60s  | 87.0 / 196.0 / 16.0 / 283   | 87.0 / 236.0 / 16.0 / 323   |
-| +3m   | 87.0 / 192.0 / 16.0 / 279   | 87.0 / 232.0 / 16.0 / 319   |
-| +5m   | 87.0 / 191.0 / 16.0 / 278   | 87.0 / 231.0 / 16.0 / 318   |
+| +30s  | 87.0 / 191.0 / 16.0 / 278   | 87.0 / 231.0 / 16.0 / 318   |
 
-Settled floor: empty 278 MB at +5m, synth 318 MB at +5m. 1000-event delta over empty: +40 MB at floor, +169 MB at peak."
+Settled floor: empty 278 MB at +30s, synth 318 MB at +30s. 1000-event delta over empty: +40 MB at floor, +169 MB at peak."
 `;

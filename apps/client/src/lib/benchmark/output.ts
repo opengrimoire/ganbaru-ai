@@ -9,14 +9,17 @@
  * See the spec doc for the rationale and a worked example.
  */
 import type { BenchmarkResult, PhaseResult, SamplePoint, SampleLabel } from "./types";
+import { SAMPLE_LABELS } from "./types";
 
-/** Boot marks emitted in the order they appear in the markdown table. */
+/**
+ * Boot marks emitted in the order they appear in the markdown table. The
+ * first row is the synthetic `launch-total` derived from
+ * `get_startup_elapsed_ms`; the rest come from the perflog.
+ */
 const BOOT_MARK_ORDER: string[] = [
   "boot.sql-main-done",
   "boot.maprow-done",
-  "boot.sql-children-done",
   "boot.first-paint",
-  "boot.rawblocks-set",
 ];
 
 function formatMb(n: number): string {
@@ -40,9 +43,9 @@ function findSample(samples: SamplePoint[], label: SampleLabel): SamplePoint | u
 }
 
 /**
- * Order the curve as the markdown expects (`peak`, `t0`, `+5s`, ...).
- * `peak` is the maximum across the burst samples; the other rows come from
- * the post-stress idle curve.
+ * Order the curve as the markdown expects (`peak`, `t0`, `+30s`). `peak`
+ * is the maximum across the burst samples; the other rows come from the
+ * post-stress idle curve.
  */
 function orderedSamples(phase: PhaseResult): Map<SampleLabel, SamplePoint | undefined> {
   const map = new Map<SampleLabel, SamplePoint | undefined>();
@@ -53,15 +56,23 @@ function orderedSamples(phase: PhaseResult): Map<SampleLabel, SamplePoint | unde
   if (peak) {
     map.set("peak", { ...peak, label: "peak" });
   }
-  for (const label of ["t0", "+5s", "+30s", "+60s", "+3m", "+5m"] as SampleLabel[]) {
+  for (const label of SAMPLE_LABELS) {
+    if (label === "peak") continue;
     map.set(label, findSample(phase.curve, label));
   }
   return map;
 }
 
+/**
+ * Settled floor: the lowest total in the post-peak idle curve. Ties pick
+ * the earliest label so the footer reads as the moment we first hit it.
+ *
+ * v2 caveat: with only `t0` and `+30s` in the curve, the "floor" is a
+ * bounded-window asymptote, not a true settled value. Late WebKit GC can
+ * fire well past the sampling window. The spec doc explains why this is
+ * still the right tradeoff for cross-build comparison.
+ */
 function findSettledFloor(phase: PhaseResult): { totalMb: number; label: SampleLabel } | undefined {
-  // Settled floor: the lowest total in the post-peak idle curve. Ties pick
-  // the earliest label so the doc reads as the moment we first hit it.
   let best: { totalMb: number; label: SampleLabel } | undefined;
   for (const s of phase.curve) {
     if (s.label === "peak") continue;
@@ -79,12 +90,34 @@ function formatBootRow(mark: string, a: PhaseResult, b: PhaseResult): string {
   const right = bVal === undefined ? "n/a" : Math.round(bVal).toString();
   // Strip "boot." prefix so the column reads as the conceptual mark name.
   const short = mark.startsWith("boot.") ? mark.slice(5) : mark;
-  return `| ${pad(short, 17)} | ${pad(left, 15)} | ${pad(right, 20)} |`;
+  return `| ${pad(short, 17)} | ${pad(left, leftColWidth(a))} | ${pad(right, rightColWidth(b))} |`;
+}
+
+function formatLaunchRow(a: PhaseResult, b: PhaseResult): string {
+  const left = a.startupMs === undefined ? "n/a" : Math.round(a.startupMs).toString();
+  const right = b.startupMs === undefined ? "n/a" : Math.round(b.startupMs).toString();
+  return `| ${pad("launch-total", 17)} | ${pad(left, leftColWidth(a))} | ${pad(right, rightColWidth(b))} |`;
 }
 
 function pad(s: string, width: number): string {
   if (s.length >= width) return s;
   return s + " ".repeat(width - s.length);
+}
+
+function leftColLabel(p: PhaseResult): string {
+  return `Phase A (${p.eventCountAtStart} events)`;
+}
+
+function rightColLabel(p: PhaseResult): string {
+  return `Phase B (${p.eventCountAtStart} events)`;
+}
+
+function leftColWidth(p: PhaseResult): number {
+  return Math.max(15, leftColLabel(p).length);
+}
+
+function rightColWidth(p: PhaseResult): number {
+  return Math.max(20, rightColLabel(p).length);
 }
 
 /**
@@ -112,6 +145,11 @@ export function formatBenchmarkMarkdown(result: BenchmarkResult, opts: {
   const floorA = findSettledFloor(result.phaseA);
   const floorB = findSettledFloor(result.phaseB);
 
+  const aLabel = leftColLabel(result.phaseA);
+  const bLabel = rightColLabel(result.phaseB);
+  const aWidth = leftColWidth(result.phaseA);
+  const bWidth = rightColWidth(result.phaseB);
+
   const lines: string[] = [];
   lines.push(`## Benchmark ${dateStr}${headerSuffix}`);
   lines.push("");
@@ -119,25 +157,27 @@ export function formatBenchmarkMarkdown(result: BenchmarkResult, opts: {
     `Scenario: ${result.scenarioId}, dataset benchmark-synth-${result.synthVersion} (${result.phaseB.eventCountAtStart} events).`,
   );
   lines.push(
-    "Methodology: 3000 ms programmatic stress; sampled at 200 ms during stress, then at fixed offsets.",
+    "Methodology: cold-cold against an isolated benchmark DB; 3000 ms programmatic stress; sampled at 200 ms during stress, then once at +30 s post-stress.",
   );
   lines.push("");
   lines.push("### Boot (ms from process start)");
   lines.push("");
-  lines.push(`| ${pad("Mark", 17)} | ${pad("Phase A (empty)", 15)} | ${pad("Phase B (synth)", 20)} |`);
-  lines.push(`|${"-".repeat(19)}|${"-".repeat(17)}|${"-".repeat(22)}|`);
+  lines.push(`| ${pad("Mark", 17)} | ${pad(aLabel, aWidth)} | ${pad(bLabel, bWidth)} |`);
+  lines.push(`|${"-".repeat(19)}|${"-".repeat(aWidth + 2)}|${"-".repeat(bWidth + 2)}|`);
+  lines.push(formatLaunchRow(result.phaseA, result.phaseB));
   for (const mark of BOOT_MARK_ORDER) {
     lines.push(formatBootRow(mark, result.phaseA, result.phaseB));
   }
   lines.push("");
   lines.push("### Memory PSS, MB (backend / frontend / network / total)");
   lines.push("");
-  lines.push(`| ${pad("t", 5)} | ${pad("Phase A (empty)", 27)} | ${pad("Phase B (synth)", 27)} |`);
-  lines.push(`|${"-".repeat(7)}|${"-".repeat(29)}|${"-".repeat(29)}|`);
-  for (const label of ["peak", "t0", "+5s", "+30s", "+60s", "+3m", "+5m"] as SampleLabel[]) {
+  const memWidth = Math.max(27, aLabel.length, bLabel.length);
+  lines.push(`| ${pad("t", 5)} | ${pad(aLabel, memWidth)} | ${pad(bLabel, memWidth)} |`);
+  lines.push(`|${"-".repeat(7)}|${"-".repeat(memWidth + 2)}|${"-".repeat(memWidth + 2)}|`);
+  for (const label of SAMPLE_LABELS) {
     const left = formatSampleCell(aSamples.get(label));
     const right = formatSampleCell(bSamples.get(label));
-    lines.push(`| ${pad(label, 5)} | ${pad(left, 27)} | ${pad(right, 27)} |`);
+    lines.push(`| ${pad(label, 5)} | ${pad(left, memWidth)} | ${pad(right, memWidth)} |`);
   }
   lines.push("");
   if (floorA && floorB) {

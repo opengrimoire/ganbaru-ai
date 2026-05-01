@@ -97,7 +97,7 @@ export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
   };
 }
 
-const OFFSET_LABELS: SampleLabel[] = ["t0", "+5s", "+30s", "+60s", "+3m", "+5m"];
+const OFFSET_LABELS: SampleLabel[] = ["+30s"];
 
 /**
  * Run the post-stress idle-curve schedule. Each entry in `SAMPLE_OFFSETS_MS`
@@ -150,7 +150,13 @@ export function sampleIdleCurve(opts: {
   });
 }
 
-/** Tags the harness lifts out of the perflog ring buffer. */
+/**
+ * Tags the harness lifts out of the perflog ring buffer.
+ *
+ * v2 drops `boot.sql-children-done` and `boot.rawblocks-set` because both
+ * fire within ~10 ms of `boot.sql-main-done` / `boot.first-paint` on
+ * every run we have captured: column space without information.
+ */
 const BOOT_MARKS_OF_INTEREST = new Set<string>([
   "boot.script-start",
   "boot.app-mount",
@@ -158,8 +164,6 @@ const BOOT_MARKS_OF_INTEREST = new Set<string>([
   "boot.sql-start",
   "boot.sql-main-done",
   "boot.maprow-done",
-  "boot.sql-children-done",
-  "boot.rawblocks-set",
   "boot.first-paint",
 ]);
 
