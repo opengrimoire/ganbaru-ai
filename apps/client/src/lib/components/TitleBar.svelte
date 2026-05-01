@@ -26,6 +26,7 @@
   import SettingsModal from "$lib/components/settings/SettingsModal.svelte";
   import FloatingThemeEditor from "$lib/components/settings/FloatingThemeEditor.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { perfLog, formatEntry, clear as clearPerfLog } from "$lib/stores/perflog.svelte";
 
   interface ProcessMemory {
@@ -51,7 +52,7 @@
   let showPomodoroMenu = $state(false);
   let showResetConfirm = $state(false);
   let showPerfMenu = $state(false);
-  let showSettings = $state(false);
+  const settingsLauncher = getSettingsLauncher();
   const themeEditor = getThemeEditor();
   let perfPinned = $state(false);
   let perfLive = $state(false);
@@ -535,7 +536,7 @@
 
     <!-- Settings -->
     <button
-      onclick={() => { showSettings = true; }}
+      onclick={() => settingsLauncher.open()}
       disabled={lockedByThemeEditor}
       class={cn(
         "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
@@ -601,14 +602,17 @@
   />
 {/if}
 
-{#if showSettings}
-  <SettingsModal onClose={() => { showSettings = false; }} />
+{#if settingsLauncher.isOpen}
+  <SettingsModal
+    onClose={() => settingsLauncher.close()}
+    initialSection={settingsLauncher.targetSection}
+  />
 {/if}
 
 {#if themeEditor.editingId}
   <FloatingThemeEditor
     onBackToList={() => {
-      showSettings = true;
+      settingsLauncher.open("appearance");
     }}
   />
 {/if}

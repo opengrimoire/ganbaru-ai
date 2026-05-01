@@ -6,8 +6,12 @@
   import AppearanceSection from "./AppearanceSection.svelte";
   import CalendarsSection from "./CalendarsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import type { SectionId } from "./types";
 
-  let { onClose }: { onClose: () => void } = $props();
+  let {
+    onClose,
+    initialSection,
+  }: { onClose: () => void; initialSection?: SectionId } = $props();
 
   const themeEditor = getThemeEditor();
 
@@ -16,8 +20,6 @@
   $effect(() => {
     if (themeEditor.editingId) onClose();
   });
-
-  type SectionId = "appearance" | "calendars";
 
   interface SectionMeta {
     id: SectionId;
@@ -40,6 +42,14 @@
   ];
 
   let activeSection = $state<SectionId>("appearance");
+
+  // Apply the launcher's target section when it is set, including on first
+  // mount. The modal is unmounted/remounted on each open, so this fires at
+  // most once per open and never overrides a subsequent sidebar click (the
+  // prop does not change during the modal's lifetime).
+  $effect.pre(() => {
+    if (initialSection) activeSection = initialSection;
+  });
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {

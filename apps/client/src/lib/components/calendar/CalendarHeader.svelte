@@ -14,10 +14,12 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Check from "@lucide/svelte/icons/check";
-  import Plus from "@lucide/svelte/icons/plus";
+  import Settings from "@lucide/svelte/icons/settings";
   import Layers from "@lucide/svelte/icons/layers";
+  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
 
   const calendarsStore = getCalendars();
+  const settingsLauncher = getSettingsLauncher();
 
   // Calendar account selector state
   let showAccountPicker = $state(false);
@@ -471,11 +473,14 @@
         {/each}
         <div class="my-1.5 border-t border-border"></div>
         <button
-          onclick={() => {}}
+          onclick={() => {
+            showAccountPicker = false;
+            settingsLauncher.open("calendars");
+          }}
           class="flex w-full items-center gap-2 rounded px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <Plus size={14} />
-          <span>Sync other accounts</span>
+          <Settings size={14} />
+          <span>Settings</span>
         </button>
       </div>
     {/if}
