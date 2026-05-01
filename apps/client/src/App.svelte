@@ -16,6 +16,7 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import IdleOverlay from "$lib/components/pomodoro/IdleOverlay.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
+  import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { onMount } from "svelte";
 
   perfMark("boot.script-start");
@@ -43,6 +44,21 @@
       .then(() => {
         perfMark("boot.tz-hydrated");
         return calendar.load();
+      })
+      .then(() => {
+        // Hand control to the benchmark harness once calendar data is in
+        // memory. If a Phase A is waiting in the persisted state file, the
+        // runner mounts the overlay and runs Phase B; otherwise this is a
+        // no-op. Two rAFs ensure CalendarView has emitted boot.first-paint
+        // before the runner kicks off, so the Phase B boot mark capture
+        // sees the same shape as Phase A's.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            getBenchmarkRunner().checkAndResume().catch((e) =>
+              console.error("benchmark resume failed:", e),
+            );
+          });
+        });
       })
       .catch((e) => console.error("Failed to migrate or load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
