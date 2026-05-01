@@ -35,6 +35,17 @@ Per-call cost is `O(log N + K)` where `K` is the number of events in the window 
 
 `display-events.ts` `applyAll` and `applyFollowing` previously expanded the entire `rawBlocks` array on every keystroke during recurring edits. They now expand only the patched template (and the capped / virtual templates for "following" splits); sibling instances are stripped from `storeEvents` via `belongsToSeries` and re-added from this single-template expansion. Preview cost is now constant regardless of total event count.
 
+### Slim in-memory event shape
+
+`rawBlocks` now carries a slim subset of columns: every field the render path, recurrence expander, notification scheduler, and active-block tracker reads, and nothing more. Heavy fields (`description`, `url`, `organizer`, `attendees`, `alarms`, `geo`, `extendedProperties`, `guestPermissions`, `categories`, `sequence`, `sourceUid`, `visibility`, `priority`) and the matching slim-override fields stay in SQLite and are loaded on demand by `calendar.loadFullEvent(id)` when the EventPanel opens or the ICS exporter serializes a calendar.
+
+- Boot (`load()` in `stores/calendar.svelte.ts`): one `SELECT` over `calendar_events` joined with `pomodoro_configs`, plus one slim `SELECT` over `calendar_event_overrides`. The previous boot also pulled every row from `calendar_event_attendees` and `calendar_event_alarms` plus the heavy override columns; those reads are gone.
+- `mapRow` only assigns keys with meaningful values, so V8 hidden classes stay compact and `{...slimEvent}` patch payloads do not accidentally clear DB columns through `updateBlock` (which Step 1 changed to a key-driven `SET` clause).
+- `EventPanel.svelte` paints its header from the slim event prop on the same frame as the open click. Heavy sections (description editor, meeting block, visibility button) gate behind `{#if mode === "create" || fullEvent}`, so the user cannot edit a heavy field before the async `loadFullEvent` resolves; once it does, a separate init effect emits a heavy-only payload through `setInitialChanges` so the existing dirty diff still works without re-clobbering slim edits.
+- ICS export (`exportCalendarAsIcs`) and undo / redo of create / delete materialize the full event before they need it: `Promise.all(slim.map((e) => store.loadFullEvent(e.id)))` before serialize, `loadFullEvent` before `pushUndo` for delete actions and after `addBlock` for add actions, and `loadFullEvent(s.originalEvent.id)` before edit-mode update so the undo snapshot can revert heavy edits the user just made. Drag commits and the App-level revert path stay slim because Step 1's patch-based update preserves untouched DB columns.
+
+Production traces from a release `.deb` should be re-run on a 968-event Google Calendar import to confirm the expected drops (idle frontend RAM, nav-peak frontend RAM, and `boot.maprow-done - boot.sql-main-done` plus `boot.sql-children-done - boot.sql-main-done`). Numbers will be added to the RAM and startup tables below once measured on the new build.
+
 ### Fast-forward for far-past origins
 
 Imported templates often have origins years before the current viewport (a daily standup with `DTSTART=2020-01-15` viewed in 2026). The cursor walk in `expandTemplate` would advance from `origStart` to `windowEnd` one interval at a time, allocating Temporal.PlainDate objects on each step. For a 6-year-old daily template, that is ~2200 cursor advances per `eventsInWindow` call, dominating the per-frame cost during held-arrow navigation.
