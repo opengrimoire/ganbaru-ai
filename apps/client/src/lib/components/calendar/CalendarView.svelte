@@ -456,6 +456,15 @@
   let arrowScrollRaf = 0;
   let arrowScrollPrev = 0;
 
+  // Held-arrow nav throttle. OS keyrepeat fires at ~30 Hz; without a gate
+  // each repeat call schedules a new anchor commit, the renderer falls
+  // behind, and queued keydowns keep draining for seconds after release
+  // (observed: a 3 s hold leaked ~12 s of nav.start marks). The throttle
+  // only filters auto-repeat events (`e.repeat === true`); the initial
+  // press always passes through so single taps stay responsive.
+  const HOLD_REPEAT_MS = 200;
+  let lastNavTime = 0;
+
   function arrowScrollStep(ts: number) {
     if (arrowScrollDir === 0) return;
     if (!arrowScrollPrev) arrowScrollPrev = ts;
@@ -503,13 +512,19 @@
       } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
+          if (e.repeat && performance.now() - lastNavTime < HOLD_REPEAT_MS) return;
+          lastNavTime = performance.now();
           navigate("back");
         } else if (e.key === "ArrowRight") {
           e.preventDefault();
+          if (e.repeat && performance.now() - lastNavTime < HOLD_REPEAT_MS) return;
+          lastNavTime = performance.now();
           navigate("forward");
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
           if (viewMode === "month") {
+            if (e.repeat && performance.now() - lastNavTime < HOLD_REPEAT_MS) return;
+            lastNavTime = performance.now();
             navigate(e.key === "ArrowUp" ? "back" : "forward");
           } else {
             startArrowScroll(e.key === "ArrowUp" ? -1 : 1);
@@ -521,6 +536,17 @@
     function handleKeyup(e: KeyboardEvent) {
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && arrowScrollDir !== 0) {
         stopArrowScroll();
+      }
+      // Drop the pending anchor commit on release so any keydown still
+      // queued in the JS event loop does not advance the calendar after
+      // the user has let go.
+      if (
+        (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") &&
+        anchorRaf !== 0
+      ) {
+        cancelAnimationFrame(anchorRaf);
+        anchorRaf = 0;
+        pendingAnchor = null;
       }
     }
 
