@@ -39,8 +39,9 @@
       <h2 class="text-[14px] font-semibold text-foreground">Run benchmark?</h2>
       <p class="text-[12px] text-foreground">
         This runs against an isolated benchmark database, restarts the app a few times to keep both
-        phases on cold boots, and takes several minutes. Your real calendar data is not touched. Do
-        not close the app or interact with it while it runs. Continue?
+        phases on cold boots, and takes about 80 seconds. Your real calendar data is not touched. A
+        desktop notification fires when the run finishes. Do not close the app or interact with it
+        while it runs. Continue?
       </p>
       <div class="flex justify-end gap-2">
         <button

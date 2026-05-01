@@ -339,6 +339,10 @@ class BenchmarkRunnerStore {
     };
     this.running = undefined;
     this.status = "summary";
+    notifyBenchmarkDone(
+      "Benchmark complete",
+      `${scenario.label}: peak ${Math.round(this.result.peakTotalMb)} MB. Open the app to copy the markdown.`,
+    );
   }
 
   #updateStep(step: string, clearCurve = false) {
@@ -357,6 +361,7 @@ class BenchmarkRunnerStore {
     this.errorMessage = message;
     this.running = undefined;
     this.status = "error";
+    notifyBenchmarkDone("Benchmark failed", message);
   }
 
   #reset() {
@@ -391,4 +396,17 @@ let store: BenchmarkRunnerStore | null = null;
 export function getBenchmarkRunner(): BenchmarkRunnerStore {
   if (!store) store = new BenchmarkRunnerStore();
   return store;
+}
+
+/**
+ * Fires the OS desktop notification used by the harness on terminal-state
+ * transitions (`summary`, `error`). Reuses the same Tauri command the
+ * calendar event reminders use; on Linux that path goes through
+ * `notify-rust` with a `message-new-instant` sound hint, so the user hears
+ * a chime even if they walked away from the app.
+ */
+function notifyBenchmarkDone(title: string, body: string): void {
+  invoke("show_event_notification", { title, body }).catch((e) => {
+    console.warn("Benchmark notification failed:", e);
+  });
 }

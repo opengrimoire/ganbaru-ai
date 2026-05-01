@@ -13,6 +13,8 @@ This doc is the spec. The first scenario (calendar week-view nav) is the worked 
 
 The benchmark is **not** a CI tool. One full run takes about 80 seconds (3 cold restarts, two ~33 s phases, one seed bridge), and the readings depend on WebKit GC heuristics that are not reproducible across machines or window-manager states. Treat it as a release-candidate gate, not a per-PR check.
 
+Because the run blocks user interaction with the app, the harness fires an OS desktop notification (with the system message-tone) when the run reaches the summary state or fails. The notification means you can step away during the 80 seconds without missing the moment the result is ready to copy.
+
 Good times to run:
 
 - Before tagging a release that touches the calendar render path, recurrence expansion, or the SQL boot path.
