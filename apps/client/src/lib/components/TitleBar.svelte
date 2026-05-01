@@ -489,7 +489,7 @@
           <!-- Live trend chart -->
           {#if perfLive}
             <div class="mt-3">
-              <MemoryChart samples={memorySamples} width={264} height={64} />
+              <MemoryChart samples={memorySamples} width={252} height={64} />
             </div>
             <button
               onclick={copyMemoryCsv}

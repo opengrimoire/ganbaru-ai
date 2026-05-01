@@ -80,12 +80,40 @@
     return nearest;
   });
 
-  const tooltipLeft = $derived.by(() => {
-    if (!hoverSample) return 0;
-    const TOOLTIP_W = 128;
-    const x = xOf(hoverSample.t) + 8;
-    return Math.min(width - TOOLTIP_W, Math.max(0, x));
+  const TOOLTIP_W = 188;
+  const TOOLTIP_GAP = 10;
+
+  /**
+   * Place the tooltip on whichever side of the cursor has more room, so it
+   * never covers the crosshair point. Falls back to a clamped position when
+   * the chart is too narrow to fit the tooltip on either side cleanly.
+   */
+  const tooltipStyle = $derived.by(() => {
+    if (!hoverSample) return "display: none;";
+    const x = xOf(hoverSample.t);
+    const spaceRight = width - x;
+    const spaceLeft = x;
+    if (spaceRight >= TOOLTIP_W + TOOLTIP_GAP) {
+      return `left: ${x + TOOLTIP_GAP}px; top: 0; width: ${TOOLTIP_W}px;`;
+    }
+    if (spaceLeft >= TOOLTIP_W + TOOLTIP_GAP) {
+      const right = width - x + TOOLTIP_GAP;
+      return `right: ${right}px; top: 0; width: ${TOOLTIP_W}px;`;
+    }
+    const left = Math.max(0, Math.min(width - TOOLTIP_W, x + TOOLTIP_GAP));
+    return `left: ${left}px; top: 0; width: ${TOOLTIP_W}px;`;
   });
+
+  /**
+   * First and last x-axis ticks anchor to the chart edge so their labels
+   * don't bleed past the SVG box (which clips by default). Middle ticks
+   * stay centered on their tick mark.
+   */
+  function tickAnchor(index: number, total: number): "start" | "middle" | "end" {
+    if (index === 0) return "start";
+    if (index === total - 1) return "end";
+    return "middle";
+  }
 
   function onMove(e: PointerEvent) {
     const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -121,7 +149,7 @@
         stroke-linejoin="round"
         class="text-foreground"
       />
-      {#each xTicks as tick}
+      {#each xTicks as tick, i}
         <line
           x1={xOf(tick.t)}
           y1={PAD_TOP + innerHeight}
@@ -133,7 +161,7 @@
         <text
           x={xOf(tick.t)}
           y={height - 2}
-          text-anchor="middle"
+          text-anchor={tickAnchor(i, xTicks.length)}
           class="fill-muted-foreground"
           style="font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;"
         >{tick.label}</text>
@@ -159,7 +187,7 @@
     {#if hoverSample}
       <div
         class="pointer-events-none absolute z-10 rounded-md border border-border bg-popover px-2 py-1 text-[10px] leading-tight shadow-md"
-        style="left: {tooltipLeft}px; top: 0; min-width: 120px;"
+        style={tooltipStyle}
       >
         <div class="tabular-nums text-muted-foreground">t = {formatElapsed(hoverSample.t)}</div>
         <div class="tabular-nums font-medium text-foreground">
@@ -169,8 +197,8 @@
           <div class="mt-1 flex flex-col gap-0.5">
             {#each hoverSample.processes as p (p.name)}
               <div class="flex justify-between gap-2 tabular-nums text-muted-foreground">
-                <span class="truncate">{p.name}</span>
-                <span>{p.mb.toFixed(1)}</span>
+                <span class="min-w-0 flex-1 truncate">{p.name}</span>
+                <span class="shrink-0">{p.mb.toFixed(1)}</span>
               </div>
             {/each}
           </div>
