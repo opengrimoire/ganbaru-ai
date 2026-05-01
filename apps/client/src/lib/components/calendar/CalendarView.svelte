@@ -24,6 +24,7 @@
   import { createEditSession } from "./edit-session.svelte";
   import type { PanelAnchor } from "./edit-session.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
+  import { getCalendarNavHandle } from "./nav-handle.svelte";
   import {
     closedDisplay,
     buildCreateDisplay,
@@ -72,6 +73,12 @@
   // the edit-flow preview. Held-arrow nav stays cheap because the cache
   // hits on adjacent windows pre-warmed during idle time.
   const viewWindow = $derived(computeViewWindow(anchorDate, viewMode));
+
+  // Keep the headless handle's cached view mode in sync so external drivers
+  // (the benchmark harness) read the current value without polling.
+  $effect(() => {
+    getCalendarNavHandle().reportViewMode(viewMode);
+  });
 
   const displayResult = $derived.by(() => {
     const visIds = calendarsStore.visibleIds;
@@ -527,7 +534,19 @@
       });
     });
 
+    // Expose navigate / view-mode setters through the headless handle so the
+    // benchmark harness (and any future scripted driver) can drive the
+    // calendar without reaching into component internals.
+    const navHandle = getCalendarNavHandle();
+    const unregisterNav = navHandle.register({
+      navigate,
+      setViewMode: (mode) => changeView(mode),
+      setAnchorDate: (date) => { anchorDate = date; },
+      getViewMode: () => viewMode,
+    });
+
     return () => {
+      unregisterNav();
       stopArrowScroll();
       if (anchorRaf !== 0) {
         cancelAnimationFrame(anchorRaf);

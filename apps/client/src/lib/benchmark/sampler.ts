@@ -1,0 +1,192 @@
+/**
+ * Memory + boot-mark sampling for the benchmark harness.
+ *
+ * Wraps `get_memory_report` (Tauri command in `lib.rs`) and the
+ * `lib/stores/perflog.svelte.ts` ring buffer. Scenarios never call this
+ * directly: the runner orchestrates peak sampling around `runStress` and
+ * the idle-curve schedule afterwards.
+ *
+ * Cadence (`STRESS_PEAK_INTERVAL_MS`, `SAMPLE_OFFSETS_MS`) is pinned in
+ * `types.ts` so historical PERFORMANCE.md rows stay comparable.
+ */
+import { invoke } from "@tauri-apps/api/core";
+import { snapshot as perfSnapshot, type PerfLogEntry } from "$lib/stores/perflog.svelte";
+import type { BootTimings, SampleLabel, SamplePoint } from "./types";
+import { STRESS_PEAK_INTERVAL_MS, SAMPLE_OFFSETS_MS } from "./types";
+
+interface MemoryReportProcess {
+  name: string;
+  mb: number;
+}
+
+interface MemoryReport {
+  processes: MemoryReportProcess[];
+  total_mb: number;
+  platform: string;
+}
+
+/**
+ * Read one memory snapshot from the backend. Maps the Rust report into the
+ * `SamplePoint` shape (backend / frontend / network split). The names come
+ * from `lib.rs` (`Backend (Rust)`, `Frontend (Svelte + WebKit)`,
+ * `Network (WebKit)`); fallbacks keep the math sane on platforms that
+ * label processes differently.
+ */
+export async function readMemorySample(
+  label: SampleLabel,
+  tMs: number,
+): Promise<SamplePoint> {
+  const report = await invoke<MemoryReport>("get_memory_report");
+  let backend = 0;
+  let frontend = 0;
+  let network = 0;
+  for (const p of report.processes) {
+    const name = p.name.toLowerCase();
+    if (name.includes("backend")) backend += p.mb;
+    else if (name.includes("frontend")) frontend += p.mb;
+    else if (name.includes("network")) network += p.mb;
+    else if (name.includes("webview")) frontend += p.mb;
+    else frontend += p.mb;
+  }
+  return {
+    label,
+    tMs,
+    totalMb: report.total_mb,
+    backendMb: backend,
+    frontendMb: frontend,
+    networkMb: network,
+  };
+}
+
+/**
+ * Periodically sample memory at `STRESS_PEAK_INTERVAL_MS` cadence. Returns
+ * a stop function that flushes any in-flight read, clears the timer, and
+ * resolves with the captured samples. The runner calls this around
+ * `runStress` so the peak buffer covers exactly the stress window.
+ */
+export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
+  const samples: SamplePoint[] = [];
+  let stopped = false;
+  const startedAt = performance.now();
+  const inFlight: Promise<void>[] = [];
+
+  function tick() {
+    if (stopped) return;
+    const tMs = performance.now() - startedAt;
+    inFlight.push(
+      readMemorySample("peak", tMs).then((s) => {
+        if (!stopped) samples.push(s);
+      }).catch(() => {
+        // A dropped sample is preferable to crashing the burst loop;
+        // the formatter tolerates a missing peak by reporting `n/a`.
+      }),
+    );
+  }
+
+  const intervalId = setInterval(tick, STRESS_PEAK_INTERVAL_MS);
+  // Fire one immediately so the burst is not biased by the interval phase.
+  tick();
+
+  return {
+    async stop(): Promise<SamplePoint[]> {
+      stopped = true;
+      clearInterval(intervalId);
+      await Promise.all(inFlight);
+      return samples;
+    },
+  };
+}
+
+const OFFSET_LABELS: SampleLabel[] = ["t0", "+5s", "+30s", "+60s", "+3m", "+5m"];
+
+/**
+ * Run the post-stress idle-curve schedule. Each entry in `SAMPLE_OFFSETS_MS`
+ * gets one reading; the resulting array is in chronological order. Aborts
+ * cleanly via `signal`: pending timers are cleared and the promise resolves
+ * with whatever samples were captured so far.
+ */
+export function sampleIdleCurve(opts: {
+  signal: AbortSignal;
+  onProgress?: (label: SampleLabel, samples: SamplePoint[]) => void;
+}): Promise<SamplePoint[]> {
+  return new Promise((resolve) => {
+    const samples: SamplePoint[] = [];
+    const startedAt = performance.now();
+    let i = 0;
+
+    function scheduleNext() {
+      if (opts.signal.aborted || i >= SAMPLE_OFFSETS_MS.length) {
+        resolve(samples);
+        return;
+      }
+      const targetMs = SAMPLE_OFFSETS_MS[i];
+      const elapsed = performance.now() - startedAt;
+      const wait = Math.max(0, targetMs - elapsed);
+      const timer = setTimeout(async () => {
+        if (opts.signal.aborted) {
+          resolve(samples);
+          return;
+        }
+        const label = OFFSET_LABELS[i];
+        try {
+          const s = await readMemorySample(label, targetMs);
+          if (!opts.signal.aborted) {
+            samples.push(s);
+            opts.onProgress?.(label, samples);
+          }
+        } catch {
+          // Swallow; an empty cell is fine in the markdown.
+        }
+        i++;
+        scheduleNext();
+      }, wait);
+      opts.signal.addEventListener("abort", () => {
+        clearTimeout(timer);
+        resolve(samples);
+      }, { once: true });
+    }
+
+    scheduleNext();
+  });
+}
+
+/** Tags the harness lifts out of the perflog ring buffer. */
+const BOOT_MARKS_OF_INTEREST = new Set<string>([
+  "boot.script-start",
+  "boot.app-mount",
+  "boot.tz-hydrated",
+  "boot.sql-start",
+  "boot.sql-main-done",
+  "boot.maprow-done",
+  "boot.sql-children-done",
+  "boot.rawblocks-set",
+  "boot.first-paint",
+]);
+
+/**
+ * Lift the boot marks from the perflog snapshot, expressed as ms relative
+ * to `boot.script-start` (the first mark fired in `App.svelte`). If
+ * `boot.script-start` is missing (very rare), falls back to the first mark
+ * in the buffer so deltas stay consistent within the run.
+ */
+export function captureBootTimings(): BootTimings {
+  const entries = perfSnapshot();
+  const baseT = findBaseT(entries);
+  const marks: Record<string, number> = {};
+  for (const e of entries) {
+    if (BOOT_MARKS_OF_INTEREST.has(e.tag)) {
+      // First write wins so a re-emitted mark does not overwrite the boot value.
+      if (!(e.tag in marks)) {
+        marks[e.tag] = Math.max(0, e.t - baseT);
+      }
+    }
+  }
+  return { marks };
+}
+
+function findBaseT(entries: readonly PerfLogEntry[]): number {
+  for (const e of entries) {
+    if (e.tag === "boot.script-start") return e.t;
+  }
+  return entries[0]?.t ?? 0;
+}
