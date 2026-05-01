@@ -319,6 +319,28 @@
     undoStack = [...undoStack, action].slice(-UNDO_LIMIT);
   }
 
+  /**
+   * Recreate an event from a captured undo/redo snapshot. The snapshot is the
+   * full event (heavy fields included) captured at action push time, so a
+   * restored event keeps its description, attendees, organizer, etc.
+   */
+  function recreateBlockFromAction(e: CalendarEvent) {
+    return calendarStore.addBlock({
+      id: e.id, title: e.title, start: e.start, end: e.end,
+      calendarId: e.calendarId, color: e.color,
+      description: e.description, recurrence: e.recurrence,
+      notifications: e.notifications, pomodoroConfig: e.pomodoroConfig,
+      allDay: e.allDay, location: e.location, url: e.url,
+      transparency: e.transparency, status: e.status,
+      sourceUid: e.sourceUid, visibility: e.visibility,
+      priority: e.priority, categories: e.categories, geo: e.geo,
+      sequence: e.sequence, rdate: e.rdate,
+      extendedProperties: e.extendedProperties,
+      organizer: e.organizer, attendees: e.attendees,
+      guestPermissions: e.guestPermissions,
+    });
+  }
+
   // Confirmation dialog
   let confirmAction: (() => Promise<void>) | null = $state(null);
   let confirmTitle: string | undefined = $state(undefined);
@@ -379,12 +401,7 @@
       if (action.type === "add") {
         await calendarStore.deleteBlock(action.event.id);
       } else if (action.type === "delete") {
-        await calendarStore.addBlock({
-          title: action.event.title, start: action.event.start, end: action.event.end,
-          id: action.event.id, color: action.event.color, description: action.event.description,
-          recurrence: action.event.recurrence, notifications: action.event.notifications,
-          pomodoroConfig: action.event.pomodoroConfig,
-        });
+        await recreateBlockFromAction(action.event);
       } else {
         await calendarStore.updateBlock(action.before);
       }
@@ -410,12 +427,7 @@
     requestConfirm(message, async () => {
       redoStack = redoStack.slice(0, -1);
       if (action.type === "add") {
-        await calendarStore.addBlock({
-          title: action.event.title, start: action.event.start, end: action.event.end,
-          id: action.event.id, color: action.event.color, description: action.event.description,
-          recurrence: action.event.recurrence, notifications: action.event.notifications,
-          pomodoroConfig: action.event.pomodoroConfig,
-        });
+        await recreateBlockFromAction(action.event);
       } else if (action.type === "delete") {
         await calendarStore.deleteBlock(action.event.id);
       } else {
@@ -790,7 +802,10 @@
         visibility: data.visibility, attendees: data.attendees,
         guestPermissions: data.guestPermissions,
       });
-      pushUndo({ type: "add", event: { ...event } });
+      // Capture the full event (heavy fields included) so redo can restore
+      // description, attendees, organizer, etc.
+      const full = await calendarStore.loadFullEvent(event.id);
+      pushUndo({ type: "add", event: full ?? { ...event } });
       redoStack = [];
     } else if (s.mode === "edit") {
       const instanceEvent = s.instanceEvent;
@@ -988,11 +1003,17 @@
           }
         }
       } else {
-        // Non-recurring edit
+        // Non-recurring edit. Snapshot the full row before mutating so undo can
+        // revert heavy fields (description, attendees, etc.) the user just
+        // edited; without this, slim-only undo would leave heavy edits stuck.
+        const fullBefore = await calendarStore.loadFullEvent(s.originalEvent.id);
+        const before = fullBefore
+          ?? calendarStore.getTemplate(s.originalEvent)
+          ?? s.originalEvent;
         const updated: CalendarEvent = { ...s.originalEvent, ...data };
-        const before = calendarStore.getTemplate(s.originalEvent) ?? s.originalEvent;
         await calendarStore.updateBlock(updated);
-        pushUndo({ type: "update", before: { ...before }, after: { ...updated } });
+        const after: CalendarEvent = { ...before, ...data };
+        pushUndo({ type: "update", before, after });
         redoStack = [];
       }
 
@@ -1063,20 +1084,26 @@
           const dayBefore = shiftDateStr(splitDate, -1);
           await calendarStore.setRepeatUntil(parentId, dayBefore);
         } else {
-          // No past instances: delete the whole series
+          // No past instances: delete the whole series. Snapshot the full
+          // template (heavy fields included) before delete so undo can
+          // restore description, attendees, etc.
           if (template) {
-            pushUndo({ type: "delete", event: { ...template } });
+            const full = await calendarStore.loadFullEvent(template.id);
+            pushUndo({ type: "delete", event: full ?? { ...template } });
             redoStack = [];
           }
           await calendarStore.deleteBlock(parentId);
         }
       }
     } else {
-      // Non-recurring: delete directly
+      // Non-recurring: delete directly. Snapshot the full event before delete
+      // so undo can restore heavy fields (description, attendees, etc.).
       const event = calendarStore.getTemplate({ id } as CalendarEvent) ?? visibleEvents.find((e) => e.id === id);
+      const full = event ? await calendarStore.loadFullEvent(event.id) : undefined;
       await calendarStore.deleteBlock(id);
-      if (event) {
-        pushUndo({ type: "delete", event: { ...event } });
+      const snapshot = full ?? (event ? { ...event } : undefined);
+      if (snapshot) {
+        pushUndo({ type: "delete", event: snapshot });
         redoStack = [];
       }
     }

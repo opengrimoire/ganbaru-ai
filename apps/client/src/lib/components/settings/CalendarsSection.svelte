@@ -97,7 +97,7 @@
         filters: ICS_FILE_FILTER,
       });
       if (!target) return;
-      const ics = calendarStore.exportCalendarAsIcs(calendar);
+      const ics = await calendarStore.exportCalendarAsIcs(calendar);
       await invoke("vault_write_text", { path: target, contents: ics });
       flashToast("Exported to file.");
     } catch (err) {

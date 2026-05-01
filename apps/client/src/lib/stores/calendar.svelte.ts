@@ -1182,11 +1182,15 @@ export function getCalendar() {
     },
 
     /**
-     * Serialize every event of `calendar` (template + child rows already
-     * merged via `load()`) into a `.ics` string ready to write to disk.
+     * Serialize every event of `calendar` into a `.ics` string ready to write
+     * to disk. `rawBlocks` carries only the slim render shape, so heavy fields
+     * (description, attendees, alarms, organizer, etc.) are loaded on demand
+     * via `loadFullEvent` before serialization so the export is lossless.
      */
-    exportCalendarAsIcs(calendar: Calendar): string {
-      const calendarEvents = rawBlocks.filter((e) => e.calendarId === calendar.id);
+    async exportCalendarAsIcs(calendar: Calendar): Promise<string> {
+      const slim = rawBlocks.filter((e) => e.calendarId === calendar.id);
+      const full = await Promise.all(slim.map((e) => store.loadFullEvent(e.id)));
+      const calendarEvents = full.filter((e): e is CalendarEvent => e !== undefined);
       return serializeCalendarToIcs(calendar, calendarEvents);
     },
 
