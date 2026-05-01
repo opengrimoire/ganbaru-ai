@@ -61,26 +61,18 @@
     { mode: "month", label: "31d", shortcut: "M" },
   ];
 
-  // Keyboard shortcuts for navigation and view switching
+  // Letter shortcuts for view switching and "today". Arrow-key navigation is
+  // owned by CalendarView so the throttle, stale-event drop, and rAF anchor
+  // coalescer apply uniformly. Adding a second listener here would let
+  // auto-repeat keydowns bypass the gate and drain the queue for seconds
+  // after the user releases the key.
   onMount(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Skip when typing in inputs or when modifiers are pressed
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-
-      // Shift is allowed for zoom shortcuts, but not for these navigation shortcuts
-      if (e.shiftKey) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
       switch (e.key) {
-        case "ArrowLeft":
-          e.preventDefault();
-          onNavigate("back");
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          onNavigate("forward");
-          break;
         case "t":
         case "T":
           e.preventDefault();
