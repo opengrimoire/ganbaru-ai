@@ -32,7 +32,7 @@ A scenario is one TypeScript module exporting a `BenchmarkScenario` value. The c
 export interface BenchmarkScenario {
   /** Stable identifier. Used for the persisted state file and in markdown output. */
   id: string;
-  /** Human label shown in the Settings developer card. */
+  /** Human label shown on the perf-panel Run button. */
   label: string;
   /** Short paragraph rendered under the label. Explain what the scenario stresses. */
   description: string;
@@ -150,7 +150,7 @@ The markdown is also legal Markdown for the doc renderer in the summary overlay,
 1. **Create the module** at `apps/client/src/lib/benchmark/scenarios/<scenario-id>.ts`. Implement the `BenchmarkScenario` interface. The `id` becomes part of the persisted state filename and the markdown output, so pick something stable.
 2. **Decide what `runStress` does.** It must keep the JS event loop working for the full `STRESS_DURATION_MS` window. For UI scenarios this typically means scheduling work via `requestAnimationFrame` so the work matches a real user's frame budget. Honor the `AbortSignal` so a cancel from the runner stops the loop promptly.
 3. **Seed your data.** `seed()` should populate a versioned, dedicated grouping (calendar, board, project, etc.) so the synthetic dataset never mingles with user data. Return a handle the runner can hand back to `cleanup()`.
-4. **Add a card.** `DeveloperSection.svelte` reads the registry in `lib/benchmark/registry.ts` and renders a card per scenario. Adding to the registry surfaces the new scenario in Settings without other UI changes.
+4. **Register it.** The TitleBar performance panel reads the registry in `lib/benchmark/registry.ts` and renders a Run button per scenario below "Copy all". Adding to the registry surfaces the new scenario in the perf panel without other UI changes.
 5. **Lock the synth.** If your scenario seeds a deterministic dataset, add a vitest case under `lib/benchmark/scenarios/<id>.test.ts` that pins the first few generated items in golden form. This is the only protection against silent generator drift.
 
 The runner, sampler, output formatter, and persistence layer are scenario-agnostic. A new scenario does not touch those files.
@@ -182,7 +182,7 @@ The runner, sampler, output formatter, and persistence layer are scenario-agnost
 - `lib/benchmark/scenarios/calendar-nav.ts`: first scenario; worked example.
 - `apps/client/src-tauri/src/lib.rs`: `read_benchmark_state`, `write_benchmark_state`, `clear_benchmark_state`, `restart_app`.
 - `lib/components/calendar/nav-handle.svelte.ts`: shared store exposing `navigate(dir)` and `setViewMode(mode)` for headless drivers.
-- `lib/components/settings/DeveloperSection.svelte`: Settings entry rendering one card per scenario.
+- `lib/components/TitleBar.svelte`: performance panel hosts the Run buttons for every scenario in the registry.
 - `lib/components/benchmark/BenchmarkOverlay.svelte`: full-screen overlay during a run; renders the summary tables on completion.
 
 The harness reuses the existing memory and perf-mark infrastructure verbatim: `get_memory_report` (Tauri command in `lib.rs`), `mark()` and `snapshot()` (in `lib/stores/perflog.svelte.ts`), and the boot/nav marks already firing from `App.svelte` and `CalendarView.svelte`. None of those files change for the harness.

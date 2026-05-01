@@ -13,6 +13,7 @@
   import PinOff from "@lucide/svelte/icons/pin-off";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
+  import Play from "@lucide/svelte/icons/play";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
@@ -28,6 +29,8 @@
   import BenchmarkOverlay from "$lib/components/benchmark/BenchmarkOverlay.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
+  import { BENCHMARK_SCENARIOS } from "$lib/benchmark/registry";
   import { perfLog, formatEntry, clear as clearPerfLog } from "$lib/stores/perflog.svelte";
 
   interface ProcessMemory {
@@ -55,6 +58,7 @@
   let showPerfMenu = $state(false);
   const settingsLauncher = getSettingsLauncher();
   const themeEditor = getThemeEditor();
+  const benchmarkRunner = getBenchmarkRunner();
   let perfPinned = $state(false);
   let perfLive = $state(false);
   let copied = $state(false);
@@ -501,6 +505,29 @@
               Copy all
             {/if}
           </button>
+          <!-- Benchmark scenarios -->
+          {#if BENCHMARK_SCENARIOS.length > 0}
+            <div class="mx-0 my-3 h-px bg-border"></div>
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] uppercase tracking-wider text-foreground">Benchmarks</span>
+              <span class="text-[10px] uppercase tracking-wider text-muted-foreground/60"
+                >~11 min, restarts app</span
+              >
+            </div>
+            <div class="mt-1.5 flex flex-col gap-1">
+              {#each BENCHMARK_SCENARIOS as scenario (scenario.id)}
+                <button
+                  onclick={() => benchmarkRunner.request(scenario.id)}
+                  disabled={benchmarkRunner.status !== "idle"}
+                  class="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  title={scenario.description}
+                >
+                  <Play size={12} />
+                  {scenario.label}
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
     </div>

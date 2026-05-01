@@ -107,11 +107,11 @@ export interface BenchmarkState {
 export interface BenchmarkScenario {
   /** Stable id used in the persisted state file and markdown output. */
   id: string;
-  /** Human label rendered on the Settings developer card. */
+  /** Human label rendered on the perf-panel Run button. */
   label: string;
-  /** Short paragraph rendered under the label. Explain what the scenario stresses. */
+  /** Short paragraph rendered as a tooltip on hover. Explain what the scenario stresses. */
   description: string;
-  /** Default seed size; the developer card shows it so the user can confirm before running. */
+  /** Default seed size used by `seed()` for Phase B. */
   defaultSeedSize: number;
   /**
    * Configure the app into the precondition required by the stress phase.

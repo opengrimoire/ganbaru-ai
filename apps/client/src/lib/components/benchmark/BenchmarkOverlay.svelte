@@ -4,7 +4,6 @@
   import Check from "@lucide/svelte/icons/check";
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { formatBenchmarkMarkdown } from "$lib/benchmark/output";
-  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const runner = getBenchmarkRunner();
 
@@ -30,15 +29,36 @@
 </script>
 
 {#if runner.status === "confirming"}
-  <ConfirmDialog
-    title="Run benchmark?"
-    message="This drives roughly 11 minutes of programmatic work and restarts the app once. Do not close the app or interact with it while it runs. Continue?"
-    confirmLabel="Run (Enter)"
-    cancelLabel="Cancel (Esc)"
-    danger={false}
-    onConfirm={() => void runner.confirm()}
-    onCancel={() => runner.cancelConfirm()}
-  />
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-[75] flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60"></div>
+    <div
+      class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
+    >
+      <h2 class="text-[14px] font-semibold text-foreground">Run benchmark?</h2>
+      <p class="text-[12px] text-foreground">
+        This drives roughly 11 minutes of programmatic work and restarts the app once. Do not close
+        the app or interact with it while it runs. Continue?
+      </p>
+      <div class="flex justify-end gap-2">
+        <button
+          type="button"
+          onclick={() => runner.cancelConfirm()}
+          class="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onclick={() => void runner.confirm()}
+          class="rounded-md border border-border bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Run
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 {#if runner.status === "running" && runner.running}
