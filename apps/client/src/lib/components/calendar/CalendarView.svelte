@@ -456,28 +456,17 @@
   let arrowScrollRaf = 0;
   let arrowScrollPrev = 0;
 
-  // Held-arrow nav guards. Two failure modes are in play:
-  //   1. OS keyrepeat fires at ~30 Hz; without a gate each repeat call
-  //      schedules a new anchor commit and the queue keeps draining for
-  //      seconds after release (observed: a 3 s hold leaked ~12 s of
-  //      nav.start marks; even after gating on `e.repeat` six events
-  //      passed in 9 ms, because WebKitGTK does not always set the flag
-  //      for queued auto-repeat events).
-  //   2. Once the keydown queue is backed up behind a slow render, events
-  //      fire long after the user has released the key. Their `timeStamp`
-  //      stays pinned to the original wall-clock moment, so an event
-  //      whose `timeStamp` is significantly older than now is a tail event
-  //      from a release that already happened.
-  // Hence: drop tail events on age, then time-throttle anything that gets
-  // through. The throttle is unconditional (no `e.repeat` dependency).
-  const HOLD_REPEAT_MS = 200;
+  // Held-arrow nav: when the keydown queue is backed up behind a slow
+  // render, events keep firing long after the user has released the key.
+  // Their `timeStamp` stays pinned to the original creation moment, so any
+  // event whose timeStamp is older than `STALE_EVENT_MS` is a tail event
+  // from a release that already happened and gets dropped. While actually
+  // holding, fresh events arrive within a few ms of creation and pass
+  // through, so this preserves full held-key cadence (browser auto-repeat
+  // ~30 Hz) and only kills the post-release queue drain.
   const STALE_EVENT_MS = 100;
-  let lastNavTime = 0;
   function navGateBlocks(e: KeyboardEvent): boolean {
-    if (performance.now() - e.timeStamp > STALE_EVENT_MS) return true;
-    if (performance.now() - lastNavTime < HOLD_REPEAT_MS) return true;
-    lastNavTime = performance.now();
-    return false;
+    return performance.now() - e.timeStamp > STALE_EVENT_MS;
   }
 
   function arrowScrollStep(ts: number) {
