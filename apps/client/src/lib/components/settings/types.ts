@@ -3,4 +3,4 @@
  * so external launchers (the calendar header, future feature surfaces) can
  * type their requests against the same identifier set.
  */
-export type SectionId = "appearance" | "calendars";
+export type SectionId = "appearance" | "calendars" | "developer";

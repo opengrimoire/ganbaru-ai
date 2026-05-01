@@ -25,6 +25,7 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import SettingsModal from "$lib/components/settings/SettingsModal.svelte";
   import FloatingThemeEditor from "$lib/components/settings/FloatingThemeEditor.svelte";
+  import BenchmarkOverlay from "$lib/components/benchmark/BenchmarkOverlay.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { perfLog, formatEntry, clear as clearPerfLog } from "$lib/stores/perflog.svelte";
@@ -616,6 +617,8 @@
     }}
   />
 {/if}
+
+<BenchmarkOverlay />
 
 <style>
   .tab-indicator {

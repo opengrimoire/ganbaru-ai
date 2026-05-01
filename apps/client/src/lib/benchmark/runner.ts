@@ -20,6 +20,7 @@ import {
   type BenchmarkScenario,
   type BenchmarkState,
   type PhaseResult,
+  type SampleLabel,
 } from "./types";
 import {
   startPeakSampler,
@@ -39,7 +40,7 @@ async function runPhase(opts: {
   scenario: BenchmarkScenario;
   signal: AbortSignal;
   eventCountAtStart: number;
-  onCurveProgress?: (label: string, total: number, completed: number) => void;
+  onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
 }): Promise<PhaseResult> {
   await opts.scenario.setup();
   if (opts.signal.aborted) throw new DOMException("aborted", "AbortError");
@@ -83,7 +84,7 @@ export function createRunner(getEventCount: () => number) {
     async runPhaseA(opts: {
       scenario: BenchmarkScenario;
       signal: AbortSignal;
-      onCurveProgress?: (label: string, total: number, completed: number) => void;
+      onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
     }): Promise<PhaseResult> {
       return runPhase({
         phase: "A",
@@ -97,7 +98,7 @@ export function createRunner(getEventCount: () => number) {
     async runPhaseB(opts: {
       scenario: BenchmarkScenario;
       signal: AbortSignal;
-      onCurveProgress?: (label: string, total: number, completed: number) => void;
+      onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
     }): Promise<PhaseResult> {
       return runPhase({
         phase: "B",

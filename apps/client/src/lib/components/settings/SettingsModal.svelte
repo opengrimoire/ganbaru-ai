@@ -3,8 +3,10 @@
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import Wrench from "@lucide/svelte/icons/wrench";
   import AppearanceSection from "./AppearanceSection.svelte";
   import CalendarsSection from "./CalendarsSection.svelte";
+  import DeveloperSection from "./DeveloperSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import type { SectionId } from "./types";
 
@@ -38,6 +40,10 @@
     {
       heading: "Data",
       items: [{ id: "calendars", label: "Calendars", icon: CalendarDays }],
+    },
+    {
+      heading: "Tools",
+      items: [{ id: "developer", label: "Developer", icon: Wrench }],
     },
   ];
 
@@ -123,6 +129,8 @@
         <AppearanceSection />
       {:else if activeSection === "calendars"}
         <CalendarsSection />
+      {:else if activeSection === "developer"}
+        <DeveloperSection />
       {/if}
     </section>
   </div>
