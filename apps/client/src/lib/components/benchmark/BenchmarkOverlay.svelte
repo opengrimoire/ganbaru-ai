@@ -32,7 +32,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-[75] flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
     <div
       class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
     >
@@ -67,7 +67,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-[75] flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
     <div
       class="relative z-10 flex w-[min(520px,90vw)] flex-col gap-4 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
     >
@@ -88,8 +88,10 @@
       </div>
 
       <p class="text-[12px] text-muted-foreground">
-        Do not interact with the app while sampling runs. Cancel discards the partial run, deletes
-        the benchmark database, and restarts the app on your real data.
+        Avoid interacting with the app: clicks and key presses can skew the memory measurements.
+        Your real calendar lives on a separate database and stays untouched even if the run is
+        interrupted, the app is force-closed, or the system shuts down. Cancel discards the
+        partial run and restarts on your real data.
       </p>
 
       <div class="flex justify-end">
@@ -109,7 +111,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-[75] flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
     <div
       class="relative z-10 flex h-[80vh] w-[min(720px,92vw)] flex-col rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
     >
@@ -147,7 +149,7 @@
           onclick={() => runner.closeSummary()}
           class="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
-          Close
+          Return to your data
         </button>
       </footer>
     </div>
@@ -158,7 +160,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-[75] flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
     <div
       class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
     >
@@ -172,7 +174,7 @@
           onclick={() => runner.closeSummary()}
           class="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
-          Close
+          Return to your data
         </button>
       </div>
     </div>
