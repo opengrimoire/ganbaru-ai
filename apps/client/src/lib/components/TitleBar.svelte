@@ -32,6 +32,9 @@
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { BENCHMARK_SCENARIOS } from "$lib/benchmark/registry";
   import { perfLog, formatEntry, clear as clearPerfLog } from "$lib/stores/perflog.svelte";
+  import MemoryChart from "$lib/components/perf/MemoryChart.svelte";
+  import type { MemorySample } from "$lib/components/perf/memorySamples";
+  import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCSV } from "$lib/components/perf/memorySamples";
 
   interface ProcessMemory {
     name: string;
@@ -60,8 +63,11 @@
   const themeEditor = getThemeEditor();
   const benchmarkRunner = getBenchmarkRunner();
   let perfPinned = $state(false);
-  let perfLive = $state(false);
+  let perfLive = $state(true);
   let copied = $state(false);
+  let csvCopied = $state(false);
+  let memorySamples = $state<MemorySample[]>([]);
+  let firstSampleAt: number | null = null;
 
   async function confirmReset() {
     showResetConfirm = false;
@@ -118,10 +124,18 @@
     function update() {
       invoke<MemoryReport>("get_memory_report").then((r) => {
         liveReport = r;
+        const now = performance.now();
+        if (firstSampleAt === null) firstSampleAt = now;
+        memorySamples.push({
+          t: now - firstSampleAt,
+          totalMb: r.total_mb,
+          processes: r.processes.map((p) => ({ name: p.name, mb: p.mb })),
+        });
+        if (memorySamples.length > SAMPLE_CAP) memorySamples.shift();
       });
     }
     update();
-    const id = setInterval(update, 5000);
+    const id = setInterval(update, SAMPLE_INTERVAL_MS);
     return () => clearInterval(id);
   });
 
@@ -175,6 +189,14 @@
     navigator.clipboard.writeText(lines.join("\n"));
     copied = true;
     setTimeout(() => { copied = false; }, 2000);
+  }
+
+  function copyMemoryCsv() {
+    const csv = samplesToCSV(memorySamples);
+    if (csv.length === 0) return;
+    navigator.clipboard.writeText(csv);
+    csvCopied = true;
+    setTimeout(() => { csvCopied = false; }, 2000);
   }
 
   $effect(() => {
@@ -417,20 +439,20 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 text-[10px] uppercase tracking-wider">
               <button
-                onclick={() => { perfLive = false; }}
-                class={cn(
-                  "transition-colors",
-                  !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
-                )}
-              >RAM SNAPSHOT</button>
-              <span class="text-muted-foreground/30">|</span>
-              <button
                 onclick={() => { perfLive = true; }}
                 class={cn(
                   "transition-colors",
                   perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
                 )}
               >LIVE RAM</button>
+              <span class="text-muted-foreground/30">|</span>
+              <button
+                onclick={() => { perfLive = false; }}
+                class={cn(
+                  "transition-colors",
+                  !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
+                )}
+              >RAM SNAPSHOT</button>
             </div>
             <button
               onclick={() => { perfPinned = !perfPinned; }}
@@ -463,6 +485,26 @@
                 <span class="text-[11px] tabular-nums text-foreground">{displayReport.total_mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
               </div>
             </div>
+          {/if}
+          <!-- Live trend chart -->
+          {#if perfLive}
+            <div class="mt-3">
+              <MemoryChart samples={memorySamples} width={264} height={64} />
+            </div>
+            <button
+              onclick={copyMemoryCsv}
+              disabled={memorySamples.length === 0}
+              class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              title="Copy the live trend as CSV ({memorySamples.length} samples)"
+            >
+              {#if csvCopied}
+                <Check size={11} />
+                Copied
+              {:else}
+                <Copy size={11} />
+                Copy CSV ({memorySamples.length})
+              {/if}
+            </button>
           {/if}
           <!-- Launch time -->
           {#if startupMs !== null}
@@ -511,7 +553,7 @@
             <div class="flex items-center justify-between">
               <span class="text-[10px] uppercase tracking-wider text-foreground">Benchmarks</span>
               <span class="text-[10px] uppercase tracking-wider text-muted-foreground/60"
-                >~11 min, restarts app</span
+                >~80 s, restarts app</span
               >
             </div>
             <div class="mt-1.5 flex flex-col gap-1">

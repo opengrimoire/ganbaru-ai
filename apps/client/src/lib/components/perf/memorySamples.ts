@@ -1,0 +1,91 @@
+/**
+ * Live RAM time-series for the perf panel chart.
+ *
+ * Samples are pushed by the polling effect in `TitleBar.svelte` once every
+ * `SAMPLE_INTERVAL_MS`. The chart and the CSV exporter both read from the
+ * same buffer so what the user copies matches what they see.
+ */
+
+export interface ProcessMemoryEntry {
+  name: string;
+  mb: number;
+}
+
+export interface MemorySample {
+  /** Milliseconds since the first sample of the session. */
+  t: number;
+  /** Sum of the per-process PSS values in MB. */
+  totalMb: number;
+  /** Per-process PSS breakdown. Names match what the Rust side emits. */
+  processes: ProcessMemoryEntry[];
+}
+
+/** Polling cadence for the live memory ring buffer. */
+export const SAMPLE_INTERVAL_MS = 5_000;
+
+/**
+ * Cap on retained samples: an hour of polling at the default cadence. Older
+ * points drop off the front. Sized so the SVG render stays cheap and the
+ * CSV stays under a few hundred KB.
+ */
+export const SAMPLE_CAP = (60 * 60 * 1000) / SAMPLE_INTERVAL_MS;
+
+/**
+ * Format a duration in milliseconds as `M:SS` for sub-hour spans and
+ * `H:MM:SS` past one hour. Used for tick labels and tooltips on the live
+ * RAM chart.
+ */
+export function formatElapsed(ms: number): string {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  }
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Pick evenly spaced tick offsets for the x-axis. Always includes both
+ * ends. Tick count adapts to available width: a 200 px chart gets three
+ * ticks, anything wider gets four.
+ */
+export function pickTicks(tMin: number, tMax: number, innerWidth: number): number[] {
+  if (tMax <= tMin) return [tMin];
+  const count = innerWidth < 200 ? 3 : 4;
+  const step = (tMax - tMin) / (count - 1);
+  const ticks: number[] = [];
+  for (let i = 0; i < count; i++) ticks.push(tMin + step * i);
+  return ticks;
+}
+
+/**
+ * Render the buffered samples as CSV. Columns are `t_ms`, `total_mb`, and
+ * one column per process name observed across the buffer (sorted). Missing
+ * values are emitted as empty cells so spreadsheet imports keep alignment.
+ */
+export function samplesToCSV(samples: MemorySample[]): string {
+  if (samples.length === 0) return "";
+  const procNames = new Set<string>();
+  for (const s of samples) {
+    for (const p of s.processes) procNames.add(p.name);
+  }
+  // ASCII sort (uppercase before lowercase) so column order is locale-independent.
+  const names = Array.from(procNames).sort();
+  const header = ["t_ms", "total_mb", ...names].join(",");
+  const rows = samples.map((s) => {
+    const map = new Map<string, number>();
+    for (const p of s.processes) map.set(p.name, p.mb);
+    const cells = [
+      Math.round(s.t).toString(),
+      s.totalMb.toFixed(2),
+      ...names.map((n) => {
+        const v = map.get(n);
+        return v === undefined ? "" : v.toFixed(2);
+      }),
+    ];
+    return cells.join(",");
+  });
+  return [header, ...rows].join("\n");
+}
