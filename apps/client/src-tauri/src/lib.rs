@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use tauri::Manager;
 
 mod db;
@@ -44,6 +45,55 @@ fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
 
     app.exit(0);
     Ok(())
+}
+
+/// Path to the persisted benchmark state file. Lives in `app_config_dir`,
+/// not the user's vault, so a `reset_database` call (which only deletes the
+/// SQLite files) does not blow it away mid-run, and the file never pollutes
+/// the vault folder users back up. Used by the in-app benchmark harness to
+/// hand state across the Phase A -> restart -> Phase B boundary.
+fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut p = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    p.push("benchmark-state.json");
+    Ok(p)
+}
+
+#[tauri::command]
+fn read_benchmark_state(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = benchmark_state_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let contents = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    Ok(Some(contents))
+}
+
+#[tauri::command]
+fn write_benchmark_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    let path = benchmark_state_path(&app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_benchmark_state(app: tauri::AppHandle) -> Result<(), String> {
+    let path = benchmark_state_path(&app)?;
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Replace the running process with a fresh launch of the same binary.
+/// `app.restart()` returns `!`, so this command never returns to the JS
+/// caller. The frontend must fire-and-forget (no `await` on the IPC
+/// response).
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -295,6 +345,10 @@ pub fn run() {
             tray::update_tray,
             force_quit,
             reset_database,
+            read_benchmark_state,
+            write_benchmark_state,
+            clear_benchmark_state,
+            restart_app,
             get_memory_report,
             get_startup_elapsed_ms,
             vault::vault_read_config,
