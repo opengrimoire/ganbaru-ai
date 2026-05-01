@@ -456,14 +456,29 @@
   let arrowScrollRaf = 0;
   let arrowScrollPrev = 0;
 
-  // Held-arrow nav throttle. OS keyrepeat fires at ~30 Hz; without a gate
-  // each repeat call schedules a new anchor commit, the renderer falls
-  // behind, and queued keydowns keep draining for seconds after release
-  // (observed: a 3 s hold leaked ~12 s of nav.start marks). The throttle
-  // only filters auto-repeat events (`e.repeat === true`); the initial
-  // press always passes through so single taps stay responsive.
+  // Held-arrow nav guards. Two failure modes are in play:
+  //   1. OS keyrepeat fires at ~30 Hz; without a gate each repeat call
+  //      schedules a new anchor commit and the queue keeps draining for
+  //      seconds after release (observed: a 3 s hold leaked ~12 s of
+  //      nav.start marks; even after gating on `e.repeat` six events
+  //      passed in 9 ms, because WebKitGTK does not always set the flag
+  //      for queued auto-repeat events).
+  //   2. Once the keydown queue is backed up behind a slow render, events
+  //      fire long after the user has released the key. Their `timeStamp`
+  //      stays pinned to the original wall-clock moment, so an event
+  //      whose `timeStamp` is significantly older than now is a tail event
+  //      from a release that already happened.
+  // Hence: drop tail events on age, then time-throttle anything that gets
+  // through. The throttle is unconditional (no `e.repeat` dependency).
   const HOLD_REPEAT_MS = 200;
+  const STALE_EVENT_MS = 100;
   let lastNavTime = 0;
+  function navGateBlocks(e: KeyboardEvent): boolean {
+    if (performance.now() - e.timeStamp > STALE_EVENT_MS) return true;
+    if (performance.now() - lastNavTime < HOLD_REPEAT_MS) return true;
+    lastNavTime = performance.now();
+    return false;
+  }
 
   function arrowScrollStep(ts: number) {
     if (arrowScrollDir === 0) return;
@@ -512,19 +527,16 @@
       } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
-          if (e.repeat && performance.now() - lastNavTime < HOLD_REPEAT_MS) return;
-          lastNavTime = performance.now();
+          if (navGateBlocks(e)) return;
           navigate("back");
         } else if (e.key === "ArrowRight") {
           e.preventDefault();
-          if (e.repeat && performance.now() - lastNavTime < HOLD_REPEAT_MS) return;
-          lastNavTime = performance.now();
+          if (navGateBlocks(e)) return;
           navigate("forward");
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
           if (viewMode === "month") {
-            if (e.repeat && performance.now() - lastNavTime < HOLD_REPEAT_MS) return;
-            lastNavTime = performance.now();
+            if (navGateBlocks(e)) return;
             navigate(e.key === "ArrowUp" ? "back" : "forward");
           } else {
             startArrowScroll(e.key === "ArrowUp" ? -1 : 1);
