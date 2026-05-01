@@ -3,6 +3,7 @@
   import Upload from "@lucide/svelte/icons/upload";
   import Download from "@lucide/svelte/icons/download";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
   import { getCalendars } from "$lib/stores/calendars.svelte";
@@ -13,12 +14,40 @@
 
   const calendarsStore = getCalendars();
   const calendarStore = getCalendar();
-  const ICS_FILE_FILTER = [{ name: "iCalendar", extensions: ["ics"] }];
+  const ICS_IMPORT_FILTER = [{ name: "iCalendar (.ics or .zip)", extensions: ["ics", "zip"] }];
+  const ICS_EXPORT_FILTER = [{ name: "iCalendar", extensions: ["ics"] }];
+
+  /**
+   * One `.ics` entry as returned by the Rust `vault_read_ics_zip_entries`
+   * command. `name` is always a basename (no directory components) and
+   * `contents` is the UTF-8 decoded entry body.
+   */
+  type IcsZipEntry = { name: string; contents: string };
+
+  /** Aggregate counters used to build the summary toast after an import. */
+  type ImportTotals = {
+    added: number;
+    updated: number;
+    skippedOlder: number;
+    calendars: number;
+    warnings: string[];
+  };
 
   let toast = $state<string | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingDelete = $state<Calendar | undefined>(undefined);
   let counts = $state<Record<string, number>>({});
+
+  /**
+   * Live progress reporter for `.ics.zip` imports. `total` is set once
+   * the archive entry list resolves; `current` increments before each
+   * entry begins. Plain single-file imports leave this undefined and
+   * rely on the spinner-only button state.
+   */
+  let isImporting = $state(false);
+  let importProgress = $state<
+    { current: number; total: number; label: string } | undefined
+  >(undefined);
 
   function flashToast(message: string) {
     toast = message;
@@ -51,42 +80,110 @@
     return parts[parts.length - 1] || path;
   }
 
-  async function handleImport() {
-    try {
-      const picked = await openDialog({
-        multiple: false,
-        directory: false,
-        filters: ICS_FILE_FILTER,
-      });
-      if (!picked || typeof picked !== "string") return;
-      const text = await invoke<string>("vault_read_text", { path: picked });
-      const filename = basenameFromPath(picked);
+  /**
+   * Parse a single `.ics` payload, upsert into a calendar grouping keyed by
+   * `groupingFilename`, and fold the result into `totals`. Same code path
+   * for plain `.ics` files and individual entries inside `.ics.zip` bundles.
+   */
+  async function importIcsText(
+    text: string,
+    groupingFilename: string,
+    totals: ImportTotals,
+  ): Promise<void> {
+    const parsed = parseIcs(text);
+    if (parsed.events.length === 0) {
+      if (parsed.warnings.length > 0) totals.warnings.push(...parsed.warnings);
+      return;
+    }
+    const targetCalendar = await calendarsStore.findOrCreateImported(groupingFilename);
+    const summary = await calendarStore.bulkImport(parsed.events, targetCalendar.id);
+    totals.added += summary.added;
+    totals.updated += summary.updated;
+    totals.skippedOlder += summary.skippedOlder;
+    totals.calendars += 1;
+    if (summary.warnings.length > 0) totals.warnings.push(...summary.warnings);
+    if (parsed.warnings.length > 0) totals.warnings.push(...parsed.warnings);
+  }
 
-      const parsed = parseIcs(text);
-      if (parsed.events.length === 0) {
-        flashToast(parsed.warnings[0] ?? "No events found in file.");
+  function summarizeTotals(totals: ImportTotals): string {
+    const parts: string[] = [];
+    if (totals.added) parts.push(`${totals.added} new`);
+    if (totals.updated) parts.push(`${totals.updated} updated`);
+    if (totals.skippedOlder) parts.push(`${totals.skippedOlder} older skipped`);
+    const summaryLine = parts.length > 0 ? parts.join(", ") : "no changes";
+    if (totals.calendars > 1) {
+      return `Imported ${totals.calendars} calendars: ${summaryLine}`;
+    }
+    return `Imported: ${summaryLine}`;
+  }
+
+  async function handleImport() {
+    if (isImporting) return;
+    const picked = await openDialog({
+      multiple: false,
+      directory: false,
+      filters: ICS_IMPORT_FILTER,
+    });
+    if (!picked || typeof picked !== "string") return;
+
+    isImporting = true;
+    try {
+      const filename = basenameFromPath(picked);
+      const isZip = /\.zip$/i.test(filename);
+
+      const totals: ImportTotals = {
+        added: 0,
+        updated: 0,
+        skippedOlder: 0,
+        calendars: 0,
+        warnings: [],
+      };
+
+      if (isZip) {
+        const entries = await invoke<IcsZipEntry[]>("vault_read_ics_zip_entries", {
+          path: picked,
+        });
+        if (entries.length === 0) {
+          flashToast("Zip contained no .ics files.");
+          return;
+        }
+        importProgress = { current: 0, total: entries.length, label: entries[0].name };
+        for (let i = 0; i < entries.length; i++) {
+          importProgress = {
+            current: i + 1,
+            total: entries.length,
+            label: entries[i].name,
+          };
+          await importIcsText(entries[i].contents, entries[i].name, totals);
+        }
+      } else {
+        importProgress = { current: 0, total: 1, label: filename };
+        const text = await invoke<string>("vault_read_text", { path: picked });
+        importProgress = { current: 1, total: 1, label: filename };
+        await importIcsText(text, filename, totals);
+      }
+
+      if (totals.calendars === 0) {
+        flashToast(totals.warnings[0] ?? "No events found in file.");
         return;
       }
 
-      const targetCalendar = await calendarsStore.findOrCreateImported(filename);
-      const summary = await calendarStore.bulkImport(parsed.events, targetCalendar.id);
-
-      const parts: string[] = [];
-      if (summary.added) parts.push(`${summary.added} new`);
-      if (summary.updated) parts.push(`${summary.updated} updated`);
-      if (summary.skippedOlder) parts.push(`${summary.skippedOlder} older skipped`);
-      const summaryLine = parts.length > 0 ? parts.join(", ") : "no changes";
-      const allWarnings = [...summary.warnings, ...parsed.warnings];
-      if (allWarnings.length > 0) {
-        for (const w of allWarnings) console.warn("[ics import]", w);
-        flashToast(`${summaryLine} (with ${allWarnings.length} warning${allWarnings.length === 1 ? "" : "s"})`);
+      const summaryLine = summarizeTotals(totals);
+      if (totals.warnings.length > 0) {
+        for (const w of totals.warnings) console.warn("[ics import]", w);
+        flashToast(
+          `${summaryLine} (with ${totals.warnings.length} warning${totals.warnings.length === 1 ? "" : "s"})`,
+        );
       } else {
-        flashToast(`Imported: ${summaryLine}`);
+        flashToast(summaryLine);
       }
       await refreshCounts();
     } catch (err) {
       console.error("ics import failed", err);
       flashToast(err instanceof Error ? err.message : "Import failed.");
+    } finally {
+      isImporting = false;
+      importProgress = undefined;
     }
   }
 
@@ -94,7 +191,7 @@
     try {
       const target = await saveDialog({
         defaultPath: `${calendar.name.replace(/[^\w.-]+/g, "_")}.ics`,
-        filters: ICS_FILE_FILTER,
+        filters: ICS_EXPORT_FILTER,
       });
       if (!target) return;
       const ics = await calendarStore.exportCalendarAsIcs(calendar);
@@ -135,22 +232,43 @@
     <div class="min-w-0 flex-1">
       <h2 class="text-[13px] font-semibold text-foreground">Calendars</h2>
       <p class="mt-0.5 text-[12px] text-muted-foreground">
-        Import a Google Calendar or Outlook .ics file as a separate calendar
-        you can delete in one click. Re-importing the same file deduplicates
-        by event UID, so it stays safe to test against your real export.
+        Import a Google Calendar or Outlook export (.ics, or the .zip bundle
+        Google ships with one .ics per calendar) as a separate calendar you
+        can delete in one click. Re-importing the same file deduplicates by
+        event UID, so it stays safe to test against your real export.
       </p>
     </div>
     <div class="flex shrink-0 items-center gap-1.5">
       <button
         type="button"
         onclick={handleImport}
-        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        disabled={isImporting}
+        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
       >
-        <Upload size={12} strokeWidth={2.25} />
-        <span>Import .ics</span>
+        {#if isImporting}
+          <LoaderCircle size={12} strokeWidth={2.25} class="animate-spin" />
+          <span>Importing</span>
+        {:else}
+          <Upload size={12} strokeWidth={2.25} />
+          <span>Import</span>
+        {/if}
       </button>
     </div>
   </header>
+
+  {#if isImporting && importProgress}
+    <div
+      class="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground"
+    >
+      <LoaderCircle size={12} strokeWidth={2.25} class="animate-spin" />
+      <span class="truncate">
+        Importing {importProgress.label}
+        {#if importProgress.total > 1}
+          ({importProgress.current}/{importProgress.total})
+        {/if}
+      </span>
+    </div>
+  {/if}
 
   <div
     class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"

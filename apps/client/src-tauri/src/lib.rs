@@ -301,6 +301,7 @@ pub fn run() {
             vault::vault_write_config,
             vault::vault_read_text,
             vault::vault_write_text,
+            vault::vault_read_ics_zip_entries,
             db_batch::db_execute_batch,
         ])
         .setup(|app| {

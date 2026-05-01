@@ -13,7 +13,7 @@
 //! on next read).
 
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use tauri::Manager;
 
@@ -112,6 +112,151 @@ pub fn vault_write_text(path: String, contents: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Hard cap on the number of entries we will inspect inside a single zip.
+/// 1024 is well above the realistic count for an export from Google
+/// Calendar (one .ics per calendar a user owns or subscribes to is usually
+/// < 50) and protects against pathological inputs that could DoS the read
+/// loop.
+const ICS_ZIP_MAX_ENTRIES: usize = 1024;
+
+/// Hard cap on the uncompressed size of a single entry, in bytes. 25 MiB
+/// is large enough for a multi-decade calendar with thousands of events
+/// (text-only iCalendar averages ~1 KiB per event) while clearly rejecting
+/// decompression bombs.
+const ICS_ZIP_MAX_ENTRY_BYTES: u64 = 25 * 1024 * 1024;
+
+/// Hard cap on the aggregate uncompressed size across every entry. Keeps a
+/// zip with many oversized entries from defeating the per-entry guard.
+const ICS_ZIP_MAX_TOTAL_BYTES: u64 = 250 * 1024 * 1024;
+
+#[derive(Debug, serde::Serialize)]
+pub struct IcsZipEntry {
+    /// File-name-only basename (no directory components) so an entry path
+    /// like `personal/work.ics` is exposed as `work.ics` to the frontend.
+    pub name: String,
+    /// UTF-8-decoded entry contents. RFC 5545 mandates UTF-8, so a decode
+    /// failure is reported as an error rather than silently lossy-replaced.
+    pub contents: String,
+}
+
+/// Read every `.ics` entry inside the zip at `path` and return their decoded
+/// contents. Used by the calendar import flow so a Google or Apple export
+/// (which always arrives as a `.ics.zip` bundle) can be imported in one
+/// step instead of forcing the user to unzip first.
+///
+/// Safety contract:
+///
+/// - Path must be absolute (matching every other `vault_*` helper).
+/// - Entry paths are validated through `enclosed_name`, which rejects any
+///   entry that tries to escape (zip-slip via `..` or absolute paths).
+/// - Encrypted entries are refused; we only ship the deflate feature.
+/// - Per-entry and aggregate decompressed-size caps reject decompression
+///   bombs even if the zip header lies about uncompressed size (the read
+///   itself is wrapped in a `Take` adapter so the cap holds at I/O level).
+/// - Only entries whose extension matches `.ics` are returned. Anything
+///   else (`__MACOSX/`, `.DS_Store`, signature files, archived metadata)
+///   is silently skipped so the importer never sees them.
+#[tauri::command]
+pub fn vault_read_ics_zip_entries(path: String) -> Result<Vec<IcsZipEntry>, String> {
+    let p = PathBuf::from(&path);
+    if !p.is_absolute() {
+        return Err("path must be absolute".to_string());
+    }
+
+    let file = fs::File::open(&p).map_err(|e| format!("failed to open zip: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("not a valid zip archive: {e}"))?;
+
+    if archive.len() > ICS_ZIP_MAX_ENTRIES {
+        return Err(format!(
+            "zip has {} entries, exceeding the limit of {ICS_ZIP_MAX_ENTRIES}",
+            archive.len()
+        ));
+    }
+
+    let mut entries: Vec<IcsZipEntry> = Vec::new();
+    let mut total_uncompressed: u64 = 0;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("failed to read zip entry {i}: {e}"))?;
+
+        if entry.is_dir() {
+            continue;
+        }
+
+        // `enclosed_name` returns `None` for any entry whose path escapes
+        // the archive root (zip-slip protection). Treat that as fatal so we
+        // never silently import from a tampered bundle.
+        let enclosed = match entry.enclosed_name() {
+            Some(name) => name,
+            None => {
+                return Err("zip contains an entry with an unsafe path".to_string());
+            }
+        };
+
+        let ext_is_ics = enclosed
+            .extension()
+            .map(|e| e.eq_ignore_ascii_case("ics"))
+            .unwrap_or(false);
+        if !ext_is_ics {
+            continue;
+        }
+
+        if entry.encrypted() {
+            return Err(format!(
+                "zip entry '{}' is encrypted; encrypted .ics imports are not supported",
+                enclosed.display()
+            ));
+        }
+
+        let reported_size = entry.size();
+        if reported_size > ICS_ZIP_MAX_ENTRY_BYTES {
+            return Err(format!(
+                "zip entry '{}' uncompressed size ({reported_size} bytes) exceeds the per-entry limit of {ICS_ZIP_MAX_ENTRY_BYTES} bytes",
+                enclosed.display()
+            ));
+        }
+        total_uncompressed = total_uncompressed.saturating_add(reported_size);
+        if total_uncompressed > ICS_ZIP_MAX_TOTAL_BYTES {
+            return Err(format!(
+                "zip total uncompressed size exceeds the limit of {ICS_ZIP_MAX_TOTAL_BYTES} bytes"
+            ));
+        }
+
+        let display_name = enclosed
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| format!("entry-{i}.ics"));
+
+        // Capture only the basename for the frontend before borrowing the
+        // entry mutably for the read.
+        drop(enclosed);
+
+        // The `Take` adapter is the real defense against a lying header:
+        // even if `entry.size()` claims a small value, we still stop after
+        // one byte past the cap and reject the entry.
+        let mut contents = String::new();
+        let mut limited = entry.by_ref().take(ICS_ZIP_MAX_ENTRY_BYTES + 1);
+        limited
+            .read_to_string(&mut contents)
+            .map_err(|e| format!("failed to read zip entry '{display_name}' as UTF-8: {e}"))?;
+        if contents.len() as u64 > ICS_ZIP_MAX_ENTRY_BYTES {
+            return Err(format!(
+                "zip entry '{display_name}' exceeds the per-entry size limit during decompression"
+            ));
+        }
+
+        entries.push(IcsZipEntry {
+            name: display_name,
+            contents,
+        });
+    }
+
+    Ok(entries)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,5 +320,80 @@ mod tests {
         );
 
         let _ = fs::remove_file(&path);
+    }
+
+    /// Build a zip file at `path` containing the given `(name, contents)`
+    /// pairs. Uses the Stored compression method so the test does not depend
+    /// on the deflate path being exercised correctly.
+    fn write_zip(path: &PathBuf, entries: &[(&str, &[u8])]) {
+        use zip::write::SimpleFileOptions;
+        use zip::write::ZipWriter;
+        use zip::CompressionMethod;
+
+        let file = fs::File::create(path).expect("create zip file");
+        let mut writer = ZipWriter::new(file);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for (name, data) in entries {
+            writer.start_file(*name, options).expect("start_file");
+            writer.write_all(data).expect("write entry");
+        }
+        writer.finish().expect("finish zip");
+    }
+
+    #[test]
+    fn vault_read_ics_zip_entries_rejects_relative_paths() {
+        let err = vault_read_ics_zip_entries("relative/path.zip".to_string()).unwrap_err();
+        assert_eq!(err, "path must be absolute");
+    }
+
+    #[test]
+    fn vault_read_ics_zip_entries_rejects_non_zip_files() {
+        let path = unique_path("not-a-zip.zip");
+        fs::write(&path, b"this is not a zip archive").expect("seed file");
+        let result = vault_read_ics_zip_entries(path.to_string_lossy().into_owned());
+        let _ = fs::remove_file(&path);
+        let err = result.unwrap_err();
+        assert!(
+            err.starts_with("not a valid zip archive"),
+            "expected not-a-zip error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn vault_read_ics_zip_entries_returns_only_ics_entries() {
+        let path = unique_path("mixed.zip");
+        let ics_a = b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n";
+        let ics_b = b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+        write_zip(
+            &path,
+            &[
+                ("calendar.ics", ics_a),
+                ("readme.txt", b"ignore me"),
+                ("nested/holidays.ICS", ics_b),
+                ("__MACOSX/.DS_Store", b"junk"),
+            ],
+        );
+
+        let result = vault_read_ics_zip_entries(path.to_string_lossy().into_owned());
+        let _ = fs::remove_file(&path);
+        let entries = result.expect("should succeed");
+        assert_eq!(entries.len(), 2, "should keep only the .ics entries");
+
+        // Names are basenames, not full archive paths.
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"calendar.ics"), "got names: {names:?}");
+        assert!(names.contains(&"holidays.ICS"), "got names: {names:?}");
+
+        let calendar = entries.iter().find(|e| e.name == "calendar.ics").unwrap();
+        assert_eq!(calendar.contents.as_bytes(), ics_a);
+    }
+
+    #[test]
+    fn vault_read_ics_zip_entries_returns_empty_when_no_ics_present() {
+        let path = unique_path("no-ics.zip");
+        write_zip(&path, &[("readme.txt", b"hello"), ("notes.md", b"# title")]);
+        let result = vault_read_ics_zip_entries(path.to_string_lossy().into_owned());
+        let _ = fs::remove_file(&path);
+        assert!(result.unwrap().is_empty());
     }
 }
