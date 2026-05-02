@@ -681,6 +681,7 @@
       ? { x: colRect?.right ?? rect.right, y: rect.top, width: colRect?.width ?? rect.width, height: rect.height }
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
+    perfMark("panel.start", { mode: "create" });
     session.openCreate(start, end, anchor, allDay);
   }
 
@@ -700,6 +701,7 @@
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
     const openEvent = () => {
+      perfMark("panel.start", { mode: "edit" });
       if (isRecurring(event)) {
         session.openEdit(event, anchor, event);
       } else {

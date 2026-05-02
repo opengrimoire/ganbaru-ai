@@ -16,6 +16,7 @@
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { mark as perfMark } from "$lib/stores/perflog.svelte";
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Music from "@lucide/svelte/icons/music";
@@ -807,6 +808,8 @@
   // (ConfirmDialog) is open, its capture-phase window listener swallows the
   // event before it reaches this handler.
   onMount(() => {
+    perfMark("panel.mounted", { mode });
+    requestAnimationFrame(() => perfMark("panel.paint-done"));
     function handleKeydown(e: KeyboardEvent) {
       // Ctrl/Cmd + Enter: save. Chosen over plain Enter so typing newlines
       // in the description textarea still works.
