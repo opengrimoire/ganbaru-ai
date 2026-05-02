@@ -161,7 +161,7 @@
           y={height - 2}
           text-anchor={tickAnchor(i, xTicks.length)}
           class="fill-muted-foreground"
-          style="font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;"
+          style="font-size: 9px;"
         >{tick.label}</text>
       {/each}
       {#if hoverSample}
@@ -198,7 +198,7 @@
           y={height - 3}
           text-anchor="middle"
           class="fill-background"
-          style="font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;"
+          style="font-size: 9px;"
         >{formatElapsed(hoverSample.t)}</text>
       {/if}
     </svg>
