@@ -80,30 +80,6 @@
     return nearest;
   });
 
-  const TOOLTIP_W = 188;
-  const TOOLTIP_GAP = 10;
-
-  /**
-   * Place the tooltip on whichever side of the cursor has more room, so it
-   * never covers the crosshair point. Falls back to a clamped position when
-   * the chart is too narrow to fit the tooltip on either side cleanly.
-   */
-  const tooltipStyle = $derived.by(() => {
-    if (!hoverSample) return "display: none;";
-    const x = xOf(hoverSample.t);
-    const spaceRight = width - x;
-    const spaceLeft = x;
-    if (spaceRight >= TOOLTIP_W + TOOLTIP_GAP) {
-      return `left: ${x + TOOLTIP_GAP}px; top: 0; width: ${TOOLTIP_W}px;`;
-    }
-    if (spaceLeft >= TOOLTIP_W + TOOLTIP_GAP) {
-      const right = width - x + TOOLTIP_GAP;
-      return `right: ${right}px; top: 0; width: ${TOOLTIP_W}px;`;
-    }
-    const left = Math.max(0, Math.min(width - TOOLTIP_W, x + TOOLTIP_GAP));
-    return `left: ${left}px; top: 0; width: ${TOOLTIP_W}px;`;
-  });
-
   /**
    * First and last x-axis ticks anchor to the chart edge so their labels
    * don't bleed past the SVG box (which clips by default). Middle ticks
@@ -125,10 +101,11 @@
   }
 </script>
 
-<div class="relative" style="width: {width}px; height: {height}px;">
+<div style="width: {width}px;">
   {#if samples.length < 2}
     <div
-      class="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground"
+      class="flex w-full items-center justify-center text-[10px] text-muted-foreground"
+      style="height: {height}px;"
     >
       Collecting samples...
     </div>
@@ -185,12 +162,14 @@
       {/if}
     </svg>
     {#if hoverSample}
-      <div
-        class="pointer-events-none absolute z-10 flex flex-col gap-1.5 rounded-md border border-border bg-popover px-2 py-1.5 shadow-md"
-        style={tooltipStyle}
-      >
+      <!--
+        Tooltip flows below the chart instead of floating over it. Pinning it
+        outside the line area means the user never has to dodge the tooltip
+        to read a point in the middle of the plot.
+      -->
+      <div class="mt-1.5 flex flex-col gap-1.5">
         <div class="flex items-baseline justify-between gap-2">
-          <span class="text-xs text-muted-foreground">t</span>
+          <span class="text-xs text-muted-foreground">Time</span>
           <span class="text-[11px] tabular-nums text-foreground">{formatElapsed(hoverSample.t)}</span>
         </div>
         {#each hoverSample.processes as p (p.name)}

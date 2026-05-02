@@ -194,10 +194,10 @@ fn get_memory_report() -> MemoryReport {
             if let Ok(comm) = std::fs::read_to_string(&comm_path) {
                 let comm = comm.trim();
                 if comm.contains("Network") {
-                    return "Network (WebKit)".to_string();
+                    return "Network".to_string();
                 }
                 if comm.contains("WebKit") {
-                    return "Frontend (Svelte + WebKit)".to_string();
+                    return "Frontend".to_string();
                 }
                 return comm.to_string();
             }
@@ -207,7 +207,7 @@ fn get_memory_report() -> MemoryReport {
         let my_pid = std::process::id();
         let my_pid_str = my_pid.to_string();
         let mut processes = vec![ProcessMemory {
-            name: "Backend (Rust)".to_string(),
+            name: "Backend".to_string(),
             mb: read_pss_kb(&my_pid_str) / 1024.0,
         }];
 
@@ -318,7 +318,7 @@ fn get_memory_report() -> MemoryReport {
                     if GetProcessMemoryInfo(handle, &mut pmc, pmc.cb) != 0 {
                         let mb = pmc.WorkingSetSize as f64 / (1024.0 * 1024.0);
                         let name = if pid == my_pid {
-                            "Backend (Rust)".to_string()
+                            "Backend".to_string()
                         } else {
                             let exe = proc_list
                                 .iter()

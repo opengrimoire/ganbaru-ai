@@ -61,32 +61,32 @@ describe("samplesToCSV", () => {
   it("emits a header plus one row per sample with sorted process columns", () => {
     const csv = samplesToCSV([
       sample(0, 250.5, [
-        { name: "client", mb: 80.1 },
-        { name: "WebKitWebProcess", mb: 150.2 },
+        { name: "Backend", mb: 80.1 },
+        { name: "Frontend", mb: 150.2 },
       ]),
       sample(5_000, 260.0, [
-        { name: "client", mb: 82.0 },
-        { name: "WebKitWebProcess", mb: 158.0 },
+        { name: "Backend", mb: 82.0 },
+        { name: "Frontend", mb: 158.0 },
       ]),
     ]);
     const [header, row1, row2] = csv.split("\n");
-    expect(header).toBe("t_ms,total_mb,WebKitWebProcess,client");
-    expect(row1).toBe("0,250.50,150.20,80.10");
-    expect(row2).toBe("5000,260.00,158.00,82.00");
+    expect(header).toBe("t_ms,total_mb,Backend,Frontend");
+    expect(row1).toBe("0,250.50,80.10,150.20");
+    expect(row2).toBe("5000,260.00,82.00,158.00");
   });
 
   it("leaves a missing process cell empty when only some samples include it", () => {
     const csv = samplesToCSV([
-      sample(0, 100, [{ name: "client", mb: 100 }]),
+      sample(0, 100, [{ name: "Backend", mb: 100 }]),
       sample(5_000, 260, [
-        { name: "client", mb: 80 },
-        { name: "NetworkProcess", mb: 180 },
+        { name: "Backend", mb: 80 },
+        { name: "Network", mb: 180 },
       ]),
     ]);
     const [header, row1, row2] = csv.split("\n");
-    expect(header).toBe("t_ms,total_mb,NetworkProcess,client");
-    expect(row1).toBe("0,100.00,,100.00");
-    expect(row2).toBe("5000,260.00,180.00,80.00");
+    expect(header).toBe("t_ms,total_mb,Backend,Network");
+    expect(row1).toBe("0,100.00,100.00,");
+    expect(row2).toBe("5000,260.00,80.00,180.00");
   });
 });
 
