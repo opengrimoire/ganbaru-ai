@@ -137,6 +137,10 @@
     return perfLive ? liveReport : snapshotReport;
   });
 
+  // Recolor the numbers while hovering so the user can tell at a glance the
+  // panel is reflecting a past sample instead of the live reading.
+  const showingHoveredSample = $derived(perfLive && chartHoverSample !== null);
+
   $effect(() => {
     function update() {
       const t = pollIndex * SAMPLE_INTERVAL_MS;
@@ -494,12 +498,12 @@
               {#each displayReport.processes as proc}
                 <div class="flex items-baseline justify-between">
                   <span class="text-xs text-muted-foreground">{proc.name}</span>
-                  <span class="text-[11px] tabular-nums text-foreground">{proc.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+                  <span class={cn("text-[11px] tabular-nums", showingHoveredSample ? "text-primary" : "text-foreground")}>{proc.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
                 </div>
               {/each}
               <div class="flex items-baseline justify-between">
                 <span class="text-xs text-muted-foreground">Total</span>
-                <span class="text-[11px] tabular-nums text-foreground">{displayReport.total_mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+                <span class={cn("text-[11px] tabular-nums", showingHoveredSample ? "text-primary" : "text-foreground")}>{displayReport.total_mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
               </div>
             </div>
           {/if}
