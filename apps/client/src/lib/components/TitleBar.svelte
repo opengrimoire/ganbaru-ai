@@ -31,7 +31,8 @@
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { BENCHMARK_SCENARIOS } from "$lib/benchmark/registry";
-  import { perfLog, formatEntry, clear as clearPerfLog, setTracking } from "$lib/stores/perflog.svelte";
+  import { perfLog, type PerfLogEntry, clear as clearPerfLog, setTracking } from "$lib/stores/perflog.svelte";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import MemoryChart from "$lib/components/perf/MemoryChart.svelte";
   import type { MemorySample } from "$lib/components/perf/memorySamples";
   import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCSV } from "$lib/components/perf/memorySamples";
@@ -46,7 +47,10 @@
     platform: string;
   }
 
-  let { startupMs = null }: { startupMs: number | null } = $props();
+  let {
+    startupMs = null,
+    shellStartupMs = null,
+  }: { startupMs: number | null; shellStartupMs: number | null } = $props();
 
   const win = getCurrentWindow();
   const nav = getNavigation();
@@ -179,17 +183,94 @@
     };
   });
 
-  const recentEntries = $derived(perfLog.entries.slice(-100));
-  const baselineT = $derived(perfLog.entries.length > 0 ? perfLog.entries[0].t : 0);
+  let launchExpanded = $state(false);
 
-  // Pin the speed log scroll to the bottom whenever the buffer grows so the
-  // newest mark is always in view. Re-runs on mount too, so the list lands
-  // pre-scrolled when the popover opens with existing entries.
+  /**
+   * Boot timeline rows. Each entry shows the time spent reaching that
+   * milestone from the previous one, so the column reads as "this step took
+   * X ms." The synthetic `shell-startup` row at the top covers the gap
+   * between process spawn and `boot.script-start` (which `performance.now()`
+   * cannot see, since its time origin starts after the WebKit shell is up).
+   * `boot.script-start` itself is the anchor and is omitted from the table:
+   * its delta would be 0 by definition.
+   */
+  type BootRow = { label: string; deltaMs: number };
+  const bootRows = $derived.by<BootRow[]>(() => {
+    const rows: BootRow[] = [];
+    if (shellStartupMs !== null) {
+      rows.push({ label: "shell-startup", deltaMs: shellStartupMs });
+    }
+    let prev: PerfLogEntry | null = null;
+    for (const e of perfLog.entries) {
+      if (!e.tag.startsWith("boot.")) continue;
+      if (prev === null) {
+        prev = e;
+        continue;
+      }
+      rows.push({
+        label: e.tag.replace(/^boot\./, ""),
+        deltaMs: Math.round((e.t - prev.t) * 10) / 10,
+      });
+      prev = e;
+    }
+    return rows;
+  });
+
+  /**
+   * Action chains: pair `<prefix>.start` with the next `<prefix>.paint-done`
+   * of the same prefix and report the duration. In-flight chains (a start
+   * with no matching paint-done yet) are hidden until they complete, so the
+   * list never shows partial values that could be misread as fast.
+   */
+  type ChainRow = {
+    prefix: "nav" | "view" | "panel";
+    action: string;
+    durationMs: number;
+  };
+  const actionChains = $derived.by<ChainRow[]>(() => {
+    const results: ChainRow[] = [];
+    const stacks: Record<string, PerfLogEntry[]> = {};
+    for (const e of perfLog.entries) {
+      const m = /^(nav|view|panel)\.(start|paint-done)$/.exec(e.tag);
+      if (!m) continue;
+      const prefix = m[1];
+      const sub = m[2];
+      if (sub === "start") {
+        (stacks[prefix] ??= []).push(e);
+        continue;
+      }
+      const start = stacks[prefix]?.pop();
+      if (!start) continue;
+      const d = start.detail ?? {};
+      let action = "";
+      if (prefix === "nav") action = String(d.dir ?? "");
+      else if (prefix === "view") action = `${d.from} -> ${d.to}`;
+      else if (prefix === "panel") action = String(d.mode ?? "");
+      results.push({
+        prefix: prefix as ChainRow["prefix"],
+        action,
+        durationMs: Math.round((e.t - start.t) * 10) / 10,
+      });
+    }
+    return results;
+  });
+
+  // Pin the chain list scroll to the bottom on new entries so the latest
+  // action is always in view. Reads `actionChains.length` so reordering
+  // within the buffer (which never happens here) wouldn't trigger a reset.
   let speedLogEl = $state<HTMLDivElement | undefined>(undefined);
   $effect(() => {
-    void perfLog.entries.length;
+    void actionChains.length;
     if (speedLogEl) speedLogEl.scrollTop = speedLogEl.scrollHeight;
   });
+
+  function formatBootRowText(row: BootRow): string {
+    return `  ${row.label.padEnd(20)} ${row.deltaMs} ms`;
+  }
+
+  function formatChainRowText(row: ChainRow): string {
+    return `  ${row.prefix.padEnd(6)} ${row.action.padEnd(16)} ${row.durationMs} ms`;
+  }
 
   function flashCopied(id: string) {
     copiedId = id;
@@ -218,11 +299,23 @@
   }
 
   function speedLogLines(): string[] {
-    if (perfLog.entries.length === 0) return [];
-    const lines: string[] = [`Speed log (${perfLog.entries.length} entries):`];
-    const base = perfLog.entries[0].t;
-    for (const entry of perfLog.entries) {
-      lines.push(`  ${formatEntry(entry, base)}`);
+    if (actionChains.length === 0) return [];
+    const lines: string[] = [`Speed log (${actionChains.length} actions):`];
+    for (const row of actionChains) {
+      lines.push(formatChainRowText(row));
+    }
+    return lines;
+  }
+
+  function launchTableLines(): string[] {
+    if (startupMs === null && bootRows.length === 0) return [];
+    const lines: string[] = [];
+    if (startupMs !== null) lines.push(`Launch time: ${startupMs} ms`);
+    if (bootRows.length > 0) {
+      lines.push("");
+      for (const row of bootRows) {
+        lines.push(formatBootRowText(row));
+      }
     }
     return lines;
   }
@@ -245,9 +338,10 @@
     copyToClipboard("speed-log", speedLogLines().join("\n"));
   }
 
-  function copyLaunchTime() {
-    if (startupMs === null) return;
-    copyToClipboard("launch", `Launch time: ${startupMs} ms`);
+  function copyLaunchTable() {
+    const lines = launchTableLines();
+    if (lines.length === 0) return;
+    copyToClipboard("launch", lines.join("\n"));
   }
 
   $effect(() => {
@@ -600,29 +694,59 @@
             </button>
           {/if}
           <!--
-            Launch time row. The whole row is a button so the user can copy
-            it with a single click; hover highlight signals the affordance,
-            the title attribute spells out what the click does, and the label
-            briefly swaps to "Copied" as confirmation.
+            Launch time row. Click toggles an expandable boot table that
+            breaks down where the startup ms went; the chevron mirrors that
+            state. Copy lives inside the expanded view so the pasted block
+            includes the full breakdown, not just the headline number.
           -->
           {#if startupMs !== null}
             <div class="mx-0 my-3 h-px bg-border"></div>
             <button
-              onclick={copyLaunchTime}
-              class="flex w-full items-baseline justify-between rounded text-left transition-colors hover:bg-accent"
-              title="Click to copy"
+              onclick={() => (launchExpanded = !launchExpanded)}
+              class="flex w-full items-center justify-between rounded text-left transition-colors hover:bg-accent"
+              title={launchExpanded ? "Hide boot breakdown" : "Show boot breakdown"}
             >
-              <span class="text-[10px] uppercase tracking-wider text-foreground">
-                {copiedId === "launch" ? "Copied" : "Launch time"}
+              <span class="text-[10px] uppercase tracking-wider text-foreground">Launch time</span>
+              <span class="flex items-center gap-1.5">
+                <span class="text-[11px] tabular-nums text-foreground">{startupMs.toLocaleString("en")} ms</span>
+                <ChevronDown
+                  size={11}
+                  class={cn("text-muted-foreground transition-transform", launchExpanded && "rotate-180")}
+                />
               </span>
-              <span class="text-[11px] tabular-nums text-foreground">{startupMs.toLocaleString("en")} ms</span>
             </button>
+            {#if launchExpanded}
+              {#if bootRows.length > 0}
+                <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
+                  {#each bootRows as row (row.label)}
+                    <div class="flex justify-between text-muted-foreground tabular-nums whitespace-nowrap">
+                      <span>{row.label}</span>
+                      <span>{row.deltaMs} ms</span>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="mt-1.5 text-[10px] text-muted-foreground/60">No boot marks captured.</div>
+              {/if}
+              <button
+                onclick={copyLaunchTable}
+                class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                {#if copiedId === "launch"}
+                  <Check size={11} />
+                  Copied
+                {:else}
+                  <Copy size={11} />
+                  Copy launch table
+                {/if}
+              </button>
+            {/if}
           {/if}
-          <!-- Speed log -->
+          <!-- Speed log: paired action chains (start -> paint-done) -->
           <div class="mx-0 my-3 h-px bg-border"></div>
           <div class="flex items-center justify-between">
             <span class="text-[10px] uppercase tracking-wider text-foreground">
-              Speed log ({perfLog.entries.length})
+              Speed log ({actionChains.length})
             </span>
             <div class="flex items-center gap-2">
               <button
@@ -632,33 +756,36 @@
                   perfLog.tracking ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
                 )}
                 title={perfLog.tracking
-                  ? "Stop recording navigation, view, and column events"
-                  : "Record navigation, view, and column events to measure interaction speed"}
+                  ? "Stop recording navigation, view, and event panel actions"
+                  : "Record navigation, view, and event panel actions"}
               >Track: {perfLog.tracking ? "on" : "off"}</button>
               <button
                 onclick={clearPerfLog}
-                disabled={recentEntries.length === 0}
+                disabled={perfLog.entries.length === 0}
                 class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
                 title="Clear speed log buffer"
               >Clear</button>
             </div>
           </div>
-          {#if recentEntries.length > 0}
+          {#if actionChains.length > 0}
             <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
-              {#each recentEntries as entry (entry)}
-                <div class="text-muted-foreground tabular-nums whitespace-nowrap">{formatEntry(entry, baselineT)}</div>
+              {#each actionChains as row, i (i)}
+                <div class="flex justify-between text-muted-foreground tabular-nums whitespace-nowrap">
+                  <span><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
+                  <span>{row.durationMs} ms</span>
+                </div>
               {/each}
             </div>
           {:else}
             <div class="mt-1.5 text-[10px] text-muted-foreground/60">
               {perfLog.tracking
-                ? "No events yet. Interact with the app to record marks."
-                : "Boot marks only. Turn on Track to record interaction events."}
+                ? "No actions recorded yet. Try navigating, switching view, or opening an event."
+                : "Turn on Track to record action durations."}
             </div>
           {/if}
           <button
             onclick={copySpeedLog}
-            disabled={perfLog.entries.length === 0}
+            disabled={actionChains.length === 0}
             class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {#if copiedId === "speed-log"}

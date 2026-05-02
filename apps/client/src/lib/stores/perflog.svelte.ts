@@ -91,21 +91,3 @@ export function snapshot(): readonly PerfLogEntry[] {
 export function clear(): void {
   perfLog.entries.length = 0;
 }
-
-/**
- * Format a single entry as `+<delta>ms | <tag> | <detail>`. The delta is
- * relative to the first entry in the provided array (so a copied trace is
- * readable without knowing absolute boot time).
- *
- * @param entry The entry to format.
- * @param baseT The timestamp to subtract for the delta column.
- */
-export function formatEntry(entry: PerfLogEntry, baseT: number): string {
-  const delta = (entry.t - baseT).toFixed(1);
-  const head = `+${delta}ms | ${entry.tag}`;
-  if (!entry.detail) return head;
-  const detail = Object.entries(entry.detail)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(" ");
-  return `${head} | ${detail}`;
-}

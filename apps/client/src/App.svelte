@@ -30,6 +30,15 @@
 
   let isMaximized = $state(true);
   let startupMs = $state<number | null>(null);
+  /**
+   * Time spent in the Tauri/WebKit shell before any JS could mark anything.
+   * Computed once when `get_startup_elapsed_ms` resolves: that IPC returns a
+   * spawn-anchored elapsed value, and `performance.now()` at the same moment
+   * is anchored to the document's time origin (which starts inside WebKit
+   * after the shell is up). The difference is the constant gap; we capture
+   * it once instead of recomputing per render.
+   */
+  let shellStartupMs = $state<number | null>(null);
 
   onMount(() => {
     perfMark("boot.app-mount");
@@ -65,6 +74,7 @@
     appWindow.isMaximized().then((v) => (isMaximized = v));
     invoke<number>("get_startup_elapsed_ms").then((ms) => {
       startupMs = ms;
+      shellStartupMs = Math.max(0, Math.round(ms - performance.now()));
     });
 
     // Prevent default Ctrl+scroll behavior (used for calendar zoom)
@@ -345,7 +355,7 @@
 
 <div class="h-screen w-screen" class:app-rounded={!isMaximized}>
   <div class="flex h-full flex-col overflow-hidden bg-sidebar">
-    <TitleBar {startupMs} />
+    <TitleBar {startupMs} {shellStartupMs} />
     <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />
