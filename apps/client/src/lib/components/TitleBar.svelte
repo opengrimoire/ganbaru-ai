@@ -600,7 +600,7 @@
             <div class="mx-0 my-3 h-px bg-border"></div>
             <button
               onclick={copyLaunchTime}
-              class="flex w-full items-baseline justify-between rounded px-1.5 py-1 text-left transition-colors hover:bg-accent"
+              class="flex w-full items-baseline justify-between rounded text-left transition-colors hover:bg-accent"
               title="Click to copy"
             >
               <span class="text-[10px] uppercase tracking-wider text-foreground">
