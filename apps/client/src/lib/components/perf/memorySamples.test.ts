@@ -3,25 +3,29 @@ import { formatElapsed, pickTicks, samplesToCSV, SAMPLE_CAP, SAMPLE_INTERVAL_MS 
 import type { MemorySample } from "./memorySamples";
 
 describe("formatElapsed", () => {
-  it("renders sub-minute durations as M:SS", () => {
-    expect(formatElapsed(0)).toBe("0:00");
-    expect(formatElapsed(500)).toBe("0:01");
-    expect(formatElapsed(59_000)).toBe("0:59");
+  it("renders sub-minute durations with the seconds suffix only", () => {
+    expect(formatElapsed(0)).toBe("0s");
+    expect(formatElapsed(500)).toBe("1s");
+    expect(formatElapsed(5_000)).toBe("5s");
+    expect(formatElapsed(59_000)).toBe("59s");
   });
 
-  it("renders sub-hour durations as M:SS", () => {
-    expect(formatElapsed(60_000)).toBe("1:00");
-    expect(formatElapsed(125_000)).toBe("2:05");
-    expect(formatElapsed(59 * 60_000 + 30_000)).toBe("59:30");
+  it("renders sub-hour durations with minute and second components", () => {
+    expect(formatElapsed(60_000)).toBe("1m");
+    expect(formatElapsed(65_000)).toBe("1m 5s");
+    expect(formatElapsed(125_000)).toBe("2m 5s");
+    expect(formatElapsed(59 * 60_000 + 30_000)).toBe("59m 30s");
   });
 
-  it("renders multi-hour durations as H:MM:SS", () => {
-    expect(formatElapsed(60 * 60_000)).toBe("1:00:00");
-    expect(formatElapsed(2 * 60 * 60_000 + 5 * 60_000 + 9_000)).toBe("2:05:09");
+  it("renders multi-hour durations with all non-zero components", () => {
+    expect(formatElapsed(60 * 60_000)).toBe("1h");
+    expect(formatElapsed(60 * 60_000 + 5_000)).toBe("1h 5s");
+    expect(formatElapsed(60 * 60_000 + 30 * 60_000)).toBe("1h 30m");
+    expect(formatElapsed(2 * 60 * 60_000 + 5 * 60_000 + 9_000)).toBe("2h 5m 9s");
   });
 
   it("clamps negative inputs to zero", () => {
-    expect(formatElapsed(-1)).toBe("0:00");
+    expect(formatElapsed(-1)).toBe("0s");
   });
 });
 

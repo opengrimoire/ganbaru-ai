@@ -122,12 +122,16 @@
 
   $effect(() => {
     function update() {
+      // Capture t when the poll fires, not when the IPC resolves: a slow
+      // first invoke followed by a fast second one would otherwise place
+      // the second sample at ~4 s instead of 5 s on the chart.
+      const now = performance.now();
+      if (firstSampleAt === null) firstSampleAt = now;
+      const t = now - firstSampleAt;
       invoke<MemoryReport>("get_memory_report").then((r) => {
         liveReport = r;
-        const now = performance.now();
-        if (firstSampleAt === null) firstSampleAt = now;
         memorySamples.push({
-          t: now - firstSampleAt,
+          t,
           totalMb: r.total_mb,
           processes: r.processes.map((p) => ({ name: p.name, mb: p.mb })),
         });
@@ -494,7 +498,7 @@
             <button
               onclick={copyMemoryCsv}
               disabled={memorySamples.length === 0}
-              class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               title="Copy the live trend as CSV ({memorySamples.length} samples)"
             >
               {#if csvCopied}
@@ -537,7 +541,7 @@
           <div class="mx-0 my-3 h-px bg-border"></div>
           <button
             onclick={copyPerformanceData}
-            class="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             {#if copied}
               <Check size={12} />
@@ -561,7 +565,7 @@
                 <button
                   onclick={() => benchmarkRunner.request(scenario.id)}
                   disabled={benchmarkRunner.status !== "idle"}
-                  class="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   title={scenario.description}
                 >
                   <Play size={12} />

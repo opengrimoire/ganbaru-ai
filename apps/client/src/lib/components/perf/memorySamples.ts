@@ -31,19 +31,21 @@ export const SAMPLE_INTERVAL_MS = 5_000;
 export const SAMPLE_CAP = (60 * 60 * 1000) / SAMPLE_INTERVAL_MS;
 
 /**
- * Format a duration in milliseconds as `M:SS` for sub-hour spans and
- * `H:MM:SS` past one hour. Used for tick labels and tooltips on the live
- * RAM chart.
+ * Format a duration in milliseconds as a compact `Xh Ym Zs` string. Zero
+ * components are dropped so short spans read as `5s` or `2m 15s` instead
+ * of `0h 0m 5s`. The empty case still renders as `0s` so callers always
+ * have a label to draw.
  */
 export function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  if (h > 0) {
-    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  }
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (s > 0 || parts.length === 0) parts.push(`${s}s`);
+  return parts.join(" ");
 }
 
 /**
