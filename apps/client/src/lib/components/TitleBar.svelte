@@ -498,12 +498,12 @@
               {#each displayReport.processes as proc}
                 <div class="flex items-baseline justify-between">
                   <span class="text-xs text-muted-foreground">{proc.name}</span>
-                  <span class={cn("text-[11px] tabular-nums", showingHoveredSample ? "italic text-muted-foreground" : "text-foreground")}>{proc.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+                  <span class={cn("text-[11px] tabular-nums text-foreground", showingHoveredSample && "italic")}>{proc.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
                 </div>
               {/each}
               <div class="flex items-baseline justify-between">
                 <span class="text-xs text-muted-foreground">Total</span>
-                <span class={cn("text-[11px] tabular-nums", showingHoveredSample ? "italic text-muted-foreground" : "text-foreground")}>{displayReport.total_mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+                <span class={cn("text-[11px] tabular-nums text-foreground", showingHoveredSample && "italic")}>{displayReport.total_mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
               </div>
             </div>
           {/if}
