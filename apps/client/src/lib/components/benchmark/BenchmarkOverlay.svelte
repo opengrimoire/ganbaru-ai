@@ -32,7 +32,7 @@
 {#if runner.status === "confirming"}
   <ConfirmDialog
     title="Run benchmark?"
-    message="Restarts the app a few times against an isolated database over about 80 seconds. Your real calendar is not touched. A desktop notification fires when the run finishes."
+    message={"Restarts the app a few times against an isolated database over about 80 seconds.\nYour real calendar is not touched. A desktop notification fires when the run finishes."}
     confirmLabel="Run (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={() => void runner.confirm()}

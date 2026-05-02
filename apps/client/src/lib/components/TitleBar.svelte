@@ -182,6 +182,15 @@
   const recentEntries = $derived(perfLog.entries.slice(-100));
   const baselineT = $derived(perfLog.entries.length > 0 ? perfLog.entries[0].t : 0);
 
+  // Pin the speed log scroll to the bottom whenever the buffer grows so the
+  // newest mark is always in view. Re-runs on mount too, so the list lands
+  // pre-scrolled when the popover opens with existing entries.
+  let speedLogEl = $state<HTMLDivElement | undefined>(undefined);
+  $effect(() => {
+    void perfLog.entries.length;
+    if (speedLogEl) speedLogEl.scrollTop = speedLogEl.scrollHeight;
+  });
+
   function flashCopied(id: string) {
     copiedId = id;
     setTimeout(() => {
@@ -635,7 +644,7 @@
             </div>
           </div>
           {#if recentEntries.length > 0}
-            <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
+            <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
               {#each recentEntries as entry (entry)}
                 <div class="text-muted-foreground tabular-nums whitespace-nowrap">{formatEntry(entry, baselineT)}</div>
               {/each}
