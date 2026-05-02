@@ -455,7 +455,17 @@
             onkeydown={(e) => { if (e.key === "Escape") showPerfMenu = false; }}
           ></div>
         {/if}
-        <div class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 shadow-lg">
+        <!--
+          Stop wheel propagation so scrolling the diagnostics list (or any
+          future scrollable region inside the perf popover) does not bubble
+          up to the title bar's tab-wheel handler, which would preventDefault
+          and switch between Calendar and Kanban instead.
+        -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 shadow-lg"
+          onwheel={(e) => e.stopPropagation()}
+        >
           <!-- RAM toggle + pin -->
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 text-[10px] uppercase tracking-wider">
@@ -566,7 +576,7 @@
             </div>
           </div>
           {#if recentEntries.length > 0}
-            <div class="mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">
+            <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">
               {#each recentEntries as entry (entry)}
                 <div class="text-muted-foreground tabular-nums whitespace-nowrap">{formatEntry(entry, baselineT)}</div>
               {/each}
@@ -737,5 +747,27 @@
 <style>
   .tab-indicator {
     transition: left 200ms cubic-bezier(0.16, 1, 0.3, 1), width 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /*
+    Themed thin scrollbar for the diagnostics list. Matches the app's other
+    in-popover scrollables by overlaying the theme's border color instead
+    of the OS default.
+  */
+  .perf-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .perf-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .perf-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .perf-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 3px;
+  }
+  .perf-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
   }
 </style>
