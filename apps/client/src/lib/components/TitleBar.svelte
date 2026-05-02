@@ -548,7 +548,7 @@
                 onhover={(s) => { chartHoverSample = s; }}
               />
             </div>
-            <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+            <div class="mt-3 grid grid-cols-2 gap-1.5">
               <button
                 onclick={copyLiveRam}
                 disabled={liveReport === null}
@@ -635,7 +635,7 @@
             </div>
           </div>
           {#if recentEntries.length > 0}
-            <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">
+            <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
               {#each recentEntries as entry (entry)}
                 <div class="text-muted-foreground tabular-nums whitespace-nowrap">{formatEntry(entry, baselineT)}</div>
               {/each}
@@ -675,7 +675,6 @@
                   onclick={() => benchmarkRunner.request(scenario.id)}
                   disabled={benchmarkRunner.status !== "idle"}
                   class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                  title={scenario.description}
                 >
                   <Play size={12} />
                   {scenario.label}

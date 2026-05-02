@@ -4,6 +4,7 @@
   import Check from "@lucide/svelte/icons/check";
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { formatBenchmarkMarkdown } from "$lib/benchmark/output";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const runner = getBenchmarkRunner();
 
@@ -29,38 +30,14 @@
 </script>
 
 {#if runner.status === "confirming"}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-[75] flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
-    <div
-      class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
-    >
-      <h2 class="text-[14px] font-semibold text-foreground">Run benchmark?</h2>
-      <p class="text-[12px] text-foreground">
-        This runs against an isolated benchmark database, restarts the app a few times to keep both
-        phases on cold boots, and takes about 80 seconds. Your real calendar data is not touched. A
-        desktop notification fires when the run finishes. Do not close the app or interact with it
-        while it runs. Continue?
-      </p>
-      <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          onclick={() => runner.cancelConfirm()}
-          class="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onclick={() => void runner.confirm()}
-          class="rounded-md border border-border bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          Run
-        </button>
-      </div>
-    </div>
-  </div>
+  <ConfirmDialog
+    title="Run benchmark?"
+    message="Restarts the app a few times against an isolated database over about 80 seconds. Your real calendar is not touched. A desktop notification fires when the run finishes."
+    confirmLabel="Run (Enter)"
+    cancelLabel="Cancel (Esc)"
+    onConfirm={() => void runner.confirm()}
+    onCancel={() => runner.cancelConfirm()}
+  />
 {/if}
 
 {#if runner.status === "running" && runner.running}
