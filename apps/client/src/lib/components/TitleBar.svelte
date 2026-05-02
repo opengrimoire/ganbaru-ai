@@ -219,7 +219,8 @@
   }
 
   function copyLiveRam() {
-    copyToClipboard("live-ram", samplesToCSV(memorySamples));
+    if (!liveReport) return;
+    copyToClipboard("live-ram", ramReportLines(liveReport, "Live RAM").join("\n"));
   }
 
   function copySnapshotRam() {
@@ -227,14 +228,8 @@
     copyToClipboard("snapshot-ram", ramReportLines(snapshotReport, "RAM snapshot (10s)").join("\n"));
   }
 
-  function copyFullLog() {
-    const blocks: string[][] = [];
-    if (liveReport) blocks.push(ramReportLines(liveReport, "Live RAM"));
-    if (startupMs !== null) blocks.push([`Launch time: ${startupMs} ms`]);
-    const log = speedLogLines();
-    if (log.length > 0) blocks.push(log);
-    if (blocks.length === 0) return;
-    copyToClipboard("full-log", blocks.map((b) => b.join("\n")).join("\n\n"));
+  function copyChart() {
+    copyToClipboard("chart", samplesToCSV(memorySamples));
   }
 
   function copySpeedLog() {
@@ -556,9 +551,8 @@
             <div class="mt-1.5 grid grid-cols-2 gap-1.5">
               <button
                 onclick={copyLiveRam}
-                disabled={memorySamples.length === 0}
+                disabled={liveReport === null}
                 class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                title="Copy the live trend as CSV ({memorySamples.length} samples)"
               >
                 {#if copiedId === "live-ram"}
                   <Check size={11} />
@@ -569,16 +563,16 @@
                 {/if}
               </button>
               <button
-                onclick={copyFullLog}
-                class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
-                title="Copy live ram + launch time + speed log as text"
+                onclick={copyChart}
+                disabled={memorySamples.length === 0}
+                class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {#if copiedId === "full-log"}
+                {#if copiedId === "chart"}
                   <Check size={11} />
                   Copied
                 {:else}
                   <Copy size={11} />
-                  Copy full log
+                  Copy chart
                 {/if}
               </button>
             </div>
@@ -586,7 +580,6 @@
             <button
               onclick={copySnapshotRam}
               class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
-              title="Copy the 10s snapshot reading as text"
             >
               {#if copiedId === "snapshot-ram"}
                 <Check size={11} />
@@ -658,7 +651,6 @@
             onclick={copySpeedLog}
             disabled={perfLog.entries.length === 0}
             class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            title="Copy only the speed log entries"
           >
             {#if copiedId === "speed-log"}
               <Check size={11} />
