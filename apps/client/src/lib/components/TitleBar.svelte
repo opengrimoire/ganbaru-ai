@@ -121,8 +121,21 @@
   let liveReport = $state<MemoryReport | null>(null);
   let snapshotReport = $state<MemoryReport | null>(null);
   let snapshotReady = $state(false);
+  let chartHoverSample = $state<MemorySample | null>(null);
 
-  const displayReport = $derived(perfLive ? liveReport : snapshotReport);
+  const displayReport = $derived.by<MemoryReport | null>(() => {
+    // While the user is hovering the live trend chart, the per-process panel
+    // mirrors the hovered sample so we do not have to draw a duplicate
+    // tooltip below the plot. Falls back to live or snapshot otherwise.
+    if (perfLive && chartHoverSample && liveReport) {
+      return {
+        processes: chartHoverSample.processes.map((p) => ({ name: p.name, mb: p.mb })),
+        total_mb: chartHoverSample.totalMb,
+        platform: liveReport.platform,
+      };
+    }
+    return perfLive ? liveReport : snapshotReport;
+  });
 
   $effect(() => {
     function update() {
@@ -493,7 +506,12 @@
           <!-- Live trend chart -->
           {#if perfLive}
             <div class="mt-3">
-              <MemoryChart samples={memorySamples} width={252} height={64} />
+              <MemoryChart
+                samples={memorySamples}
+                width={252}
+                height={64}
+                onhover={(s) => { chartHoverSample = s; }}
+              />
             </div>
             <button
               onclick={copyMemoryCsv}

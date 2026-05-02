@@ -64,8 +64,9 @@ export function pickTicks(tMin: number, tMax: number, innerWidth: number): numbe
 
 /**
  * Render the buffered samples as CSV. Columns are `t_ms`, `total_mb`, and
- * one column per process name observed across the buffer (sorted). Missing
- * values are emitted as empty cells so spreadsheet imports keep alignment.
+ * one column per process name observed across the buffer (sorted, lowercased
+ * to match the snake_case style of the fixed columns). Missing values emit
+ * as empty cells so spreadsheet imports keep alignment.
  */
 export function samplesToCSV(samples: MemorySample[]): string {
   if (samples.length === 0) return "";
@@ -75,7 +76,7 @@ export function samplesToCSV(samples: MemorySample[]): string {
   }
   // ASCII sort (uppercase before lowercase) so column order is locale-independent.
   const names = Array.from(procNames).sort();
-  const header = ["t_ms", "total_mb", ...names].join(",");
+  const header = ["t_ms", "total_mb", ...names.map((n) => n.toLowerCase())].join(",");
   const rows = samples.map((s) => {
     const map = new Map<string, number>();
     for (const p of s.processes) map.set(p.name, p.mb);

@@ -70,7 +70,7 @@ describe("samplesToCSV", () => {
       ]),
     ]);
     const [header, row1, row2] = csv.split("\n");
-    expect(header).toBe("t_ms,total_mb,Backend,Frontend");
+    expect(header).toBe("t_ms,total_mb,backend,frontend");
     expect(row1).toBe("0,250.50,80.10,150.20");
     expect(row2).toBe("5000,260.00,82.00,158.00");
   });
@@ -84,7 +84,7 @@ describe("samplesToCSV", () => {
       ]),
     ]);
     const [header, row1, row2] = csv.split("\n");
-    expect(header).toBe("t_ms,total_mb,Backend,Network");
+    expect(header).toBe("t_ms,total_mb,backend,network");
     expect(row1).toBe("0,100.00,100.00,");
     expect(row2).toBe("5000,260.00,80.00,180.00");
   });

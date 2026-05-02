@@ -6,10 +6,17 @@
     samples,
     width = 256,
     height = 64,
+    onhover,
   }: {
     samples: MemorySample[];
     width?: number;
     height?: number;
+    /**
+     * Lifts the currently hovered sample to the parent so the existing
+     * per-process panel above the chart can mirror the hovered values
+     * instead of duplicating them in a tooltip.
+     */
+    onhover?: (sample: MemorySample | null) => void;
   } = $props();
 
   const PAD_X = 2;
@@ -99,6 +106,20 @@
   function onLeave() {
     hoverX = null;
   }
+
+  $effect(() => {
+    onhover?.(hoverSample);
+  });
+
+  // Time chip on the x-axis. Width is sized for the longest label
+  // `formatElapsed` will produce in a one-hour buffer (`Xm Ys` or `1h Ym`).
+  const CHIP_W = 56;
+  const CHIP_H = 12;
+  const chipLeft = $derived.by(() => {
+    if (!hoverSample) return 0;
+    const target = xOf(hoverSample.t) - CHIP_W / 2;
+    return Math.max(0, Math.min(width - CHIP_W, target));
+  });
 </script>
 
 <div style="width: {width}px;">
@@ -159,30 +180,27 @@
           r="2.5"
           class="fill-foreground"
         />
+        <!--
+          Time chip pinned to the x-axis. Drawn after the regular ticks so
+          its filled background covers the closest one cleanly without
+          fading the others, keeping the time scale readable on either side.
+        -->
+        <rect
+          x={chipLeft}
+          y={height - CHIP_H - 1}
+          width={CHIP_W}
+          height={CHIP_H}
+          rx="2"
+          class="fill-foreground"
+        />
+        <text
+          x={chipLeft + CHIP_W / 2}
+          y={height - 3}
+          text-anchor="middle"
+          class="fill-background"
+          style="font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;"
+        >{formatElapsed(hoverSample.t)}</text>
       {/if}
     </svg>
-    {#if hoverSample}
-      <!--
-        Tooltip flows below the chart instead of floating over it. Pinning it
-        outside the line area means the user never has to dodge the tooltip
-        to read a point in the middle of the plot.
-      -->
-      <div class="mt-1.5 flex flex-col gap-1.5">
-        <div class="flex items-baseline justify-between gap-2">
-          <span class="text-xs text-muted-foreground">Time</span>
-          <span class="text-[11px] tabular-nums text-foreground">{formatElapsed(hoverSample.t)}</span>
-        </div>
-        {#each hoverSample.processes as p (p.name)}
-          <div class="flex items-baseline justify-between gap-2">
-            <span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">{p.name}</span>
-            <span class="shrink-0 text-[11px] tabular-nums text-foreground">{p.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
-          </div>
-        {/each}
-        <div class="flex items-baseline justify-between gap-2">
-          <span class="text-xs text-muted-foreground">Total</span>
-          <span class="text-[11px] tabular-nums text-foreground">{hoverSample.totalMb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
-        </div>
-      </div>
-    {/if}
   {/if}
 </div>
