@@ -9,15 +9,15 @@
  * Boot marks (tags starting with `boot.`) are always recorded so the
  * benchmark harness can extract them regardless of the user's preference.
  * Every other mark is gated behind the `tracking` flag, which the user
- * toggles from the perf popup. Off by default so normal use does not flood
- * the buffer with `nav.*` / `view.*` / `col.*` events nobody is reading.
+ * toggles from the perf popup. The flag is session-local and resets to
+ * off on every launch, so normal use never accumulates `nav.*` / `view.*`
+ * / `col.*` events in the background.
  *
  * Marks are timestamps plus an optional small `detail` map. No event
  * content, titles, or PII is recorded.
  */
 
 const MAX_ENTRIES = 100;
-const TRACKING_STORAGE_KEY = "ganbaru.perflog.tracking";
 
 /**
  * One timing mark in the ring buffer.
@@ -32,39 +32,25 @@ export type PerfLogEntry = {
   detail?: Record<string, string | number>;
 };
 
-function readTrackingPref(): boolean {
-  if (typeof localStorage === "undefined") return false;
-  try {
-    return localStorage.getItem(TRACKING_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Reactive ring buffer of perf log entries plus the user's tracking
- * preference. Bound to `$state` so the panel re-renders when either
- * changes. Always treated as append-only externally; use `clear()` to
- * reset.
+ * Reactive ring buffer of perf log entries plus the in-memory tracking
+ * flag. Bound to `$state` so the panel re-renders when either changes.
+ * Always treated as append-only externally; use `clear()` to reset.
+ * `tracking` resets to `false` on every page load by design.
  */
 export const perfLog = $state<{ entries: PerfLogEntry[]; tracking: boolean }>({
   entries: [],
-  tracking: readTrackingPref(),
+  tracking: false,
 });
 
 /**
- * Flip interaction tracking on or off. Boot marks are unaffected. Persists
- * to `localStorage` so the choice survives reloads.
+ * Flip interaction tracking on or off for the current session. Boot marks
+ * are unaffected. The flag is intentionally not persisted; reopening the
+ * app always starts with tracking off so a forgotten toggle never bloats
+ * the buffer in production.
  */
 export function setTracking(on: boolean): void {
   perfLog.tracking = on;
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(TRACKING_STORAGE_KEY, on ? "true" : "false");
-  } catch {
-    // localStorage unavailable (private mode, quota, etc.); the in-memory
-    // flag still works for the rest of the session.
-  }
 }
 
 /**
