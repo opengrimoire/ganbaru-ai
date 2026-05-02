@@ -31,7 +31,7 @@
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { BENCHMARK_SCENARIOS } from "$lib/benchmark/registry";
-  import { perfLog, formatEntry, clear as clearPerfLog } from "$lib/stores/perflog.svelte";
+  import { perfLog, formatEntry, clear as clearPerfLog, setTracking } from "$lib/stores/perflog.svelte";
   import MemoryChart from "$lib/components/perf/MemoryChart.svelte";
   import type { MemorySample } from "$lib/components/perf/memorySamples";
   import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCSV } from "$lib/components/perf/memorySamples";
@@ -541,22 +541,41 @@
             </div>
           {/if}
           <!-- Diagnostics -->
-          {#if recentEntries.length > 0}
-            <div class="mx-0 my-3 h-px bg-border"></div>
-            <div class="flex items-center justify-between">
-              <span class="text-[10px] uppercase tracking-wider text-foreground">
-                Diagnostics ({perfLog.entries.length})
-              </span>
+          <div class="mx-0 my-3 h-px bg-border"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] uppercase tracking-wider text-foreground">
+              Diagnostics ({perfLog.entries.length})
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                onclick={() => setTracking(!perfLog.tracking)}
+                class={cn(
+                  "text-[10px] uppercase tracking-wider transition-colors",
+                  perfLog.tracking ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
+                )}
+                title={perfLog.tracking
+                  ? "Stop recording navigation, view, and column events"
+                  : "Record navigation, view, and column events to measure interaction speed"}
+              >Track: {perfLog.tracking ? "on" : "off"}</button>
               <button
                 onclick={clearPerfLog}
-                class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground"
+                disabled={recentEntries.length === 0}
+                class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
                 title="Clear diagnostics buffer"
               >Clear</button>
             </div>
+          </div>
+          {#if recentEntries.length > 0}
             <div class="mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">
               {#each recentEntries as entry (entry)}
                 <div class="text-muted-foreground tabular-nums whitespace-nowrap">{formatEntry(entry, baselineT)}</div>
               {/each}
+            </div>
+          {:else}
+            <div class="mt-1.5 text-[10px] text-muted-foreground/60">
+              {perfLog.tracking
+                ? "No events yet. Interact with the app to record marks."
+                : "Boot marks only. Turn on Track to record interaction events."}
             </div>
           {/if}
           <!-- Copy -->
