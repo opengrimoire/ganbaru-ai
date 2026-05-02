@@ -64,8 +64,9 @@
   const benchmarkRunner = getBenchmarkRunner();
   let perfPinned = $state(false);
   let perfLive = $state(true);
-  let copied = $state(false);
-  let csvCopied = $state(false);
+  // One slot for the most recently copied button so each one can flash a
+  // "Copied" confirmation without needing a separate flag per button.
+  let copiedId = $state<string | null>(null);
   let memorySamples = $state<MemorySample[]>([]);
   // Logical sample index. Multiplying by SAMPLE_INTERVAL_MS yields a
   // drift-free `t` even when setInterval fires a few ms early or late, so
@@ -181,43 +182,68 @@
   const recentEntries = $derived(perfLog.entries.slice(-100));
   const baselineT = $derived(perfLog.entries.length > 0 ? perfLog.entries[0].t : 0);
 
-  function copyPerformanceData() {
-    const report = displayReport;
-    const lines: string[] = [];
-    if (report) {
-      const mode = perfLive ? "Live" : "Snapshot (10s)";
-      lines.push(`Performance ${mode} (${report.platform})`);
-      lines.push("");
-      lines.push("RAM by process:");
-      for (const p of report.processes) {
-        lines.push(`  ${p.name}: ${p.mb.toFixed(1)} MB`);
-      }
-      lines.push(`  Total PSS: ${Math.round(report.total_mb)} MB`);
-    }
-    if (startupMs !== null) {
-      if (lines.length > 0) lines.push("");
-      lines.push(`Launch time: ${startupMs} ms`);
-    }
-    if (perfLog.entries.length > 0) {
-      if (lines.length > 0) lines.push("");
-      lines.push(`Diagnostics (${perfLog.entries.length} entries):`);
-      const base = perfLog.entries[0].t;
-      for (const entry of perfLog.entries) {
-        lines.push(`  ${formatEntry(entry, base)}`);
-      }
-    }
-    if (lines.length === 0) return;
-    navigator.clipboard.writeText(lines.join("\n"));
-    copied = true;
-    setTimeout(() => { copied = false; }, 2000);
+  function flashCopied(id: string) {
+    copiedId = id;
+    setTimeout(() => {
+      // Only clear if the same flash is still active. A second click on a
+      // different button would have replaced `copiedId`; we should not race
+      // and clear that newer flash here.
+      if (copiedId === id) copiedId = null;
+    }, 2000);
   }
 
-  function copyMemoryCsv() {
-    const csv = samplesToCSV(memorySamples);
-    if (csv.length === 0) return;
-    navigator.clipboard.writeText(csv);
-    csvCopied = true;
-    setTimeout(() => { csvCopied = false; }, 2000);
+  function copyToClipboard(id: string, text: string) {
+    if (text.length === 0) return;
+    navigator.clipboard.writeText(text);
+    flashCopied(id);
+  }
+
+  function ramReportLines(report: MemoryReport, label: string): string[] {
+    const lines: string[] = [`${label} (${report.platform})`, ""];
+    lines.push("RAM by process:");
+    for (const p of report.processes) {
+      lines.push(`  ${p.name}: ${p.mb.toFixed(1)} MB`);
+    }
+    lines.push(`  Total PSS: ${Math.round(report.total_mb)} MB`);
+    return lines;
+  }
+
+  function speedLogLines(): string[] {
+    if (perfLog.entries.length === 0) return [];
+    const lines: string[] = [`Speed log (${perfLog.entries.length} entries):`];
+    const base = perfLog.entries[0].t;
+    for (const entry of perfLog.entries) {
+      lines.push(`  ${formatEntry(entry, base)}`);
+    }
+    return lines;
+  }
+
+  function copyLiveRam() {
+    copyToClipboard("live-ram", samplesToCSV(memorySamples));
+  }
+
+  function copySnapshotRam() {
+    if (!snapshotReport) return;
+    copyToClipboard("snapshot-ram", ramReportLines(snapshotReport, "RAM snapshot (10s)").join("\n"));
+  }
+
+  function copyFullLog() {
+    const blocks: string[][] = [];
+    if (liveReport) blocks.push(ramReportLines(liveReport, "Live RAM"));
+    if (startupMs !== null) blocks.push([`Launch time: ${startupMs} ms`]);
+    const log = speedLogLines();
+    if (log.length > 0) blocks.push(log);
+    if (blocks.length === 0) return;
+    copyToClipboard("full-log", blocks.map((b) => b.join("\n")).join("\n\n"));
+  }
+
+  function copySpeedLog() {
+    copyToClipboard("speed-log", speedLogLines().join("\n"));
+  }
+
+  function copyLaunchTime() {
+    if (startupMs === null) return;
+    copyToClipboard("launch", `Launch time: ${startupMs} ms`);
   }
 
   $effect(() => {
@@ -517,7 +543,7 @@
               </div>
             </div>
           {/if}
-          <!-- Live trend chart -->
+          <!-- Live trend chart + per-mode copy buttons -->
           {#if perfLive}
             <div class="mt-3">
               <MemoryChart
@@ -527,34 +553,74 @@
                 onhover={(s) => { chartHoverSample = s; }}
               />
             </div>
+            <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+              <button
+                onclick={copyLiveRam}
+                disabled={memorySamples.length === 0}
+                class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Copy the live trend as CSV ({memorySamples.length} samples)"
+              >
+                {#if copiedId === "live-ram"}
+                  <Check size={11} />
+                  Copied
+                {:else}
+                  <Copy size={11} />
+                  Copy live ram
+                {/if}
+              </button>
+              <button
+                onclick={copyFullLog}
+                class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+                title="Copy live ram + launch time + speed log as text"
+              >
+                {#if copiedId === "full-log"}
+                  <Check size={11} />
+                  Copied
+                {:else}
+                  <Copy size={11} />
+                  Copy full log
+                {/if}
+              </button>
+            </div>
+          {:else if snapshotReady}
             <button
-              onclick={copyMemoryCsv}
-              disabled={memorySamples.length === 0}
-              class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              title="Copy the live trend as CSV ({memorySamples.length} samples)"
+              onclick={copySnapshotRam}
+              class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+              title="Copy the 10s snapshot reading as text"
             >
-              {#if csvCopied}
+              {#if copiedId === "snapshot-ram"}
                 <Check size={11} />
                 Copied
               {:else}
                 <Copy size={11} />
-                Copy CSV ({memorySamples.length})
+                Copy snapshot ram
               {/if}
             </button>
           {/if}
-          <!-- Launch time -->
+          <!--
+            Launch time row. The whole row is a button so the user can copy
+            it with a single click; hover highlight signals the affordance,
+            the title attribute spells out what the click does, and the label
+            briefly swaps to "Copied" as confirmation.
+          -->
           {#if startupMs !== null}
             <div class="mx-0 my-3 h-px bg-border"></div>
-            <div class="flex items-baseline justify-between">
-              <span class="text-[10px] uppercase tracking-wider text-foreground">Launch time</span>
+            <button
+              onclick={copyLaunchTime}
+              class="flex w-full items-baseline justify-between rounded px-1.5 py-1 text-left transition-colors hover:bg-accent"
+              title="Click to copy"
+            >
+              <span class="text-[10px] uppercase tracking-wider text-foreground">
+                {copiedId === "launch" ? "Copied" : "Launch time"}
+              </span>
               <span class="text-[11px] tabular-nums text-foreground">{startupMs.toLocaleString("en")} ms</span>
-            </div>
+            </button>
           {/if}
-          <!-- Diagnostics -->
+          <!-- Speed log -->
           <div class="mx-0 my-3 h-px bg-border"></div>
           <div class="flex items-center justify-between">
             <span class="text-[10px] uppercase tracking-wider text-foreground">
-              Diagnostics ({perfLog.entries.length})
+              Speed log ({perfLog.entries.length})
             </span>
             <div class="flex items-center gap-2">
               <button
@@ -571,7 +637,7 @@
                 onclick={clearPerfLog}
                 disabled={recentEntries.length === 0}
                 class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
-                title="Clear diagnostics buffer"
+                title="Clear speed log buffer"
               >Clear</button>
             </div>
           </div>
@@ -588,18 +654,18 @@
                 : "Boot marks only. Turn on Track to record interaction events."}
             </div>
           {/if}
-          <!-- Copy -->
-          <div class="mx-0 my-3 h-px bg-border"></div>
           <button
-            onclick={copyPerformanceData}
-            class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            onclick={copySpeedLog}
+            disabled={perfLog.entries.length === 0}
+            class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            title="Copy only the speed log entries"
           >
-            {#if copied}
-              <Check size={12} />
+            {#if copiedId === "speed-log"}
+              <Check size={11} />
               Copied
             {:else}
-              <Copy size={12} />
-              Copy all
+              <Copy size={11} />
+              Copy speed log
             {/if}
           </button>
           <!-- Benchmark scenarios -->
