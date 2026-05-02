@@ -67,7 +67,11 @@
   let copied = $state(false);
   let csvCopied = $state(false);
   let memorySamples = $state<MemorySample[]>([]);
-  let firstSampleAt: number | null = null;
+  // Logical sample index. Multiplying by SAMPLE_INTERVAL_MS yields a
+  // drift-free `t` even when setInterval fires a few ms early or late, so
+  // the chart ticks land on clean 5 s multiples instead of accumulating
+  // event-loop slop.
+  let pollIndex = 0;
 
   async function confirmReset() {
     showResetConfirm = false;
@@ -122,12 +126,8 @@
 
   $effect(() => {
     function update() {
-      // Capture t when the poll fires, not when the IPC resolves: a slow
-      // first invoke followed by a fast second one would otherwise place
-      // the second sample at ~4 s instead of 5 s on the chart.
-      const now = performance.now();
-      if (firstSampleAt === null) firstSampleAt = now;
-      const t = now - firstSampleAt;
+      const t = pollIndex * SAMPLE_INTERVAL_MS;
+      pollIndex++;
       invoke<MemoryReport>("get_memory_report").then((r) => {
         liveReport = r;
         memorySamples.push({

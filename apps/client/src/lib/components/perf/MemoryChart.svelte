@@ -186,23 +186,23 @@
     </svg>
     {#if hoverSample}
       <div
-        class="pointer-events-none absolute z-10 rounded-md border border-border bg-popover px-2 py-1 text-[10px] leading-tight shadow-md"
+        class="pointer-events-none absolute z-10 flex flex-col gap-1.5 rounded-md border border-border bg-popover px-2 py-1.5 shadow-md"
         style={tooltipStyle}
       >
-        <div class="tabular-nums text-muted-foreground">t = {formatElapsed(hoverSample.t)}</div>
-        <div class="tabular-nums font-medium text-foreground">
-          {hoverSample.totalMb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB total
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="text-xs text-muted-foreground">t</span>
+          <span class="text-[11px] tabular-nums text-foreground">{formatElapsed(hoverSample.t)}</span>
         </div>
-        {#if hoverSample.processes.length > 0}
-          <div class="mt-1 flex flex-col gap-0.5">
-            {#each hoverSample.processes as p (p.name)}
-              <div class="flex justify-between gap-2 tabular-nums text-muted-foreground">
-                <span class="min-w-0 flex-1 truncate">{p.name}</span>
-                <span class="shrink-0">{p.mb.toFixed(1)}</span>
-              </div>
-            {/each}
+        {#each hoverSample.processes as p (p.name)}
+          <div class="flex items-baseline justify-between gap-2">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">{p.name}</span>
+            <span class="shrink-0 text-[11px] tabular-nums text-foreground">{p.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
           </div>
-        {/if}
+        {/each}
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="text-xs text-muted-foreground">Total</span>
+          <span class="text-[11px] tabular-nums text-foreground">{hoverSample.totalMb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+        </div>
       </div>
     {/if}
   {/if}
