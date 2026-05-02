@@ -48,9 +48,8 @@
   }
 
   let {
-    startupMs = null,
     shellStartupMs = null,
-  }: { startupMs: number | null; shellStartupMs: number | null } = $props();
+  }: { shellStartupMs: number | null } = $props();
 
   const win = getCurrentWindow();
   const nav = getNavigation();
@@ -191,10 +190,13 @@
    * X ms." The synthetic `shell-startup` row at the top covers the gap
    * between process spawn and `boot.script-start` (which `performance.now()`
    * cannot see, since its time origin starts after the WebKit shell is up).
-   * `boot.script-start` itself is the anchor and is omitted from the table:
-   * its delta would be 0 by definition.
+   * `boot.script-start` itself is the anchor and is omitted: its delta would
+   * be 0 by definition. `boot.rawblocks-set` is also omitted because the
+   * only work between it and the previous mark is one assignment plus a sync
+   * `invalidate()`, so it always rounds to 0 regardless of data size.
    */
   type BootRow = { label: string; deltaMs: number };
+  const HIDDEN_BOOT_TAGS = new Set(["boot.rawblocks-set"]);
   const bootRows = $derived.by<BootRow[]>(() => {
     const rows: BootRow[] = [];
     if (shellStartupMs !== null) {
@@ -203,6 +205,7 @@
     let prev: PerfLogEntry | null = null;
     for (const e of perfLog.entries) {
       if (!e.tag.startsWith("boot.")) continue;
+      if (HIDDEN_BOOT_TAGS.has(e.tag)) continue;
       if (prev === null) {
         prev = e;
         continue;
@@ -214,6 +217,17 @@
       prev = e;
     }
     return rows;
+  });
+
+  /**
+   * Headline Launch time, derived as the sum of all visible boot row deltas.
+   * Computing it client-side from the same data the table renders means the
+   * number on top and the rows below are guaranteed to agree, instead of
+   * the snapshot-vs-running-clock skew of an IPC-fetched value.
+   */
+  const launchMs = $derived.by(() => {
+    if (bootRows.length === 0) return null;
+    return Math.round(bootRows.reduce((sum, r) => sum + r.deltaMs, 0));
   });
 
   /**
@@ -308,14 +322,10 @@
   }
 
   function launchTableLines(): string[] {
-    if (startupMs === null && bootRows.length === 0) return [];
-    const lines: string[] = [];
-    if (startupMs !== null) lines.push(`Launch time: ${startupMs} ms`);
-    if (bootRows.length > 0) {
-      lines.push("");
-      for (const row of bootRows) {
-        lines.push(formatBootRowText(row));
-      }
+    if (launchMs === null) return [];
+    const lines: string[] = [`Launch time: ${launchMs} ms`, ""];
+    for (const row of bootRows) {
+      lines.push(formatBootRowText(row));
     }
     return lines;
   }
@@ -699,7 +709,7 @@
             state. Copy lives inside the expanded view so the pasted block
             includes the full breakdown, not just the headline number.
           -->
-          {#if startupMs !== null}
+          {#if launchMs !== null}
             <div class="mx-0 my-3 h-px bg-border"></div>
             <button
               onclick={() => (launchExpanded = !launchExpanded)}
@@ -708,7 +718,7 @@
             >
               <span class="text-[10px] uppercase tracking-wider text-foreground">Launch time</span>
               <span class="flex items-center gap-1.5">
-                <span class="text-[11px] tabular-nums text-foreground">{startupMs.toLocaleString("en")} ms</span>
+                <span class="text-[11px] tabular-nums text-foreground">{launchMs.toLocaleString("en")} ms</span>
                 <ChevronDown
                   size={11}
                   class={cn("text-muted-foreground transition-transform", launchExpanded && "rotate-180")}

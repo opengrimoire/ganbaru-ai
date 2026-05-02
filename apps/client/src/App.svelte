@@ -29,7 +29,6 @@
   const zoom = getZoom();
 
   let isMaximized = $state(true);
-  let startupMs = $state<number | null>(null);
   /**
    * Time spent in the Tauri/WebKit shell before any JS could mark anything.
    * Computed once when `get_startup_elapsed_ms` resolves: that IPC returns a
@@ -73,7 +72,6 @@
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));
     invoke<number>("get_startup_elapsed_ms").then((ms) => {
-      startupMs = ms;
       shellStartupMs = Math.max(0, Math.round(ms - performance.now()));
     });
 
@@ -355,7 +353,7 @@
 
 <div class="h-screen w-screen" class:app-rounded={!isMaximized}>
   <div class="flex h-full flex-col overflow-hidden bg-sidebar">
-    <TitleBar {startupMs} {shellStartupMs} />
+    <TitleBar {shellStartupMs} />
     <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />
