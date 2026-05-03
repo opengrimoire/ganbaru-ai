@@ -1,9 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import {
     getLocalTimezone,
     getTimezoneInfo,
-    prewarmTimezoneSearch,
     searchTimezones,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
@@ -64,6 +62,7 @@
   let popoverPos = $state({ top: 0, left: 0 });
   let query = $state("");
   let highlightIndex = $state(0);
+  let searchHydrated = $state(false);
 
   // Custom scrollbar metrics. We hide the native scrollbar on `.tz-results`
   // and render a thumb sibling that overlays the right edge of the list.
@@ -94,30 +93,17 @@
 
   const localTz = getLocalTimezone();
 
-  const filtered = $derived(searchTimezones(query, timezones));
+  const EMPTY_TIMEZONE_RESULTS: string[] = [];
+  const filtered = $derived(
+    open && searchHydrated
+      ? searchTimezones(query, timezones)
+      : EMPTY_TIMEZONE_RESULTS,
+  );
 
   // Reset highlight whenever the query changes so the first row is selected.
   $effect(() => {
     void query;
     highlightIndex = 0;
-  });
-
-  // Pre-bake metadata for every filtered IANA zone shortly after mount so
-  // the first popover open is instant. Without this, the first search
-  // walks ~400 zones through Intl.DateTimeFormat synchronously.
-  onMount(() => {
-    type IdleScheduler = (cb: () => void) => void;
-    const w = window as Window & {
-      requestIdleCallback?: (cb: () => void) => number;
-    };
-    const schedule: IdleScheduler = w.requestIdleCallback
-      ? (cb) => {
-          w.requestIdleCallback?.(cb);
-        }
-      : (cb) => {
-          setTimeout(cb, 0);
-        };
-    schedule(() => prewarmTimezoneSearch());
   });
 
   function computePosition() {
@@ -147,6 +133,7 @@
     query = "";
     highlightIndex = 0;
     computePosition();
+    searchHydrated = true;
     open = true;
     requestAnimationFrame(() => inputEl?.focus());
   }

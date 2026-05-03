@@ -127,6 +127,8 @@ Record measurements after each significant feature or milestone. Use the release
 | Date | Phase | What changed | Backend (MB) | Frontend (MB) | Network (MB) | Total PSS (MB) | Platform |
 |---|---|---|---|---|---|---|---|
 | 2026-04-01 | Phase 1 | Baseline: calendar, pomodoro, kanban | 87.5 | 205.0 | 15.9 | 308 | Linux (Ubuntu) |
+| 2026-05-03 | Phase 1 | Before lazy timezone search metadata | 107.4 | 247.4 | 18.5 | 373 | Linux (Ubuntu) |
+| 2026-05-03 | Phase 1 | Lazy timezone search metadata, median of 4 startup snapshots | 113.7 | 197.3 | 19.5 | 329 | Linux (Ubuntu) |
 
 ## Package size log
 

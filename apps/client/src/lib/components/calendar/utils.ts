@@ -637,15 +637,6 @@ function getSortedByOffset(): TimezoneInfo[] {
 }
 
 /**
- * Pre-bake metadata for every filtered IANA zone. Call from an idle
- * callback shortly after mount so the first popover open finds the cache
- * warm. Idempotent: re-runs are O(n) Map lookups with no new work.
- */
-export function prewarmTimezoneSearch(): void {
-  getSortedByOffset();
-}
-
-/**
  * Search timezones with ranked multi-field matching.
  *
  * Empty query returns the full filtered list (Etc/* and deprecated aliases
@@ -1325,4 +1316,3 @@ export function createSmoothScroll(
 
   return fn;
 }
-
