@@ -4,7 +4,6 @@
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import AppearanceSection from "./AppearanceSection.svelte";
-  import CalendarsSection from "./CalendarsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import type { SectionId } from "./types";
 
@@ -42,6 +41,21 @@
   ];
 
   let activeSection = $state<SectionId>("appearance");
+  type CalendarsSectionComponent = typeof import("./CalendarsSection.svelte").default;
+  let CalendarsSection = $state<CalendarsSectionComponent | null>(null);
+  let loadingCalendarsSection: Promise<void> | null = null;
+
+  function loadCalendarsSection(): Promise<void> {
+    if (CalendarsSection) return Promise.resolve();
+    loadingCalendarsSection ??= import("./CalendarsSection.svelte")
+      .then((module) => {
+        CalendarsSection = module.default;
+      })
+      .finally(() => {
+        loadingCalendarsSection = null;
+      });
+    return loadingCalendarsSection;
+  }
 
   // Apply the launcher's target section when it is set, including on first
   // mount. The modal is unmounted/remounted on each open, so this fires at
@@ -49,6 +63,10 @@
   // prop does not change during the modal's lifetime).
   $effect.pre(() => {
     if (initialSection) activeSection = initialSection;
+  });
+
+  $effect(() => {
+    if (activeSection === "calendars") void loadCalendarsSection();
   });
 
   onMount(() => {
@@ -122,7 +140,10 @@
       {#if activeSection === "appearance"}
         <AppearanceSection />
       {:else if activeSection === "calendars"}
-        <CalendarsSection />
+        {#if CalendarsSection}
+          {@const Section = CalendarsSection}
+          <Section />
+        {/if}
       {/if}
     </section>
   </div>

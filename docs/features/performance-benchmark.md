@@ -88,7 +88,7 @@ export interface BenchmarkScenario {
 
 The runner orchestrates two phases around this contract. Each phase is one cold boot of the app:
 
-- **Phase A** runs `setup()` then `runStress()` against the empty benchmark database. Memory is sampled at 200 ms cadence during the 3000 ms stress burst (peak buffer), then once at +30 s afterward. Boot marks already captured by `lib/stores/perflog.svelte.ts` and the process-spawn-anchored `get_startup_elapsed_ms` are folded into the result.
+- **Phase A** runs `setup()` then `runStress()` against the empty benchmark database. Memory is sampled at 200 ms cadence during the 3000 ms stress burst (peak buffer), then once at +30 s afterward. Boot marks already captured by `lib/stores/perflog.svelte.ts` are folded into the result, with `launch-total` derived from the process-spawn shell baseline plus the first-paint mark.
 - **Phase B** runs the same shape on the next cold boot, with `seed()` having populated the benchmark database between the phases.
 
 Each phase therefore captures a memory curve, a peak, and the boot timings of the cold run that produced it.
@@ -204,7 +204,7 @@ Methodology: cold-cold against an isolated benchmark DB; 3000 ms programmatic st
 Settled floor: empty 278 MB at +30s, synth 318 MB at +30s. 1000-event delta over empty: +40 MB at floor, +169 MB at peak.
 ````
 
-The boot table's first row, `launch-total`, comes from `get_startup_elapsed_ms` (anchored to Rust process spawn) and surfaces shell-startup wins that script-anchored boot marks miss. The remaining boot rows are perflog marks fired from the WebKit document.
+The boot table's first row, `launch-total`, is process-spawn anchored. `App.svelte` records the process-to-`boot.script-start` baseline once, and the sampler adds the first-paint delta from the perflog. This surfaces shell-startup wins that script-anchored boot marks miss without accidentally measuring the later 30-second idle curve. The remaining boot rows are perflog marks fired from the WebKit document.
 
 The format is deliberately one block, not two. Phase A and Phase B share rows so the reader can compare the same sample point across phases at a glance. Phase columns are labeled with the actual event count (`Phase A (0 events)`, `Phase B (1000 events)`) so legacy rows that ran against non-empty data are visibly distinguishable.
 
@@ -219,7 +219,7 @@ The markdown is also legal Markdown for the doc renderer in the summary overlay,
 3. **Seed your data.** `seed()` runs against the isolated benchmark database. Return a handle the runner can hand back to `cleanup()`.
 4. **`cleanup()` is usually a no-op.** The benchmark database is dropped wholesale on summary close, so per-calendar / per-table cleanup only matters if your scenario wants to release memory mid-run.
 5. **Vault scenarios need vault isolation.** The current isolation only covers the database. A scenario that writes to disk under `vault/` (notes, diary, project files) will leak into the user's vault until vault-directory isolation lands. The slot is reserved in `apps/client/src-tauri/src/vault.rs`. The calendar-nav scenario does not need it.
-6. **Register it.** The TitleBar performance panel reads the registry in `lib/benchmark/registry.ts` and renders a Run button per scenario below "Copy all". Adding to the registry surfaces the new scenario in the perf panel without other UI changes.
+6. **Register it.** The lazy performance panel reads the registry in `lib/benchmark/registry.ts` and renders a Run button per scenario under Benchmarks. Adding to the registry surfaces the new scenario in the perf panel without other UI changes.
 7. **Lock the synth.** If your scenario seeds a deterministic dataset, add a vitest case under `lib/benchmark/scenarios/<id>.test.ts` that pins the first few generated items in golden form. This is the only protection against silent generator drift.
 
 The runner, sampler, output formatter, and persistence layer are scenario-agnostic. A new scenario does not touch those files.
@@ -249,8 +249,8 @@ A v1 state file left over from an interrupted v1 run is invalidated automaticall
 ## Critical files
 
 - `lib/benchmark/types.ts`: `BenchmarkScenario`, `PhaseResult`, `SamplePoint`, `BenchmarkState` (with `vaultMode` and `stage`), `HARNESS_VERSION`, `SAMPLE_OFFSETS_MS`.
-- `lib/benchmark/sampler.ts`: peak-sampling and idle-curve sampling. Wraps `get_memory_report` invokes and the `snapshot()` helper from `lib/stores/perflog.svelte.ts`.
-- `lib/benchmark/runner.ts`: phase orchestration, `persistPhaseAPending` / `persistPhaseBPending`, `loadPersistedState` / `clearPersistedState`, restart wiring. Captures `startupMs` per phase via `get_startup_elapsed_ms`.
+- `lib/benchmark/sampler.ts`: peak-sampling, idle-curve sampling, and boot timing capture. Wraps `get_memory_report` invokes, `snapshot()` from `lib/stores/perflog.svelte.ts`, and the stored shell-startup baseline.
+- `lib/benchmark/runner.ts`: phase orchestration, `persistPhaseAPending` / `persistPhaseBPending`, `loadPersistedState` / `clearPersistedState`, restart wiring. Captures `startupMs` per phase from the sampler's `launchTotalMs`.
 - `lib/benchmark/synth.ts`: `mulberry32` PRNG plus the `v1` distribution. Pure logic; tested.
 - `lib/benchmark/output.ts`: `BenchmarkResult` to markdown. Renders the `launch-total` row from `startupMs`. Pure logic; tested.
 - `lib/benchmark/registry.ts`: list of installed scenarios. Adding to this array surfaces the scenario in the UI.
@@ -259,7 +259,8 @@ A v1 state file left over from an interrupted v1 run is invalidated automaticall
 - `lib/stores/benchmarkRunner.svelte.ts`: drives the state machine. `confirm`, `checkAndResume`, `closeSummary`, `cancel`.
 - `apps/client/src-tauri/src/lib.rs`: `read_benchmark_state`, `write_benchmark_state`, `clear_benchmark_state`, `restart_app`, `prepare_benchmark_db`, `teardown_benchmark_db`, `get_startup_elapsed_ms`, `get_memory_report`. Registers SQL migrations for both the user database and `sqlite:ganbaruai-benchmark.db`.
 - `lib/components/calendar/nav-handle.svelte.ts`: shared store exposing `navigate(dir)` and `setViewMode(mode)` for headless drivers.
-- `lib/components/TitleBar.svelte`: performance panel hosts the Run buttons for every scenario in the registry.
+- `lib/components/TitleBar.svelte`: hosts the gauge button and lazy-loads the performance panel.
+- `lib/components/perf/PerformancePopover.svelte`: memory polling, launch table, speed log, and Run buttons for every scenario in the registry. Polling starts only while this component is mounted.
 - `lib/components/benchmark/BenchmarkOverlay.svelte`: full-screen overlay during a run, renders the summary tables on completion.
 
-The harness reuses the existing memory and perf-mark infrastructure verbatim: `get_memory_report` (Tauri command in `lib.rs`), `mark()` and `snapshot()` (in `lib/stores/perflog.svelte.ts`), and the boot/nav marks already firing from `App.svelte` and `CalendarView.svelte`. None of those files change for the harness.
+The harness reuses the existing memory and perf-mark infrastructure: `get_memory_report` (Tauri command in `lib.rs`), `mark()` and `snapshot()` (in `lib/stores/perflog.svelte.ts`), and the boot/nav marks already firing from `App.svelte` and `CalendarView.svelte`.

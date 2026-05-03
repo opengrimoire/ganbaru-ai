@@ -19,7 +19,6 @@
   import WeekView from "./WeekView.svelte";
   import DayView from "./DayView.svelte";
   import MonthView from "./MonthView.svelte";
-  import EventPanel from "./EventPanel.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { createEditSession } from "./edit-session.svelte";
   import type { PanelAnchor } from "./edit-session.svelte";
@@ -39,6 +38,22 @@
   const pomodoro = getPomodoro();
   const calZoom = getCalendarZoom();
   const theme = getTheme();
+
+  type EventPanelComponent = typeof import("./EventPanel.svelte").default;
+  let EventPanel = $state<EventPanelComponent | null>(null);
+  let loadingEventPanel: Promise<void> | null = null;
+
+  function loadEventPanel(): Promise<void> {
+    if (EventPanel) return Promise.resolve();
+    loadingEventPanel ??= import("./EventPanel.svelte")
+      .then((module) => {
+        EventPanel = module.default;
+      })
+      .finally(() => {
+        loadingEventPanel = null;
+      });
+    return loadingEventPanel;
+  }
 
   /**
    * Advance a `YYYY-MM-DD` string by one calendar day. Inlined to keep
@@ -63,6 +78,12 @@
 
   // Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.)
   const session = createEditSession();
+
+  $effect(() => {
+    if (session.state.mode === "create" || session.state.mode === "edit") {
+      void loadEventPanel();
+    }
+  });
 
   // Display events (pure overlay, no store mutation)
   // When saving edits, suppress preview computation to prevent flash
@@ -682,6 +703,7 @@
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
     perfMark("panel.start", { mode: "create" });
+    void loadEventPanel();
     session.openCreate(start, end, anchor, allDay);
   }
 
@@ -702,6 +724,7 @@
 
     const openEvent = () => {
       perfMark("panel.start", { mode: "edit" });
+      void loadEventPanel();
       if (isRecurring(event)) {
         session.openEdit(event, anchor, event);
       } else {
@@ -764,6 +787,7 @@
             // initial sync captures pre-drag values as baseline. tick() lets
             // the panel mount and emit that sync before the drag delta is
             // applied to changes, making dirty correctly reflect the drag.
+            await loadEventPanel();
             session.openEdit(originalInstance, anchor, originalInstance);
             await tick();
             session.updateChanges({ start: event.start, end: event.end });
@@ -780,6 +804,7 @@
         ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
         : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
+      await loadEventPanel();
       session.openEdit(originalInstance, anchor, originalInstance);
       await tick();
       session.updateChanges({ start: event.start, end: event.end });
@@ -1296,34 +1321,37 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- Invisible backdrop: pointer-events pass through, clicks on empty space close panel -->
     <div class="fixed inset-0 z-40 pointer-events-none"></div>
-    {#if session.state.mode === "create"}
-      <EventPanel
-        mode="create"
-        start={session.state.start}
-        end={session.state.end}
-        anchor={session.state.anchor}
-        initialAllDay={!!session.changes.allDay}
-        onSave={handlePanelSave}
-        onChange={handlePanelChange}
-        onInitialSync={handlePanelInitialSync}
-        onClose={handlePanelClose}
-      />
-    {:else if session.state.mode === "edit"}
-      <EventPanel
-        mode="edit"
-        event={panelEvent}
-        anchor={session.state.anchor}
-        externalDirty={session.dirty}
-        readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
-        skipInlineDeleteConfirm={deleteWouldStopSession}
-        loadFullEvent={calendarStore.loadFullEvent}
-        onSave={handlePanelSave}
-        onDelete={handleDelete}
-        onChange={handlePanelChange}
-        onInitialSync={handlePanelInitialSync}
-        onClose={handlePanelClose}
-        onScopeChange={handleScopeChange}
-      />
+    {#if EventPanel}
+      {@const Panel = EventPanel}
+      {#if session.state.mode === "create"}
+        <Panel
+          mode="create"
+          start={session.state.start}
+          end={session.state.end}
+          anchor={session.state.anchor}
+          initialAllDay={!!session.changes.allDay}
+          onSave={handlePanelSave}
+          onChange={handlePanelChange}
+          onInitialSync={handlePanelInitialSync}
+          onClose={handlePanelClose}
+        />
+      {:else if session.state.mode === "edit"}
+        <Panel
+          mode="edit"
+          event={panelEvent}
+          anchor={session.state.anchor}
+          externalDirty={session.dirty}
+          readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
+          skipInlineDeleteConfirm={deleteWouldStopSession}
+          loadFullEvent={calendarStore.loadFullEvent}
+          onSave={handlePanelSave}
+          onDelete={handleDelete}
+          onChange={handlePanelChange}
+          onInitialSync={handlePanelInitialSync}
+          onClose={handlePanelClose}
+          onScopeChange={handleScopeChange}
+        />
+      {/if}
     {/if}
   {/if}
 

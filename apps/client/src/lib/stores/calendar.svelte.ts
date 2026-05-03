@@ -24,7 +24,6 @@ import {
   classifyImportEvents,
   type ExistingEventRow,
 } from "./calendar-bulk-import";
-import { serializeCalendarToIcs } from "$lib/calendar/ics/serializer";
 import type { IcsImportSummary } from "$lib/calendar/ics/types";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
 
@@ -1191,6 +1190,7 @@ export function getCalendar() {
       const slim = rawBlocks.filter((e) => e.calendarId === calendar.id);
       const full = await Promise.all(slim.map((e) => store.loadFullEvent(e.id)));
       const calendarEvents = full.filter((e): e is CalendarEvent => e !== undefined);
+      const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
       return serializeCalendarToIcs(calendar, calendarEvents);
     },
 

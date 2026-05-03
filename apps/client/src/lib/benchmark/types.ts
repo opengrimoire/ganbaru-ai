@@ -10,7 +10,6 @@
  * `docs/features/performance-benchmark.md`.
  */
 import type { CalendarEvent } from "$lib/components/calendar/types";
-import type { PerfLogEntry } from "$lib/stores/perflog.svelte";
 
 /**
  * Cadence pinned in code so historical rows in PERFORMANCE.md stay
@@ -92,6 +91,11 @@ export interface SamplePoint {
 export interface BootTimings {
   /** Tag-keyed milliseconds from `boot.script-start`. Missing marks are omitted. */
   marks: Record<string, number>;
+  /**
+   * Process-spawn to first-paint time, derived from the boot baseline and
+   * the first-paint mark. Optional when either input is unavailable.
+   */
+  launchTotalMs?: number;
 }
 
 /** One phase's complete result: boot, peak, idle curve, plus context. */
@@ -109,12 +113,12 @@ export interface PhaseResult {
   /** Filtered slice of perflog entries scoped to boot of the run that produced this phase. */
   boot: BootTimings;
   /**
-   * Wall-clock launch time, in ms, captured from `get_startup_elapsed_ms`
-   * right after the boot marks are lifted. Anchored to the Rust process
-   * spawn (`PROCESS_START`), which fires before WebKit even loads the
-   * document, so a build that improves Tauri/WebKit shell startup shows
-   * here even when JS-anchored marks stay flat. Optional because older
-   * runs may not have captured it.
+   * Wall-clock launch time, in ms, derived from the stored shell baseline
+   * plus the first-paint mark. Anchored to Rust process spawn
+   * (`PROCESS_START`), which fires before WebKit loads the document, so a
+   * build that improves Tauri/WebKit shell startup shows here even when
+   * JS-anchored marks stay flat. Optional because older runs may not have
+   * captured it.
    */
   startupMs?: number;
   /** Number of events in `rawBlocks` at the moment the phase started. */

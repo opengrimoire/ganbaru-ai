@@ -19,8 +19,8 @@ import {
 
 /**
  * Boot marks emitted in the order they appear in the markdown table. The
- * first row is the synthetic `launch-total` derived from
- * `get_startup_elapsed_ms`; the rest come from the perflog.
+ * first row is the synthetic `launch-total` derived from the shell baseline
+ * and first-paint mark; the rest come from the perflog.
  */
 const BOOT_MARK_ORDER: string[] = [
   "boot.sql-main-done",

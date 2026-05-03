@@ -38,9 +38,14 @@ export type PerfLogEntry = {
  * Always treated as append-only externally; use `clear()` to reset.
  * `tracking` resets to `false` on every page load by design.
  */
-export const perfLog = $state<{ entries: PerfLogEntry[]; tracking: boolean }>({
+export const perfLog = $state<{
+  entries: PerfLogEntry[];
+  tracking: boolean;
+  shellStartupMs: number | null;
+}>({
   entries: [],
   tracking: false,
+  shellStartupMs: null,
 });
 
 /**
@@ -51,6 +56,15 @@ export const perfLog = $state<{ entries: PerfLogEntry[]; tracking: boolean }>({
  */
 export function setTracking(on: boolean): void {
   perfLog.tracking = on;
+}
+
+/**
+ * Record the process-spawn to `boot.script-start` gap. Rust knows process
+ * spawn time while the browser only sees `performance.now()`, so App.svelte
+ * computes the constant bridge once and the benchmark harness reuses it.
+ */
+export function setShellStartupMs(ms: number): void {
+  perfLog.shellStartupMs = ms;
 }
 
 /**
@@ -82,6 +96,11 @@ export function mark(tag: string, detail?: Record<string, string | number>): voi
  */
 export function snapshot(): readonly PerfLogEntry[] {
   return Object.freeze(perfLog.entries.slice());
+}
+
+/** Return the first timestamp for a mark, if it is still in the ring buffer. */
+export function firstMarkTime(tag: string): number | undefined {
+  return perfLog.entries.find((entry) => entry.tag === tag)?.t;
 }
 
 /**

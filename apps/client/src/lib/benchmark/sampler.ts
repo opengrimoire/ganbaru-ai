@@ -10,7 +10,7 @@
  * `types.ts` so historical PERFORMANCE.md rows stay comparable.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { snapshot as perfSnapshot, type PerfLogEntry } from "$lib/stores/perflog.svelte";
+import { perfLog, snapshot as perfSnapshot, type PerfLogEntry } from "$lib/stores/perflog.svelte";
 import type { BootTimings, SampleLabel, SamplePoint } from "./types";
 import { STRESS_PEAK_INTERVAL_MS, SAMPLE_OFFSETS_MS, formatOffsetLabel } from "./types";
 
@@ -175,15 +175,22 @@ export function captureBootTimings(): BootTimings {
   const entries = perfSnapshot();
   const baseT = findBaseT(entries);
   const marks: Record<string, number> = {};
+  let firstPaintT: number | undefined;
   for (const e of entries) {
     if (BOOT_MARKS_OF_INTEREST.has(e.tag)) {
       // First write wins so a re-emitted mark does not overwrite the boot value.
       if (!(e.tag in marks)) {
         marks[e.tag] = Math.max(0, e.t - baseT);
       }
+      if (e.tag === "boot.first-paint" && firstPaintT === undefined) {
+        firstPaintT = e.t;
+      }
     }
   }
-  return { marks };
+  const launchTotalMs = firstPaintT === undefined || perfLog.shellStartupMs === null
+    ? undefined
+    : Math.max(0, perfLog.shellStartupMs + firstPaintT - baseT);
+  return launchTotalMs === undefined ? { marks } : { marks, launchTotalMs };
 }
 
 function findBaseT(entries: readonly PerfLogEntry[]): number {

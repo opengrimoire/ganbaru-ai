@@ -41,8 +41,8 @@ Per-call cost is `O(log N + K)` where `K` is the number of events in the window 
 
 - Boot (`load()` in `stores/calendar.svelte.ts`): one `SELECT` over `calendar_events` joined with `pomodoro_configs`, plus one slim `SELECT` over `calendar_event_overrides`. The previous boot also pulled every row from `calendar_event_attendees` and `calendar_event_alarms` plus the heavy override columns; those reads are gone.
 - `mapRow` only assigns keys with meaningful values, so V8 hidden classes stay compact and `{...slimEvent}` patch payloads do not accidentally clear DB columns through `updateBlock` (which Step 1 changed to a key-driven `SET` clause).
-- `EventPanel.svelte` paints its header from the slim event prop on the same frame as the open click. Heavy sections (description editor, meeting block, visibility button) gate behind `{#if mode === "create" || fullEvent}`, so the user cannot edit a heavy field before the async `loadFullEvent` resolves; once it does, a separate init effect emits a heavy-only payload through `setInitialChanges` so the existing dirty diff still works without re-clobbering slim edits.
-- ICS export (`exportCalendarAsIcs`) and undo / redo of create / delete materialize the full event before they need it: `Promise.all(slim.map((e) => store.loadFullEvent(e.id)))` before serialize, `loadFullEvent` before `pushUndo` for delete actions and after `addBlock` for add actions, and `loadFullEvent(s.originalEvent.id)` before edit-mode update so the undo snapshot can revert heavy edits the user just made. Drag commits and the App-level revert path stay slim because Step 1's patch-based update preserves untouched DB columns.
+- `EventPanel.svelte` is dynamically imported the first time the user creates or edits an event. Once loaded, it paints its header from the slim event prop on the same frame as the open click. Heavy sections (description editor, meeting block, visibility button) gate behind `{#if mode === "create" || fullEvent}`, so the user cannot edit a heavy field before the async `loadFullEvent` resolves; once it does, a separate init effect emits a heavy-only payload through `setInitialChanges` so the existing dirty diff still works without re-clobbering slim edits.
+- ICS export (`exportCalendarAsIcs`) and undo / redo of create / delete materialize the full event before they need it: `Promise.all(slim.map((e) => store.loadFullEvent(e.id)))` before serialize, `loadFullEvent` before `pushUndo` for delete actions and after `addBlock` for add actions, and `loadFullEvent(s.originalEvent.id)` before edit-mode update so the undo snapshot can revert heavy edits the user just made. The serializer and parser load only when the user imports or exports calendar files. Drag commits and the App-level revert path stay slim because Step 1's patch-based update preserves untouched DB columns.
 
 Production traces from a release `.deb` should be re-run on a 968-event Google Calendar import to confirm the expected drops (idle frontend RAM, nav-peak frontend RAM, and `boot.maprow-done - boot.sql-main-done` plus `boot.sql-children-done - boot.sql-main-done`). Numbers will be added to the RAM and startup tables below once measured on the new build.
 
@@ -56,7 +56,7 @@ EXDATE, RDATE, COUNT, and UNTIL semantics are preserved: the loop body that foll
 
 ## How to read performance data
 
-Click the gauge icon in the title bar to open the performance panel. It shows a per-process memory breakdown (updated every 5 seconds) and the startup time captured when the app launched. The "Copy" button copies all values as plain text.
+Click the gauge icon in the title bar to open the performance panel. The panel is lazy-loaded, and memory polling starts only while it is mounted. It shows a per-process memory breakdown (updated every 5 seconds), a 10-second snapshot timer that starts when the panel opens, and the startup time captured when the app launched. The copy buttons export each block as plain text.
 
 ## Memory measurement
 
@@ -138,13 +138,13 @@ Record the installer size after each milestone build. Run `ls -lh target/release
 
 ## Benchmark harness rows
 
-Each row below is the markdown block emitted by the in-app benchmark harness (TitleBar performance panel, Run button under "Copy all"). The harness is documented in `docs/features/performance-benchmark.md`. Always run a release `.deb`, on a fresh boot, with no other heavy apps open and no dev tools attached.
+Each row below is the markdown block emitted by the in-app benchmark harness (gauge performance panel, Benchmarks section). The benchmark UI loads only when the panel opens or when a persisted benchmark run resumes after restart. The harness is documented in `docs/features/performance-benchmark.md`. Always run a release `.deb`, on a fresh boot, with no other heavy apps open and no dev tools attached.
 
 The harness has shipped two formats. v1 runs are not directly comparable to v2 runs: v1 ran Phase A inline against whatever was in the user's database (not an empty baseline, not isolated) and sampled out to +5 m. v2 runs both phases cold against an isolated benchmark database, with Phase A always empty and one +30 s sample.
 
 ### V2 baseline (harness v2)
 
-`HARNESS_VERSION = "2"`. Cold-cold isolated benchmark DB. Phase A is the empty baseline, Phase B is the synth-1000 dataset. Sampling at peak + t0 + +30 s. Boot table includes `launch-total` (process-spawn-anchored).
+`HARNESS_VERSION = "2"`. Cold-cold isolated benchmark DB. Phase A is the empty baseline, Phase B is the synth-1000 dataset. Sampling at peak + t0 + +30 s. Boot table includes `launch-total`, derived from the process-spawn shell baseline plus the first-paint mark.
 
 (no rows yet, paste v2 markdown blocks from release-build runs here.)
 

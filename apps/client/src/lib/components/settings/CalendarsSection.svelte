@@ -8,7 +8,6 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getCalendar } from "$lib/stores/calendar.svelte";
-  import { parseIcs } from "$lib/calendar/ics/parser";
   import type { Calendar } from "$lib/components/calendar/types";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
@@ -48,6 +47,12 @@
   let importProgress = $state<
     { current: number; total: number; label: string } | undefined
   >(undefined);
+  let loadingIcsParser: Promise<typeof import("$lib/calendar/ics/parser")> | null = null;
+
+  function loadIcsParser(): Promise<typeof import("$lib/calendar/ics/parser")> {
+    loadingIcsParser ??= import("$lib/calendar/ics/parser");
+    return loadingIcsParser;
+  }
 
   function flashToast(message: string) {
     toast = message;
@@ -90,6 +95,7 @@
     groupingFilename: string,
     totals: ImportTotals,
   ): Promise<void> {
+    const { parseIcs } = await loadIcsParser();
     const parsed = parseIcs(text);
     if (parsed.events.length === 0) {
       if (parsed.warnings.length > 0) totals.warnings.push(...parsed.warnings);

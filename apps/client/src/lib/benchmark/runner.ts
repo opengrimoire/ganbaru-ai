@@ -64,15 +64,7 @@ async function runPhase(opts: {
     },
   });
 
-  // Process-spawn-anchored launch time, captured once per phase. Read after
-  // the curve so any post-stress noise has already settled into the boot
-  // mark snapshot. A failed read is non-fatal: the formatter renders "n/a".
-  let startupMs: number | undefined;
-  try {
-    startupMs = await invoke<number>("get_startup_elapsed_ms");
-  } catch {
-    startupMs = undefined;
-  }
+  const boot = captureBootTimings();
 
   return {
     phase: opts.phase,
@@ -80,8 +72,8 @@ async function runPhase(opts: {
     stressDurationMs,
     peakSamples,
     curve: [t0, ...restCurve],
-    boot: captureBootTimings(),
-    startupMs,
+    boot,
+    startupMs: boot.launchTotalMs,
     eventCountAtStart: opts.eventCountAtStart,
   };
 }

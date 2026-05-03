@@ -12,11 +12,12 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
-  import KanbanView from "$lib/components/kanban/KanbanView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
-  import IdleOverlay from "$lib/components/pomodoro/IdleOverlay.svelte";
-  import { mark as perfMark } from "$lib/stores/perflog.svelte";
-  import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
+  import {
+    firstMarkTime,
+    mark as perfMark,
+    setShellStartupMs,
+  } from "$lib/stores/perflog.svelte";
   import { onMount } from "svelte";
 
   perfMark("boot.script-start");
@@ -29,13 +30,65 @@
   const zoom = getZoom();
 
   let isMaximized = $state(true);
+  type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
+  type KanbanViewComponent = typeof import("$lib/components/kanban/KanbanView.svelte").default;
+  type IdleOverlayComponent = typeof import("$lib/components/pomodoro/IdleOverlay.svelte").default;
+  let BenchmarkOverlay = $state<BenchmarkOverlayComponent | null>(null);
+  let KanbanView = $state<KanbanViewComponent | null>(null);
+  let IdleOverlay = $state<IdleOverlayComponent | null>(null);
+  let loadingBenchmarkOverlay: Promise<void> | null = null;
+  let loadingKanbanView: Promise<void> | null = null;
+  let loadingIdleOverlay: Promise<void> | null = null;
+
+  function ensureBenchmarkOverlay(): Promise<void> {
+    if (BenchmarkOverlay) return Promise.resolve();
+    loadingBenchmarkOverlay ??= import("$lib/components/benchmark/BenchmarkOverlay.svelte")
+      .then((module) => {
+        BenchmarkOverlay = module.default;
+      })
+      .finally(() => {
+        loadingBenchmarkOverlay = null;
+      });
+    return loadingBenchmarkOverlay;
+  }
+
+  async function resumeBenchmarkIfNeeded(): Promise<void> {
+    const stateJson = await invoke<string | null>("read_benchmark_state");
+    if (!stateJson) return;
+    await ensureBenchmarkOverlay();
+    const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
+    await getBenchmarkRunner().checkAndResume();
+  }
+
+  function loadKanbanView(): Promise<void> {
+    if (KanbanView) return Promise.resolve();
+    loadingKanbanView ??= import("$lib/components/kanban/KanbanView.svelte")
+      .then((module) => {
+        KanbanView = module.default;
+      })
+      .finally(() => {
+        loadingKanbanView = null;
+      });
+    return loadingKanbanView;
+  }
+
+  function loadIdleOverlay(): Promise<void> {
+    if (IdleOverlay) return Promise.resolve();
+    loadingIdleOverlay ??= import("$lib/components/pomodoro/IdleOverlay.svelte")
+      .then((module) => {
+        IdleOverlay = module.default;
+      })
+      .finally(() => {
+        loadingIdleOverlay = null;
+      });
+    return loadingIdleOverlay;
+  }
+
   /**
-   * Time spent in the Tauri/WebKit shell before any JS could mark anything.
-   * Computed once when `get_startup_elapsed_ms` resolves: that IPC returns a
-   * spawn-anchored elapsed value, and `performance.now()` at the same moment
-   * is anchored to the document's time origin (which starts inside WebKit
-   * after the shell is up). The difference is the constant gap; we capture
-   * it once instead of recomputing per render.
+   * Time spent before App.svelte could emit `boot.script-start`. The Rust
+   * command is process-spawn anchored, while performance.now is anchored to
+   * the WebKit document. Adding the script-start mark produces the baseline
+   * used by the launch table and benchmark output.
    */
   let shellStartupMs = $state<number | null>(null);
 
@@ -62,7 +115,7 @@
         // sees the same shape as Phase A's.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            getBenchmarkRunner().checkAndResume().catch((e) =>
+            resumeBenchmarkIfNeeded().catch((e) =>
               console.error("benchmark resume failed:", e),
             );
           });
@@ -72,7 +125,10 @@
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));
     invoke<number>("get_startup_elapsed_ms").then((ms) => {
-      shellStartupMs = Math.max(0, Math.round(ms - performance.now()));
+      const scriptStartMs = firstMarkTime("boot.script-start") ?? 0;
+      const nextShellStartupMs = Math.max(0, Math.round(ms - performance.now() + scriptStartMs));
+      shellStartupMs = nextShellStartupMs;
+      setShellStartupMs(nextShellStartupMs);
     });
 
     // Prevent default Ctrl+scroll behavior (used for calendar zoom)
@@ -132,6 +188,14 @@
 
   const suspendInfo = $derived(pomodoro.suspendedAway);
   const idleInfo = $derived(pomodoro.idlePaused);
+
+  $effect(() => {
+    if (nav.current === "kanban") void loadKanbanView();
+  });
+
+  $effect(() => {
+    if (idleInfo) void loadIdleOverlay();
+  });
 
   function formatAwayDuration(totalSeconds: number): string {
     const hours = Math.floor(totalSeconds / 3600);
@@ -353,12 +417,15 @@
 
 <div class="h-screen w-screen" class:app-rounded={!isMaximized}>
   <div class="flex h-full flex-col overflow-hidden bg-sidebar">
-    <TitleBar {shellStartupMs} />
+    <TitleBar {shellStartupMs} {ensureBenchmarkOverlay} />
     <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />
       {:else if nav.current === "kanban"}
-        <KanbanView />
+        {#if KanbanView}
+          {@const Kanban = KanbanView}
+          <Kanban />
+        {/if}
       {/if}
     </main>
   </div>
@@ -386,13 +453,19 @@
     />
   {/if}
 
-  {#if idleInfo}
-    <IdleOverlay
+  {#if idleInfo && IdleOverlay}
+    {@const Idle = IdleOverlay}
+    <Idle
       idleSeconds={idleInfo.idleSeconds}
       nativeOverlay={idleInfo.nativeOverlay}
       onResume={() => pomodoro.dismissIdle(true)}
       onStop={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
     />
+  {/if}
+
+  {#if BenchmarkOverlay}
+    {@const Overlay = BenchmarkOverlay}
+    <Overlay />
   {/if}
 </div>
 
