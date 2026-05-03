@@ -3,7 +3,7 @@
 //! The vault is a single folder on disk that holds all user data the app
 //! produces (notes, diary, events index, settings). For now only
 //! `vault/config.json` is wired; the rest of the vault layout described in
-//! `CLAUDE.md` will land as the matching features ship.
+//! `AGENTS.md` will land as the matching features ship.
 //!
 //! Path: `app_config_dir / "vault"`. A future "vault location" setting can
 //! replace [`vault_path`] without touching callers.

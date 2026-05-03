@@ -8,28 +8,29 @@ This doc is a placeholder. Deeper design comes in a later pass.
 
 ### 1. Integrated terminal (developer path)
 
-An xterm.js terminal embedded in the app, running Claude Code with full capabilities (file editing, bash, sub-agents). The user installs Claude Code separately and provides their own API key. GanbaruAI provides:
+An xterm.js terminal embedded in the app, running Codex or another CLI coding agent with full capabilities (file editing, bash, subagents). The user installs the agent separately and signs in with their own account or API key. GanbaruAI provides:
 
-- **Context injection** via `--append-system-prompt` flags at launch, populated from the active project, current kanban tasks, recent progress, calendar events, and related notes.
+- **Context injection** through the launch prompt or standard input, populated from the active project, current kanban tasks, recent progress, calendar events, and related notes.
 - **Per-project conversation threads** persisted in SQLite. When a calendar event starts, the terminal saves the current conversation and resumes the conversation for the new event's project.
-- **Background agents** for delegated or parallel work, run as headless processes (`claude --bare -p "task" --output-format json`).
+- **Background agents** for delegated or parallel work, run through the selected agent's documented non-interactive mode. Codex uses `codex exec`.
 - **Workflow phase prompts** that adapt the agent's behavior to the current project phase (brainstorming, evaluation, planning, execution).
 
-CLAUDE.md remains as project-level conventions. Per-task context comes from GanbaruAI dynamically, not from the markdown file.
+`AGENTS.md` remains as project-level conventions. Per-task context comes from GanbaruAI dynamically, not from the markdown file.
 
 ### 2. BYOK chat widget (general-user path)
 
 A chat interface that connects to the user's chosen LLM provider. Three provider categories cover most users:
 
-- **Anthropic API** (Claude).
-- **OpenAI-compatible API** (GPT-4, Groq, Together, Mistral, and any provider using the chat completions format).
+- **OpenAI API**.
+- **OpenAI-compatible API** (Groq, Together, Mistral, and any provider using a compatible chat format).
 - **Ollama** for local models (Llama, Mistral, Gemma) running on the user's machine, no API key needed.
+- Other provider APIs when users supply their own credentials and the integration is implemented explicitly.
 
 The chat widget can read and write GanbaruAI data (calendar events, kanban tasks, notes) via the same CLI bridge the terminal uses. It cannot edit arbitrary files or run arbitrary bash commands; the developer path is the surface for those capabilities.
 
 ### 3. MCP (external clients only)
 
-GanbaruAI exposes calendar, kanban, and notes data via an MCP server for use by external AI clients (ChatGPT, Claude web, a teammate's agent on a different machine). MCP is also consumed for integrations with external systems (email, external calendars).
+GanbaruAI exposes calendar, kanban, and notes data via an MCP server for use by external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients on a different machine). MCP is also consumed for integrations with external systems (email, external calendars).
 
 MCP is **not** the path for internal agent interaction. Internal agents (the embedded terminal, background agents) use the CLI directly, which is faster, simpler, and avoids the JSON-RPC overhead.
 
@@ -43,7 +44,7 @@ ganbaruai event create --start 2026-04-20T14:00 --duration 90m --project foo
 ganbaruai progress export --to PROGRESS.md
 ```
 
-This is the bridge between AI agents and GanbaruAI's data. It works with any agent that can run a shell command (Claude Code, Cursor, custom scripts), with no plugin or MCP server required for the local case.
+This is the bridge between AI agents and GanbaruAI's data. It works with any agent that can run a shell command (Codex, Cursor, custom scripts), with no plugin or MCP server required for the local case.
 
 ## Workflow phase prompts
 
@@ -62,7 +63,7 @@ The UI shows contextual action buttons alongside the AI panel: "Plan this sprint
 
 ## Privacy and data flow
 
-- The terminal path: data flows through Claude Code, which sends prompts to Anthropic's API. The user controls what is included via the system prompt and the agent's tool use.
+- The terminal path: data flows through the selected CLI agent. With Codex's hosted models, prompts and tool output are sent to OpenAI under the user's account or API key. With local open models, data can stay on-device if the agent and model support that setup.
 - The BYOK path: data flows to whatever provider the user configured. Local providers (Ollama) keep all data on-device.
 - The MCP path: external clients receive only the data the user authorizes them to see.
 

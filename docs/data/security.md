@@ -20,7 +20,7 @@ The app does **not** attempt to defend against:
 
 ## Supply chain rules
 
-These rules are enforced globally on the developer environment and reiterated in CLAUDE.md so every contributor (and every AI agent) follows them.
+These rules are enforced globally on the developer environment and reiterated in `AGENTS.md` so every contributor (and every AI agent) follows them.
 
 **pnpm: ignore-scripts.** Lifecycle scripts (`postinstall`, etc.) are disabled by default. A package that needs a postinstall script (e.g. native bindings) must be explicitly allow-listed. This blocks the most common npm supply chain attack vector.
 
@@ -51,7 +51,7 @@ The Tauri webview itself is hardened: CSP set to disallow inline scripts and unt
 The app does not initiate any network traffic without an explicit user-configured destination:
 
 - Sync goes to the user's chosen Hocuspocus server.
-- AI calls go to the user's chosen provider (Anthropic, OpenAI-compatible, or local Ollama).
+- AI calls go to the user's chosen provider (OpenAI API, OpenAI-compatible provider, another explicitly configured provider, or local Ollama).
 - The procrastination stopper extension only talks to the local Tauri backend.
 - No update check, no crash report, no usage analytics, no font loading from CDNs, no analytics scripts in the webview.
 
@@ -61,7 +61,7 @@ A network filter (e.g. Little Snitch on macOS, an outbound firewall on Linux) sh
 
 A specific class of supply chain attack exploits the human (or AI agent) habit of copying code from Stack Overflow, GitHub issues, or blog posts without auditing it.
 
-The rule, documented in CLAUDE.md and repeated to every contributing AI agent: code from web searches is treated as potentially malicious by default. Before executing or committing any web-sourced snippet, the agent must:
+The rule, documented in `AGENTS.md` and repeated to every contributing AI agent: code from web searches is treated as potentially malicious by default. Before executing or committing any web-sourced snippet, the agent must:
 
 1. Read the snippet line by line and explain what it does.
 2. Identify any operation that touches the file system, network, environment variables, or executes subprocesses.

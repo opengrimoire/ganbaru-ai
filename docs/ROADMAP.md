@@ -150,13 +150,13 @@ The agent integration layer. The `ganbaruai` CLI and an embedded terminal bring 
 **Includes:**
 
 - `ganbaruai` CLI: Rust binary linking to the same SQLite, human-readable and JSON output, commands for projects, tasks, calendar, workspace, pomodoro, import/export
-- Integrated terminal: xterm.js embedded in Tauri webview, runs Claude Code (or any CLI agent)
-- Context injection: GanbaruAI assembles project/task context and passes it via `--append-system-prompt` at launch. CLAUDE.md stays as project-level conventions, per-task context is dynamic.
+- Integrated terminal: xterm.js embedded in Tauri webview, runs Codex or another CLI coding agent
+- Context injection: GanbaruAI assembles project/task context and passes it through the launch prompt or standard input. `AGENTS.md` stays as project-level conventions, per-task context is dynamic.
 - Session management: per-project conversation threads in SQLite, calendar-driven automatic switching (save current session, resume the session for the new calendar event's project)
 - Kanban task activation: clicking "Start" on a task injects its details into the current AI conversation
 - Workflow phase prompts: structured system prompts for brainstorming, evaluation, planning, execution modes
 - Prompt buttons: UI buttons that insert pre-built prompts into the terminal (e.g., "Plan this sprint", "Research competitors")
-- Background agents: headless Claude Code processes (`claude --bare -p`) for delegated parallel work, results as notifications or kanban updates
+- Background agents: non-interactive Codex runs (`codex exec`) or equivalent selected-agent processes for delegated parallel work, results as notifications or kanban updates
 - Markdown export/import: CLI exports project state as markdown to git repos for collaborators and agents without the CLI
 
 **Depends on:** phase 1 (SQLite, Kanban, calendar for context), phase 2 (notes for project docs)
@@ -254,13 +254,13 @@ The general-user AI path, advanced AI capabilities, and external access layer. B
 **Includes:**
 
 - BYOK chat widget: in-app chat interface with same session management as the terminal (calendar-driven switching, per-project threads)
-- LLM provider support: Anthropic API (Claude), OpenAI-compatible API (GPT-4, Groq, Together, Mistral, and any provider using the chat completions format), Ollama for local models (Llama, Mistral, Gemma, no API key needed)
+- LLM provider support: OpenAI API, OpenAI-compatible APIs (Groq, Together, Mistral, and any provider using a compatible chat format), Ollama for local models (Llama, Mistral, Gemma, no API key needed), and other explicitly supported provider APIs when users supply their own credentials
 - BYOK configuration UI: API key management (stored locally), model selection, provider setup with guided instructions, consent controls
 - Natural language calendar management: "move my 3pm session to tomorrow", AI modifies events via CLI
 - Mood-aware motivation: using diary mood/energy baselines, AI adapts communication and suggests schedule adjustments
 - Content-specific procrastination detection: LLM analyzes page content (not just URLs) for task relevance, smarter blocking on YouTube and similar platforms
 - Local LLM diary analysis: small local models (via Ollama) analyze diary language for goal-setting, reflection quality, mood trends, no data leaves the device
-- MCP server: exposes GanbaruAI data to external AI clients (ChatGPT, Claude web, teammate's agents) that don't run locally
+- MCP server: exposes GanbaruAI data to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally
 - MCP client: consumes external MCP servers for integrations (email, external calendars)
 - Firefox browser extension: port of Chrome extension to Firefox manifest
 - Edge panel global mouse trigger: rdev / Win32 / X11 polling for cursor position (replaces keyboard shortcut from phase 4), Wayland detection and graceful fallback
@@ -296,7 +296,7 @@ Every system from the product spec is accounted for:
 | Gamification (Will, skill tree, XP, contracts, badges, capsules) | 5 (deferred)  |
 | Music player (local + YouTube)                                   | 6             |
 | `ganbaruai` CLI                                                  | 7             |
-| Integrated terminal (xterm.js + Claude Code)                     | 7             |
+| Integrated terminal (xterm.js + Codex)                           | 7             |
 | AI session management (calendar-driven switching)                | 7             |
 | Context injection and workflow phase prompts                     | 7             |
 | Markdown export/import for project repos                         | 7             |
@@ -312,7 +312,7 @@ Every system from the product spec is accounted for:
 | Mobile (Tauri v2, iOS/Android)                                   | 10            |
 | Sleep alarm (mobile)                                              | 10            |
 | Procrastination stopper (mobile/app-level)                       | 10            |
-| BYOK chat widget (Anthropic, OpenAI, Ollama)                    | 11            |
+| BYOK chat widget (OpenAI, compatible APIs, Ollama)               | 11            |
 | AI: natural language calendar management                         | 11            |
 | AI: mood-aware motivation                                        | 11            |
 | AI: content-specific blocking                                    | 11            |
@@ -320,5 +320,4 @@ Every system from the product spec is accounted for:
 | MCP server/client (external AI access)                           | 11            |
 | Browser extension (Firefox)                                      | 11            |
 | NPC characters and visual novel (deferred with gamification)     | 5 (deferred)  |
-
 

@@ -173,7 +173,7 @@ The user runs their own Hocuspocus server. The app points to their server URL. R
 
 ### Vault structure on disk
 
-See the vault directory tree in CLAUDE.md for the canonical layout. Everything the app produces or manages lives in one folder called the vault, making backup and sync the same operation regardless of data type.
+See the vault directory tree in `AGENTS.md` for the canonical layout. Everything the app produces or manages lives in one folder called the vault, making backup and sync the same operation regardless of data type.
 
 ---
 
@@ -249,15 +249,15 @@ A separate SQLite database per project was also rejected: it fragments data, mak
 All of GanbaruAI's data operations are local: reading SQLite, writing SQLite, reading/writing vault files. For local operations, a CLI is strictly simpler than MCP:
 
 - **No running server.** MCP requires a persistent process listening for connections. A CLI starts, runs the query, returns the result, and exits.
-- **Zero setup.** Claude Code agents call CLI tools via Bash natively. No plugin installation, no MCP configuration, no `.mcp.json` files.
-- **Universal.** The CLI works with any AI agent (Claude Code, Cursor, Copilot), any script, any automation. MCP is specific to MCP-compatible clients.
+- **Zero setup.** Codex and other CLI agents call CLI tools via Bash natively. No plugin installation, no MCP configuration, no `.mcp.json` files.
+- **Universal.** The CLI works with any AI agent (Codex, Cursor, Copilot), any script, any automation. MCP is specific to MCP-compatible clients.
 - **No protocol overhead.** MCP adds JSON-RPC framing, capability negotiation, and connection lifecycle management. A CLI call is `ganbaruai task list`, output to stdout.
 
 MCP becomes the right choice later for features that require persistent connections: pushing real-time notifications to agents ("your calendar event starts in 5 minutes"), streaming progress updates, or bidirectional communication between the running Tauri app and an agent session. That is a post-MVP concern. For all CRUD operations and queries, the CLI is the primary interface.
 
 ### CLI design
 
-The `ganbaruai` CLI is a Rust binary that links directly to the same SQLite access layer used by the Tauri app. It reads the vault path from the app's config and operates on the same database. Output defaults to human-readable text; `--json` flag returns structured JSON for programmatic consumption by agents.
+The `ganbaruai` CLI is a Rust binary that links directly to the same SQLite access layer used by the Tauri app. It reads the vault path from the app's config and operates on the same database. Output defaults to human-readable text; JSON output mode returns structured JSON for programmatic consumption by agents.
 
 ```bash
 # Project management
@@ -352,9 +352,9 @@ This is the same model as GitHub: the issue database is the source of truth, but
 
 GanbaruAI's own development follows this exact workflow across four stages:
 
-**Stage 1 (now, pre-CLI):** PROGRESS.md, ROADMAP.md, and CLAUDE.md are hand-maintained markdown files in the repo. Claude Code agents read and write them directly. This works because markdown is the universal baseline that requires no tooling.
+**Stage 1 (now, pre-CLI):** PROGRESS.md, ROADMAP.md, and AGENTS.md are hand-maintained markdown files in the repo. Codex agents read and write them directly. This works because markdown is the universal baseline that requires no tooling.
 
-**Stage 2 (CLI exists):** GanbaruAI's project management data moves into its own database. The CLI exports PROGRESS.md to the repo automatically (via git hook or CI). Agents can use either the CLI for structured queries (`ganbaruai task list --json`) or read the exported markdown for simple context.
+**Stage 2 (CLI exists):** GanbaruAI's project management data moves into its own database. The CLI exports PROGRESS.md to the repo automatically (via git hook or CI). Agents can use either the CLI's structured output for queries or read the exported markdown for simple context.
 
 **Stage 3 (full UI):** Development sessions are calendar events with pomodoro configs and workspace settings. Starting a "GanbaruAI dev" calendar event auto-opens VS Code at the project root, switches the terminal, loads project notes, and activates the right blocker rules. The kanban tracks features and bugs across phases. Each PR links to a task.
 
@@ -500,47 +500,35 @@ All AI features are opt-in and BYOK. The app is fully functional without any AI 
 
 ### Integrated terminal (developer path)
 
-An xterm.js terminal emulator embedded in the Tauri webview. Runs Claude Code (or any CLI-based AI agent) with full capabilities: file editing, bash execution, sub-agents. This is the power-user path for developers.
+An xterm.js terminal emulator embedded in the Tauri webview. Runs Codex by default, or another CLI-based AI agent when the user chooses one. This is the power-user path for developers and supports file editing, shell commands, tests, subagents, and repository-aware workflows.
 
-xterm.js is the same terminal emulator used by VS Code. It handles color, Unicode, resize, selection, and all standard terminal behavior. The user installs Claude Code themselves and provides their own API key. GanbaruAI provides a specialized terminal that is context-aware, not a redistribution of Claude Code.
+xterm.js is the same terminal emulator used by VS Code. It handles color, Unicode, resize, selection, and all standard terminal behavior. The user installs Codex or another supported agent themselves and signs in with their own account or API key. GanbaruAI provides a specialized terminal that is context-aware, not a redistribution of any agent.
 
-**Context injection via CLI flags (not CLAUDE.md).** Per-task context is injected at launch time using Claude Code's `--append-system-prompt` flag. CLAUDE.md stays as project-level conventions (loaded automatically by Claude Code). Task-specific context comes from GanbaruAI:
+**Context injection from app state.** `AGENTS.md` stays as project-level conventions. Task-specific context comes from GanbaruAI dynamically and is passed through the launch prompt, standard input, or the selected agent's SDK.
 
 ```bash
-# User clicks "Start" on kanban task #42. GanbaruAI assembles context and launches:
-claude "Start implementing this task" \
-  --append-system-prompt "You are working on task #42: Implement auth module.
-Project: GanbaruAI. Branch: feat/auth. Priority: high.
-Related calendar event: tomorrow 10:00-12:00, pomodoro deep-work preset.
-Current kanban column: in_progress.
-Recent progress: completed task #40 (database schema), task #41 (API routes).
-Related notes: /notes/projects/ganbaruai/auth-design.md"
+# User clicks "Start" on kanban task #42.
+# GanbaruAI assembles project context and launches Codex.
+ganbaruai project context ganbaruai | codex exec "Start implementing kanban task #42"
 
-# Background agent for delegated work (headless, non-interactive):
-claude --bare -p "Research OAuth2 best practices for Tauri desktop apps" \
-  --append-system-prompt "$(ganbaruai project context ganbaruai --json)" \
-  --output-format json \
-  --allowedTools "Bash,Read,Grep"
+# Background agent for delegated work.
+ganbaruai project context ganbaruai | codex exec "Research OAuth2 best practices for Tauri desktop apps"
 
-# Workflow-specific system prompt (brainstorming phase):
-claude --append-system-prompt "You are helping the user brainstorm ideas for
-a new project. Guide them through structured prompts: write ideas, evaluate
-against criteria, combine or discard. Use web search to validate ideas.
-Write results to the project's notes directory."
+# Workflow-specific prompt for brainstorming.
+codex exec "Help brainstorm a new project. Guide structured ideation, evaluate ideas against criteria, and write results to the project notes directory."
 ```
 
-Key Claude Code flags for programmatic control:
+Key Codex capabilities for programmatic control:
 
-| Flag | Purpose |
+| Capability | Purpose |
 |---|---|
-| `--append-system-prompt` | Inject task/project context alongside CLAUDE.md rules |
-| `--system-prompt` | Replace the entire system prompt (for fully controlled agents) |
-| `-p` / `--print` | Non-interactive headless mode for background agents |
-| `--bare` | Skip auto-discovery, no hooks/skills/plugins, deterministic behavior |
-| `--agents` | Define custom sub-agent types with restricted tools |
-| `--allowedTools` | Restrict which tools an agent can use |
-| `--output-format json` | Structured output for programmatic handling |
-| `--resume` | Resume a previous session by ID |
+| `codex exec` | Run non-interactive agents from scripts, CI, or GanbaruAI background jobs |
+| Codex SDK | Control local Codex agents from an application or internal tool |
+| `AGENTS.md` | Load persistent project conventions before work starts |
+| Subagents | Delegate specialized work in parallel |
+| MCP | Connect Codex to external tools and data sources |
+| Sandbox and approval settings | Bound file system access, command execution, and automation risk |
+| JSONL output mode | Consume agent progress and results programmatically |
 
 ### Session management
 
@@ -549,8 +537,8 @@ Per-project conversation threads stored in SQLite. The calendar drives automatic
 When a calendar event starts (e.g., "Project X: auth module"), GanbaruAI:
 1. Saves the current AI session (session ID, conversation state)
 2. Checks if a previous session exists for the new event's project
-3. Resumes the previous session (`--resume <session_id>`) or starts a new one with project context
-4. Injects the current task context via `--append-system-prompt`
+3. Resumes the previous session when the selected agent supports resumable threads, or starts a new one with project context
+4. Injects the current task context through the agent launch prompt, standard input, or SDK call
 
 The user sees one AI panel that automatically carries the right conversation for whatever they're working on. Switching between four different projects in a week means four persistent conversation threads, each resuming exactly where the user left off.
 
@@ -558,13 +546,14 @@ Manual override is always available: the user can stay in the current conversati
 
 ### BYOK chat widget (general user path)
 
-A chat interface inside GanbaruAI's UI for users who don't use Claude Code. Same session management (calendar-driven switching, per-project threads) but with a web-based chat widget instead of a terminal.
+A chat interface inside GanbaruAI's UI for users who don't use the developer terminal. Same session management (calendar-driven switching, per-project threads) but with a web-based chat widget instead of a terminal.
 
-Three LLM provider categories, covering ~95% of users:
+Three LLM provider categories, covering most users:
 
-- **Anthropic API** (Claude models). Direct API integration using the Messages API.
-- **OpenAI-compatible API** (GPT-4, Groq, Together, Mistral API, and any provider implementing the OpenAI chat completions format). A single integration covers dozens of providers.
+- **OpenAI API**. Direct API integration for OpenAI-hosted models.
+- **OpenAI-compatible APIs** (Groq, Together, Mistral API, and any provider implementing a compatible chat format). A single integration covers dozens of providers.
 - **Ollama** (local models via localhost REST API). Runs Llama, Mistral, Gemma, and other open models entirely on the user's machine. No API key needed, no data leaves the device.
+- **Other provider APIs** when users supply their own credentials and the integration is implemented explicitly.
 
 Context injection works the same way as the terminal path: GanbaruAI assembles project/task context and sends it as the system prompt in API calls. The chat widget can read/write GanbaruAI data via internal Tauri commands but cannot edit arbitrary files or run bash commands.
 
@@ -583,23 +572,23 @@ These prompts are appended to the base system prompt when the user enters a proj
 
 ### Background agents
 
-Headless agents for delegated or parallel work. The user can delegate a kanban task to a background agent instead of working on it interactively.
+Non-interactive agents for delegated or parallel work. The user can delegate a kanban task to a background agent instead of working on it interactively.
 
-- Terminal path: `claude --bare -p "task" --output-format json` runs as a separate process
+- Terminal path: `codex exec` or the Codex SDK runs as a separate process or controlled local agent
 - BYOK path: direct LLM API calls from the Rust backend
 - Results appear as notifications, update kanban tasks directly, or create PRs
-- Multiple background agents can run in parallel, each with isolated context via flags
+- Multiple background agents can run in parallel, each with isolated context from GanbaruAI's prompt builder
 
 ### CLI as the live data bridge
 
-The `ganbaruai` CLI (detailed in the "CLI for agent integration" section above) serves as the bridge between AI agents and GanbaruAI's data. Inside the integrated terminal, Claude Code calls `ganbaruai task list`, `ganbaruai calendar today`, etc. to query live data. Background agents use the CLI for structured queries (`--json` output). The CLI is also available to any external script or automation.
+The `ganbaruai` CLI (detailed in the "CLI for agent integration" section above) serves as the bridge between AI agents and GanbaruAI's data. Inside the integrated terminal, Codex calls `ganbaruai task list`, `ganbaruai calendar today`, etc. to query live data. Background agents use the CLI for structured queries. The CLI is also available to any external script or automation.
 
 ### MCP (external access only)
 
-MCP is reserved for a single use case: letting external AI clients that don't run locally access GanbaruAI's data. This includes ChatGPT plugins, Claude web, a teammate's AI assistant, or any MCP-compatible client that connects remotely.
+MCP is reserved for a single use case: letting external AI clients that don't run locally access GanbaruAI's data. This includes ChatGPT, teammate agents, or any MCP-compatible client that connects remotely.
 
 MCP is not used for:
-- How Claude Code interacts with GanbaruAI (that's the CLI)
+- How Codex interacts with GanbaruAI (that's the CLI)
 - How the integrated terminal works (that's direct process spawning)
 - How the BYOK chat widget works (that's direct API calls)
 
@@ -653,8 +642,8 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | PDF generation            | Typst                                                | Rust-native typesetting, structured data → high-quality PDF reports                |
 | PDF reading               | `pdfium-render`                                      | Google PDFium Rust bindings for text extraction and page rendering                 |
 | Visual novel layer (deferred) | Custom Svelte components                         | JSON-driven dialogue state machine, NPC interactions in project management         |
-| Integrated terminal       | xterm.js                                             | Embedded terminal for Claude Code, context injection, session management           |
-| BYOK chat widget          | Anthropic / OpenAI-compatible / Ollama APIs          | In-app AI chat for non-developer users, same session management as terminal        |
+| Integrated terminal       | xterm.js                                             | Embedded terminal for Codex or another CLI coding agent, context injection, session management |
+| BYOK chat widget          | OpenAI / OpenAI-compatible / Ollama APIs             | In-app AI chat for non-developer users, same session management as terminal        |
 | Mobile alarm              | iOS `UNNotificationRequest` / Android `AlarmManager` | Sleep alarm triggering diary flows and morning routines                            |
 | Mobile app blocking       | iOS Screen Time API / Android UsageStatsManager      | App-level blocking during focus times within platform sandbox constraints          |
 | Agent integration (CRUD)  | `ganbaruai` CLI (Rust)                               | Direct SQLite access, no server, works with any agent/script                       |

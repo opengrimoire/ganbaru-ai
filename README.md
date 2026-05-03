@@ -31,7 +31,7 @@ Anti-procrastination project manager for life and work. Free, local, open-source
 | **Work environments** | Saved configs per session block: apps to open/close, browser tabs, playlist, blocker rules. Auto-activated by the calendar | Planned |
 | **Edge panel** | Always-on-top sidebar with live pomodoro timer, quick-add tasks, music controls, active environment name | Planned |
 | **Music player** | Local file playback (Symphonia/FFmpeg), YouTube via IFrame API, playlists tied to session blocks and environments | Planned |
-| **AI panel** | Embedded terminal (xterm.js) for Claude Code, BYOK chat widget (Anthropic, OpenAI-compatible, Ollama), calendar-driven session switching, context injection from app state | Planned |
+| **AI panel** | Embedded terminal (xterm.js) for Codex or another CLI coding agent, BYOK chat widget (OpenAI API, OpenAI-compatible providers, Ollama), calendar-driven session switching, context injection from app state | Planned |
 | **Project management** | Lifecycle templates (brainstorming, evaluation, planning, execution), requirement version control, date cascade, report generation | Planned |
 | **Sync** | Yjs CRDTs with self-hosted Hocuspocus server, E2E encryption, collaborative workspaces with live presence | Planned |
 | **Mobile** | Tauri v2 Android and iOS builds, sleep alarm with diary integration, notification-based pomodoro | Planned |

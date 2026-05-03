@@ -137,17 +137,17 @@ Design principle: minimize clicks. Every action reachable from the edge panel sh
 
 ### Integrated AI panel
 
-The AI panel is GanbaruAI's conversational interface for working with AI assistants. It appears as a panel in the app, supporting two modes: an embedded terminal running Claude Code (developer path) and a chat widget connecting to BYOK LLM providers (general user path). All AI features are opt-in. The app is fully functional without any AI.
+The AI panel is GanbaruAI's conversational interface for working with AI assistants. It appears as a panel in the app, supporting two modes: an embedded terminal running Codex or another CLI coding agent (developer path) and a chat widget connecting to BYOK LLM providers (general user path). All AI features are opt-in. The app is fully functional without any AI.
 
 **One conversation per project, calendar-driven switching.** Each project has its own persistent conversation thread stored in SQLite. When a calendar event starts, the AI panel automatically saves the current conversation and resumes (or starts) the conversation for the new event's project. A developer working on four different projects in a week has four conversation threads, each resuming exactly where they left off. Manual override is always available.
 
-**Context injection from app state.** When a session starts or switches, GanbaruAI assembles context from the active project, current kanban tasks, recent progress, calendar events, and related notes. For the terminal, context is injected via `--append-system-prompt` flags at launch. For the chat widget, context is sent as the system prompt in API calls. CLAUDE.md stays as project-level conventions; per-task context comes from GanbaruAI dynamically.
+**Context injection from app state.** When a session starts or switches, GanbaruAI assembles context from the active project, current kanban tasks, recent progress, calendar events, and related notes. For the terminal, context is passed through the launch prompt or standard input, depending on the selected agent. For the chat widget, context is sent as the system prompt in API calls. `AGENTS.md` stays as project-level conventions; per-task context comes from GanbaruAI dynamically.
 
 **Kanban task activation.** Clicking "Start" on a kanban task injects that task's details (title, description, priority, branch, related calendar events, related notes) into the current AI conversation. The agent immediately knows what the user is working on without any explanation needed.
 
-**Developer path (Claude Code terminal):** an xterm.js terminal emulator running Claude Code with full capabilities (file editing, bash, sub-agents). The user installs Claude Code themselves and provides their own API key. GanbaruAI provides context injection, session management, and workflow prompt buttons. Background agents run as headless processes (`claude --bare -p "task" --output-format json`) for delegated or parallel work.
+**Developer path (Codex terminal):** an xterm.js terminal emulator running Codex or another CLI coding agent with full capabilities (file editing, bash, subagents). The user installs the agent themselves and signs in with their own account or API key. GanbaruAI provides context injection, session management, and workflow prompt buttons. Background agents run through the selected agent's documented non-interactive mode, with `codex exec` as the default target for Codex.
 
-**General user path (BYOK chat widget):** a chat interface connecting to the user's chosen LLM provider. Three provider categories cover ~95% of users: Anthropic API (Claude), OpenAI-compatible API (GPT-4, Groq, Together, Mistral, and any provider using the chat completions format), and Ollama for local models (Llama, Mistral, Gemma, running entirely on the user's machine with no API key needed). The chat widget can read/write GanbaruAI data but cannot edit arbitrary files or run bash commands.
+**General user path (BYOK chat widget):** a chat interface connecting to the user's chosen LLM provider. Three provider categories cover most users: OpenAI API, OpenAI-compatible APIs (Groq, Together, Mistral, and any provider using a compatible chat format), and Ollama for local models (Llama, Mistral, Gemma, running entirely on the user's machine with no API key needed). Other provider APIs can be added when users supply their own credentials. The chat widget can read/write GanbaruAI data but cannot edit arbitrary files or run bash commands.
 
 **Workflow phase prompts.** Each project management phase has a structured system prompt that adapts the AI's behavior: brainstorming mode guides structured ideation, evaluation mode helps assess ideas against Want/Can/Need criteria, planning mode assists with specifications and resource estimation, execution mode helps with implementation and blockers. These prompts work with both the terminal and the chat widget. One general agent per project carries context across all phases.
 
@@ -347,7 +347,7 @@ The AI can create and modify calendar events via the CLI: scheduling work sessio
 
 ### AI panel → Notes
 
-The AI can read and write project notes. In the terminal path, Claude Code edits markdown files directly. In the BYOK chat path, the AI can read notes for context and suggest content.
+The AI can read and write project notes. In the terminal path, Codex or another CLI coding agent edits markdown files directly. In the BYOK chat path, the AI can read notes for context and suggest content.
 
 ### AI panel → Project management
 
@@ -372,7 +372,7 @@ When a project is a software repository, GanbaruAI bridges its internal data wit
 - **Calendar events** for the project carry pomodoro presets, music, blocker rules, and workspace settings. Starting a calendar event for "Project X" auto-opens the right browser tabs, switches the terminal to the project directory, loads the project's notes, and activates the project's kanban board.
 - **Kanban tasks** are the live task layer. The kanban tab auto-switches based on the active calendar event's project. Agents and collaborators see the same tasks.
 - **The `ganbaruai` CLI** exports project state as markdown into the git repository (PROGRESS.md, KANBAN.md). This makes project context available to collaborators who don't use GanbaruAI and to AI agents that read the repo natively. The export is a view of the database, not the source of truth. Changes made to the exported markdown (by agents or humans) can be imported back.
-- **AI agents** interact with GanbaruAI via the CLI: querying tasks, creating calendar events, updating progress. This works with any agent (Claude Code, Cursor, etc.) via standard Bash calls, with no MCP server or plugin required.
+- **AI agents** interact with GanbaruAI via the CLI: querying tasks, creating calendar events, updating progress. This works with Codex, Cursor, and any agent that can run shell commands, with no MCP server or plugin required.
 
 The data split: documents (notes, diary, project docs) are markdown files on disk. Structured data (events, tasks, workspace configs) is SQLite. The CLI bridges the two worlds. See TECH_STACK.md for the full technical rationale.
 
@@ -400,7 +400,7 @@ The integrated AI panel (terminal and BYOK chat) provides the foundation. These 
 
 **Local LLM diary analysis:** small local models (via Ollama) analyze diary language for goal-setting patterns, reflection quality, and mood trends without any API calls or data leaving the device.
 
-**MCP for external access:** exposes GanbaruAI's data (calendar, tasks, notes) to external AI clients (ChatGPT, Claude web, teammate's agents) that don't run locally. Also consumes external MCP servers for integrations (email, external calendars). MCP is not used for internal agent interaction; that's handled by the CLI and direct process spawning.
+**MCP for external access:** exposes GanbaruAI's data (calendar, tasks, notes) to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally. Also consumes external MCP servers for integrations (email, external calendars). MCP is not used for internal agent interaction; that's handled by the CLI and direct process spawning.
 
 ---
 
