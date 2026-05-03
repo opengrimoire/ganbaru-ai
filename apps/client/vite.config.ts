@@ -5,6 +5,32 @@ import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
 
+function chunkNameForModule(id: string): string | undefined {
+  const moduleId = id.replaceAll("\\", "/");
+  if (!moduleId.includes("node_modules")) return undefined;
+
+  if (moduleId.includes("/node_modules/svelte/") || moduleId.includes("/node_modules/esm-env/")) {
+    return "vendor-svelte";
+  }
+  if (
+    moduleId.includes("/node_modules/@js-temporal/polyfill/") ||
+    moduleId.includes("/node_modules/jsbi/")
+  ) {
+    return "vendor-temporal";
+  }
+  if (moduleId.includes("/node_modules/ical.js/")) {
+    return "vendor-ical";
+  }
+  if (moduleId.includes("/node_modules/@tauri-apps/")) {
+    return "vendor-tauri";
+  }
+  if (moduleId.includes("/node_modules/@lucide/svelte/")) {
+    return "vendor-icons";
+  }
+
+  return "vendor";
+}
+
 /**
  * Skip Svelte component style virtuals (`?svelte&type=style&lang.css`) in
  * Tailwind's transform. None of the project's `<style>` blocks use Tailwind
@@ -35,6 +61,13 @@ export default defineConfig({
     },
   },
   clearScreen: false,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: chunkNameForModule,
+      },
+    },
+  },
   server: {
     port: 1420,
     strictPort: true,
