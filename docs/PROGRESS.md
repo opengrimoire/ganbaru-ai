@@ -20,6 +20,8 @@ Phase 1: core loop (wrapping up)
 
 - Monorepo scaffold (Turborepo + pnpm workspaces + Cargo workspace)
 - Tauri v2 + Svelte 5 + Vite app shell with tab navigation
+- Production build chunking groups Svelte, Tauri, Temporal, ical.js, lucide, and remaining vendor modules into stable Rollup chunks so `pnpm tauri build` avoids Svelte runtime circular chunk warnings and keeps the largest minified JS chunk below Rollup's 500 kB warning threshold.
+- Development Node policy recommends Node 24 LTS through `.nvmrc` and `.node-version` while accepting Node 22.12.0 or newer via `package.json` engines; Node remains a build-time tool only and is not bundled with Tauri installers.
 - shadcn-svelte + Tailwind CSS v4, custom neutral gray theme (dark + light), custom title bar
 - shared-types package
 - SQLite schema with migrations (calendar_events, pomodoro_sessions, pomodoro_configs, pomodoro_segments, tasks, calendars, attendees, alarms, overrides)

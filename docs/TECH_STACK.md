@@ -68,6 +68,8 @@ The build tool. Default bundler in the Tauri + Svelte scaffold. Handles HMR duri
 
 The package manager. Chosen over npm and yarn for strict dependency isolation (no phantom dependencies, meaning packages can only import what they explicitly declare), disk efficiency via content-addressable storage (shared dependencies are linked, not duplicated across workspaces), and first-class workspace support that Turborepo builds on top of.
 
+Development uses Node.js for the Svelte, Vite, TypeScript, Tailwind, Vitest, pnpm, and Tauri CLI toolchain only. Node is not bundled with the shipped Tauri app. Node 24 LTS is the recommended local version through `.nvmrc` and `.node-version`; the package engine accepts Node 22.12.0 or newer on the Node 22 LTS line while it remains maintained.
+
 ### Turborepo
 
 The monorepo task runner. Sits on top of pnpm workspaces and handles build orchestration, task dependency resolution, and local/remote build caching across all packages. When iterating on the Svelte frontend without touching the media player package, Turborepo skips the media player build entirely via cache. Task dependencies are declared in `turbo.json`. For example, the Tauri app's `build` task depends on the media player npm package being built first, and Turborepo ensures the correct execution order and parallelization.

@@ -43,7 +43,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phased development plan.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) >= 22
+- [Node.js](https://nodejs.org/) 24 LTS recommended. Node 22.12.0 or newer is also supported while Node 22 remains maintained.
 - [pnpm](https://pnpm.io/) >= 10
 - [Rust](https://rustup.rs/) (stable)
 - Tauri v2 system dependencies for your platform: [v2.tauri.app/start/prerequisites](https://v2.tauri.app/start/prerequisites/)
