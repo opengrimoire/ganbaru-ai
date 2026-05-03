@@ -18,6 +18,7 @@
     mark as perfMark,
     setShellStartupMs,
   } from "$lib/stores/perflog.svelte";
+  import type { MemoryReport, StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
   import { onMount } from "svelte";
 
   perfMark("boot.script-start");
@@ -91,6 +92,7 @@
    * used by the launch table and benchmark output.
    */
   let shellStartupMs = $state<number | null>(null);
+  let startupMemorySnapshot = $state<StartupMemorySnapshot>({ status: "pending" });
 
   onMount(() => {
     perfMark("boot.app-mount");
@@ -130,6 +132,18 @@
       shellStartupMs = nextShellStartupMs;
       setShellStartupMs(nextShellStartupMs);
     });
+    const startupMemoryTimerId = setTimeout(() => {
+      invoke<MemoryReport>("get_memory_report")
+        .then((report) => {
+          startupMemorySnapshot = { status: "ready", report };
+        })
+        .catch((e) => {
+          startupMemorySnapshot = {
+            status: "failed",
+            message: e instanceof Error ? e.message : String(e),
+          };
+        });
+    }, 10_000);
 
     // Prevent default Ctrl+scroll behavior (used for calendar zoom)
     const blockCtrlWheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
@@ -157,6 +171,7 @@
       document.removeEventListener("wheel", blockCtrlWheel, { capture: true });
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", checkZone);
+      clearTimeout(startupMemoryTimerId);
       clearInterval(zoneIntervalId);
     };
   });
@@ -417,7 +432,7 @@
 
 <div class="h-screen w-screen" class:app-rounded={!isMaximized}>
   <div class="flex h-full flex-col overflow-hidden bg-sidebar">
-    <TitleBar {shellStartupMs} {ensureBenchmarkOverlay} />
+    <TitleBar {shellStartupMs} {startupMemorySnapshot} {ensureBenchmarkOverlay} />
     <main class="content-panel mx-3 mb-3 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />

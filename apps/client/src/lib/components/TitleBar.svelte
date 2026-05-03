@@ -21,12 +21,15 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
 
   let {
     shellStartupMs = null,
+    startupMemorySnapshot = { status: "pending" },
     ensureBenchmarkOverlay = async () => {},
   }: {
     shellStartupMs: number | null;
+    startupMemorySnapshot: StartupMemorySnapshot;
     ensureBenchmarkOverlay?: () => Promise<void>;
   } = $props();
 
@@ -394,6 +397,7 @@
           {@const Popover = PerformancePopover}
           <Popover
             {shellStartupMs}
+            {startupMemorySnapshot}
             pinned={perfPinned}
             onPinnedChange={(nextPinned: boolean) => { perfPinned = nextPinned; }}
             {ensureBenchmarkOverlay}

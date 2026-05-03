@@ -13,25 +13,17 @@
   import MemoryChart from "$lib/components/perf/MemoryChart.svelte";
   import type { MemorySample } from "$lib/components/perf/memorySamples";
   import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCSV } from "$lib/components/perf/memorySamples";
-
-  interface ProcessMemory {
-    name: string;
-    mb: number;
-  }
-
-  interface MemoryReport {
-    processes: ProcessMemory[];
-    total_mb: number;
-    platform: string;
-  }
+  import type { MemoryReport, StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
 
   let {
     shellStartupMs = null,
+    startupMemorySnapshot = { status: "pending" },
     pinned = false,
     onPinnedChange = () => {},
     ensureBenchmarkOverlay = async () => {},
   }: {
     shellStartupMs: number | null;
+    startupMemorySnapshot: StartupMemorySnapshot;
     pinned: boolean;
     onPinnedChange: (pinned: boolean) => void;
     ensureBenchmarkOverlay?: () => Promise<void>;
@@ -51,14 +43,12 @@
   let pollIndex = 0;
 
   let liveReport = $state<MemoryReport | null>(null);
-  let snapshotReport = $state<MemoryReport | null>(null);
-  let snapshotReady = $state(false);
   let chartHoverSample = $state<MemorySample | null>(null);
 
   const displayReport = $derived.by<MemoryReport | null>(() => {
     // While the user is hovering the live trend chart, the per-process panel
     // mirrors the hovered sample so we do not have to draw a duplicate
-    // tooltip below the plot. Falls back to live or snapshot otherwise.
+    // tooltip below the plot. Falls back to live or startup snapshot otherwise.
     if (perfLive && chartHoverSample && liveReport) {
       return {
         processes: chartHoverSample.processes.map((p) => ({ name: p.name, mb: p.mb })),
@@ -66,7 +56,8 @@
         platform: liveReport.platform,
       };
     }
-    return perfLive ? liveReport : snapshotReport;
+    if (perfLive) return liveReport;
+    return startupMemorySnapshot.status === "ready" ? startupMemorySnapshot.report : null;
   });
 
   // Recolor the numbers while hovering so the user can tell at a glance the
@@ -90,24 +81,6 @@
     update();
     const id = setInterval(update, SAMPLE_INTERVAL_MS);
     return () => clearInterval(id);
-  });
-
-  let snapshotCountdown = $state(10);
-
-  $effect(() => {
-    const tick = setInterval(() => {
-      if (snapshotCountdown > 0) snapshotCountdown--;
-    }, 1000);
-    const timer = setTimeout(() => {
-      invoke<MemoryReport>("get_memory_report").then((r) => {
-        snapshotReport = r;
-        snapshotReady = true;
-      });
-    }, 10000);
-    return () => {
-      clearInterval(tick);
-      clearTimeout(timer);
-    };
   });
 
   let launchExpanded = $state(false);
@@ -255,9 +228,12 @@
     copyToClipboard("live-ram", ramReportLines(liveReport, "Live RAM").join("\n"));
   }
 
-  function copySnapshotRam() {
-    if (!snapshotReport) return;
-    copyToClipboard("snapshot-ram", ramReportLines(snapshotReport, "RAM snapshot (10s)").join("\n"));
+  function copyStartupRam() {
+    if (startupMemorySnapshot.status !== "ready") return;
+    copyToClipboard(
+      "startup-ram",
+      ramReportLines(startupMemorySnapshot.report, "Startup RAM snapshot (10s)").join("\n"),
+    );
   }
 
   function copyChart() {
@@ -311,7 +287,7 @@
           "transition-colors",
           !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
         )}
-      >RAM SNAPSHOT (10s)</button>
+      >STARTUP RAM (10s)</button>
     </div>
     <button
       onclick={() => onPinnedChange(!pinned)}
@@ -329,8 +305,10 @@
     </button>
   </div>
 
-  {#if !perfLive && !snapshotReady}
-    <div class="mt-2 text-xs text-muted-foreground">Snapshot in {snapshotCountdown}s...</div>
+  {#if !perfLive && startupMemorySnapshot.status === "pending"}
+    <div class="mt-2 text-xs text-muted-foreground">Startup snapshot pending...</div>
+  {:else if !perfLive && startupMemorySnapshot.status === "failed"}
+    <div class="mt-2 text-xs text-muted-foreground">Startup snapshot unavailable.</div>
   {:else if displayReport && displayReport.processes.length > 0}
     <div class="mt-2 space-y-1.5">
       {#each displayReport.processes as proc}
@@ -383,17 +361,17 @@
         {/if}
       </button>
     </div>
-  {:else if snapshotReady}
+  {:else if startupMemorySnapshot.status === "ready"}
     <button
-      onclick={copySnapshotRam}
+      onclick={copyStartupRam}
       class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
     >
-      {#if copiedId === "snapshot-ram"}
+      {#if copiedId === "startup-ram"}
         <Check size={11} />
         Copied
       {:else}
         <Copy size={11} />
-        Copy snapshot ram
+        Copy startup ram
       {/if}
     </button>
   {/if}

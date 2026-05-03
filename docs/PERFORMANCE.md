@@ -56,7 +56,7 @@ EXDATE, RDATE, COUNT, and UNTIL semantics are preserved: the loop body that foll
 
 ## How to read performance data
 
-Click the gauge icon in the title bar to open the performance panel. The panel is lazy-loaded, and memory polling starts only while it is mounted. It shows a per-process memory breakdown (updated every 5 seconds), a 10-second snapshot timer that starts when the panel opens, and the startup time captured when the app launched. The copy buttons export each block as plain text.
+Click the gauge icon in the title bar to open the performance panel. The panel is lazy-loaded, and live memory polling starts only while it is mounted. The app also captures one lightweight startup RAM snapshot 10 seconds after launch, before the diagnostics panel needs to be opened, so the panel can copy release-build startup numbers without terminal commands. The copy buttons export each block as plain text.
 
 ## Memory measurement
 
