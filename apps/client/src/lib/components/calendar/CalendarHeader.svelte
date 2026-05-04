@@ -406,7 +406,7 @@
     {#each viewOptions as opt}
       <button
         onclick={() => onViewChange(opt.mode)}
-        class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {viewMode === opt.mode
+        class="rounded-md px-2.5 py-1 text-xs font-medium {viewMode === opt.mode
           ? 'bg-card text-card-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
         title="{opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1)} view ('{opt.shortcut.toLowerCase()}' key)"

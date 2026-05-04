@@ -10,6 +10,7 @@ export type EditSessionState =
       originalEvent: CalendarEvent;
       instanceEvent: CalendarEvent;
       templateId: string;
+      detailsLoaded: boolean;
       anchor: PanelAnchor;
     };
 
@@ -112,6 +113,7 @@ export function createEditSession() {
       event: CalendarEvent,
       anchor: PanelAnchor,
       instanceEvent?: CalendarEvent,
+      detailsLoaded = false,
     ) {
       const templateId = event.recurringParentId ?? event.id;
       state = {
@@ -119,6 +121,7 @@ export function createEditSession() {
         originalEvent: { ...event },
         instanceEvent: instanceEvent ? { ...instanceEvent } : { ...event },
         templateId,
+        detailsLoaded,
         anchor,
       };
       changes = {};

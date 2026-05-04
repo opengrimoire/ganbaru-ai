@@ -146,13 +146,13 @@
   <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
       disabled={readOnly}
-      class="flex w-9 shrink-0 items-center justify-center transition-colors
+      class="flex w-9 shrink-0 items-center justify-center
         {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
       <Users size={13} />
     </button>
     <button onclick={onexpand}
       disabled={readOnly}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors">
+      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
       <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
       {#if enabled && summary}
         <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
@@ -198,7 +198,7 @@
                 { icon: Eye, label: "See list", title: "See guest list", get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; onchange(); } },
               ] as perm}
                 <button onclick={() => perm.set(!perm.get())} title={perm.title}
-                  class="flex items-center gap-1 rounded px-1 py-0.5 transition-colors active:scale-95
+                  class="flex items-center gap-1 rounded px-1 py-0.5 active:scale-95
                     {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
                   <perm.icon size={11} strokeWidth={2} />
                   <span class="text-[9px]">{perm.label}</span>
@@ -250,12 +250,12 @@
                 {#if !readOnly}
                   <div class="flex shrink-0 items-center gap-0.5">
                     <button onclick={() => toggleAttendeeOptional(att.id)}
-                      class="rounded p-0.5 transition-all active:scale-75
+                      class="rounded p-0.5 active:scale-75
                         {att.role === 'opt-participant' ? 'text-muted-foreground/40' : 'text-foreground'}">
                       <Flag size={11} />
                     </button>
                     <button onclick={() => removeAttendee(att.id)}
-                      class="rounded p-0.5 text-muted-foreground transition-all active:scale-75 hover:text-destructive">
+                      class="rounded p-0.5 text-muted-foreground active:scale-75 hover:text-destructive">
                       <X size={11} />
                     </button>
                   </div>
@@ -278,7 +278,7 @@
               }} />
             {#if attendeeInput.trim()}
               <button onclick={addAttendee}
-                class="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground">
+                class="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground">
                 <Plus size={11} />
               </button>
             {/if}
@@ -290,9 +290,6 @@
 </div>
 
 <style>
-  .section-header {
-    transition: background-color 180ms ease-out;
-  }
   .scrollbar-thin {
     scrollbar-width: thin;
   }

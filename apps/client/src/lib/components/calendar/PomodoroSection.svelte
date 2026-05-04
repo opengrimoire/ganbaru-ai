@@ -58,12 +58,12 @@
 <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(e); }}
-      class="flex w-9 shrink-0 items-center justify-center transition-colors
+      class="flex w-9 shrink-0 items-center justify-center
         {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
       <Timer size={13} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors">
+      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
       <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
     </button>
@@ -73,7 +73,7 @@
       {#each Object.entries(POMO_PRESETS) as [key, val]}
         <button
           onclick={() => applyPreset(key as PomodoroPreset)}
-          class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px] transition-all
+          class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px]
             {preset === key
               ? 'bg-black/5 dark:bg-black/15 text-foreground'
               : 'text-foreground'}"
@@ -84,7 +84,7 @@
       {/each}
       <button
         onclick={() => applyPreset("custom")}
-        class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px] transition-all
+        class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px]
           {preset === 'custom'
             ? 'bg-black/5 dark:bg-black/15 text-foreground'
             : 'text-foreground'}"
@@ -125,9 +125,6 @@
 </div>
 
 <style>
-  .section-header {
-    transition: background-color 180ms ease-out;
-  }
   .num-input {
     -moz-appearance: textfield;
     appearance: textfield;

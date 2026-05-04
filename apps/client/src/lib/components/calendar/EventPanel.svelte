@@ -44,6 +44,7 @@
     anchor,
     initialAllDay = false,
     externalDirty = false,
+    detailsLoaded = false,
     readOnly = false,
     skipInlineDeleteConfirm = false,
     loadFullEvent,
@@ -61,13 +62,13 @@
     anchor: { x: number; y: number; width: number; height: number };
     initialAllDay?: boolean;
     externalDirty?: boolean;
+    detailsLoaded?: boolean;
     readOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
     /**
      * Fetches the full DB row (heavy fields like description, attendees,
-     * organizer) for an event id. The boot path keeps a slim subset in
-     * memory so the panel header can paint instantly; this loads the rest
-     * asynchronously and the heavy sections gate on its arrival.
+     * organizer) for an event id. Used as a fallback when edit mode receives
+     * a slim event. Normal edit opens preload details before mounting.
      */
     loadFullEvent?: (id: string) => Promise<CalendarEvent | undefined>;
     onSave: (data: {
@@ -341,14 +342,13 @@
   );
 
   // ─── Initialization ─────────────────────────────────────────────
-  // Two-phase init in edit mode: the slim event prop carries enough to paint
-  // the header (title, time, color, recurrence, pomodoro, notifications)
-  // synchronously on the same frame as the open click; heavy fields
-  // (description, url, attendees, organizer, geo, guestPermissions,
-  // visibility) arrive when `fullEvent` resolves a few ms later and the
-  // gated sections render.
+  // Edit mode normally receives a full event row preloaded by CalendarView,
+  // so the panel paints meeting details, visibility, and description in its
+  // first stable render. The async `loadFullEvent` path remains as a fallback
+  // for callers that still hand over a slim event.
   let lastInitKey = "";
   let lastFullKey = "";
+  let initialized = $state(false);
   let fullEvent = $state<CalendarEvent | null>(null);
 
   // Trigger the heavy-field fetch whenever a different event opens. The
@@ -356,7 +356,7 @@
   // for an event the user already navigated away from can't clobber the
   // current panel.
   $effect(() => {
-    if (mode !== "edit" || !event?.id || !loadFullEvent) {
+    if (mode !== "edit" || !event?.id || detailsLoaded || !loadFullEvent) {
       fullEvent = null;
       lastFullKey = "";
       return;
@@ -377,6 +377,7 @@
     const key = mode === "edit" ? (event?.id ?? "") : "create";
     if (key === lastInitKey) return;
     lastInitKey = key;
+    initialized = false;
 
     if (mode === "edit" && event) {
       title = event.title;
@@ -393,22 +394,17 @@
       transparency = event.transparency ?? "opaque";
       eventStatus = event.status ?? "confirmed";
       rdate = event.rdate;
-      // Heavy fields default to empty until loadFullEvent resolves; the
-      // sections that render them are gated below so the user cannot edit
-      // them in this window.
-      description = "";
-      eventUrl = "";
-      visibility = "public";
-      organizer = undefined;
-      attendees = [];
-      guestCanModify = false;
-      guestCanInviteOthers = true;
-      guestCanSeeOtherGuests = true;
-      geo = undefined;
-      // Best guess until heavy fields arrive: the slim event keeps location,
-      // so a location-only meeting still shows. Attendees and url flip the
-      // flag in the heavy-init effect once they're loaded.
-      meetingEnabled = !!event.location;
+      description = event.description ?? "";
+      eventUrl = event.url ?? "";
+      visibility = event.visibility ?? "public";
+      organizer = event.organizer;
+      attendees = event.attendees ? [...event.attendees] : [];
+      guestCanModify = event.guestPermissions?.canModify ?? false;
+      guestCanInviteOthers = event.guestPermissions?.canInviteOthers ?? true;
+      guestCanSeeOtherGuests = event.guestPermissions?.canSeeOtherGuests ?? true;
+      geo = event.geo;
+      meetingEnabled = !!(event.attendees && event.attendees.length > 0)
+        || !!event.location || !!event.url;
 
       const pc = event.pomodoroConfig;
       pomodoroEnabled = !!pc;
@@ -496,6 +492,7 @@
     // clean session, and the panel can be closed silently (no "Discard
     // unsaved changes?" prompt).
     (onInitialSync ?? onChange)?.(buildChangesPayload());
+    initialized = true;
   });
 
   // Heavy-field init: runs once per fullEvent arrival. The setInitialChanges
@@ -506,7 +503,7 @@
   // their state is safe.
   let lastHeavyAppliedKey = "";
   $effect(() => {
-    if (!fullEvent) return;
+    if (detailsLoaded || !fullEvent) return;
     if (mode !== "edit") return;
     if (fullEvent.id === lastHeavyAppliedKey) return;
     lastHeavyAppliedKey = fullEvent.id;
@@ -839,7 +836,7 @@
   bind:this={panelEl}
   class="panel-root flex flex-col"
   data-readonly={readOnly || undefined}
-  style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {panelStyle} background-color: var(--panel-bg);"
+  style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {panelStyle} background-color: var(--panel-bg); visibility: {initialized ? 'visible' : 'hidden'};"
   onclick={handlePanelClick}
 >
   <!-- Drag handle bar with close button -->
@@ -865,7 +862,7 @@
         {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl]}
           <button
             onclick={() => handleScopeClick(val as RecurringScope)}
-            class="flex-1 rounded px-2 py-1 text-[10px] font-medium transition-all
+            class="flex-1 rounded px-2 py-1 text-[10px] font-medium
               {scope === val
                 ? 'bg-action-confirm text-action-confirm-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'}"
@@ -899,7 +896,7 @@
       <!-- Start date (left) -->
       <div class="relative z-[1] shrink-0">
         <button onclick={toggleDatepicker}
-          class="rounded py-1 transition-colors text-event-panel-input-text
+          class="rounded py-1 text-event-panel-input-text
             {readOnly ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
         </button>
@@ -927,7 +924,7 @@
           onclick={() => openTimePicker("start")}
           disabled={readOnly}
           maxlength={5} placeholder="HH:MM"
-          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-event-panel-input-text
+          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
             {readOnly ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
         <span class="text-muted-foreground/60">&ndash;</span>
@@ -936,7 +933,7 @@
           onclick={() => openTimePicker("end")}
           disabled={readOnly}
           maxlength={5} placeholder="HH:MM"
-          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none transition-colors text-event-panel-input-text
+          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
             {readOnly ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
 
@@ -962,7 +959,7 @@
       <!-- End date (right) -->
       <div class="relative z-[1] shrink-0">
         <button onclick={toggleEndDatepicker}
-          class="rounded py-1 transition-colors text-event-panel-input-text
+          class="rounded py-1 text-event-panel-input-text
             {readOnly ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
         </button>
@@ -1016,7 +1013,7 @@
           emitChange();
         }}
         disabled={readOnly}
-        class="flex items-center gap-1 rounded-none px-2 py-2 transition-colors
+        class="flex items-center gap-1 rounded-none px-2 py-2
           {allDay ? 'bg-black/5 dark:bg-black/15 text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
         title="All day"
       >
@@ -1029,7 +1026,7 @@
         <button
           onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1 rounded-none px-2 py-2 transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-none px-2 py-2 hover:bg-black/5 dark:hover:bg-black/15
             {showAsPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Show as"
         >
@@ -1044,7 +1041,7 @@
             {#each (["opaque", "transparent"] as const) as t}
               <button
                 onclick={() => { transparency = t; showAsPicker = false; emitChange(); }}
-                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] hover:bg-black/5 dark:hover:bg-black/15
                   {transparency === t ? 'text-foreground font-medium' : 'text-muted-foreground'}"
               >{t === "opaque" ? "Busy" : "Free"}</button>
             {/each}
@@ -1057,7 +1054,7 @@
         <button
           onclick={() => { statusPicker = !statusPicker; showAsPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={readOnly}
-          class="flex items-center gap-1 rounded-none px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+          class="flex items-center gap-1 rounded-none px-2 py-2 capitalize hover:bg-black/5 dark:hover:bg-black/15
             {statusPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Status"
         >
@@ -1072,7 +1069,7 @@
             {#each (["confirmed", "tentative", "cancelled"] as const) as s}
               <button
                 onclick={() => { eventStatus = s; statusPicker = false; emitChange(); }}
-                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize hover:bg-black/5 dark:hover:bg-black/15
                   {eventStatus === s ? 'text-foreground font-medium' : 'text-muted-foreground'}"
               >{s}</button>
             {/each}
@@ -1080,16 +1077,12 @@
         {/if}
       </div>
 
-      <!-- Visibility (heavy field; gated until fullEvent loads to avoid the
-           race where a user click between slim init and heavy arrival is
-           overwritten by the DB value). In create mode there is no fullEvent
-           and the field is editable from the first frame. -->
-      {#if mode === "create" || fullEvent}
+      {#if mode === "create" || detailsLoaded || fullEvent}
         <div class="relative">
           <button
             onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
             disabled={readOnly}
-            class="flex items-center gap-1 rounded-none px-2 py-2 capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+            class="flex items-center gap-1 rounded-none px-2 py-2 capitalize hover:bg-black/5 dark:hover:bg-black/15
               {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
             title="Visibility"
           >
@@ -1108,7 +1101,7 @@
               {#each (["public", "private", "confidential"] as const) as v}
                 <button
                   onclick={() => { visibility = v; visibilityPicker = false; emitChange(); }}
-                  class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize transition-colors hover:bg-black/5 dark:hover:bg-black/15
+                  class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize hover:bg-black/5 dark:hover:bg-black/15
                     {visibility === v ? 'text-foreground font-medium' : 'text-muted-foreground'}"
                 >{v}</button>
               {/each}
@@ -1123,10 +1116,8 @@
   <!-- Fixed bottom: feature sections (always visible) -->
   <div class="shrink-0 flex flex-col gap-1.5 px-3.5 py-1.5">
 
-      <!-- 1) Meeting (heavy: description, url, attendees, organizer, geo,
-           guestPermissions). Gated on fullEvent in edit mode so the user
-           cannot type into description before the DB value lands. -->
-      {#if mode === "create" || fullEvent}
+      <!-- 1) Meeting -->
+      {#if mode === "create" || detailsLoaded || fullEvent}
         <MeetingSection
           enabled={meetingEnabled}
           bind:url={eventUrl}
@@ -1183,7 +1174,7 @@
             <Music size={13} />
           </button>
           <button onclick={() => handleExpand("music")}
-            class="flex flex-1 items-center px-2.5 py-2 text-left transition-colors">
+            class="flex flex-1 items-center px-2.5 py-2 text-left">
             <span class="translate-y-[1.13px] text-[11px] text-muted-foreground">Music</span>
           </button>
         </div>
@@ -1214,14 +1205,14 @@
         {:else}
           {#if mode === "edit" && onDelete && event}
             <button onclick={armOrConfirmDelete}
-              class="flex w-9 shrink-0 items-center justify-center bg-black/[0.06] dark:bg-black/[0.30] text-foreground transition-colors hover:text-destructive"
+              class="flex w-9 shrink-0 items-center justify-center bg-black/[0.06] dark:bg-black/[0.30] text-foreground hover:text-destructive"
               title="Delete (Ctrl + D)">
               <Trash2 size={13} strokeWidth={1.8} />
             </button>
           {/if}
           <button onclick={handleSave}
             title="Save (Ctrl + Enter)"
-            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] transition-all
+            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px]
               {saving || saveReady
                 ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'
                 : 'text-muted-foreground cursor-not-allowed'}"

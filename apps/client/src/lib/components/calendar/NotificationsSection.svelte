@@ -110,12 +110,12 @@
 <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
-      class="flex w-9 shrink-0 items-center justify-center transition-colors
+      class="flex w-9 shrink-0 items-center justify-center
         {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
       <Bell size={13} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors">
+      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
       <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
     </button>
@@ -143,14 +143,14 @@
             onkeydown={(e) => e.stopPropagation()} />
           <button bind:this={dropdownBtns[idx]}
             onclick={() => { dropdownIdx = dropdownIdx === idx ? null : idx; }}
-            class="rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] transition-colors
+            class="rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px]
               {dropdownIdx === idx ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}
               text-event-panel-input-text">
             {CUSTOM_UNITS.find((u) => u.value === cn.unit)?.label ?? "minutes"}
           </button>
           <span class="text-[11px] text-muted-foreground">before</span>
           <button onclick={() => { removeCustomNotif(idx); dropdownIdx = null; }}
-            class="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
+            class="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
             <X size={12} />
           </button>
 
@@ -163,7 +163,7 @@
               use:positionDropdown={idx}>
               {#each CUSTOM_UNITS as u}
                 <button onclick={() => { updateCustomNotif(idx, cn.amount, u.value); dropdownIdx = null; }}
-                  class="flex w-full items-center px-3 py-1.5 text-left text-[11px] transition-colors
+                  class="flex w-full items-center px-3 py-1.5 text-left text-[11px]
                     {cn.unit === u.value
                       ? 'bg-black/5 dark:bg-black/15 text-foreground'
                       : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
@@ -176,7 +176,7 @@
       {/each}
       {#if customNotifs.length < 2}
         <button onclick={addCustomNotif}
-          class="flex items-center gap-1 self-start rounded-none px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+          class="flex items-center gap-1 self-start rounded-none px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15">
           <Plus size={12} /> <span>Custom</span>
         </button>
       {/if}
@@ -185,9 +185,6 @@
 </div>
 
 <style>
-  .section-header {
-    transition: background-color 180ms ease-out;
-  }
   .num-input {
     -moz-appearance: textfield;
     appearance: textfield;

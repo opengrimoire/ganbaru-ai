@@ -42,6 +42,7 @@
   type EventPanelComponent = typeof import("./EventPanel.svelte").default;
   let EventPanel = $state<EventPanelComponent | null>(null);
   let loadingEventPanel: Promise<void> | null = null;
+  let panelOpenRequestId = 0;
 
   function loadEventPanel(): Promise<void> {
     if (EventPanel) return Promise.resolve();
@@ -161,8 +162,10 @@
   });
 
   let suppressEditingGlow = $state(false);
+  let pendingEditEventId = $state<string | undefined>(undefined);
   const previewedIds = $derived(suppressEditingGlow ? new Set<string>() : displayResult.previewedIds);
   const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
+  const visualEditingId = $derived(suppressEditingGlow ? undefined : (editingId ?? pendingEditEventId));
 
   // Track when drag operations end to prevent click-to-close after drag
   let lastDragEndTime = 0;
@@ -175,6 +178,10 @@
     }
     return undefined;
   });
+
+  const panelDetailsLoaded = $derived(
+    session.state.mode === "edit" ? session.state.detailsLoaded : false,
+  );
 
   // Whether clicking delete for the current event+scope would stop the
   // active pomodoro session (modal will appear). When true, the panel
@@ -692,6 +699,8 @@
   }
 
   function handleEventCreate(start: string, end: string, allDay?: boolean) {
+    panelOpenRequestId++;
+    pendingEditEventId = undefined;
     // Track that a create operation ended (prevents click-to-close)
     lastDragEndTime = Date.now();
 
@@ -722,13 +731,29 @@
       ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-    const openEvent = () => {
+    const openEvent = async () => {
+      const requestId = ++panelOpenRequestId;
+      pendingEditEventId = event.id;
       perfMark("panel.start", { mode: "edit" });
-      void loadEventPanel();
-      if (isRecurring(event)) {
-        session.openEdit(event, anchor, event);
-      } else {
-        session.openEdit(event, anchor);
+      try {
+        const lookupId = event.recurringParentId ?? event.id;
+        const [fullEvent] = await Promise.all([
+          calendarStore.loadFullEvent(lookupId),
+          loadEventPanel(),
+        ]);
+        if (requestId !== panelOpenRequestId) return;
+        const hydratedEvent = fullEvent
+          ? ({ ...fullEvent, ...event } as CalendarEvent)
+          : event;
+        if (isRecurring(event)) {
+          session.openEdit(hydratedEvent, anchor, hydratedEvent, !!fullEvent);
+        } else {
+          session.openEdit(hydratedEvent, anchor, undefined, !!fullEvent);
+        }
+      } catch (e) {
+        console.error("[CalendarView] open event failed:", e);
+      } finally {
+        if (requestId === panelOpenRequestId) pendingEditEventId = undefined;
       }
     };
 
@@ -839,6 +864,8 @@
   }
 
   function handlePanelClose() {
+    panelOpenRequestId++;
+    pendingEditEventId = undefined;
     if (session.dirty) {
       requestConfirm(
         "Your changes will be lost.",
@@ -1255,7 +1282,7 @@
         theme={theme.current}
         {timezones}
         {tzAbbrMode}
-        editingId={editingId}
+        editingId={visualEditingId}
         {previewedIds}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
@@ -1277,7 +1304,7 @@
         theme={theme.current}
         {timezones}
         {tzAbbrMode}
-        editingId={editingId}
+        editingId={visualEditingId}
         {previewedIds}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
@@ -1340,6 +1367,7 @@
           mode="edit"
           event={panelEvent}
           anchor={session.state.anchor}
+          detailsLoaded={panelDetailsLoaded}
           externalDirty={session.dirty}
           readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
           skipInlineDeleteConfirm={deleteWouldStopSession}

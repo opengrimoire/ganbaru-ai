@@ -190,12 +190,12 @@
 <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
-      class="flex w-9 shrink-0 items-center justify-center transition-colors
+      class="flex w-9 shrink-0 items-center justify-center
         {recurrence ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
       <Repeat size={13} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left transition-colors">
+      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
       <span class="translate-y-[1.13px] text-[11px] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{recurrence ? label : ""}</span>
     </button>
@@ -213,7 +213,7 @@
         <div class="flex gap-1">
           {#each FREQ_OPTIONS as opt}
             <button onclick={() => updateFrequency(opt.value)}
-              class="rounded-none px-2 py-1 text-[11px] transition-all
+              class="rounded-none px-2 py-1 text-[11px]
                 {recFrequency === opt.value
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-muted-foreground'}"
@@ -229,7 +229,7 @@
           <div class="grid grid-cols-7 gap-1">
             {#each ALL_WEEKDAYS as wd}
               <button onclick={() => toggleWeekday(wd.value)}
-                class="flex h-7 items-center justify-center rounded-none text-[10px] transition-all
+                class="flex h-7 items-center justify-center rounded-none text-[10px]
                   {recWeekdays.has(wd.value)
                     ? 'bg-black/5 dark:bg-black/15 text-foreground'
                     : 'bg-black/[0.02] dark:bg-black/[0.06] text-muted-foreground'}"
@@ -245,7 +245,7 @@
           <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Repeat on</span>
           <div class="flex gap-1.5">
             <button onclick={() => setMonthlyMode("day")}
-              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px] transition-all
+              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]
                 {monthlyMode === 'day'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
@@ -255,7 +255,7 @@
               <span>Day {getEventDayOfMonth()}</span>
             </button>
             <button onclick={() => setMonthlyMode("ordinal")}
-              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px] transition-all
+              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]
                 {monthlyMode === 'ordinal'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
@@ -282,7 +282,7 @@
 
         <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("until")}
-            class="flex w-12 items-center gap-2 text-foreground transition-all">
+            class="flex w-12 items-center gap-2 text-foreground">
             <div class="size-[11px] shrink-0 rounded-full
               {recEndType === 'until' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
@@ -295,7 +295,7 @@
               onclick={() => { if (recEndType !== "until") updateEndType("until"); pickerOpen = !pickerOpen; }}
               onblur={parseDateInput}
               onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); parseDateInput(); pickerOpen = false; } }}
-              class="w-[110px] rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] outline-none transition-colors
+              class="w-[110px] rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] outline-none
                 {recEndType === 'until' ? 'text-event-panel-input-text' : 'text-muted-foreground'}
                 {pickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}" />
 
@@ -313,7 +313,7 @@
 
         <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("count")}
-            class="flex w-12 items-center gap-2 text-foreground transition-all">
+            class="flex w-12 items-center gap-2 text-foreground">
             <div class="size-[11px] shrink-0 rounded-full
               {recEndType === 'count' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
@@ -341,9 +341,6 @@
 </div>
 
 <style>
-  .section-header {
-    transition: background-color 180ms ease-out;
-  }
   .num-input {
     -moz-appearance: textfield;
     appearance: textfield;
