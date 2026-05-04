@@ -61,8 +61,6 @@
 
   const panelOpen = $derived(!!editingId);
 
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-
   const dateStr = $derived(formatDatePart(date));
   // `events` arrives pre-bucketed per day from CalendarView, so the only
   // remaining concern is to drop all-day rows which render in the banner.
@@ -407,8 +405,8 @@
     return undefined;
   }
 
-  function handleSlotPointerDown(e: PointerEvent, hour: number) {
-    if (e.button !== 0) return;
+  function handleColumnAreaPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || draggingEventId) return;
 
     // Calculate position from actual click coordinates
     if (!columnEl) return;
@@ -518,7 +516,13 @@
 <div
   data-day-column
   class="relative min-w-0 {zoomModifierPressed ? 'zoom-active' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
-  style="height: calc(24 * var(--hour-h) * 1px); contain: layout style;"
+  style="
+    height: calc(24 * var(--hour-h) * 1px);
+    contain: layout style;
+    background-image: linear-gradient(to bottom, transparent calc(100% - 1px), var(--cal-gridline) calc(100% - 1px));
+    background-size: 100% calc(var(--hour-h) * 1px);
+    background-repeat: repeat-y;
+  "
   onmousemove={handleColumnMouseMove}
   onmouseleave={handleColumnMouseLeave}
   onpointerdown={handleRailAreaPointerDown}
@@ -539,16 +543,6 @@
       ></div>
     </div>
   {/if}
-
-  <!-- Hourly gridlines (23 solid lines, one at each hour boundary) -->
-  {#each hours as hour}
-    {#if hour < 23}
-      <div
-        class="pointer-events-none absolute left-0 right-0 z-[2]"
-        style="top: calc({hour + 1} * var(--hour-h) * 1px); height: 0; border-bottom: 1px solid var(--cal-gridline);"
-      ></div>
-    {/if}
-  {/each}
 
   <!-- Pomodoro timeline rails (one per contiguous group of pomodoro events) -->
   {#each railSegments as seg}
@@ -590,19 +584,10 @@
 
   <div
     bind:this={columnEl}
-    class="absolute top-0 right-0 bottom-0"
+    class="absolute top-0 right-0 bottom-0 {draggingEventId ? 'pointer-events-none' : zoomModifierPressed ? '' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
     style="left: {railWidth + 4}px;"
+    onpointerdown={handleColumnAreaPointerDown}
   >
-  <!-- Hour cells (click targets only, gridlines are in outer container) -->
-  {#each hours as hour}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="absolute w-full {draggingEventId ? 'pointer-events-none' : zoomModifierPressed ? '' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
-      style="top: calc({hour} * var(--hour-h) * 1px); height: calc(var(--hour-h) * 1px);"
-      onpointerdown={(e) => handleSlotPointerDown(e, hour)}
-    ></div>
-  {/each}
-
   <!-- Events (use layout-aware positions that account for drag/create preview) -->
   {#each effectivePositioned as pos (pos.event.id)}
     <EventBlock
