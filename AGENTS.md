@@ -150,6 +150,7 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 ### Code style
 
 - Do not use em dash characters or two consecutive hyphens in markdown, code comments, or commit messages. Restructure sentences using periods, commas, colons, semicolons, or parentheses instead.
+- Avoid unnecessary capitalization. Use sentence case in markdown headings, code comments, documentation, branch names, and commit messages unless capitalization is required by grammar, proper nouns, acronyms, or official names. Correct nearby text that violates this when editing files.
 
 ### Project philosophy
 
