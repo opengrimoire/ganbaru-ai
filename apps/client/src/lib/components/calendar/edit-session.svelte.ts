@@ -25,6 +25,8 @@ export interface CreatePreview {
   endDateStr?: string;
 }
 
+const IDLE_TIMEOUT_DEFAULT = 1;
+
 /**
  * Deep-equal comparison for a single field of a CalendarEvent patch.
  * Treats missing and explicit undefined as equivalent.
@@ -37,6 +39,78 @@ export function fieldEqual(a: unknown, b: unknown): boolean {
   if (a === null || b === null) return false;
   if (typeof a !== "object" || typeof b !== "object") return false;
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function normalizeNotifications(notifications?: number[]): number[] | undefined {
+  if (!notifications || notifications.length === 0) return undefined;
+  return [...new Set(notifications)].sort((a, b) => a - b);
+}
+
+function normalizePomodoroConfig(config?: PomodoroConfig): PomodoroConfig | undefined {
+  if (!config) return undefined;
+  return {
+    focusDurationMinutes: config.focusDurationMinutes,
+    shortBreakMinutes: config.shortBreakMinutes,
+    longBreakMinutes: config.longBreakMinutes,
+    pomodoroCount: 4,
+    idleTimeoutMinutes: config.idleTimeoutMinutes !== null ? IDLE_TIMEOUT_DEFAULT : null,
+  };
+}
+
+/**
+ * Build the normalized baseline shape used by EventPanel on first paint.
+ * Keeping this in the session avoids a parent-state callback during panel
+ * mount, which otherwise makes event-panel opens wait for a second Svelte
+ * flush before they can paint.
+ */
+export function buildEditPanelInitialChanges(event: CalendarEvent): Partial<CalendarEvent> {
+  const meetingEnabled = !!(event.attendees && event.attendees.length > 0)
+    || !!event.location || !!event.url;
+  return {
+    title: event.title.trim(),
+    start: event.start,
+    end: event.end,
+    color: event.color,
+    description: event.description ?? "",
+    recurrence: event.recurrence,
+    notifications: normalizeNotifications(event.notifications),
+    pomodoroConfig: normalizePomodoroConfig(event.pomodoroConfig),
+    allDay: event.allDay || undefined,
+    location: meetingEnabled && event.location ? event.location : undefined,
+    url: meetingEnabled && event.url ? event.url : undefined,
+    transparency: event.transparency !== "opaque" ? event.transparency : undefined,
+    status: event.status !== "confirmed" ? event.status : undefined,
+    visibility: event.visibility !== "public" ? event.visibility : undefined,
+    attendees: meetingEnabled && event.attendees && event.attendees.length > 0
+      ? [...event.attendees]
+      : undefined,
+  };
+}
+
+export function buildCreatePanelInitialChanges(start: string, end: string, allDay?: boolean): Partial<CalendarEvent> {
+  return {
+    title: "",
+    start,
+    end,
+    color: undefined,
+    description: "",
+    recurrence: undefined,
+    notifications: [0],
+    pomodoroConfig: {
+      focusDurationMinutes: 40,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 10,
+      pomodoroCount: 4,
+      idleTimeoutMinutes: IDLE_TIMEOUT_DEFAULT,
+    },
+    allDay: allDay || undefined,
+    location: undefined,
+    url: undefined,
+    transparency: undefined,
+    status: undefined,
+    visibility: undefined,
+    attendees: undefined,
+  };
 }
 
 /**
@@ -114,6 +188,7 @@ export function createEditSession() {
       anchor: PanelAnchor,
       instanceEvent?: CalendarEvent,
       detailsLoaded = false,
+      initialChanges = buildEditPanelInitialChanges(event),
     ) {
       const templateId = event.recurringParentId ?? event.id;
       state = {
@@ -124,8 +199,8 @@ export function createEditSession() {
         detailsLoaded,
         anchor,
       };
-      changes = {};
-      baseline = {};
+      changes = { ...initialChanges };
+      baseline = { ...initialChanges };
       scope = "this";
       createPreview = null;
     },
@@ -134,21 +209,10 @@ export function createEditSession() {
       state = { mode: "create", start, end, anchor };
       scope = "this";
 
-      // Seed changes and baseline with the same default shape so the preview
-      // can render the pomodoro badge (and all-day styling) on the first
-      // frame. Mirroring the seed into baseline keeps the session clean:
-      // the panel's initial sync will merge more fields into both sides on
-      // mount without flipping dirty.
-      const defaultPomodoro: PomodoroConfig = {
-        focusDurationMinutes: 40,
-        shortBreakMinutes: 5,
-        longBreakMinutes: 10,
-        pomodoroCount: 4,
-        idleTimeoutMinutes: 1,
-      };
-      const initial: Partial<CalendarEvent> = allDay
-        ? { allDay: true }
-        : { pomodoroConfig: defaultPomodoro };
+      // Seed the full panel baseline before mount. This keeps create preview
+      // data available on the first frame and avoids a parent callback from
+      // EventPanel during the opening flush.
+      const initial = buildCreatePanelInitialChanges(start, end, allDay);
       changes = { ...initial };
       baseline = { ...initial };
 

@@ -12,11 +12,10 @@
   import PomodoroSection from "./PomodoroSection.svelte";
   import NotificationsSection from "./NotificationsSection.svelte";
   import RecurrenceSection from "./RecurrenceSection.svelte";
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import { mark as perfMark } from "$lib/stores/perflog.svelte";
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Music from "@lucide/svelte/icons/music";
@@ -45,6 +44,8 @@
     initialAllDay = false,
     externalDirty = false,
     detailsLoaded = false,
+    initialSyncSeeded = false,
+    parked = false,
     readOnly = false,
     skipInlineDeleteConfirm = false,
     loadFullEvent,
@@ -63,12 +64,14 @@
     initialAllDay?: boolean;
     externalDirty?: boolean;
     detailsLoaded?: boolean;
+    initialSyncSeeded?: boolean;
+    parked?: boolean;
     readOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
     /**
-     * Fetches the full DB row (heavy fields like description, attendees,
-     * organizer) for an event id. Used as a fallback when edit mode receives
-     * a slim event. Normal edit opens preload details before mounting.
+     * Fetches the panel detail row (description, attendees, organizer, etc.)
+     * for an event id. Used as a fallback when edit mode receives a slim
+     * event. Normal edit opens preload details before mounting.
      */
     loadFullEvent?: (id: string) => Promise<CalendarEvent | undefined>;
     onSave: (data: {
@@ -95,6 +98,8 @@
     onInitialSync?: (data: Partial<CalendarEvent>) => void;
     onScopeChange?: (scope: RecurringScope) => void;
   } = $props();
+
+  const controlsDisabled = $derived(readOnly || parked);
 
   // ─── Core fields ────────────────────────────────────────────────
   let title = $state("");
@@ -191,7 +196,7 @@
   }
 
   function toggleDatepicker() {
-    if (readOnly) return;
+    if (controlsDisabled) return;
     timePickerTarget = null;
     endDatepickerOpen = false;
     showAsPicker = false;
@@ -200,7 +205,7 @@
   }
 
   function toggleEndDatepicker() {
-    if (readOnly) return;
+    if (controlsDisabled) return;
     timePickerTarget = null;
     datepickerOpen = false;
     showAsPicker = false;
@@ -216,7 +221,7 @@
 
 
   function openTimePicker(target: "start" | "end") {
-    if (readOnly) return;
+    if (controlsDisabled) return;
     datepickerOpen = false;
     endDatepickerOpen = false;
     showAsPicker = false;
@@ -262,7 +267,7 @@
 
 
   function handleToggle(s: Section, e?: MouseEvent) {
-    if (readOnly) return;
+    if (controlsDisabled) return;
     if (e) bounceIcon(e);
     if (s === "music") return;
     const enabled = isSectionEnabled(s);
@@ -286,7 +291,7 @@
 
   /** Label click: expand/collapse the details panel. */
   function handleExpand(s: Section) {
-    if (readOnly) return;
+    if (controlsDisabled) return;
     // Auto-activate repeat when expanding for the first time
     if (s === "repeat" && !recurrence && openSection !== s) {
       recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
@@ -350,13 +355,23 @@
   let lastFullKey = "";
   let initialized = $state(false);
   let fullEvent = $state<CalendarEvent | null>(null);
+  let saving = $state(false);
+  const showHeavySections = $derived(mode === "create" || detailsLoaded || fullEvent);
+
+  function resetExitAnimation() {
+    const el = panelEl;
+    if (!el) return;
+    for (const animation of el.getAnimations()) {
+      animation.cancel();
+    }
+  }
 
   // Trigger the heavy-field fetch whenever a different event opens. The
   // resolver checks `lastFullKey` again at completion so a stale promise
   // for an event the user already navigated away from can't clobber the
   // current panel.
   $effect(() => {
-    if (mode !== "edit" || !event?.id || detailsLoaded || !loadFullEvent) {
+    if (parked || mode !== "edit" || !event?.id || detailsLoaded || !loadFullEvent) {
       fullEvent = null;
       lastFullKey = "";
       return;
@@ -374,9 +389,14 @@
   });
 
   $effect(() => {
-    const key = mode === "edit" ? (event?.id ?? "") : "create";
+    const key = parked
+      ? `parked:${mode}:${mode === "edit" ? (event?.id ?? "") : `${start ?? ""}:${end ?? ""}:${initialAllDay ? 1 : 0}`}`
+      : mode === "edit" ? (event?.id ?? "") : `create:${start ?? ""}:${end ?? ""}:${initialAllDay ? 1 : 0}`;
     if (key === lastInitKey) return;
     lastInitKey = key;
+    resetExitAnimation();
+    saving = false;
+    deleteArmed = false;
     initialized = false;
 
     if (mode === "edit" && event) {
@@ -491,8 +511,19 @@
     // subsequent edit that reverts back to the original value restores a
     // clean session, and the panel can be closed silently (no "Discard
     // unsaved changes?" prompt).
-    (onInitialSync ?? onChange)?.(buildChangesPayload());
+    if (!parked && !initialSyncSeeded) {
+      (onInitialSync ?? onChange)?.(buildChangesPayload());
+    }
     initialized = true;
+
+    if (!parked && mode === "create") {
+      const selectKey = key;
+      tick().then(() => {
+        if (lastInitKey === selectKey && !parked && mode === "create") {
+          titleInput?.select();
+        }
+      });
+    }
   });
 
   // Heavy-field init: runs once per fullEvent arrival. The setInitialChanges
@@ -640,10 +671,6 @@
     onChange?.(buildChangesPayload());
   }
 
-  $effect(() => {
-    if (mode === "create" && titleInput) titleInput.select();
-  });
-
   // ─── Panel position ─────────────────────────────────────────────
   // When a section is expanded, the panel's bottom edge is pinned at
   // its pre-expansion position so it only grows upward. Otherwise the
@@ -677,6 +704,7 @@
 
     return `position:fixed; left:${Math.round(left)}px; top:${Math.round(top)}px; width:${PANEL_WIDTH}px; z-index:50;`;
   });
+  const parkedPanelStyle = `position:fixed; left:-10000px; top:-10000px; width:${PANEL_WIDTH}px; z-index:-1; pointer-events:none;`;
 
 
   const shortDate = $derived.by(() => {
@@ -728,9 +756,8 @@
     };
   }
 
-  let saving = $state(false);
-
   function handleSave() {
+    if (parked) return;
     if (saving || !saveReady) return;
     const data = buildSaveData();
     const s = isRecurring ? scope : undefined;
@@ -748,7 +775,9 @@
       ).onfinish = () => onSave(data, s);
     }, 200);
   }
-  function handleDeleteClick() { if (event && onDelete) onDelete(event.id, isRecurring ? scope : undefined); }
+  function handleDeleteClick() {
+    if (!parked && event && onDelete) onDelete(event.id, isRecurring ? scope : undefined);
+  }
 
   function armOrConfirmDelete() {
     if (mode !== "edit" || !event || !onDelete) return;
@@ -769,6 +798,7 @@
   }
 
   function handlePanelClick(e: MouseEvent) {
+    if (parked) return;
     e.stopPropagation();
     // Disarm the inline delete confirmation if the click landed outside the
     // confirm button. The confirm button handles its own disarm on click.
@@ -793,6 +823,7 @@
   function handleScopeClick(s: RecurringScope) { scope = s; onScopeChange?.(s); }
 
   function handleDragStart(e: PointerEvent) {
+    if (parked) return;
     isDragging = true;
     dragStart = { x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -805,9 +836,8 @@
   // (ConfirmDialog) is open, its capture-phase window listener swallows the
   // event before it reaches this handler.
   onMount(() => {
-    perfMark("panel.mounted", { mode });
-    requestAnimationFrame(() => perfMark("panel.paint-done"));
     function handleKeydown(e: KeyboardEvent) {
+      if (parked) return;
       // Ctrl/Cmd + Enter: save. Chosen over plain Enter so typing newlines
       // in the description textarea still works.
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -835,8 +865,10 @@
 <div
   bind:this={panelEl}
   class="panel-root flex flex-col"
-  data-readonly={readOnly || undefined}
-  style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {panelStyle} background-color: var(--panel-bg); visibility: {initialized ? 'visible' : 'hidden'};"
+  data-readonly={controlsDisabled || undefined}
+  data-parked={parked || undefined}
+  aria-hidden={parked || undefined}
+  style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {parked ? parkedPanelStyle : panelStyle} background-color: var(--panel-bg); visibility: {initialized && !parked ? 'visible' : 'hidden'};"
   onclick={handlePanelClick}
 >
   <!-- Drag handle bar with close button -->
@@ -862,6 +894,7 @@
         {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl]}
           <button
             onclick={() => handleScopeClick(val as RecurringScope)}
+            disabled={controlsDisabled}
             class="flex-1 rounded px-2 py-1 text-[10px] font-medium
               {scope === val
                 ? 'bg-action-confirm text-action-confirm-foreground shadow-sm'
@@ -879,13 +912,13 @@
           type="text"
           bind:value={title}
           placeholder="Session title..."
-          disabled={readOnly}
+          disabled={controlsDisabled}
           class="w-full bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
           oninput={emitChange}
           onkeydown={inputKeydown}
         />
       </div>
-      {#if !readOnly}
+      {#if !controlsDisabled}
         <ColorPicker {color} theme={theme.current} onselect={(c) => { color = c; emitChange(); }} />
       {/if}
     </div>
@@ -897,7 +930,7 @@
       <div class="relative z-[1] shrink-0">
         <button onclick={toggleDatepicker}
           class="rounded py-1 text-event-panel-input-text
-            {readOnly ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+            {controlsDisabled ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
         </button>
 
@@ -922,19 +955,19 @@
         <input type="text" bind:value={startTime}
           oninput={emitChange}
           onclick={() => openTimePicker("start")}
-          disabled={readOnly}
+          disabled={controlsDisabled}
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
-            {readOnly ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+            {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
         <span class="text-muted-foreground/60">&ndash;</span>
         <input type="text" bind:value={endTime}
           oninput={emitChange}
           onclick={() => openTimePicker("end")}
-          disabled={readOnly}
+          disabled={controlsDisabled}
           maxlength={5} placeholder="HH:MM"
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
-            {readOnly ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+            {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
 
         <!-- Floating time picker -->
@@ -960,7 +993,7 @@
       <div class="relative z-[1] shrink-0">
         <button onclick={toggleEndDatepicker}
           class="rounded py-1 text-event-panel-input-text
-            {readOnly ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+            {controlsDisabled ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
         </button>
 
@@ -1012,7 +1045,7 @@
           }
           emitChange();
         }}
-        disabled={readOnly}
+        disabled={controlsDisabled}
         class="flex items-center gap-1 rounded-none px-2 py-2
           {allDay ? 'bg-black/5 dark:bg-black/15 text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
         title="All day"
@@ -1025,7 +1058,7 @@
       <div class="relative">
         <button
           onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
-          disabled={readOnly}
+          disabled={controlsDisabled}
           class="flex items-center gap-1 rounded-none px-2 py-2 hover:bg-black/5 dark:hover:bg-black/15
             {showAsPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Show as"
@@ -1053,7 +1086,7 @@
       <div class="relative">
         <button
           onclick={() => { statusPicker = !statusPicker; showAsPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
-          disabled={readOnly}
+          disabled={controlsDisabled}
           class="flex items-center gap-1 rounded-none px-2 py-2 capitalize hover:bg-black/5 dark:hover:bg-black/15
             {statusPicker ? 'text-foreground' : 'text-muted-foreground'}"
           title="Status"
@@ -1077,11 +1110,11 @@
         {/if}
       </div>
 
-      {#if mode === "create" || detailsLoaded || fullEvent}
+      {#if showHeavySections}
         <div class="relative">
           <button
             onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
-            disabled={readOnly}
+            disabled={controlsDisabled}
             class="flex items-center gap-1 rounded-none px-2 py-2 capitalize hover:bg-black/5 dark:hover:bg-black/15
               {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
             title="Visibility"
@@ -1117,7 +1150,7 @@
   <div class="shrink-0 flex flex-col gap-1.5 px-3.5 py-1.5">
 
       <!-- 1) Meeting -->
-      {#if mode === "create" || detailsLoaded || fullEvent}
+      {#if showHeavySections}
         <MeetingSection
           enabled={meetingEnabled}
           bind:url={eventUrl}
@@ -1129,7 +1162,7 @@
           bind:guestCanSeeOtherGuests
           {organizer}
           {description}
-          {readOnly}
+          readOnly={controlsDisabled}
           expanded={openSection === "meeting"}
           ontoggle={() => handleToggle("meeting")}
           onexpand={() => handleExpand("meeting")}
@@ -1174,6 +1207,7 @@
             <Music size={13} />
           </button>
           <button onclick={() => handleExpand("music")}
+            disabled={controlsDisabled}
             class="flex flex-1 items-center px-2.5 py-2 text-left">
             <span class="translate-y-[1.13px] text-[11px] text-muted-foreground">Music</span>
           </button>
@@ -1197,6 +1231,7 @@
           <button
             bind:this={confirmDeleteBtn}
             onclick={() => { deleteArmed = false; handleDeleteClick(); }}
+            disabled={controlsDisabled}
             title="Click again to delete (Ctrl + D)"
             class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-action-danger-armed-foreground bg-action-danger-armed">
             <Trash2 size={13} strokeWidth={1.8} />
@@ -1205,12 +1240,14 @@
         {:else}
           {#if mode === "edit" && onDelete && event}
             <button onclick={armOrConfirmDelete}
+              disabled={controlsDisabled}
               class="flex w-9 shrink-0 items-center justify-center bg-black/[0.06] dark:bg-black/[0.30] text-foreground hover:text-destructive"
               title="Delete (Ctrl + D)">
               <Trash2 size={13} strokeWidth={1.8} />
             </button>
           {/if}
           <button onclick={handleSave}
+            disabled={controlsDisabled}
             title="Save (Ctrl + Enter)"
             class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px]
               {saving || saveReady

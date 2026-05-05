@@ -26,6 +26,46 @@ export interface DisplayResult {
 const PENDING_CREATE_ID = "__pending_create__";
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const fmtMin = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+const DISPLAY_CHANGE_KEYS = [
+  "title",
+  "start",
+  "end",
+  "color",
+  "recurrence",
+  "notifications",
+  "pomodoroConfig",
+  "allDay",
+  "location",
+  "transparency",
+  "status",
+  "rdate",
+] satisfies (keyof CalendarEvent)[];
+
+function fieldEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === undefined && b === undefined) return true;
+  if (a === null && b === null) return true;
+  if (a === undefined || b === undefined) return false;
+  if (a === null || b === null) return false;
+  if (typeof a !== "object" || typeof b !== "object") return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function hasVisibleEventChanges(originalEvent: CalendarEvent, changes: Partial<CalendarEvent>): boolean {
+  for (const key of DISPLAY_CHANGE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
+    if (!fieldEqual(changes[key], originalEvent[key])) return true;
+  }
+  return false;
+}
+
+function unchangedEditDisplay(events: CalendarEvent[], editingId: string): DisplayResult {
+  return {
+    events,
+    previewedIds: new Set([editingId]),
+    editingId,
+  };
+}
 
 /** Compute display events when no edit session is active. */
 export function closedDisplay(storeEvents: CalendarEvent[]): DisplayResult {
@@ -118,6 +158,10 @@ export function computeEditDisplay(
   const { originalEvent, instanceEvent, templateId } = session;
   const isRecurring = !!originalEvent.recurringParentId || !!originalEvent.recurrence;
 
+  if (!hasVisibleEventChanges(originalEvent, changes)) {
+    return unchangedEditDisplay(storeEvents, originalEvent.id);
+  }
+
   if (!isRecurring) {
     return applyNonRecurring(storeEvents, originalEvent, changes);
   }
@@ -142,6 +186,9 @@ export function applyNonRecurring(
   const eventExists = events.some((e) => e.id === originalEvent.id);
   if (!eventExists) {
     return closedDisplay(events);
+  }
+  if (!hasVisibleEventChanges(originalEvent, changes)) {
+    return unchangedEditDisplay(events, originalEvent.id);
   }
 
   const merged = { ...originalEvent, ...changes };
@@ -173,6 +220,9 @@ export function applyThis(
   const eventExists = events.some((e) => e.id === targetId);
   if (!eventExists) {
     return closedDisplay(events);
+  }
+  if (!hasVisibleEventChanges(originalEvent, changes)) {
+    return unchangedEditDisplay(events, targetId);
   }
 
   const merged = { ...originalEvent, ...changes };

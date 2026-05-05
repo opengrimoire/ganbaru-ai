@@ -137,34 +137,80 @@
     prefix: "nav" | "view" | "panel";
     action: string;
     durationMs: number;
+    steps: { label: string; ms: number }[];
   };
+  type PendingChain = { start: PerfLogEntry; steps: PerfLogEntry[] };
+
+  function panelRequest(entry: PerfLogEntry): number | undefined {
+    const value = entry.detail?.request;
+    return typeof value === "number" ? value : undefined;
+  }
+
+  function panelStepLabel(tag: string): string {
+    if (tag === "panel.module-ready") return "module";
+    if (tag === "panel.details-ready") return "details";
+    if (tag === "panel.state-open") return "state";
+    if (tag === "panel.flush-done") return "flush";
+    return tag.replace(/^panel\./, "");
+  }
+
+  function findPanelChainIndex(stack: PendingChain[], entry: PerfLogEntry): number {
+    const request = panelRequest(entry);
+    if (request === undefined) return stack.length - 1;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (panelRequest(stack[i].start) === request) return i;
+    }
+    return -1;
+  }
+
   const actionChains = $derived.by<ChainRow[]>(() => {
     const results: ChainRow[] = [];
-    const stacks: Record<string, PerfLogEntry[]> = {};
+    const stacks: Record<string, PendingChain[]> = {};
     for (const e of perfLog.entries) {
-      const m = /^(nav|view|panel)\.(start|paint-done)$/.exec(e.tag);
+      const m = /^(nav|view|panel)\.(start|module-ready|details-ready|state-open|flush-done|paint-done)$/.exec(e.tag);
       if (!m) continue;
       const prefix = m[1];
       const sub = m[2];
       if (sub === "start") {
-        (stacks[prefix] ??= []).push(e);
+        (stacks[prefix] ??= []).push({ start: e, steps: [] });
         continue;
       }
-      const start = stacks[prefix]?.pop();
-      if (!start) continue;
+      const stack = stacks[prefix];
+      if (!stack || stack.length === 0) continue;
+      const chainIndex = prefix === "panel" ? findPanelChainIndex(stack, e) : stack.length - 1;
+      if (chainIndex < 0) continue;
+      const active = stack[chainIndex];
+      if (prefix === "panel" && sub !== "paint-done") {
+        active.steps.push(e);
+        continue;
+      }
+      const [chain] = stack.splice(chainIndex, 1);
+      if (!chain) continue;
+      const start = chain.start;
       const d = start.detail ?? {};
       let action = "";
       if (prefix === "nav") action = String(d.dir ?? "");
       else if (prefix === "view") action = `${d.from} -> ${d.to}`;
-      else if (prefix === "panel") action = String(d.mode ?? "");
+      else if (prefix === "panel") {
+        const state = d.state ? ` ${d.state}` : "";
+        const moduleState = d.module ? `/${d.module}` : "";
+        action = `${String(d.mode ?? "")}${state}${moduleState}`;
+      }
       results.push({
         prefix: prefix as ChainRow["prefix"],
         action,
         durationMs: Math.round((e.t - start.t) * 10) / 10,
+        steps: chain.steps.map((step) => ({
+          label: panelStepLabel(step.tag),
+          ms: Math.round((step.t - start.t) * 10) / 10,
+        })),
       });
     }
     return results;
   });
+  const hasSpeedLogEntries = $derived(
+    perfLog.entries.some((entry) => !entry.tag.startsWith("boot.")),
+  );
 
   // Pin the chain list scroll to the bottom on new entries so the latest
   // action is always in view.
@@ -179,7 +225,10 @@
   }
 
   function formatChainRowText(row: ChainRow): string {
-    return `  ${row.prefix.padEnd(6)} ${row.action.padEnd(16)} ${row.durationMs} ms`;
+    const steps = row.steps.length > 0
+      ? ` (${row.steps.map((step) => `${step.label} ${step.ms} ms`).join(", ")})`
+      : "";
+    return `  ${row.prefix.padEnd(6)} ${row.action.padEnd(16)} ${row.durationMs} ms${steps}`;
   }
 
   function flashCopied(id: string) {
@@ -438,7 +487,7 @@
       >Track: {perfLog.tracking ? "on" : "off"}</button>
       <button
         onclick={clearPerfLog}
-        disabled={perfLog.entries.length === 0}
+        disabled={!hasSpeedLogEntries}
         class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
         title="Clear speed log buffer"
       >Clear</button>
@@ -447,9 +496,16 @@
   {#if actionChains.length > 0}
     <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
       {#each actionChains as row, i (i)}
-        <div class="flex justify-between text-muted-foreground tabular-nums whitespace-nowrap">
-          <span><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
-          <span>{row.durationMs} ms</span>
+        <div class="text-muted-foreground tabular-nums">
+          <div class="flex justify-between whitespace-nowrap">
+            <span><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
+            <span>{row.durationMs} ms</span>
+          </div>
+          {#if row.steps.length > 0}
+            <div class="truncate pl-6 text-muted-foreground/60">
+              {row.steps.map((step) => `${step.label} ${step.ms} ms`).join("  ")}
+            </div>
+          {/if}
         </div>
       {/each}
     </div>

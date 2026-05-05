@@ -33,6 +33,7 @@
     timezones = [] as string[],
     tzAbbrMode = "acronym" as TimezoneAbbrMode,
     onEventClick,
+    onEventPrefetch,
     onEventUpdate,
     onEventCreate,
     editingId,
@@ -53,6 +54,7 @@
     timezones?: string[];
     tzAbbrMode?: TimezoneAbbrMode;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
+    onEventPrefetch?: (event: CalendarEvent) => void;
     onEventUpdate: (event: CalendarEvent) => void;
     onEventCreate: (start: string, end: string, allDay?: boolean) => void;
     editingId?: string;
@@ -523,6 +525,7 @@
                 canDrag={!editingId || pos.event.id === editingId}
                 isPast={endDateStr < todayStr}
                 onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
+                onprefetch={() => onEventPrefetch?.(pos.event)}
                 onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
               />
             </div>
@@ -626,6 +629,7 @@
               dragPreview={drag.getDragPreviewForDate(dateStr)}
               createPreview={drag.getCreatePreviewForDate(dateStr)}
               onEventClick={onEventClick}
+              onEventPrefetch={onEventPrefetch}
               onDragStart={drag.handleDragStart}
               onCreateStart={drag.handleCreateStart}
             />

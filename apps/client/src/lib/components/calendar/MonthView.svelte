@@ -20,6 +20,7 @@
     theme,
     onDayClick,
     onEventClick,
+    onEventPrefetch,
     onWheelNavigate,
   }: {
     anchorDate: Date;
@@ -27,6 +28,7 @@
     theme: Theme;
     onDayClick: (date: Date) => void;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
+    onEventPrefetch?: (event: CalendarEvent) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
   } = $props();
 
@@ -184,6 +186,8 @@
               <div
                 class="relative z-[2] mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
                 style="background-color: {evtColors.bg}; color: {evtColors.text};"
+                onpointerenter={() => onEventPrefetch?.(evt)}
+                onpointerdown={() => onEventPrefetch?.(evt)}
                 onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
               >
                 <span class="truncate">{#if evt.title}{evt.title}{:else}(No title){/if}</span>

@@ -132,6 +132,22 @@ describe("applyNonRecurring", () => {
     expect(result.events.find((e) => e.id === "evt1")!.title).toBe("Updated");
     expect(result.events.find((e) => e.id === "evt2")!.title).toBe("Other");
   });
+
+  it("keeps the original event array when changes do not affect the calendar grid", () => {
+    const evt = makeEvent();
+    const events = [evt, makeEvent({ id: "evt2", title: "Other" })];
+    const result = applyNonRecurring(events, evt, {
+      title: evt.title,
+      start: evt.start,
+      end: evt.end,
+      description: "Updated notes",
+      visibility: "private",
+    });
+
+    expect(result.events).toBe(events);
+    expect(result.editingId).toBe("evt1");
+    expect(result.previewedIds.has("evt1")).toBe(true);
+  });
 });
 
 describe("applyThis", () => {
@@ -153,6 +169,31 @@ describe("applyThis", () => {
     // Siblings unchanged
     const sibling = result.events.find((e) => e.id === inst21.id)!;
     expect(sibling.title).toBe("Daily standup");
+  });
+
+  it("keeps the original event array when instance changes do not affect the calendar grid", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2026-03-20");
+    const inst21 = makeInstance(template, "2026-03-21");
+    const events = [template, inst20, inst21];
+
+    const result = applyThis(events, inst20, inst20, {
+      title: inst20.title,
+      start: inst20.start,
+      end: inst20.end,
+      url: "https://meet.example",
+      attendees: [{
+        id: "attendee-1",
+        email: "victor@example.com",
+        role: "req-participant",
+        status: "accepted",
+        rsvp: true,
+      }],
+    });
+
+    expect(result.events).toBe(events);
+    expect(result.editingId).toBe(inst20.id);
+    expect(result.previewedIds.has(inst20.id)).toBe(true);
   });
 });
 

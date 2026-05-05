@@ -6,8 +6,8 @@
  * serializes the buffer to clipboard so users on a release `.deb` (where
  * DevTools is disabled) can capture traces without a terminal.
  *
- * Boot marks (tags starting with `boot.`) are always recorded so the
- * benchmark harness can extract them regardless of the user's preference.
+ * Boot marks (tags starting with `boot.`) are always recorded, but only
+ * once per tag, so later component remounts cannot rewrite startup timing.
  * Every other mark is gated behind the `tracking` flag, which the user
  * toggles from the perf popup. The flag is session-local and resets to
  * off on every launch, so normal use never accumulates `nav.*` / `view.*`
@@ -18,6 +18,7 @@
  */
 
 const MAX_ENTRIES = 100;
+const bootTagsSeen = new Set<string>();
 
 /**
  * One timing mark in the ring buffer.
@@ -80,7 +81,13 @@ export function setShellStartupMs(ms: number): void {
  *   names, etc.). Do not pass user-visible strings or PII.
  */
 export function mark(tag: string, detail?: Record<string, string | number>): void {
-  if (!tag.startsWith("boot.") && !perfLog.tracking) return;
+  const isBootTag = tag.startsWith("boot.");
+  if (isBootTag) {
+    if (bootTagsSeen.has(tag)) return;
+    bootTagsSeen.add(tag);
+  } else if (!perfLog.tracking) {
+    return;
+  }
   const t = Math.round(performance.now() * 10) / 10;
   const entry: PerfLogEntry = detail ? { t, tag, detail } : { t, tag };
   if (perfLog.entries.length >= MAX_ENTRIES) {
@@ -104,9 +111,11 @@ export function firstMarkTime(tag: string): number | undefined {
 }
 
 /**
- * Empty the buffer. Used by the perf panel's "Clear" button before a new
- * trace capture so the user copies only the relevant scenario.
+ * Clear interaction trace marks while preserving startup boot marks. Used by
+ * the perf panel's Speed Log "Clear" button before a new trace capture.
  */
 export function clear(): void {
+  const bootEntries = perfLog.entries.filter((entry) => entry.tag.startsWith("boot."));
   perfLog.entries.length = 0;
+  perfLog.entries.push(...bootEntries);
 }

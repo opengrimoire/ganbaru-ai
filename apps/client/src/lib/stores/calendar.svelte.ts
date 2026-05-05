@@ -82,6 +82,32 @@ function hasStructuralChanges(
 /** DB-backed template events (no virtual instances). */
 let rawBlocks = $state<CalendarEvent[]>([]);
 let batchDepth = 0;
+const PANEL_EVENT_CACHE_LIMIT = 64;
+const panelEventCache = new Map<string, Promise<CalendarEvent | undefined>>();
+
+type DbFullEvent = DbCalendarEvent & {
+  description: string | null;
+  url: string | null;
+  source_uid: string | null;
+  visibility: string;
+  priority: number | null;
+  categories: string | null;
+  geo: string | null;
+  sequence: number;
+  extended_properties: string | null;
+  organizer: string | null;
+  guest_can_modify: number;
+  guest_can_invite_others: number;
+  guest_can_see_other_guests: number;
+};
+
+type DbFullOverride = DbOverride & {
+  description: string | null;
+  location: string | null;
+  url: string | null;
+  visibility: string | null;
+  extended_properties: string | null;
+};
 
 /**
  * Sorted lookup over `rawBlocks`, rebuilt lazily after each invalidate. The
@@ -109,7 +135,46 @@ let indexVersion = $state(0);
 function invalidate() {
   if (batchDepth > 0) return;
   expansionIndex = null;
+  panelEventCache.clear();
   indexVersion++;
+}
+
+function rememberPanelEvent(id: string, promise: Promise<CalendarEvent | undefined>) {
+  panelEventCache.set(id, promise);
+  while (panelEventCache.size > PANEL_EVENT_CACHE_LIMIT) {
+    const first = panelEventCache.keys().next().value;
+    if (typeof first !== "string") break;
+    panelEventCache.delete(first);
+  }
+}
+
+function applyFullEventFields(row: DbFullEvent, event: CalendarEvent) {
+  if (row.description) event.description = row.description;
+  if (row.url) event.url = row.url;
+  if (row.source_uid) event.sourceUid = row.source_uid;
+  if (row.visibility && row.visibility !== "public") {
+    event.visibility = row.visibility as EventVisibility;
+  }
+  if (row.priority != null) event.priority = row.priority;
+  const categories = safeJsonParse<string[]>(row.categories);
+  if (categories) event.categories = categories;
+  const geo = safeJsonParse<GeoCoordinates>(row.geo);
+  if (geo) event.geo = geo;
+  if (row.sequence) event.sequence = row.sequence;
+  const extendedProperties =
+    safeJsonParse<Record<string, string>>(row.extended_properties);
+  if (extendedProperties) event.extendedProperties = extendedProperties;
+  const organizer = safeJsonParse<EventOrganizer>(row.organizer);
+  if (organizer) event.organizer = organizer;
+  if (row.guest_can_modify === 1
+    || row.guest_can_invite_others === 0
+    || row.guest_can_see_other_guests === 0) {
+    event.guestPermissions = {
+      canModify: row.guest_can_modify === 1,
+      canInviteOthers: row.guest_can_invite_others !== 0,
+      canSeeOtherGuests: row.guest_can_see_other_guests !== 0,
+    };
+  }
 }
 
 function getIndex(): ExpansionIndex {
@@ -193,7 +258,8 @@ async function saveOverrides(
  * Load slim per-instance overrides in one unfiltered query and group by
  * parent id. Heavy override columns (description, location, url,
  * extended_properties, visibility) stay in the DB and ride along with the
- * parent through `loadFullEvent` when EventPanel or ICS export needs them.
+ * parent through the panel / full-event loaders when EventPanel, undo, or
+ * ICS export needs them.
  */
 async function loadOverrides(renderZone: string): Promise<Map<string, EventOverride[]>> {
   const rows = await select<DbOverride>(
@@ -313,42 +379,62 @@ export function getCalendar() {
     },
 
     /**
+     * Fetch just the fields the event panel needs for first paint. This is
+     * intentionally lighter than `loadFullEvent`: no alarms and no recurring
+     * override mirrors. Results are cached until the next calendar mutation,
+     * and event tiles prefetch this on pointer hover / pointer down.
+     */
+    async loadPanelEvent(id: string): Promise<CalendarEvent | undefined> {
+      const cached = panelEventCache.get(id);
+      if (cached) return cached;
+
+      const promise = (async () => {
+        const renderZone = localTimezone();
+        const [rows, attendeeRows] = await Promise.all([
+          select<DbFullEvent>(
+            `SELECT ce.*,
+                    pc.focus_duration_minutes, pc.short_break_minutes,
+                    pc.long_break_minutes, pc.pomodoro_count,
+                    pc.idle_timeout_minutes
+             FROM calendar_events ce
+             LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
+             WHERE ce.id = $1`,
+            [id],
+          ),
+          select<DbAttendee>(
+            `SELECT * FROM calendar_event_attendees WHERE event_id = $1
+             ORDER BY sort_order ASC`,
+            [id],
+          ),
+        ]);
+        if (rows.length === 0) return undefined;
+        const event = mapRow(rows[0], renderZone);
+        applyFullEventFields(rows[0], event);
+        if (attendeeRows.length > 0) event.attendees = attendeeRows.map(mapAttendee);
+        return event;
+      })().catch((e: unknown) => {
+        if (panelEventCache.get(id) === promise) panelEventCache.delete(id);
+        throw e;
+      });
+
+      rememberPanelEvent(id, promise);
+      return promise;
+    },
+
+    prefetchPanelEvent(id: string): void {
+      void store.loadPanelEvent(id).catch((e) => {
+        console.warn("[calendar] panel event prefetch failed:", e);
+      });
+    },
+
+    /**
      * Fetch the full DB row for one event id and return a fully populated
      * `CalendarEvent`. The boot path holds only a slim subset of columns in
-     * `rawBlocks`; this is what EventPanel and the ICS exporter call when
-     * they need the heavy fields (description, url, organizer, attendees,
-     * alarms, visibility, priority, categories, geo, sequence,
-     * extendedProperties, guestPermissions, plus heavy override columns).
-     *
-     * Four queries run in parallel: the main row joined with its pomodoro
-     * config, plus attendees / alarms / overrides keyed by event_id /
-     * parent_event_id. All four hit indexed PK or FK columns, so the cost
-     * over Tauri IPC is a few milliseconds even on the release build.
+     * `rawBlocks`; this is what ICS export and undo / redo call when they
+     * need every heavy field, including alarms and override mirrors.
      */
     async loadFullEvent(id: string): Promise<CalendarEvent | undefined> {
       const renderZone = localTimezone();
-      type DbFullEvent = DbCalendarEvent & {
-        description: string | null;
-        url: string | null;
-        source_uid: string | null;
-        visibility: string;
-        priority: number | null;
-        categories: string | null;
-        geo: string | null;
-        sequence: number;
-        extended_properties: string | null;
-        organizer: string | null;
-        guest_can_modify: number;
-        guest_can_invite_others: number;
-        guest_can_see_other_guests: number;
-      };
-      type DbFullOverride = DbOverride & {
-        description: string | null;
-        location: string | null;
-        url: string | null;
-        visibility: string | null;
-        extended_properties: string | null;
-      };
       const [rows, attendeeRows, alarmRows, overrideRows] = await Promise.all([
         select<DbFullEvent>(
           `SELECT ce.*,
@@ -378,33 +464,7 @@ export function getCalendar() {
       if (rows.length === 0) return undefined;
       const row = rows[0];
       const event = mapRow(row, renderZone);
-
-      if (row.description) event.description = row.description;
-      if (row.url) event.url = row.url;
-      if (row.source_uid) event.sourceUid = row.source_uid;
-      if (row.visibility && row.visibility !== "public") {
-        event.visibility = row.visibility as EventVisibility;
-      }
-      if (row.priority != null) event.priority = row.priority;
-      const categories = safeJsonParse<string[]>(row.categories);
-      if (categories) event.categories = categories;
-      const geo = safeJsonParse<GeoCoordinates>(row.geo);
-      if (geo) event.geo = geo;
-      if (row.sequence) event.sequence = row.sequence;
-      const extendedProperties =
-        safeJsonParse<Record<string, string>>(row.extended_properties);
-      if (extendedProperties) event.extendedProperties = extendedProperties;
-      const organizer = safeJsonParse<EventOrganizer>(row.organizer);
-      if (organizer) event.organizer = organizer;
-      if (row.guest_can_modify === 1
-        || row.guest_can_invite_others === 0
-        || row.guest_can_see_other_guests === 0) {
-        event.guestPermissions = {
-          canModify: row.guest_can_modify === 1,
-          canInviteOthers: row.guest_can_invite_others !== 0,
-          canSeeOtherGuests: row.guest_can_see_other_guests !== 0,
-        };
-      }
+      applyFullEventFields(row, event);
 
       if (attendeeRows.length > 0) {
         event.attendees = attendeeRows.map(mapAttendee);

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { fieldEqual, isDirtyDiff } from "./edit-session.svelte";
+import type { CalendarEvent } from "./types";
+import {
+  buildCreatePanelInitialChanges,
+  buildEditPanelInitialChanges,
+  fieldEqual,
+  isDirtyDiff,
+} from "./edit-session.svelte";
 
 describe("fieldEqual", () => {
   it("treats two undefined values as equal", () => {
@@ -155,5 +161,63 @@ describe("isDirtyDiff", () => {
     const baseline = { title: "X", color: undefined, description: undefined };
     const changes = { title: "X", color: undefined, description: undefined };
     expect(isDirtyDiff(changes, baseline)).toBe(false);
+  });
+});
+
+describe("panel initial changes", () => {
+  function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
+    return {
+      id: "evt1",
+      title: " Focus ",
+      start: "2026-04-16 09:00",
+      end: "2026-04-16 10:00",
+      timezone: "America/New_York",
+      calendarId: "local",
+      ...overrides,
+    };
+  }
+
+  it("normalizes edit baseline to the panel emit shape", () => {
+    const result = buildEditPanelInitialChanges(makeEvent({
+      notifications: [30, 0, 30],
+      pomodoroConfig: {
+        focusDurationMinutes: 40,
+        shortBreakMinutes: 5,
+        longBreakMinutes: 10,
+        pomodoroCount: 2,
+        idleTimeoutMinutes: 15,
+      },
+      location: "Office",
+      visibility: "private",
+    }));
+
+    expect(result.title).toBe("Focus");
+    expect(result.notifications).toEqual([0, 30]);
+    expect(result.pomodoroConfig).toEqual({
+      focusDurationMinutes: 40,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 10,
+      pomodoroCount: 4,
+      idleTimeoutMinutes: 1,
+    });
+    expect(result.location).toBe("Office");
+    expect(result.visibility).toBe("private");
+  });
+
+  it("seeds create baseline with default panel values", () => {
+    const result = buildCreatePanelInitialChanges("2026-04-16 09:00", "2026-04-16 10:00", true);
+
+    expect(result.title).toBe("");
+    expect(result.start).toBe("2026-04-16 09:00");
+    expect(result.end).toBe("2026-04-16 10:00");
+    expect(result.notifications).toEqual([0]);
+    expect(result.allDay).toBe(true);
+    expect(result.pomodoroConfig).toEqual({
+      focusDurationMinutes: 40,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 10,
+      pomodoroCount: 4,
+      idleTimeoutMinutes: 1,
+    });
   });
 });

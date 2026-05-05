@@ -40,9 +40,65 @@
   const theme = getTheme();
 
   type EventPanelComponent = typeof import("./EventPanel.svelte").default;
+  type IdleSchedulerWindow = Window & typeof globalThis & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+  type ParkedPanelSnapshot =
+    | {
+        mode: "create";
+        start: string;
+        end: string;
+        anchor: PanelAnchor;
+        initialAllDay: boolean;
+      }
+    | {
+        mode: "edit";
+        event: CalendarEvent;
+        anchor: PanelAnchor;
+        detailsLoaded: boolean;
+        readOnly: boolean;
+        skipInlineDeleteConfirm: boolean;
+      };
+  type PanelRenderState =
+    | {
+        parked: boolean;
+        mode: "create";
+        start: string;
+        end: string;
+        anchor: PanelAnchor;
+        initialAllDay: boolean;
+        event?: undefined;
+        detailsLoaded: false;
+        externalDirty: false;
+        readOnly: false;
+        skipInlineDeleteConfirm: false;
+      }
+    | {
+        parked: boolean;
+        mode: "edit";
+        start: "";
+        end: "";
+        anchor: PanelAnchor;
+        initialAllDay: false;
+        event: CalendarEvent;
+        detailsLoaded: boolean;
+        externalDirty: boolean;
+        readOnly: boolean;
+        skipInlineDeleteConfirm: boolean;
+      };
+
+  const PANEL_PARK_TIMEOUT_MS = 500;
+  const CREATE_CLOSE_GUARD_MS = 500;
+  const PARKED_PANEL_ANCHOR: PanelAnchor = { x: -10000, y: -10000, width: 0, height: 0 };
+
   let EventPanel = $state<EventPanelComponent | null>(null);
   let loadingEventPanel: Promise<void> | null = null;
   let panelOpenRequestId = 0;
+  let parkedPanelSnapshot = $state<ParkedPanelSnapshot | null>(null);
+  let panelParkScheduled = false;
+  let panelParkIdleHandle = 0;
+  let panelParkTimerHandle = 0;
 
   function loadEventPanel(): Promise<void> {
     if (EventPanel) return Promise.resolve();
@@ -54,6 +110,74 @@
         loadingEventPanel = null;
       });
     return loadingEventPanel;
+  }
+
+  function ensureEventPanelReady(requestId: number): Promise<void> | undefined {
+    if (EventPanel) {
+      perfMark("panel.module-ready", { request: requestId });
+      return undefined;
+    }
+    return loadEventPanel().then(() => {
+      if (requestId === panelOpenRequestId) {
+        perfMark("panel.module-ready", { request: requestId });
+      }
+    });
+  }
+
+  function closeSession() {
+    const snapshot = snapshotCurrentPanel();
+    if (snapshot) parkedPanelSnapshot = snapshot;
+    session.close();
+  }
+
+  function buildDefaultParkedPanelSnapshot(): ParkedPanelSnapshot {
+    const day = formatDatePart(new Date());
+    return {
+      mode: "create",
+      start: `${day} 00:00`,
+      end: `${day} 00:00`,
+      anchor: PARKED_PANEL_ANCHOR,
+      initialAllDay: false,
+    };
+  }
+
+  async function mountParkedPanel() {
+    panelParkIdleHandle = 0;
+    panelParkTimerHandle = 0;
+    if (parkedPanelSnapshot || session.state.mode !== "closed") return;
+    try {
+      await loadEventPanel();
+      if (session.state.mode === "closed" && !parkedPanelSnapshot) {
+        parkedPanelSnapshot = buildDefaultParkedPanelSnapshot();
+      }
+    } catch (e) {
+      console.error("[CalendarView] park event panel failed:", e);
+    }
+  }
+
+  function schedulePanelPark() {
+    if (panelParkScheduled) return;
+    panelParkScheduled = true;
+    const idleWindow = window as IdleSchedulerWindow;
+    if (idleWindow.requestIdleCallback) {
+      panelParkIdleHandle = idleWindow.requestIdleCallback(() => {
+        void mountParkedPanel();
+      }, { timeout: PANEL_PARK_TIMEOUT_MS });
+      return;
+    }
+    panelParkTimerHandle = window.setTimeout(() => {
+      void mountParkedPanel();
+    }, PANEL_PARK_TIMEOUT_MS);
+  }
+
+  function markPanelPaintDone(requestId: number) {
+    tick().then(() => {
+      if (requestId !== panelOpenRequestId) return;
+      perfMark("panel.flush-done", { request: requestId });
+      requestAnimationFrame(() => {
+        if (requestId === panelOpenRequestId) perfMark("panel.paint-done", { request: requestId });
+      });
+    });
   }
 
   /**
@@ -91,9 +215,9 @@
   // (store updates before session closes, so preview would briefly conflict)
   let suppressEditPreview = $state(false);
 
-  // Visible-viewport window. Drives both the store's expansion cache and
-  // the edit-flow preview. Held-arrow nav stays cheap because the cache
-  // hits on adjacent windows pre-warmed during idle time.
+  // Visible-viewport window. Drives both the store's expansion index and
+  // the edit-flow preview. Held-arrow nav stays cheap because anchor changes
+  // are coalesced to one viewport update per animation frame.
   const viewWindow = $derived(computeViewWindow(anchorDate, viewMode));
 
   // Keep the headless handle's cached view mode in sync so external drivers
@@ -169,6 +293,7 @@
 
   // Track when drag operations end to prevent click-to-close after drag
   let lastDragEndTime = 0;
+  let suppressOutsideClickUntil = 0;
 
   // Merged event for the panel (original + changes, so panel sees drag/resize updates)
   const panelEvent = $derived.by(() => {
@@ -201,6 +326,91 @@
     if (!ev.pomodoroConfig) return false;
     if (ev.id === pomodoro.activeBlockId) return false;
     return parseCalendarDate(ev.end).getTime() < Date.now();
+  });
+
+  function snapshotCurrentPanel(): ParkedPanelSnapshot | null {
+    const s = session.state;
+    if (s.mode === "create") {
+      return {
+        mode: "create",
+        start: s.start,
+        end: s.end,
+        anchor: s.anchor,
+        initialAllDay: !!session.changes.allDay,
+      };
+    }
+    if (s.mode === "edit" && panelEvent) {
+      return {
+        mode: "edit",
+        event: panelEvent,
+        anchor: s.anchor,
+        detailsLoaded: panelDetailsLoaded,
+        readOnly: isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId),
+        skipInlineDeleteConfirm: deleteWouldStopSession,
+      };
+    }
+    return null;
+  }
+
+  const panelRender = $derived.by<PanelRenderState | null>(() => {
+    const s = session.state;
+    if (s.mode === "create") {
+      return {
+        parked: false,
+        mode: "create",
+        start: s.start,
+        end: s.end,
+        anchor: s.anchor,
+        initialAllDay: !!session.changes.allDay,
+        detailsLoaded: false,
+        externalDirty: false,
+        readOnly: false,
+        skipInlineDeleteConfirm: false,
+      };
+    }
+    if (s.mode === "edit" && panelEvent) {
+      return {
+        parked: false,
+        mode: "edit",
+        start: "",
+        end: "",
+        anchor: s.anchor,
+        initialAllDay: false,
+        event: panelEvent,
+        detailsLoaded: panelDetailsLoaded,
+        externalDirty: session.dirty,
+        readOnly: isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId),
+        skipInlineDeleteConfirm: deleteWouldStopSession,
+      };
+    }
+    if (!parkedPanelSnapshot) return null;
+    if (parkedPanelSnapshot.mode === "create") {
+      return {
+        parked: true,
+        mode: "create",
+        start: parkedPanelSnapshot.start,
+        end: parkedPanelSnapshot.end,
+        anchor: parkedPanelSnapshot.anchor,
+        initialAllDay: parkedPanelSnapshot.initialAllDay,
+        detailsLoaded: false,
+        externalDirty: false,
+        readOnly: false,
+        skipInlineDeleteConfirm: false,
+      };
+    }
+    return {
+      parked: true,
+      mode: "edit",
+      start: "",
+      end: "",
+      anchor: parkedPanelSnapshot.anchor,
+      initialAllDay: false,
+      event: parkedPanelSnapshot.event,
+      detailsLoaded: parkedPanelSnapshot.detailsLoaded,
+      externalDirty: false,
+      readOnly: parkedPanelSnapshot.readOnly,
+      skipInlineDeleteConfirm: parkedPanelSnapshot.skipInlineDeleteConfirm,
+    };
   });
 
   function isRecurring(event: CalendarEvent): boolean {
@@ -441,7 +651,7 @@
         await calendarStore.updateBlock(action.before);
       }
       redoStack = [...redoStack, action];
-      session.close();
+      closeSession();
     }, { title });
   }
 
@@ -605,6 +815,7 @@
     tick().then(() => {
       requestAnimationFrame(() => {
         perfMark("boot.first-paint", { count: visibleEvents.length });
+        schedulePanelPark();
       });
     });
 
@@ -626,6 +837,13 @@
       if (anchorRaf !== 0) {
         cancelAnimationFrame(anchorRaf);
         anchorRaf = 0;
+      }
+      const idleWindow = window as IdleSchedulerWindow;
+      if (panelParkIdleHandle !== 0 && idleWindow.cancelIdleCallback) {
+        idleWindow.cancelIdleCallback(panelParkIdleHandle);
+      }
+      if (panelParkTimerHandle !== 0) {
+        window.clearTimeout(panelParkTimerHandle);
       }
       pendingAnchor = null;
       window.removeEventListener("keydown", handleKeydown);
@@ -698,8 +916,8 @@
     });
   }
 
-  function handleEventCreate(start: string, end: string, allDay?: boolean) {
-    panelOpenRequestId++;
+  async function handleEventCreate(start: string, end: string, allDay?: boolean) {
+    const requestId = ++panelOpenRequestId;
     pendingEditEventId = undefined;
     // Track that a create operation ended (prevents click-to-close)
     lastDragEndTime = Date.now();
@@ -711,9 +929,25 @@
       ? { x: colRect?.right ?? rect.right, y: rect.top, width: colRect?.width ?? rect.width, height: rect.height }
       : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-    perfMark("panel.start", { mode: "create" });
-    void loadEventPanel();
-    session.openCreate(start, end, anchor, allDay);
+    const panelState = session.state.mode === "closed"
+      ? parkedPanelSnapshot ? "unpark" : "open"
+      : "switch";
+    perfMark("panel.start", {
+      mode: "create",
+      state: panelState,
+      module: EventPanel ? "loaded" : "cold",
+      request: requestId,
+    });
+    try {
+      const panelReady = ensureEventPanelReady(requestId);
+      if (panelReady) await panelReady;
+      if (requestId !== panelOpenRequestId) return;
+      session.openCreate(start, end, anchor, allDay);
+      perfMark("panel.state-open", { request: requestId });
+      markPanelPaintDone(requestId);
+    } catch (e) {
+      console.error("[CalendarView] open create panel failed:", e);
+    }
   }
 
   function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
@@ -734,12 +968,25 @@
     const openEvent = async () => {
       const requestId = ++panelOpenRequestId;
       pendingEditEventId = event.id;
-      perfMark("panel.start", { mode: "edit" });
+      const panelState = session.state.mode === "closed"
+        ? parkedPanelSnapshot ? "unpark" : "open"
+        : "switch";
+      perfMark("panel.start", {
+        mode: "edit",
+        state: panelState,
+        module: EventPanel ? "loaded" : "cold",
+        request: requestId,
+      });
       try {
         const lookupId = event.recurringParentId ?? event.id;
         const [fullEvent] = await Promise.all([
-          calendarStore.loadFullEvent(lookupId),
-          loadEventPanel(),
+          calendarStore.loadPanelEvent(lookupId).then((full) => {
+            if (requestId === panelOpenRequestId) {
+              perfMark("panel.details-ready", { found: full ? 1 : 0, request: requestId });
+            }
+            return full;
+          }),
+          ensureEventPanelReady(requestId) ?? Promise.resolve(),
         ]);
         if (requestId !== panelOpenRequestId) return;
         const hydratedEvent = fullEvent
@@ -750,6 +997,8 @@
         } else {
           session.openEdit(hydratedEvent, anchor, undefined, !!fullEvent);
         }
+        perfMark("panel.state-open", { request: requestId });
+        markPanelPaintDone(requestId);
       } catch (e) {
         console.error("[CalendarView] open event failed:", e);
       } finally {
@@ -767,6 +1016,11 @@
     }
 
     openEvent();
+  }
+
+  function handleEventPrefetch(event: CalendarEvent) {
+    if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
+    calendarStore.prefetchPanelEvent(event.recurringParentId ?? event.id);
   }
 
   async function handleEventUpdate(event: CalendarEvent) {
@@ -808,13 +1062,11 @@
         requestConfirm(
           "Your changes will be lost.",
           async () => {
-            // Open with the pre-drag instance as originalEvent so the panel's
-            // initial sync captures pre-drag values as baseline. tick() lets
-            // the panel mount and emit that sync before the drag delta is
-            // applied to changes, making dirty correctly reflect the drag.
+            // Open with the pre-drag instance as originalEvent so the
+            // session baseline starts from pre-drag values before the drag
+            // delta is applied to changes.
             await loadEventPanel();
             session.openEdit(originalInstance, anchor, originalInstance);
-            await tick();
             session.updateChanges({ start: event.start, end: event.end });
           },
           { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
@@ -831,7 +1083,6 @@
 
       await loadEventPanel();
       session.openEdit(originalInstance, anchor, originalInstance);
-      await tick();
       session.updateChanges({ start: event.start, end: event.end });
       return;
     }
@@ -869,12 +1120,50 @@
     if (session.dirty) {
       requestConfirm(
         "Your changes will be lost.",
-        async () => { session.close(); },
+        async () => { closeSession(); },
         { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
       return;
     }
-    session.close();
+    closeSession();
+  }
+
+  function isPanelOrEventTarget(target: EventTarget | null): boolean {
+    return target instanceof Element
+      && (target.closest("[data-event-id]") !== null || target.closest(".panel-root") !== null);
+  }
+
+  function handleOutsidePointerDown(e: PointerEvent) {
+    if (session.state.mode === "closed") return;
+    if (isPanelOrEventTarget(e.target)) return;
+
+    suppressOutsideClickUntil = performance.now() + 750;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (Date.now() - lastDragEndTime < CREATE_CLOSE_GUARD_MS) return;
+    handlePanelClose();
+  }
+
+  function handleOutsideClick(e: MouseEvent) {
+    if (performance.now() > suppressOutsideClickUntil) {
+      suppressOutsideClickUntil = 0;
+      return;
+    }
+    suppressOutsideClickUntil = 0;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function outsideClose(node: HTMLElement) {
+    node.addEventListener("pointerdown", handleOutsidePointerDown, true);
+    node.addEventListener("click", handleOutsideClick, true);
+    return {
+      destroy() {
+        node.removeEventListener("pointerdown", handleOutsidePointerDown, true);
+        node.removeEventListener("click", handleOutsideClick, true);
+      },
+    };
   }
 
   async function handlePanelSave(data: {
@@ -1149,7 +1438,7 @@
       pomodoro.stopSession();
       sessionStopPending = false;
     }
-    session.close();
+    closeSession();
     suppressEditingGlow = false;
     suppressEditPreview = false;
   }
@@ -1232,7 +1521,7 @@
       pomodoro.stopSession();
       sessionStopPending = false;
     }
-    session.close();
+    closeSession();
   }
 
   function handleDayClickFromMonth(date: Date) {
@@ -1255,16 +1544,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={containerEl} class="relative flex h-full flex-col select-none overflow-hidden" onclick={(e) => {
-  // Close panel when clicking on empty calendar space (not on events or panel)
-  if (session.state.mode === "closed") return;
-  // Don't close if a drag operation just ended (click fires after pointerup)
-  // Use 500ms threshold to account for initialization delays on first interaction
-  if (Date.now() - lastDragEndTime < 500) return;
-  const target = e.target as HTMLElement;
-  if (target.closest("[data-event-id]") || target.closest(".panel-root")) return;
-  handlePanelClose();
-}}>
+<div bind:this={containerEl} use:outsideClose class="relative flex h-full flex-col select-none overflow-hidden">
   <CalendarHeader
     {anchorDate}
     {viewMode}
@@ -1287,6 +1567,7 @@
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
+        onEventPrefetch={handleEventPrefetch}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}
         onAddTimezone={addTimezone}
@@ -1309,6 +1590,7 @@
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
+        onEventPrefetch={handleEventPrefetch}
         onEventUpdate={handleEventUpdate}
         onEventCreate={handleEventCreate}
         onAddTimezone={addTimezone}
@@ -1325,6 +1607,7 @@
         theme={theme.current}
         onDayClick={handleDayClickFromMonth}
         onEventClick={handleEventClick}
+        onEventPrefetch={handleEventPrefetch}
         onWheelNavigate={handleWheelNavigate}
       />
     {/if}
@@ -1348,39 +1631,30 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- Invisible backdrop: pointer-events pass through, clicks on empty space close panel -->
     <div class="fixed inset-0 z-40 pointer-events-none"></div>
-    {#if EventPanel}
-      {@const Panel = EventPanel}
-      {#if session.state.mode === "create"}
-        <Panel
-          mode="create"
-          start={session.state.start}
-          end={session.state.end}
-          anchor={session.state.anchor}
-          initialAllDay={!!session.changes.allDay}
-          onSave={handlePanelSave}
-          onChange={handlePanelChange}
-          onInitialSync={handlePanelInitialSync}
-          onClose={handlePanelClose}
-        />
-      {:else if session.state.mode === "edit"}
-        <Panel
-          mode="edit"
-          event={panelEvent}
-          anchor={session.state.anchor}
-          detailsLoaded={panelDetailsLoaded}
-          externalDirty={session.dirty}
-          readOnly={isEditingLocked || calendarsStore.isReadOnly(session.state.originalEvent.calendarId)}
-          skipInlineDeleteConfirm={deleteWouldStopSession}
-          loadFullEvent={calendarStore.loadFullEvent}
-          onSave={handlePanelSave}
-          onDelete={handleDelete}
-          onChange={handlePanelChange}
-          onInitialSync={handlePanelInitialSync}
-          onClose={handlePanelClose}
-          onScopeChange={handleScopeChange}
-        />
-      {/if}
-    {/if}
+  {/if}
+  {#if EventPanel && panelRender}
+    {@const Panel = EventPanel}
+    <Panel
+      parked={panelRender.parked}
+      mode={panelRender.mode}
+      start={panelRender.start}
+      end={panelRender.end}
+      event={panelRender.mode === "edit" ? panelRender.event : undefined}
+      anchor={panelRender.anchor}
+      initialAllDay={panelRender.initialAllDay}
+      detailsLoaded={panelRender.detailsLoaded}
+      externalDirty={panelRender.externalDirty}
+      initialSyncSeeded
+      readOnly={panelRender.readOnly}
+      skipInlineDeleteConfirm={panelRender.skipInlineDeleteConfirm}
+      loadFullEvent={calendarStore.loadPanelEvent}
+      onSave={handlePanelSave}
+      onDelete={panelRender.mode === "edit" && !panelRender.parked ? handleDelete : undefined}
+      onChange={handlePanelChange}
+      onInitialSync={handlePanelInitialSync}
+      onClose={handlePanelClose}
+      onScopeChange={handleScopeChange}
+    />
   {/if}
 
 </div>

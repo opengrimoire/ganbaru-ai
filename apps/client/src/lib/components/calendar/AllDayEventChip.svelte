@@ -19,6 +19,7 @@
     canDrag = true,
     isPast = false,
     onclick,
+    onprefetch,
     onpointerdown,
   }: {
     event: CalendarEvent;
@@ -29,6 +30,7 @@
     canDrag?: boolean;
     isPast?: boolean;
     onclick: (rect?: DOMRect) => void;
+    onprefetch?: () => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
@@ -61,6 +63,7 @@
   }
 
   function handlePointerDown(e: PointerEvent) {
+    onprefetch?.();
     e.stopPropagation();
     onpointerdown?.(e);
   }
@@ -85,6 +88,7 @@
     {isTentative ? 'background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}
   "
   onclick={handleClick}
+  onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
   {#if hasRepeat || hasNotification}

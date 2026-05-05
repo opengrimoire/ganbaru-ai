@@ -23,6 +23,7 @@
     isPast = false,
     inResizeZone = false,
     onclick,
+    onprefetch,
     onpointerdown,
   }: {
     positioned: PositionedEvent;
@@ -34,6 +35,7 @@
     isPast?: boolean;
     inResizeZone?: boolean;
     onclick: (rect?: DOMRect) => void;
+    onprefetch?: () => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
@@ -67,6 +69,7 @@
   const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
 
   function handlePointerDown(e: PointerEvent) {
+    onprefetch?.();
     e.stopPropagation();
     onpointerdown?.(e);
   }
@@ -112,6 +115,7 @@
     filter: none;
   "
   onclick={handleClick}
+  onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
   <!-- Resize handle: top (hidden on clipped edge) -->

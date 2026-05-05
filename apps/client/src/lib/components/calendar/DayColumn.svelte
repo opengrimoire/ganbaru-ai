@@ -31,6 +31,7 @@
     dragPreview = null,
     createPreview = null,
     onEventClick,
+    onEventPrefetch,
     onDragStart,
     onCreateStart,
     editingId,
@@ -53,6 +54,7 @@
     grabbingId?: string;
     didDrag?: boolean;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
+    onEventPrefetch?: (event: CalendarEvent) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
   } = $props();
@@ -600,6 +602,7 @@
       isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
       inResizeZone={hoverResizeBlockId === pos.event.id}
       onclick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
+      onprefetch={() => onEventPrefetch?.(pos.event)}
       onpointerdown={(e) => onDragStart(pos.event.id, e, getBlockEdgeFromClick(pos.event.id, e))}
     />
   {/each}
