@@ -1,10 +1,11 @@
 /**
- * Phase orchestration for the benchmark harness.
+ * Pass orchestration for the benchmark harness.
  *
  * Public surface:
- * - `runPhaseA(scenario)` / `runPhaseB(scenario)`: drive the workload for one phase.
+ * - `runPhaseA(scenario)` / `runPhaseB(scenario)`: drive the workload for one pass.
  * - `persistPhaseAPending(...)`: write state file before the first restart.
- * - `persistPhaseBPending(...)`: write state file between Phase A and Phase B.
+ * - `persistPhaseBPending(...)`: write state file between the two passes.
+ * - `persistBenchmarkState(...)`: update the state file without changing the payload.
  * - `loadPersistedState()` / `clearPersistedState()`: state file plumbing.
  *
  * The scenario module owns `setup()`, `runWorkload()`, `seed()`, and
@@ -23,6 +24,7 @@ import {
   type BenchmarkState,
   type PhaseResult,
   type SampleLabel,
+  type StartupRunState,
 } from "./types";
 import {
   startPeakSampler,
@@ -32,7 +34,7 @@ import {
 } from "./sampler";
 
 /**
- * Run one phase. The scenario provides `setup()` and `runWorkload()`;
+ * Run one pass. The scenario provides `setup()` and `runWorkload()`;
  * the runner adds boot timing and, only for memory scenarios, peak sampling
  * plus the post-workload idle curve.
  */
@@ -71,6 +73,9 @@ async function runPhase(opts: {
   }
 
   const boot = captureBootTimings();
+  const startupSamples = opts.scenario.workload.kind === "startup"
+    ? [{ startedAt, eventCountAtStart, boot }]
+    : undefined;
 
   return {
     phase: opts.phase,
@@ -81,6 +86,7 @@ async function runPhase(opts: {
     metrics: maybeMetrics ?? undefined,
     boot,
     startupMs: boot.launchTotalMs,
+    startupSamples,
     eventCountAtStart,
   };
 }
@@ -120,40 +126,48 @@ export function createRunner(getEventCount: () => number) {
 /**
  * Persist `phase-a-pending` state, written right after the user confirms.
  * The next cold boot opens the isolated benchmark DB (because
- * `vaultMode === "benchmark"`) and the runner picks up Phase A from
+ * `vaultMode === "benchmark"`) and the runner picks up the baseline pass from
  * `checkAndResume`. State file lives in `app_config_dir/benchmark-state.json`,
  * not the vault.
  */
 export async function persistPhaseAPending(opts: {
   scenarioId: string;
   platform: string;
+  buildRef?: string;
+  startedAt?: string;
   suite?: BenchmarkSuiteState;
+  startupRuns?: StartupRunState;
 }): Promise<void> {
   const state: BenchmarkState = {
     scenarioId: opts.scenarioId,
-    startedAt: new Date().toISOString(),
+    startedAt: opts.startedAt ?? new Date().toISOString(),
     harnessVersion: HARNESS_VERSION,
     synthVersion: SYNTH_VERSION,
     platform: opts.platform,
+    buildRef: opts.buildRef,
     vaultMode: "benchmark",
     stage: "phase-a-pending",
     suite: opts.suite,
+    startupRuns: opts.startupRuns,
   };
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });
 }
 
 /**
- * Persist `phase-b-pending` state, written between Phase A finishing and
- * the second restart. Carries the captured Phase A result and the seed
- * handle so Phase B can reference both after the next cold boot.
+ * Persist `phase-b-pending` state, written after the baseline pass and
+ * before the second restart. Carries the captured baseline result and the
+ * seed handle so the synthetic pass can reference both after the next cold
+ * boot.
  */
 export async function persistPhaseBPending(opts: {
   scenarioId: string;
   platform: string;
+  buildRef?: string;
   startedAt: string;
   phaseA: PhaseResult;
   seedHandle: { calendarId: string; eventCount: number };
   suite?: BenchmarkSuiteState;
+  startupRuns?: StartupRunState;
 }): Promise<void> {
   const state: BenchmarkState = {
     scenarioId: opts.scenarioId,
@@ -161,12 +175,18 @@ export async function persistPhaseBPending(opts: {
     harnessVersion: HARNESS_VERSION,
     synthVersion: SYNTH_VERSION,
     platform: opts.platform,
+    buildRef: opts.buildRef,
     vaultMode: "benchmark",
     stage: "phase-b-pending",
     phaseA: opts.phaseA,
     seedHandle: opts.seedHandle,
     suite: opts.suite,
+    startupRuns: opts.startupRuns,
   };
+  await invoke("write_benchmark_state", { json: JSON.stringify(state) });
+}
+
+export async function persistBenchmarkState(state: BenchmarkState): Promise<void> {
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });
 }
 
@@ -176,6 +196,14 @@ export function restartApp(): void {
     // The IPC may resolve normally on platforms where the restart returns
     // before the new process kills the old one. Either way, nothing useful
     // can be done here.
+  });
+}
+
+/** Trigger a relaunch after the current app process has fully exited. */
+export function restartAppAfterDelay(delayMs: number): void {
+  void invoke("restart_app_after_delay", { delayMs }).catch(() => {
+    // If the helper cannot spawn, there is no useful in-process recovery:
+    // benchmark state has already been written for the next boot.
   });
 }
 
@@ -202,6 +230,14 @@ export async function loadPersistedState(): Promise<BenchmarkState | null> {
     return null;
   }
   if (parsed.synthVersion !== SYNTH_VERSION) {
+    await discardStaleArtifacts();
+    return null;
+  }
+  if (parsed.stage === "phase-a-running" || parsed.stage === "phase-b-running") {
+    await discardStaleArtifacts();
+    return null;
+  }
+  if (parsed.stage !== "phase-a-pending" && parsed.stage !== "phase-b-pending") {
     await discardStaleArtifacts();
     return null;
   }

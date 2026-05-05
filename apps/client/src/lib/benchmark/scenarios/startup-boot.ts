@@ -10,11 +10,11 @@ export const startupBootScenario: BenchmarkScenario = {
   id: "startup-boot",
   label: "Startup boot",
   description:
-    "Captures launch and boot marks after a cold restart without adding a memory settling window. Use this for startup-time regressions.",
+    "Captures repeated process launch samples to usable calendar paint without adding a memory settling window. Use this for startup-time regressions.",
   workload: {
     kind: "startup",
     question: "How fast does the app launch into the calendar?",
-    label: "calendar startup boot marks",
+    label: "calendar startup launch samples",
     durationMs: 0,
     memoryMode: "none",
   },

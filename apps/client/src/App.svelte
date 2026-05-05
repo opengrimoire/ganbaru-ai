@@ -110,11 +110,10 @@
       })
       .then(() => {
         // Hand control to the benchmark harness once calendar data is in
-        // memory. If a Phase A is waiting in the persisted state file, the
-        // runner mounts the overlay and runs Phase B; otherwise this is a
-        // no-op. Two rAFs ensure CalendarView has emitted boot.first-paint
-        // before the runner kicks off, so the Phase B boot mark capture
-        // sees the same shape as Phase A's.
+        // memory. Pending benchmark state mounts the overlay and resumes the
+        // next pass; otherwise this is a no-op. Two rAFs ensure CalendarView
+        // has emitted boot.first-paint before the runner kicks off, so boot
+        // mark capture sees the same shape in both passes.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             resumeBenchmarkIfNeeded().catch((e) =>

@@ -4,7 +4,7 @@ import type { CalendarEvent } from "$lib/components/calendar/types";
 import { generateSynthEvents, DEFAULT_SEED } from "../synth";
 import type { BenchmarkMetric, SynthEventDraft } from "../types";
 
-/** Anchor used by calendar benchmarks so Phase A and Phase B hit the same window. */
+/** Anchor used by calendar benchmarks so both passes hit the same window. */
 export const CALENDAR_BENCHMARK_ANCHOR_ISO = "2026-04-30";
 
 /** Calendar grouping name template. Renaming requires bumping `SYNTH_VERSION`. */

@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Stdio;
 use tauri::Manager;
 
 mod db;
@@ -8,6 +9,9 @@ mod tray;
 mod vault;
 
 static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+static PLATFORM_LABEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+const DELAYED_RELAUNCH_MS_ENV: &str = "GANBARUAI_DELAYED_RELAUNCH_MS";
+const DELAYED_RELAUNCH_TARGET_ENV: &str = "GANBARUAI_DELAYED_RELAUNCH_TARGET";
 
 #[tauri::command]
 fn get_startup_elapsed_ms() -> u64 {
@@ -138,6 +142,64 @@ fn restart_app(app: tauri::AppHandle) {
     app.restart();
 }
 
+/// Exit this process and let a short-lived helper reopen the app after a
+/// fixed delay. The benchmark startup harness uses this so repeated launch
+/// samples do not run as instant warm restarts.
+#[tauri::command]
+fn restart_app_after_delay(app: tauri::AppHandle, delay_ms: u64) -> Result<(), String> {
+    spawn_delayed_relaunch_helper(delay_ms)?;
+    app.exit(0);
+    Ok(())
+}
+
+fn spawn_delayed_relaunch_helper(delay_ms: u64) -> Result<(), String> {
+    let helper_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let target_exe = relaunch_target_path(&helper_exe);
+    std::process::Command::new(helper_exe)
+        .env(DELAYED_RELAUNCH_MS_ENV, delay_ms.to_string())
+        .env(DELAYED_RELAUNCH_TARGET_ENV, target_exe)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn relaunch_target_path(fallback: &std::path::Path) -> PathBuf {
+    #[cfg(target_os = "linux")]
+    if let Ok(appimage) = std::env::var("APPIMAGE") {
+        if !appimage.trim().is_empty() {
+            return PathBuf::from(appimage);
+        }
+    }
+    fallback.to_path_buf()
+}
+
+fn run_delayed_relaunch_helper_if_needed() -> bool {
+    let Ok(delay_raw) = std::env::var(DELAYED_RELAUNCH_MS_ENV) else {
+        return false;
+    };
+    let Ok(delay_ms) = delay_raw.parse::<u64>() else {
+        return false;
+    };
+    let target = std::env::var(DELAYED_RELAUNCH_TARGET_ENV)
+        .map(PathBuf::from)
+        .or_else(|_| std::env::current_exe());
+    let Ok(target) = target else {
+        return true;
+    };
+    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+    let _ = std::process::Command::new(target)
+        .env_remove(DELAYED_RELAUNCH_MS_ENV)
+        .env_remove(DELAYED_RELAUNCH_TARGET_ENV)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    true
+}
+
 #[derive(serde::Serialize, Clone)]
 struct ProcessMemory {
     name: String,
@@ -149,6 +211,74 @@ struct MemoryReport {
     processes: Vec<ProcessMemory>,
     total_mb: f64,
     platform: String,
+}
+
+fn platform_label() -> String {
+    PLATFORM_LABEL.get_or_init(detect_platform_label).clone()
+}
+
+#[cfg(target_os = "linux")]
+fn detect_platform_label() -> String {
+    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+        for line in content.lines() {
+            if let Some(value) = line.strip_prefix("PRETTY_NAME=") {
+                let pretty = value.trim().trim_matches('"');
+                if !pretty.is_empty() {
+                    return format!("Linux {pretty}");
+                }
+            }
+        }
+    }
+    "Linux".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn detect_platform_label() -> String {
+    if let Ok(output) = std::process::Command::new("cmd")
+        .args(["/C", "ver"])
+        .output()
+    {
+        let text = String::from_utf8_lossy(&output.stdout);
+        if let Some(version) = parse_windows_version(&text) {
+            let major = windows_marketing_version(&version);
+            return format!("{major} ({version})");
+        }
+    }
+    "Windows".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_version(text: &str) -> Option<String> {
+    let start = text.find("Version ")? + "Version ".len();
+    let rest = &text[start..];
+    let end = rest
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(rest.len());
+    let version = rest[..end].trim();
+    if version.is_empty() {
+        None
+    } else {
+        Some(version.to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_marketing_version(version: &str) -> &'static str {
+    let build = version
+        .split('.')
+        .nth(2)
+        .and_then(|part| part.parse::<u32>().ok())
+        .unwrap_or(0);
+    if build >= 22_000 {
+        "Windows 11"
+    } else {
+        "Windows 10"
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+fn detect_platform_label() -> String {
+    std::env::consts::OS.to_string()
 }
 
 #[tauri::command]
@@ -248,7 +378,7 @@ fn get_memory_report() -> MemoryReport {
         MemoryReport {
             processes,
             total_mb,
-            platform: "Linux".to_string(),
+            platform: platform_label(),
         }
     }
     #[cfg(target_os = "windows")]
@@ -271,7 +401,7 @@ fn get_memory_report() -> MemoryReport {
                 return MemoryReport {
                     processes: vec![],
                     total_mb: 0.0,
-                    platform: "Windows".to_string(),
+                    platform: platform_label(),
                 };
             }
 
@@ -345,7 +475,7 @@ fn get_memory_report() -> MemoryReport {
             MemoryReport {
                 processes,
                 total_mb,
-                platform: "Windows".to_string(),
+                platform: platform_label(),
             }
         }
     }
@@ -354,13 +484,16 @@ fn get_memory_report() -> MemoryReport {
         MemoryReport {
             processes: vec![],
             total_mb: 0.0,
-            platform: std::env::consts::OS.to_string(),
+            platform: platform_label(),
         }
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if run_delayed_relaunch_helper_if_needed() {
+        return;
+    }
     PROCESS_START.set(std::time::Instant::now()).ok();
 
     tauri::Builder::default()
@@ -398,6 +531,7 @@ pub fn run() {
             prepare_benchmark_db,
             teardown_benchmark_db,
             restart_app,
+            restart_app_after_delay,
             get_memory_report,
             get_startup_elapsed_ms,
             vault::vault_read_config,

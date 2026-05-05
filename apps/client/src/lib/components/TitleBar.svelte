@@ -21,6 +21,7 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
 
   let {
@@ -38,6 +39,7 @@
   const pomodoro = getPomodoro();
   const theme = getTheme();
   const zoom = getZoom();
+  const benchmarkRunner = getBenchmarkRunner();
 
   let isMaximized = $state(false);
   let showCloseConfirm = $state(false);
@@ -47,6 +49,7 @@
   const settingsLauncher = getSettingsLauncher();
   const themeEditor = getThemeEditor();
   let perfPinned = $state(false);
+  const lockedByBenchmark = $derived(benchmarkRunner.status !== "idle");
 
   type PerformancePopoverComponent = typeof import("$lib/components/perf/PerformancePopover.svelte").default;
   type SettingsModalComponent = typeof import("$lib/components/settings/SettingsModal.svelte").default;
@@ -119,11 +122,29 @@
     await invoke("reset_database");
   }
 
-  function handleClose() {
+  async function benchmarkBlocksClose(): Promise<boolean> {
+    if (lockedByBenchmark) return true;
+    try {
+      return (await invoke<string | null>("read_benchmark_state")) !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleClose() {
+    if (await benchmarkBlocksClose()) {
+      void ensureBenchmarkOverlay();
+      return;
+    }
     showCloseConfirm = true;
   }
 
   function confirmClose() {
+    if (lockedByBenchmark) {
+      showCloseConfirm = false;
+      void ensureBenchmarkOverlay();
+      return;
+    }
     showCloseConfirm = false;
     // Best-effort rollback of any open theme edit so the vault does not
     // keep half-tuned colors after a forced quit. Debounced writes may not
@@ -169,7 +190,7 @@
     });
     win.onCloseRequested((e) => {
       e.preventDefault();
-      showCloseConfirm = true;
+      void handleClose();
     }).then((unlisten) => {
       cleanupClose = unlisten;
     });
@@ -182,7 +203,12 @@
   function handleModalKeydown(e: KeyboardEvent) {
     if (e.ctrlKey && e.shiftKey && e.key === "W") {
       e.preventDefault();
-      handleClose();
+      e.stopPropagation();
+      if (lockedByBenchmark) {
+        void ensureBenchmarkOverlay();
+        return;
+      }
+      void handleClose();
     }
   }
 
@@ -480,8 +506,14 @@
     </button>
     <button
       onclick={handleClose}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-destructive hover:text-destructive-foreground"
-      title="Close"
+      disabled={lockedByBenchmark}
+      class={cn(
+        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+        lockedByBenchmark
+          ? "cursor-not-allowed opacity-40"
+          : "hover:bg-destructive hover:text-destructive-foreground",
+      )}
+      title={lockedByBenchmark ? "Disabled while a benchmark is active" : "Close"}
     >
       <X size={14} strokeWidth={1.75} />
     </button>

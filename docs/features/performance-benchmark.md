@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v4 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then emits normalized markdown for `docs/PERFORMANCE.md`.
+Harness v9 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`.
 
 ## User flow
 
@@ -15,13 +15,14 @@ Recommended flow:
 3. Open the title-bar performance panel.
 4. Click `Run all benchmarks`.
 5. Leave the app alone while the overlay runs.
-6. Copy the markdown summary and paste it into the thread for placement.
+6. Review the readable summary tables.
+7. Click `Copy markdown` and send the markdown to an agent for careful placement in the performance record.
 
 The harness fires a desktop notification when it reaches summary or error state.
 
 ## Data safety
 
-The harness uses `app_config_dir/ganbaruai-benchmark.db` for the whole run. The user's real database and vault are not opened during benchmark phases.
+The harness uses `app_config_dir/ganbaruai-benchmark.db` for the whole run. The user's real database and vault are not opened during benchmark passes.
 
 Safety mechanisms:
 
@@ -31,20 +32,22 @@ Safety mechanisms:
 - The app restarts after teardown so the SQL plugin opens the real user DB again.
 - Stale state is discarded when `HARNESS_VERSION`, `SYNTH_VERSION`, or the TTL check fails.
 
-## Phase model
+## Dataset ids
 
-Every scenario runs two cold phases:
+Benchmark result tables use compact dataset ids:
 
-| Phase | Dataset |
+| Pattern | Meaning |
 |---|---|
-| A | Empty isolated benchmark DB, plus setup rows required by the scenario |
-| B | Isolated DB seeded with `benchmark-synth-v1` at 1000 events, plus setup rows required by the scenario |
+| `base-N` | The isolated benchmark DB after scenario setup and before synthetic seeding. `N` is the number of calendar events present at measurement start. |
+| `synth-vX-N` | The isolated benchmark DB seeded with synthetic dataset version `vX`. `N` is the number of calendar events present at measurement start. |
+
+The formatter emits these ids directly. Do not render prose dataset labels such as "empty", "setup events", or "synthetic calendar" in copied markdown.
 
 Each scenario declares a primary measurement mode:
 
 | Kind | Captures | Post-workload memory wait |
 |---|---|---|
-| `startup` | Boot marks only | No |
+| `startup` | Repeated process launches to usable calendar paint after a closed-process cooldown | No |
 | `idle-memory` | Workload peak, workload end, and +30s memory while idle | Yes |
 | `stress-memory` | Workload peak, workload end, and +30s memory during a fixed stress action | Yes |
 | `interaction-latency` | Repeated UI action timings and averages | No |
@@ -66,29 +69,41 @@ idle
 
 phase-a-pending
   open isolated empty DB
-  run Phase A
+  write phase-a-running
+  run baseline pass
+  for startup only, repeat phase-a-pending until enough launch samples exist
   seed benchmark-synth-v1
   write phase-b-pending
   restart app
 
 phase-b-pending
   open isolated seeded DB
-  run Phase B
+  write phase-b-running
+  run synthetic pass
+  for startup only, repeat phase-b-pending until enough launch samples exist
   if suite has more scenarios:
     prepare benchmark DB
     write next phase-a-pending with accumulated results
     restart app
   otherwise:
+    teardown benchmark DB
+    clear benchmark state
     show summary
 
 summary
   user clicks Return to your data
+  restart app
+
+phase-a-running or phase-b-running on boot
+  previous process was killed mid-pass
   teardown benchmark DB
   clear benchmark state
-  restart app
+  continue on the user's real DB
 ```
 
-One scenario currently costs two benchmark phases plus restarts. A full suite costs that amount multiplied by the number of registered scenarios.
+Non-startup scenarios currently cost two benchmark passes plus restarts. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five synthetic restarts. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
+
+If the process is killed during a benchmark pass, the partial result is not comparable. The next boot discards the isolated benchmark DB instead of trying to resume from data that may contain half-finished setup or workload state. Explicit Cancel still aborts the active run and restarts on the user's real DB.
 
 ## Scenario contract
 
@@ -121,7 +136,7 @@ export interface BenchmarkScenario {
 
 Implementation rules:
 
-- `setup()` places the app in the deterministic starting state for both phases.
+- `setup()` places the app in the deterministic starting state for both passes.
 - `runWorkload()` performs the measured action and must honor the abort signal.
 - Scenarios that need a fixed measurement window should keep the workload alive for `workload.durationMs`.
 - Interaction scenarios should run enough repetitions to report an average, median, p95, min, and max when practical.
@@ -133,13 +148,11 @@ Implementation rules:
 
 | Scenario | Module | Primary measurement |
 |---|---|---|
-| `startup-boot` | `lib/benchmark/scenarios/startup-boot.ts` | Cold launch and boot marks |
+| `startup-boot` | `lib/benchmark/scenarios/startup-boot.ts` | Repeated launch to usable calendar paint |
 | `idle-memory` | `lib/benchmark/scenarios/idle-memory.ts` | Idle calendar RAM |
 | `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Week-view navigation stress RAM |
 | `event-panel-open` | `lib/benchmark/scenarios/event-panel-open.ts` | Existing-event panel open and switch latency |
 | `calendar-create-cancel` | `lib/benchmark/scenarios/calendar-create-cancel.ts` | Create-panel open and cancel latency |
-| `ics-import` | `lib/benchmark/scenarios/ics-import.ts` | ICS parse and database write latency |
-| `theme-editor-open` | `lib/benchmark/scenarios/theme-editor-open.ts` | Settings and theme editor lazy-load and open latency |
 
 ## Synthetic event generator
 
@@ -159,27 +172,37 @@ Bumping the generator requires a new synth version and a fresh row series in `do
 
 ## Output format
 
-The summary overlay emits one markdown block per scenario. `Run all benchmarks` concatenates every block into one copyable suite summary.
+The summary overlay has two outputs:
 
-Every block contains:
+- A readable on-screen preview rendered from `BenchmarkResult` data as normal HTML tables.
+- A `Copy markdown` action that copies plain canonical markdown. This markdown is agent input for placing rows in `docs/PERFORMANCE.md`, not HTML and not a raw preview.
 
-- Header with date and platform.
-- Scenario and primary question.
-- Phase A and Phase B datasets.
-- Methodology line.
+While the benchmark overlay is active, in-app close affordances are blocked, including the title-bar close button, `Ctrl+Shift+W`, and Tauri close requests. A forced OS process kill cannot be blocked; the `*-running` state handles that case on the next boot.
 
-Then the block contains exactly the section that matches the scenario's primary measurement:
+During memory scenarios, the running overlay labels the fixed workload period as `Idle window: 3 s` or `Stress window: 3 s`. That label describes only the measured workload window. The later `Idle curve` step still waits for the post-workload memory sample.
 
-- `startup` emits `Startup boot`.
-- `idle-memory` and `stress-memory` emit `Memory PSS, MB`.
-- `interaction-latency` and `operation-latency` emit `Primary metrics`.
+The copied markdown is one suite-level block. It contains:
 
-The output intentionally avoids slash-packed memory cells so results can be copied into canonical tables with minimal rewriting.
+- Header with the run placeholder, such as `YYYY-MM-DD-ID` or the current date plus `-ID`.
+- One generated `Index` table that lists run metadata and every scenario section.
+- One `Run metadata` table with run id, harness, build ref, platform, and notes.
+- One section per scenario in the run.
+
+Each scenario section contains exactly the table that matches the scenario's primary measurement:
+
+- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v9 waits 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
+- `idle-memory` and `stress-memory` emit the memory table.
+- `interaction-latency` and `operation-latency` emit repeated latency rows for metrics with run statistics.
+- Scalar metrics without run statistics, such as counts or one-off module load times, emit a compact `Run`, `Dataset`, `Metric`, `Value`, `Unit` table.
+
+The copied markdown intentionally avoids slash-packed memory cells, repeated global metadata, empty stat columns, and measurement-level notes. Run metadata is the only generated table with a `Notes` column. Fixed scenario details belong in `docs/PERFORMANCE.md` prose near the scenario section. A future comparable detail should become a dedicated typed column instead of a generic note.
+
+`buildRef` is generated at frontend build time from the app version and short git commit, such as `0.1.0+a7451de`. A dirty worktree adds `-dirty`. The platform label comes from the native memory-report command and should include useful OS detail, such as `Linux Ubuntu 24.04.4 LTS` or `Windows 11 (10.0.22631)`.
 
 ## Critical files
 
-- `lib/benchmark/types.ts`: scenario contract, phase result types, suite state, versions, sampling constants.
-- `lib/benchmark/runner.ts`: phase orchestration, persisted state, restart wiring.
+- `lib/benchmark/types.ts`: scenario contract, pass result types, suite state, versions, sampling constants.
+- `lib/benchmark/runner.ts`: pass orchestration, persisted state, restart wiring.
 - `lib/benchmark/sampler.ts`: memory sampling and boot timing capture.
 - `lib/benchmark/output.ts`: benchmark result markdown formatter.
 - `lib/benchmark/registry.ts`: installed scenario list.

@@ -81,6 +81,7 @@ function hasStructuralChanges(
 
 /** DB-backed template events (no virtual instances). */
 let rawBlocks = $state<CalendarEvent[]>([]);
+let loaded = $state(false);
 let batchDepth = 0;
 const PANEL_EVENT_CACHE_LIMIT = 64;
 const panelEventCache = new Map<string, Promise<CalendarEvent | undefined>>();
@@ -335,6 +336,10 @@ export function getCalendar() {
       return rawBlocks;
     },
 
+    get loaded(): boolean {
+      return loaded;
+    },
+
     /** Suppress invalidate() during multi-step mutations. */
     beginBatch() { batchDepth++; },
     endBatch() { if (--batchDepth <= 0) { batchDepth = 0; invalidate(); } },
@@ -342,6 +347,7 @@ export function getCalendar() {
     async load() {
       perfMark("boot.sql-start");
       try {
+        loaded = false;
         const renderZone = localTimezone();
         const rows = await select<DbCalendarEvent>(
           `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
@@ -370,6 +376,7 @@ export function getCalendar() {
         perfMark("boot.sql-children-done");
 
         rawBlocks = mapped;
+        loaded = true;
         invalidate();
         perfMark("boot.rawblocks-set", { events: rawBlocks.length });
       } catch (e) {

@@ -1,13 +1,13 @@
 /**
  * Type contracts for the in-app performance benchmark harness.
  *
- * The harness drives deterministic workloads twice (Phase A on an empty
- * baseline DB, Phase B on a 1000-event synthetic dataset) and emits compact
- * markdown ready for `docs/PERFORMANCE.md`. Each scenario declares whether
- * it measures startup, memory, or feature latency so the runner avoids
- * unrelated waits. Both phases run after a cold restart against an isolated
- * `ganbaruai-benchmark.db` so the user's real DB and vault are never touched.
- * The rationale lives in `docs/features/performance-benchmark.md`.
+ * The harness drives deterministic workloads twice (baseline dataset, then
+ * synthetic dataset) and emits compact markdown ready for
+ * `docs/PERFORMANCE.md`. Each scenario declares whether it measures startup,
+ * memory, or feature latency so the runner avoids unrelated waits. Both
+ * passes run after a cold restart against an isolated
+ * `ganbaruai-benchmark.db` so the user's real DB and vault are never
+ * touched. The rationale lives in `docs/features/performance-benchmark.md`.
  */
 import type { CalendarEvent } from "$lib/components/calendar/types";
 
@@ -18,6 +18,10 @@ import type { CalendarEvent } from "$lib/components/calendar/types";
  */
 export const STRESS_DURATION_MS = 3000;
 export const STRESS_PEAK_INTERVAL_MS = 200;
+/** Number of process launches captured per dataset by the startup benchmark. */
+export const STARTUP_SAMPLE_RUNS = 5;
+/** Closed-process wait before each startup benchmark relaunch sample. */
+export const STARTUP_RELAUNCH_COOLDOWN_MS = 10_000;
 /**
  * Offsets in milliseconds, measured from the moment `runWorkload` resolves.
  *
@@ -34,14 +38,23 @@ export const STATE_TTL_MS = 60 * 60 * 1000;
 /**
  * Bumped manually when the harness output shape, sampling cadence, or synth
  * generator changes in a way that would invalidate cross-build comparison.
- * Stored on the persisted state file so a stale Phase A captured by an old
- * build cannot accidentally feed Phase B on a new build.
+ * Stored on the persisted state file so stale baseline data captured by an
+ * old build cannot accidentally feed the synthetic pass on a new build.
  *
+ * v9 (2026-05-05): startup benchmark uses a closed-process cooldown before
+ * repeated relaunch samples.
+ * v8 (2026-05-05): startup benchmark reports repeated end-to-end launch
+ * stats to a usable calendar paint instead of single launch samples.
+ * v7 (2026-05-05): adds a generated index to copied markdown and preview.
+ * v6 (2026-05-05): removes low-value ICS import and theme editor scenarios
+ * from the canonical benchmark suite.
+ * v5 (2026-05-05): keeps notes at run metadata level only and splits
+ * repeated latency rows from scalar metric rows.
  * v4 (2026-05-04): question-oriented scenarios with explicit memory
- * sampling modes and primary-metric output. v1/v2/v3 state files are
- * silently discarded on read.
+ * sampling modes and primary-metric output.
+ * v1/v2/v3 state files are silently discarded on read.
  */
-export const HARNESS_VERSION = "4";
+export const HARNESS_VERSION = "9";
 
 /** Synth dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const SYNTH_VERSION = "v1";
@@ -129,15 +142,25 @@ export interface BootTimings {
   /** Tag-keyed milliseconds from `boot.script-start`. Missing marks are omitted. */
   marks: Record<string, number>;
   /**
-   * Process-spawn to first-paint time, derived from the boot baseline and
-   * the first-paint mark. Optional when either input is unavailable.
+   * Process-spawn to usable calendar paint time, derived from the boot
+   * baseline and `boot.usable-paint`. Optional when either input is
+   * unavailable. Older runs may fall back to first paint.
    */
   launchTotalMs?: number;
 }
 
-/** One phase's complete result: boot, optional memory samples, metrics, plus context. */
+export interface StartupBootSample {
+  /** Wall-clock ISO 8601 string captured when the sample was collected. */
+  startedAt: string;
+  /** Number of events in `rawBlocks` for this launch sample. */
+  eventCountAtStart: number;
+  /** Boot timings captured from process start to usable calendar paint. */
+  boot: BootTimings;
+}
+
+/** One pass's complete result: boot, optional memory samples, metrics, plus context. */
 export interface PhaseResult {
-  /** "A" for the empty-baseline run, "B" for the synth-seeded run. */
+  /** "A" for the baseline run, "B" for the synth-seeded run. */
   phase: "A" | "B";
   /** Wall-clock ISO 8601 string captured at the start of the phase. */
   startedAt: string;
@@ -152,14 +175,13 @@ export interface PhaseResult {
   /** Filtered slice of perflog entries scoped to boot of the run that produced this phase. */
   boot: BootTimings;
   /**
-   * Wall-clock launch time, in ms, derived from the stored shell baseline
-   * plus the first-paint mark. Anchored to Rust process spawn
-   * (`PROCESS_START`), which fires before WebKit loads the document, so a
-   * build that improves Tauri/WebKit shell startup shows here even when
-   * JS-anchored marks stay flat. Optional because older runs may not have
+   * End-to-end launch time, in ms, derived from Rust process spawn to the
+   * usable calendar paint mark. Optional because older runs may not have
    * captured it.
    */
   startupMs?: number;
+  /** Individual process-launch samples for startup benchmark phases. */
+  startupSamples?: StartupBootSample[];
   /** Number of events in `rawBlocks` at the moment the phase started. */
   eventCountAtStart: number;
 }
@@ -170,11 +192,11 @@ export interface PhaseResult {
  * call does not blow it away mid-run, and the file never pollutes the
  * vault folder users back up.
  *
- * The harness writes this file twice per run: once after the user
- * confirms (`stage: "phase-a-pending"`) and again after Phase A finishes
- * (`stage: "phase-b-pending"`, carrying `phaseA` and `seedHandle`). The
- * boot path reads `vaultMode` to decide which DB file to open before any
- * scenario logic runs.
+ * The harness writes this file before each intentional restart with a
+ * `*-pending` stage, then flips that stage to `*-running` before the
+ * measured pass starts. A later boot that sees `*-running` means the
+ * process was killed mid-pass, so the runner discards benchmark artifacts
+ * instead of resuming from a possibly dirty isolated DB.
  */
 export interface BenchmarkState {
   scenarioId: string;
@@ -186,6 +208,8 @@ export interface BenchmarkState {
   synthVersion: string;
   /** Platform string at write time, just for the markdown header. */
   platform: string;
+  /** App version plus git ref at write time, e.g. `0.1.0+a7451de-dirty`. */
+  buildRef?: string;
   /**
    * Which DB the next boot should open. `"benchmark"` routes
    * `db.ts:resolveUrl()` to the isolated `ganbaruai-benchmark.db`; the
@@ -194,20 +218,28 @@ export interface BenchmarkState {
    * and to leave room for future scenarios that need user-DB access.
    */
   vaultMode: "user" | "benchmark";
-  /** Which phase the runner should execute on the next boot. */
-  stage: "phase-a-pending" | "phase-b-pending";
-  /** Phase A result, present once Phase A has run (i.e., from `phase-b-pending` onward). */
+  /** Pending stages intentionally resume; running stages mean interrupted work. */
+  stage: "phase-a-pending" | "phase-a-running" | "phase-b-pending" | "phase-b-running";
+  /** Baseline result, present once that pass has run (i.e., from `phase-b-pending` onward). */
   phaseA?: PhaseResult;
   /** Calendar id holding the seeded synth events; absent during `phase-a-pending`. */
   seedHandle?: { calendarId: string; eventCount: number };
   /** Present when the user chose Run all instead of one scenario. */
   suite?: BenchmarkSuiteState;
+  /** Accumulated repeated launch samples for the startup benchmark. */
+  startupRuns?: StartupRunState;
 }
 
 export interface BenchmarkSuiteState {
   scenarioIds: string[];
   index: number;
   results: BenchmarkResult[];
+}
+
+export interface StartupRunState {
+  targetRuns: number;
+  phaseA: PhaseResult[];
+  phaseB: PhaseResult[];
 }
 
 /**
@@ -224,7 +256,7 @@ export interface BenchmarkScenario {
   description: string;
   /** Workload shape used by the runner and markdown formatter. */
   workload: BenchmarkWorkload;
-  /** Default seed size used by `seed()` for Phase B. */
+  /** Default seed size used by `seed()` for the synthetic dataset. */
   defaultSeedSize: number;
   /**
    * Configure the app into the precondition required by the stress phase.
@@ -238,7 +270,7 @@ export interface BenchmarkScenario {
    */
   runWorkload(signal: AbortSignal): Promise<void | BenchmarkMetric[]>;
   /**
-   * Seed the synthetic dataset for Phase B. Called once between Phase A and
+   * Seed the synthetic dataset. Called once between the baseline pass and
    * the restart. Returns a handle that `cleanup()` can use to undo.
    */
   seed(version: string, seedSize: number): Promise<{ calendarId: string; eventCount: number }>;
@@ -249,7 +281,7 @@ export interface BenchmarkScenario {
   cleanup(seedHandle: { calendarId: string }): Promise<void>;
 }
 
-/** A whole benchmark run after Phase B completes. */
+/** A whole benchmark run after both passes complete. */
 export interface BenchmarkResult {
   scenarioId: string;
   scenarioLabel: string;
@@ -257,6 +289,7 @@ export interface BenchmarkResult {
   synthVersion: string;
   harnessVersion: string;
   platform: string;
+  buildRef?: string;
   phaseA: PhaseResult;
   phaseB: PhaseResult;
   /** Peak total memory (MB) observed in either phase, present only for memory benchmarks. */

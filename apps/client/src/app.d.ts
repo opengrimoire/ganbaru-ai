@@ -13,6 +13,9 @@ declare module "@fontsource/*";
 // declaration can be replaced by the standard ES type once it is published.
 import type { Temporal as TemporalPolyfill } from "@js-temporal/polyfill";
 declare global {
+  const __GANBARUAI_APP_VERSION__: string;
+  const __GANBARUAI_BUILD_REF__: string;
+
   // eslint-disable-next-line no-var
   var Temporal: typeof TemporalPolyfill;
   // Expose as a namespace alias too, so call sites can write

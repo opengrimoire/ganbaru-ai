@@ -14,27 +14,114 @@ import type {
   PhaseResult,
   SamplePoint,
   SampleLabel,
+  StartupBootSample,
 } from "./types";
-import {
-  SAMPLE_LABELS,
-  STRESS_PEAK_INTERVAL_MS,
-  SAMPLE_OFFSETS_MS,
-  formatOffsetProse,
-} from "./types";
+import { SAMPLE_LABELS } from "./types";
 
 /**
- * Boot marks emitted in the order they appear in the markdown table. The
- * first row is the synthetic `launch-total` derived from the shell baseline
- * and first-paint mark; the rest come from the perflog.
+ * Boot marks used for startup summary stats. The headline launch stat uses
+ * process spawn through usable calendar paint.
  */
-const BOOT_MARK_ORDER: string[] = [
-  "boot.app-mount",
-  "boot.tz-hydrated",
-  "boot.sql-start",
-  "boot.sql-main-done",
-  "boot.maprow-done",
-  "boot.first-paint",
-];
+const FIRST_PAINT_MARK = "boot.first-paint";
+const USABLE_PAINT_MARK = "boot.usable-paint";
+
+const STAT_DETAIL_KEYS = ["runs", "minMs", "medianMs", "p95Ms", "maxMs"] as const;
+export interface BenchmarkRunMetadataRow {
+  run: string;
+  harness: string;
+  buildRef: string;
+  platform: string;
+  notes: string;
+}
+
+export interface BenchmarkIndexRow {
+  section: string;
+  output: string;
+  rows: string;
+}
+
+export interface BenchmarkStartupRow {
+  run: string;
+  dataset: string;
+  runs: string;
+  firstPaintMedianMs: string;
+  usablePaintMedianMs: string;
+  launchMinMs: string;
+  launchP95Ms: string;
+  launchMaxMs: string;
+  launchMedianMs: string;
+}
+
+export interface BenchmarkMemoryRow {
+  run: string;
+  dataset: string;
+  timepoint: string;
+  backendMb: string;
+  frontendMb: string;
+  networkMb: string;
+  totalMb: string;
+}
+
+export interface BenchmarkLatencyRow {
+  run: string;
+  dataset: string;
+  metric: string;
+  value: string;
+  unit: string;
+  runs: string;
+  min: string;
+  median: string;
+  p95: string;
+  max: string;
+}
+
+export interface BenchmarkScalarMetricRow {
+  run: string;
+  dataset: string;
+  metric: string;
+  value: string;
+  unit: string;
+}
+
+export type BenchmarkPreviewSection =
+  | {
+    id: string;
+    title: string;
+    kind: "startup";
+    rows: BenchmarkStartupRow[];
+  }
+  | {
+    id: string;
+    title: string;
+    kind: "memory";
+    rows: BenchmarkMemoryRow[];
+  }
+  | {
+    id: string;
+    title: string;
+    kind: "metrics";
+    latencyRows: BenchmarkLatencyRow[];
+    scalarRows: BenchmarkScalarMetricRow[];
+  };
+
+export interface BenchmarkSuitePreview {
+  metadata: BenchmarkRunMetadataRow;
+  index: BenchmarkIndexRow[];
+  sections: BenchmarkPreviewSection[];
+}
+
+interface BenchmarkOutputOptions {
+  /** Override the date stamp; defaults to today's local YYYY-MM-DD. */
+  date?: string;
+  /** Optional environment hint, e.g. "Linux Ubuntu 25.10, WebKitGTK 2.46". */
+  env?: string;
+  /** Optional build identifier shown in run metadata. */
+  build?: string;
+  /** Optional complete run id. Defaults to `${date}-ID`. */
+  run?: string;
+  /** Optional run notes. */
+  notes?: string;
+}
 
 function formatMb(n: number): string {
   if (Number.isNaN(n) || !Number.isFinite(n)) return "n/a";
@@ -52,20 +139,6 @@ function formatMetricValue(metric: BenchmarkMetric | undefined): string {
   return metric.unit === "count"
     ? Math.round(metric.value).toString()
     : Math.round(metric.value).toString();
-}
-
-function formatMetricDetails(metric: BenchmarkMetric | undefined): string {
-  if (!metric?.details) return "";
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(metric.details)) {
-    const label = key.replace(/Ms$/, "");
-    if (typeof value === "number") {
-      parts.push(key.endsWith("Ms") ? `${label} ${Math.round(value)} ms` : `${label} ${value}`);
-    } else {
-      parts.push(`${label} ${value}`);
-    }
-  }
-  return parts.join(", ");
 }
 
 /** Format one sample row's right-side cell, e.g. `87.0 / 245.0 / 15.8 / 348`. */
@@ -99,26 +172,6 @@ function orderedSamples(phase: PhaseResult): Map<SampleLabel, SamplePoint | unde
   return map;
 }
 
-/**
- * Settled floor: the lowest total in the post-peak idle curve. Ties pick
- * the earliest label so the footer reads as the moment we first hit it.
- *
- * Harness caveat: with only `t0` and `+30s` in the curve, the "floor" is a
- * bounded-window asymptote, not a true settled value. Late WebKit GC can
- * fire well past the sampling window. The spec doc explains why this is
- * still the right tradeoff for cross-build comparison.
- */
-function findSettledFloor(phase: PhaseResult): { totalMb: number; label: SampleLabel } | undefined {
-  let best: { totalMb: number; label: SampleLabel } | undefined;
-  for (const s of phase.curve) {
-    if (s.label === "peak") continue;
-    if (!best || s.totalMb < best.totalMb) {
-      best = { totalMb: s.totalMb, label: s.label };
-    }
-  }
-  return best;
-}
-
 function metricsByLabel(phase: PhaseResult): Map<string, BenchmarkMetric> {
   const map = new Map<string, BenchmarkMetric>();
   for (const metric of phase.metrics ?? []) {
@@ -131,177 +184,416 @@ function formatBootValue(value: number | undefined): string {
   return value === undefined ? "n/a" : Math.round(value).toString();
 }
 
-function phaseDataset(result: BenchmarkResult, phase: PhaseResult): string {
+interface NumberStats {
+  runs: number;
+  min?: number;
+  median?: number;
+  p95?: number;
+  max?: number;
+}
+
+function numberStats(values: Array<number | undefined>): NumberStats {
+  const finite = values
+    .filter((value): value is number => value !== undefined && Number.isFinite(value))
+    .sort((a, b) => a - b);
+  if (finite.length === 0) return { runs: 0 };
+  return {
+    runs: finite.length,
+    min: finite[0],
+    median: percentile(finite, 0.5),
+    p95: percentile(finite, 0.95),
+    max: finite[finite.length - 1],
+  };
+}
+
+function percentile(sortedValues: number[], fraction: number): number {
+  if (sortedValues.length === 0) return Number.NaN;
+  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(sortedValues.length * fraction) - 1));
+  return sortedValues[index] ?? Number.NaN;
+}
+
+function fallbackStartupSample(phase: PhaseResult): StartupBootSample {
+  return {
+    startedAt: phase.startedAt,
+    eventCountAtStart: phase.eventCountAtStart,
+    boot: {
+      ...phase.boot,
+      launchTotalMs: phase.boot.launchTotalMs ?? phase.startupMs,
+    },
+  };
+}
+
+function startupSamples(phase: PhaseResult): StartupBootSample[] {
+  return phase.startupSamples && phase.startupSamples.length > 0
+    ? phase.startupSamples
+    : [fallbackStartupSample(phase)];
+}
+
+export function benchmarkDatasetLabel(result: BenchmarkResult, phase: PhaseResult): string {
   if (phase.phase === "A") {
-    return phase.eventCountAtStart === 0 ? "empty" : `setup, ${phase.eventCountAtStart} events`;
+    return `base-${phase.eventCountAtStart}`;
   }
-  return `benchmark-synth-${result.synthVersion}, ${phase.eventCountAtStart} events`;
+  const synthVersion = result.synthVersion.startsWith("v")
+    ? result.synthVersion
+    : `v${result.synthVersion}`;
+  return `synth-${synthVersion}-${phase.eventCountAtStart}`;
 }
 
-function formatBootTableRow(result: BenchmarkResult, phase: PhaseResult): string {
-  const cells = [
-    `Phase ${phase.phase}`,
-    phaseDataset(result, phase),
-    formatBootValue(phase.startupMs),
-    ...BOOT_MARK_ORDER.map((mark) => formatBootValue(phase.boot.marks[mark])),
-  ];
-  return `| ${cells.join(" | ")} |`;
+function timepointLabel(label: SampleLabel): string {
+  return label === "peak" ? "workload peak" : label === "t0" ? "workload end" : label;
 }
 
-function formatMemoryTableRow(
+function buildStartupRows(result: BenchmarkResult, run: string): BenchmarkStartupRow[] {
+  return [result.phaseA, result.phaseB].map((phase) => {
+    const samples = startupSamples(phase);
+    const firstPaintStats = numberStats(samples.map((sample) => sample.boot.marks[FIRST_PAINT_MARK]));
+    const usablePaintStats = numberStats(samples.map((sample) => sample.boot.marks[USABLE_PAINT_MARK]));
+    const launchStats = numberStats(samples.map((sample) => sample.boot.launchTotalMs));
+    return {
+      run,
+      dataset: benchmarkDatasetLabel(result, phase),
+      runs: launchStats.runs.toString(),
+      firstPaintMedianMs: formatBootValue(firstPaintStats.median),
+      usablePaintMedianMs: formatBootValue(usablePaintStats.median),
+      launchMinMs: formatBootValue(launchStats.min),
+      launchP95Ms: formatBootValue(launchStats.p95),
+      launchMaxMs: formatBootValue(launchStats.max),
+      launchMedianMs: formatBootValue(launchStats.median),
+    };
+  });
+}
+
+function buildMemoryRows(result: BenchmarkResult, run: string): BenchmarkMemoryRow[] {
+  const rows: BenchmarkMemoryRow[] = [];
+  for (const phase of [result.phaseA, result.phaseB]) {
+    const samples = orderedSamples(phase);
+    for (const label of SAMPLE_LABELS) {
+      const sample = samples.get(label);
+      rows.push(formatMemoryRow(result, phase, run, label, sample));
+    }
+  }
+  return rows;
+}
+
+function formatMemoryRow(
   result: BenchmarkResult,
   phase: PhaseResult,
+  run: string,
   label: SampleLabel,
   sample: SamplePoint | undefined,
-): string {
-  const timepoint = label === "peak" ? "workload peak" : label === "t0" ? "workload end" : label;
-  const cells = [
-    `Phase ${phase.phase}`,
-    phaseDataset(result, phase),
-    timepoint,
-    sample ? formatMb(sample.backendMb) : "n/a",
-    sample ? formatMb(sample.frontendMb) : "n/a",
-    sample ? formatMb(sample.networkMb) : "n/a",
-    sample ? formatTotalMb(sample.totalMb) : "n/a",
-  ];
-  return `| ${cells.join(" | ")} |`;
+): BenchmarkMemoryRow {
+  return {
+    run,
+    dataset: benchmarkDatasetLabel(result, phase),
+    timepoint: timepointLabel(label),
+    backendMb: sample ? formatMb(sample.backendMb) : "n/a",
+    frontendMb: sample ? formatMb(sample.frontendMb) : "n/a",
+    networkMb: sample ? formatMb(sample.networkMb) : "n/a",
+    totalMb: sample ? formatTotalMb(sample.totalMb) : "n/a",
+  };
 }
 
 /**
- * Format a complete benchmark result as a single markdown block. Suitable
- * for pasting into `docs/PERFORMANCE.md` and for in-app display in the
- * summary overlay.
+ * Build the structured summary used by the readable in-app preview and the
+ * canonical markdown formatter.
  */
-export function formatBenchmarkMarkdown(result: BenchmarkResult, opts: {
-  /** Override the date stamp; defaults to today's local YYYY-MM-DD. */
-  date?: string;
-  /** Optional environment hint, e.g. "Linux Ubuntu 25.10, WebKitGTK 2.46". */
-  env?: string;
-  /** Optional build identifier shown in the header. */
-  build?: string;
-}): string {
-  const dateStr = opts.date ?? today();
-  const headerBits: string[] = [];
-  if (opts.build) headerBits.push(`build ${opts.build}`);
-  if (opts.env) headerBits.push(opts.env);
-  else headerBits.push(result.platform);
-  const headerSuffix = headerBits.length > 0 ? ` (${headerBits.join(", ")})` : "";
+export function buildBenchmarkSuitePreview(
+  results: BenchmarkResult[],
+  opts: BenchmarkOutputOptions = {},
+): BenchmarkSuitePreview {
+  const run = runId(opts);
+  const buildRef = opts.build ?? unique(results.map((result) => result.buildRef).filter(isDefined)).join(", ");
+  const platform = opts.env ?? unique(results.map((result) => result.platform)).join(", ");
+  const harness = unique(results.map((result) => result.harnessVersion)).map(formatHarness).join(", ");
+  const metadata: BenchmarkRunMetadataRow = {
+    run,
+    harness: harness || "n/a",
+    buildRef: buildRef || "n/a",
+    platform: platform || "n/a",
+    notes: opts.notes ?? "",
+  };
+  const sections = results.map((result) => buildSection(result, run));
+  return {
+    metadata,
+    index: buildIndex(sections),
+    sections,
+  };
+}
 
-  const lines: string[] = [];
-  lines.push(`## Benchmark ${dateStr}${headerSuffix}`);
-  lines.push("");
-  lines.push(`Scenario: ${result.scenarioId}. Question: ${result.workload.question}`);
-  lines.push(
-    `Datasets: Phase A ${phaseDataset(result, result.phaseA)}. Phase B ${phaseDataset(result, result.phaseB)}.`,
-  );
-  lines.push(formatMethodology(result));
+/**
+ * Format a complete benchmark result as a canonical markdown block.
+ */
+export function formatBenchmarkMarkdown(
+  result: BenchmarkResult,
+  opts: BenchmarkOutputOptions = {},
+): string {
+  return formatBenchmarkSuiteMarkdown([result], opts);
+}
 
+function buildSection(result: BenchmarkResult, run: string): BenchmarkPreviewSection {
   if (result.workload.kind === "startup") {
-    appendBootSection(lines, result);
-  } else if (result.workload.memoryMode === "post-workload") {
-    appendMemorySection(lines, result);
-  } else {
-    appendMetricsSection(lines, result);
+    return {
+      id: result.scenarioId,
+      title: sectionTitle(result),
+      kind: "startup",
+      rows: buildStartupRows(result, run),
+    };
   }
-
-  return lines.join("\n");
-}
-
-function formatMethodology(result: BenchmarkResult): string {
-  const duration = result.workload.durationMs > 0
-    ? `${result.workload.durationMs} ms ${result.workload.label}`
-    : result.workload.label;
   if (result.workload.memoryMode === "post-workload") {
-    const offsetsClause = SAMPLE_OFFSETS_MS.length === 1
-      ? `once at ${formatOffsetProse(SAMPLE_OFFSETS_MS[0])}`
-      : `at ${SAMPLE_OFFSETS_MS.map(formatOffsetProse).join(", ")}`;
-    return `Methodology: cold-cold against an isolated benchmark DB; ${duration}; memory sampled at ${STRESS_PEAK_INTERVAL_MS} ms during the workload, then ${offsetsClause} post-workload.`;
+    return {
+      id: result.scenarioId,
+      title: sectionTitle(result),
+      kind: "memory",
+      rows: buildMemoryRows(result, run),
+    };
   }
-  return `Methodology: cold-cold against an isolated benchmark DB; ${duration}; no post-workload memory wait.`;
+  return {
+    id: result.scenarioId,
+    title: sectionTitle(result),
+    kind: "metrics",
+    ...buildMetricRows(result, run),
+  };
 }
 
-function appendBootSection(lines: string[], result: BenchmarkResult): void {
-  lines.push("");
-  lines.push("### Startup boot");
-  lines.push("");
-  lines.push("| Phase | Dataset | Launch total ms | App mount ms | Tz hydrated ms | SQL start ms | SQL main done ms | Map row done ms | First paint ms |");
-  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|");
-  lines.push(formatBootTableRow(result, result.phaseA));
-  lines.push(formatBootTableRow(result, result.phaseB));
-}
-
-function appendMemorySection(lines: string[], result: BenchmarkResult): void {
-  const aSamples = orderedSamples(result.phaseA);
-  const bSamples = orderedSamples(result.phaseB);
-  const floorA = findSettledFloor(result.phaseA);
-  const floorB = findSettledFloor(result.phaseB);
-
-  lines.push("");
-  lines.push("### Memory PSS, MB");
-  lines.push("");
-  lines.push("| Phase | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |");
-  lines.push("|---|---|---|---:|---:|---:|---:|");
-  for (const label of SAMPLE_LABELS) {
-    lines.push(formatMemoryTableRow(result, result.phaseA, label, aSamples.get(label)));
-    lines.push(formatMemoryTableRow(result, result.phaseB, label, bSamples.get(label)));
-  }
-  lines.push("");
-  if (floorA && floorB) {
-    const peakA = aSamples.get("peak");
-    const peakB = bSamples.get("peak");
-    const floorDelta = Math.round(floorB.totalMb - floorA.totalMb);
-    const peakDelta = peakA && peakB
-      ? Math.round(peakB.totalMb - peakA.totalMb)
-      : undefined;
-    const peakStr = peakDelta === undefined
-      ? ""
-      : ` Phase B delta over Phase A: ${signed(floorDelta)} MB at floor, ${signed(peakDelta)} MB at peak.`;
-    lines.push(
-      `Settled floor: Phase A ${formatTotalMb(floorA.totalMb)} MB at ${floorA.label}, Phase B ${formatTotalMb(floorB.totalMb)} MB at ${floorB.label}.${peakStr}`,
-    );
-  }
-}
-
-function appendMetricsSection(lines: string[], result: BenchmarkResult): void {
+function buildMetricRows(
+  result: BenchmarkResult,
+  run: string,
+): { latencyRows: BenchmarkLatencyRow[]; scalarRows: BenchmarkScalarMetricRow[] } {
   const metricLabels = [
     ...new Set([
       ...(result.phaseA.metrics ?? []).map((metric) => metric.label),
       ...(result.phaseB.metrics ?? []).map((metric) => metric.label),
     ]),
   ];
-  lines.push("");
-  lines.push("### Primary metrics");
-  lines.push("");
-  if (metricLabels.length === 0) {
-    lines.push("No primary metrics were captured.");
-    return;
-  }
-
   const phaseAMetrics = metricsByLabel(result.phaseA);
   const phaseBMetrics = metricsByLabel(result.phaseB);
-  lines.push("| Metric | Unit | Phase A | Details A | Phase B | Details B |");
-  lines.push("|---|---|---:|---|---:|---|");
+  const latencyRows: BenchmarkLatencyRow[] = [];
+  const scalarRows: BenchmarkScalarMetricRow[] = [];
   for (const label of metricLabels) {
     const aMetric = phaseAMetrics.get(label);
     const bMetric = phaseBMetrics.get(label);
+    const unit = aMetric?.unit ?? bMetric?.unit ?? "";
+    if (hasStatDetails(aMetric) || hasStatDetails(bMetric)) {
+      latencyRows.push(buildLatencyRow(result, result.phaseA, run, label, unit, aMetric));
+      latencyRows.push(buildLatencyRow(result, result.phaseB, run, label, unit, bMetric));
+    } else {
+      scalarRows.push(buildScalarMetricRow(result, result.phaseA, run, label, unit, aMetric));
+      scalarRows.push(buildScalarMetricRow(result, result.phaseB, run, label, unit, bMetric));
+    }
+  }
+  return { latencyRows, scalarRows };
+}
+
+function buildLatencyRow(
+  result: BenchmarkResult,
+  phase: PhaseResult,
+  run: string,
+  label: string,
+  unit: string,
+  metric: BenchmarkMetric | undefined,
+): BenchmarkLatencyRow {
+  return {
+    run,
+    dataset: benchmarkDatasetLabel(result, phase),
+    metric: label,
+    value: formatMetricValue(metric),
+    unit,
+    runs: formatMetricDetail(metric, "runs"),
+    min: formatMetricDetail(metric, "minMs"),
+    median: formatMetricDetail(metric, "medianMs"),
+    p95: formatMetricDetail(metric, "p95Ms"),
+    max: formatMetricDetail(metric, "maxMs"),
+  };
+}
+
+function buildScalarMetricRow(
+  result: BenchmarkResult,
+  phase: PhaseResult,
+  run: string,
+  label: string,
+  unit: string,
+  metric: BenchmarkMetric | undefined,
+): BenchmarkScalarMetricRow {
+  return {
+    run,
+    dataset: benchmarkDatasetLabel(result, phase),
+    metric: label,
+    value: formatMetricValue(metric),
+    unit,
+  };
+}
+
+function hasStatDetails(metric: BenchmarkMetric | undefined): boolean {
+  if (!metric?.details) return false;
+  return STAT_DETAIL_KEYS.some((key) => metric.details?.[key] !== undefined);
+}
+
+function formatMetricDetail(metric: BenchmarkMetric | undefined, key: string): string {
+  const value = metric?.details?.[key];
+  if (value === undefined) return "";
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.round(value).toString() : "";
+  }
+  return value;
+}
+
+function sectionTitle(result: BenchmarkResult): string {
+  if (result.scenarioId === "startup-boot") return "Startup boot";
+  if (result.scenarioId === "idle-memory") return "Idle memory";
+  if (result.scenarioId === "calendar-nav") return "Calendar navigation stress memory";
+  if (result.scenarioId === "event-panel-open") return "Event panel latency";
+  if (result.scenarioId === "calendar-create-cancel") return "Create panel latency";
+  return result.scenarioLabel;
+}
+
+function buildIndex(sections: BenchmarkPreviewSection[]): BenchmarkIndexRow[] {
+  return [
+    { section: "Run metadata", output: "Run context", rows: "1" },
+    ...sections.map((section) => ({
+      section: section.title,
+      output: indexOutput(section),
+      rows: indexRows(section),
+    })),
+  ];
+}
+
+function indexOutput(section: BenchmarkPreviewSection): string {
+  if (section.kind === "startup") return "Startup table";
+  if (section.kind === "memory") return "Memory table";
+  if (section.latencyRows.length > 0 && section.scalarRows.length > 0) return "Latency and scalar tables";
+  if (section.latencyRows.length > 0) return "Latency table";
+  if (section.scalarRows.length > 0) return "Scalar table";
+  return "No metric rows";
+}
+
+function indexRows(section: BenchmarkPreviewSection): string {
+  if (section.kind === "startup" || section.kind === "memory") return section.rows.length.toString();
+  const parts: string[] = [];
+  if (section.latencyRows.length > 0) parts.push(`${section.latencyRows.length} latency`);
+  if (section.scalarRows.length > 0) parts.push(`${section.scalarRows.length} scalar`);
+  return parts.length > 0 ? parts.join(", ") : "0";
+}
+
+export function formatBenchmarkSuiteMarkdown(
+  results: BenchmarkResult[],
+  opts: BenchmarkOutputOptions = {},
+): string {
+  const preview = buildBenchmarkSuitePreview(results, opts);
+  const lines: string[] = [];
+  lines.push(`## Benchmark ${preview.metadata.run}`);
+  lines.push("");
+  appendIndex(lines, preview.index);
+  lines.push("");
+  appendRunMetadata(lines, preview.metadata);
+  for (const section of preview.sections) {
+    lines.push("");
+    lines.push(`### ${section.title}`);
+    lines.push("");
+    if (section.kind === "startup") {
+      appendStartupTable(lines, section.rows);
+    } else if (section.kind === "memory") {
+      appendMemoryTable(lines, section.rows);
+    } else {
+      appendMetricTables(lines, section.latencyRows, section.scalarRows);
+    }
+  }
+  return lines.join("\n");
+}
+
+function appendIndex(lines: string[], rows: BenchmarkIndexRow[]): void {
+  lines.push("### Index");
+  lines.push("");
+  lines.push("| Section | Output | Rows |");
+  lines.push("|---|---|---:|");
+  for (const row of rows) {
+    lines.push(`| ${row.section} | ${row.output} | ${row.rows} |`);
+  }
+}
+
+function appendRunMetadata(lines: string[], metadata: BenchmarkRunMetadataRow): void {
+  lines.push("### Run metadata");
+  lines.push("");
+  lines.push("| Run | Harness | Build ref | Platform | Notes |");
+  lines.push("|---|---|---|---|---|");
+  lines.push(
+    `| ${metadata.run} | ${metadata.harness} | ${metadata.buildRef} | ${metadata.platform} | ${metadata.notes} |`,
+  );
+}
+
+function appendStartupTable(lines: string[], rows: BenchmarkStartupRow[]): void {
+  lines.push("| Run | Dataset | Runs | First paint median ms | Usable paint median ms | Launch min ms | Launch P95 ms | Launch max ms | Launch median ms |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|");
+  for (const row of rows) {
     lines.push(
-      `| ${label} | ${aMetric?.unit ?? bMetric?.unit ?? ""} | ${formatMetricValue(aMetric)} | ${formatMetricDetails(aMetric)} | ${formatMetricValue(bMetric)} | ${formatMetricDetails(bMetric)} |`,
+      `| ${row.run} | ${row.dataset} | ${row.runs} | ${row.firstPaintMedianMs} | ${row.usablePaintMedianMs} | ${row.launchMinMs} | ${row.launchP95Ms} | ${row.launchMaxMs} | ${row.launchMedianMs} |`,
     );
   }
 }
 
-export function formatBenchmarkSuiteMarkdown(results: BenchmarkResult[], opts: {
-  date?: string;
-  env?: string;
-  build?: string;
-}): string {
-  return results.map((result) => formatBenchmarkMarkdown(result, opts)).join("\n\n");
+function appendMemoryTable(lines: string[], rows: BenchmarkMemoryRow[]): void {
+  lines.push("| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |");
+  lines.push("|---|---|---|---:|---:|---:|---:|");
+  for (const row of rows) {
+    lines.push(
+      `| ${row.run} | ${row.dataset} | ${row.timepoint} | ${row.backendMb} | ${row.frontendMb} | ${row.networkMb} | ${row.totalMb} |`,
+    );
+  }
 }
 
-function signed(n: number): string {
-  if (n > 0) return `+${n}`;
-  if (n < 0) return `${n}`;
-  return "0";
+function appendMetricTables(
+  lines: string[],
+  latencyRows: BenchmarkLatencyRow[],
+  scalarRows: BenchmarkScalarMetricRow[],
+): void {
+  if (latencyRows.length === 0 && scalarRows.length === 0) {
+    lines.push("No primary metrics were captured.");
+    return;
+  }
+  if (latencyRows.length > 0) {
+    appendLatencyTable(lines, latencyRows);
+  }
+  if (scalarRows.length > 0) {
+    if (latencyRows.length > 0) lines.push("");
+    appendScalarMetricTable(lines, scalarRows);
+  }
+}
+
+function appendLatencyTable(lines: string[], rows: BenchmarkLatencyRow[]): void {
+  lines.push("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |");
+  lines.push("|---|---|---|---:|---|---:|---:|---:|---:|---:|");
+  for (const row of rows) {
+    lines.push(
+      `| ${row.run} | ${row.dataset} | ${row.metric} | ${row.value} | ${row.unit} | ${row.runs} | ${row.min} | ${row.median} | ${row.p95} | ${row.max} |`,
+    );
+  }
+}
+
+function appendScalarMetricTable(lines: string[], rows: BenchmarkScalarMetricRow[]): void {
+  lines.push("| Run | Dataset | Metric | Value | Unit |");
+  lines.push("|---|---|---|---:|---|");
+  for (const row of rows) {
+    lines.push(
+      `| ${row.run} | ${row.dataset} | ${row.metric} | ${row.value} | ${row.unit} |`,
+    );
+  }
+}
+
+function runId(opts: BenchmarkOutputOptions): string {
+  if (opts.run) return opts.run;
+  return `${opts.date ?? today()}-ID`;
+}
+
+function formatHarness(version: string): string {
+  if (!version) return "n/a";
+  return version.startsWith("v") ? version : `v${version}`;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.length > 0))];
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function today(): string {

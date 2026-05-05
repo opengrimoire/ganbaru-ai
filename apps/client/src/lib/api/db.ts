@@ -1,14 +1,15 @@
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
+import { HARNESS_VERSION, STATE_TTL_MS, SYNTH_VERSION } from "$lib/benchmark/types";
 
 /**
  * Connection string for the active database. Resolved exactly once on the
  * first call to `getDb()` and cached for the rest of the process lifetime.
  *
- * The resolution checks the persisted benchmark state file: if a harness
- * run is in flight with `vaultMode === "benchmark"`, the URL points at the
- * isolated `ganbaruai-benchmark.db` so the user's real DB is never opened.
- * Otherwise it returns the dev or release user-DB filename.
+ * The resolution checks the persisted benchmark state file: only fresh
+ * `*-pending` states route to the isolated `ganbaruai-benchmark.db`.
+ * Interrupted `*-running` states fall back to the user DB and are cleaned
+ * up by the benchmark runner after boot.
  */
 let cachedUrl: string | null = null;
 
@@ -19,6 +20,10 @@ function defaultUserUrl(): string {
 /** Minimal shape needed for the URL decision. The full state lives in `benchmark/types.ts`. */
 interface VaultModeProbe {
   vaultMode?: "user" | "benchmark";
+  stage?: string;
+  harnessVersion?: string;
+  synthVersion?: string;
+  startedAt?: string;
 }
 
 async function resolveUrl(): Promise<string> {
@@ -26,7 +31,13 @@ async function resolveUrl(): Promise<string> {
     const json = await invoke<string | null>("read_benchmark_state");
     if (json) {
       const parsed = JSON.parse(json) as VaultModeProbe;
-      if (parsed?.vaultMode === "benchmark") {
+      const ageMs = Date.now() - new Date(parsed.startedAt ?? "").getTime();
+      const validVersion = parsed?.harnessVersion === HARNESS_VERSION
+        && parsed?.synthVersion === SYNTH_VERSION;
+      const fresh = Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= STATE_TTL_MS;
+      const benchmarkPending = parsed?.stage === "phase-a-pending"
+        || parsed?.stage === "phase-b-pending";
+      if (parsed?.vaultMode === "benchmark" && benchmarkPending && validVersion && fresh) {
         return "sqlite:ganbaruai-benchmark.db";
       }
     }

@@ -1,9 +1,47 @@
 import { defineConfig, type Plugin } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "path";
+import { fileURLToPath } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(configDir, "../..");
+const appVersion = readAppVersion();
+const buildRef = `${appVersion}+${readGitCommit()}${isGitDirty() ? "-dirty" : ""}`;
+
+function readAppVersion(): string {
+  const raw = readFileSync(path.join(configDir, "package.json"), "utf8");
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed === "object" && parsed !== null && "version" in parsed) {
+    const version = parsed.version;
+    if (typeof version === "string" && version.length > 0) return version;
+  }
+  return "0.0.0";
+}
+
+function readGitCommit(): string {
+  return gitOutput(["rev-parse", "--short", "HEAD"]) ?? "unknown";
+}
+
+function isGitDirty(): boolean {
+  const status = gitOutput(["status", "--short"]);
+  return status !== undefined && status.length > 0;
+}
+
+function gitOutput(args: string[]): string | undefined {
+  try {
+    return execFileSync("git", args, {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
 
 function chunkNameForModule(id: string): string | undefined {
   const moduleId = id.replaceAll("\\", "/");
@@ -55,6 +93,10 @@ function skipSvelteStyleVirtuals(plugins: Plugin[]): Plugin[] {
 
 export default defineConfig({
   plugins: [...skipSvelteStyleVirtuals(tailwindcss()), svelte()],
+  define: {
+    __GANBARUAI_APP_VERSION__: JSON.stringify(appVersion),
+    __GANBARUAI_BUILD_REF__: JSON.stringify(buildRef),
+  },
   resolve: {
     alias: {
       $lib: path.resolve("./src/lib"),

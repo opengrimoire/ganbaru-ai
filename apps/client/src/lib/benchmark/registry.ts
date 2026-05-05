@@ -13,8 +13,6 @@ import { idleMemoryScenario } from "./scenarios/idle-memory";
 import { calendarNavScenario } from "./scenarios/calendar-nav";
 import { eventPanelOpenScenario } from "./scenarios/event-panel-open";
 import { calendarCreateCancelScenario } from "./scenarios/calendar-create-cancel";
-import { icsImportScenario } from "./scenarios/ics-import";
-import { themeEditorOpenScenario } from "./scenarios/theme-editor-open";
 
 export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   startupBootScenario,
@@ -22,8 +20,6 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   calendarNavScenario,
   eventPanelOpenScenario,
   calendarCreateCancelScenario,
-  icsImportScenario,
-  themeEditorOpenScenario,
 ];
 
 export function getScenarioById(id: string): BenchmarkScenario | undefined {

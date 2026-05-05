@@ -262,6 +262,22 @@
   });
 
   const visibleEvents = $derived(displayResult.events);
+  let bootUsablePaintMarked = false;
+
+  $effect(() => {
+    if (bootUsablePaintMarked || !calendarStore.loaded) return;
+    void visibleEvents.length;
+    tick().then(() => {
+      requestAnimationFrame(() => {
+        if (bootUsablePaintMarked || !calendarStore.loaded) return;
+        bootUsablePaintMarked = true;
+        perfMark("boot.usable-paint", {
+          count: visibleEvents.length,
+          events: calendarStore.rawBlocks.length,
+        });
+      });
+    });
+  });
 
   /**
    * Per-day bucket built once per `visibleEvents` recompute. Replaces

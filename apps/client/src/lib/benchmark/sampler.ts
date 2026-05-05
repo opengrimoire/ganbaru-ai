@@ -151,9 +151,9 @@ export function sampleIdleCurve(opts: {
 /**
  * Tags the harness lifts out of the perflog ring buffer.
  *
- * The harness omits `boot.sql-children-done` and `boot.rawblocks-set` because both
- * fire within ~10 ms of `boot.sql-main-done` / `boot.first-paint` on
- * every run we have captured: column space without information.
+ * The harness omits `boot.sql-children-done` and `boot.rawblocks-set`
+ * because both are intermediate implementation marks. `boot.usable-paint`
+ * is the startup target: the calendar has loaded data and rendered a frame.
  */
 const BOOT_MARKS_OF_INTEREST = new Set<string>([
   "boot.script-start",
@@ -163,6 +163,7 @@ const BOOT_MARKS_OF_INTEREST = new Set<string>([
   "boot.sql-main-done",
   "boot.maprow-done",
   "boot.first-paint",
+  "boot.usable-paint",
 ]);
 
 /**
@@ -176,6 +177,7 @@ export function captureBootTimings(): BootTimings {
   const baseT = findBaseT(entries);
   const marks: Record<string, number> = {};
   let firstPaintT: number | undefined;
+  let usablePaintT: number | undefined;
   for (const e of entries) {
     if (BOOT_MARKS_OF_INTEREST.has(e.tag)) {
       // First write wins so a re-emitted mark does not overwrite the boot value.
@@ -185,11 +187,15 @@ export function captureBootTimings(): BootTimings {
       if (e.tag === "boot.first-paint" && firstPaintT === undefined) {
         firstPaintT = e.t;
       }
+      if (e.tag === "boot.usable-paint" && usablePaintT === undefined) {
+        usablePaintT = e.t;
+      }
     }
   }
-  const launchTotalMs = firstPaintT === undefined || perfLog.shellStartupMs === null
+  const launchTargetT = usablePaintT ?? firstPaintT;
+  const launchTotalMs = launchTargetT === undefined || perfLog.shellStartupMs === null
     ? undefined
-    : Math.max(0, perfLog.shellStartupMs + firstPaintT - baseT);
+    : Math.max(0, perfLog.shellStartupMs + launchTargetT - baseT);
   return launchTotalMs === undefined ? { marks } : { marks, launchTotalMs };
 }
 

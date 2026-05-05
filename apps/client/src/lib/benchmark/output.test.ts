@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { formatBenchmarkMarkdown, formatBenchmarkSuiteMarkdown, formatSampleCell } from "./output";
 import {
-  SAMPLE_OFFSETS_MS,
-  STRESS_DURATION_MS,
-  STRESS_PEAK_INTERVAL_MS,
-  formatOffsetProse,
-} from "./types";
-import type { BenchmarkResult, PhaseResult, SamplePoint } from "./types";
+  buildBenchmarkSuitePreview,
+  formatBenchmarkMarkdown,
+  formatBenchmarkSuiteMarkdown,
+  formatSampleCell,
+} from "./output";
+import { HARNESS_VERSION, STRESS_DURATION_MS } from "./types";
+import type { BenchmarkResult, PhaseResult, SamplePoint, StartupBootSample } from "./types";
 
 function sample(label: SamplePoint["label"], total: number, frontend: number): SamplePoint {
   return {
@@ -44,10 +44,31 @@ function mockPhase(phase: "A" | "B", peak: number, floor: number, eventCount: nu
         "boot.sql-main-done": phase === "A" ? 412 : 609,
         "boot.maprow-done": phase === "A" ? 415 : 783,
         "boot.first-paint": phase === "A" ? 542 : 921,
+        "boot.usable-paint": phase === "A" ? 620 : 1030,
       },
+      launchTotalMs: phase === "A" ? 1430 : 1612,
     },
     startupMs: phase === "A" ? 1430 : 1612,
     eventCountAtStart: eventCount,
+  };
+}
+
+function startupSample(
+  eventCountAtStart: number,
+  firstPaintMs: number,
+  usablePaintMs: number,
+  launchTotalMs: number,
+): StartupBootSample {
+  return {
+    startedAt: "2026-05-01T10:00:00.000Z",
+    eventCountAtStart,
+    boot: {
+      marks: {
+        "boot.first-paint": firstPaintMs,
+        "boot.usable-paint": usablePaintMs,
+      },
+      launchTotalMs,
+    },
   };
 }
 
@@ -62,8 +83,9 @@ const RESULT: BenchmarkResult = {
     memoryMode: "post-workload",
   },
   synthVersion: "v1",
-  harnessVersion: "4",
+  harnessVersion: HARNESS_VERSION,
   platform: "Linux",
+  buildRef: "0.1.0+9815ea5",
   phaseA: mockPhase("A", 348, 278, 0),
   phaseB: mockPhase("B", 517, 318, 1000),
   peakTotalMb: 517,
@@ -83,6 +105,30 @@ const STARTUP_RESULT: BenchmarkResult = {
   peakTotalMb: undefined,
 };
 
+const REPEATED_STARTUP_RESULT: BenchmarkResult = {
+  ...STARTUP_RESULT,
+  phaseA: {
+    ...STARTUP_RESULT.phaseA,
+    startupSamples: [
+      startupSample(0, 95, 170, 800),
+      startupSample(0, 105, 180, 900),
+      startupSample(0, 90, 160, 700),
+      startupSample(0, 98, 175, 850),
+      startupSample(0, 101, 172, 830),
+    ],
+  },
+  phaseB: {
+    ...STARTUP_RESULT.phaseB,
+    startupSamples: [
+      startupSample(1000, 230, 520, 1100),
+      startupSample(1000, 220, 500, 1050),
+      startupSample(1000, 240, 550, 1200),
+      startupSample(1000, 210, 490, 1000),
+      startupSample(1000, 235, 530, 1150),
+    ],
+  },
+};
+
 const METRIC_RESULT: BenchmarkResult = {
   ...RESULT,
   scenarioId: "event-panel-open",
@@ -96,6 +142,7 @@ const METRIC_RESULT: BenchmarkResult = {
   },
   phaseA: {
     ...RESULT.phaseA,
+    eventCountAtStart: 2,
     peakSamples: [],
     curve: [],
     metrics: [
@@ -123,6 +170,50 @@ const METRIC_RESULT: BenchmarkResult = {
   peakTotalMb: undefined,
 };
 
+const MIXED_METRIC_RESULT: BenchmarkResult = {
+  ...RESULT,
+  scenarioId: "mixed-metrics",
+  scenarioLabel: "Mixed metrics",
+  workload: {
+    kind: "operation-latency",
+    question: "Can repeated and scalar metrics render without empty columns?",
+    label: "mixed metric formatting",
+    durationMs: 0,
+    memoryMode: "none",
+  },
+  phaseA: {
+    ...RESULT.phaseA,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      {
+        label: "parse fixtures avg",
+        unit: "ms",
+        value: 21,
+        details: { runs: 5, minMs: 16, medianMs: 17, p95Ms: 37, maxMs: 37 },
+      },
+      { label: "write fixtures", unit: "ms", value: 82 },
+      { label: "import warnings", unit: "count", value: 3 },
+    ],
+  },
+  phaseB: {
+    ...RESULT.phaseB,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      {
+        label: "parse fixtures avg",
+        unit: "ms",
+        value: 18,
+        details: { runs: 5, minMs: 10, medianMs: 16, p95Ms: 29, maxMs: 29 },
+      },
+      { label: "write fixtures", unit: "ms", value: 353 },
+      { label: "import warnings", unit: "count", value: 3 },
+    ],
+  },
+  peakTotalMb: undefined,
+};
+
 describe("formatSampleCell", () => {
   it("formats backend / frontend / network / total with one decimal except total", () => {
     expect(formatSampleCell(sample("peak", 348, 245))).toBe("87.0 / 245.0 / 16.0 / 348");
@@ -134,23 +225,29 @@ describe("formatSampleCell", () => {
 });
 
 describe("formatBenchmarkMarkdown", () => {
-  it("emits a memory block without incidental boot tables", () => {
+  it("emits one metadata table and dataset-based memory rows", () => {
     const md = formatBenchmarkMarkdown(RESULT, {
       date: "2026-05-01",
       build: "9815ea5",
       env: "Linux Ubuntu 25.10, WebKitGTK 2.46",
     });
-    expect(md.startsWith("## Benchmark 2026-05-01 (build 9815ea5, Linux Ubuntu 25.10, WebKitGTK 2.46)")).toBe(true);
-    expect(md.includes("Question: How much memory does repeated week navigation use?")).toBe(true);
-    expect(md.includes(`${STRESS_DURATION_MS} ms programmatic week-view navigation stress`)).toBe(true);
-    expect(md.includes(`memory sampled at ${STRESS_PEAK_INTERVAL_MS} ms during the workload`)).toBe(true);
-    expect(md.includes(`once at ${formatOffsetProse(SAMPLE_OFFSETS_MS[0])} post-workload`)).toBe(true);
-    expect(md.includes("Phase B benchmark-synth-v1, 1000 events")).toBe(true);
+    expect(md.startsWith("## Benchmark 2026-05-01-ID")).toBe(true);
+    expect(md.match(/### Index/g)).toHaveLength(1);
+    expect(md.match(/### Run metadata/g)).toHaveLength(1);
+    expect(md.indexOf("### Index")).toBeLessThan(md.indexOf("### Run metadata"));
+    expect(md.includes("| Calendar navigation stress memory | Memory table | 6 |")).toBe(true);
+    expect(md.includes(`| 2026-05-01-ID | v${HARNESS_VERSION} | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |`)).toBe(true);
+    expect(md.includes("Scenario:")).toBe(false);
+    expect(md.includes("Phase A")).toBe(false);
+    expect(md.includes("Phase B")).toBe(false);
+    expect(md.includes(`${STRESS_DURATION_MS} ms programmatic week-view navigation stress`)).toBe(false);
     expect(md.includes("### Startup boot")).toBe(false);
-    expect(md.includes("### Memory PSS, MB")).toBe(true);
-    expect(md.includes("Phase A | empty")).toBe(true);
-    expect(md.includes("Phase B | benchmark-synth-v1, 1000 events")).toBe(true);
-    expect(md.includes("Settled floor:")).toBe(true);
+    expect(md.includes("### Calendar navigation stress memory")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | synth-v1-1000 | workload peak")).toBe(true);
+    expect(md.includes("Settled floor:")).toBe(false);
+    expect(md.includes("| Date |")).toBe(false);
+    expect(md.includes("| Platform |")).toBe(true);
   });
 
   it("matches the golden snapshot so spacing changes are intentional", () => {
@@ -162,7 +259,7 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md).toMatchSnapshot();
   });
 
-  it("substitutes 'n/a' when a boot mark is missing in one phase", () => {
+  it("substitutes 'n/a' when the usable paint mark is missing in one phase", () => {
     const partial: BenchmarkResult = {
       ...STARTUP_RESULT,
       phaseA: {
@@ -176,48 +273,93 @@ describe("formatBenchmarkMarkdown", () => {
       },
     };
     const md = formatBenchmarkMarkdown(partial, { date: "2026-05-01" });
-    expect(md.includes("Map row done ms")).toBe(true);
+    expect(md.includes("Usable paint median ms")).toBe(true);
     expect(md.includes("n/a")).toBe(true);
   });
 
-  it("renders 'n/a' for launch-total when startupMs is missing", () => {
+  it("renders 'n/a' for launch median when launch timing is missing", () => {
     const partial: BenchmarkResult = {
       ...STARTUP_RESULT,
-      phaseA: { ...STARTUP_RESULT.phaseA, startupMs: undefined },
+      phaseA: {
+        ...STARTUP_RESULT.phaseA,
+        boot: { marks: STARTUP_RESULT.phaseA.boot.marks },
+        startupMs: undefined,
+      },
     };
     const md = formatBenchmarkMarkdown(partial, { date: "2026-05-01" });
-    expect(md.includes("Launch total ms")).toBe(true);
+    expect(md.includes("Launch median ms")).toBe(true);
     expect(md.includes("n/a")).toBe(true);
   });
 
-  it("computes the floor delta against the empty phase", () => {
-    const md = formatBenchmarkMarkdown(RESULT, { date: "2026-05-01" });
-    // Phase A floor 278, Phase B floor 318: delta is +40.
-    expect(md.includes("+40")).toBe(true);
-    // Peak A 348, peak B 517: delta is +169.
-    expect(md.includes("+169")).toBe(true);
-  });
-
-  it("renders startup boot rows without memory sampling output", () => {
+  it("renders startup boot rows with launch median as the rightmost column", () => {
     const md = formatBenchmarkMarkdown(STARTUP_RESULT, { date: "2026-05-01" });
     expect(md.includes("### Startup boot")).toBe(true);
-    expect(md.includes("Launch total ms")).toBe(true);
-    expect(md.includes("### Memory PSS, MB")).toBe(false);
-    expect(md.includes("no post-workload memory wait")).toBe(true);
+    const header = md.split("\n").find((line) => line.startsWith("| Run | Dataset | Runs |"));
+    expect(header?.endsWith("| Launch median ms |")).toBe(true);
+    expect(md.includes("Launch total ms")).toBe(false);
+    expect(md.includes("### Calendar navigation stress memory")).toBe(false);
+    expect(md.includes("no post-workload memory wait")).toBe(false);
   });
 
-  it("renders primary metric rows when phases include metrics", () => {
+  it("summarizes repeated startup launches with median as the headline value", () => {
+    const md = formatBenchmarkMarkdown(REPEATED_STARTUP_RESULT, { date: "2026-05-01" });
+    expect(md.includes("| 2026-05-01-ID | base-0 | 5 | 98 | 172 | 700 | 900 | 900 | 830 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | synth-v1-1000 | 5 | 230 | 520 | 1000 | 1200 | 1200 | 1100 |")).toBe(true);
+  });
+
+  it("renders latency rows with stats split into canonical columns", () => {
     const md = formatBenchmarkMarkdown(METRIC_RESULT, { date: "2026-05-01" });
-    expect(md.includes("### Primary metrics")).toBe(true);
+    expect(md.includes("### Event panel latency")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max | Notes |")).toBe(false);
     expect(md.includes("edit open from closed avg")).toBe(true);
-    expect(md.includes("runs 10")).toBe(true);
-    expect(md.includes("details 44 ms")).toBe(true);
-    expect(md.includes("details 72 ms")).toBe(true);
-    expect(md.includes("### Memory PSS, MB")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | base-2 | edit open from closed avg | 121 | ms | 10 |  | 117 | 138 |  |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | synth-v1-1000 | edit open from closed avg | 176 | ms | 10 |  | 171 | 202 |  |")).toBe(true);
+    expect(md.includes("details 44 ms")).toBe(false);
+    expect(md.includes("### Calendar navigation stress memory")).toBe(false);
   });
 
-  it("formats multiple benchmark results as one pasteable suite block", () => {
+  it("splits scalar metrics from repeated latency rows", () => {
+    const md = formatBenchmarkMarkdown(MIXED_METRIC_RESULT, { date: "2026-05-01" });
+    expect(md.includes("### Mixed metrics")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | parse fixtures avg | 21 | ms | 5 | 16 | 17 | 37 | 37 |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Value | Unit |\n|---|---|---|---:|---|")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | write fixtures | 82 | ms |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | synth-v1-1000 | import warnings | 3 | count |")).toBe(true);
+    expect(md.includes("| write fixtures | 82 | ms |  |")).toBe(false);
+  });
+
+  it("builds a structured preview for rendered summary tables", () => {
+    const preview = buildBenchmarkSuitePreview([STARTUP_RESULT, METRIC_RESULT], {
+      date: "2026-05-01",
+      build: "9815ea5",
+      env: "Linux Ubuntu 25.10, WebKitGTK 2.46",
+    });
+    expect(preview.metadata).toMatchObject({
+      run: "2026-05-01-ID",
+      harness: `v${HARNESS_VERSION}`,
+      buildRef: "9815ea5",
+      platform: "Linux Ubuntu 25.10, WebKitGTK 2.46",
+    });
+    expect(preview.sections).toHaveLength(2);
+    expect(preview.index).toEqual([
+      { section: "Run metadata", output: "Run context", rows: "1" },
+      { section: "Startup boot", output: "Startup table", rows: "2" },
+      { section: "Event panel latency", output: "Latency table", rows: "2 latency" },
+    ]);
+    expect(preview.sections[0]?.kind).toBe("startup");
+    expect(preview.sections[1]?.kind).toBe("metrics");
+    if (preview.sections[1]?.kind === "metrics") {
+      expect(preview.sections[1].latencyRows).toHaveLength(2);
+      expect(preview.sections[1].scalarRows).toHaveLength(0);
+    }
+  });
+
+  it("formats multiple benchmark results as one pasteable suite block without duplicated metadata", () => {
     const md = formatBenchmarkSuiteMarkdown([RESULT, RESULT], { date: "2026-05-01" });
-    expect(md.match(/^## Benchmark/gm)).toHaveLength(2);
+    expect(md.match(/^## Benchmark/gm)).toHaveLength(1);
+    expect(md.match(/### Run metadata/g)).toHaveLength(1);
+    expect(md.match(/### Calendar navigation stress memory/g)).toHaveLength(2);
   });
 });

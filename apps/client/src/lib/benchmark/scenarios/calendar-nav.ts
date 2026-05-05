@@ -5,7 +5,7 @@
  * without depending on real keyboard input timing.
  *
  * Seeding lays down a versioned synthetic calendar in the isolated
- * benchmark DB so Phase B compares across builds. `cleanup` is a no-op:
+ * benchmark DB so the synthetic dataset compares across builds. `cleanup` is a no-op:
  * the entire benchmark DB file is deleted on summary close, so
  * per-calendar deletion would be redundant.
  */
@@ -17,7 +17,7 @@ export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
   label: "Calendar week-view nav",
   description:
-    "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. Phase A runs against an empty baseline; Phase B re-runs after a restart on a 1000-event synthetic calendar. Both phases run against an isolated benchmark DB; your real calendar is never touched.",
+    "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline and a 1000-event synthetic calendar. Both datasets use an isolated benchmark DB; your real calendar is never touched.",
   workload: {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
