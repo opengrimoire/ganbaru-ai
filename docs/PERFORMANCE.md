@@ -82,7 +82,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-04-03` with harness v4. No v6 baseline has been recorded yet.
+Latest recorded canonical baseline: `2026-05-05-01` with harness v6.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
@@ -90,16 +90,16 @@ Harness v6 keeps the core benchmark questions, removes low-value ICS import and 
 
 | Run | Harness | Build ref | Platform | Notes |
 |---|---|---|---|---|
-| 2026-05-04-03 | v4 | 0.1.0+a7451de | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-05-01 | v6 | 0.1.0+889cc3c | Linux Ubuntu 24.04.4 LTS |  |
 
 ### Startup boot
 
 Harness v6 reports repeated process launches. Before each startup sample, the app exits and a helper waits 10 seconds before reopening it. Use `Launch median ms` as the user-facing app-open comparison value. It measures Rust process start through `boot.usable-paint`, when the calendar data has loaded and the calendar has rendered a frame. `First paint median ms` is diagnostic and can happen before event rows are visible.
 
-No v6 startup run has been recorded yet.
-
 | Run | Dataset | Runs | First paint median ms | Usable paint median ms | Launch min ms | Launch P95 ms | Launch max ms | Launch median ms |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
+| 2026-05-05-01 | base-0 | 5 | 120 | 215 | 855 | 987 | 987 | 868 |
+| 2026-05-05-01 | synth-v1-1000 | 5 | 121 | 722 | 1370 | 1550 | 1550 | 1444 |
 
 ### Idle memory
 
@@ -107,23 +107,23 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
-| 2026-05-04-03 | base-0 | workload peak | 104.3 | 203.1 | 17.8 | 325 |
-| 2026-05-04-03 | base-0 | workload end | 104.0 | 184.5 | 17.8 | 306 |
-| 2026-05-04-03 | base-0 | +30s | 103.3 | 186.6 | 17.8 | 308 |
-| 2026-05-04-03 | synth-v1-1000 | workload peak | 109.8 | 274.8 | 17.8 | 402 |
-| 2026-05-04-03 | synth-v1-1000 | workload end | 109.6 | 236.0 | 17.8 | 363 |
-| 2026-05-04-03 | synth-v1-1000 | +30s | 108.8 | 240.1 | 17.8 | 367 |
+| 2026-05-05-01 | base-0 | workload peak | 110.9 | 208.9 | 17.5 | 337 |
+| 2026-05-05-01 | base-0 | workload end | 110.6 | 188.4 | 17.5 | 317 |
+| 2026-05-05-01 | base-0 | +30s | 110.8 | 191.4 | 17.5 | 320 |
+| 2026-05-05-01 | synth-v1-1000 | workload peak | 113.7 | 272.1 | 17.7 | 404 |
+| 2026-05-05-01 | synth-v1-1000 | workload end | 113.7 | 236.9 | 17.7 | 368 |
+| 2026-05-05-01 | synth-v1-1000 | +30s | 112.9 | 242.8 | 17.7 | 373 |
 
 ### Calendar navigation stress memory
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
-| 2026-05-04-03 | base-0 | workload peak | 104.9 | 332.8 | 17.8 | 456 |
-| 2026-05-04-03 | base-0 | workload end | 104.9 | 340.1 | 17.8 | 463 |
-| 2026-05-04-03 | base-0 | +30s | 104.2 | 335.6 | 17.8 | 458 |
-| 2026-05-04-03 | synth-v1-1000 | workload peak | 108.1 | 339.8 | 17.8 | 466 |
-| 2026-05-04-03 | synth-v1-1000 | workload end | 108.1 | 307.6 | 17.8 | 433 |
-| 2026-05-04-03 | synth-v1-1000 | +30s | 107.4 | 268.6 | 17.8 | 394 |
+| 2026-05-05-01 | base-0 | workload peak | 108.6 | 324.7 | 17.7 | 451 |
+| 2026-05-05-01 | base-0 | workload end | 108.6 | 330.2 | 17.7 | 456 |
+| 2026-05-05-01 | base-0 | +30s | 108.0 | 324.2 | 17.7 | 450 |
+| 2026-05-05-01 | synth-v1-1000 | workload peak | 114.7 | 359.9 | 17.7 | 492 |
+| 2026-05-05-01 | synth-v1-1000 | workload end | 114.7 | 332.1 | 17.7 | 464 |
+| 2026-05-05-01 | synth-v1-1000 | +30s | 114.0 | 301.4 | 17.8 | 433 |
 
 ### Event panel latency
 
@@ -131,10 +131,10 @@ Rows report user-visible elapsed time. Internal module, detail-load, state, and 
 
 | Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |
 |---|---|---|---:|---|---:|---:|---:|---:|---:|
-| 2026-05-04-03 | base-2 | edit open from closed avg | 25 | ms | 10 | 16 | 17 | 56 | 56 |
-| 2026-05-04-03 | synth-v1-1000 | edit open from closed avg | 83 | ms | 10 | 68 | 72 | 158 | 158 |
-| 2026-05-04-03 | base-2 | edit switch while open avg | 16 | ms | 10 | 15 | 16 | 18 | 18 |
-| 2026-05-04-03 | synth-v1-1000 | edit switch while open avg | 47 | ms | 10 | 36 | 50 | 51 | 51 |
+| 2026-05-05-01 | base-2 | edit open from closed avg | 29 | ms | 10 | 16 | 18 | 74 | 74 |
+| 2026-05-05-01 | synth-v1-1002 | edit open from closed avg | 105 | ms | 10 | 87 | 95 | 169 | 169 |
+| 2026-05-05-01 | base-2 | edit switch while open avg | 17 | ms | 10 | 15 | 16 | 28 | 28 |
+| 2026-05-05-01 | synth-v1-1002 | edit switch while open avg | 52 | ms | 10 | 43 | 46 | 62 | 62 |
 
 ### Create panel latency
 
@@ -142,10 +142,10 @@ The cancel timing includes the fixed 500 ms guard used by the scenario before cl
 
 | Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |
 |---|---|---|---:|---|---:|---:|---:|---:|---:|
-| 2026-05-04-03 | base-0 | create panel open avg | 77 | ms | 6 | 24 | 92 | 97 | 97 |
-| 2026-05-04-03 | synth-v1-1000 | create panel open avg | 62 | ms | 6 | 51 | 63 | 72 | 72 |
-| 2026-05-04-03 | base-0 | create cancel after guard avg | 57 | ms | 6 | 53 | 58 | 59 | 59 |
-| 2026-05-04-03 | synth-v1-1000 | create cancel after guard avg | 89 | ms | 6 | 80 | 91 | 92 | 92 |
+| 2026-05-05-01 | base-0 | create panel open avg | 51 | ms | 6 | 27 | 29 | 100 | 100 |
+| 2026-05-05-01 | synth-v1-1000 | create panel open avg | 69 | ms | 6 | 53 | 68 | 78 | 78 |
+| 2026-05-05-01 | base-0 | create cancel after guard avg | 63 | ms | 6 | 59 | 60 | 72 | 72 |
+| 2026-05-05-01 | synth-v1-1000 | create cancel after guard avg | 98 | ms | 6 | 92 | 93 | 110 | 110 |
 
 ## Historical context
 
@@ -155,13 +155,7 @@ These runs are useful context but are not mixed into the current tables because 
 |---|---|---|---|---|
 | 2026-05-04-01 | 2026-05-04 | v2 | `calendar-nav` only | Superseded by v4 and later question-oriented records |
 | 2026-05-04-02 | 2026-05-04 | v3 | Full suite | Superseded by v4 and later question-oriented records |
-
-Legacy v4 startup rows below were single samples to first paint. Do not use them for public startup claims.
-
-| Run | Dataset | App mount ms | Tz hydrated ms | SQL start ms | SQL main done ms | Map row done ms | First paint ms | Launch total ms |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| 2026-05-04-03 | base-0 | 87 | 97 | 97 | 171 | 172 | 103 | 779 |
-| 2026-05-04-03 | synth-v1-1000 | 226 | 235 | 236 | 316 | 472 | 242 | 677 |
+| 2026-05-04-03 | 2026-05-04 | v4 | Full suite | Superseded by v6 startup methodology and scenario set |
 
 ## Package size
 

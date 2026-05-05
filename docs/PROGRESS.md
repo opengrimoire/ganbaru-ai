@@ -14,7 +14,7 @@ Phase 1: core loop (wrapping up)
 
 ## Next up
 
-- Record the first v6 benchmark run after adding closed-process startup cooldowns, then compare memory and latency against canonical baseline `2026-05-04-03`.
+- Compare future performance changes against canonical baseline `2026-05-05-01`.
 
 ## What exists (phase 1)
 
@@ -31,7 +31,7 @@ Phase 1: core loop (wrapping up)
 - Theme system: built-in light/dark themes, user theme CRUD, SQLite-backed token snapshots, derivation engine, contrast checks, preset picker, JSON import/export, and floating theme editor.
 - Settings surface: Appearance and Data sections, font and zoom controls, calendar import/export controls, and a floating theme editor that can operate while the app remains clickable.
 - Diagnostics: lazy performance popover with live RAM, startup RAM snapshot, chart copy, speed log, launch-time breakdown, and benchmark controls.
-- Benchmark harness v6: isolated benchmark DB passes, startup-boot, idle-memory, calendar-nav, event-panel-open, and calendar-create-cancel scenarios; one Run all button; suite state persisted across restarts; interrupted-pass cleanup; repeated startup launch medians to usable calendar paint after closed-process cooldowns; clearer running labels for memory windows; rendered summary tables; canonical markdown with compact dataset ids, one run metadata notes column, and separate latency/scalar metric tables; build refs and detailed platform labels; and docs at `docs/features/performance-benchmark.md` plus indexed canonical tracking rules in `docs/PERFORMANCE.md`.
+- Benchmark harness v6: isolated benchmark DB passes, startup-boot, idle-memory, calendar-nav, event-panel-open, and calendar-create-cancel scenarios; one Run all button; suite state persisted across restarts; interrupted-pass cleanup; repeated startup launch medians to usable calendar paint after closed-process cooldowns; clearer running labels for memory windows; rendered summary tables; canonical markdown with compact dataset ids, one run metadata notes column, and separate latency/scalar metric tables; build refs and detailed platform labels; canonical baseline `2026-05-05-01`; and docs at `docs/features/performance-benchmark.md` plus indexed canonical tracking rules in `docs/PERFORMANCE.md`.
 
 ## Validation baseline
 
