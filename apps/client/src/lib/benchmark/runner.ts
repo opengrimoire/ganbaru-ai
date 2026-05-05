@@ -2,12 +2,12 @@
  * Phase orchestration for the benchmark harness.
  *
  * Public surface:
- * - `runPhaseA(scenario)` / `runPhaseB(scenario)`: drive the stress for one phase.
+ * - `runPhaseA(scenario)` / `runPhaseB(scenario)`: drive the workload for one phase.
  * - `persistPhaseAPending(...)`: write state file before the first restart.
  * - `persistPhaseBPending(...)`: write state file between Phase A and Phase B.
  * - `loadPersistedState()` / `clearPersistedState()`: state file plumbing.
  *
- * The scenario module owns `setup()`, `runStress()`, `seed()`, and
+ * The scenario module owns `setup()`, `runWorkload()`, `seed()`, and
  * `cleanup()`; the runner does not know the difference between a calendar
  * scenario and a future kanban / pomodoro scenario.
  */
@@ -19,6 +19,7 @@ import {
   SYNTH_VERSION,
   SAMPLE_OFFSETS_MS,
   type BenchmarkScenario,
+  type BenchmarkSuiteState,
   type BenchmarkState,
   type PhaseResult,
   type SampleLabel,
@@ -31,50 +32,56 @@ import {
 } from "./sampler";
 
 /**
- * Run the stress + idle curve sequence for one phase. Counterpart to the
- * scenario contract: the scenario provides `setup()` and `runStress()`,
- * the runner adds peak sampling, the post-stress idle curve, and the
- * boot-mark snapshot.
+ * Run one phase. The scenario provides `setup()` and `runWorkload()`;
+ * the runner adds boot timing and, only for memory scenarios, peak sampling
+ * plus the post-workload idle curve.
  */
 async function runPhase(opts: {
   phase: "A" | "B";
   scenario: BenchmarkScenario;
   signal: AbortSignal;
-  eventCountAtStart: number;
+  getEventCount: () => number;
   onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
 }): Promise<PhaseResult> {
   await opts.scenario.setup();
   if (opts.signal.aborted) throw new DOMException("aborted", "AbortError");
 
   const startedAt = new Date().toISOString();
-  const peakSampler = startPeakSampler();
+  const eventCountAtStart = opts.getEventCount();
+  const shouldSampleMemory = opts.scenario.workload.memoryMode === "post-workload";
+  const peakSampler = shouldSampleMemory ? startPeakSampler() : undefined;
 
-  const stressStarted = performance.now();
-  await opts.scenario.runStress(opts.signal);
-  const stressDurationMs = performance.now() - stressStarted;
+  const workloadStarted = performance.now();
+  const maybeMetrics = await opts.scenario.runWorkload(opts.signal);
+  const workloadDurationMs = performance.now() - workloadStarted;
 
-  const peakSamples = await peakSampler.stop();
+  const peakSamples = await peakSampler?.stop() ?? [];
   if (opts.signal.aborted) throw new DOMException("aborted", "AbortError");
 
-  const t0 = await readMemorySample("t0", 0);
-  const restCurve = await sampleIdleCurve({
-    signal: opts.signal,
-    onProgress: (label, samples) => {
-      opts.onCurveProgress?.(label, SAMPLE_OFFSETS_MS.length, samples.length);
-    },
-  });
+  let curve = [] as PhaseResult["curve"];
+  if (shouldSampleMemory) {
+    const t0 = await readMemorySample("t0", 0);
+    const restCurve = await sampleIdleCurve({
+      signal: opts.signal,
+      onProgress: (label, samples) => {
+        opts.onCurveProgress?.(label, SAMPLE_OFFSETS_MS.length, samples.length);
+      },
+    });
+    curve = [t0, ...restCurve];
+  }
 
   const boot = captureBootTimings();
 
   return {
     phase: opts.phase,
     startedAt,
-    stressDurationMs,
+    workloadDurationMs,
     peakSamples,
-    curve: [t0, ...restCurve],
+    curve,
+    metrics: maybeMetrics ?? undefined,
     boot,
     startupMs: boot.launchTotalMs,
-    eventCountAtStart: opts.eventCountAtStart,
+    eventCountAtStart,
   };
 }
 
@@ -89,7 +96,7 @@ export function createRunner(getEventCount: () => number) {
         phase: "A",
         scenario: opts.scenario,
         signal: opts.signal,
-        eventCountAtStart: getEventCount(),
+        getEventCount,
         onCurveProgress: opts.onCurveProgress,
       });
     },
@@ -103,7 +110,7 @@ export function createRunner(getEventCount: () => number) {
         phase: "B",
         scenario: opts.scenario,
         signal: opts.signal,
-        eventCountAtStart: getEventCount(),
+        getEventCount,
         onCurveProgress: opts.onCurveProgress,
       });
     },
@@ -120,6 +127,7 @@ export function createRunner(getEventCount: () => number) {
 export async function persistPhaseAPending(opts: {
   scenarioId: string;
   platform: string;
+  suite?: BenchmarkSuiteState;
 }): Promise<void> {
   const state: BenchmarkState = {
     scenarioId: opts.scenarioId,
@@ -129,6 +137,7 @@ export async function persistPhaseAPending(opts: {
     platform: opts.platform,
     vaultMode: "benchmark",
     stage: "phase-a-pending",
+    suite: opts.suite,
   };
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });
 }
@@ -144,6 +153,7 @@ export async function persistPhaseBPending(opts: {
   startedAt: string;
   phaseA: PhaseResult;
   seedHandle: { calendarId: string; eventCount: number };
+  suite?: BenchmarkSuiteState;
 }): Promise<void> {
   const state: BenchmarkState = {
     scenarioId: opts.scenarioId,
@@ -155,6 +165,7 @@ export async function persistPhaseBPending(opts: {
     stage: "phase-b-pending",
     phaseA: opts.phaseA,
     seedHandle: opts.seedHandle,
+    suite: opts.suite,
   };
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });
 }

@@ -3,7 +3,7 @@
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
-  import { formatBenchmarkMarkdown } from "$lib/benchmark/output";
+  import { formatBenchmarkSuiteMarkdown } from "$lib/benchmark/output";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const runner = getBenchmarkRunner();
@@ -14,8 +14,22 @@
   // Materialize the markdown lazily so the overlay does not recompute every
   // render while the user is just looking at it.
   const summaryMarkdown = $derived.by(() => {
-    if (runner.status !== "summary" || !runner.result) return "";
-    return formatBenchmarkMarkdown(runner.result, {});
+    if (runner.status !== "summary" || runner.results.length === 0) return "";
+    return formatBenchmarkSuiteMarkdown(runner.results, {});
+  });
+
+  const confirmTitle = $derived(
+    runner.pendingMode === "suite" ? "Run all benchmarks?" : "Run benchmark?",
+  );
+  const confirmMessage = $derived.by(() => {
+    const labels = runner.pendingScenarioLabels;
+    const prefix = runner.pendingMode === "suite"
+      ? `Runs ${labels.length} benchmarks sequentially against isolated databases.`
+      : "Restarts the app a few times against an isolated database.";
+    const listed = runner.pendingMode === "suite"
+      ? `\n\nScenarios:\n${labels.map((label) => `- ${label}`).join("\n")}`
+      : "";
+    return `${prefix}\nYour real calendar is not touched. A desktop notification fires when the run finishes.${listed}`;
   });
 
   function copyMarkdown() {
@@ -31,8 +45,8 @@
 
 {#if runner.status === "confirming"}
   <ConfirmDialog
-    title="Run benchmark?"
-    message={"Restarts the app a few times against an isolated database over about 80 seconds.\nYour real calendar is not touched. A desktop notification fires when the run finishes."}
+    title={confirmTitle}
+    message={confirmMessage}
     confirmLabel="Run (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={() => void runner.confirm()}
@@ -56,6 +70,9 @@
       </div>
 
       <div class="text-[13px] text-foreground">
+        {#if runner.running.suite}
+          Benchmark {runner.running.suite.index + 1}/{runner.running.suite.total}.
+        {/if}
         Phase {runner.running.phase}: {runner.running.step}
         {#if runner.running.curve}
           <span class="text-muted-foreground"
@@ -65,7 +82,7 @@
       </div>
 
       <p class="text-[12px] text-muted-foreground">
-        Avoid interacting with the app: clicks and key presses can skew the memory measurements.
+        Avoid interacting with the app: clicks and key presses can skew the measurements.
         Your real calendar lives on a separate database and stays untouched even if the run is
         interrupted, the app is force-closed, or the system shuts down. Cancel discards the
         partial run and restarts on your real data.

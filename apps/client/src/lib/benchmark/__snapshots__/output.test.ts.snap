@@ -3,25 +3,20 @@
 exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing changes are intentional 1`] = `
 "## Benchmark 2026-05-01 (build 9815ea5, Linux Ubuntu 25.10, WebKitGTK 2.46)
 
-Scenario: calendar-nav, dataset benchmark-synth-v1 (1000 events).
-Methodology: cold-cold against an isolated benchmark DB; 3000 ms programmatic stress; sampled at 200 ms during stress, then once at +30 s post-stress.
+Scenario: calendar-nav. Question: How much memory does repeated week navigation use?
+Datasets: Phase A empty. Phase B benchmark-synth-v1, 1000 events.
+Methodology: cold-cold against an isolated benchmark DB; 3000 ms programmatic week-view navigation stress; memory sampled at 200 ms during the workload, then once at +30 s post-workload.
 
-### Boot (ms from process start)
+### Memory PSS, MB
 
-| Mark              | Phase A (0 events) | Phase B (1000 events) |
-|-------------------|--------------------|-----------------------|
-| launch-total      | 1430               | 1612                  |
-| sql-main-done     | 412                | 609                   |
-| maprow-done       | 415                | 783                   |
-| first-paint       | 542                | 921                   |
+| Phase | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
+|---|---|---|---:|---:|---:|---:|
+| Phase A | empty | workload peak | 87.0 | 261.0 | 16.0 | 348 |
+| Phase B | benchmark-synth-v1, 1000 events | workload peak | 87.0 | 430.0 | 16.0 | 517 |
+| Phase A | empty | workload end | 87.0 | 231.0 | 16.0 | 318 |
+| Phase B | benchmark-synth-v1, 1000 events | workload end | 87.0 | 400.0 | 16.0 | 487 |
+| Phase A | empty | +30s | 87.0 | 191.0 | 16.0 | 278 |
+| Phase B | benchmark-synth-v1, 1000 events | +30s | 87.0 | 231.0 | 16.0 | 318 |
 
-### Memory PSS, MB (backend / frontend / network / total)
-
-| t     | Phase A (0 events)          | Phase B (1000 events)       |
-|-------|-----------------------------|-----------------------------|
-| peak  | 87.0 / 261.0 / 16.0 / 348   | 87.0 / 430.0 / 16.0 / 517   |
-| t0    | 87.0 / 231.0 / 16.0 / 318   | 87.0 / 400.0 / 16.0 / 487   |
-| +30s  | 87.0 / 191.0 / 16.0 / 278   | 87.0 / 231.0 / 16.0 / 318   |
-
-Settled floor: empty 278 MB at +30s, synth 318 MB at +30s. 1000-event delta over empty: +40 MB at floor, +169 MB at peak."
+Settled floor: Phase A 278 MB at +30s, Phase B 318 MB at +30s. Phase B delta over Phase A: +40 MB at floor, +169 MB at peak."
 `;

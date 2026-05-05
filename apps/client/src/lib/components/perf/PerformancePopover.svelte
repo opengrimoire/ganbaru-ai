@@ -308,6 +308,16 @@
     }
     benchmarkRunner.request(scenarioId);
   }
+
+  async function requestAllBenchmarks(): Promise<void> {
+    try {
+      await ensureBenchmarkOverlay();
+    } catch (e) {
+      console.error("benchmark overlay load failed", e);
+      return;
+    }
+    benchmarkRunner.requestAll();
+  }
 </script>
 
 <!--
@@ -535,10 +545,18 @@
     <div class="flex items-center justify-between">
       <span class="text-[10px] uppercase tracking-wider text-foreground">Benchmarks</span>
       <span class="text-[10px] uppercase tracking-wider text-muted-foreground/60"
-        >~80 s, restarts app</span
+        >restarts app</span
       >
     </div>
     <div class="mt-1.5 flex flex-col gap-1">
+      <button
+        onclick={() => void requestAllBenchmarks()}
+        disabled={benchmarkRunner.status !== "idle"}
+        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <Play size={12} />
+        Run all benchmarks
+      </button>
       {#each BENCHMARK_SCENARIOS as scenario (scenario.id)}
         <button
           onclick={() => void requestBenchmark(scenario.id)}

@@ -8,10 +8,15 @@
  *
  * See the spec doc for the rationale and a worked example.
  */
-import type { BenchmarkResult, PhaseResult, SamplePoint, SampleLabel } from "./types";
+import type {
+  BenchmarkMetric,
+  BenchmarkResult,
+  PhaseResult,
+  SamplePoint,
+  SampleLabel,
+} from "./types";
 import {
   SAMPLE_LABELS,
-  STRESS_DURATION_MS,
   STRESS_PEAK_INTERVAL_MS,
   SAMPLE_OFFSETS_MS,
   formatOffsetProse,
@@ -23,6 +28,9 @@ import {
  * and first-paint mark; the rest come from the perflog.
  */
 const BOOT_MARK_ORDER: string[] = [
+  "boot.app-mount",
+  "boot.tz-hydrated",
+  "boot.sql-start",
   "boot.sql-main-done",
   "boot.maprow-done",
   "boot.first-paint",
@@ -38,6 +46,28 @@ function formatTotalMb(n: number): string {
   return Math.round(n).toString();
 }
 
+function formatMetricValue(metric: BenchmarkMetric | undefined): string {
+  if (!metric) return "n/a";
+  if (!Number.isFinite(metric.value)) return "n/a";
+  return metric.unit === "count"
+    ? Math.round(metric.value).toString()
+    : Math.round(metric.value).toString();
+}
+
+function formatMetricDetails(metric: BenchmarkMetric | undefined): string {
+  if (!metric?.details) return "";
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(metric.details)) {
+    const label = key.replace(/Ms$/, "");
+    if (typeof value === "number") {
+      parts.push(key.endsWith("Ms") ? `${label} ${Math.round(value)} ms` : `${label} ${value}`);
+    } else {
+      parts.push(`${label} ${value}`);
+    }
+  }
+  return parts.join(", ");
+}
+
 /** Format one sample row's right-side cell, e.g. `87.0 / 245.0 / 15.8 / 348`. */
 export function formatSampleCell(s: SamplePoint | undefined): string {
   if (!s) return "n/a";
@@ -50,8 +80,8 @@ function findSample(samples: SamplePoint[], label: SampleLabel): SamplePoint | u
 
 /**
  * Order the curve as the markdown expects (`peak`, `t0`, `+30s`). `peak`
- * is the maximum across the burst samples; the other rows come from the
- * post-stress idle curve.
+ * is the maximum across the workload samples; the other rows come from the
+ * post-workload idle curve.
  */
 function orderedSamples(phase: PhaseResult): Map<SampleLabel, SamplePoint | undefined> {
   const map = new Map<SampleLabel, SamplePoint | undefined>();
@@ -73,7 +103,7 @@ function orderedSamples(phase: PhaseResult): Map<SampleLabel, SamplePoint | unde
  * Settled floor: the lowest total in the post-peak idle curve. Ties pick
  * the earliest label so the footer reads as the moment we first hit it.
  *
- * v2 caveat: with only `t0` and `+30s` in the curve, the "floor" is a
+ * Harness caveat: with only `t0` and `+30s` in the curve, the "floor" is a
  * bounded-window asymptote, not a true settled value. Late WebKit GC can
  * fire well past the sampling window. The spec doc explains why this is
  * still the right tradeoff for cross-build comparison.
@@ -89,41 +119,52 @@ function findSettledFloor(phase: PhaseResult): { totalMb: number; label: SampleL
   return best;
 }
 
-function formatBootRow(mark: string, a: PhaseResult, b: PhaseResult): string {
-  const aVal = a.boot.marks[mark];
-  const bVal = b.boot.marks[mark];
-  const left = aVal === undefined ? "n/a" : Math.round(aVal).toString();
-  const right = bVal === undefined ? "n/a" : Math.round(bVal).toString();
-  // Strip "boot." prefix so the column reads as the conceptual mark name.
-  const short = mark.startsWith("boot.") ? mark.slice(5) : mark;
-  return `| ${pad(short, 17)} | ${pad(left, leftColWidth(a))} | ${pad(right, rightColWidth(b))} |`;
+function metricsByLabel(phase: PhaseResult): Map<string, BenchmarkMetric> {
+  const map = new Map<string, BenchmarkMetric>();
+  for (const metric of phase.metrics ?? []) {
+    map.set(metric.label, metric);
+  }
+  return map;
 }
 
-function formatLaunchRow(a: PhaseResult, b: PhaseResult): string {
-  const left = a.startupMs === undefined ? "n/a" : Math.round(a.startupMs).toString();
-  const right = b.startupMs === undefined ? "n/a" : Math.round(b.startupMs).toString();
-  return `| ${pad("launch-total", 17)} | ${pad(left, leftColWidth(a))} | ${pad(right, rightColWidth(b))} |`;
+function formatBootValue(value: number | undefined): string {
+  return value === undefined ? "n/a" : Math.round(value).toString();
 }
 
-function pad(s: string, width: number): string {
-  if (s.length >= width) return s;
-  return s + " ".repeat(width - s.length);
+function phaseDataset(result: BenchmarkResult, phase: PhaseResult): string {
+  if (phase.phase === "A") {
+    return phase.eventCountAtStart === 0 ? "empty" : `setup, ${phase.eventCountAtStart} events`;
+  }
+  return `benchmark-synth-${result.synthVersion}, ${phase.eventCountAtStart} events`;
 }
 
-function leftColLabel(p: PhaseResult): string {
-  return `Phase A (${p.eventCountAtStart} events)`;
+function formatBootTableRow(result: BenchmarkResult, phase: PhaseResult): string {
+  const cells = [
+    `Phase ${phase.phase}`,
+    phaseDataset(result, phase),
+    formatBootValue(phase.startupMs),
+    ...BOOT_MARK_ORDER.map((mark) => formatBootValue(phase.boot.marks[mark])),
+  ];
+  return `| ${cells.join(" | ")} |`;
 }
 
-function rightColLabel(p: PhaseResult): string {
-  return `Phase B (${p.eventCountAtStart} events)`;
-}
-
-function leftColWidth(p: PhaseResult): number {
-  return Math.max(15, leftColLabel(p).length);
-}
-
-function rightColWidth(p: PhaseResult): number {
-  return Math.max(20, rightColLabel(p).length);
+function formatMemoryTableRow(
+  result: BenchmarkResult,
+  phase: PhaseResult,
+  label: SampleLabel,
+  sample: SamplePoint | undefined,
+): string {
+  const timepoint = label === "peak" ? "workload peak" : label === "t0" ? "workload end" : label;
+  const cells = [
+    `Phase ${phase.phase}`,
+    phaseDataset(result, phase),
+    timepoint,
+    sample ? formatMb(sample.backendMb) : "n/a",
+    sample ? formatMb(sample.frontendMb) : "n/a",
+    sample ? formatMb(sample.networkMb) : "n/a",
+    sample ? formatTotalMb(sample.totalMb) : "n/a",
+  ];
+  return `| ${cells.join(" | ")} |`;
 }
 
 /**
@@ -146,47 +187,63 @@ export function formatBenchmarkMarkdown(result: BenchmarkResult, opts: {
   else headerBits.push(result.platform);
   const headerSuffix = headerBits.length > 0 ? ` (${headerBits.join(", ")})` : "";
 
+  const lines: string[] = [];
+  lines.push(`## Benchmark ${dateStr}${headerSuffix}`);
+  lines.push("");
+  lines.push(`Scenario: ${result.scenarioId}. Question: ${result.workload.question}`);
+  lines.push(
+    `Datasets: Phase A ${phaseDataset(result, result.phaseA)}. Phase B ${phaseDataset(result, result.phaseB)}.`,
+  );
+  lines.push(formatMethodology(result));
+
+  if (result.workload.kind === "startup") {
+    appendBootSection(lines, result);
+  } else if (result.workload.memoryMode === "post-workload") {
+    appendMemorySection(lines, result);
+  } else {
+    appendMetricsSection(lines, result);
+  }
+
+  return lines.join("\n");
+}
+
+function formatMethodology(result: BenchmarkResult): string {
+  const duration = result.workload.durationMs > 0
+    ? `${result.workload.durationMs} ms ${result.workload.label}`
+    : result.workload.label;
+  if (result.workload.memoryMode === "post-workload") {
+    const offsetsClause = SAMPLE_OFFSETS_MS.length === 1
+      ? `once at ${formatOffsetProse(SAMPLE_OFFSETS_MS[0])}`
+      : `at ${SAMPLE_OFFSETS_MS.map(formatOffsetProse).join(", ")}`;
+    return `Methodology: cold-cold against an isolated benchmark DB; ${duration}; memory sampled at ${STRESS_PEAK_INTERVAL_MS} ms during the workload, then ${offsetsClause} post-workload.`;
+  }
+  return `Methodology: cold-cold against an isolated benchmark DB; ${duration}; no post-workload memory wait.`;
+}
+
+function appendBootSection(lines: string[], result: BenchmarkResult): void {
+  lines.push("");
+  lines.push("### Startup boot");
+  lines.push("");
+  lines.push("| Phase | Dataset | Launch total ms | App mount ms | Tz hydrated ms | SQL start ms | SQL main done ms | Map row done ms | First paint ms |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|");
+  lines.push(formatBootTableRow(result, result.phaseA));
+  lines.push(formatBootTableRow(result, result.phaseB));
+}
+
+function appendMemorySection(lines: string[], result: BenchmarkResult): void {
   const aSamples = orderedSamples(result.phaseA);
   const bSamples = orderedSamples(result.phaseB);
   const floorA = findSettledFloor(result.phaseA);
   const floorB = findSettledFloor(result.phaseB);
 
-  const aLabel = leftColLabel(result.phaseA);
-  const bLabel = rightColLabel(result.phaseB);
-  const aWidth = leftColWidth(result.phaseA);
-  const bWidth = rightColWidth(result.phaseB);
-
-  const lines: string[] = [];
-  lines.push(`## Benchmark ${dateStr}${headerSuffix}`);
   lines.push("");
-  lines.push(
-    `Scenario: ${result.scenarioId}, dataset benchmark-synth-${result.synthVersion} (${result.phaseB.eventCountAtStart} events).`,
-  );
-  const offsetsClause = SAMPLE_OFFSETS_MS.length === 1
-    ? `once at ${formatOffsetProse(SAMPLE_OFFSETS_MS[0])}`
-    : `at ${SAMPLE_OFFSETS_MS.map(formatOffsetProse).join(", ")}`;
-  lines.push(
-    `Methodology: cold-cold against an isolated benchmark DB; ${STRESS_DURATION_MS} ms programmatic stress; sampled at ${STRESS_PEAK_INTERVAL_MS} ms during stress, then ${offsetsClause} post-stress.`,
-  );
+  lines.push("### Memory PSS, MB");
   lines.push("");
-  lines.push("### Boot (ms from process start)");
-  lines.push("");
-  lines.push(`| ${pad("Mark", 17)} | ${pad(aLabel, aWidth)} | ${pad(bLabel, bWidth)} |`);
-  lines.push(`|${"-".repeat(19)}|${"-".repeat(aWidth + 2)}|${"-".repeat(bWidth + 2)}|`);
-  lines.push(formatLaunchRow(result.phaseA, result.phaseB));
-  for (const mark of BOOT_MARK_ORDER) {
-    lines.push(formatBootRow(mark, result.phaseA, result.phaseB));
-  }
-  lines.push("");
-  lines.push("### Memory PSS, MB (backend / frontend / network / total)");
-  lines.push("");
-  const memWidth = Math.max(27, aLabel.length, bLabel.length);
-  lines.push(`| ${pad("t", 5)} | ${pad(aLabel, memWidth)} | ${pad(bLabel, memWidth)} |`);
-  lines.push(`|${"-".repeat(7)}|${"-".repeat(memWidth + 2)}|${"-".repeat(memWidth + 2)}|`);
+  lines.push("| Phase | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |");
+  lines.push("|---|---|---|---:|---:|---:|---:|");
   for (const label of SAMPLE_LABELS) {
-    const left = formatSampleCell(aSamples.get(label));
-    const right = formatSampleCell(bSamples.get(label));
-    lines.push(`| ${pad(label, 5)} | ${pad(left, memWidth)} | ${pad(right, memWidth)} |`);
+    lines.push(formatMemoryTableRow(result, result.phaseA, label, aSamples.get(label)));
+    lines.push(formatMemoryTableRow(result, result.phaseB, label, bSamples.get(label)));
   }
   lines.push("");
   if (floorA && floorB) {
@@ -198,13 +255,47 @@ export function formatBenchmarkMarkdown(result: BenchmarkResult, opts: {
       : undefined;
     const peakStr = peakDelta === undefined
       ? ""
-      : ` ${result.phaseB.eventCountAtStart}-event delta over empty: ${signed(floorDelta)} MB at floor, ${signed(peakDelta)} MB at peak.`;
+      : ` Phase B delta over Phase A: ${signed(floorDelta)} MB at floor, ${signed(peakDelta)} MB at peak.`;
     lines.push(
-      `Settled floor: empty ${formatTotalMb(floorA.totalMb)} MB at ${floorA.label}, synth ${formatTotalMb(floorB.totalMb)} MB at ${floorB.label}.${peakStr}`,
+      `Settled floor: Phase A ${formatTotalMb(floorA.totalMb)} MB at ${floorA.label}, Phase B ${formatTotalMb(floorB.totalMb)} MB at ${floorB.label}.${peakStr}`,
     );
   }
+}
 
-  return lines.join("\n");
+function appendMetricsSection(lines: string[], result: BenchmarkResult): void {
+  const metricLabels = [
+    ...new Set([
+      ...(result.phaseA.metrics ?? []).map((metric) => metric.label),
+      ...(result.phaseB.metrics ?? []).map((metric) => metric.label),
+    ]),
+  ];
+  lines.push("");
+  lines.push("### Primary metrics");
+  lines.push("");
+  if (metricLabels.length === 0) {
+    lines.push("No primary metrics were captured.");
+    return;
+  }
+
+  const phaseAMetrics = metricsByLabel(result.phaseA);
+  const phaseBMetrics = metricsByLabel(result.phaseB);
+  lines.push("| Metric | Unit | Phase A | Details A | Phase B | Details B |");
+  lines.push("|---|---|---:|---|---:|---|");
+  for (const label of metricLabels) {
+    const aMetric = phaseAMetrics.get(label);
+    const bMetric = phaseBMetrics.get(label);
+    lines.push(
+      `| ${label} | ${aMetric?.unit ?? bMetric?.unit ?? ""} | ${formatMetricValue(aMetric)} | ${formatMetricDetails(aMetric)} | ${formatMetricValue(bMetric)} | ${formatMetricDetails(bMetric)} |`,
+    );
+  }
+}
+
+export function formatBenchmarkSuiteMarkdown(results: BenchmarkResult[], opts: {
+  date?: string;
+  env?: string;
+  build?: string;
+}): string {
+  return results.map((result) => formatBenchmarkMarkdown(result, opts)).join("\n\n");
 }
 
 function signed(n: number): string {

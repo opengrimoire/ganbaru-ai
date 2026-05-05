@@ -3,7 +3,7 @@
  *
  * Wraps `get_memory_report` (Tauri command in `lib.rs`) and the
  * `lib/stores/perflog.svelte.ts` ring buffer. Scenarios never call this
- * directly: the runner orchestrates peak sampling around `runStress` and
+ * directly: the runner orchestrates peak sampling around `runWorkload` and
  * the idle-curve schedule afterwards.
  *
  * Cadence (`STRESS_PEAK_INTERVAL_MS`, `SAMPLE_OFFSETS_MS`) is pinned in
@@ -62,7 +62,7 @@ export async function readMemorySample(
  * Periodically sample memory at `STRESS_PEAK_INTERVAL_MS` cadence. Returns
  * a stop function that flushes any in-flight read, clears the timer, and
  * resolves with the captured samples. The runner calls this around
- * `runStress` so the peak buffer covers exactly the stress window.
+ * `runWorkload` so the peak buffer covers exactly the workload window.
  */
 export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
   const samples: SamplePoint[] = [];
@@ -151,7 +151,7 @@ export function sampleIdleCurve(opts: {
 /**
  * Tags the harness lifts out of the perflog ring buffer.
  *
- * v2 drops `boot.sql-children-done` and `boot.rawblocks-set` because both
+ * The harness omits `boot.sql-children-done` and `boot.rawblocks-set` because both
  * fire within ~10 ms of `boot.sql-main-done` / `boot.first-paint` on
  * every run we have captured: column space without information.
  */

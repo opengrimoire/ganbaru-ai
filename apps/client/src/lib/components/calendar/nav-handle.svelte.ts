@@ -16,11 +16,17 @@ type NavigateDirection = "today" | "back" | "forward";
 type NavigateFn = (direction: NavigateDirection) => void;
 type SetViewModeFn = (mode: CalendarViewMode) => void;
 type SetAnchorDateFn = (date: Date) => void;
+type OpenVisibleEventFn = (index: number) => Promise<boolean>;
+type OpenCreatePanelFn = (start: string, end: string, allDay?: boolean) => Promise<boolean>;
+type ClosePanelFn = () => Promise<void>;
 
 class CalendarNavHandle {
   #navigate: NavigateFn | null = null;
   #setViewMode: SetViewModeFn | null = null;
   #setAnchorDate: SetAnchorDateFn | null = null;
+  #openVisibleEvent: OpenVisibleEventFn | null = null;
+  #openCreatePanel: OpenCreatePanelFn | null = null;
+  #closePanel: ClosePanelFn | null = null;
   #viewMode: CalendarViewMode = "week";
 
   /**
@@ -31,16 +37,25 @@ class CalendarNavHandle {
     navigate: NavigateFn;
     setViewMode: SetViewModeFn;
     setAnchorDate: SetAnchorDateFn;
+    openVisibleEvent: OpenVisibleEventFn;
+    openCreatePanel: OpenCreatePanelFn;
+    closePanel: ClosePanelFn;
     getViewMode: () => CalendarViewMode;
   }): () => void {
     this.#navigate = opts.navigate;
     this.#setViewMode = opts.setViewMode;
     this.#setAnchorDate = opts.setAnchorDate;
+    this.#openVisibleEvent = opts.openVisibleEvent;
+    this.#openCreatePanel = opts.openCreatePanel;
+    this.#closePanel = opts.closePanel;
     this.#viewMode = opts.getViewMode();
     return () => {
       this.#navigate = null;
       this.#setViewMode = null;
       this.#setAnchorDate = null;
+      this.#openVisibleEvent = null;
+      this.#openCreatePanel = null;
+      this.#closePanel = null;
     };
   }
 
@@ -68,6 +83,18 @@ class CalendarNavHandle {
 
   setAnchorDate(date: Date) {
     this.#setAnchorDate?.(date);
+  }
+
+  openVisibleEvent(index: number): Promise<boolean> {
+    return this.#openVisibleEvent?.(index) ?? Promise.resolve(false);
+  }
+
+  openCreatePanel(start: string, end: string, allDay?: boolean): Promise<boolean> {
+    return this.#openCreatePanel?.(start, end, allDay) ?? Promise.resolve(false);
+  }
+
+  closePanel(): Promise<void> {
+    return this.#closePanel?.() ?? Promise.resolve();
   }
 }
 

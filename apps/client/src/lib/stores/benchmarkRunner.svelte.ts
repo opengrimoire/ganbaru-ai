@@ -1,11 +1,11 @@
 /**
- * Cross-component runner state for the in-app benchmark harness (v2).
+ * Cross-component runner state for the in-app benchmark harness.
  *
  * Mounted once in `TitleBar.svelte` (the same place as the floating theme
  * editor and settings modal). Settings panels call `request()` to ask for
  * a run; the overlay reacts to status transitions.
  *
- * V2 flow (cold-cold against an isolated benchmark DB):
+ * Current flow (cold-cold against an isolated benchmark DB):
  *
  *   idle
  *     -> user clicks Run
@@ -40,6 +40,7 @@ import { getCalendar } from "./calendar.svelte";
 import {
   SYNTH_VERSION,
   type BenchmarkResult,
+  type BenchmarkSuiteState,
   type BenchmarkState,
   type BenchmarkScenario,
   type PhaseResult,
@@ -53,15 +54,17 @@ import {
   loadPersistedState,
   clearPersistedState,
 } from "$lib/benchmark/runner";
-import { getScenarioById } from "$lib/benchmark/registry";
+import { BENCHMARK_SCENARIOS, getScenarioById } from "$lib/benchmark/registry";
 
 type Status = "idle" | "confirming" | "running" | "summary" | "error";
+type PendingRequest = { mode: "single" | "suite"; scenarioIds: string[] };
 
 export interface RunningInfo {
   phase: "A" | "B";
   scenarioId: string;
   scenarioLabel: string;
-  /** Short user-facing label for the current step (e.g. "Stress (3 s)"). */
+  suite?: { index: number; total: number };
+  /** Short user-facing label for the current step, e.g. `stress (3 s)`. */
   step: string;
   /** Set during the idle-curve schedule so the overlay can show progress. */
   curve?: { done: number; total: number; label: SampleLabel };
@@ -71,22 +74,42 @@ class BenchmarkRunnerStore {
   status = $state<Status>("idle");
   running = $state<RunningInfo | undefined>(undefined);
   result = $state<BenchmarkResult | null>(null);
+  results = $state<BenchmarkResult[]>([]);
   errorMessage = $state<string | undefined>(undefined);
-  pendingScenarioId = $state<string | undefined>(undefined);
+  pendingRequest = $state<PendingRequest | undefined>(undefined);
 
   #abort: AbortController | null = null;
 
   /** Open the confirmation dialog for `scenarioId`. */
   request(scenarioId: string) {
     if (this.status !== "idle") return;
-    this.pendingScenarioId = scenarioId;
+    this.pendingRequest = { mode: "single", scenarioIds: [scenarioId] };
+    this.status = "confirming";
+  }
+
+  /** Open the confirmation dialog for every registered scenario. */
+  requestAll() {
+    if (this.status !== "idle") return;
+    this.pendingRequest = {
+      mode: "suite",
+      scenarioIds: BENCHMARK_SCENARIOS.map((scenario) => scenario.id),
+    };
     this.status = "confirming";
   }
 
   cancelConfirm() {
     if (this.status !== "confirming") return;
-    this.pendingScenarioId = undefined;
+    this.pendingRequest = undefined;
     this.status = "idle";
+  }
+
+  get pendingMode(): "single" | "suite" | undefined {
+    return this.pendingRequest?.mode;
+  }
+
+  get pendingScenarioLabels(): string[] {
+    return (this.pendingRequest?.scenarioIds ?? [])
+      .map((id) => getScenarioById(id)?.label ?? id);
   }
 
   /**
@@ -96,28 +119,36 @@ class BenchmarkRunnerStore {
    */
   async confirm() {
     if (this.status !== "confirming") return;
-    const scenarioId = this.pendingScenarioId;
-    if (!scenarioId) return;
+    const pending = this.pendingRequest;
+    const scenarioId = pending?.scenarioIds[0];
+    if (!pending || !scenarioId) return;
     const scenario = getScenarioById(scenarioId);
     if (!scenario) {
       this.errorMessage = `Unknown scenario: ${scenarioId}`;
       this.status = "error";
       return;
     }
-    this.pendingScenarioId = undefined;
+    this.pendingRequest = undefined;
 
     this.status = "running";
     this.running = {
       phase: "A",
       scenarioId: scenario.id,
       scenarioLabel: scenario.label,
+      suite: pending.mode === "suite" ? { index: 0, total: pending.scenarioIds.length } : undefined,
       step: "Restarting for Phase A",
     };
 
     try {
       await invoke("prepare_benchmark_db");
       const platform = await this.#detectPlatform();
-      await persistPhaseAPending({ scenarioId: scenario.id, platform });
+      await persistPhaseAPending({
+        scenarioId: scenario.id,
+        platform,
+        suite: pending.mode === "suite"
+          ? { scenarioIds: pending.scenarioIds, index: 0, results: [] }
+          : undefined,
+      });
     } catch (e) {
       this.#failWith(`Setup failed: ${this.#errMsg(e)}`);
       return;
@@ -234,6 +265,9 @@ class BenchmarkRunnerStore {
       phase: "A",
       scenarioId: scenario.id,
       scenarioLabel: scenario.label,
+      suite: state.suite
+        ? { index: state.suite.index, total: state.suite.scenarioIds.length }
+        : undefined,
       step: "Setting up",
     };
     this.#abort = new AbortController();
@@ -242,7 +276,7 @@ class BenchmarkRunnerStore {
 
     let phaseA: PhaseResult;
     try {
-      this.#updateStep("Stress (3 s)");
+      this.#updateStep(this.#workloadStep(scenario));
       phaseA = await runner.runPhaseA({
         scenario,
         signal: this.#abort.signal,
@@ -275,6 +309,7 @@ class BenchmarkRunnerStore {
         startedAt: state.startedAt,
         phaseA,
         seedHandle,
+        suite: state.suite,
       });
     } catch (e) {
       this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
@@ -296,6 +331,9 @@ class BenchmarkRunnerStore {
       phase: "B",
       scenarioId: scenario.id,
       scenarioLabel: scenario.label,
+      suite: state.suite
+        ? { index: state.suite.index, total: state.suite.scenarioIds.length }
+        : undefined,
       step: "Setting up",
     };
     this.#abort = new AbortController();
@@ -304,7 +342,7 @@ class BenchmarkRunnerStore {
 
     let phaseB: PhaseResult;
     try {
-      this.#updateStep("Stress (3 s)");
+      this.#updateStep(this.#workloadStep(scenario));
       phaseB = await runner.runPhaseB({
         scenario,
         signal: this.#abort.signal,
@@ -324,25 +362,77 @@ class BenchmarkRunnerStore {
     // the type stays load-bearing for future scenarios that need it.
     void seedHandle;
 
-    const peakA = Math.max(0, ...phaseA.peakSamples.map((s) => s.totalMb));
-    const peakB = Math.max(0, ...phaseB.peakSamples.map((s) => s.totalMb));
+    const peakTotals = [...phaseA.peakSamples, ...phaseB.peakSamples].map((s) => s.totalMb);
+    const peakTotalMb = peakTotals.length > 0 ? Math.max(...peakTotals) : undefined;
 
-    this.result = {
+    const result: BenchmarkResult = {
       scenarioId: scenario.id,
       scenarioLabel: scenario.label,
+      workload: scenario.workload,
       synthVersion: state.synthVersion,
       harnessVersion: state.harnessVersion,
       platform: state.platform,
       phaseA,
       phaseB,
-      peakTotalMb: Math.max(peakA, peakB),
+      peakTotalMb,
     };
+
+    const suite = state.suite;
+    if (suite && suite.index < suite.scenarioIds.length - 1) {
+      await this.#continueSuite(suite, result, state.platform);
+      return;
+    }
+
+    this.result = result;
+    this.results = suite ? [...suite.results, result] : [result];
     this.running = undefined;
     this.status = "summary";
     notifyBenchmarkDone(
-      "Benchmark complete",
-      `${scenario.label}: peak ${Math.round(this.result.peakTotalMb)} MB. Open the app to copy the markdown.`,
+      suite ? "Benchmark suite complete" : "Benchmark complete",
+      suite
+        ? `${this.results.length} benchmarks finished. Open the app to copy the markdown.`
+        : this.#completionMessage(scenario, result),
     );
+  }
+
+  async #continueSuite(
+    suite: BenchmarkSuiteState,
+    result: BenchmarkResult,
+    platform: string,
+  ): Promise<void> {
+    const nextIndex = suite.index + 1;
+    const nextScenarioId = suite.scenarioIds[nextIndex];
+    const nextScenario = getScenarioById(nextScenarioId);
+    if (!nextScenario) {
+      this.#failWith(`Unknown suite scenario: ${nextScenarioId}`);
+      return;
+    }
+    const nextSuite: BenchmarkSuiteState = {
+      scenarioIds: suite.scenarioIds,
+      index: nextIndex,
+      results: [...suite.results, result],
+    };
+    this.result = result;
+    this.results = nextSuite.results;
+    this.running = {
+      phase: "A",
+      scenarioId: nextScenario.id,
+      scenarioLabel: nextScenario.label,
+      suite: { index: nextIndex, total: suite.scenarioIds.length },
+      step: "Restarting for next benchmark",
+    };
+    try {
+      await invoke("prepare_benchmark_db");
+      await persistPhaseAPending({
+        scenarioId: nextScenario.id,
+        platform,
+        suite: nextSuite,
+      });
+    } catch (e) {
+      this.#failWith(`Preparing next benchmark failed: ${this.#errMsg(e)}`);
+      return;
+    }
+    restartApp();
   }
 
   #updateStep(step: string, clearCurve = false) {
@@ -357,6 +447,25 @@ class BenchmarkRunnerStore {
     this.running = { ...this.running, step: "Idle curve", curve };
   }
 
+  #workloadStep(scenario: BenchmarkScenario): string {
+    if (scenario.workload.memoryMode === "post-workload") {
+      const seconds = Math.round(scenario.workload.durationMs / 1000);
+      return `${scenario.workload.kind} (${seconds} s)`;
+    }
+    return scenario.workload.label;
+  }
+
+  #completionMessage(scenario: BenchmarkScenario, result: BenchmarkResult): string {
+    if (result.peakTotalMb !== undefined) {
+      return `${scenario.label}: peak ${Math.round(result.peakTotalMb)} MB. Open the app to copy the markdown.`;
+    }
+    const metricCount = [
+      ...(result.phaseA.metrics ?? []),
+      ...(result.phaseB.metrics ?? []),
+    ].length;
+    return `${scenario.label}: ${metricCount} metric rows. Open the app to copy the markdown.`;
+  }
+
   #failWith(message: string) {
     this.errorMessage = message;
     this.running = undefined;
@@ -368,8 +477,9 @@ class BenchmarkRunnerStore {
     this.status = "idle";
     this.running = undefined;
     this.result = null;
+    this.results = [];
     this.errorMessage = undefined;
-    this.pendingScenarioId = undefined;
+    this.pendingRequest = undefined;
     this.#abort = null;
   }
 

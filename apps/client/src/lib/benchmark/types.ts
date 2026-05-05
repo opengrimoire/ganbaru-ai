@@ -1,13 +1,13 @@
 /**
  * Type contracts for the in-app performance benchmark harness.
  *
- * The harness drives a deterministic stress sequence twice (Phase A on an
- * empty baseline DB, Phase B on a 1000-event synthetic dataset), samples
- * memory across the GC-decay window, and emits a compact markdown block
- * ready for `docs/PERFORMANCE.md`. Both phases run after a cold restart
- * against an isolated `ganbaruai-benchmark.db` so the user's real DB and
- * vault are never touched. The rationale lives in
- * `docs/features/performance-benchmark.md`.
+ * The harness drives deterministic workloads twice (Phase A on an empty
+ * baseline DB, Phase B on a 1000-event synthetic dataset) and emits compact
+ * markdown ready for `docs/PERFORMANCE.md`. Each scenario declares whether
+ * it measures startup, memory, or feature latency so the runner avoids
+ * unrelated waits. Both phases run after a cold restart against an isolated
+ * `ganbaruai-benchmark.db` so the user's real DB and vault are never touched.
+ * The rationale lives in `docs/features/performance-benchmark.md`.
  */
 import type { CalendarEvent } from "$lib/components/calendar/types";
 
@@ -19,7 +19,7 @@ import type { CalendarEvent } from "$lib/components/calendar/types";
 export const STRESS_DURATION_MS = 3000;
 export const STRESS_PEAK_INTERVAL_MS = 200;
 /**
- * Offsets in milliseconds, measured from the moment `runStress` resolves.
+ * Offsets in milliseconds, measured from the moment `runWorkload` resolves.
  *
  * v2 cuts the curve to a single +30s reading. Empirically (2026-05-01) the
  * GC sweep that drops 60-100 MB lands between t0 and +30s; everything
@@ -37,10 +37,11 @@ export const STATE_TTL_MS = 60 * 60 * 1000;
  * Stored on the persisted state file so a stale Phase A captured by an old
  * build cannot accidentally feed Phase B on a new build.
  *
- * v2 (2026-05-01): isolated benchmark DB, both phases run cold, empty
- * baseline for Phase A. v1 state files are silently discarded on read.
+ * v4 (2026-05-04): question-oriented scenarios with explicit memory
+ * sampling modes and primary-metric output. v1/v2/v3 state files are
+ * silently discarded on read.
  */
-export const HARNESS_VERSION = "2";
+export const HARNESS_VERSION = "4";
 
 /** Synth dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const SYNTH_VERSION = "v1";
@@ -82,6 +83,42 @@ export interface SamplePoint {
   networkMb: number;
 }
 
+export type BenchmarkQuestionKind =
+  | "startup"
+  | "idle-memory"
+  | "stress-memory"
+  | "interaction-latency"
+  | "operation-latency";
+
+export type BenchmarkMemoryMode = "none" | "post-workload";
+
+export interface BenchmarkWorkload {
+  /** Primary question this scenario answers. Controls markdown output shape. */
+  kind: BenchmarkQuestionKind;
+  /** Human-readable question shown in docs and benchmark output. */
+  question: string;
+  /** Short phrase used in methodology output, e.g. "programmatic week-view navigation". */
+  label: string;
+  /**
+   * Target wall time for fixed-window workloads. Interaction and operation
+   * benchmarks can use `0` when they finish after their measured actions.
+   */
+  durationMs: number;
+  /** Whether the runner should sample workload peak, t0, and post-workload RAM. */
+  memoryMode: BenchmarkMemoryMode;
+}
+
+export type BenchmarkMetricUnit = "ms" | "count";
+
+export interface BenchmarkMetric {
+  /** Stable row label within a scenario, e.g. `edit open from closed`. */
+  label: string;
+  unit: BenchmarkMetricUnit;
+  value: number;
+  /** Optional scalar breakdown, such as `moduleMs`, `detailsMs`, or row counts. */
+  details?: Record<string, string | number>;
+}
+
 /**
  * Boot timing extracted from the perflog ring buffer. The marks the harness
  * cares about exist regardless of whether a benchmark is running, so the
@@ -98,18 +135,20 @@ export interface BootTimings {
   launchTotalMs?: number;
 }
 
-/** One phase's complete result: boot, peak, idle curve, plus context. */
+/** One phase's complete result: boot, optional memory samples, metrics, plus context. */
 export interface PhaseResult {
   /** "A" for the empty-baseline run, "B" for the synth-seeded run. */
   phase: "A" | "B";
   /** Wall-clock ISO 8601 string captured at the start of the phase. */
   startedAt: string;
-  /** Total ms the stress loop ran (should equal STRESS_DURATION_MS within jitter). */
-  stressDurationMs: number;
-  /** All readings during the stress burst, including the peak. */
+  /** Total ms the scenario workload ran. */
+  workloadDurationMs: number;
+  /** All readings during workloads that opt into memory sampling. */
   peakSamples: SamplePoint[];
-  /** Idle-curve samples at SAMPLE_OFFSETS_MS. `peak` from peakSamples is the first row. */
+  /** Post-workload samples for memory benchmarks. Empty for latency-only scenarios. */
   curve: SamplePoint[];
+  /** Optional scenario-specific timings or counters captured during the workload. */
+  metrics?: BenchmarkMetric[];
   /** Filtered slice of perflog entries scoped to boot of the run that produced this phase. */
   boot: BootTimings;
   /**
@@ -150,7 +189,7 @@ export interface BenchmarkState {
   /**
    * Which DB the next boot should open. `"benchmark"` routes
    * `db.ts:resolveUrl()` to the isolated `ganbaruai-benchmark.db`; the
-   * user's real DB stays untouched. Always `"benchmark"` for the v2
+   * user's real DB stays untouched. Always `"benchmark"` for the current
    * harness; the field exists to make the boot path's decision explicit
    * and to leave room for future scenarios that need user-DB access.
    */
@@ -161,6 +200,14 @@ export interface BenchmarkState {
   phaseA?: PhaseResult;
   /** Calendar id holding the seeded synth events; absent during `phase-a-pending`. */
   seedHandle?: { calendarId: string; eventCount: number };
+  /** Present when the user chose Run all instead of one scenario. */
+  suite?: BenchmarkSuiteState;
+}
+
+export interface BenchmarkSuiteState {
+  scenarioIds: string[];
+  index: number;
+  results: BenchmarkResult[];
 }
 
 /**
@@ -175,6 +222,8 @@ export interface BenchmarkScenario {
   label: string;
   /** Short paragraph rendered as a tooltip on hover. Explain what the scenario stresses. */
   description: string;
+  /** Workload shape used by the runner and markdown formatter. */
+  workload: BenchmarkWorkload;
   /** Default seed size used by `seed()` for Phase B. */
   defaultSeedSize: number;
   /**
@@ -183,11 +232,11 @@ export interface BenchmarkScenario {
    */
   setup(): Promise<void>;
   /**
-   * Drive the deterministic stress for exactly `STRESS_DURATION_MS`. The
-   * runner starts a peak-sampling timer before calling this and stops it
-   * after; the scenario keeps the work loop going for the full window.
+   * Drive the deterministic workload. The scenario keeps the work loop
+   * going for `workload.durationMs` only when it needs a fixed window. It
+   * may return scenario-specific metrics for the markdown summary.
    */
-  runStress(signal: AbortSignal): Promise<void>;
+  runWorkload(signal: AbortSignal): Promise<void | BenchmarkMetric[]>;
   /**
    * Seed the synthetic dataset for Phase B. Called once between Phase A and
    * the restart. Returns a handle that `cleanup()` can use to undo.
@@ -204,13 +253,14 @@ export interface BenchmarkScenario {
 export interface BenchmarkResult {
   scenarioId: string;
   scenarioLabel: string;
+  workload: BenchmarkWorkload;
   synthVersion: string;
   harnessVersion: string;
   platform: string;
   phaseA: PhaseResult;
   phaseB: PhaseResult;
-  /** Peak total memory (MB) observed in either phase. */
-  peakTotalMb: number;
+  /** Peak total memory (MB) observed in either phase, present only for memory benchmarks. */
+  peakTotalMb?: number;
 }
 
 /** Synthetic event shape produced by the v1 generator. */

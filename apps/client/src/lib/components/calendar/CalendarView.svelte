@@ -180,6 +180,14 @@
     });
   }
 
+  async function waitForFrames(count: number): Promise<void> {
+    for (let i = 0; i < count; i++) {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    }
+  }
+
   /**
    * Advance a `YYYY-MM-DD` string by one calendar day. Inlined to keep
    * `eventsByDay` allocation-free of Temporal objects in the hot path.
@@ -827,6 +835,9 @@
       navigate,
       setViewMode: (mode) => changeView(mode),
       setAnchorDate: (date) => { anchorDate = date; },
+      openVisibleEvent: openVisibleEventForBenchmark,
+      openCreatePanel: openCreatePanelForBenchmark,
+      closePanel: closePanelForBenchmark,
       getViewMode: () => viewMode,
     });
 
@@ -950,7 +961,7 @@
     }
   }
 
-  function handleEventClick(event: CalendarEvent, rect?: DOMRect) {
+  async function handleEventClick(event: CalendarEvent, rect?: DOMRect): Promise<void> {
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
     // Already editing this exact event. Toggle panel closed if clean.
@@ -1009,18 +1020,44 @@
     if (session.dirty) {
       requestConfirm(
         "Your changes will be lost.",
-        async () => { openEvent(); },
+        async () => { await openEvent(); },
         { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
       return;
     }
 
-    openEvent();
+    await openEvent();
   }
 
   function handleEventPrefetch(event: CalendarEvent) {
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
     calendarStore.prefetchPanelEvent(event.recurringParentId ?? event.id);
+  }
+
+  async function openVisibleEventForBenchmark(index: number): Promise<boolean> {
+    const event = visibleEvents.filter((item) => !item.id.startsWith(PENDING_CREATE_ID))[index];
+    if (!event) return false;
+    await handleEventClick(event);
+    await tick();
+    await waitForFrames(2);
+    return true;
+  }
+
+  async function openCreatePanelForBenchmark(
+    start: string,
+    end: string,
+    allDay?: boolean,
+  ): Promise<boolean> {
+    await handleEventCreate(start, end, allDay);
+    await tick();
+    await waitForFrames(2);
+    return true;
+  }
+
+  async function closePanelForBenchmark(): Promise<void> {
+    handlePanelClose();
+    await tick();
+    await waitForFrames(2);
   }
 
   async function handleEventUpdate(event: CalendarEvent) {

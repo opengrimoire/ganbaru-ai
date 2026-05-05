@@ -1,0 +1,44 @@
+import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
+import { type BenchmarkScenario } from "../types";
+import {
+  parseCalendarBenchmarkAnchor,
+  seedCalendarSynth,
+  waitForFrames,
+} from "./calendar-utils";
+
+export const startupBootScenario: BenchmarkScenario = {
+  id: "startup-boot",
+  label: "Startup boot",
+  description:
+    "Captures launch and boot marks after a cold restart without adding a memory settling window. Use this for startup-time regressions.",
+  workload: {
+    kind: "startup",
+    question: "How fast does the app launch into the calendar?",
+    label: "calendar startup boot marks",
+    durationMs: 0,
+    memoryMode: "none",
+  },
+  defaultSeedSize: 1000,
+
+  async setup(): Promise<void> {
+    const handle = getCalendarNavHandle();
+    if (!handle.available) {
+      throw new Error("Calendar view is not mounted; cannot run startup benchmark");
+    }
+    handle.setViewMode("week");
+    handle.setAnchorDate(parseCalendarBenchmarkAnchor());
+    await waitForFrames(1);
+  },
+
+  async runWorkload(): Promise<void> {
+    await waitForFrames(1);
+  },
+
+  async seed(version: string, seedSize: number): Promise<{ calendarId: string; eventCount: number }> {
+    return seedCalendarSynth(version, seedSize);
+  },
+
+  async cleanup(_seedHandle: { calendarId: string }): Promise<void> {
+    // The isolated benchmark DB is deleted after the run.
+  },
+};

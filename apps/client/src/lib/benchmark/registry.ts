@@ -4,14 +4,26 @@
  * array. The Settings developer section reads this list directly so a
  * new scenario surfaces in the UI without any other UI change.
  *
- * Order is rendered order; keep the first-shipped scenario first to
- * keep historical row ordering in PERFORMANCE.md predictable.
+ * Order is rendered order; keep startup and memory baselines first so
+ * pasted suite output is easy to place in PERFORMANCE.md.
  */
 import type { BenchmarkScenario } from "./types";
+import { startupBootScenario } from "./scenarios/startup-boot";
+import { idleMemoryScenario } from "./scenarios/idle-memory";
 import { calendarNavScenario } from "./scenarios/calendar-nav";
+import { eventPanelOpenScenario } from "./scenarios/event-panel-open";
+import { calendarCreateCancelScenario } from "./scenarios/calendar-create-cancel";
+import { icsImportScenario } from "./scenarios/ics-import";
+import { themeEditorOpenScenario } from "./scenarios/theme-editor-open";
 
 export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
+  startupBootScenario,
+  idleMemoryScenario,
   calendarNavScenario,
+  eventPanelOpenScenario,
+  calendarCreateCancelScenario,
+  icsImportScenario,
+  themeEditorOpenScenario,
 ];
 
 export function getScenarioById(id: string): BenchmarkScenario | undefined {
