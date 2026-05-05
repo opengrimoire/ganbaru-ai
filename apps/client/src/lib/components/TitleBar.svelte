@@ -283,7 +283,7 @@
   onwheel={handleTabWheel}
 >
   <!-- Navigation tabs -->
-  <div class="relative flex items-center gap-0.5 pl-3">
+  <div class="relative flex items-center gap-0.5 pl-1.5">
     <div
       class="tab-indicator absolute top-0 h-full rounded-md bg-background dark:bg-accent"
       style="{indicatorStyle} box-shadow: 0 0 0 1px {theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.1)'};"
@@ -485,7 +485,7 @@
   </div>
 
   <!-- Window controls -->
-  <div class="flex items-center gap-0.5 pr-2">
+  <div class="flex items-center gap-0.5 pr-1.5">
     <button
       onclick={() => win.minimize()}
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"

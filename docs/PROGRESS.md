@@ -26,6 +26,7 @@ Phase 1: core loop (wrapping up)
 - Calendar core: week, day, and month views; drag create, move, and resize; all-day events; recurring events with RFC 5545 RRULE support; timezone-aware persistence and rendering; edit sessions; undo/redo; pomodoro integration; and iCalendar import/export including `.ics.zip` imports.
 - Calendar performance: slim in-memory event rows, heavy fields loaded on demand, window-bounded event expansion through `calendar-index.ts`, per-day buckets, CSS gridlines, lighter panel detail queries, hover/pointer prefetch, and parked/lazy EventPanel.
 - Event panel stability: full detail preload before paint, no meeting-field pop-in, no control color animation on open, stable selected contours, safe create-panel outside-click handling, and reusable parked panel state without save/title regressions.
+- App shell layout: compact, even edge spacing around the tabs and primary workspace.
 - Pomodoro timer: focus/break phases, cycle tracking, segment lifecycle, timeline rail visualization, idle detection, suspend/wake handling, and active-block calendar integration.
 - Kanban board: backlog, todo, in-progress, and done columns with CRUD, task movement, and priority badges.
 - Theme system: built-in light/dark themes, user theme CRUD, SQLite-backed token snapshots, derivation engine, contrast checks, preset picker, JSON import/export, and floating theme editor.
