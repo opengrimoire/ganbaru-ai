@@ -51,7 +51,7 @@ Do not paste ad hoc `Live RAM`, `Startup RAM snapshot`, or `Speed log` panel cop
 
 ## Benchmark questions
 
-Harness v9 exposes individual buttons plus one `Run all benchmarks` button. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample.
+Harness v6 exposes individual buttons plus one `Run all benchmarks` button. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample.
 
 | Scenario | Primary question | Primary output | Post-workload RAM wait |
 |---|---|---|---|
@@ -82,9 +82,9 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-04-03` with harness v4. No v9 baseline has been recorded yet.
+Latest recorded canonical baseline: `2026-05-04-03` with harness v4. No v6 baseline has been recorded yet.
 
-Harness v9 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, adds a generated index, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
+Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
 ### Run metadata
 
@@ -94,9 +94,9 @@ Harness v9 keeps the core benchmark questions, removes low-value ICS import and 
 
 ### Startup boot
 
-Harness v9 reports repeated process launches. Before each startup sample, the app exits and a helper waits 10 seconds before reopening it. Use `Launch median ms` as the user-facing app-open comparison value. It measures Rust process start through `boot.usable-paint`, when the calendar data has loaded and the calendar has rendered a frame. `First paint median ms` is diagnostic and can happen before event rows are visible.
+Harness v6 reports repeated process launches. Before each startup sample, the app exits and a helper waits 10 seconds before reopening it. Use `Launch median ms` as the user-facing app-open comparison value. It measures Rust process start through `boot.usable-paint`, when the calendar data has loaded and the calendar has rendered a frame. `First paint median ms` is diagnostic and can happen before event rows are visible.
 
-No v9 startup run has been recorded yet.
+No v6 startup run has been recorded yet.
 
 | Run | Dataset | Runs | First paint median ms | Usable paint median ms | Launch min ms | Launch P95 ms | Launch max ms | Launch median ms |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
@@ -202,7 +202,7 @@ Use the compact scalar table for one-off values and counts:
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
 
-When the benchmark harness changes output shape or measurement methodology, bump `HARNESS_VERSION` and explain whether the old rows remain comparable. If the measurement method changed, old rows become historical context instead of direct comparison data.
+Only bump `HARNESS_VERSION` when numeric comparability changes: measurement methodology, sampling cadence, scenario workload, or synth data generation. Do not bump it for markdown layout, rendered-preview layout, wording, docs-only changes, column order, or removing helper sections such as a generated index. When the measurement method changes, explain whether old rows remain comparable; if not, old rows become historical context instead of direct comparison data.
 
 ## Performance principles
 

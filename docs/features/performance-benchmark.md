@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v9 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`.
+Harness v6 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`.
 
 ## User flow
 
@@ -184,13 +184,12 @@ During memory scenarios, the running overlay labels the fixed workload period as
 The copied markdown is one suite-level block. It contains:
 
 - Header with the run placeholder, such as `YYYY-MM-DD-ID` or the current date plus `-ID`.
-- One generated `Index` table that lists run metadata and every scenario section.
 - One `Run metadata` table with run id, harness, build ref, platform, and notes.
 - One section per scenario in the run.
 
 Each scenario section contains exactly the table that matches the scenario's primary measurement:
 
-- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v9 waits 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
+- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v6 waits 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
 - `idle-memory` and `stress-memory` emit the memory table.
 - `interaction-latency` and `operation-latency` emit repeated latency rows for metrics with run statistics.
 - Scalar metrics without run statistics, such as counts or one-off module load times, emit a compact `Run`, `Dataset`, `Metric`, `Value`, `Unit` table.

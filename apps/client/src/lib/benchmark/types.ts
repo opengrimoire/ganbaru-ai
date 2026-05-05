@@ -36,25 +36,22 @@ export const SAMPLE_OFFSETS_MS = [30_000];
 export const STATE_TTL_MS = 60 * 60 * 1000;
 
 /**
- * Bumped manually when the harness output shape, sampling cadence, or synth
- * generator changes in a way that would invalidate cross-build comparison.
+ * Bumped manually when measurement methodology, sampling cadence, scenario
+ * workload, or synth generator changes in a way that would invalidate
+ * numeric cross-build comparison. Cosmetic markdown, rendered-preview,
+ * wording, and docs changes do not bump this value.
  * Stored on the persisted state file so stale baseline data captured by an
  * old build cannot accidentally feed the synthetic pass on a new build.
  *
- * v9 (2026-05-05): startup benchmark uses a closed-process cooldown before
+ * v6 (2026-05-05): startup benchmark uses a closed-process cooldown before
  * repeated relaunch samples.
- * v8 (2026-05-05): startup benchmark reports repeated end-to-end launch
+ * v5 (2026-05-05): startup benchmark reports repeated end-to-end launch
  * stats to a usable calendar paint instead of single launch samples.
- * v7 (2026-05-05): adds a generated index to copied markdown and preview.
- * v6 (2026-05-05): removes low-value ICS import and theme editor scenarios
- * from the canonical benchmark suite.
- * v5 (2026-05-05): keeps notes at run metadata level only and splits
- * repeated latency rows from scalar metric rows.
  * v4 (2026-05-04): question-oriented scenarios with explicit memory
  * sampling modes and primary-metric output.
  * v1/v2/v3 state files are silently discarded on read.
  */
-export const HARNESS_VERSION = "9";
+export const HARNESS_VERSION = "6";
 
 /** Synth dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const SYNTH_VERSION = "v1";

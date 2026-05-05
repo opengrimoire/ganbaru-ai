@@ -232,10 +232,8 @@ describe("formatBenchmarkMarkdown", () => {
       env: "Linux Ubuntu 25.10, WebKitGTK 2.46",
     });
     expect(md.startsWith("## Benchmark 2026-05-01-ID")).toBe(true);
-    expect(md.match(/### Index/g)).toHaveLength(1);
+    expect(md.includes("### Index")).toBe(false);
     expect(md.match(/### Run metadata/g)).toHaveLength(1);
-    expect(md.indexOf("### Index")).toBeLessThan(md.indexOf("### Run metadata"));
-    expect(md.includes("| Calendar navigation stress memory | Memory table | 6 |")).toBe(true);
     expect(md.includes(`| 2026-05-01-ID | v${HARNESS_VERSION} | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |`)).toBe(true);
     expect(md.includes("Scenario:")).toBe(false);
     expect(md.includes("Phase A")).toBe(false);
@@ -343,11 +341,6 @@ describe("formatBenchmarkMarkdown", () => {
       platform: "Linux Ubuntu 25.10, WebKitGTK 2.46",
     });
     expect(preview.sections).toHaveLength(2);
-    expect(preview.index).toEqual([
-      { section: "Run metadata", output: "Run context", rows: "1" },
-      { section: "Startup boot", output: "Startup table", rows: "2" },
-      { section: "Event panel latency", output: "Latency table", rows: "2 latency" },
-    ]);
     expect(preview.sections[0]?.kind).toBe("startup");
     expect(preview.sections[1]?.kind).toBe("metrics");
     if (preview.sections[1]?.kind === "metrics") {

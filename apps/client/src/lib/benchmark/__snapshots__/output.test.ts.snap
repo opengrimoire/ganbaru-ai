@@ -3,18 +3,11 @@
 exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing changes are intentional 1`] = `
 "## Benchmark 2026-05-01-ID
 
-### Index
-
-| Section | Output | Rows |
-|---|---|---:|
-| Run metadata | Run context | 1 |
-| Calendar navigation stress memory | Memory table | 6 |
-
 ### Run metadata
 
 | Run | Harness | Build ref | Platform | Notes |
 |---|---|---|---|---|
-| 2026-05-01-ID | v9 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
+| 2026-05-01-ID | v6 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
 
 ### Calendar navigation stress memory
 

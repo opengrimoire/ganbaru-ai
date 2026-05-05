@@ -148,30 +148,6 @@
       <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4">
         {#if summaryPreview}
           <section class="space-y-2">
-            <h3 class="text-[13px] font-semibold text-foreground">Index</h3>
-            <div class={tableWrapClass}>
-              <table class={tableClass}>
-                <thead>
-                  <tr>
-                    <th class={thClass}>Section</th>
-                    <th class={thClass}>Output</th>
-                    <th class={thClass}>Rows</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each summaryPreview.index as row}
-                    <tr>
-                      <td class={tdClass}>{row.section}</td>
-                      <td class={tdClass}>{row.output}</td>
-                      <td class={tdClass}>{row.rows}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="space-y-2">
             <h3 class="text-[13px] font-semibold text-foreground">Run metadata</h3>
             <div class={tableWrapClass}>
               <table class={tableClass}>

@@ -34,12 +34,6 @@ export interface BenchmarkRunMetadataRow {
   notes: string;
 }
 
-export interface BenchmarkIndexRow {
-  section: string;
-  output: string;
-  rows: string;
-}
-
 export interface BenchmarkStartupRow {
   run: string;
   dataset: string;
@@ -106,7 +100,6 @@ export type BenchmarkPreviewSection =
 
 export interface BenchmarkSuitePreview {
   metadata: BenchmarkRunMetadataRow;
-  index: BenchmarkIndexRow[];
   sections: BenchmarkPreviewSection[];
 }
 
@@ -315,7 +308,6 @@ export function buildBenchmarkSuitePreview(
   const sections = results.map((result) => buildSection(result, run));
   return {
     metadata,
-    index: buildIndex(sections),
     sections,
   };
 }
@@ -446,34 +438,6 @@ function sectionTitle(result: BenchmarkResult): string {
   return result.scenarioLabel;
 }
 
-function buildIndex(sections: BenchmarkPreviewSection[]): BenchmarkIndexRow[] {
-  return [
-    { section: "Run metadata", output: "Run context", rows: "1" },
-    ...sections.map((section) => ({
-      section: section.title,
-      output: indexOutput(section),
-      rows: indexRows(section),
-    })),
-  ];
-}
-
-function indexOutput(section: BenchmarkPreviewSection): string {
-  if (section.kind === "startup") return "Startup table";
-  if (section.kind === "memory") return "Memory table";
-  if (section.latencyRows.length > 0 && section.scalarRows.length > 0) return "Latency and scalar tables";
-  if (section.latencyRows.length > 0) return "Latency table";
-  if (section.scalarRows.length > 0) return "Scalar table";
-  return "No metric rows";
-}
-
-function indexRows(section: BenchmarkPreviewSection): string {
-  if (section.kind === "startup" || section.kind === "memory") return section.rows.length.toString();
-  const parts: string[] = [];
-  if (section.latencyRows.length > 0) parts.push(`${section.latencyRows.length} latency`);
-  if (section.scalarRows.length > 0) parts.push(`${section.scalarRows.length} scalar`);
-  return parts.length > 0 ? parts.join(", ") : "0";
-}
-
 export function formatBenchmarkSuiteMarkdown(
   results: BenchmarkResult[],
   opts: BenchmarkOutputOptions = {},
@@ -481,8 +445,6 @@ export function formatBenchmarkSuiteMarkdown(
   const preview = buildBenchmarkSuitePreview(results, opts);
   const lines: string[] = [];
   lines.push(`## Benchmark ${preview.metadata.run}`);
-  lines.push("");
-  appendIndex(lines, preview.index);
   lines.push("");
   appendRunMetadata(lines, preview.metadata);
   for (const section of preview.sections) {
@@ -498,16 +460,6 @@ export function formatBenchmarkSuiteMarkdown(
     }
   }
   return lines.join("\n");
-}
-
-function appendIndex(lines: string[], rows: BenchmarkIndexRow[]): void {
-  lines.push("### Index");
-  lines.push("");
-  lines.push("| Section | Output | Rows |");
-  lines.push("|---|---|---:|");
-  for (const row of rows) {
-    lines.push(`| ${row.section} | ${row.output} | ${row.rows} |`);
-  }
 }
 
 function appendRunMetadata(lines: string[], metadata: BenchmarkRunMetadataRow): void {
