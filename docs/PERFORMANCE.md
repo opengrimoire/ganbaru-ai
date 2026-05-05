@@ -2,7 +2,7 @@
 
 This file is the canonical performance record for GanbaruAI. It should stay useful to future agents that need to reason about RAM, startup time, and interaction speed without reconstructing old debugging sessions.
 
-## Canonical Tracking
+## Canonical tracking
 
 Use benchmark-generated results as the source of truth. Manual copies from the performance panel are diagnostic only: useful during investigation, but not stable enough for the historical record because they can mix real user data, empty databases, warm boots, open diagnostics UI, and human timing.
 
@@ -16,9 +16,9 @@ Canonical rows must identify:
 
 The performance panel remains useful for quick checks, especially while iterating on a bug. Do not paste those ad hoc readings into the benchmark tables.
 
-## Benchmark Runs
+## Benchmark runs
 
-### Run Metadata
+### Run metadata
 
 | Run | Date | Harness | Scenario | Dataset A | Dataset B | Platform | Build ref | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -44,7 +44,7 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-04-01 | B | benchmark-synth-v1, 1000 events | stress end | 108.6 | 329.7 | 17.6 | 456 |
 | 2026-05-04-01 | B | benchmark-synth-v1, 1000 events | +30s | 107.9 | 302.4 | 17.6 | 428 |
 
-### Package Size
+### Package size
 
 Package size is not produced by the benchmark harness, but it is deterministic enough to track here. Use decimal MB from byte size.
 
@@ -59,7 +59,7 @@ stat -c "%n %s" target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm 
 | 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .rpm | 7.4 | Linux |
 | 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .AppImage | 80.9 | Linux |
 
-## Scenario Registry
+## Scenario registry
 
 ### Existing
 
@@ -76,7 +76,7 @@ Current shape:
 
 This is not an idle startup benchmark. Its memory rows include stress behavior.
 
-### Next Benchmarks
+### Next benchmarks
 
 **startup-idle**
 
@@ -141,7 +141,7 @@ Recommended shape:
 - Open a generated user theme with many isolated tokens.
 - Record first paint and memory delta.
 
-## Benchmark Output Rules
+## Benchmark output rules
 
 Prefer normalized tables over compact slash cells. Good:
 
@@ -154,7 +154,7 @@ Do not repeat long methodology paragraphs for every run. Put the methodology onc
 
 When the benchmark harness changes output shape, bump `HARNESS_VERSION` and start a new row series. Old rows remain historical context, not directly comparable data.
 
-## Performance Principles
+## Performance principles
 
 GanbaruAI should feel lightweight even though it uses Tauri plus a WebView. The floor is higher than a fully native UI, so the app code should avoid adding avoidable RAM and startup cost.
 
@@ -172,9 +172,9 @@ General rules:
 - Keep large or rarely used fields out of always-resident frontend state.
 - Use Rust for native I/O, filesystem safety, compression, and data work that already crosses IPC or is proven expensive. Keep UI state, layout, and Svelte component logic in TypeScript.
 
-## Measurement Notes
+## Measurement notes
 
-### Memory Metrics
+### Memory metrics
 
 | Metric | Meaning | Use |
 |---|---|---|
@@ -184,7 +184,7 @@ General rules:
 
 Linux currently reads PSS from `/proc/{pid}/smaps_rollup`. Windows uses Working Set through Win32 APIs, which is closer to RSS. macOS memory reporting is not implemented yet.
 
-### Process Buckets
+### Process buckets
 
 | Bucket | Meaning |
 |---|---|
@@ -194,13 +194,13 @@ Linux currently reads PSS from `/proc/{pid}/smaps_rollup`. Windows uses Working 
 
 The frontend number includes the browser engine. It cannot be split cleanly into "WebKit baseline" and "GanbaruAI app code" at runtime.
 
-### Performance Panel
+### Performance panel
 
 The title-bar performance panel is a diagnostic tool. It can copy live RAM, startup RAM, charts, speed logs, and benchmark summaries. Only benchmark summaries should become canonical rows in this file.
 
 The panel itself is lazy-loaded. Live memory polling starts only while the panel is mounted. The startup RAM snapshot is captured before the panel needs to be opened, so it remains useful for quick local diagnosis even if it is not the canonical record.
 
-### Current Architecture Notes
+### Current architecture notes
 
 These notes explain the broad shape of current performance work. They should stay conceptual, not incident-specific.
 
