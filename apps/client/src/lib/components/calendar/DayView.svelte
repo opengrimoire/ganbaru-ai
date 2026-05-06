@@ -11,6 +11,7 @@
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
+  import HourGridlines from "./HourGridlines.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import AllDayEventChip from "./AllDayEventChip.svelte";
@@ -415,7 +416,8 @@
         style="grid-column: 1 / -1; grid-template-columns: subgrid; {calZoom.isAnimating ? 'pointer-events: none;' : ''}"
       >
       <TimeGutter {timezones} {anchorDate} {tzCount} />
-      <div class="min-w-0" style="border-left: 1px solid var(--cal-gridline);">
+      <div class="relative min-w-0" style="border-left: 1px solid var(--cal-gridline);">
+        <HourGridlines />
         <DayColumn
           date={anchorDate}
           events={dayBucket}

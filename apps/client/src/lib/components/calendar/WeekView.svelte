@@ -13,6 +13,7 @@
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
+  import HourGridlines from "./HourGridlines.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import AllDayEventChip from "./AllDayEventChip.svelte";
@@ -611,6 +612,7 @@
         class="relative grid"
         style="grid-column: span 7; grid-template-columns: subgrid;"
       >
+        <HourGridlines />
         {#each weekDays as day, i}
           {@const dateStr = formatDatePart(day)}
           <div class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">

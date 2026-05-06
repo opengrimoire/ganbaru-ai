@@ -517,13 +517,10 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative min-w-0 {zoomModifierPressed ? 'zoom-active' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+  class="relative z-[2] min-w-0 {zoomModifierPressed ? 'zoom-active' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
   style="
     height: calc(24 * var(--hour-h) * 1px);
     contain: layout style;
-    background-image: linear-gradient(to bottom, transparent calc(100% - 1px), var(--cal-gridline) calc(100% - 1px));
-    background-size: 100% calc(var(--hour-h) * 1px);
-    background-repeat: repeat-y;
   "
   onmousemove={handleColumnMouseMove}
   onmouseleave={handleColumnMouseLeave}
