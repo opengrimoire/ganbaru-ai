@@ -81,7 +81,7 @@ Unsaved changes are tracked. Closing the panel with unsaved edits prompts to sav
 
 The day and week views use a momentum-based scroll: dragging or wheeling builds velocity, lifting the input lets the velocity decay smoothly. This makes long-range navigation (jumping from morning to evening) feel direct without forcing the user to overshoot and correct.
 
-Vertical zoom maps minutes to pixels. The discrete zoom levels in pixels per hour are `[30, 45, 67, 100, 150, 200]`. The default is 100. Zooming in or out (Ctrl+wheel, or pinch on touch) snaps to the nearest level.
+Vertical zoom maps minutes to pixels. The discrete zoom levels in pixels per hour are `[30, 45, 67, 100, 150, 200]`. The default is 67. The header `-` and `+` controls, Shift + -, Shift + +, Ctrl+wheel, and pinch on touch snap to the nearest level. Shift + 0 resets the calendar timeline zoom.
 
 For "power scrolls" (rapid wheel events), the renderer applies a brief zoom in instantly to avoid the row-height transition flashing through intermediate values. Smooth interpolation is reserved for ordinary scroll-and-rest patterns.
 

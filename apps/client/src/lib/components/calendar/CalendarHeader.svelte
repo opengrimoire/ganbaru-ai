@@ -17,9 +17,13 @@
   import Settings from "@lucide/svelte/icons/settings";
   import Layers from "@lucide/svelte/icons/layers";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import Minus from "@lucide/svelte/icons/minus";
+  import Plus from "@lucide/svelte/icons/plus";
 
   const calendarsStore = getCalendars();
   const settingsLauncher = getSettingsLauncher();
+  const calZoom = getCalendarZoom();
 
   // Calendar account selector state
   let showAccountPicker = $state(false);
@@ -414,6 +418,28 @@
 
   <!-- View selector -->
   <div class="flex items-center gap-0.5">
+    <button
+      onclick={() => calZoom.zoomStep(-1)}
+      disabled={!calZoom.canZoomOut}
+      class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomOut
+        ? 'cursor-default text-muted-foreground/30'
+        : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+      title="Zoom out (Shift + -)"
+      aria-label="Zoom out"
+    >
+      <Minus size={13} />
+    </button>
+    <button
+      onclick={() => calZoom.zoomStep(1)}
+      disabled={!calZoom.canZoomIn}
+      class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomIn
+        ? 'cursor-default text-muted-foreground/30'
+        : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
+      title="Zoom in (Shift + +)"
+      aria-label="Zoom in"
+    >
+      <Plus size={13} />
+    </button>
     {#each viewOptions as opt}
       <button
         onclick={() => onViewChange(opt.mode)}

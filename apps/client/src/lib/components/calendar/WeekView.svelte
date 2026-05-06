@@ -235,7 +235,7 @@
       ready = true;
     }
 
-    // Keyboard shortcuts: Shift + +/- for internal calendar zoom.
+    // Keyboard shortcuts: Shift + +/- and Shift + 0 for internal calendar zoom.
     // The physical key that produces "+" varies by keyboard layout:
     //   - US/French: "Equal" key (Shift + = produces +)
     //   - Spanish/German: "BracketRight" key (where + is printed)
@@ -243,17 +243,22 @@
     // Since the Keyboard API may not be available in all WebViews (e.g., Tauri),
     // we check all known physical key codes where + is commonly located.
     const PLUS_KEY_CODES = ["Equal", "BracketRight", "NumpadAdd"];
+    const RESET_KEY_CODES = ["Digit0", "Numpad0"];
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey) return; // Reserved for app-level zoom
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
 
-      // Zoom in: direct + character, or Shift + any known plus key location
-      if (e.key === "+" || (e.shiftKey && PLUS_KEY_CODES.includes(e.code))) {
+      const resetZoom = e.shiftKey && (e.key === "0" || RESET_KEY_CODES.includes(e.code));
+      const zoomIn = e.key === "+" || (e.shiftKey && PLUS_KEY_CODES.includes(e.code));
+
+      if (resetZoom) {
+        e.preventDefault();
+        calZoom.reset();
+      } else if (zoomIn) {
         e.preventDefault();
         calZoom.zoomStep(1);
-      // Zoom out: - or _ (Shift + -)
       } else if (e.key === "-" || e.key === "_") {
         e.preventDefault();
         calZoom.zoomStep(-1);
