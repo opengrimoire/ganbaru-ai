@@ -60,13 +60,16 @@
   type PerformancePopoverComponent = typeof import("$lib/components/perf/PerformancePopover.svelte").default;
   type SettingsModalComponent = typeof import("$lib/components/settings/SettingsModal.svelte").default;
   type FloatingThemeEditorComponent = typeof import("$lib/components/settings/FloatingThemeEditor.svelte").default;
+  type HelpShortcutsModalComponent = typeof import("$lib/components/HelpShortcutsModal.svelte").default;
 
   let PerformancePopover = $state<PerformancePopoverComponent | null>(null);
   let SettingsModal = $state<SettingsModalComponent | null>(null);
   let FloatingThemeEditor = $state<FloatingThemeEditorComponent | null>(null);
+  let HelpShortcutsModal = $state<HelpShortcutsModalComponent | null>(null);
   let loadingPerformancePopover: Promise<void> | null = null;
   let loadingSettingsModal: Promise<void> | null = null;
   let loadingFloatingThemeEditor: Promise<void> | null = null;
+  let loadingHelpShortcutsModal: Promise<void> | null = null;
 
   function loadPerformancePopover(): Promise<void> {
     if (PerformancePopover) return Promise.resolve();
@@ -104,6 +107,18 @@
     return loadingFloatingThemeEditor;
   }
 
+  function loadHelpShortcutsModal(): Promise<void> {
+    if (HelpShortcutsModal) return Promise.resolve();
+    loadingHelpShortcutsModal ??= import("$lib/components/HelpShortcutsModal.svelte")
+      .then((module) => {
+        HelpShortcutsModal = module.default;
+      })
+      .finally(() => {
+        loadingHelpShortcutsModal = null;
+      });
+    return loadingHelpShortcutsModal;
+  }
+
   function togglePerfMenu() {
     showPerfMenu = !showPerfMenu;
     if (showPerfMenu) void loadPerformancePopover();
@@ -112,6 +127,13 @@
   function openSettings() {
     settingsLauncher.open();
     void loadSettingsModal();
+  }
+
+  let showHelpShortcuts = $state(false);
+
+  function openHelpShortcuts() {
+    showHelpShortcuts = true;
+    void loadHelpShortcutsModal();
   }
 
   $effect(() => {
@@ -523,7 +545,7 @@
     <!-- TODO: implement help panel -->
     {#if preferences.titleBarVisibility.help}
       <button
-        onclick={() => {}}
+        onclick={openHelpShortcuts}
         disabled={lockedByThemeEditor}
         class={cn(
           "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
@@ -669,6 +691,11 @@
     onConfirm={confirmClose}
     onCancel={cancelClose}
   />
+{/if}
+
+{#if showHelpShortcuts && HelpShortcutsModal}
+  {@const ShortcutsModal = HelpShortcutsModal}
+  <ShortcutsModal onClose={() => { showHelpShortcuts = false; }} />
 {/if}
 
 {#if settingsLauncher.isOpen}
