@@ -4,6 +4,7 @@
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { Temporal } from "@js-temporal/polyfill";
@@ -29,6 +30,7 @@
   const calendars = getCalendars();
   const pomodoro = getPomodoro();
   const zoom = getZoom();
+  const settingsLauncher = getSettingsLauncher();
 
   let isMaximized = $state(true);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
@@ -221,6 +223,12 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.ctrlKey && e.key === ",") {
+      e.preventDefault();
+      settingsLauncher.open();
+      return;
+    }
+
     if (e.ctrlKey && (e.key === "=" || e.key === "+")) {
       e.preventDefault();
       zoom.zoomIn();

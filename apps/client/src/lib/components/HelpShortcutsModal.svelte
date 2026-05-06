@@ -28,6 +28,7 @@
         { keys: ["Ctrl + 0"], action: "Reset zoom" },
         { keys: ["Alt + 1"], action: "Open calendar" },
         { keys: ["Alt + 2"], action: "Open kanban" },
+        { keys: ["Ctrl + ,"], action: "Open settings" },
         { keys: ["Ctrl + Tab"], action: "Next view" },
         { keys: ["Ctrl + Shift + Tab"], action: "Previous view" },
         { keys: ["Ctrl + Shift + W"], action: "Close app" },
