@@ -718,37 +718,57 @@
   let arrowScrollRaf = 0;
   let arrowScrollPrev = 0;
 
-  // Held-arrow nav: drive navigation from a self-renewing rAF loop while
-  // the key is held, NOT from each individual keydown event. WebKitGTK on
-  // Linux pins `KeyboardEvent.timeStamp` to the original press for queued
-  // auto-repeat events and unreliably sets `e.repeat`, so per-event
-  // filtering can't tell fresh presses, in-hold auto-repeat, and
-  // post-release queue tail apart. Instead the keydown handler only
-  // updates the polling direction and (cheaply) ensures a poll is
-  // scheduled; auto-repeat keydowns and queue-drain tail are no-ops
-  // because the poll was already scheduled or already cancelled. The
-  // poll runs at the browser's frame rate so navigation cadence tracks
-  // render budget naturally, and keyup cancels it so the calendar stops
-  // the moment the user releases the key.
-  let navPollRaf = 0;
-  let navPollDirection: "forward" | "back" | null = null;
-  function startNavPoll(direction: "forward" | "back") {
-    navPollDirection = direction;
-    if (navPollRaf !== 0) return;
-    navPollRaf = requestAnimationFrame(navPollTick);
-  }
-  function navPollTick() {
-    navPollRaf = 0;
-    if (navPollDirection === null) return;
-    navigate(navPollDirection);
-    navPollRaf = requestAnimationFrame(navPollTick);
-  }
-  function stopNavPoll() {
-    navPollDirection = null;
-    if (navPollRaf !== 0) {
-      cancelAnimationFrame(navPollRaf);
-      navPollRaf = 0;
+  // Held-arrow navigation fires once immediately, then repeats only after a
+  // hold delay. The old frame-rate polling made empty calendars jump multiple
+  // ranges from a normal quick key press because rendering could finish in a
+  // few milliseconds before keyup cancelled the loop.
+  const NAV_HOLD_DELAY_MS = 280;
+  const NAV_REPEAT_MS = 120;
+  let navHeldKey: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | null = null;
+  let navHeldDirection: "forward" | "back" | null = null;
+  let navHoldTimer: ReturnType<typeof setTimeout> | null = null;
+  let navRepeatTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearNavTimers() {
+    if (navHoldTimer !== null) {
+      clearTimeout(navHoldTimer);
+      navHoldTimer = null;
     }
+    if (navRepeatTimer !== null) {
+      clearTimeout(navRepeatTimer);
+      navRepeatTimer = null;
+    }
+  }
+
+  function scheduleNavRepeat() {
+    navRepeatTimer = setTimeout(() => {
+      navRepeatTimer = null;
+      if (navHeldDirection === null) return;
+      navigate(navHeldDirection);
+      scheduleNavRepeat();
+    }, NAV_REPEAT_MS);
+  }
+
+  function startNavHold(
+    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+    direction: "forward" | "back",
+  ) {
+    if (navHeldKey === key) return;
+    clearNavTimers();
+    navHeldKey = key;
+    navHeldDirection = direction;
+    navigate(direction);
+    navHoldTimer = setTimeout(() => {
+      navHoldTimer = null;
+      scheduleNavRepeat();
+    }, NAV_HOLD_DELAY_MS);
+  }
+
+  function stopNavHold(key?: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown") {
+    if (key && navHeldKey !== key) return;
+    navHeldKey = null;
+    navHeldDirection = null;
+    clearNavTimers();
   }
 
   function arrowScrollStep(ts: number) {
@@ -798,14 +818,14 @@
       } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
-          startNavPoll("back");
+          startNavHold("ArrowLeft", "back");
         } else if (e.key === "ArrowRight") {
           e.preventDefault();
-          startNavPoll("forward");
+          startNavHold("ArrowRight", "forward");
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
           if (viewMode === "month") {
-            startNavPoll(e.key === "ArrowUp" ? "back" : "forward");
+            startNavHold(e.key, e.key === "ArrowUp" ? "back" : "forward");
           } else {
             startArrowScroll(e.key === "ArrowUp" ? -1 : 1);
           }
@@ -815,21 +835,16 @@
 
     function handleKeyup(e: KeyboardEvent) {
       if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
-        stopNavPoll();
+        stopNavHold(e.key);
         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           stopArrowScroll();
-        }
-        if (anchorRaf !== 0) {
-          cancelAnimationFrame(anchorRaf);
-          anchorRaf = 0;
-          pendingAnchor = null;
         }
       }
     }
 
     function handleBlur() {
       stopArrowScroll();
-      stopNavPoll();
+      stopNavHold();
     }
 
     window.addEventListener("keydown", handleKeydown);
@@ -860,7 +875,7 @@
     return () => {
       unregisterNav();
       stopArrowScroll();
-      stopNavPoll();
+      stopNavHold();
       if (anchorRaf !== 0) {
         cancelAnimationFrame(anchorRaf);
         anchorRaf = 0;
