@@ -37,10 +37,10 @@
     {
       title: "Calendar",
       items: [
-        { keys: ["T"], action: "Go to today" },
-        { keys: ["D"], action: "Day view" },
-        { keys: ["W"], action: "Week view" },
-        { keys: ["M"], action: "Month view" },
+        { keys: ["0"], action: "Go to today" },
+        { keys: ["D", "1"], action: "Day view" },
+        { keys: ["W", "7"], action: "Week view" },
+        { keys: ["M", "9"], action: "Month view" },
         { keys: ["Arrow left"], action: "Previous date range" },
         { keys: ["Arrow right"], action: "Next date range" },
         { keys: ["Arrow up", "Arrow down"], action: "Scroll timeline", context: "Day and week views" },

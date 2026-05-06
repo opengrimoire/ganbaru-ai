@@ -55,13 +55,19 @@
     onDaySelect: (date: Date) => void;
   } = $props();
 
-  const viewOptions: { mode: CalendarViewMode; label: string; shortcut: string }[] = [
-    { mode: "day", label: "1d", shortcut: "D" },
-    { mode: "week", label: "7d", shortcut: "W" },
-    { mode: "month", label: "31d", shortcut: "M" },
+  const viewOptions: { mode: CalendarViewMode; label: string; shortcuts: string[] }[] = [
+    { mode: "day", label: "1d", shortcuts: ["D", "1"] },
+    { mode: "week", label: "7d", shortcuts: ["W", "7"] },
+    { mode: "month", label: "31d", shortcuts: ["M", "9"] },
   ];
 
-  // Letter shortcuts for view switching and "today". Arrow-key navigation is
+  function shortcutTitle(shortcuts: readonly string[]): string {
+    const labels = shortcuts.map((shortcut) => `'${shortcut.toLowerCase()}'`);
+    if (labels.length === 1) return `${labels[0]} key`;
+    return `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]} keys`;
+  }
+
+  // Keyboard shortcuts for view switching and "today". Arrow-key navigation is
   // owned by CalendarView so the throttle, stale-event drop, and rAF anchor
   // coalescer apply uniformly. Adding a second listener here would let
   // auto-repeat keydowns bypass the gate and drain the queue for seconds
@@ -73,23 +79,25 @@
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
       switch (e.key) {
-        case "t":
-        case "T":
+        case "0":
           e.preventDefault();
           onNavigate("today");
           break;
         case "d":
         case "D":
+        case "1":
           e.preventDefault();
           onViewChange("day");
           break;
         case "w":
         case "W":
+        case "7":
           e.preventDefault();
           onViewChange("week");
           break;
         case "m":
         case "M":
+        case "9":
           e.preventDefault();
           onViewChange("month");
           break;
@@ -409,7 +417,7 @@
         class="rounded-md px-2.5 py-1 text-xs font-medium {viewMode === opt.mode
           ? 'bg-card text-card-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-        title="{opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1)} view ('{opt.shortcut.toLowerCase()}' key)"
+        title="{opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1)} view ({shortcutTitle(opt.shortcuts)})"
       >
         {opt.label}
       </button>
@@ -423,7 +431,7 @@
     class="ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors {isOnToday
       ? 'text-muted-foreground/30 cursor-default'
       : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-    title="Go to today ('t' key)"
+    title="Go to today ('0' key)"
   >
     <RotateCcw size={13} />
   </button>
