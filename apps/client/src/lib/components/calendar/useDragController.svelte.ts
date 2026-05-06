@@ -1,4 +1,5 @@
 import type { CalendarEvent, DragState, EventColor, PositionedEvent } from "./types";
+import { tick } from "svelte";
 import {
   minuteOfDay,
   snapToGrid,
@@ -30,6 +31,9 @@ function unlockCursor() {
 // Auto-scroll constants
 const AUTO_SCROLL_ZONE = 48; // px from edge to start scrolling
 const AUTO_SCROLL_MAX_SPEED = 12; // px per frame at the very edge
+const DEFAULT_CLICK_EVENT_MINUTES = 30;
+const CREATE_HOLD_PREVIEW_DELAY_MS = 160;
+const CREATE_DRAG_THRESHOLD_PX = 3;
 
 export interface DragControllerConfig {
   events: () => CalendarEvent[];
@@ -57,10 +61,13 @@ export function useDragController(config: DragControllerConfig) {
     dateStr: string;
     anchorMinute: number;
     columnEl: HTMLElement;
-    didDrag: boolean;
+    pointerStartX: number;
+    pointerStartY: number;
+    mode: "pending" | "selecting";
   } | null>(null);
   let createPreviewDate = $state<string | null>(null);
   let createPreview = $state<PositionedEvent | null>(null);
+  let createHoldTimer = 0;
 
   // Track latest pointer position for scroll-triggered updates and auto-scroll
   let lastPointerEvent: PointerEvent | null = null;
@@ -115,6 +122,13 @@ export function useDragController(config: DragControllerConfig) {
     if (autoScrollRaf) {
       cancelAnimationFrame(autoScrollRaf);
       autoScrollRaf = 0;
+    }
+  }
+
+  function clearCreateHoldTimer() {
+    if (createHoldTimer) {
+      clearTimeout(createHoldTimer);
+      createHoldTimer = 0;
     }
   }
 
@@ -366,21 +380,42 @@ export function useDragController(config: DragControllerConfig) {
     if (!columnEl) return;
 
     const roundedMinute = Math.round(minute);
-    createState = { dateStr, anchorMinute: roundedMinute, columnEl, didDrag: false };
-    const snap = calZoom.gridMinutes;
-    const endMinute = Math.min(minute + snap, 1440);
-    createPreviewDate = dateStr;
-    createPreview = buildPreview(dateStr, minute, endMinute);
+    createState = {
+      dateStr,
+      anchorMinute: roundedMinute,
+      columnEl,
+      pointerStartX: e.clientX,
+      pointerStartY: e.clientY,
+      mode: "pending",
+    };
 
     lastPointerEvent = e;
     lockCursor("crosshair");
     window.addEventListener("pointermove", handleCreateMove);
     window.addEventListener("pointerup", handleCreateEnd);
+    createHoldTimer = window.setTimeout(() => {
+      enterCreateSelection();
+    }, CREATE_HOLD_PREVIEW_DELAY_MS);
+  }
+
+  function enterCreateSelection() {
+    const state = createState;
+    if (!state || state.mode === "selecting") return;
+
+    clearCreateHoldTimer();
+    createState = { ...state, mode: "selecting" };
+    const snap = calZoom.gridMinutes;
+    createPreviewDate = state.dateStr;
+    createPreview = buildPreview(
+      state.dateStr,
+      state.anchorMinute,
+      Math.min(state.anchorMinute + snap, 1440),
+    );
     startAutoScroll();
   }
 
   function updateCreatePreview() {
-    if (!createState || !lastPointerEvent) return;
+    if (!createState || createState.mode !== "selecting" || !lastPointerEvent) return;
 
     const hourHeight = config.hourHeight();
     const rect = createState.columnEl.getBoundingClientRect();
@@ -392,7 +427,6 @@ export function useDragController(config: DragControllerConfig) {
     let endMinute = Math.max(anchor, cursorMinute);
     const snap = calZoom.gridMinutes;
     if (endMinute - startMinute < snap) endMinute = startMinute + snap;
-    createState.didDrag = true;
 
     createPreview = buildPreview(
       createState.dateStr,
@@ -402,28 +436,53 @@ export function useDragController(config: DragControllerConfig) {
   }
 
   function handleCreateMove(e: PointerEvent) {
-    if (!createState) return;
+    const state = createState;
+    if (!state) return;
     lastPointerEvent = e;
+
+    if (state.mode === "pending") {
+      const dx = e.clientX - state.pointerStartX;
+      const dy = e.clientY - state.pointerStartY;
+      const movedEnough = Math.hypot(dx, dy) >= CREATE_DRAG_THRESHOLD_PX;
+      if (!movedEnough) return;
+      enterCreateSelection();
+    }
+
     updateCreatePreview();
   }
 
-  function handleCreateEnd() {
+  async function handleCreateEnd() {
     window.removeEventListener("pointermove", handleCreateMove);
     window.removeEventListener("pointerup", handleCreateEnd);
+    clearCreateHoldTimer();
     stopAutoScroll();
     unlockCursor();
     lastPointerEvent = null;
 
-    if (createPreview && createState) {
-      // Click without drag: use 30-minute default duration
-      if (!createState.didDrag) {
-        const anchor = createState.anchorMinute;
-        const endMinute = clampMinute(Math.min(anchor + 30, 1440));
-        createPreview = buildPreview(createState.dateStr, anchor, endMinute);
-      }
-      // Save values and clear preview state BEFORE calling onEventCreate
-      // This prevents both __create__ and PENDING_CREATE_ID from existing simultaneously
-      // which would cause the layout to see them as overlapping and animate width changes
+    const state = createState;
+
+    if (state?.mode === "pending") {
+      const endMinute = clampMinute(
+        Math.min(state.anchorMinute + DEFAULT_CLICK_EVENT_MINUTES, 1440),
+      );
+      const preview = buildPreview(state.dateStr, state.anchorMinute, endMinute);
+      createPreviewDate = state.dateStr;
+      createPreview = preview;
+      await tick();
+
+      const start = preview.event.start;
+      const end = preview.event.end;
+      createState = null;
+      createPreview = null;
+      createPreviewDate = null;
+      config.onEventCreate(start, end);
+      return;
+    }
+
+    if (createPreview && state) {
+      // Save values and clear preview state before calling onEventCreate.
+      // This prevents both __create__ and PENDING_CREATE_ID from existing simultaneously,
+      // which would cause the layout to see them as overlapping and animate width changes.
       const start = createPreview.event.start;
       const end = createPreview.event.end;
       createState = null;
