@@ -60,6 +60,7 @@
     { mode: "week", label: "7d", shortcuts: ["W", "7"] },
     { mode: "month", label: "31d", shortcuts: ["M", "9"] },
   ];
+  const todayShortcuts = ["T", "0"] as const;
 
   function shortcutTitle(shortcuts: readonly string[]): string {
     const labels = shortcuts.map((shortcut) => `'${shortcut.toLowerCase()}'`);
@@ -79,6 +80,8 @@
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
       switch (e.key) {
+        case "t":
+        case "T":
         case "0":
           e.preventDefault();
           onNavigate("today");
@@ -431,7 +434,7 @@
     class="ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors {isOnToday
       ? 'text-muted-foreground/30 cursor-default'
       : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-    title="Go to today ('0' key)"
+    title="Go to today ({shortcutTitle(todayShortcuts)})"
   >
     <RotateCcw size={13} />
   </button>

@@ -37,7 +37,7 @@
     {
       title: "Calendar",
       items: [
-        { keys: ["0"], action: "Go to today" },
+        { keys: ["T", "0"], action: "Go to today" },
         { keys: ["D", "1"], action: "Day view" },
         { keys: ["W", "7"], action: "Week view" },
         { keys: ["M", "9"], action: "Month view" },
@@ -129,7 +129,13 @@
             <h3 class="mb-2 text-[12px] font-semibold text-muted-foreground">{group.title}</h3>
             <div class="flex flex-col divide-y divide-border/70">
               {#each group.items as item}
-                <div class="grid grid-cols-[13.5rem_minmax(18rem,24rem)] gap-4 py-2 first:pt-0 last:pb-0">
+                <div class="grid grid-cols-[14rem_12.5rem] gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
+                  <div class="min-w-0 text-sm leading-5 text-foreground">
+                    <div>{item.action}</div>
+                    {#if item.context}
+                      <div class="text-xs text-muted-foreground">{item.context}</div>
+                    {/if}
+                  </div>
                   <div class="flex min-w-0 flex-col items-start gap-1 overflow-hidden">
                     {#each item.keys as key}
                       <span class="flex flex-wrap items-center gap-1">
@@ -152,12 +158,6 @@
                         {/each}
                       </span>
                     {/each}
-                  </div>
-                  <div class="min-w-0 text-sm leading-5 text-foreground">
-                    <div>{item.action}</div>
-                    {#if item.context}
-                      <div class="text-xs text-muted-foreground">{item.context}</div>
-                    {/if}
                   </div>
                 </div>
               {/each}
