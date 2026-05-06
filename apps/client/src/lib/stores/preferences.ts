@@ -58,6 +58,29 @@ export const FONT_SCALE_MIN = 0.85;
 export const FONT_SCALE_MAX = 1.3;
 export const DEFAULT_FONT_SCALE = 1.0;
 
+export const TITLE_BAR_CONTROL_IDS = [
+  "pomodoro",
+  "theme",
+  "performance",
+  "reset",
+  "help",
+  "settings",
+  "compactTabs",
+] as const;
+
+export type TitleBarControlId = (typeof TITLE_BAR_CONTROL_IDS)[number];
+export type TitleBarVisibility = Record<TitleBarControlId, boolean>;
+
+export const DEFAULT_TITLE_BAR_VISIBILITY: TitleBarVisibility = Object.freeze({
+  pomodoro: true,
+  theme: true,
+  performance: true,
+  reset: true,
+  help: true,
+  settings: true,
+  compactTabs: false,
+});
+
 /**
  * Clamp an arbitrary number into the supported font-scale range. Non-finite
  * inputs fall back to the default scale.
@@ -90,4 +113,27 @@ export function resolveFontFamilyStack(id: FontFamilyId | undefined | null): str
   // DEFAULT_FONT_FAMILY_ID is guaranteed to be in FONT_FAMILIES, so option is
   // never undefined; the non-null assertion is a type-system formality.
   return option!.cssStack;
+}
+
+export function isTitleBarControlId(value: unknown): value is TitleBarControlId {
+  return typeof value === "string"
+    && TITLE_BAR_CONTROL_IDS.includes(value as TitleBarControlId);
+}
+
+/**
+ * Normalize persisted title bar visibility. Unknown keys are ignored and
+ * missing values stay visible, so old configs survive new controls.
+ */
+export function parseTitleBarVisibility(value: unknown): TitleBarVisibility {
+  const visibility: TitleBarVisibility = { ...DEFAULT_TITLE_BAR_VISIBILITY };
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return visibility;
+  }
+  const record = value as Record<string, unknown>;
+  for (const id of TITLE_BAR_CONTROL_IDS) {
+    if (typeof record[id] === "boolean") {
+      visibility[id] = record[id];
+    }
+  }
+  return visibility;
 }

@@ -5,6 +5,8 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
+  import type { TitleBarControlId } from "$lib/stores/preferences";
   import { cn } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
@@ -14,6 +16,7 @@
   import CircleHelp from "@lucide/svelte/icons/circle-help";
   import Settings from "@lucide/svelte/icons/settings";
   import CircleX from "@lucide/svelte/icons/circle-x";
+  import Check from "@lucide/svelte/icons/check";
   import Minus from "@lucide/svelte/icons/minus";
   import Square from "@lucide/svelte/icons/square";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
@@ -39,6 +42,7 @@
   const pomodoro = getPomodoro();
   const theme = getTheme();
   const zoom = getZoom();
+  const preferences = getPreferences();
   const benchmarkRunner = getBenchmarkRunner();
 
   let isMaximized = $state(false);
@@ -46,6 +50,8 @@
   let showPomodoroMenu = $state(false);
   let showResetConfirm = $state(false);
   let showPerfMenu = $state(false);
+  let showTitleBarMenu = $state(false);
+  let titleBarMenuStyle = $state("");
   const settingsLauncher = getSettingsLauncher();
   const themeEditor = getThemeEditor();
   let perfPinned = $state(false);
@@ -179,6 +185,18 @@
     { view: "kanban", label: "Kanban", icon: LayoutList },
   ];
 
+  const titleBarControls: { id: TitleBarControlId; label: string }[] = [
+    { id: "pomodoro", label: "Pomodoro" },
+    { id: "theme", label: "Theme toggle" },
+    { id: "performance", label: "Performance" },
+    { id: "reset", label: "Reset database" },
+    { id: "help", label: "Help" },
+    { id: "settings", label: "Settings" },
+  ];
+
+  const TITLE_BAR_MENU_WIDTH = 224;
+  const MENU_EDGE_GAP = 8;
+
   $effect(() => {
     win.isMaximized().then((v) => (isMaximized = v));
     let cleanupResize: (() => void) | undefined;
@@ -201,6 +219,11 @@
   });
 
   function handleModalKeydown(e: KeyboardEvent) {
+    if (showTitleBarMenu && e.key === "Escape") {
+      showTitleBarMenu = false;
+      return;
+    }
+
     if (e.ctrlKey && e.shiftKey && e.key === "W") {
       e.preventDefault();
       e.stopPropagation();
@@ -244,9 +267,15 @@
   function updateIndicator() {
     const idx = tabs.findIndex((t) => t.view === nav.current);
     const el = tabEls[idx];
-    if (!el) return;
+    if (!el) {
+      indicatorStyle = "";
+      return;
+    }
     const parent = el.parentElement;
-    if (!parent) return;
+    if (!parent) {
+      indicatorStyle = "";
+      return;
+    }
     const parentRect = parent.getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
     indicatorStyle = `left: ${elRect.left - parentRect.left}px; width: ${elRect.width}px;`;
@@ -254,6 +283,7 @@
 
   $effect(() => {
     void nav.current;
+    void preferences.titleBarVisibility.compactTabs;
     requestAnimationFrame(updateIndicator);
   });
 
@@ -272,6 +302,29 @@
     }
     setTimeout(() => { tabWheelCooldown = false; }, 300);
   }
+
+  function openTitleBarMenu(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const left = Math.min(
+      Math.max(MENU_EDGE_GAP, e.clientX),
+      Math.max(MENU_EDGE_GAP, window.innerWidth - TITLE_BAR_MENU_WIDTH - MENU_EDGE_GAP),
+    );
+    const top = Math.max(MENU_EDGE_GAP, e.clientY);
+    titleBarMenuStyle = [
+      `left: ${left}px`,
+      `top: ${top}px`,
+      `width: ${TITLE_BAR_MENU_WIDTH}px`,
+      `max-height: calc(100vh - ${top + MENU_EDGE_GAP}px)`,
+    ].join("; ");
+    showTitleBarMenu = true;
+  }
+
+  function toggleTitleBarControl(id: TitleBarControlId) {
+    preferences.toggleTitleBarControl(id);
+    showTitleBarMenu = false;
+  }
 </script>
 
 <svelte:window onkeydown={handleModalKeydown} />
@@ -281,6 +334,7 @@
   data-tauri-drag-region
   class="flex h-[42px] w-full shrink-0 select-none items-center bg-sidebar"
   onwheel={handleTabWheel}
+  oncontextmenu={openTitleBarMenu}
 >
   <!-- Navigation tabs -->
   <div class="relative flex items-center gap-0.5 pl-1.5">
@@ -293,7 +347,10 @@
         bind:this={tabEls[i]}
         onclick={() => nav.navigate(tab.view)}
         class={cn(
-          "relative z-[1] flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+          "relative z-[1] flex h-8 items-center rounded-md text-sm font-medium transition-colors",
+          preferences.titleBarVisibility.compactTabs
+            ? "w-8 justify-center"
+            : "gap-1.5 px-3",
           nav.current === tab.view
             ? "text-foreground dark:text-white"
             : "text-sidebar-foreground dark:text-white/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -301,7 +358,9 @@
         title={`${tab.label} (Alt+${i + 1})`}
       >
         <tab.icon size={14} strokeWidth={1.75} />
-        <span>{tab.label}</span>
+        {#if !preferences.titleBarVisibility.compactTabs}
+          <span>{tab.label}</span>
+        {/if}
       </button>
     {/each}
   </div>
@@ -312,176 +371,188 @@
   <!-- Utility buttons -->
   <div class="flex items-center gap-0.5">
     <!-- Pomodoro progress ring with dropdown -->
-    <div class="relative">
-      <button
-        onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
-        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
-        title={pomodoro.isRunning ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
-      >
-        <svg viewBox="0 0 20 20" class="h-4 w-4">
-          <circle
-            cx="10"
-            cy="10"
-            r="8"
-            fill="none"
-            stroke-width="2.5"
-            class={isActive ? "stroke-foreground/20 dark:stroke-white/20" : "stroke-foreground/15 dark:stroke-white/15"}
-          />
-          {#if isActive}
+    {#if preferences.titleBarVisibility.pomodoro}
+      <div class="relative">
+        <button
+          onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
+          class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
+          title={pomodoro.isRunning ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
+        >
+          <svg viewBox="0 0 20 20" class="h-4 w-4">
             <circle
               cx="10"
               cy="10"
               r="8"
               fill="none"
               stroke-width="2.5"
-              stroke-dasharray={`${((100 - progressPercent()) / 100) * 50.27} 50.27`}
-              stroke-linecap="round"
-              class="stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center"
+              class={isActive ? "stroke-foreground/20 dark:stroke-white/20" : "stroke-foreground/15 dark:stroke-white/15"}
             />
-          {/if}
-        </svg>
-      </button>
-      {#if showPomodoroMenu}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="fixed inset-0 z-40"
-          onclick={() => { showPomodoroMenu = false; }}
-          onkeydown={(e) => { if (e.key === "Escape") showPomodoroMenu = false; }}
-        ></div>
-        <div class="absolute right-0 top-9 z-50 min-w-36 rounded-lg border border-border bg-popover py-1 shadow-lg">
-          {#if isActive}
-            <div class="px-3 py-1.5 text-xs text-muted-foreground">
-              {pomodoro.formattedTime} left
-            </div>
-            <div class="my-1 h-px bg-border"></div>
-            {#if pomodoro.isRunning}
-              <button
-                onclick={() => { pomodoro.pause(); showPomodoroMenu = false; }}
-                class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-              >Pause</button>
-            {:else}
-              <button
-                onclick={() => { pomodoro.start(); showPomodoroMenu = false; }}
-                class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-              >Resume</button>
+            {#if isActive}
+              <circle
+                cx="10"
+                cy="10"
+                r="8"
+                fill="none"
+                stroke-width="2.5"
+                stroke-dasharray={`${((100 - progressPercent()) / 100) * 50.27} 50.27`}
+                stroke-linecap="round"
+                class="stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center"
+              />
             {/if}
-            <button
-              onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
-              class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-            >Skip</button>
-          {:else}
-            <div class="px-3 py-1.5 text-xs text-muted-foreground">
-              No active session
-            </div>
-          {/if}
-        </div>
-      {/if}
-    </div>
-
-    <!-- Theme toggle -->
-    <button
-      onclick={() => theme.toggle()}
-      disabled={lockedByThemeEditor}
-      class={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
-        lockedByThemeEditor
-          ? "cursor-not-allowed opacity-40"
-          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
-      )}
-      title={lockedByThemeEditor
-        ? "Disabled while editing a theme"
-        : theme.isDark
-          ? "Switch to light mode"
-          : "Switch to dark mode"}
-    >
-      {#if theme.isDark}
-        <Sun size={14} strokeWidth={1.75} />
-      {:else}
-        <Moon size={14} strokeWidth={1.75} />
-      {/if}
-    </button>
-
-    <!-- Performance monitor -->
-    <div class="relative">
-      <button
-        onclick={togglePerfMenu}
-        class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        title="Performance"
-      >
-        <CircleGauge size={14} strokeWidth={1.75} />
-      </button>
-      {#if showPerfMenu}
-        {#if !perfPinned}
+          </svg>
+        </button>
+        {#if showPomodoroMenu}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="fixed inset-0 z-40"
-            onclick={() => { showPerfMenu = false; }}
-            onkeydown={(e) => { if (e.key === "Escape") showPerfMenu = false; }}
+            onclick={() => { showPomodoroMenu = false; }}
+            onkeydown={(e) => { if (e.key === "Escape") showPomodoroMenu = false; }}
           ></div>
-        {/if}
-        {#if PerformancePopover}
-          {@const Popover = PerformancePopover}
-          <Popover
-            {shellStartupMs}
-            {startupMemorySnapshot}
-            pinned={perfPinned}
-            onPinnedChange={(nextPinned: boolean) => { perfPinned = nextPinned; }}
-            {ensureBenchmarkOverlay}
-          />
-        {:else}
-          <div
-            class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
-          >
-            Loading...
+          <div class="absolute right-0 top-9 z-50 min-w-36 rounded-lg border border-border bg-popover py-1 shadow-lg">
+            {#if isActive}
+              <div class="px-3 py-1.5 text-xs text-muted-foreground">
+                {pomodoro.formattedTime} left
+              </div>
+              <div class="my-1 h-px bg-border"></div>
+              {#if pomodoro.isRunning}
+                <button
+                  onclick={() => { pomodoro.pause(); showPomodoroMenu = false; }}
+                  class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+                >Pause</button>
+              {:else}
+                <button
+                  onclick={() => { pomodoro.start(); showPomodoroMenu = false; }}
+                  class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+                >Resume</button>
+              {/if}
+              <button
+                onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
+                class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+              >Skip</button>
+            {:else}
+              <div class="px-3 py-1.5 text-xs text-muted-foreground">
+                No active session
+              </div>
+            {/if}
           </div>
         {/if}
-      {/if}
-    </div>
+      </div>
+    {/if}
+
+    <!-- Theme toggle -->
+    {#if preferences.titleBarVisibility.theme}
+      <button
+        onclick={() => theme.toggle()}
+        disabled={lockedByThemeEditor}
+        class={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          lockedByThemeEditor
+            ? "cursor-not-allowed opacity-40"
+            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        )}
+        title={lockedByThemeEditor
+          ? "Disabled while editing a theme"
+          : theme.isDark
+            ? "Switch to light mode"
+            : "Switch to dark mode"}
+      >
+        {#if theme.isDark}
+          <Sun size={14} strokeWidth={1.75} />
+        {:else}
+          <Moon size={14} strokeWidth={1.75} />
+        {/if}
+      </button>
+    {/if}
+
+    <!-- Performance monitor -->
+    {#if preferences.titleBarVisibility.performance}
+      <div class="relative">
+        <button
+          onclick={togglePerfMenu}
+          class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          title="Performance"
+        >
+          <CircleGauge size={14} strokeWidth={1.75} />
+        </button>
+        {#if showPerfMenu}
+          {#if !perfPinned}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="fixed inset-0 z-40"
+              onclick={() => { showPerfMenu = false; }}
+              onkeydown={(e) => { if (e.key === "Escape") showPerfMenu = false; }}
+            ></div>
+          {/if}
+          {#if PerformancePopover}
+            {@const Popover = PerformancePopover}
+            <Popover
+              {shellStartupMs}
+              {startupMemorySnapshot}
+              pinned={perfPinned}
+              onPinnedChange={(nextPinned: boolean) => { perfPinned = nextPinned; }}
+              {ensureBenchmarkOverlay}
+            />
+          {:else}
+            <div
+              class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
+            >
+              Loading...
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/if}
 
     <!-- Reset database -->
-    <button
-      onclick={() => { showResetConfirm = true; }}
-      disabled={lockedByThemeEditor}
-      class={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
-        lockedByThemeEditor
-          ? "cursor-not-allowed opacity-40"
-          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
-      )}
-      title={lockedByThemeEditor ? "Disabled while editing a theme" : "Reset database"}
-    >
-      <CircleX size={14} strokeWidth={1.75} />
-    </button>
+    {#if preferences.titleBarVisibility.reset}
+      <button
+        onclick={() => { showResetConfirm = true; }}
+        disabled={lockedByThemeEditor}
+        class={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          lockedByThemeEditor
+            ? "cursor-not-allowed opacity-40"
+            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        )}
+        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Reset database"}
+      >
+        <CircleX size={14} strokeWidth={1.75} />
+      </button>
+    {/if}
 
     <!-- TODO: implement help panel -->
-    <button
-      onclick={() => {}}
-      disabled={lockedByThemeEditor}
-      class={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
-        lockedByThemeEditor
-          ? "cursor-not-allowed opacity-40"
-          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
-      )}
-      title={lockedByThemeEditor ? "Disabled while editing a theme" : "Help"}
-    >
-      <CircleHelp size={14} strokeWidth={1.75} />
-    </button>
+    {#if preferences.titleBarVisibility.help}
+      <button
+        onclick={() => {}}
+        disabled={lockedByThemeEditor}
+        class={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          lockedByThemeEditor
+            ? "cursor-not-allowed opacity-40"
+            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        )}
+        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Help"}
+      >
+        <CircleHelp size={14} strokeWidth={1.75} />
+      </button>
+    {/if}
 
     <!-- Settings -->
-    <button
-      onclick={openSettings}
-      disabled={lockedByThemeEditor}
-      class={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
-        lockedByThemeEditor
-          ? "cursor-not-allowed opacity-40"
-          : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
-      )}
-      title={lockedByThemeEditor ? "Disabled while editing a theme" : "Settings"}
-    >
-      <Settings size={14} strokeWidth={1.75} />
-    </button>
+    {#if preferences.titleBarVisibility.settings}
+      <button
+        onclick={openSettings}
+        disabled={lockedByThemeEditor}
+        class={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          lockedByThemeEditor
+            ? "cursor-not-allowed opacity-40"
+            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        )}
+        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Settings"}
+      >
+        <Settings size={14} strokeWidth={1.75} />
+      </button>
+    {/if}
   </div>
 
   <!-- Window controls -->
@@ -519,6 +590,64 @@
     </button>
   </div>
 </div>
+
+{#if showTitleBarMenu}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-40"
+    onclick={() => { showTitleBarMenu = false; }}
+    oncontextmenu={(e) => { e.preventDefault(); showTitleBarMenu = false; }}
+  ></div>
+  <div
+    class="fixed z-50 overflow-hidden rounded-lg border border-border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-xl"
+    style={titleBarMenuStyle}
+    role="menu"
+  >
+    <div class="p-1">
+      {#each titleBarControls as control}
+        {@const checked = preferences.titleBarVisibility[control.id]}
+        <button
+          role="menuitemcheckbox"
+          aria-checked={checked}
+          onclick={() => toggleTitleBarControl(control.id)}
+          class={cn(
+            "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm transition-colors",
+            checked
+              ? "text-popover-foreground hover:bg-accent"
+              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+          )}
+        >
+          <span class="flex size-5 shrink-0 items-center justify-center text-primary">
+            {#if checked}
+              <Check size={15} strokeWidth={2.4} />
+            {/if}
+          </span>
+          <span class="min-w-0 flex-1 truncate">{control.label}</span>
+        </button>
+      {/each}
+      <div class="my-1 h-px bg-border/80"></div>
+      <button
+        role="menuitemcheckbox"
+        aria-checked={preferences.titleBarVisibility.compactTabs}
+        onclick={() => toggleTitleBarControl("compactTabs")}
+        class={cn(
+          "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm transition-colors",
+          preferences.titleBarVisibility.compactTabs
+            ? "text-popover-foreground hover:bg-accent"
+            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        )}
+      >
+        <span class="flex size-5 shrink-0 items-center justify-center text-primary">
+          {#if preferences.titleBarVisibility.compactTabs}
+            <Check size={15} strokeWidth={2.4} />
+          {/if}
+        </span>
+        <span class="min-w-0 flex-1 truncate">Compact tabs</span>
+      </button>
+    </div>
+  </div>
+{/if}
 
 {#if showResetConfirm}
   <ConfirmDialog
@@ -566,6 +695,6 @@
 
 <style>
   .tab-indicator {
-    transition: left 200ms cubic-bezier(0.16, 1, 0.3, 1), width 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: none;
   }
 </style>

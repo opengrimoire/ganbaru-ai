@@ -5,8 +5,12 @@ import {
   FONT_SCALE_MIN,
   FONT_SCALE_MAX,
   DEFAULT_FONT_SCALE,
+  DEFAULT_TITLE_BAR_VISIBILITY,
+  TITLE_BAR_CONTROL_IDS,
   clampFontScale,
   getFontFamilyById,
+  isTitleBarControlId,
+  parseTitleBarVisibility,
   resolveFontFamilyStack,
 } from "./preferences";
 
@@ -106,5 +110,61 @@ describe("resolveFontFamilyStack", () => {
     );
     expect(resolveFontFamilyStack(null)).toBe(defaultOption!.cssStack);
     expect(resolveFontFamilyStack(undefined)).toBe(defaultOption!.cssStack);
+  });
+});
+
+describe("title bar visibility helpers", () => {
+  it("accepts registered title bar control IDs only", () => {
+    expect(isTitleBarControlId("pomodoro")).toBe(true);
+    expect(isTitleBarControlId("settings")).toBe(true);
+    expect(isTitleBarControlId("compactTabs")).toBe(true);
+    expect(isTitleBarControlId("calendarTab")).toBe(false);
+    expect(isTitleBarControlId("kanbanTab")).toBe(false);
+    expect(isTitleBarControlId("tabs")).toBe(false);
+    expect(isTitleBarControlId("window-controls")).toBe(false);
+    expect(isTitleBarControlId(null)).toBe(false);
+  });
+
+  it("has a default visibility value for every registered control", () => {
+    expect(Object.keys(DEFAULT_TITLE_BAR_VISIBILITY).sort()).toEqual(
+      [...TITLE_BAR_CONTROL_IDS].sort(),
+    );
+  });
+
+  it("parses stored booleans and fills missing values with defaults", () => {
+    expect(parseTitleBarVisibility({ compactTabs: true, performance: false })).toEqual({
+      ...DEFAULT_TITLE_BAR_VISIBILITY,
+      compactTabs: true,
+      performance: false,
+    });
+  });
+
+  it("ignores legacy tab hiding values so tabs remain available", () => {
+    expect(
+      parseTitleBarVisibility({
+        tabs: false,
+        calendarTab: false,
+        kanbanTab: false,
+      }),
+    ).toEqual(DEFAULT_TITLE_BAR_VISIBILITY);
+  });
+
+  it("ignores unknown keys and non-boolean values", () => {
+    expect(
+      parseTitleBarVisibility({
+        compactTabs: "true",
+        settings: false,
+        unknown: false,
+      }),
+    ).toEqual({
+      ...DEFAULT_TITLE_BAR_VISIBILITY,
+      settings: false,
+    });
+  });
+
+  it("falls back to defaults for malformed stored values", () => {
+    expect(parseTitleBarVisibility(null)).toEqual(DEFAULT_TITLE_BAR_VISIBILITY);
+    expect(parseTitleBarVisibility([])).toEqual(DEFAULT_TITLE_BAR_VISIBILITY);
+    expect(parseTitleBarVisibility("bad")).toEqual(DEFAULT_TITLE_BAR_VISIBILITY);
   });
 });

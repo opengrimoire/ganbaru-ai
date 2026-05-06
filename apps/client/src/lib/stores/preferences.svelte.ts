@@ -3,8 +3,13 @@ import {
   FONT_FAMILIES,
   DEFAULT_FONT_FAMILY_ID,
   DEFAULT_FONT_SCALE,
+  DEFAULT_TITLE_BAR_VISIBILITY,
+  type TitleBarControlId,
+  type TitleBarVisibility,
   clampFontScale,
   getFontFamilyById,
+  isTitleBarControlId,
+  parseTitleBarVisibility,
   resolveFontFamilyStack,
 } from "./preferences";
 import { getConfigKey, setConfigKey } from "../vault/config";
@@ -12,6 +17,7 @@ import { getConfigKey, setConfigKey } from "../vault/config";
 const FONT_FAMILY_CONFIG_KEY = "preferences.fontFamilyId";
 const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
 const EVENT_TZ_DISPLAY_KEY = "preferences.eventTimezoneDisplay";
+const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
 
 export type EventTimezoneDisplay = "device" | "homeZone";
 const DEFAULT_EVENT_TZ_DISPLAY: EventTimezoneDisplay = "device";
@@ -34,9 +40,16 @@ function loadSavedEventTzDisplay(): EventTimezoneDisplay {
   return DEFAULT_EVENT_TZ_DISPLAY;
 }
 
+function loadSavedTitleBarVisibility(): TitleBarVisibility {
+  return parseTitleBarVisibility(
+    getConfigKey<unknown>(TITLE_BAR_VISIBILITY_CONFIG_KEY, undefined),
+  );
+}
+
 let fontFamilyId = $state<FontFamilyId>(loadSavedFontFamilyId());
 let fontScale = $state<number>(loadSavedFontScale());
 let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTzDisplay());
+let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
 
 function applyPreferencesToDom(): void {
   if (typeof document === "undefined") return;
@@ -70,6 +83,21 @@ function setEventTimezoneDisplay(value: EventTimezoneDisplay): void {
   setConfigKey(EVENT_TZ_DISPLAY_KEY, value);
 }
 
+function setTitleBarControlVisible(id: TitleBarControlId, visible: boolean): void {
+  if (!isTitleBarControlId(id)) return;
+  titleBarVisibility = { ...titleBarVisibility, [id]: visible };
+  setConfigKey(TITLE_BAR_VISIBILITY_CONFIG_KEY, titleBarVisibility);
+}
+
+function toggleTitleBarControl(id: TitleBarControlId): void {
+  setTitleBarControlVisible(id, !titleBarVisibility[id]);
+}
+
+function resetTitleBarVisibility(): void {
+  titleBarVisibility = { ...DEFAULT_TITLE_BAR_VISIBILITY };
+  setConfigKey(TITLE_BAR_VISIBILITY_CONFIG_KEY, titleBarVisibility);
+}
+
 /**
  * Access app-wide user preferences (font family, font scale). Returns
  * getters so Svelte's reactivity picks up changes in consuming components.
@@ -89,9 +117,14 @@ export function getPreferences() {
     get eventTimezoneDisplay(): EventTimezoneDisplay {
       return eventTimezoneDisplay;
     },
+    get titleBarVisibility(): TitleBarVisibility {
+      return titleBarVisibility;
+    },
     setFontFamily,
     setFontScale,
     setEventTimezoneDisplay,
+    setTitleBarControlVisible,
+    toggleTitleBarControl,
     resetFontFamily() {
       setFontFamily(DEFAULT_FONT_FAMILY_ID);
     },
@@ -101,5 +134,6 @@ export function getPreferences() {
     resetEventTimezoneDisplay() {
       setEventTimezoneDisplay(DEFAULT_EVENT_TZ_DISPLAY);
     },
+    resetTitleBarVisibility,
   };
 }
