@@ -101,8 +101,7 @@ function startOrRetargetAnimation(toH: number) {
   const centerOffset = (viewportH - stickyH) / 2;
 
   // Get current state (either mid-animation or static)
-  const currentHStr = sc.style.getPropertyValue("--hour-h");
-  const fromH = currentHStr ? parseFloat(currentHStr) : ZOOM_LEVELS[levelIndex];
+  const fromH = getRenderedHourHeight(sc);
   const fromScroll = sc.scrollTop;
 
   // Compute center time at current state
@@ -155,6 +154,12 @@ function persist(h: number) {
   localStorage.setItem(STORAGE_KEY, String(h));
 }
 
+function getRenderedHourHeight(sc: HTMLElement): number {
+  const currentHStr = sc.style.getPropertyValue("--hour-h");
+  const currentH = currentHStr ? parseFloat(currentHStr) : Number.NaN;
+  return Number.isFinite(currentH) && currentH > 0 ? currentH : hourHeight;
+}
+
 export function getCalendarZoom() {
   return {
     get hourHeight() {
@@ -187,21 +192,29 @@ export function getCalendarZoom() {
       this.zoomStep(direction);
     },
     reset() {
+      const defaultH = ZOOM_LEVELS[DEFAULT_INDEX];
       if (zoomRaf) {
         cancelAnimationFrame(zoomRaf);
         zoomRaf = 0;
       }
       clearTimeout(commitTimer);
       commitTimer = 0;
-      gestureActive = false;
       animating = false;
       lastWheelZoom = 0;
       levelIndex = DEFAULT_INDEX;
-      hourHeight = ZOOM_LEVELS[DEFAULT_INDEX];
-      if (scrollRef) {
-        scrollRef.style.setProperty("--hour-h", String(ZOOM_LEVELS[DEFAULT_INDEX]));
+      persist(defaultH);
+
+      if (scrollRef && getRenderedHourHeight(scrollRef) !== defaultH) {
+        gestureActive = true;
+        startOrRetargetAnimation(defaultH);
+        commitTimer = window.setTimeout(commitZoom, ANIM_DURATION + 50);
+      } else {
+        gestureActive = false;
+        hourHeight = defaultH;
+        if (scrollRef) {
+          scrollRef.style.setProperty("--hour-h", String(defaultH));
+        }
       }
-      persist(ZOOM_LEVELS[DEFAULT_INDEX]);
     },
     get canZoomIn() {
       return hourHeight < ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
