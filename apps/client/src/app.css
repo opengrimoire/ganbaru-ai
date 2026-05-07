@@ -83,6 +83,12 @@
   --editor-chrome-checker-a: #CCCCCC;
   --editor-chrome-checker-b: #FFFFFF;
   --editor-chrome-thumb-border: #FFFFFF;
+
+  --shell-gap: 0.375rem;
+  --content-radius: 0.5rem;
+  --titlebar-h: 42px;
+  --toolbar-h: 42px;
+  --panel-margin: 0.5rem;
 }
 
 .dark {
@@ -246,6 +252,33 @@
   }
 }
 
+.app-shell[data-size-class="compact"] {
+  --shell-gap: 0.25rem;
+  --content-radius: 0.375rem;
+  --panel-margin: 0.375rem;
+}
+
+.app-shell[data-size-class="narrow"] {
+  --shell-gap: 0.125rem;
+  --content-radius: 0.25rem;
+  --titlebar-h: 40px;
+  --toolbar-h: 40px;
+  --panel-margin: 0.25rem;
+}
+
+.app-shell[data-size-class="micro"] {
+  --shell-gap: 0;
+  --content-radius: 0;
+  --titlebar-h: 38px;
+  --toolbar-h: 38px;
+  --panel-margin: 0.125rem;
+}
+
+.content-panel {
+  margin: 0 var(--shell-gap) var(--shell-gap);
+  border-radius: var(--content-radius);
+}
+
 /* Calendar theme variables */
 :root {
   --cal-bg: #FFFFFF;
@@ -283,4 +316,3 @@
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
-

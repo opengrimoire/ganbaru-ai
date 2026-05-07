@@ -6,6 +6,7 @@
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { getViewport } from "$lib/stores/viewport.svelte";
   import type { TitleBarControlId } from "$lib/stores/preferences";
   import { cn } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
@@ -17,6 +18,7 @@
   import Settings from "@lucide/svelte/icons/settings";
   import CircleX from "@lucide/svelte/icons/circle-x";
   import Check from "@lucide/svelte/icons/check";
+  import MoreHorizontal from "@lucide/svelte/icons/more-horizontal";
   import Minus from "@lucide/svelte/icons/minus";
   import Square from "@lucide/svelte/icons/square";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
@@ -43,6 +45,7 @@
   const theme = getTheme();
   const zoom = getZoom();
   const preferences = getPreferences();
+  const viewport = getViewport();
   const benchmarkStatus = getBenchmarkStatus();
 
   let isMaximized = $state(false);
@@ -51,6 +54,7 @@
   let showResetConfirm = $state(false);
   let showPerfMenu = $state(false);
   let showTitleBarMenu = $state(false);
+  let showUtilityOverflowMenu = $state(false);
   let titleBarMenuStyle = $state("");
   const settingsLauncher = getSettingsLauncher();
   const themeEditor = getThemeEditor();
@@ -121,10 +125,12 @@
 
   function togglePerfMenu() {
     showPerfMenu = !showPerfMenu;
+    showUtilityOverflowMenu = false;
     if (showPerfMenu) void loadPerformancePopover();
   }
 
   function openSettings() {
+    showUtilityOverflowMenu = false;
     settingsLauncher.open();
     void loadSettingsModal();
   }
@@ -132,6 +138,7 @@
   let showHelpShortcuts = $state(false);
 
   function openHelpShortcuts() {
+    showUtilityOverflowMenu = false;
     showHelpShortcuts = true;
     void loadHelpShortcutsModal();
   }
@@ -148,6 +155,20 @@
     showResetConfirm = false;
     pomodoro.stopSession();
     await invoke("reset_database");
+  }
+
+  function activateOverflowControl(id: TitleBarControlId) {
+    if (overflowControlDisabled(id)) return;
+    showUtilityOverflowMenu = false;
+    if (id === "theme") {
+      theme.toggle();
+    } else if (id === "reset") {
+      showResetConfirm = true;
+    } else if (id === "help") {
+      openHelpShortcuts();
+    } else if (id === "settings") {
+      openSettings();
+    }
   }
 
   async function benchmarkBlocksClose(): Promise<boolean> {
@@ -218,6 +239,40 @@
 
   const TITLE_BAR_MENU_WIDTH = 224;
   const MENU_EDGE_GAP = 8;
+  const themeEditorLockedControlIds = new Set<TitleBarControlId>([
+    "theme",
+    "reset",
+    "help",
+    "settings",
+  ]);
+
+  const autoCompactTabs = $derived(
+    preferences.titleBarVisibility.compactTabs || viewport.below("regular"),
+  );
+  const compactOverflowIds = $derived.by(() => {
+    const ids = new Set<TitleBarControlId>();
+    if (viewport.below("regular")) {
+      ids.add("theme");
+      ids.add("reset");
+      ids.add("help");
+    }
+    return ids;
+  });
+  const overflowActionControls = $derived(
+    titleBarControls.filter((control) =>
+      control.id !== "compactTabs"
+      && preferences.titleBarVisibility[control.id]
+      && compactOverflowIds.has(control.id),
+    ),
+  );
+
+  function titleBarControlVisible(id: TitleBarControlId): boolean {
+    return preferences.titleBarVisibility[id] && !compactOverflowIds.has(id);
+  }
+
+  function overflowControlDisabled(id: TitleBarControlId): boolean {
+    return lockedByThemeEditor && themeEditorLockedControlIds.has(id);
+  }
 
   $effect(() => {
     win.isMaximized().then((v) => (isMaximized = v));
@@ -241,6 +296,11 @@
   });
 
   function handleModalKeydown(e: KeyboardEvent) {
+    if (showUtilityOverflowMenu && e.key === "Escape") {
+      showUtilityOverflowMenu = false;
+      return;
+    }
+
     if (showTitleBarMenu && e.key === "Escape") {
       showTitleBarMenu = false;
       return;
@@ -305,7 +365,7 @@
 
   $effect(() => {
     void nav.current;
-    void preferences.titleBarVisibility.compactTabs;
+    void autoCompactTabs;
     requestAnimationFrame(updateIndicator);
   });
 
@@ -354,7 +414,8 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-tauri-drag-region
-  class="flex h-[42px] w-full shrink-0 select-none items-center bg-sidebar"
+  class="flex w-full shrink-0 select-none items-center bg-sidebar"
+  style="height: var(--titlebar-h);"
   onwheel={handleTabWheel}
   oncontextmenu={openTitleBarMenu}
 >
@@ -370,7 +431,7 @@
         onclick={() => nav.navigate(tab.view)}
         class={cn(
           "relative z-[1] flex h-8 items-center rounded-md text-sm font-medium transition-colors",
-          preferences.titleBarVisibility.compactTabs
+          autoCompactTabs
             ? "w-8 justify-center"
             : "gap-1.5 px-3",
           nav.current === tab.view
@@ -380,7 +441,7 @@
         title={`${tab.label} (Alt+${i + 1})`}
       >
         <tab.icon size={14} strokeWidth={1.75} />
-        {#if !preferences.titleBarVisibility.compactTabs}
+        {#if !autoCompactTabs}
           <span>{tab.label}</span>
         {/if}
       </button>
@@ -393,7 +454,7 @@
   <!-- Utility buttons -->
   <div class="flex items-center gap-0.5">
     <!-- Pomodoro progress ring with dropdown -->
-    {#if preferences.titleBarVisibility.pomodoro}
+    {#if titleBarControlVisible("pomodoro")}
       <div class="relative">
         <button
           onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
@@ -462,7 +523,7 @@
     {/if}
 
     <!-- Theme toggle -->
-    {#if preferences.titleBarVisibility.theme}
+    {#if titleBarControlVisible("theme")}
       <button
         onclick={() => theme.toggle()}
         disabled={lockedByThemeEditor}
@@ -487,7 +548,7 @@
     {/if}
 
     <!-- Performance monitor -->
-    {#if preferences.titleBarVisibility.performance}
+    {#if titleBarControlVisible("performance")}
       <div class="relative">
         <button
           onclick={togglePerfMenu}
@@ -526,7 +587,7 @@
     {/if}
 
     <!-- Reset database -->
-    {#if preferences.titleBarVisibility.reset}
+    {#if titleBarControlVisible("reset")}
       <button
         onclick={() => { showResetConfirm = true; }}
         disabled={lockedByThemeEditor}
@@ -543,7 +604,7 @@
     {/if}
 
     <!-- TODO: implement help panel -->
-    {#if preferences.titleBarVisibility.help}
+    {#if titleBarControlVisible("help")}
       <button
         onclick={openHelpShortcuts}
         disabled={lockedByThemeEditor}
@@ -560,7 +621,7 @@
     {/if}
 
     <!-- Settings -->
-    {#if preferences.titleBarVisibility.settings}
+    {#if titleBarControlVisible("settings")}
       <button
         onclick={openSettings}
         disabled={lockedByThemeEditor}
@@ -574,6 +635,44 @@
       >
         <Settings size={14} strokeWidth={1.75} />
       </button>
+    {/if}
+
+    {#if overflowActionControls.length > 0}
+      <div class="relative">
+        <button
+          onclick={() => { showUtilityOverflowMenu = !showUtilityOverflowMenu; showPerfMenu = false; }}
+          class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          title="More controls"
+          aria-label="More controls"
+        >
+          <MoreHorizontal size={15} strokeWidth={1.75} />
+        </button>
+        {#if showUtilityOverflowMenu}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="fixed inset-0 z-40"
+            onclick={() => { showUtilityOverflowMenu = false; }}
+            onkeydown={(e) => { if (e.key === "Escape") showUtilityOverflowMenu = false; }}
+          ></div>
+          <div class="absolute right-0 top-9 z-50 min-w-40 rounded-lg border border-border bg-popover py-1 shadow-lg">
+            {#each overflowActionControls as control}
+              {@const disabled = overflowControlDisabled(control.id)}
+              <button
+                onclick={() => activateOverflowControl(control.id)}
+                {disabled}
+                class={cn(
+                  "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors",
+                  disabled
+                    ? "cursor-not-allowed text-muted-foreground/50"
+                    : "text-foreground hover:bg-accent",
+                )}
+              >
+                {control.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     {/if}
   </div>
 

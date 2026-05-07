@@ -14,7 +14,7 @@ Phase 1: core loop
 
 ## Next up
 
+- Continue the responsive UX plan in `docs/RESPONSIVE_UX_PLAN.md` with calendar-header overflow and event-panel sheet modes.
 
 
 ## What exists (phase 1)
-

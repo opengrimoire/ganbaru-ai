@@ -21,6 +21,7 @@ All documentation lives in `docs/`. Top-level overviews:
 - **docs/TECH_STACK.md**: how it's built
 - **docs/ROADMAP.md**: phased development plan
 - **docs/PERFORMANCE.md**: memory, startup, and package size measurements
+- **docs/RESPONSIVE_UX_PLAN.md**: responsive UX audit and implementation plan
 
 Granular docs (read the relevant one when working on a feature):
 

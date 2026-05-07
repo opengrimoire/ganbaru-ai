@@ -5,6 +5,7 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getViewport } from "$lib/stores/viewport.svelte";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { Temporal } from "@js-temporal/polyfill";
@@ -32,6 +33,7 @@
   const pomodoro = getPomodoro();
   const zoom = getZoom();
   const settingsLauncher = getSettingsLauncher();
+  const viewport = getViewport();
 
   let isMaximized = $state(true);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
@@ -438,10 +440,14 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="h-screen w-screen" class:app-rounded={!isMaximized}>
+<div
+  class="app-shell h-screen w-screen"
+  class:app-rounded={!isMaximized}
+  data-size-class={viewport.sizeClass}
+>
   <div class="flex h-full flex-col overflow-hidden bg-sidebar">
     <TitleBar {shellStartupMs} {startupMemorySnapshot} {ensureBenchmarkOverlay} />
-    <main class="content-panel mx-1.5 mb-1.5 flex-1 min-h-0 overflow-hidden rounded-lg bg-background">
+    <main class="content-panel flex-1 min-h-0 overflow-hidden bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />
       {:else if nav.current === "kanban"}
@@ -496,7 +502,7 @@
 
 <style>
   .app-rounded {
-    border-radius: 10px;
+    border-radius: var(--content-radius);
     overflow: hidden;
   }
 </style>
