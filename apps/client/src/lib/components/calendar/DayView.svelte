@@ -12,7 +12,6 @@
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
   import HourGridlines from "./HourGridlines.svelte";
-  import HoverTimeGuide, { type HoverTimeGuideState } from "./HoverTimeGuide.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import AllDayEventChip from "./AllDayEventChip.svelte";
@@ -76,75 +75,6 @@
   let stickyHeaderHeight = $state(0);
   const calZoom = getCalendarZoom();
   const smoothScroll = createSmoothScroll(() => scrollContainer);
-  let timedColumnsEl: HTMLDivElement | undefined = $state();
-  let hoverGuide = $state<HoverTimeGuideState | null>(null);
-  let hoverGuideRaf = 0;
-  let pendingHoverGuide: HoverTimeGuideState | null | undefined;
-  let hoverGuideVisible = false;
-
-  function applyHoverGuideNow(next: HoverTimeGuideState | null) {
-    cancelHoverGuideFrame();
-    hoverGuide = next;
-  }
-
-  function scheduleHoverGuide(next: HoverTimeGuideState | null) {
-    if (next?.instant) {
-      applyHoverGuideNow(next);
-      return;
-    }
-    pendingHoverGuide = next;
-    if (hoverGuideRaf) return;
-    hoverGuideRaf = requestAnimationFrame(() => {
-      hoverGuideRaf = 0;
-      if (pendingHoverGuide !== undefined) {
-        hoverGuide = pendingHoverGuide;
-        pendingHoverGuide = undefined;
-      }
-    });
-  }
-
-  function cancelHoverGuideFrame() {
-    if (hoverGuideRaf) {
-      cancelAnimationFrame(hoverGuideRaf);
-      hoverGuideRaf = 0;
-    }
-    pendingHoverGuide = undefined;
-  }
-
-  function handleHoverGuideChange(guide: {
-    columnLeft: number;
-    columnWidth: number;
-    instant: boolean;
-    minute: number;
-    positionMinute: number;
-    y: number;
-  } | null) {
-    if (!guide || !timedColumnsEl) {
-      hoverGuideVisible = false;
-      scheduleHoverGuide(null);
-      return;
-    }
-
-    const containerRect = timedColumnsEl.getBoundingClientRect();
-    const nextX = guide.columnLeft - containerRect.left;
-
-    scheduleHoverGuide({
-      horizontalInstant: !hoverGuideVisible,
-      instant: guide.instant,
-      minute: guide.minute,
-      positionMinute: guide.positionMinute,
-      width: guide.columnWidth,
-      x: nextX,
-      y: guide.y,
-    });
-    hoverGuideVisible = true;
-  }
-
-  function clearHoverGuide() {
-    if (calZoom.isAnimating) return;
-    hoverGuideVisible = false;
-    scheduleHoverGuide(null);
-  }
 
   function onWheel(e: WheelEvent) {
     smoothScroll(e);
@@ -301,7 +231,6 @@
 
     return () => {
       clearInterval(interval);
-      cancelHoverGuideFrame();
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("keydown", handleKeyDown);
       scrollContainer?.removeEventListener("scroll", handleScroll);
@@ -484,11 +413,9 @@
       >
       <TimeGutter {timezones} {anchorDate} {tzCount} />
       <div
-        bind:this={timedColumnsEl}
         data-day-column-shell
         class="relative min-w-0"
         style="border-left: 1px solid var(--cal-gridline);"
-        onmouseleave={clearHoverGuide}
       >
         <HourGridlines />
         <DayColumn
@@ -507,14 +434,11 @@
           createPreview={drag.getCreatePreviewForDate(dateStr)}
           dragGuideMinute={drag.getDragGuideMinuteForDate(dateStr)}
           createGuideMinute={drag.getCreateGuideMinuteForDate(dateStr)}
-          externalHoverGuide
           onEventClick={onEventClick}
           onEventPrefetch={onEventPrefetch}
           onDragStart={drag.handleDragStart}
           onCreateStart={drag.handleCreateStart}
-          onHoverGuideChange={handleHoverGuideChange}
         />
-        <HoverTimeGuide guide={hoverGuide} {theme} />
       </div>
       </div>
     </div>
