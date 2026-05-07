@@ -76,16 +76,6 @@
   const smoothScroll = createSmoothScroll(() => scrollContainer);
 
   function onWheel(e: WheelEvent) {
-    if (e.ctrlKey || e.shiftKey) {
-      e.preventDefault();
-      if (scrollContainer) {
-        smoothScroll.cancel();
-        // Shift+Scroll converts deltaY to deltaX for horizontal scrolling, so check both
-        const delta = e.shiftKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-        calZoom.zoomAt(delta, gutterTopHeight, scrollContainer);
-      }
-      return;
-    }
     smoothScroll(e);
   }
 
@@ -97,7 +87,7 @@
 
   function handleHeaderWheel(e: WheelEvent) {
     if (e.ctrlKey || e.shiftKey) {
-      e.preventDefault();
+      smoothScroll(e);
       e.stopPropagation();
       return;
     }
@@ -246,10 +236,10 @@
     };
   });
 
-  // Sync --hour-h when hourHeight changes outside of a zoom gesture
+  // Sync --hour-h when hourHeight changes outside of a zoom animation
   // (e.g. button-driven zoom). Also adjusts scrollTop to keep the
-  // center time stable. Skipped during gestures because the store
-  // manages --hour-h imperatively via applyZoom/commitZoom.
+  // center time stable. Skipped during animations because the store
+  // manages --hour-h imperatively until commit.
   $effect(() => {
     const newH = calZoom.hourHeight;
     if (!scrollContainer || calZoom.isAnimating) return;

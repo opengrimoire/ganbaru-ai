@@ -305,7 +305,6 @@
   let scrollProximityRaf = 0;
   let guideTransitionResumeRaf = 0;
   let isScrolling = $state(false);
-  let zoomModifierPressed = $state(false); // Ctrl or Shift held for zoom
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
   let hoverMinute: number | null = $state(null);
@@ -340,39 +339,33 @@
     function clearMouseState() {
       lastClientX = null;
       lastClientY = null;
-      hoverResizeBlockId = null;
-      hoverMinute = null;
+      clearHoverAffordances();
     }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Control" || e.key === "Shift") {
-        zoomModifierPressed = true;
-      }
-    }
-    function handleKeyUp(e: KeyboardEvent) {
-      if (e.key === "Control" || e.key === "Shift") zoomModifierPressed = false;
+    function handleVisibilityChange() {
+      if (document.hidden) clearMouseState();
     }
     window.addEventListener("blur", clearMouseState);
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) clearMouseState();
-    });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // Track scroll for resize detection during scroll
-    const sp = columnEl?.closest('.hide-scrollbar') as HTMLElement | null;
+    const sp = columnEl?.closest(".hide-scrollbar") as HTMLElement | null;
     if (sp) {
-      sp.addEventListener('scroll', handleParentScroll);
+      sp.addEventListener("scroll", handleParentScroll);
     }
 
     return () => {
       window.removeEventListener("blur", clearMouseState);
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      sp?.removeEventListener('scroll', handleParentScroll);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      sp?.removeEventListener("scroll", handleParentScroll);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
       if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
     };
   });
+
+  function clearHoverAffordances() {
+    hoverResizeBlockId = null;
+    hoverMinute = null;
+  }
 
   function getResizeThreshold(): number {
     // Fixed 6px to match the resize handle's visible zone in EventBlock
@@ -476,7 +469,7 @@
     const overBlockedRail = offsetX < 0
       && railSegments.some((seg) => seg.start <= rawMinute && seg.end >= rawMinute);
     const unavailable = !!draggingEventId || !!dragPreview || !!createPreview
-      || zoomModifierPressed || calZoom.isAnimating || overBlockedRail
+      || calZoom.isAnimating || overBlockedRail
       || offsetY < 0 || offsetY > dayHeight;
 
     if (unavailable) {
@@ -568,10 +561,9 @@
   function handleColumnMouseMove(e: MouseEvent) {
     if (!columnEl) return;
 
-    // Skip processing during zoom to prevent forced layout recalculations
-    if (zoomModifierPressed || calZoom.isAnimating) {
-      hoverResizeBlockId = null;
-      hoverMinute = null;
+    // Skip processing during zoom animation to prevent forced layout recalculations.
+    if (calZoom.isAnimating) {
+      clearHoverAffordances();
       return;
     }
 
@@ -606,7 +598,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative z-[2] min-w-0 {zoomModifierPressed ? 'zoom-active' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+  class="relative z-[2] min-w-0 {hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
   style="
     height: calc(24 * var(--hour-h) * 1px);
     contain: layout style;
@@ -672,7 +664,7 @@
 
   <div
     bind:this={columnEl}
-    class="absolute top-0 right-0 bottom-0 {draggingEventId ? 'pointer-events-none' : zoomModifierPressed ? '' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+    class="absolute top-0 right-0 bottom-0 {draggingEventId ? 'pointer-events-none' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
     style="left: {railWidth + 4}px;"
     onpointerdown={handleColumnAreaPointerDown}
   >
@@ -862,8 +854,4 @@
     50% { opacity: 0.9; }
   }
 
-  .zoom-active,
-  .zoom-active :global(*) {
-    cursor: none !important;
-  }
 </style>

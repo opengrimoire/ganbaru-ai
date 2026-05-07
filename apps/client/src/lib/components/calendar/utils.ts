@@ -1235,6 +1235,13 @@ interface SmoothScrollFn {
   cancel(): void;
 }
 
+function getSmoothScrollDelta(e: WheelEvent): number {
+  if (e.shiftKey && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+    return e.deltaX;
+  }
+  return e.deltaY;
+}
+
 export function createSmoothScroll(
   getEl: () => HTMLElement | undefined,
   gain = 3,
@@ -1298,7 +1305,7 @@ export function createSmoothScroll(
     const el = getEl();
     if (!el) return;
     e.preventDefault();
-    velocity += e.deltaY * gain;
+    velocity += getSmoothScrollDelta(e) * gain;
     if (!running) {
       running = true;
       prev = 0;

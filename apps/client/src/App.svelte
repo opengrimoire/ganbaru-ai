@@ -146,9 +146,9 @@
         });
     }, 10_000);
 
-    // Prevent default Ctrl+scroll behavior (used for calendar zoom)
-    const blockCtrlWheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
-    document.addEventListener("wheel", blockCtrlWheel, { passive: false, capture: true });
+    // Prevent native webview scaling from modified wheel input.
+    const blockNativeWheelScale = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    document.addEventListener("wheel", blockNativeWheelScale, { passive: false, capture: true });
 
     // Track device timezone changes (travel, OS-level update). On change,
     // reload calendar events so wall-clock strings reflect the new zone.
@@ -169,7 +169,7 @@
     const zoneIntervalId = setInterval(checkZone, 60_000);
 
     return () => {
-      document.removeEventListener("wheel", blockCtrlWheel, { capture: true });
+      document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", checkZone);
       clearTimeout(startupMemoryTimerId);

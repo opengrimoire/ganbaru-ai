@@ -83,11 +83,9 @@ Unsaved changes are tracked. Closing the panel with unsaved edits prompts to sav
 
 ## Smooth scrolling and zoom
 
-The day and week views use a momentum-based scroll: dragging or wheeling builds velocity, lifting the input lets the velocity decay smoothly. This makes long-range navigation (jumping from morning to evening) feel direct without forcing the user to overshoot and correct.
+The day and week views use a momentum-based scroll: dragging or wheeling builds velocity, lifting the input lets the velocity decay smoothly. This makes long-range navigation (jumping from morning to evening) feel direct without forcing the user to overshoot and correct. Modified wheel input scrolls the timeline rather than changing zoom, including Shift-wheel on platforms that report it as horizontal wheel movement.
 
-Vertical zoom maps minutes to pixels. The discrete zoom levels in pixels per hour are `[30, 45, 67, 100, 150, 200]`. The default is 67. The header `-` and `+` controls, Shift + -, Shift + +, Ctrl+wheel, and pinch on touch snap to the nearest level. Shift + 0 resets the calendar timeline zoom while preserving the visible time position where possible.
-
-For "power scrolls" (rapid wheel events), the renderer applies a brief zoom in instantly to avoid the row-height transition flashing through intermediate values. Smooth interpolation is reserved for ordinary scroll-and-rest patterns.
+Vertical zoom maps minutes to pixels. The discrete zoom levels in pixels per hour are `[30, 45, 67, 100, 150, 200]`. The default is 67. The header `-` and `+` controls and the Shift + - and Shift + + shortcuts snap to the nearest level. Shift + 0 resets the calendar timeline zoom while preserving the visible time position where possible.
 
 ## All-day events
 

@@ -52,7 +52,6 @@
         { keys: ["Shift + +", "+"], action: "Zoom in the calendar timeline" },
         { keys: ["Shift + -", "-"], action: "Zoom out the calendar timeline" },
         { keys: ["Shift + 0"], action: "Reset calendar timeline zoom" },
-        { keys: ["Ctrl + scroll"], action: "Zoom the calendar timeline" },
       ],
     },
     {

@@ -127,13 +127,15 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - Cover edge cases, not just happy paths. Shallow "it exists" tests are worthless.
 - Test names describe behavior, not implementation.
 
-**For UI/component changes:** Run the app and verify manually. Unit tests verify logic, not visual behavior.
+**For UI/component changes:** `pnpm -w run validate` is the completion gate. Agents cannot manually verify the real Tauri app UI from this environment. Do not start a dev server, launch Tauri, or run HTTP smoke checks as a substitute for manual verification. If a UI behavior needs more confidence than existing checks provide, add or update tests where practical, then run `pnpm -w run validate`.
 
 **Commands (always use `-w` flag for root scripts):**
 - `pnpm -w run check`: fast feedback (types, format, lint). Use while coding.
 - `pnpm -w run test`: all tests (vitest + cargo test). Use after changes to tested code.
 - `pnpm -w run validate`: everything (check + test). Run before reporting a task as complete. All errors must be fixed; do not report a task as done if validate fails.
 - `pnpm test:coverage` (from apps/client): coverage report to see what's tested.
+
+After `pnpm -w run validate` passes, finish the task without extra dev-server, Tauri launch, status, or diff checks unless they are directly required for the request, a commit, or an unexpected issue.
 
 ## Rules
 

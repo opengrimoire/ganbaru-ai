@@ -2,7 +2,6 @@ const STORAGE_KEY = "ganbaruai-calendar-zoom";
 const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
 const DEFAULT_INDEX = 2; // 67px
 const ANIM_DURATION = 150; // ms for smooth zoom animation
-const WHEEL_COOLDOWN = 120; // ms between wheel-triggered zoom steps
 
 function findClosestIndex(height: number): number {
   let best = 0;
@@ -46,7 +45,6 @@ let stickyH = 0;
 let zoomRaf = 0;
 let gestureActive = false;
 let commitTimer = 0;
-let lastWheelZoom = 0;
 
 // Animation state
 let animating = false;
@@ -176,21 +174,6 @@ export function getCalendarZoom() {
       scrollRef = container;
       stickyH = stickyHeight;
     },
-    /** Ctrl+Scroll handler: triggers zoomStep with a short cooldown. */
-    zoomAt(deltaY: number, stickyHeight: number, scrollContainer: HTMLElement) {
-      const now = performance.now();
-      if (now - lastWheelZoom < WHEEL_COOLDOWN) return;
-      lastWheelZoom = now;
-
-      // Capture scroll container reference
-      if (!scrollRef) {
-        scrollRef = scrollContainer;
-        stickyH = stickyHeight;
-      }
-
-      const direction = deltaY > 0 ? -1 : 1;
-      this.zoomStep(direction);
-    },
     reset() {
       const defaultH = ZOOM_LEVELS[DEFAULT_INDEX];
       if (zoomRaf) {
@@ -200,7 +183,6 @@ export function getCalendarZoom() {
       clearTimeout(commitTimer);
       commitTimer = 0;
       animating = false;
-      lastWheelZoom = 0;
       levelIndex = DEFAULT_INDEX;
       persist(defaultH);
 

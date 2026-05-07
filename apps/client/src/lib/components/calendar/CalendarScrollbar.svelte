@@ -20,9 +20,9 @@
   let dragStartScrollTop = 0;
 
   function updateThumb() {
-    // Freeze the scrollbar during zoom gestures to avoid forced reflows
+    // Freeze the scrollbar during zoom animations to avoid forced reflows
     // that cause visual flashes. The scrollbar updates on the next
-    // scroll or resize event after the zoom gesture completes.
+    // scroll or resize event after the zoom animation completes.
     if (calZoom.isAnimating) return;
     if (!scrollContainer || !trackEl) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
