@@ -12,6 +12,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import TitleBar from "$lib/components/TitleBar.svelte";
+  import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import {
@@ -489,6 +490,8 @@
     {@const Overlay = BenchmarkOverlay}
     <Overlay />
   {/if}
+
+  <WindowResizeHandles disabled={isMaximized || !!idleInfo} />
 </div>
 
 <style>
