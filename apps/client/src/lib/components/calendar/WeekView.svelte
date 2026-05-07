@@ -163,7 +163,16 @@
   let pendingHoverGuide: HoverTimeGuideState | null | undefined;
   let hoverGuideVisible = false;
 
+  function applyHoverGuideNow(next: HoverTimeGuideState | null) {
+    cancelHoverGuideFrame();
+    hoverGuide = next;
+  }
+
   function scheduleHoverGuide(next: HoverTimeGuideState | null) {
+    if (next?.instant) {
+      applyHoverGuideNow(next);
+      return;
+    }
     pendingHoverGuide = next;
     if (hoverGuideRaf) return;
     hoverGuideRaf = requestAnimationFrame(() => {
@@ -213,6 +222,7 @@
   }
 
   function clearHoverGuide() {
+    if (calZoom.isAnimating) return;
     hoverGuideVisible = false;
     scheduleHoverGuide(null);
   }

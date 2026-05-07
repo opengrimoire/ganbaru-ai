@@ -1,4 +1,5 @@
 const STORAGE_KEY = "ganbaruai-calendar-zoom";
+export const CALENDAR_ZOOM_FRAME_EVENT = "ganbaruai-calendar-zoom-frame";
 const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
 const DEFAULT_INDEX = 1; // 45px, 15min grid
 const ANIM_DURATION = 150; // ms for smooth zoom animation
@@ -82,6 +83,7 @@ function animateTick() {
 
   sc.style.setProperty("--hour-h", String(currentH));
   sc.scrollTop = currentScroll;
+  sc.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
 
   if (t < 1) {
     zoomRaf = requestAnimationFrame(animateTick);
@@ -137,6 +139,7 @@ function commitZoom() {
   // Ensure final state is exact
   if (sc) {
     sc.style.setProperty("--hour-h", String(finalH));
+    sc.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
   }
 
   // Update Svelte state (triggers reactivity)
@@ -195,6 +198,7 @@ export function getCalendarZoom() {
         hourHeight = defaultH;
         if (scrollRef) {
           scrollRef.style.setProperty("--hour-h", String(defaultH));
+          scrollRef.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
         }
       }
     },

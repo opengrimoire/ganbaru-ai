@@ -20,7 +20,7 @@
   import { select } from "$lib/api/db";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import EventBlock from "./EventBlock.svelte";
-  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { CALENDAR_ZOOM_FRAME_EVENT, getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
@@ -320,7 +320,6 @@
   let lastClientY: number | null = null;
   let scrollProximityRaf = 0;
   let guideTransitionResumeRaf = 0;
-  let zoomGuideRaf = 0;
   let isScrolling = false;
   let lastPointerMoveAt = 0;
   const guideOwnerId = Symbol("calendar-hover-guide-owner");
@@ -377,6 +376,7 @@
     const sp = columnEl?.closest(".hide-scrollbar") as HTMLElement | null;
     if (sp) {
       sp.addEventListener("scroll", handleParentScroll);
+      sp.addEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
     }
     function handleGuideOwner(e: Event) {
       const owner = (e as CustomEvent<symbol>).detail;
@@ -388,36 +388,10 @@
       window.removeEventListener("blur", clearMouseState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       sp?.removeEventListener("scroll", handleParentScroll);
+      sp?.removeEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
       window.removeEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
       if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
-      if (zoomGuideRaf) cancelAnimationFrame(zoomGuideRaf);
-    };
-  });
-
-  $effect(() => {
-    if (!calZoom.isAnimating) return;
-    if (lastClientX === null || lastClientY === null || !columnEl) return;
-
-    const updateGuideDuringZoom = () => {
-      if (!calZoom.isAnimating) {
-        zoomGuideRaf = 0;
-        if (lastClientX !== null && lastClientY !== null && columnEl) {
-          updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
-        }
-        return;
-      }
-
-      if (lastClientX !== null && lastClientY !== null && columnEl) {
-        updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
-      }
-      zoomGuideRaf = requestAnimationFrame(updateGuideDuringZoom);
-    };
-
-    zoomGuideRaf = requestAnimationFrame(updateGuideDuringZoom);
-    return () => {
-      if (zoomGuideRaf) cancelAnimationFrame(zoomGuideRaf);
-      zoomGuideRaf = 0;
     };
   });
 
@@ -591,17 +565,23 @@
     });
   }
 
-  function updateCreateHoverGuide(offsetX: number, offsetY: number) {
+  function updateCreateHoverGuide(
+    offsetX: number,
+    offsetY: number,
+    preserveCurrentGuide = false,
+  ) {
     const hh = getRenderedHourHeight();
     const dayHeight = 24 * hh;
     const rawMinute = (offsetY / hh) * 60;
+    const outsideDay = offsetY < 0 || offsetY > dayHeight;
     const overBlockedRail = offsetX < 0
       && railSegments.some((seg) => seg.start <= rawMinute && seg.end >= rawMinute);
     const unavailable = !!draggingEventId || !!dragPreview || !!createPreview
       || overBlockedRail
-      || offsetY < 0 || offsetY > dayHeight;
+      || outsideDay;
 
     if (unavailable) {
+      if (preserveCurrentGuide && outsideDay) return;
       setHoverGuide(null);
       return;
     }
@@ -627,6 +607,7 @@
     clientX: number,
     clientY: number,
     updateGuide: boolean,
+    preserveCurrentGuide = false,
   ) {
     if (!columnEl) return;
 
@@ -642,7 +623,7 @@
     }
 
     if (updateGuide) {
-      updateCreateHoverGuide(colOffsetX, colOffsetY);
+      updateCreateHoverGuide(colOffsetX, colOffsetY, preserveCurrentGuide);
     }
   }
 
@@ -687,6 +668,7 @@
   function handleParentScroll() {
     if (lastClientY === null || !columnEl) return;
     if (currentGuideOwner !== guideOwnerId) return;
+    if (calZoom.isAnimating) return;
 
     isScrolling = true;
 
@@ -705,6 +687,13 @@
     }
   }
 
+  function handleZoomFrame() {
+    if (currentGuideOwner !== guideOwnerId) return;
+    if (lastClientX === null || lastClientY === null || !columnEl) return;
+    if (!guideMotionInstant) guideMotionInstant = true;
+    updateHoverStateFromClientPoint(lastClientX, lastClientY, true, true);
+  }
+
   function handleColumnMouseMove(e: MouseEvent) {
     if (!columnEl) return;
 
@@ -719,6 +708,7 @@
   }
 
   function handleColumnMouseLeave(e: MouseEvent) {
+    if (calZoom.isAnimating) return;
     const enteringTimedSurface = isTimedColumnSurface(e.relatedTarget);
     if (!enteringTimedSurface && currentGuideOwner === guideOwnerId) {
       currentGuideOwner = null;
