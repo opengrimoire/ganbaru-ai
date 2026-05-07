@@ -610,7 +610,7 @@
         <HourGridlines />
         {#each weekDays as day, i}
           {@const dateStr = formatDatePart(day)}
-          <div class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">
+          <div data-day-column-shell class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">
             <DayColumn
               date={day}
               events={eventsByDay.get(dateStr) ?? EMPTY_DAY}

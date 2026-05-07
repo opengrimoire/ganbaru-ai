@@ -307,6 +307,8 @@
   let zoomGuideRaf = 0;
   let isScrolling = $state(false);
   let lastPointerMoveAt = 0;
+  const guideOwnerId = Symbol("calendar-hover-guide-owner");
+  const GUIDE_OWNER_EVENT = "ganbaruai-calendar-hover-guide-owner";
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
   let hoverMinute: number | null = $state(null);
@@ -359,11 +361,17 @@
     if (sp) {
       sp.addEventListener("scroll", handleParentScroll);
     }
+    function handleGuideOwner(e: Event) {
+      const owner = (e as CustomEvent<symbol>).detail;
+      if (owner !== guideOwnerId) clearHoverAffordances();
+    }
+    window.addEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
 
     return () => {
       window.removeEventListener("blur", clearMouseState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       sp?.removeEventListener("scroll", handleParentScroll);
+      window.removeEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
       if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
       if (zoomGuideRaf) cancelAnimationFrame(zoomGuideRaf);
@@ -401,6 +409,15 @@
     hoverMinute = null;
     hoverPositionMinute = null;
     guideMotionInstant = false;
+  }
+
+  function claimGuideOwnership() {
+    window.dispatchEvent(new CustomEvent(GUIDE_OWNER_EVENT, { detail: guideOwnerId }));
+  }
+
+  function isTimedColumnSurface(target: EventTarget | null): boolean {
+    return target instanceof Element
+      && target.closest("[data-day-column], [data-day-column-shell]") !== null;
   }
 
   function getResizeThreshold(): number {
@@ -618,6 +635,8 @@
   function handleColumnMouseMove(e: MouseEvent) {
     if (!columnEl) return;
 
+    claimGuideOwnership();
+
     // Track mouse position for resize detection
     lastClientX = e.clientX;
     lastClientY = e.clientY;
@@ -626,14 +645,13 @@
     updateHoverStateFromClientPoint(e.clientX, e.clientY, true);
   }
 
-  function handleColumnMouseLeave() {
+  function handleColumnMouseLeave(e: MouseEvent) {
     lastClientX = null;
     lastClientY = null;
     hoverResizeBlockId = null;
-    hoverMinute = null;
-    hoverPositionMinute = null;
-    guideMotionInstant = false;
     isScrolling = false;
+    if (isTimedColumnSurface(e.relatedTarget)) return;
+    clearHoverAffordances();
   }
 
   function handleRailAreaPointerDown(e: PointerEvent) {

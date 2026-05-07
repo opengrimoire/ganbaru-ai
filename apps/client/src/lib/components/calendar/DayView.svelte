@@ -411,7 +411,7 @@
         style="grid-column: 1 / -1; grid-template-columns: subgrid; {calZoom.isAnimating ? 'pointer-events: none;' : ''}"
       >
       <TimeGutter {timezones} {anchorDate} {tzCount} />
-      <div class="relative min-w-0" style="border-left: 1px solid var(--cal-gridline);">
+      <div data-day-column-shell class="relative min-w-0" style="border-left: 1px solid var(--cal-gridline);">
         <HourGridlines />
         <DayColumn
           date={anchorDate}
