@@ -360,7 +360,7 @@
     bind:this={scrollContainer}
     onwheel={onWheel}
     class="hide-scrollbar absolute inset-0 overflow-y-auto overflow-x-hidden"
-    style="background-color: var(--cal-bg);"
+    style="--hour-h: {calZoom.hourHeight}; background-color: var(--cal-bg);"
   >
     <div class="grid" style="grid-template-columns: {gridCols};">
       <!-- Sticky header row -->
