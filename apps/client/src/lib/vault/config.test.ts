@@ -98,9 +98,16 @@ describe("ensureConfigLoaded", () => {
   it("treats malformed JSON from the backend as an empty config", async () => {
     installLocalStorage();
     setReadResponse("not json");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { ensureConfigLoaded, getConfigKey } = await loadModule();
-    await ensureConfigLoaded();
-    expect(getConfigKey("anything", "fallback")).toBe("fallback");
+    try {
+      await ensureConfigLoaded();
+      expect(getConfigKey("anything", "fallback")).toBe("fallback");
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0]?.[0]).toBe("vault_read_config failed");
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("treats a non-object root as an empty config", async () => {
