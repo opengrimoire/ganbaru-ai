@@ -64,7 +64,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={dialogEl}
-    class="confirm-dialog relative z-10 rounded-md border border-black/20 bg-card text-card-foreground px-8 py-5 dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground"
+    class="confirm-dialog relative z-10 rounded-md border border-black/20 bg-card text-card-foreground px-8 py-5 outline-none dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground"
     style="--foreground: var(--card-foreground);"
     role="dialog"
     aria-modal="true"
