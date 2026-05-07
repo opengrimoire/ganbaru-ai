@@ -306,11 +306,13 @@
   let guideTransitionResumeRaf = 0;
   let zoomGuideRaf = 0;
   let isScrolling = $state(false);
+  let lastPointerMoveAt = 0;
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
   let hoverMinute: number | null = $state(null);
   let hoverPositionMinute: number | null = $state(null);
   let guideTransitionPaused = $state(false);
+  let guideMotionInstant = $state(false);
   const visibleGuideMinute = $derived(createGuideMinute ?? dragGuideMinute ?? hoverMinute);
   const visibleGuidePositionMinute = $derived(
     createGuideMinute ?? dragGuideMinute ?? hoverPositionMinute ?? hoverMinute ?? 0,
@@ -398,6 +400,7 @@
     hoverResizeBlockId = null;
     hoverMinute = null;
     hoverPositionMinute = null;
+    guideMotionInstant = false;
   }
 
   function getResizeThreshold(): number {
@@ -605,6 +608,7 @@
       scrollProximityRaf = requestAnimationFrame(() => {
         scrollProximityRaf = 0;
         if (lastClientX !== null && lastClientY !== null) {
+          guideMotionInstant = performance.now() - lastPointerMoveAt < 80;
           updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
         }
       });
@@ -617,6 +621,8 @@
     // Track mouse position for resize detection
     lastClientX = e.clientX;
     lastClientY = e.clientY;
+    lastPointerMoveAt = performance.now();
+    guideMotionInstant = true;
     updateHoverStateFromClientPoint(e.clientX, e.clientY, true);
   }
 
@@ -626,6 +632,7 @@
     hoverResizeBlockId = null;
     hoverMinute = null;
     hoverPositionMinute = null;
+    guideMotionInstant = false;
     isScrolling = false;
   }
 
@@ -818,7 +825,7 @@
   </div>
 
   <div
-    class="hover-time-guide pointer-events-none absolute left-0 right-0 {visibleGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
+    class="hover-time-guide pointer-events-none absolute left-0 right-0 {visibleGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused || guideMotionInstant || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
     style="
       top: 0;
       transform: translate3d(0, calc({visibleGuidePositionMinute} / 60 * var(--hour-h) * 1px), 0);
