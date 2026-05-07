@@ -1201,7 +1201,12 @@
       && (target.closest("[data-event-id]") !== null || target.closest(".panel-root") !== null);
   }
 
+  function isConfirmDialogPanelTarget(target: EventTarget | null): boolean {
+    return target instanceof Element && target.closest(".confirm-dialog") !== null;
+  }
+
   function handleOutsidePointerDown(e: PointerEvent) {
+    if (confirmAction) return;
     if (session.state.mode === "closed") return;
     if (isPanelOrEventTarget(e.target)) return;
 
@@ -1214,6 +1219,7 @@
   }
 
   function handleOutsideClick(e: MouseEvent) {
+    if (confirmAction && isConfirmDialogPanelTarget(e.target)) return;
     if (performance.now() > suppressOutsideClickUntil) {
       suppressOutsideClickUntil = 0;
       return;

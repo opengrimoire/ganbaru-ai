@@ -19,7 +19,13 @@
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Bell from "@lucide/svelte/icons/bell";
-  import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
+  import {
+    isThemeCalendarDark,
+    resolveAppTokens,
+    resolveCalendarTokens,
+    type Theme,
+  } from "$lib/stores/themes";
+  import { pickBrightForeground } from "$lib/components/ui/colorMath";
 
   let {
     date,
@@ -30,6 +36,8 @@
     currentTimeMinute = -1,
     dragPreview = null,
     createPreview = null,
+    dragGuideMinute = null,
+    createGuideMinute = null,
     onEventClick,
     onEventPrefetch,
     onDragStart,
@@ -50,6 +58,8 @@
     previewedIds?: Set<string>;
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
+    dragGuideMinute?: number | null;
+    createGuideMinute?: number | null;
     draggingEventId?: string;
     grabbingId?: string;
     didDrag?: boolean;
@@ -60,6 +70,12 @@
   } = $props();
 
   const isDark = $derived(isThemeCalendarDark(theme));
+  const resolvedAppTokens = $derived(resolveAppTokens(theme));
+  const resolvedCalendarTokens = $derived(resolveCalendarTokens(theme));
+  const hoverGuideColor = $derived(resolvedCalendarTokens["--cal-current-time"]);
+  const hoverGuideTextColor = $derived(
+    pickBrightForeground(hoverGuideColor, resolvedAppTokens["--foreground"]),
+  );
 
   const panelOpen = $derived(!!editingId);
 
@@ -287,10 +303,26 @@
   let lastClientX: number | null = $state(null);
   let lastClientY: number | null = $state(null);
   let scrollProximityRaf = 0;
+  let guideTransitionResumeRaf = 0;
   let isScrolling = $state(false);
   let zoomModifierPressed = $state(false); // Ctrl or Shift held for zoom
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
+  let hoverMinute: number | null = $state(null);
+  let guideTransitionPaused = $state(false);
+  const visibleGuideMinute = $derived(createGuideMinute ?? dragGuideMinute ?? hoverMinute);
+  const visibleGuidePositionMinute = $derived(visibleGuideMinute ?? 0);
+  const visibleGuideActive = $derived(createGuideMinute !== null || dragGuideMinute !== null);
+  const visibleGuideShown = $derived(visibleGuideMinute !== null);
+  const visibleGuideLabel = $derived(
+    visibleGuideMinute === null ? "" : formatMinuteLabel(visibleGuideMinute),
+  );
+
+  $effect(() => {
+    if (dragPreview || createPreview || dragGuideMinute !== null || createGuideMinute !== null) {
+      hoverMinute = null;
+    }
+  });
 
   // Re-check resize proximity when block layout changes (e.g. new block saved)
   $effect(() => {
@@ -301,15 +333,7 @@
 
   function recheckProximity() {
     if (!columnEl || lastClientX === null || lastClientY === null) return;
-    const colRect = columnEl.getBoundingClientRect();
-    const colOffsetX = lastClientX - colRect.left;
-    const colOffsetY = lastClientY - colRect.top;
-    const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
-    if (nearby) {
-      hoverResizeBlockId = (panelOpen && nearby.eventId !== editingId) ? null : nearby.eventId;
-    } else {
-      hoverResizeBlockId = null;
-    }
+    updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
   }
 
   onMount(() => {
@@ -317,6 +341,7 @@
       lastClientX = null;
       lastClientY = null;
       hoverResizeBlockId = null;
+      hoverMinute = null;
     }
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Control" || e.key === "Shift") {
@@ -345,6 +370,7 @@
       window.removeEventListener("keyup", handleKeyUp);
       sp?.removeEventListener('scroll', handleParentScroll);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
+      if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
     };
   });
 
@@ -354,7 +380,11 @@
     return 6;
   }
 
-  function findNearbyBlockEdge(offsetX: number, offsetY: number, colWidth: number): { eventId: string; edge: "resize-top" | "resize-bottom" } | null {
+  type BlockHit =
+    | { kind: "edge"; eventId: string; edge: "resize-top" | "resize-bottom" }
+    | { kind: "body"; eventId: string };
+
+  function findBlockHit(offsetX: number, offsetY: number, colWidth: number): BlockHit | null {
     const hh = calZoom.hourHeight;
     const threshold = getResizeThreshold();
 
@@ -380,18 +410,104 @@
       if (offsetY >= blockTopY && offsetY < blockBottomY) {
         // Mouse is inside this block. Check if near an edge.
         if (!pos.isClippedTop && Math.abs(offsetY - blockTopY) < threshold) {
-          return { eventId: pos.event.id, edge: "resize-top" };
+          return { kind: "edge", eventId: pos.event.id, edge: "resize-top" };
         }
         if (!pos.isClippedBottom && Math.abs(offsetY - blockBottomY) < threshold) {
-          return { eventId: pos.event.id, edge: "resize-bottom" };
+          return { kind: "edge", eventId: pos.event.id, edge: "resize-bottom" };
         }
         // Inside block but not near edge
-        return null;
+        return { kind: "body", eventId: pos.event.id };
       }
     }
 
     // Mouse is not inside any block, allow event creation
     return null;
+  }
+
+  function findNearbyBlockEdge(offsetX: number, offsetY: number, colWidth: number): { eventId: string; edge: "resize-top" | "resize-bottom" } | null {
+    const hit = findBlockHit(offsetX, offsetY, colWidth);
+    return hit?.kind === "edge" ? { eventId: hit.eventId, edge: hit.edge } : null;
+  }
+
+  function formatMinuteLabel(minute: number): string {
+    const clamped = Math.max(0, Math.min(1440, Math.round(minute)));
+    const h = Math.floor(clamped / 60);
+    const m = clamped % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  function getCreateMinuteFromOffset(offsetY: number): number {
+    const hh = calZoom.hourHeight;
+    const rawMinute = (offsetY / hh) * 60;
+    let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
+
+    if (isToday && currentTimeMinute >= 0) {
+      const currentTimeY = (currentTimeMinute / 60) * hh;
+      if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
+        minute = Math.floor(currentTimeMinute);
+      }
+    }
+
+    return minute;
+  }
+
+  function setHoverMinute(next: number | null) {
+    if (hoverMinute === next) return;
+    if (visibleGuideMinute === null && next !== null) {
+      pauseGuideTransitionForShow();
+    }
+    hoverMinute = next;
+  }
+
+  function pauseGuideTransitionForShow() {
+    guideTransitionPaused = true;
+    if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
+    guideTransitionResumeRaf = requestAnimationFrame(() => {
+      guideTransitionResumeRaf = requestAnimationFrame(() => {
+        guideTransitionResumeRaf = 0;
+        guideTransitionPaused = false;
+      });
+    });
+  }
+
+  function updateCreateHoverGuide(offsetX: number, offsetY: number) {
+    const dayHeight = 24 * calZoom.hourHeight;
+    const rawMinute = (offsetY / calZoom.hourHeight) * 60;
+    const overBlockedRail = offsetX < 0
+      && railSegments.some((seg) => seg.start <= rawMinute && seg.end >= rawMinute);
+    const unavailable = !!draggingEventId || !!dragPreview || !!createPreview
+      || zoomModifierPressed || calZoom.isAnimating || overBlockedRail
+      || offsetY < 0 || offsetY > dayHeight;
+
+    if (unavailable) {
+      setHoverMinute(null);
+      return;
+    }
+
+    setHoverMinute(getCreateMinuteFromOffset(offsetY));
+  }
+
+  function updateHoverStateFromClientPoint(
+    clientX: number,
+    clientY: number,
+    updateGuide: boolean,
+  ) {
+    if (!columnEl) return;
+
+    const colRect = columnEl.getBoundingClientRect();
+    const colOffsetX = clientX - colRect.left;
+    const colOffsetY = clientY - colRect.top;
+    const hit = findBlockHit(colOffsetX, colOffsetY, colRect.width);
+
+    if (hit?.kind === "edge") {
+      hoverResizeBlockId = (panelOpen && hit.eventId !== editingId) ? null : hit.eventId;
+    } else {
+      hoverResizeBlockId = null;
+    }
+
+    if (updateGuide) {
+      updateCreateHoverGuide(colOffsetX, colOffsetY);
+    }
   }
 
   // Get resize edge for a specific block from click coordinates
@@ -427,17 +543,7 @@
     if (panelOpen) return;
 
     // Calculate minute from actual click position
-    const hh = calZoom.hourHeight;
-    const rawMinute = (colOffsetY / hh) * 60;
-    let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
-
-    // Snap to current time if close
-    if (isToday && currentTimeMinute >= 0) {
-      const currentTimeY = (currentTimeMinute / 60) * hh;
-      if (Math.abs(colOffsetY - currentTimeY) < getResizeThreshold()) {
-        minute = Math.floor(currentTimeMinute);
-      }
-    }
+    const minute = getCreateMinuteFromOffset(colOffsetY);
 
     onCreateStart(dateStr, minute, e);
   }
@@ -452,7 +558,9 @@
     if (!scrollProximityRaf) {
       scrollProximityRaf = requestAnimationFrame(() => {
         scrollProximityRaf = 0;
-        recheckProximity();
+        if (lastClientX !== null && lastClientY !== null) {
+          updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
+        }
       });
     }
   }
@@ -463,31 +571,21 @@
     // Skip processing during zoom to prevent forced layout recalculations
     if (zoomModifierPressed || calZoom.isAnimating) {
       hoverResizeBlockId = null;
+      hoverMinute = null;
       return;
     }
 
     // Track mouse position for resize detection
     lastClientX = e.clientX;
     lastClientY = e.clientY;
-
-    // Detect if mouse is near a block's resize edge
-    const colRect = columnEl.getBoundingClientRect();
-    const colOffsetX = e.clientX - colRect.left;
-    const colOffsetY = e.clientY - colRect.top;
-    const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
-
-    if (nearby) {
-      // When panel is open, only show resize for edited event
-      hoverResizeBlockId = (panelOpen && nearby.eventId !== editingId) ? null : nearby.eventId;
-    } else {
-      hoverResizeBlockId = null;
-    }
+    updateHoverStateFromClientPoint(e.clientX, e.clientY, true);
   }
 
   function handleColumnMouseLeave() {
     lastClientX = null;
     lastClientY = null;
     hoverResizeBlockId = null;
+    hoverMinute = null;
     isScrolling = false;
   }
 
@@ -496,19 +594,10 @@
     const colRect = columnEl.getBoundingClientRect();
     // Only handle clicks in the rail zone (left of columnEl)
     if (e.clientX >= colRect.left) return;
-    const hh = calZoom.hourHeight;
     const offsetY = e.clientY - colRect.top;
-    const rawMinute = (offsetY / hh) * 60;
+    const rawMinute = (offsetY / calZoom.hourHeight) * 60;
     if (railSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
-    let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
-
-    // Snap to current time if close (use floor to match displayed clock minute)
-    if (isToday && currentTimeMinute >= 0) {
-      const currentTimeY = (currentTimeMinute / 60) * hh;
-      if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
-        minute = Math.floor(currentTimeMinute);
-      }
-    }
+    const minute = getCreateMinuteFromOffset(offsetY);
 
     onCreateStart(dateStr, minute, e);
   }
@@ -688,6 +777,33 @@
 
   </div>
 
+  <div
+    class="hover-time-guide pointer-events-none absolute left-0 right-0 {visibleGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused ? 'hover-time-guide-transition-paused' : ''}"
+    style="
+      top: 0;
+      transform: translate3d(0, calc({visibleGuidePositionMinute} / 60 * var(--hour-h) * 1px), 0);
+      z-index: 49;
+      --hover-time-guide-color: {hoverGuideColor};
+      --hover-time-guide-text: {hoverGuideTextColor};
+    "
+    aria-hidden="true"
+  >
+    <div
+      class="hover-time-label absolute"
+      style="
+        top: 0;
+        left: 2px;
+        transform: translateY({visibleGuidePositionMinute <= 0 ? '0' : visibleGuidePositionMinute >= 1440 ? '-100%' : '-50%'});
+      "
+    >
+      {visibleGuideLabel}
+    </div>
+    <div
+      class="hover-time-line absolute right-0"
+      style="left: 42px; top: -1px;"
+    ></div>
+  </div>
+
   </div>
 
 <style>
@@ -696,6 +812,45 @@
     outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
     outline-offset: 0;
     transition: left 120ms ease-out, width 120ms ease-out;
+  }
+
+  .hover-time-label {
+    border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--hover-time-guide-text) 22%, transparent);
+    background-color: var(--hover-time-guide-color);
+    color: var(--hover-time-guide-text);
+    font-size: 10px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    line-height: 1;
+    box-sizing: border-box;
+    width: 38px;
+    padding: 2px 3px 1px;
+    box-shadow: 0 1px 4px color-mix(in srgb, black 24%, transparent);
+    text-align: center;
+  }
+
+  .hover-time-line {
+    height: 2px;
+    background-color: var(--hover-time-guide-color);
+    opacity: 1;
+  }
+
+  .hover-time-guide {
+    opacity: 0;
+    transition: transform 70ms linear;
+    visibility: hidden;
+  }
+
+  .hover-time-guide-shown {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .hover-time-guide-active,
+  .hover-time-guide-transition-paused {
+    transition: none;
   }
 
   .break-band-active {

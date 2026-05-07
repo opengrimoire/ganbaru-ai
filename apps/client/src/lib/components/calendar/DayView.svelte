@@ -437,6 +437,8 @@
           didDrag={drag.didDrag}
           dragPreview={drag.getDragPreviewForDate(dateStr)}
           createPreview={drag.getCreatePreviewForDate(dateStr)}
+          dragGuideMinute={drag.getDragGuideMinuteForDate(dateStr)}
+          createGuideMinute={drag.getCreateGuideMinuteForDate(dateStr)}
           onEventClick={onEventClick}
           onEventPrefetch={onEventPrefetch}
           onDragStart={drag.handleDragStart}

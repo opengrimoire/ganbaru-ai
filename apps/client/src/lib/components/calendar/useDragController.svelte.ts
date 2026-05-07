@@ -54,6 +54,8 @@ export function useDragController(config: DragControllerConfig) {
   let dragState = $state<DragState | null>(null);
   let dragPreviewDate = $state<string | null>(null);
   let dragPreview = $state<PositionedEvent | null>(null);
+  let dragGuideDate = $state<string | null>(null);
+  let dragGuideMinute = $state<number | null>(null);
   let grabbingId = $state<string | null>(null); // Set immediately on pointerdown for visual feedback
   let _didDrag = $state(false); // Suppress click after drag
 
@@ -67,6 +69,8 @@ export function useDragController(config: DragControllerConfig) {
   } | null>(null);
   let createPreviewDate = $state<string | null>(null);
   let createPreview = $state<PositionedEvent | null>(null);
+  let createGuideDate = $state<string | null>(null);
+  let createGuideMinute = $state<number | null>(null);
   let createHoldTimer = 0;
 
   // Track latest pointer position for scroll-triggered updates and auto-scroll
@@ -130,6 +134,13 @@ export function useDragController(config: DragControllerConfig) {
       clearTimeout(createHoldTimer);
       createHoldTimer = 0;
     }
+  }
+
+  function guideFromDateStr(value: string): { date: string; minute: number } {
+    return {
+      date: value.split(" ")[0],
+      minute: clampMinute(minuteOfDay(value)),
+    };
   }
 
   // Scroll-aware delta
@@ -230,6 +241,7 @@ export function useDragController(config: DragControllerConfig) {
     let newStart: number;
     let newEnd: number;
     let targetDate = dragState.originDate;
+    let resizeGuideEdge: "start" | "end" | null = null;
 
     if (dragState.type === "move") {
       // Compute column delta to handle dragging from continuation blocks
@@ -271,11 +283,13 @@ export function useDragController(config: DragControllerConfig) {
         newStart = raw;
         newEnd = anchor;
         if (newEnd - newStart < minSize) newStart = newEnd - minSize;
+        resizeGuideEdge = "start";
       } else {
         // Flipped: top handle crossed below bottom
         newStart = anchor;
         newEnd = raw;
         if (newEnd - newStart < minSize) newEnd = newStart + minSize;
+        resizeGuideEdge = "end";
       }
     } else {
       // resize-bottom (supports crossover and crossing midnight)
@@ -286,12 +300,14 @@ export function useDragController(config: DragControllerConfig) {
         newStart = anchor;
         newEnd = raw;
         if (newEnd - newStart < minSize) newEnd = newStart + minSize;
+        resizeGuideEdge = "end";
       } else {
         // Flipped: bottom handle crossed above top
         raw = Math.max(0, raw);
         newStart = raw;
         newEnd = anchor;
         if (newEnd - newStart < minSize) newStart = newEnd - minSize;
+        resizeGuideEdge = "start";
       }
     }
 
@@ -299,6 +315,7 @@ export function useDragController(config: DragControllerConfig) {
     const activeResize = config.activeBlockId?.();
     if (activeResize && dragState.eventId === activeResize) {
       newStart = dragState.originStartMinute;
+      resizeGuideEdge = "end";
       const now = new Date();
       const nowMinute = now.getHours() * 60 + now.getMinutes();
       const snap = calZoom.gridMinutes;
@@ -333,6 +350,15 @@ export function useDragController(config: DragControllerConfig) {
       column: 0,
       totalColumns: 1,
     };
+
+    if (resizeGuideEdge) {
+      const guide = guideFromDateStr(resizeGuideEdge === "start" ? startStr : endStr);
+      dragGuideDate = guide.date;
+      dragGuideMinute = guide.minute;
+    } else {
+      dragGuideDate = null;
+      dragGuideMinute = null;
+    }
   }
 
   function handleDragMove(e: PointerEvent) {
@@ -366,6 +392,8 @@ export function useDragController(config: DragControllerConfig) {
     dragState = null;
     dragPreview = null;
     dragPreviewDate = null;
+    dragGuideDate = null;
+    dragGuideMinute = null;
     grabbingId = null;
   }
 
@@ -406,6 +434,8 @@ export function useDragController(config: DragControllerConfig) {
     createState = { ...state, mode: "selecting" };
     const snap = calZoom.gridMinutes;
     createPreviewDate = state.dateStr;
+    createGuideDate = state.dateStr;
+    createGuideMinute = state.anchorMinute;
     createPreview = buildPreview(
       state.dateStr,
       state.anchorMinute,
@@ -421,6 +451,8 @@ export function useDragController(config: DragControllerConfig) {
     const rect = createState.columnEl.getBoundingClientRect();
     const offsetY = lastPointerEvent.clientY - rect.top;
     const cursorMinute = clampMinute(snapToGrid((offsetY / hourHeight) * 60, calZoom.gridMinutes));
+    createGuideDate = createState.dateStr;
+    createGuideMinute = cursorMinute;
 
     const anchor = createState.anchorMinute;
     let startMinute = Math.min(anchor, cursorMinute);
@@ -475,6 +507,8 @@ export function useDragController(config: DragControllerConfig) {
       createState = null;
       createPreview = null;
       createPreviewDate = null;
+      createGuideDate = null;
+      createGuideMinute = null;
       config.onEventCreate(start, end);
       return;
     }
@@ -488,11 +522,15 @@ export function useDragController(config: DragControllerConfig) {
       createState = null;
       createPreview = null;
       createPreviewDate = null;
+      createGuideDate = null;
+      createGuideMinute = null;
       config.onEventCreate(start, end);
     } else {
       createState = null;
       createPreview = null;
       createPreviewDate = null;
+      createGuideDate = null;
+      createGuideMinute = null;
     }
   }
 
@@ -571,6 +609,14 @@ export function useDragController(config: DragControllerConfig) {
     return null;
   }
 
+  function getDragGuideMinuteForDate(dateStr: string): number | null {
+    return dragGuideDate === dateStr ? dragGuideMinute : null;
+  }
+
+  function getCreateGuideMinuteForDate(dateStr: string): number | null {
+    return createGuideDate === dateStr ? createGuideMinute : null;
+  }
+
   return {
     get dragState() { return dragState; },
     get dragPreview() { return dragPreview; },
@@ -583,5 +629,7 @@ export function useDragController(config: DragControllerConfig) {
     handleCreateStart,
     getDragPreviewForDate,
     getCreatePreviewForDate,
+    getDragGuideMinuteForDate,
+    getCreateGuideMinuteForDate,
   };
 }

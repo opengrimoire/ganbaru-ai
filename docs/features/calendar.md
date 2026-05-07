@@ -52,6 +52,10 @@ The day and week views support direct manipulation:
 - **Esc, click outside, or pressing Save** closes the edit panel.
 - **Right-click** opens a context menu (delete, archive, duplicate). Past events show archive instead of delete.
 
+**Time guide.** In day and week timed columns, hovering shows a horizontal time guide with a label on the left. The guide previews the minute a new event would start from that pointer position, using the current calendar zoom granularity rather than arbitrary pixel precision. It stays visible over event blocks and while the event panel is open, but it is non-interactive: it must not intercept clicks, drags, panel controls, or confirmation dialogs. It renders above calendar blocks and drag/create previews, below the event panel and modals.
+
+The guide uses the calendar current-time token (`--cal-current-time`) so it shares the red semantic color of the now line. The label must choose readable text against that color, including custom themes. On column entry, the guide appears directly at the current pointer minute rather than animating from midnight. Passive hover and scroll can smooth movement, but active create and resize gestures update instantly. During resize crossover, the guide follows the edge currently controlled by the pointer: bottom-edge resizing follows the end until it crosses the original start, then follows the new start; top-edge resizing does the symmetric case.
+
 In month view, click on a day cell to switch to day view focused on that date. Click on an event row to open the edit panel.
 
 ## Edit panel
@@ -75,7 +79,7 @@ Inside the panel, sections are split per concern:
 - **TimezoneSelector:** IANA timezone for the event. Defaults to the user's timezone.
 - **TimePicker:** start and end time. Hidden when all-day is on.
 
-Unsaved changes are tracked. Closing the panel with unsaved edits prompts to save or discard. Saving on a recurring event triggers the scope picker (this, following, all). See `features/calendar-recurrence.md`.
+Unsaved changes are tracked. Closing the panel with unsaved edits prompts to save or discard. Confirmation dialogs opened from the panel own their pointer events, so the panel's outside-close listener must not block clicks on dialog buttons. Saving on a recurring event triggers the scope picker (this, following, all). See `features/calendar-recurrence.md`.
 
 ## Smooth scrolling and zoom
 
