@@ -304,6 +304,7 @@
   let lastClientY: number | null = $state(null);
   let scrollProximityRaf = 0;
   let guideTransitionResumeRaf = 0;
+  let zoomGuideRaf = 0;
   let isScrolling = $state(false);
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
@@ -359,6 +360,33 @@
       sp?.removeEventListener("scroll", handleParentScroll);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
       if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
+      if (zoomGuideRaf) cancelAnimationFrame(zoomGuideRaf);
+    };
+  });
+
+  $effect(() => {
+    if (!calZoom.isAnimating) return;
+    if (lastClientX === null || lastClientY === null || !columnEl) return;
+
+    const updateGuideDuringZoom = () => {
+      if (!calZoom.isAnimating) {
+        zoomGuideRaf = 0;
+        if (lastClientX !== null && lastClientY !== null && columnEl) {
+          updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
+        }
+        return;
+      }
+
+      if (lastClientX !== null && lastClientY !== null && columnEl) {
+        updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
+      }
+      zoomGuideRaf = requestAnimationFrame(updateGuideDuringZoom);
+    };
+
+    zoomGuideRaf = requestAnimationFrame(updateGuideDuringZoom);
+    return () => {
+      if (zoomGuideRaf) cancelAnimationFrame(zoomGuideRaf);
+      zoomGuideRaf = 0;
     };
   });
 
@@ -373,12 +401,19 @@
     return 6;
   }
 
+  function getRenderedHourHeight(): number {
+    const scrollContainer = columnEl?.closest(".hide-scrollbar") as HTMLElement | null;
+    const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
+    const rendered = raw ? parseFloat(raw) : Number.NaN;
+    return Number.isFinite(rendered) && rendered > 0 ? rendered : calZoom.hourHeight;
+  }
+
   type BlockHit =
     | { kind: "edge"; eventId: string; edge: "resize-top" | "resize-bottom" }
     | { kind: "body"; eventId: string };
 
   function findBlockHit(offsetX: number, offsetY: number, colWidth: number): BlockHit | null {
-    const hh = calZoom.hourHeight;
+    const hh = getRenderedHourHeight();
     const threshold = getResizeThreshold();
 
     // Blocks are positioned inside a container offset by railWidth + 4
@@ -430,7 +465,7 @@
   }
 
   function getCreateMinuteFromOffset(offsetY: number): number {
-    const hh = calZoom.hourHeight;
+    const hh = getRenderedHourHeight();
     const rawMinute = (offsetY / hh) * 60;
     let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
@@ -464,12 +499,13 @@
   }
 
   function updateCreateHoverGuide(offsetX: number, offsetY: number) {
-    const dayHeight = 24 * calZoom.hourHeight;
-    const rawMinute = (offsetY / calZoom.hourHeight) * 60;
+    const hh = getRenderedHourHeight();
+    const dayHeight = 24 * hh;
+    const rawMinute = (offsetY / hh) * 60;
     const overBlockedRail = offsetX < 0
       && railSegments.some((seg) => seg.start <= rawMinute && seg.end >= rawMinute);
     const unavailable = !!draggingEventId || !!dragPreview || !!createPreview
-      || calZoom.isAnimating || overBlockedRail
+      || overBlockedRail
       || offsetY < 0 || offsetY > dayHeight;
 
     if (unavailable) {
@@ -543,7 +579,6 @@
 
   function handleParentScroll() {
     if (lastClientY === null || !columnEl) return;
-    if (calZoom.isAnimating) return;
 
     isScrolling = true;
 
@@ -560,12 +595,6 @@
 
   function handleColumnMouseMove(e: MouseEvent) {
     if (!columnEl) return;
-
-    // Skip processing during zoom animation to prevent forced layout recalculations.
-    if (calZoom.isAnimating) {
-      clearHoverAffordances();
-      return;
-    }
 
     // Track mouse position for resize detection
     lastClientX = e.clientX;
@@ -770,7 +799,7 @@
   </div>
 
   <div
-    class="hover-time-guide pointer-events-none absolute left-0 right-0 {visibleGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused ? 'hover-time-guide-transition-paused' : ''}"
+    class="hover-time-guide pointer-events-none absolute left-0 right-0 {visibleGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
     style="
       top: 0;
       transform: translate3d(0, calc({visibleGuidePositionMinute} / 60 * var(--hour-h) * 1px), 0);

@@ -1,6 +1,6 @@
 const STORAGE_KEY = "ganbaruai-calendar-zoom";
 const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
-const DEFAULT_INDEX = 2; // 67px
+const DEFAULT_INDEX = 1; // 45px, 15min grid
 const ANIM_DURATION = 150; // ms for smooth zoom animation
 
 function findClosestIndex(height: number): number {
@@ -43,11 +43,11 @@ let hourHeight = $state(ZOOM_LEVELS[levelIndex]);
 let scrollRef: HTMLElement | null = null;
 let stickyH = 0;
 let zoomRaf = 0;
-let gestureActive = false;
+let gestureActive = $state(false);
 let commitTimer = 0;
 
 // Animation state
-let animating = false;
+let animating = $state(false);
 let animStartTime = 0;
 let animFromH = 0;
 let animToH = 0;
