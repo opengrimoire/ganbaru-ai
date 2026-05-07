@@ -76,6 +76,8 @@ export function useDragController(config: DragControllerConfig) {
   // Track latest pointer position for scroll-triggered updates and auto-scroll
   let lastPointerEvent: PointerEvent | null = null;
   let autoScrollRaf = 0;
+  let scrollUpdateRaf = 0;
+  let scrollUpdateContainer: HTMLElement | null = null;
 
   // Auto-scroll
 
@@ -126,6 +128,34 @@ export function useDragController(config: DragControllerConfig) {
     if (autoScrollRaf) {
       cancelAnimationFrame(autoScrollRaf);
       autoScrollRaf = 0;
+    }
+  }
+
+  function scheduleScrollDrivenUpdate() {
+    if (scrollUpdateRaf) return;
+    scrollUpdateRaf = requestAnimationFrame(() => {
+      scrollUpdateRaf = 0;
+      if (dragState) updateDragPreview();
+      if (createState) updateCreatePreview();
+    });
+  }
+
+  function startScrollDrivenUpdates() {
+    const container = config.getScrollContainer();
+    if (!container || scrollUpdateContainer === container) return;
+    stopScrollDrivenUpdates();
+    scrollUpdateContainer = container;
+    container.addEventListener("scroll", scheduleScrollDrivenUpdate, { passive: true });
+  }
+
+  function stopScrollDrivenUpdates() {
+    if (scrollUpdateContainer) {
+      scrollUpdateContainer.removeEventListener("scroll", scheduleScrollDrivenUpdate);
+      scrollUpdateContainer = null;
+    }
+    if (scrollUpdateRaf) {
+      cancelAnimationFrame(scrollUpdateRaf);
+      scrollUpdateRaf = 0;
     }
   }
 
@@ -224,6 +254,7 @@ export function useDragController(config: DragControllerConfig) {
     lastPointerEvent = e;
     window.addEventListener("pointermove", handleDragMove);
     window.addEventListener("pointerup", handleDragEnd);
+    startScrollDrivenUpdates();
     startAutoScroll();
   }
 
@@ -371,6 +402,7 @@ export function useDragController(config: DragControllerConfig) {
     window.removeEventListener("pointermove", handleDragMove);
     window.removeEventListener("pointerup", handleDragEnd);
     stopAutoScroll();
+    stopScrollDrivenUpdates();
     unlockCursor();
     lastPointerEvent = null;
 
@@ -441,6 +473,7 @@ export function useDragController(config: DragControllerConfig) {
       state.anchorMinute,
       Math.min(state.anchorMinute + snap, 1440),
     );
+    startScrollDrivenUpdates();
     startAutoScroll();
   }
 
@@ -488,6 +521,7 @@ export function useDragController(config: DragControllerConfig) {
     window.removeEventListener("pointerup", handleCreateEnd);
     clearCreateHoldTimer();
     stopAutoScroll();
+    stopScrollDrivenUpdates();
     unlockCursor();
     lastPointerEvent = null;
 
