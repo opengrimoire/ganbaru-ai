@@ -38,10 +38,12 @@
     createPreview = null,
     dragGuideMinute = null,
     createGuideMinute = null,
+    externalHoverGuide = false,
     onEventClick,
     onEventPrefetch,
     onDragStart,
     onCreateStart,
+    onHoverGuideChange,
     editingId,
     previewedIds,
     draggingEventId,
@@ -60,6 +62,7 @@
     createPreview?: PositionedEvent | null;
     dragGuideMinute?: number | null;
     createGuideMinute?: number | null;
+    externalHoverGuide?: boolean;
     draggingEventId?: string;
     grabbingId?: string;
     didDrag?: boolean;
@@ -67,6 +70,13 @@
     onEventPrefetch?: (event: CalendarEvent) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
+    onHoverGuideChange?: (guide: {
+      columnLeft: number;
+      columnWidth: number;
+      instant: boolean;
+      minute: number;
+      positionMinute: number;
+    } | null) => void;
   } = $props();
 
   const isDark = $derived(isThemeCalendarDark(theme));
@@ -321,6 +331,7 @@
   );
   const visibleGuideActive = $derived(createGuideMinute !== null || dragGuideMinute !== null);
   const visibleGuideShown = $derived(visibleGuideMinute !== null);
+  const renderedGuideShown = $derived(visibleGuideShown && (visibleGuideActive || !externalHoverGuide));
   const visibleGuideLabel = $derived(
     visibleGuideMinute === null ? "" : formatMinuteLabel(visibleGuideMinute),
   );
@@ -329,6 +340,7 @@
     if (dragPreview || createPreview || dragGuideMinute !== null || createGuideMinute !== null) {
       hoverMinute = null;
       hoverPositionMinute = null;
+      onHoverGuideChange?.(null);
     }
   });
 
@@ -363,7 +375,7 @@
     }
     function handleGuideOwner(e: Event) {
       const owner = (e as CustomEvent<symbol>).detail;
-      if (owner !== guideOwnerId) clearHoverAffordances();
+      if (owner !== guideOwnerId) clearHoverAffordances(false);
     }
     window.addEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
 
@@ -404,11 +416,12 @@
     };
   });
 
-  function clearHoverAffordances() {
+  function clearHoverAffordances(notifyHoverGuide = true) {
     hoverResizeBlockId = null;
     hoverMinute = null;
     hoverPositionMinute = null;
     guideMotionInstant = false;
+    if (notifyHoverGuide) onHoverGuideChange?.(null);
   }
 
   function claimGuideOwnership() {
@@ -514,6 +527,7 @@
     if (!next) {
       hoverMinute = null;
       hoverPositionMinute = null;
+      onHoverGuideChange?.(null);
       return;
     }
 
@@ -523,6 +537,7 @@
 
     hoverMinute = next.minute;
     hoverPositionMinute = next.positionMinute;
+    emitExternalHoverGuide(next);
   }
 
   function pauseGuideTransitionForShow() {
@@ -552,6 +567,18 @@
     }
 
     setHoverGuide(getCreateGuideFromOffset(offsetY));
+  }
+
+  function emitExternalHoverGuide(guide: { minute: number; positionMinute: number }) {
+    if (!externalHoverGuide || !columnEl) return;
+    const colRect = columnEl.getBoundingClientRect();
+    onHoverGuideChange?.({
+      columnLeft: colRect.left,
+      columnWidth: colRect.width,
+      instant: guideMotionInstant || guideTransitionPaused || calZoom.isAnimating,
+      minute: guide.minute,
+      positionMinute: guide.positionMinute,
+    });
   }
 
   function updateHoverStateFromClientPoint(
@@ -843,7 +870,7 @@
   </div>
 
   <div
-    class="hover-time-guide pointer-events-none absolute left-0 right-0 {visibleGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused || guideMotionInstant || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
+    class="hover-time-guide pointer-events-none absolute left-0 right-0 {renderedGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused || guideMotionInstant || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
     style="
       top: 0;
       transform: translate3d(0, calc({visibleGuidePositionMinute} / 60 * var(--hour-h) * 1px), 0);

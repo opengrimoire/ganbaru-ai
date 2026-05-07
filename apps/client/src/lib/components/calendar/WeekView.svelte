@@ -14,6 +14,7 @@
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
   import HourGridlines from "./HourGridlines.svelte";
+  import HoverTimeGuide, { type HoverTimeGuideState } from "./HoverTimeGuide.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import AllDayEventChip from "./AllDayEventChip.svelte";
@@ -155,6 +156,37 @@
   // stickyAllDayBannerHeight is measured via bind:offsetHeight on the all-day banner
   const calZoom = getCalendarZoom();
   const smoothScroll = createSmoothScroll(() => scrollContainer);
+  let timedColumnsEl: HTMLDivElement | undefined = $state();
+  let hoverGuide = $state<HoverTimeGuideState | null>(null);
+
+  function handleHoverGuideChange(guide: {
+    columnLeft: number;
+    columnWidth: number;
+    instant: boolean;
+    minute: number;
+    positionMinute: number;
+  } | null) {
+    if (!guide || !timedColumnsEl) {
+      hoverGuide = null;
+      return;
+    }
+
+    const containerRect = timedColumnsEl.getBoundingClientRect();
+    const nextX = guide.columnLeft - containerRect.left;
+
+    hoverGuide = {
+      horizontalInstant: hoverGuide === null,
+      instant: guide.instant,
+      minute: guide.minute,
+      positionMinute: guide.positionMinute,
+      width: guide.columnWidth,
+      x: nextX,
+    };
+  }
+
+  function clearHoverGuide() {
+    hoverGuide = null;
+  }
 
   function onWheel(e: WheelEvent) {
     smoothScroll(e);
@@ -604,8 +636,10 @@
       <TimeGutter {timezones} {anchorDate} tzCount={tzCount} />
 
       <div
+        bind:this={timedColumnsEl}
         class="relative grid"
         style="grid-column: span 7; grid-template-columns: subgrid;"
+        onmouseleave={clearHoverGuide}
       >
         <HourGridlines />
         {#each weekDays as day, i}
@@ -627,13 +661,16 @@
               createPreview={drag.getCreatePreviewForDate(dateStr)}
               dragGuideMinute={drag.getDragGuideMinuteForDate(dateStr)}
               createGuideMinute={drag.getCreateGuideMinuteForDate(dateStr)}
+              externalHoverGuide
               onEventClick={onEventClick}
               onEventPrefetch={onEventPrefetch}
               onDragStart={drag.handleDragStart}
               onCreateStart={drag.handleCreateStart}
+              onHoverGuideChange={handleHoverGuideChange}
             />
           </div>
         {/each}
+        <HoverTimeGuide guide={hoverGuide} {theme} />
 
               </div>
       </div>
