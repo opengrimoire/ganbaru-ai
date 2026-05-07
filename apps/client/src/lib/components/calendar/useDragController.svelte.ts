@@ -32,7 +32,7 @@ function unlockCursor() {
 // Auto-scroll constants
 const AUTO_SCROLL_ZONE = 48; // px from edge to start scrolling
 const AUTO_SCROLL_MAX_SPEED = 12; // px per frame at the very edge
-const DEFAULT_CLICK_EVENT_MINUTES = 30;
+const DEFAULT_CLICK_EVENT_MINUTES = 60;
 const CREATE_HOLD_PREVIEW_DELAY_MS = 160;
 const CREATE_DRAG_THRESHOLD_PX = 3;
 const EVENT_DRAG_THRESHOLD_PX = 3;
