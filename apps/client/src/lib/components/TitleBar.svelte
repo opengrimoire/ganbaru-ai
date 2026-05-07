@@ -256,6 +256,9 @@
       ids.add("reset");
       ids.add("help");
     }
+    if (viewport.below("narrow")) {
+      ids.add("settings");
+    }
     return ids;
   });
   const overflowActionControls = $derived(

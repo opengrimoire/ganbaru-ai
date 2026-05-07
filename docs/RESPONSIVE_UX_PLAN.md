@@ -29,7 +29,7 @@ The app may not expose every command at every size, but hidden commands must sta
 
 | Area | Current behavior | UX risk |
 |---|---|---|
-| Tauri window | `tauri.conf.json` sets `minWidth: 800` and `minHeight: 600`. | The OS prevents truly compact or tiny window testing. |
+| Tauri window | `tauri.conf.json` now sets `minWidth: 280`, `minHeight: 180`, and uses an opaque frameless window. | Compact and micro sizes are testable, but several primary surfaces still need dedicated compact modes. |
 | App shell | `App.svelte` uses a fixed full-screen frame with fixed content margin and rounded content panel. | The frame chrome consumes too much space at tiny sizes. |
 | Title bar | `TitleBar.svelte` keeps tabs, utility buttons, and window controls in one row. Compact tabs are manual, not automatic. | Controls can run out of room before the app reaches a useful tiny mode. |
 | Calendar header | `CalendarHeader.svelte` keeps navigation, date picker, zoom, view switches, today, and calendar picker in one row. | The toolbar has no priority collapse model. |
@@ -106,13 +106,10 @@ Keep state outside render variants. If week view falls back to a focused day ren
 
 ### Tauri window
 
-Do not remove the current 800 by 600 minimum until the shell and primary surfaces have compact modes. Lower it in stages:
+The minimum is intentionally low enough to make micro-window QA possible:
+280 by 180. This does not mean every surface is finished at that size. It means the app should expose the rough edges early instead of hiding them behind an 800 by 600 floor.
 
-1. After shell and title bar work: 560 by 420.
-2. After calendar panel work: 390 by 360.
-3. After micro capsule work: 280 by 180, if the OS and Tauri behavior remain stable.
-
-This prevents the app from entering sizes that are technically possible but not yet usable.
+The shell and title bar must stay recoverable at that size. The window stays opaque because transparent frameless windows can expose desktop pixels during live resize on Linux before WebKitGTK repaints the new area. Primary surfaces should then be upgraded until the micro state feels intentional rather than merely allowed by the window manager.
 
 ### App shell
 
@@ -292,14 +289,11 @@ Run the matrix at font scale 1.0 and 1.3. Also test with one, three, and five ti
 
 1. Add viewport classification and shell tokens.
 2. Add automatic title-bar and calendar-header overflow.
-3. Lower Tauri minimum size to 560 by 420.
-4. Make event panel responsive with anchored, sheet, and full-screen modes.
-5. Add compact and focused calendar render variants.
-6. Lower Tauri minimum size to 390 by 360.
-7. Make settings, theme editor, help, performance, and kanban responsive.
-8. Add micro focus capsule.
-9. Lower Tauri minimum size as far as verified.
-10. Add responsive benchmark scenarios and record any meaningful performance changes in `docs/PERFORMANCE.md`.
+3. Make event panel responsive with anchored, sheet, and full-screen modes.
+4. Add compact and focused calendar render variants.
+5. Make settings, theme editor, help, performance, and kanban responsive.
+6. Add micro focus capsule.
+7. Add responsive benchmark scenarios and record any meaningful performance changes in `docs/PERFORMANCE.md`.
 
 ## Definition of done
 

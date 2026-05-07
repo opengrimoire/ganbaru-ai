@@ -15,11 +15,11 @@
         "title": "GanbaruAI",
         "width": 1200,
         "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
+        "minWidth": 280,
+        "minHeight": 180,
         "maximized": true,
         "decorations": false,
-        "transparent": true,
+        "transparent": false,
         "zoomHotkeysEnabled": false
       }
     ],
