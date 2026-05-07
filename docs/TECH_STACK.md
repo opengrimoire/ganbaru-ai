@@ -291,62 +291,49 @@ ganbaruai pomodoro status
 ganbaruai pomodoro start --task 42
 
 # Export project state as markdown (for the project's git repo)
-ganbaruai export progress --project ganbaruai
 ganbaruai export kanban --project ganbaruai
-
-# Import markdown changes back into the database
-ganbaruai import progress PROGRESS.md --project ganbaruai
 ```
 
 ### Markdown export for software project repositories
 
 When a user manages a software project with GanbaruAI, the structured data (tasks, calendar events, workspace configs) lives in GanbaruAI's vault SQLite. But the project's git repository also needs project context for:
 
-- **Collaborators who don't use GanbaruAI.** They read PROGRESS.md to understand what's happening.
+- **Collaborators who don't use GanbaruAI.** They read exported kanban snapshots and reports to understand what's happening.
 - **AI agents without the CLI installed.** They read markdown natively without any tooling.
 - **Code review context.** A PR description can reference task numbers from the exported kanban.
 - **Onboarding.** New contributors read the project state to orient themselves.
 
-The CLI exports project state as markdown into the repository:
+The CLI exports repo-facing views as markdown into the repository:
 
 ```bash
-# Generate PROGRESS.md from GanbaruAI's database
-ganbaruai export progress --project ganbaruai > PROGRESS.md
-
 # Generate a kanban snapshot
 ganbaruai export kanban --project ganbaruai > KANBAN.md
 ```
 
-Example output of `ganbaruai export progress`:
+Example output of `ganbaruai export kanban`:
 
 ```markdown
-# Progress: GanbaruAI
+# Kanban: GanbaruAI
 
-## Current phase
-Phase 2: notes and diary
-
-## Active work
-- (branch: feat/tiptap-editor) Tiptap integration, markdown storage [task #42]
-- (branch: feat/diary-forms) Morning/evening diary entry forms [task #45]
-
-## Kanban: in progress
+## In progress
 - #42: Tiptap rich text editor [high] (assigned calendar: Mon/Wed 10:00-12:00)
 - #45: Diary entry forms [medium]
 
-## Kanban: to do
+## To do
 - #48: Bidirectional backlink index
 - #49: Note search and filtering
 
-## What exists
-Phase 1 complete: calendar, kanban, pomodoro (279 tests)
+## Done recently
+- #39: Pomodoro segment persistence
+- #40: Calendar conflict warnings
 ```
 
 **This export is a view of the database, not the source of truth.** The flow is:
 
 1. User manages tasks and events in GanbaruAI's UI (or via CLI). SQLite stores the data.
-2. `ganbaruai export` writes the current state as markdown to the project repo.
+2. `ganbaruai export kanban` writes the current task state as markdown to the project repo.
 3. Collaborators and agents read the markdown. It is always up to date because the export runs on commit (via a git hook) or on demand.
-4. If an agent edits the markdown directly (e.g., marks a task done in PROGRESS.md), the CLI can import those changes back: `ganbaruai import progress PROGRESS.md --project ganbaruai`.
+4. If a user edits an exported kanban snapshot directly, an explicit import command can validate and apply those changes back to SQLite.
 
 This is the same model as GitHub: the issue database is the source of truth, but issues are viewable as markdown and editable via API. The markdown is portable and useful on its own, but it is derived from the structured data.
 
@@ -354,17 +341,17 @@ This is the same model as GitHub: the issue database is the source of truth, but
 
 GanbaruAI's own development follows this exact workflow across four stages:
 
-**Stage 1 (now, pre-CLI):** PROGRESS.md, ROADMAP.md, and AGENTS.md are hand-maintained markdown files in the repo. Codex agents read and write them directly. This works because markdown is the universal baseline that requires no tooling.
+**Stage 1 (now, pre-CLI):** ROADMAP.md, AGENTS.md, and feature docs are hand-maintained markdown files in the repo. Codex agents read and write them directly. This works because markdown is the universal baseline that requires no tooling.
 
-**Stage 2 (CLI exists):** GanbaruAI's project management data moves into its own database. The CLI exports PROGRESS.md to the repo automatically (via git hook or CI). Agents can use either the CLI's structured output for queries or read the exported markdown for simple context.
+**Stage 2 (CLI exists):** GanbaruAI's project management data moves into its own database. The CLI exports kanban snapshots and generated reports to the repo automatically (via git hook or CI). Agents can use either the CLI's structured output for queries or read the exported markdown for simple context.
 
 **Stage 3 (full UI):** Development sessions are calendar events with pomodoro configs and workspace settings. Starting a "GanbaruAI dev" calendar event auto-opens VS Code at the project root, switches the terminal, loads project notes, and activates the right blocker rules. The kanban tracks features and bugs across phases. Each PR links to a task.
 
-**Stage 4 (agent integration, post-MVP):** Agents query the database via CLI before starting work, create calendar events for their planned work sessions, update task status as they complete items, and export progress to the repo on commit. The developer reviews agent work from the calendar and kanban views in GanbaruAI's UI, not by reading raw git logs.
+**Stage 4 (agent integration, post-MVP):** Agents query the database via CLI before starting work, create calendar events for their planned work sessions, update task status as they complete items, and export repo-facing context on commit. The developer reviews agent work from the calendar and kanban views in GanbaruAI's UI, not by reading raw git logs.
 
 The feedback loop: every workflow friction discovered while building GanbaruAI with GanbaruAI becomes a feature improvement. The tool's own development is the primary test case for its project management system, its agent integration, and its markdown export format.
 
-This means the markdown format used during early development (the current PROGRESS.md, ROADMAP.md) is not throwaway scaffolding. It is the v1 of the export format that the CLI will produce. The structure evolves, but the concept stays: markdown as the portable, universal project state representation that works with and without GanbaruAI.
+The repo-facing markdown format is a portability layer, not the canonical store. The source of truth stays in SQLite; generated markdown exists to make project state readable in tools that only understand files.
 
 ---
 

@@ -19,7 +19,6 @@ All documentation lives in `docs/`. Top-level overviews:
 
 - **docs/PRODUCT_SPEC.md**: what the app does and why (being migrated into granular docs; will be removed once empty)
 - **docs/TECH_STACK.md**: how it's built
-- **docs/PROGRESS.md**: current state of the project
 - **docs/ROADMAP.md**: phased development plan
 - **docs/PERFORMANCE.md**: memory, startup, and package size measurements
 
@@ -141,12 +140,6 @@ After `pnpm -w run validate` passes, finish the task without extra dev-server, T
 
 ### Documentation
 
-- Read docs/PROGRESS.md at the start of every conversation to understand what has been done and what is in progress.
-- After every session where files are created, modified, or deleted, update docs/PROGRESS.md before finishing. It is a current-state board, not a history log (git has the history). Maintenance rules:
-  - When something is completed, move it from "Active work" to "What exists" as a brief line.
-  - When a full phase is complete, collapse its "What exists" items into a single summary line and start the next phase.
-  - When starting a new feature branch, add it to "Active work" with the branch name and scope.
-  - "Blocked / needs decision" tracks anything that cannot proceed without input.
 - Keep the workspace structure and vault structure in this file up to date. When directories are created, renamed, or removed, update the relevant tree. Never hardcode vault paths; read them from user configuration.
 
 ### Code style

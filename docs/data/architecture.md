@@ -55,10 +55,10 @@ The Tauri integration uses `tauri-plugin-sql`. Higher-level ORMs were considered
 
 The app is not the only thing that needs to read this data. AI agents (Codex or another CLI coding agent in the integrated terminal, MCP clients), backup tools, scripts, and human collaborators all interact with the same store.
 
-The bridge is the `ganbaruai` CLI (Rust binary, reads the same SQLite). It exposes structured commands (`task list`, `event get`, `progress export`) that AI agents call via Bash. This keeps three properties:
+The bridge is the `ganbaruai` CLI (Rust binary, reads the same SQLite). It exposes structured commands (`task list`, `event get`, `export kanban`) that AI agents call via Bash. This keeps three properties:
 
 1. One source of truth. The CLI reads what the app writes. There is no duplicate authoritative store for agents.
-2. Markdown exports stay derivative. The CLI can write `PROGRESS.md` or `KANBAN.md` to a git repo for collaborators who never install the app, but those files are regenerated from the database; editing them by hand is supported only via an explicit import command.
+2. Markdown exports stay derivative. The CLI can write kanban snapshots or generated reports to a git repo for collaborators who never install the app, but those files are regenerated from the database; editing them by hand is supported only via an explicit import command where the export type supports imports.
 3. External readers handle dirty state. If the app crashed and a run is mid-write, the CLI applies the same recovery semantics as the app on startup (see `algorithms/pomodoro-state-machine.md`). Aggregations always operate on a consistent view.
 
 The MCP server is for external clients only (ChatGPT, teammate agents, and other MCP-compatible clients). Internal agent flows use the CLI directly. This keeps MCP a thin, documented surface and avoids two parallel paths to the same data.

@@ -56,7 +56,7 @@ Project status reports can be generated from kanban board state, calendar data, 
 
 ## Software repository integration
 
-When a project is a software repository, the `ganbaruai` CLI exports project state as markdown into the repo (PROGRESS.md, KANBAN.md). This makes context available to collaborators who do not run GanbaruAI and to AI agents that read the repo natively. The export is a view; the source of truth remains in SQLite. Changes to the exported markdown can be imported back.
+When a project is a software repository, the `ganbaruai` CLI exports repo-facing markdown views such as `KANBAN.md` and generated reports. This makes context available to collaborators who do not run GanbaruAI and to AI agents that read the repo natively. The export is a view; the source of truth remains in SQLite. Changes to exported markdown can be imported back when the export type supports imports.
 
 ## Linkage to other systems
 

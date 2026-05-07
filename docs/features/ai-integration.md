@@ -41,7 +41,7 @@ The `ganbaruai` CLI is a Rust binary that reads the same SQLite database the app
 ```
 ganbaruai task list --project foo --status in_progress
 ganbaruai event create --start 2026-04-20T14:00 --duration 90m --project foo
-ganbaruai progress export --to PROGRESS.md
+ganbaruai export kanban --project foo
 ```
 
 This is the bridge between AI agents and GanbaruAI's data. It works with any agent that can run a shell command (Codex, Cursor, custom scripts), with no plugin or MCP server required for the local case.
