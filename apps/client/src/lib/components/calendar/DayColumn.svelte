@@ -309,9 +309,12 @@
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
   let hoverMinute: number | null = $state(null);
+  let hoverPositionMinute: number | null = $state(null);
   let guideTransitionPaused = $state(false);
   const visibleGuideMinute = $derived(createGuideMinute ?? dragGuideMinute ?? hoverMinute);
-  const visibleGuidePositionMinute = $derived(visibleGuideMinute ?? 0);
+  const visibleGuidePositionMinute = $derived(
+    createGuideMinute ?? dragGuideMinute ?? hoverPositionMinute ?? hoverMinute ?? 0,
+  );
   const visibleGuideActive = $derived(createGuideMinute !== null || dragGuideMinute !== null);
   const visibleGuideShown = $derived(visibleGuideMinute !== null);
   const visibleGuideLabel = $derived(
@@ -321,6 +324,7 @@
   $effect(() => {
     if (dragPreview || createPreview || dragGuideMinute !== null || createGuideMinute !== null) {
       hoverMinute = null;
+      hoverPositionMinute = null;
     }
   });
 
@@ -393,6 +397,7 @@
   function clearHoverAffordances() {
     hoverResizeBlockId = null;
     hoverMinute = null;
+    hoverPositionMinute = null;
   }
 
   function getResizeThreshold(): number {
@@ -465,26 +470,39 @@
   }
 
   function getCreateMinuteFromOffset(offsetY: number): number {
+    return getCreateGuideFromOffset(offsetY).minute;
+  }
+
+  function getCreateGuideFromOffset(offsetY: number): { minute: number; positionMinute: number } {
     const hh = getRenderedHourHeight();
     const rawMinute = (offsetY / hh) * 60;
+    const positionMinute = Math.max(0, Math.min(1440, rawMinute));
     let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
     if (isToday && currentTimeMinute >= 0) {
       const currentTimeY = (currentTimeMinute / 60) * hh;
       if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
         minute = Math.floor(currentTimeMinute);
+        return { minute, positionMinute: currentTimeMinute };
       }
     }
 
-    return minute;
+    return { minute, positionMinute };
   }
 
-  function setHoverMinute(next: number | null) {
-    if (hoverMinute === next) return;
-    if (visibleGuideMinute === null && next !== null) {
+  function setHoverGuide(next: { minute: number; positionMinute: number } | null) {
+    if (!next) {
+      hoverMinute = null;
+      hoverPositionMinute = null;
+      return;
+    }
+
+    if (visibleGuideMinute === null) {
       pauseGuideTransitionForShow();
     }
-    hoverMinute = next;
+
+    hoverMinute = next.minute;
+    hoverPositionMinute = next.positionMinute;
   }
 
   function pauseGuideTransitionForShow() {
@@ -509,11 +527,11 @@
       || offsetY < 0 || offsetY > dayHeight;
 
     if (unavailable) {
-      setHoverMinute(null);
+      setHoverGuide(null);
       return;
     }
 
-    setHoverMinute(getCreateMinuteFromOffset(offsetY));
+    setHoverGuide(getCreateGuideFromOffset(offsetY));
   }
 
   function updateHoverStateFromClientPoint(
@@ -607,6 +625,7 @@
     lastClientY = null;
     hoverResizeBlockId = null;
     hoverMinute = null;
+    hoverPositionMinute = null;
     isScrolling = false;
   }
 
@@ -616,7 +635,7 @@
     // Only handle clicks in the rail zone (left of columnEl)
     if (e.clientX >= colRect.left) return;
     const offsetY = e.clientY - colRect.top;
-    const rawMinute = (offsetY / calZoom.hourHeight) * 60;
+    const rawMinute = (offsetY / getRenderedHourHeight()) * 60;
     if (railSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
     const minute = getCreateMinuteFromOffset(offsetY);
 
