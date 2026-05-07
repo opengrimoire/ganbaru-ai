@@ -879,7 +879,7 @@
       class="hover-time-label absolute"
       style="
         top: 0;
-        left: 2px;
+        left: 0;
         transform: translateY({visibleGuidePositionMinute <= 0 ? '0' : visibleGuidePositionMinute >= 1440 ? '-100%' : '-50%'});
       "
     >
@@ -887,7 +887,7 @@
     </div>
     <div
       class="hover-time-line absolute right-0"
-      style="left: 42px; top: -1px;"
+      style="left: 38px; top: -1.15px;"
     ></div>
   </div>
 
@@ -914,12 +914,11 @@
     box-sizing: border-box;
     width: 38px;
     padding: 2px 3px 1px;
-    box-shadow: 0 1px 4px color-mix(in srgb, black 24%, transparent);
     text-align: center;
   }
 
   .hover-time-line {
-    height: 2px;
+    height: 2.3px;
     background-color: var(--hover-time-guide-color);
     opacity: 1;
   }
