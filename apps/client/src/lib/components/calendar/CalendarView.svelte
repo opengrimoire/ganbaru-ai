@@ -958,18 +958,14 @@
     });
   }
 
-  async function handleEventCreate(start: string, end: string, allDay?: boolean) {
+  async function handleEventCreate(start: string, end: string, allDay?: boolean, createAnchor?: PanelAnchor) {
     const requestId = ++panelOpenRequestId;
     pendingEditEventId = undefined;
     // Track that a create operation ended (prevents click-to-close)
     lastDragEndTime = Date.now();
 
-    const previewEl = containerEl?.querySelector("[data-create-preview]");
-    const rect = previewEl?.getBoundingClientRect();
-    const colRect = previewEl?.closest("[data-day-column]")?.getBoundingClientRect();
-    const anchor: PanelAnchor = rect
-      ? { x: colRect?.right ?? rect.right, y: rect.top, width: colRect?.width ?? rect.width, height: rect.height }
-      : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+    const anchor: PanelAnchor = createAnchor
+      ?? { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
     const panelState = session.state.mode === "closed"
       ? parkedPanelSnapshot ? "unpark" : "open"
@@ -982,10 +978,10 @@
     });
     try {
       const panelReady = ensureEventPanelReady(requestId);
-      if (panelReady) await panelReady;
-      if (requestId !== panelOpenRequestId) return;
       session.openCreate(start, end, anchor, allDay);
       perfMark("panel.state-open", { request: requestId });
+      if (panelReady) await panelReady;
+      if (requestId !== panelOpenRequestId) return;
       markPanelPaintDone(requestId);
     } catch (e) {
       console.error("[CalendarView] open create panel failed:", e);

@@ -1,3 +1,8 @@
+<script module lang="ts">
+  const GUIDE_OWNER_EVENT = "ganbaruai-calendar-hover-guide-owner";
+  let currentGuideOwner: symbol | null = null;
+</script>
+
 <script lang="ts">
   import type { CalendarEvent, PositionedEvent, PersistedSegment } from "./types";
   import {
@@ -76,6 +81,7 @@
       instant: boolean;
       minute: number;
       positionMinute: number;
+      y: number;
     } | null) => void;
   } = $props();
 
@@ -310,24 +316,25 @@
   });
 
   let columnEl: HTMLDivElement | undefined = $state();
-  let lastClientX: number | null = $state(null);
-  let lastClientY: number | null = $state(null);
+  let lastClientX: number | null = null;
+  let lastClientY: number | null = null;
   let scrollProximityRaf = 0;
   let guideTransitionResumeRaf = 0;
   let zoomGuideRaf = 0;
-  let isScrolling = $state(false);
+  let isScrolling = false;
   let lastPointerMoveAt = 0;
   const guideOwnerId = Symbol("calendar-hover-guide-owner");
-  const GUIDE_OWNER_EVENT = "ganbaruai-calendar-hover-guide-owner";
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
   let hoverMinute: number | null = $state(null);
   let hoverPositionMinute: number | null = $state(null);
   let guideTransitionPaused = $state(false);
   let guideMotionInstant = $state(false);
-  const visibleGuideMinute = $derived(createGuideMinute ?? dragGuideMinute ?? hoverMinute);
+  const localHoverMinute = $derived(externalHoverGuide ? null : hoverMinute);
+  const localHoverPositionMinute = $derived(externalHoverGuide ? null : hoverPositionMinute);
+  const visibleGuideMinute = $derived(createGuideMinute ?? dragGuideMinute ?? localHoverMinute);
   const visibleGuidePositionMinute = $derived(
-    createGuideMinute ?? dragGuideMinute ?? hoverPositionMinute ?? hoverMinute ?? 0,
+    createGuideMinute ?? dragGuideMinute ?? localHoverPositionMinute ?? localHoverMinute ?? 0,
   );
   const visibleGuideActive = $derived(createGuideMinute !== null || dragGuideMinute !== null);
   const visibleGuideShown = $derived(visibleGuideMinute !== null);
@@ -358,9 +365,7 @@
 
   onMount(() => {
     function clearMouseState() {
-      lastClientX = null;
-      lastClientY = null;
-      clearHoverAffordances();
+      clearHoverTracking();
     }
     function handleVisibilityChange() {
       if (document.hidden) clearMouseState();
@@ -375,7 +380,7 @@
     }
     function handleGuideOwner(e: Event) {
       const owner = (e as CustomEvent<symbol>).detail;
-      if (owner !== guideOwnerId) clearHoverAffordances(false);
+      if (owner !== guideOwnerId) clearHoverTracking(false);
     }
     window.addEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
 
@@ -420,11 +425,35 @@
     hoverResizeBlockId = null;
     hoverMinute = null;
     hoverPositionMinute = null;
-    guideMotionInstant = false;
+    if (guideMotionInstant) guideMotionInstant = false;
     if (notifyHoverGuide) onHoverGuideChange?.(null);
   }
 
+  function clearHoverTracking(notifyHoverGuide = true) {
+    const hasTracking = lastClientX !== null
+      || lastClientY !== null
+      || hoverResizeBlockId !== null
+      || hoverMinute !== null
+      || hoverPositionMinute !== null
+      || guideMotionInstant
+      || isScrolling
+      || scrollProximityRaf !== 0;
+
+    if (!hasTracking && !notifyHoverGuide) return;
+
+    lastClientX = null;
+    lastClientY = null;
+    isScrolling = false;
+    if (scrollProximityRaf) {
+      cancelAnimationFrame(scrollProximityRaf);
+      scrollProximityRaf = 0;
+    }
+    clearHoverAffordances(notifyHoverGuide);
+  }
+
   function claimGuideOwnership() {
+    if (currentGuideOwner === guideOwnerId) return;
+    currentGuideOwner = guideOwnerId;
     window.dispatchEvent(new CustomEvent(GUIDE_OWNER_EVENT, { detail: guideOwnerId }));
   }
 
@@ -506,24 +535,35 @@
     return getCreateGuideFromOffset(offsetY).minute;
   }
 
-  function getCreateGuideFromOffset(offsetY: number): { minute: number; positionMinute: number } {
+  function getCreateGuideFromOffset(offsetY: number): { minute: number; positionMinute: number; y: number } {
     const hh = getRenderedHourHeight();
+    const dayHeight = 24 * hh;
     const rawMinute = (offsetY / hh) * 60;
     const positionMinute = Math.max(0, Math.min(1440, rawMinute));
+    const y = Math.max(0, Math.min(dayHeight, offsetY));
     let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
     if (isToday && currentTimeMinute >= 0) {
       const currentTimeY = (currentTimeMinute / 60) * hh;
       if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
         minute = Math.floor(currentTimeMinute);
-        return { minute, positionMinute: currentTimeMinute };
+        return { minute, positionMinute: currentTimeMinute, y: currentTimeY };
       }
     }
 
-    return { minute, positionMinute };
+    return { minute, positionMinute, y };
   }
 
-  function setHoverGuide(next: { minute: number; positionMinute: number } | null) {
+  function setHoverGuide(next: { minute: number; positionMinute: number; y: number } | null) {
+    if (externalHoverGuide) {
+      if (next) {
+        emitExternalHoverGuide(next);
+      } else {
+        onHoverGuideChange?.(null);
+      }
+      return;
+    }
+
     if (!next) {
       hoverMinute = null;
       hoverPositionMinute = null;
@@ -569,15 +609,17 @@
     setHoverGuide(getCreateGuideFromOffset(offsetY));
   }
 
-  function emitExternalHoverGuide(guide: { minute: number; positionMinute: number }) {
+  function emitExternalHoverGuide(guide: { minute: number; positionMinute: number; y: number }) {
     if (!externalHoverGuide || !columnEl) return;
     const colRect = columnEl.getBoundingClientRect();
+    if (colRect.width <= 0 || !Number.isFinite(guide.y)) return;
     onHoverGuideChange?.({
       columnLeft: colRect.left,
       columnWidth: colRect.width,
       instant: guideMotionInstant || guideTransitionPaused || calZoom.isAnimating,
       minute: guide.minute,
       positionMinute: guide.positionMinute,
+      y: guide.y,
     });
   }
 
@@ -644,6 +686,7 @@
 
   function handleParentScroll() {
     if (lastClientY === null || !columnEl) return;
+    if (currentGuideOwner !== guideOwnerId) return;
 
     isScrolling = true;
 
@@ -652,7 +695,10 @@
       scrollProximityRaf = requestAnimationFrame(() => {
         scrollProximityRaf = 0;
         if (lastClientX !== null && lastClientY !== null) {
-          guideMotionInstant = performance.now() - lastPointerMoveAt < 80;
+          const shouldMoveInstantly = performance.now() - lastPointerMoveAt < 80;
+          if (guideMotionInstant !== shouldMoveInstantly) {
+            guideMotionInstant = shouldMoveInstantly;
+          }
           updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
         }
       });
@@ -668,17 +714,16 @@
     lastClientX = e.clientX;
     lastClientY = e.clientY;
     lastPointerMoveAt = performance.now();
-    guideMotionInstant = true;
+    if (!guideMotionInstant) guideMotionInstant = true;
     updateHoverStateFromClientPoint(e.clientX, e.clientY, true);
   }
 
   function handleColumnMouseLeave(e: MouseEvent) {
-    lastClientX = null;
-    lastClientY = null;
-    hoverResizeBlockId = null;
-    isScrolling = false;
-    if (isTimedColumnSurface(e.relatedTarget)) return;
-    clearHoverAffordances();
+    const enteringTimedSurface = isTimedColumnSurface(e.relatedTarget);
+    if (!enteringTimedSurface && currentGuideOwner === guideOwnerId) {
+      currentGuideOwner = null;
+    }
+    clearHoverTracking(!enteringTimedSurface);
   }
 
   function handleRailAreaPointerDown(e: PointerEvent) {

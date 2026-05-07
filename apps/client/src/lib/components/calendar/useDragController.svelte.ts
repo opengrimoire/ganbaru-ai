@@ -1,4 +1,5 @@
 import type { CalendarEvent, DragState, EventColor, PositionedEvent } from "./types";
+import type { PanelAnchor } from "./edit-session.svelte";
 import { tick } from "svelte";
 import {
   minuteOfDay,
@@ -34,6 +35,7 @@ const AUTO_SCROLL_MAX_SPEED = 12; // px per frame at the very edge
 const DEFAULT_CLICK_EVENT_MINUTES = 30;
 const CREATE_HOLD_PREVIEW_DELAY_MS = 160;
 const CREATE_DRAG_THRESHOLD_PX = 3;
+const EVENT_DRAG_THRESHOLD_PX = 3;
 
 export interface DragControllerConfig {
   events: () => CalendarEvent[];
@@ -41,7 +43,7 @@ export interface DragControllerConfig {
   getColumnDate: (clientX: number) => string;
   getScrollContainer: () => HTMLElement | null;
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
-  onEventCreate: (start: string, end: string) => void;
+  onEventCreate: (start: string, end: string, anchor?: PanelAnchor) => void;
   canDrag?: (eventId: string) => boolean;
   /** Returns true if event has completed progress and should not be moved or resized. */
   isEventLocked?: (eventId: string) => boolean;
@@ -75,6 +77,7 @@ export function useDragController(config: DragControllerConfig) {
 
   // Track latest pointer position for scroll-triggered updates and auto-scroll
   let lastPointerEvent: PointerEvent | null = null;
+  let dragInteractionActive = false;
   let autoScrollRaf = 0;
   let scrollUpdateRaf = 0;
   let scrollUpdateContainer: HTMLElement | null = null;
@@ -114,7 +117,7 @@ export function useDragController(config: DragControllerConfig) {
     if (speed !== 0) {
       container.scrollTop += speed;
       // Re-run the move handler so the preview tracks the new scroll position
-      if (dragState) updateDragPreview();
+      if (dragState && dragInteractionActive) updateDragPreview();
       if (createState) updateCreatePreview();
     }
     autoScrollRaf = requestAnimationFrame(autoScrollLoop);
@@ -135,7 +138,7 @@ export function useDragController(config: DragControllerConfig) {
     if (scrollUpdateRaf) return;
     scrollUpdateRaf = requestAnimationFrame(() => {
       scrollUpdateRaf = 0;
-      if (dragState) updateDragPreview();
+      if (dragState && dragInteractionActive) updateDragPreview();
       if (createState) updateCreatePreview();
     });
   }
@@ -250,12 +253,13 @@ export function useDragController(config: DragControllerConfig) {
       lockCursor("grabbing");
     }
 
+    dragInteractionActive = dragState.type === "resize-top" || dragState.type === "resize-bottom";
     grabbingId = eventId; // Show contour immediately on grab
     lastPointerEvent = e;
     window.addEventListener("pointermove", handleDragMove);
     window.addEventListener("pointerup", handleDragEnd);
     startScrollDrivenUpdates();
-    startAutoScroll();
+    if (dragInteractionActive) startAutoScroll();
   }
 
   function updateDragPreview() {
@@ -395,16 +399,33 @@ export function useDragController(config: DragControllerConfig) {
   function handleDragMove(e: PointerEvent) {
     if (!dragState) return;
     lastPointerEvent = e;
+    if (!dragInteractionActive) {
+      const dx = e.clientX - dragState.pointerStartX;
+      const dy = e.clientY - dragState.pointerStartY;
+      const movedEnough = Math.hypot(dx, dy) >= EVENT_DRAG_THRESHOLD_PX;
+      if (!movedEnough) return;
+      dragInteractionActive = true;
+      startAutoScroll();
+    }
     updateDragPreview();
   }
 
-  async function handleDragEnd() {
+  async function handleDragEnd(e: PointerEvent) {
     window.removeEventListener("pointermove", handleDragMove);
     window.removeEventListener("pointerup", handleDragEnd);
     stopAutoScroll();
     stopScrollDrivenUpdates();
     unlockCursor();
-    lastPointerEvent = null;
+
+    if (dragState) {
+      lastPointerEvent = e;
+      if (!dragInteractionActive) {
+        const dx = e.clientX - dragState.pointerStartX;
+        const dy = e.clientY - dragState.pointerStartY;
+        dragInteractionActive = Math.hypot(dx, dy) >= EVENT_DRAG_THRESHOLD_PX;
+      }
+      if (dragInteractionActive) updateDragPreview();
+    }
 
     const state = dragState;
     const wasDragging = !!dragPreview;
@@ -427,6 +448,8 @@ export function useDragController(config: DragControllerConfig) {
     dragGuideDate = null;
     dragGuideMinute = null;
     grabbingId = null;
+    lastPointerEvent = null;
+    dragInteractionActive = false;
   }
 
   // Create-by-drag
@@ -434,9 +457,7 @@ export function useDragController(config: DragControllerConfig) {
   function handleCreateStart(dateStr: string, minute: number, e: PointerEvent) {
     if (dragState) return; // don't start create while an event drag is active
 
-    const columnEl = (e.target as HTMLElement).closest(
-      '[style*="border-left"]',
-    ) as HTMLElement;
+    const columnEl = (e.target as HTMLElement).closest("[data-day-column-shell]") as HTMLElement | null;
     if (!columnEl) return;
 
     const roundedMinute = Math.round(minute);
@@ -500,6 +521,17 @@ export function useDragController(config: DragControllerConfig) {
     );
   }
 
+  function getCreatePreviewAnchor(preview: PositionedEvent, columnEl: HTMLElement): PanelAnchor {
+    const rect = columnEl.getBoundingClientRect();
+    const hourHeight = config.hourHeight();
+    return {
+      x: rect.right,
+      y: rect.top + (preview.startMinute / 60) * hourHeight,
+      width: rect.width,
+      height: (preview.durationMinutes / 60) * hourHeight,
+    };
+  }
+
   function handleCreateMove(e: PointerEvent) {
     const state = createState;
     if (!state) return;
@@ -516,14 +548,25 @@ export function useDragController(config: DragControllerConfig) {
     updateCreatePreview();
   }
 
-  async function handleCreateEnd() {
+  async function handleCreateEnd(e: PointerEvent) {
     window.removeEventListener("pointermove", handleCreateMove);
     window.removeEventListener("pointerup", handleCreateEnd);
     clearCreateHoldTimer();
     stopAutoScroll();
     stopScrollDrivenUpdates();
     unlockCursor();
-    lastPointerEvent = null;
+
+    if (createState) {
+      lastPointerEvent = e;
+      if (createState.mode === "pending") {
+        const dx = e.clientX - createState.pointerStartX;
+        const dy = e.clientY - createState.pointerStartY;
+        if (Math.hypot(dx, dy) >= CREATE_DRAG_THRESHOLD_PX) {
+          enterCreateSelection();
+        }
+      }
+      updateCreatePreview();
+    }
 
     const state = createState;
 
@@ -538,12 +581,14 @@ export function useDragController(config: DragControllerConfig) {
 
       const start = preview.event.start;
       const end = preview.event.end;
+      const anchor = getCreatePreviewAnchor(preview, state.columnEl);
       createState = null;
       createPreview = null;
       createPreviewDate = null;
       createGuideDate = null;
       createGuideMinute = null;
-      config.onEventCreate(start, end);
+      config.onEventCreate(start, end, anchor);
+      lastPointerEvent = null;
       return;
     }
 
@@ -553,18 +598,21 @@ export function useDragController(config: DragControllerConfig) {
       // which would cause the layout to see them as overlapping and animate width changes.
       const start = createPreview.event.start;
       const end = createPreview.event.end;
+      const anchor = getCreatePreviewAnchor(createPreview, state.columnEl);
       createState = null;
       createPreview = null;
       createPreviewDate = null;
       createGuideDate = null;
       createGuideMinute = null;
-      config.onEventCreate(start, end);
+      config.onEventCreate(start, end, anchor);
+      lastPointerEvent = null;
     } else {
       createState = null;
       createPreview = null;
       createPreviewDate = null;
       createGuideDate = null;
       createGuideMinute = null;
+      lastPointerEvent = null;
     }
   }
 

@@ -20,6 +20,7 @@
   import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
   import { useAllDayDragController } from "./useAllDayDragController.svelte";
+  import type { PanelAnchor } from "./edit-session.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { onMount } from "svelte";
@@ -58,7 +59,7 @@
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventPrefetch?: (event: CalendarEvent) => void;
     onEventUpdate: (event: CalendarEvent) => void;
-    onEventCreate: (start: string, end: string, allDay?: boolean) => void;
+    onEventCreate: (start: string, end: string, allDay?: boolean, anchor?: PanelAnchor) => void;
     editingId?: string;
     previewedIds?: Set<string>;
     initialScrollMinute?: number;
@@ -158,6 +159,29 @@
   const smoothScroll = createSmoothScroll(() => scrollContainer);
   let timedColumnsEl: HTMLDivElement | undefined = $state();
   let hoverGuide = $state<HoverTimeGuideState | null>(null);
+  let hoverGuideRaf = 0;
+  let pendingHoverGuide: HoverTimeGuideState | null | undefined;
+  let hoverGuideVisible = false;
+
+  function scheduleHoverGuide(next: HoverTimeGuideState | null) {
+    pendingHoverGuide = next;
+    if (hoverGuideRaf) return;
+    hoverGuideRaf = requestAnimationFrame(() => {
+      hoverGuideRaf = 0;
+      if (pendingHoverGuide !== undefined) {
+        hoverGuide = pendingHoverGuide;
+        pendingHoverGuide = undefined;
+      }
+    });
+  }
+
+  function cancelHoverGuideFrame() {
+    if (hoverGuideRaf) {
+      cancelAnimationFrame(hoverGuideRaf);
+      hoverGuideRaf = 0;
+    }
+    pendingHoverGuide = undefined;
+  }
 
   function handleHoverGuideChange(guide: {
     columnLeft: number;
@@ -165,27 +189,32 @@
     instant: boolean;
     minute: number;
     positionMinute: number;
+    y: number;
   } | null) {
     if (!guide || !timedColumnsEl) {
-      hoverGuide = null;
+      hoverGuideVisible = false;
+      scheduleHoverGuide(null);
       return;
     }
 
     const containerRect = timedColumnsEl.getBoundingClientRect();
     const nextX = guide.columnLeft - containerRect.left;
 
-    hoverGuide = {
-      horizontalInstant: hoverGuide === null,
+    scheduleHoverGuide({
+      horizontalInstant: !hoverGuideVisible,
       instant: guide.instant,
       minute: guide.minute,
       positionMinute: guide.positionMinute,
       width: guide.columnWidth,
       x: nextX,
-    };
+      y: guide.y,
+    });
+    hoverGuideVisible = true;
   }
 
   function clearHoverGuide() {
-    hoverGuide = null;
+    hoverGuideVisible = false;
+    scheduleHoverGuide(null);
   }
 
   function onWheel(e: WheelEvent) {
@@ -290,6 +319,7 @@
 
     return () => {
       clearInterval(interval);
+      cancelHoverGuideFrame();
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("keydown", handleKeyDown);
       scrollContainer?.removeEventListener("scroll", handleScroll);
@@ -357,7 +387,7 @@
     getColumnDate,
     getScrollContainer: () => scrollContainer ?? null,
     onEventUpdate: (e) => onEventUpdate(e),
-    onEventCreate: (s, e) => onEventCreate(s, e),
+    onEventCreate: (s, e, anchor) => onEventCreate(s, e, false, anchor),
     canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
     activeBlockId: () => pomodoroStore.activeBlockId,
     isEventLocked: (id) => {

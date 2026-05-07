@@ -6,6 +6,7 @@
     positionMinute: number;
     width: number;
     x: number;
+    y: number;
   }
 </script>
 
@@ -54,7 +55,7 @@
       <div
         class="hover-time-guide-y {guide.instant ? 'hover-time-guide-transition-paused' : ''}"
         style="
-          transform: translate3d(0, calc({guide.positionMinute} / 60 * var(--hour-h) * 1px), 0);
+          transform: translate3d(0, {guide.y}px, 0);
         "
       >
         <div

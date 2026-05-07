@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import Pin from "@lucide/svelte/icons/pin";
   import PinOff from "@lucide/svelte/icons/pin-off";
@@ -66,17 +67,24 @@
 
   $effect(() => {
     function update() {
-      const t = pollIndex * SAMPLE_INTERVAL_MS;
-      pollIndex++;
-      invoke<MemoryReport>("get_memory_report").then((r) => {
-        liveReport = r;
-        memorySamples.push({
-          t,
-          totalMb: r.total_mb,
-          processes: r.processes.map((p) => ({ name: p.name, mb: p.mb })),
-        });
-        if (memorySamples.length > SAMPLE_CAP) memorySamples.shift();
+      const t = untrack(() => {
+        const next = pollIndex * SAMPLE_INTERVAL_MS;
+        pollIndex++;
+        return next;
       });
+      invoke<MemoryReport>("get_memory_report")
+        .then((r) => {
+          liveReport = r;
+          memorySamples.push({
+            t,
+            totalMb: r.total_mb,
+            processes: r.processes.map((p) => ({ name: p.name, mb: p.mb })),
+          });
+          if (memorySamples.length > SAMPLE_CAP) memorySamples.shift();
+        })
+        .catch((e) => {
+          console.warn("[perf] memory report failed:", e);
+        });
     }
     update();
     const id = setInterval(update, SAMPLE_INTERVAL_MS);
