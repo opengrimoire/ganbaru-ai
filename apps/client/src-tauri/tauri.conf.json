@@ -18,6 +18,7 @@
         "minWidth": 280,
         "minHeight": 180,
         "maximized": true,
+        "visible": false,
         "decorations": false,
         "transparent": false,
         "zoomHotkeysEnabled": false

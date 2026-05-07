@@ -3,8 +3,25 @@ import { Temporal } from "@js-temporal/polyfill";
 import "@fontsource-variable/inter";
 import "./app.css";
 import { mount } from "svelte";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ensureConfigLoaded } from "./lib/vault/config";
 import { hydrateUserThemes } from "./lib/stores/theme.svelte";
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+async function revealMainWindow(): Promise<void> {
+  await nextFrame();
+  await nextFrame();
+  try {
+    await getCurrentWindow().show();
+  } catch (error) {
+    console.warn("Failed to reveal the main window:", error);
+  }
+}
 
 // Boot order: hydrate vault/config.json, then load user themes from
 // SQLite, then mount App. Config and theme reads block first paint so
@@ -16,12 +33,19 @@ import { hydrateUserThemes } from "./lib/stores/theme.svelte";
 // and on first run only the calendar grid waits while the rest of the
 // chrome paints immediately.
 const appPromise = (async () => {
-  await ensureConfigLoaded();
-  await hydrateUserThemes();
-  const { default: App } = await import("./App.svelte");
-  return mount(App, {
-    target: document.getElementById("app")!,
-  });
+  try {
+    await ensureConfigLoaded();
+    await hydrateUserThemes();
+    const { default: App } = await import("./App.svelte");
+    const app = mount(App, {
+      target: document.getElementById("app")!,
+    });
+    await revealMainWindow();
+    return app;
+  } catch (error) {
+    await revealMainWindow();
+    throw error;
+  }
 })();
 
 export default appPromise;
