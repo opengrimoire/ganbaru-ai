@@ -43,6 +43,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { BUILD_REF } from "$lib/buildInfo";
 import { getCalendar } from "./calendar.svelte";
+import { getBenchmarkStatus, type BenchmarkStatus } from "./benchmarkStatus.svelte";
 import {
   STARTUP_RELAUNCH_COOLDOWN_MS,
   STARTUP_SAMPLE_RUNS,
@@ -69,7 +70,6 @@ import {
 } from "$lib/benchmark/runner";
 import { BENCHMARK_SCENARIOS, getScenarioById } from "$lib/benchmark/registry";
 
-type Status = "idle" | "confirming" | "running" | "summary" | "error";
 type PendingRequest = { mode: "single" | "suite"; scenarioIds: string[] };
 
 export interface RunningInfo {
@@ -84,7 +84,16 @@ export interface RunningInfo {
 }
 
 class BenchmarkRunnerStore {
-  status = $state<Status>("idle");
+  #benchmarkStatus = getBenchmarkStatus();
+
+  get status(): BenchmarkStatus {
+    return this.#benchmarkStatus.status;
+  }
+
+  set status(status: BenchmarkStatus) {
+    this.#benchmarkStatus.setStatus(status);
+  }
+
   running = $state<RunningInfo | undefined>(undefined);
   result = $state<BenchmarkResult | null>(null);
   results = $state<BenchmarkResult[]>([]);

@@ -24,7 +24,7 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
-  import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
+  import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
 
   let {
@@ -43,7 +43,7 @@
   const theme = getTheme();
   const zoom = getZoom();
   const preferences = getPreferences();
-  const benchmarkRunner = getBenchmarkRunner();
+  const benchmarkStatus = getBenchmarkStatus();
 
   let isMaximized = $state(false);
   let showCloseConfirm = $state(false);
@@ -55,7 +55,7 @@
   const settingsLauncher = getSettingsLauncher();
   const themeEditor = getThemeEditor();
   let perfPinned = $state(false);
-  const lockedByBenchmark = $derived(benchmarkRunner.status !== "idle");
+  const lockedByBenchmark = $derived(benchmarkStatus.status !== "idle");
 
   type PerformancePopoverComponent = typeof import("$lib/components/perf/PerformancePopover.svelte").default;
   type SettingsModalComponent = typeof import("$lib/components/settings/SettingsModal.svelte").default;
