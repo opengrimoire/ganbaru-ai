@@ -6,6 +6,12 @@ All timestamps are ISO 8601 in UTC with a `Z` suffix. The UI converts to the dev
 
 UUIDs are the primary key for all user-data tables. Auto-incrementing integers are avoided because they leak insertion order and complicate sync. UUIDs are generated client-side at write time.
 
+## Data evolution rule
+
+Persisted data is a user-owned contract. Any schema, config, JSON, import/export, or token-catalog change must explicitly handle existing installs and older exported files. Before removing or renaming stored data, check for live rows, seed/reset rows, stale config keys, legacy JSON fields, import validators, export serializers, and fallback behavior.
+
+Do not leave obsolete persistent data behind. If a column, row key, config key, or JSON field stops having meaning, add a narrow migration or cleanup path and document why it is safe. Migrations should be idempotent, preserve user-authored values that still map to current behavior, and delete only data that is dead or derivable from current canonical data.
+
 ## Calendar
 
 ### `calendars`
@@ -212,6 +218,8 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 ### `theme_tokens`
 
 One row per resolved color value, across three peer kinds. Sources drive multi-token derivation when one of them is edited; app and calendar tokens are the rendered shell snapshot. Source key names are bare (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`); app and calendar key names keep their `--prefixed` CSS form.
+
+Migration v9 removes app-token rows that used to store implementation paint hooks now derived at runtime or owned by component code. This keeps existing vaults aligned with the current token catalog instead of preserving obsolete live or seed rows.
 
 | Field | Type | Description |
 |---|---|---|

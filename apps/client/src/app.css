@@ -70,15 +70,6 @@
   --priority-hard: #F97316;
   --priority-epic: #A855F7;
 
-  /* Pomodoro (light) */
-  --pomodoro-idle-text: #9CA3AF;
-  --pomodoro-idle-timer: #FFFFFF;
-
-  /* Calendar extras (light) */
-  --cal-color-picker-outline: #141420;
-  --cal-description-editor-bg: #0000000D;
-  --cal-drag-preview-border: #0000004D;
-
   /* Color picker thumb + alpha checker (fixed, visibility against any gradient) */
   --editor-chrome-checker-a: #CCCCCC;
   --editor-chrome-checker-b: #FFFFFF;
@@ -157,15 +148,6 @@
   --priority-hard: #FB923C;
   --priority-epic: #C084FC;
 
-  /* Pomodoro (dark) */
-  --pomodoro-idle-text: #9CA3AF;
-  --pomodoro-idle-timer: #FFFFFF;
-
-  /* Calendar extras (dark) */
-  --cal-color-picker-outline: #141420;
-  --cal-description-editor-bg: #00000026;
-  --cal-drag-preview-border: #FFFFFF80;
-
   /* Color picker thumb + alpha checker (fixed, visibility against any gradient) */
   --editor-chrome-checker-a: #3A3A3F;
   --editor-chrome-checker-b: #5A5A60;
@@ -226,8 +208,6 @@
   --color-priority-medium: var(--priority-medium);
   --color-priority-hard: var(--priority-hard);
   --color-priority-epic: var(--priority-epic);
-  --color-pomodoro-idle-text: var(--pomodoro-idle-text);
-  --color-pomodoro-idle-timer: var(--pomodoro-idle-timer);
 }
 
 @layer base {

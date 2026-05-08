@@ -16,6 +16,13 @@
   let open = $state(false);
 
   const colorEntry = $derived(getEventColor(color, theme));
+
+  function swatchStyle(bg: string, text: string, selected: boolean): string {
+    const outline = selected
+      ? ` outline: 2px solid ${text}; outline-offset: 0;`
+      : "";
+    return `background-color: ${bg};${outline}`;
+  }
 </script>
 
 <div class="relative flex items-center">
@@ -35,7 +42,7 @@
         <button
           onclick={() => { onselect(color === c ? undefined : c); open = false; }}
           class="h-[18px] w-11 rounded-md"
-          style="background-color: {entry.bg};{color === c ? ' outline: 2px solid var(--cal-color-picker-outline); outline-offset: 0;' : ''}"
+          style={swatchStyle(entry.bg, entry.text, color === c)}
           title={entry.bg}
         ></button>
       {/each}

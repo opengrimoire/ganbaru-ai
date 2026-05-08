@@ -348,8 +348,6 @@ describe("deriveAppTokens", () => {
       "--status-tentative-foreground",
       "--status-declined",
       "--status-declined-foreground",
-      "--pomodoro-idle-timer",
-      "--cal-drag-preview-border",
     ];
     for (const key of exactKeys) {
       expect(derived[key]?.toLowerCase()).toBe(
@@ -388,7 +386,6 @@ describe("deriveAppTokens", () => {
       "--event-panel-input-text",
       "--event-panel-placeholder",
       "--event-panel-muted-text",
-      "--pomodoro-idle-text",
     ];
     for (const key of walkKeys) {
       const drift = Math.abs(L(derived[key]) - L(BASE_APP_TOKENS.dark[key]));

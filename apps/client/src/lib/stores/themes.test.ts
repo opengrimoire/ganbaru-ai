@@ -218,7 +218,7 @@ describe("computeThemeTokenOps", () => {
     expect(result.applied.size).toBe(0);
   });
 
-  it("paints every app and calendar token from a user theme snapshot", () => {
+  it("paints editable snapshot tokens and derived runtime tokens", () => {
     const customApp = { ...BASE_APP_TOKENS.dark, "--primary": "#abc", "--background": "#fff" };
     const customCal = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#eee" };
     const theme = makeUserTheme({
@@ -230,9 +230,24 @@ describe("computeThemeTokenOps", () => {
     expect(result.toSet.get("--background")).toBe("#fff");
     expect(result.toSet.get("--cal-bg")).toBe("#eee");
     expect(result.toClear.size).toBe(0);
-    // Every app and calendar key participates in the snapshot.
+    expect(result.toSet.has("--event-panel-edge")).toBe(true);
+    expect(result.toSet.has("--pomodoro-idle-text")).toBe(false);
+    // Every editable app and calendar key participates in the snapshot.
     expect(result.applied.has("--primary")).toBe(true);
     expect(result.applied.has("--cal-bg")).toBe(true);
+  });
+
+  it("clears stale implementation tokens that user themes no longer paint", () => {
+    const theme = makeUserTheme();
+    const previous = new Set([
+      "--primary",
+      "--pomodoro-idle-text",
+      "--cal-drag-preview-border",
+    ]);
+    const result = computeThemeTokenOps(theme, previous);
+    expect(result.toClear).toEqual(
+      new Set(["--pomodoro-idle-text", "--cal-drag-preview-border"]),
+    );
   });
 
   it("clears previously applied tokens that the new built-in does not paint", () => {

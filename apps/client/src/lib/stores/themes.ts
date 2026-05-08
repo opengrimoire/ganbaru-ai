@@ -28,7 +28,7 @@ export type ThemeId = string;
  *   `calendarTokenOverrides` when they want a fully independent value.
  * - **ink:** text base. Default text color and the color every "lifted"
  *   surface mixes a small fraction of to tint it. Also drives secondary
- *   text tokens (form indicator, pomodoro idle caption, event panel text).
+ *   text tokens (form indicator and event panel text).
  * - **primary:** brand/action accent used on highlighted buttons and links.
  * - **destructive:** danger signal. Identity-drives the destructive tile,
  *   armed-delete state, and declined attendance status.
@@ -72,7 +72,7 @@ export type EventPaletteHexes = readonly string[];
  * a stored theme's stamp and this constant to render an opt-in "rebake"
  * banner so non-pinned colors do not silently drift across app updates.
  */
-export const DERIVATION_ENGINE_VERSION = 1;
+export const DERIVATION_ENGINE_VERSION = 2;
 
 /**
  * A built-in theme ships with the app, never persists to SQLite, and paints
@@ -292,12 +292,12 @@ export function themeIds(
  * Compute the CSS custom property changes needed to apply a theme when
  * `previouslyApplied` tokens were set by the last theme.
  *
- * User themes paint their full token snapshot; built-ins paint nothing and
- * let the base CSS rules show through. The result tells the caller which
- * tokens to set, which leftover keys to clear, and the new set of applied
- * keys to remember for the next switch (without this bookkeeping, switching
- * from a user theme to a built-in would leave the previous theme's values
- * stuck on the root).
+ * User themes paint their editable token snapshot plus runtime-only derived
+ * implementation tokens; built-ins paint nothing and let the base CSS rules
+ * show through. The result tells the caller which tokens to set, which
+ * leftover keys to clear, and the new set of applied keys to remember for
+ * the next switch (without this bookkeeping, switching from a user theme to
+ * a built-in would leave the previous theme's values stuck on the root).
  */
 export function computeThemeTokenOps(
   theme: Theme,
@@ -310,11 +310,11 @@ export function computeThemeTokenOps(
   const toSet = new Map<string, string>();
   const applied = new Set<string>();
   if (theme.kind === "user") {
-    for (const [key, value] of Object.entries(theme.appTokens)) {
+    for (const [key, value] of Object.entries(resolveAppTokens(theme))) {
       toSet.set(key, value);
       applied.add(key);
     }
-    for (const [key, value] of Object.entries(theme.calendarTokens)) {
+    for (const [key, value] of Object.entries(resolveCalendarTokens(theme))) {
       toSet.set(key, value);
       applied.add(key);
     }
@@ -356,14 +356,8 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--sidebar-accent-foreground",
   "--event-panel-bg",
   "--event-panel-contrast",
-  "--event-panel-edge",
-  "--event-panel-shadow",
-  "--event-panel-divider",
-  "--event-panel-input-text",
-  "--event-panel-placeholder",
   "--event-panel-text",
   "--event-panel-muted-text",
-  "--form-indicator",
   "--action-confirm",
   "--action-confirm-foreground",
   "--action-danger-armed",
@@ -378,11 +372,15 @@ export const APP_TOKEN_KEYS: readonly string[] = Object.freeze([
   "--priority-medium",
   "--priority-hard",
   "--priority-epic",
-  "--pomodoro-idle-text",
-  "--pomodoro-idle-timer",
-  "--cal-color-picker-outline",
-  "--cal-description-editor-bg",
-  "--cal-drag-preview-border",
+] as const);
+
+const DERIVED_APP_TOKEN_KEYS: readonly string[] = Object.freeze([
+  "--event-panel-edge",
+  "--event-panel-shadow",
+  "--event-panel-divider",
+  "--event-panel-input-text",
+  "--event-panel-placeholder",
+  "--form-indicator",
 ] as const);
 
 /**
@@ -460,11 +458,6 @@ export const BASE_APP_TOKENS: Readonly<
     "--priority-medium": "#EAB308",
     "--priority-hard": "#F97316",
     "--priority-epic": "#A855F7",
-    "--pomodoro-idle-text": "#9CA3AF",
-    "--pomodoro-idle-timer": "#FFFFFF",
-    "--cal-color-picker-outline": "#141420",
-    "--cal-description-editor-bg": "#0000000D",
-    "--cal-drag-preview-border": "#0000004D",
   }),
   dark: Object.freeze({
     "--background": "#27282A",
@@ -512,11 +505,6 @@ export const BASE_APP_TOKENS: Readonly<
     "--priority-medium": "#FACC15",
     "--priority-hard": "#FB923C",
     "--priority-epic": "#C084FC",
-    "--pomodoro-idle-text": "#9CA3AF",
-    "--pomodoro-idle-timer": "#FFFFFF",
-    "--cal-color-picker-outline": "#141420",
-    "--cal-description-editor-bg": "#00000026",
-    "--cal-drag-preview-border": "#FFFFFF80",
   }),
 });
 
@@ -618,7 +606,6 @@ const APP_FRACTIONS = {
   eventPanelPlaceholder: 0.180110,
   eventPanelMutedText: 0.363909,
   eventPanelDivider: 0.839033,
-  pomodoroIdleText: 0.244651,
 } as const;
 
 /**
@@ -710,9 +697,6 @@ export function deriveAppTokens(
     walkFraction(anchorFor(bg), bg, fraction);
   const bright = (bg: string, target = 4.5) =>
     pickBrightForeground(bg, ink, target);
-  // Pomodoro idle overlay paints a full-screen black surface; tokens over
-  // it pair against pure black rather than against canvas.
-  const idleBg = "#000000";
   const canvasIsDark = relativeLuminance(canvas) < 0.5;
   const card = shift(d.cardDeltaL);
   const popover = shift(d.popoverDeltaL);
@@ -766,16 +750,15 @@ export function deriveAppTokens(
     "--status-declined": destructive,
     "--status-declined-foreground": bright(destructive, 3),
     "--form-indicator": anchorFor(canvas),
-    "--pomodoro-idle-text": walk(idleBg, f.pomodoroIdleText),
-    "--pomodoro-idle-timer": bright(idleBg, 4.5),
     "--event-panel-bg": eventPanelBg,
     "--event-panel-contrast": eventPanelContrast,
+    "--event-panel-edge": canvasIsDark ? "#0000008C" : "#0000004D",
+    "--event-panel-shadow": canvasIsDark ? "#00000066" : "#0000001F",
     "--event-panel-divider": walk(eventPanelBg, f.eventPanelDivider),
     "--event-panel-text": walk(eventPanelBg, f.eventPanelText),
     "--event-panel-input-text": walk(eventPanelBg, f.eventPanelInputText),
     "--event-panel-placeholder": walk(eventPanelBg, f.eventPanelPlaceholder),
     "--event-panel-muted-text": walk(eventPanelBg, f.eventPanelMutedText),
-    "--cal-drag-preview-border": canvasIsDark ? "#FFFFFF80" : "#0000004D",
   };
 }
 
@@ -837,22 +820,42 @@ export function deriveCalendarTokens(
 }
 
 /**
- * Resolve every app-shell token for a theme. User themes paint from the
- * stored snapshot directly; built-ins fall through to the base CSS rules.
- * The three-layer fall-through (override, derived, base) is gone: the
- * snapshot is computed at write time and stays stable at runtime.
+ * Resolve every app-shell token for a theme. User themes paint editable
+ * values from the stored snapshot and derive implementation-only values at
+ * runtime; built-ins fall through to the base CSS rules.
  */
 export function resolveAppTokens(theme: Theme): Record<string, string> {
-  if (theme.kind === "user") return { ...theme.appTokens };
+  if (theme.kind === "user") {
+    const derived = deriveAppTokens(theme.sources);
+    return {
+      ...pickTokens(theme.appTokens, APP_TOKEN_KEYS),
+      ...pickTokens(derived, DERIVED_APP_TOKEN_KEYS),
+    };
+  }
   return { ...BASE_APP_TOKENS[theme.base] };
+}
+
+function pickTokens(
+  source: Readonly<Record<string, string>>,
+  keys: readonly string[],
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
 }
 
 /**
  * Calendar-shell counterpart to {@link resolveAppTokens}. User themes paint
- * from the stored snapshot; built-ins fall through to the base CSS.
+ * editable values from the stored snapshot; built-ins fall through to the
+ * base CSS.
  */
 export function resolveCalendarTokens(theme: Theme): Record<string, string> {
-  if (theme.kind === "user") return { ...theme.calendarTokens };
+  if (theme.kind === "user") {
+    return pickTokens(theme.calendarTokens, CALENDAR_TOKEN_KEYS);
+  }
   return { ...BASE_CALENDAR_TOKENS[theme.base] };
 }
 

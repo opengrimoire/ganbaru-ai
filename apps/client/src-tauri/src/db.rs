@@ -329,5 +329,47 @@ pub fn migrations() -> Vec<Migration> {
             UPDATE calendar_events SET timezone = 'UTC' WHERE timezone = '';
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 9,
+        description: "remove obsolete theme implementation token rows",
+        // The visual app theme contract no longer stores implementation
+        // paint hooks that are derived at runtime or owned by component
+        // code. Delete old live and seed rows so existing vaults match the
+        // current token catalog instead of carrying stale key/value data.
+        sql: "
+            DELETE FROM theme_tokens
+            WHERE kind = 'app'
+              AND key IN (
+                '--event-panel-edge',
+                '--event-panel-shadow',
+                '--event-panel-divider',
+                '--event-panel-input-text',
+                '--event-panel-placeholder',
+                '--form-indicator',
+                '--pomodoro-idle-text',
+                '--pomodoro-idle-timer',
+                '--cal-color-picker-outline',
+                '--cal-description-editor-bg',
+                '--cal-drag-preview-border'
+              );
+
+            DELETE FROM theme_seed_tokens
+            WHERE kind = 'app'
+              AND key IN (
+                '--event-panel-edge',
+                '--event-panel-shadow',
+                '--event-panel-divider',
+                '--event-panel-input-text',
+                '--event-panel-placeholder',
+                '--form-indicator',
+                '--pomodoro-idle-text',
+                '--pomodoro-idle-timer',
+                '--cal-color-picker-outline',
+                '--cal-description-editor-bg',
+                '--cal-drag-preview-border'
+              );
+        ",
+        kind: MigrationKind::Up,
     }]
 }

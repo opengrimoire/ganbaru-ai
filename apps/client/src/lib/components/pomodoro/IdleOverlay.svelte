@@ -112,23 +112,34 @@
 
 <div class="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black select-none">
   <div class="flex flex-col items-center gap-8">
-    <p class="text-pomodoro-idle-text text-sm tracking-wide uppercase">Focus session paused</p>
+    <p class="idle-copy text-sm tracking-wide uppercase">Focus session paused</p>
 
-    <p class="text-pomodoro-idle-timer text-7xl font-light tabular-nums">
+    <p class="idle-timer text-7xl font-light tabular-nums">
       {formatDuration(elapsed)}
     </p>
 
-    <p class="text-pomodoro-idle-text text-base">
+    <p class="idle-copy text-base">
       idle
     </p>
   </div>
 
   <div class="mt-16 flex flex-col items-center gap-3">
-    <p class="text-pomodoro-idle-text text-sm">
-      Press <span class="text-white">Space</span> to resume focus
+    <p class="idle-copy text-sm">
+      Press <span class="idle-key">Space</span> to resume focus
     </p>
-    <p class="text-pomodoro-idle-text text-sm">
-      Press <span class="text-white">Esc</span> to stop session
+    <p class="idle-copy text-sm">
+      Press <span class="idle-key">Esc</span> to stop session
     </p>
   </div>
 </div>
+
+<style>
+  .idle-copy {
+    color: #9CA3AF;
+  }
+
+  .idle-timer,
+  .idle-key {
+    color: #FFFFFF;
+  }
+</style>

@@ -253,7 +253,11 @@
   }
 
   .desc-editing {
-    background-color: var(--cal-description-editor-bg);
+    background-color: color-mix(
+      in oklab,
+      var(--event-panel-bg) 45%,
+      var(--event-panel-contrast)
+    );
     padding: 6px 8px;
     border-radius: 4px;
   }

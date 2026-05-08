@@ -142,6 +142,19 @@ After `pnpm -w run validate` passes, finish the task without extra dev-server, T
 
 - Keep the workspace structure and vault structure in this file up to date. When directories are created, renamed, or removed, update the relevant tree. Never hardcode vault paths; read them from user configuration.
 
+### Data handling and migrations
+
+- Treat stored user data as durable. Any change to SQLite schema, persisted JSON, config keys, theme tokens, import/export formats, or generated vault data must consider existing installs, older exports, stale rows, removed fields, renamed keys, seed/reset data, and rollback or fallback behavior.
+- Do not leave dead persistent data behind. If a field, row key, config key, or JSON property becomes obsolete, add an explicit migration, cleanup path, or validator drop rule, then document it in the relevant data or feature spec.
+- Keep migrations idempotent and narrowly scoped. Preserve user-authored values whenever those values still have meaning, and only delete data that is truly obsolete or derivable from current canonical data.
+
+### Theme and color tokens
+
+- New UI should use existing semantic theme tokens first. Add a new editable theme token only when it represents a stable, user-facing customization choice that users can reasonably understand and value.
+- Do not add editable theme tokens for one-off internal paint details such as borders, shadows, dividers, placeholder text, selected-state outlines, editor tints, drag-preview borders, or temporary affordances when they can be derived from an existing surface, foreground, event color, or semantic signal.
+- Keep theme editing broad but curated. The editor should expose meaningful color decisions, not every CSS variable. Prefer local derivation for implementation details and document the relationship when it affects future theme work.
+- When adding, renaming, or removing theme tokens, update `docs/features/themes.md`, import/export validation, SQLite migrations or cleanup paths, seed/reset behavior, and tests in the same change.
+
 ### Code style
 
 - Do not use em dash characters or two consecutive hyphens in markdown, code comments, or commit messages. Restructure sentences using periods, commas, colons, semicolons, or parentheses instead.

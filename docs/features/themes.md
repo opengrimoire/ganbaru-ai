@@ -20,7 +20,7 @@ A Theme is a self-contained visual package. The minimum fields:
 User themes additionally carry a full resolved-token snapshot and source palette:
 
 - **sources:** six-color palette (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`) that drives the rest of the shell through the derivation engine. Calendar canvas is not a source: it auto-derives from the app canvas via a direction-aware OKLab ΔL offset (see "Derivation formulas" below) and is pinnable through the per-token isolated flag on `--cal-bg` when the user wants to isolate it.
-- **appTokens / calendarTokens:** full resolved hex map for every key in `APP_TOKEN_KEYS` (50 entries) and `CALENDAR_TOKEN_KEYS` (10 entries). The snapshot is what the runtime actually paints; sources are kept as editor seeds so source edits can re-derive the snapshot in lockstep.
+- **appTokens / calendarTokens:** resolved hex map for every user-editable key in `APP_TOKEN_KEYS` (39 entries) and `CALENDAR_TOKEN_KEYS` (10 entries). Runtime-only implementation colors are derived from those values and are not stored, exported, or shown as editor rows.
 - **appIsolated / calendarIsolated:** sets of token keys flagged as user-pinned. An isolated token does not participate in source-edit cascades or rebakes: it stays at whatever hex the user wrote.
 - **derivationEngineVersion:** integer stamp identifying which version of the derivation engine produced the snapshot. The editor shows a rebake banner when a stored theme's stamp trails the current code constant (see "Engine version and rebaking" below).
 - **blendCanvas:** scalar hex the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated; pinning `--cal-bg` lets the user pin `blendCanvas` indirectly.
@@ -133,25 +133,25 @@ Seeds are not exported in the JSON payload: `serializeTheme` emits the live snap
 
 ## Shell token derivation
 
-The app and calendar shell are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). User themes paint those tokens from a stored snapshot; the derivation engine runs only at write time.
+The app and calendar shell are styled through CSS tokens defined in `app.css` under `:root` (light) and `.dark` (dark). User themes paint user-editable tokens from a stored snapshot. Runtime-only implementation tokens are derived from the same sources when the theme is resolved.
 
 ### Snapshot model
 
-Every user-theme token is stored as a resolved hex snapshot in `theme_tokens`, one row per (theme, kind, key) triple covering every key in `APP_TOKEN_KEYS` (50 entries) and `CALENDAR_TOKEN_KEYS` (10 entries). Sources are kept as editor seeds in the same table under `kind='source'`; they drive multi-token derivation when the user edits one of them, but they are not consulted at paint time. The per-token `isolated` flag controls whether each token participates in the next source-edit cascade or is treated as user-pinned.
+Every user-editable theme token is stored as a resolved hex snapshot in `theme_tokens`, one row per (theme, kind, key) triple covering every key in `APP_TOKEN_KEYS` (39 entries) and `CALENDAR_TOKEN_KEYS` (10 entries). Sources are kept as editor seeds in the same table under `kind='source'`; they drive multi-token derivation when the user edits one of them, but they are not consulted at paint time. The per-token `isolated` flag controls whether each token participates in the next source-edit cascade or is treated as user-pinned.
 
-`computeThemeTokenOps` reads the snapshot directly: for built-ins it serves `BASE_APP_TOKENS[base]` and `BASE_CALENDAR_TOKENS[base]`; for user themes it serves `theme.appTokens` and `theme.calendarTokens` verbatim. The result is pushed to the root via `root.style.setProperty`. Switching themes clears tokens set by the previous theme that the next one does not cover.
+`computeThemeTokenOps` paints user themes from the editable snapshot plus `DERIVED_APP_TOKEN_KEYS`, a runtime-only set for implementation details such as the event-panel edge, shadow, divider, input text, placeholder, and form indicator. Built-ins paint nothing inline; they clear previously applied user-theme variables so the base CSS in `app.css` takes over. Switching themes clears tokens set by the previous theme that the next one does not cover, including stale implementation variables from older theme versions.
 
 ### Source-edit cascade
 
 Editing a source value triggers `updateSourceValue(themeId, sourceKey, hex)`. The store rebuilds the snapshot from `deriveAppTokens(newSources)` and `deriveCalendarTokens(newSources)`, then updates the in-memory theme:
 
 - Replace the `sources[sourceKey]` entry.
-- For each app token where the isolated flag is unset, write the new derived value into `appTokens`.
+- For each user-editable app token where the isolated flag is unset, write the new derived value into `appTokens`.
 - For each calendar token where the isolated flag is unset, write the new derived value into `calendarTokens`.
 - If `--cal-bg` is non-isolated, set `blendCanvas` to the new derived `--cal-bg` so the dimmed event-tile blend stays in sync.
 - Re-paint the DOM if the edited theme is active.
 
-The mutator never touches SQLite. Save and apply later flushes the resulting snapshot through `persistThemeToDb`, which calls `replaceThemeContent` for an existing theme (UPDATE parent, DELETE+INSERT children, preserve dismissals) or `insertTheme` for a fresh theme. Isolated tokens never receive the new derived hex; they keep whatever the user wrote. Pinning a token whose value happens to equal the current derivation is a deliberate choice to freeze that color through future source edits, so no special "ghost equality" handling is needed.
+The mutator never touches SQLite. Save and apply later flushes the resulting snapshot through `persistThemeToDb`, which calls `replaceThemeContent` for an existing theme (UPDATE parent, DELETE+INSERT children, preserve dismissals) or `insertTheme` for a fresh theme. Isolated tokens never receive the new derived hex; they keep whatever the user wrote. Pinning a token whose value happens to equal the current derivation is a deliberate choice to freeze that color through future source edits, so no special "ghost equality" handling is needed. Runtime-only implementation colors are recomputed when the theme is resolved and cannot be pinned.
 
 ### Isolated flag semantics
 
@@ -163,14 +163,28 @@ Three mutators expose the flag:
 
 All three mutators are pure in-memory; the buffer flushes to SQLite when the editor commits.
 
-Imported themes route unknown keys to be dropped: only keys present in `APP_TOKEN_KEYS` / `CALENDAR_TOKEN_KEYS` (and only valid hex values) survive validation.
+Imported themes route unknown keys to be dropped: only user-editable keys present in `APP_TOKEN_KEYS` / `CALENDAR_TOKEN_KEYS` (and only valid hex values) survive validation. Older exports that contain former implementation-detail keys import without those keys.
+
+Existing SQLite themes are cleaned by migration v9, which deletes obsolete live and seed rows for former implementation-detail app tokens. The schema shape stays generic, but persisted rows track the current editable token catalog.
+
+### Token catalog changes
+
+The theme token catalog is expected to keep changing as the editor grows. Every addition, rename, split, merge, or removal must be treated as a persisted-data change, not only a UI refactor. Before changing `APP_TOKEN_KEYS`, `CALENDAR_TOKEN_KEYS`, source keys, seed mirrors, JSON export fields, or import validation, check how existing SQLite rows and older theme JSON files will behave.
+
+Required handling for token-catalog changes:
+
+- Preserve user-authored values when the old value still maps to a current editable concept.
+- Drop obsolete JSON keys during validation so older exports remain importable.
+- Add SQLite cleanup migrations for obsolete live and seed rows so old vaults do not carry dead token data forever.
+- Bump `DERIVATION_ENGINE_VERSION` when unchanged sources can produce different derived colors.
+- Update this spec and `docs/data/schema.md` with the migration or compatibility rule.
 
 ### Sources
 
 A theme can ship a `sources` object with six hex colors. The first four form the **app foundation**, the last two are **semantic signals**:
 
 - `canvas`: app background. Every derived surface (card, popover, secondary, muted, accent, sidebar, event panel, calendar canvas) is computed by shifting this color's OKLab lightness by a signed per-token offset, so editing canvas cascades through the full surface stack including the calendar.
-- `ink`: text base. The starting anchor for the contrast-aware pickers that drive `--foreground` (against canvas) and `--card-foreground` (against the card surface), the form indicator dot, the pomodoro idle caption, and the event panel's placeholder and muted captions. Because `--foreground` and `--card-foreground` both flow through `pickReadableForeground`, darkening canvas or tinting a card surface automatically flips the body text to the high-contrast side instead of stranding the user with black text on black.
+- `ink`: text base. The starting anchor for the contrast-aware pickers that drive `--foreground` (against canvas), `--card-foreground` (against the card surface), the runtime-only form indicator dot, and the event panel's text hierarchy. Because `--foreground` and `--card-foreground` both flow through `pickReadableForeground`, darkening canvas or tinting a card surface automatically flips the body text to the high-contrast side instead of stranding the user with black text on black.
 - `primary`: brand/action accent, used directly for `--primary`.
 - `destructive`: danger signal. Identity-drives `--destructive`, `--action-danger-armed`, and `--status-declined` so the delete button, armed-delete state, and declined attendance tile stay consistent.
 - `confirm`: positive signal. Identity-drives `--action-confirm` (save button, active scope pill) and `--status-accepted` (accepted attendance tile).
@@ -185,8 +199,10 @@ The derivation engine is calibrated end-to-end against the dark built-in. Feedin
 The engine combines three kinds of computations:
 
 - **Shift-derived surfaces** (card, popover, secondary, muted, accent, sidebar, sidebar-accent, event-panel-bg, event-panel-contrast, cal-bg, cal-timeline-rail) are produced by `shiftPerceptualL(canvas, deltaL)`. The per-token deltas in `APP_DERIVATION` are the measured BASE.dark OKLab-L diffs between canvas and each surface hex. Card (+0.028), popover (+0.056), accent (+0.077) lift above canvas; sidebar (-0.039) recedes below canvas so the title bar frames the app (the "contrarian" step that makes the dark built-in read as layered). Event-panel-bg (+0.013) sits just above canvas and event-panel-contrast (-0.021) just below, keeping the recessed band behind the floating panel visible on any canvas. Near-white or near-black canvases clamp the upper or lower tiers at the gamut boundary (accent, popover, and card can all collapse to `#ffffff` on a pure-white canvas, for example), which is expected clamp behavior rather than a layout failure. Calendar canvas is a direction-aware shift: dark canvases (relative luminance below 0.5) receive `calCanvasDarkDeltaL` (-0.089) so `--cal-bg` recedes into the grid, while light canvases receive `calCanvasLightDeltaL` (+0.032) so the grid lifts gently above the app background. The calendar timeline rail is derived the same way but on top of `--cal-bg`, not canvas: dark cal-bg receives `timelineRailDarkDeltaL` (+0.183), light cal-bg receives `timelineRailLightDeltaL` (-0.072).
-- **Walk-fraction tokens** (muted-foreground, ring, event-panel-divider, event-panel-text, event-panel-input-text, event-panel-placeholder, event-panel-muted-text, pomodoro-idle-text, cal-time-label, cal-timeline-break) are produced by `walkFraction(ink, paired-bg, fraction)`. The fractions in `APP_FRACTIONS` and `CAL_FRACTIONS` are measured from BASE.dark: each token's OKLab-L position as a fraction of the way from ink to its paired surface. BASE.dark's muted-foreground `#9494A0` sits at fraction 0.443 from ink (`L=0.893`) toward its muted bg, ring `#606070` sits at 0.673 from ink toward canvas, and so on. A contrast-target walk cannot reproduce those hexes because BASE.dark's own contrast sits between 3:1 and 4.5:1 in ways that don't collapse to a single target, so the fraction-based walk is the only way to hit BASE.dark identity while still cascading consistently on any canvas.
-- **Contrast-picked and hardcoded foregrounds.** `pickReadableForeground` resolves `--foreground`, `--card-foreground`, `--popover-foreground`, `--primary-foreground`, `--secondary-foreground`, and `--accent-foreground` against their paired surface so body text always meets AA 4.5:1. `pickBrightForeground` resolves `--destructive-foreground`, `--action-danger-armed-foreground`, `--status-accepted-foreground`, `--status-declined-foreground`, `--sidebar-foreground`, `--sidebar-accent-foreground`, and `--pomodoro-idle-timer` so status signals and sidebar text snap to `#FFFFFF` (or ink, or `#000000`) at 3:1 or higher. `--action-confirm-foreground` is the special case: it starts with `shiftPerceptualL(confirm, +0.519)` so BASE.dark produces its pale green `#D1FAE5` on `#065F46` and BASE.light clamps to white on `#059669`; the result is checked against a 3:1 floor and falls back to `pickReadableForeground` only when the source confirm is bright enough that the shift collapses to low contrast (e.g., a pure `#00FF7F`). `--status-tentative-foreground` is hardcoded to `#FFFFFF` to match BASE.dark/light's intentional low-contrast signal on bright warnings. `--form-indicator` is hardcoded to ink so the radio/checkbox dot tracks the user's text color directly. `--cal-drag-preview-border` branches on canvas luminance: dark canvases get `#FFFFFF80`, light canvases get `#0000004D`. `--cal-gridline` uses `pickReadableBorder` with a lowered 1.4:1 target so cloned themes inherit the built-in's subtle gridline style instead of painting prominent lines.
+- **Walk-fraction tokens** (muted-foreground, ring, event-panel-divider, event-panel-text, event-panel-input-text, event-panel-placeholder, event-panel-muted-text, cal-time-label, cal-timeline-break) are produced by `walkFraction(anchor, paired-bg, fraction)`. The fractions in `APP_FRACTIONS` and `CAL_FRACTIONS` are measured from BASE.dark: each token's OKLab-L position as a fraction of the way from a readable foreground anchor to its paired surface. BASE.dark's muted-foreground `#9494A0` sits at fraction 0.443 from ink (`L=0.893`) toward its muted bg, ring `#606070` sits at 0.673 from ink toward canvas, and so on. A contrast-target walk cannot reproduce those hexes because BASE.dark's own contrast sits between 3:1 and 4.5:1 in ways that don't collapse to a single target, so the fraction-based walk is the only way to hit BASE.dark identity while still cascading consistently on any canvas. Event-panel divider, input text, and placeholder are runtime-only outputs, not editor rows.
+- **Contrast-picked and hardcoded foregrounds.** `pickReadableForeground` resolves `--foreground`, `--card-foreground`, `--popover-foreground`, `--primary-foreground`, `--secondary-foreground`, and `--accent-foreground` against their paired surface so body text always meets AA 4.5:1. `pickBrightForeground` resolves `--destructive-foreground`, `--action-danger-armed-foreground`, `--status-accepted-foreground`, `--status-declined-foreground`, `--sidebar-foreground`, and `--sidebar-accent-foreground` so status signals and sidebar text snap to `#FFFFFF` (or ink, or `#000000`) at 3:1 or higher. `--action-confirm-foreground` is the special case: it starts with `shiftPerceptualL(confirm, +0.519)` so BASE.dark produces its pale green `#D1FAE5` on `#065F46` and BASE.light clamps to white on `#059669`; the result is checked against a 3:1 floor and falls back to `pickReadableForeground` only when the source confirm is bright enough that the shift collapses to low contrast (e.g., a pure `#00FF7F`). `--status-tentative-foreground` is hardcoded to `#FFFFFF` to match BASE.dark/light's intentional low-contrast signal on bright warnings. `--form-indicator` uses the readable foreground anchor against canvas so radio/checkbox dots flip with canvas for free. `--cal-gridline` uses `pickReadableBorder` with a lowered 1.4:1 target so cloned themes inherit the built-in's subtle gridline style instead of painting prominent lines.
+
+The event color picker outline, description editor edit tint, and all-day drag-preview border are no longer theme tokens. The selected color swatch uses the swatch's own readable text color as its outline, the description editor tint mixes the event-panel surface with its section-header strip, and the all-day drag preview mixes the event color with that event's readable text color. These details stay legible without adding editor rows.
 
 Confirm, warning, and destructive propagate through identity derivation: one source color feeds both the button state and the corresponding status tile, so users pick three semantic accents (green, amber, red) and every surface that carries that meaning stays consistent.
 
@@ -203,21 +219,23 @@ Groups are ordered top-to-bottom as a three-tier walkthrough: app and calendar f
 **Tier 1 (app and calendar foundation)** starts with the dominant canvas, keeps the calendar grid and event panel controls beside it, then continues through the remaining core shell sources:
 
 - **App canvas**: the dominant background color. Drives background, card, popover (paired with its text), secondary surface, muted surface, hover highlight, focus ring, title bar, and title bar hover. Editing it shifts the entire non-accent palette at once.
-- **Calendar surface**: a sourceless card covering the auto-derived calendar background and its driven tokens. The card header carries no source color (the grid background tracks the app canvas by default). Sub-rows expose `--cal-bg` (isolate to pin a specific grid color), `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, and `--cal-timeline-rail`. Isolating `--cal-bg` breaks the auto-derivation so the user can paint the grid a different color than the app canvas.
-- **Calendar details**: a sourceless card that collects every non-derived calendar color. Merges the former "Calendar markers" and "Calendar extras" into one group: today marker (pair), now line, break marker, focus marker, color-picker outline, description editor tint, and the all-day drag-preview border.
-- **Event panel**: nine sub-rows painting the event creation/edit panel surface, section-header strip, outer edge, drop shadow, title divider, input text, placeholder, body text, and muted captions. Sourceless today; grouping the nine tokens together keeps them visible as a block near the calendar controls that use them.
-- **Ink**: base text color. Anchors the contrast-aware pickers that derive every foreground, border, and muted caption. Sub-rows cover `--foreground`, `--form-indicator`, and `--pomodoro-idle-text`.
+- **Calendar surface**: UI description: "Calendar background, header, gridlines, and timeline." A sourceless card covering the auto-derived calendar background and its driven tokens. The card header carries no source color (the grid background tracks the app canvas by default). Sub-rows expose `--cal-bg` (isolate to pin a specific grid color), `--cal-header-bg`, `--cal-gridline`, `--cal-time-label`, and `--cal-timeline-rail`. Isolating `--cal-bg` breaks the auto-derivation so the user can paint the grid a different color than the app canvas.
+- **Calendar details**: UI description: "Semantic markers and accents on the calendar grid." A sourceless card that collects the calendar details a user can reasonably tune: today marker (pair), now line, break marker, and focus marker.
+- **Event panel**: four sub-rows painting the event creation/edit panel surface, section-header strip, body text, and muted captions. Runtime-only panel edge, shadow, divider, input text, and placeholder colors are derived from those surfaces and are not shown as rows.
+- **Ink**: UI description: "Base text color." Anchors the contrast-aware pickers that derive every foreground, border, and muted caption. The visible sub-row covers `--foreground`; form controls derive their indicator color from ink and canvas at runtime.
 - **Primary action**: main accent for highlighted buttons and links. The source drives the button background directly (identity derivation) and the button text through contrast pick; a single sub-row exposes `--primary-foreground` for isolation.
-- **Destructive**: danger signal. Sub-rows cover `--destructive`, `--action-danger-armed`, and `--status-declined` so the user can either let the one red drive all three or isolate any tile.
+- **Destructive**: UI description: "Danger signal." Sub-rows cover `--destructive`, `--action-danger-armed`, and `--status-declined` so the user can either let the one red drive all three or isolate any tile.
 
 **Tier 2 (semantic signals)** adds the positive and cautionary accents:
 
-- **Confirm**: drives the save button (paired bg + text), the active scope pill, and the accepted attendance tile. The pair row exposes `--action-confirm` alongside `--action-confirm-foreground`; a follow-up single row exposes `--status-accepted`.
-- **Warning**: drives the tentative attendance tile today. Ships with one sub-row (`--status-tentative`) and is reserved for future notification warnings and deadline accents.
+- **Confirm**: UI description: "Positive signal." Drives the save button (paired bg + text), the active scope pill, and the accepted attendance tile. The pair row exposes `--action-confirm` alongside `--action-confirm-foreground`; a follow-up single row exposes `--status-accepted`.
+- **Warning**: UI description: "Caution signal." Drives the tentative attendance tile today. Ships with one sub-row (`--status-tentative`) and is reserved for future notification warnings and deadline accents.
 
 **Tier 3 (other feature surfaces)** keeps the remaining feature-scoped colors adjacent so nothing is scattered:
 
-- **Task priority**: four sub-rows for the kanban priority badges (`--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`). Each token feeds both the badge background (at 20% opacity) and the label text at full opacity.
+- **Task priority**: UI description: "Kanban badge colors per difficulty tier." Four sub-rows for the kanban priority badges (`--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`). Each priority row uses "Applied as a tint for background and solid for text." Each token feeds both the badge background (at 20% opacity) and the label text at full opacity.
+
+The Event palette header uses the concise UI description: "24 color slots. Each one has a faded variant for past events, blended toward Calendar background."
 
 The editor chrome lives directly below the floating panel's drag header and outside the editor scroll viewport. The scrollbar belongs only to the editable body, so it starts at App canvas rather than beside the name row and section index. The chrome uses the same solid sidebar surface as the drag header, with no overlay opacity, and draws a bottom divider before the editable body. The theme identity row is a single compound field with one border, one background, and a fixed height matching the section index. It uses the same background treatment, font size, and muted text color as the section index. Its left slot holds a compact decorative day/night icon sized to the smaller typography, and a subtle divider separates it from the name text. Focusing the icon or name input does not add a wrapper highlight; the field stays visually stable while editing. Built-in themes show the decorative day/night icon and read-only name. User themes keep the icon slot clickable for flipping the decorative tag and keep the name text editable, so renaming remains available even after the user scrolls deep into palette or JSON rows. The header keeps its compact original height and has its own divider above the editor chrome.
 
@@ -258,23 +276,40 @@ The only exceptions are three fixed base-only tokens used by `ColorField`: `--ed
 
 ### Semantic tokens
 
-The editor exposes the following semantic tokens beyond the core shell surfaces. Most of them sit under a source color whose change propagates to the whole group (form indicator and pomodoro idle caption under Ink, armed delete and declined status under Destructive, confirm + accepted under Confirm, tentative under Warning). The remainder live under sourceless feature cards so their relationship to a feature stays obvious, but no single source drives them.
+The editor exposes semantic colors when they represent a useful user choice. Implementation details that can be derived reliably stay out of the editor so the panel does not turn into a list of internal paint hooks.
+
+### Editable token policy
+
+The theme editor should stay powerful, but curated. Expose colors broadly when they represent stable, user-facing decisions that a theme author can understand and intentionally tune. Do not expose every paint hook just because it exists in CSS.
+
+Prefer derivation when a color is an implementation detail or a predictable variation of another color. Borders, shadows, dividers, placeholder text, selected-state outlines, editor tints, drag-preview borders, hover guides, and temporary affordances should usually follow an existing surface, foreground, event color, or semantic signal. They belong in `DERIVED_APP_TOKEN_KEYS`, component-local `color-mix()`, or code-level constants unless a clear user-facing customization need appears.
+
+Before adding an editable token, ask:
+
+- Is this color visible as a meaningful concept to users, or only as internal polish?
+- Would a theme author expect to choose it independently from its parent surface or semantic color?
+- Can the app derive it reliably from canvas, ink, event color, panel surface, or status color while preserving contrast?
+- Does exposing it make the editor clearer, or does it add noise most users will never benefit from?
+- If persisted, what migration, JSON import/export, seed/reset, and rebake behavior does it need?
+
+When in doubt, derive it first and document the relationship. Promote it to an editable token only after there is a concrete reason that derivation is insufficient.
 
 Distribution across the editor:
 
-- **Ink tints** (3): `--form-indicator` (radio/checkbox dot inside calendar sub-sections), `--pomodoro-idle-text` (caption on the idle overlay), and `--pomodoro-idle-timer` (the big countdown on the idle overlay). Form indicator is `pickReadableForeground(canvas, { ink, canvas, target: 4.5 })` so it flips direction when canvas flips without requiring an ink edit, idle caption uses `walkFraction(anchor, "#000000", 0.245)` against the overlay's black surface at BASE.dark's fraction (anchor contrast-picked against black, which resolves to ink on any reasonable theme), and the idle timer uses `pickBrightForeground` so it stays pure white against the overlay.
+- **Primary foreground** (1): `--primary-foreground`. Contrast-picked from the primary source so tinted pastel primaries flip to dark text automatically.
 - **Destructive family** (4): `--action-danger-armed` + `--action-danger-armed-foreground` (delete button once armed) and `--status-declined` + `--status-declined-foreground` (declined attendance tile). Backgrounds identity-derive from `destructive`; foregrounds are contrast-picked.
 - **Confirm family** (4): `--action-confirm` + `--action-confirm-foreground` (save button, active scope pill) and `--status-accepted` + `--status-accepted-foreground` (accepted attendance tile). Backgrounds identity-derive from `confirm`; foregrounds are contrast-picked.
 - **Warning family** (2): `--status-tentative` + `--status-tentative-foreground` (tentative attendance tile). Background identity-derives from `warning`; foreground is contrast-picked.
-- **Primary foreground** (1): `--primary-foreground`. Contrast-picked from the primary source so tinted pastel primaries flip to dark text automatically.
 - **Destructive foreground core** (1): `--destructive-foreground`, same treatment for the destructive source.
-- **Calendar details** (7, sourceless): Today marker (pair of circle + inner text), now line, break marker, focus marker, event-color-picker outline, description editor tint, and the all-day drag-preview border. The today marker, now line, and focus marker carry hard-coded semantic meaning that does not reduce to the source palette, so the snapshot stores the BASE CSS value on clone; users can still isolate any of them to repaint them.
-- **Event panel** (9, sourceless): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, `--event-panel-text`, `--event-panel-muted-text`. Backgrounds shift off canvas by calibrated deltas; divider, body, input, placeholder, and muted text each use `walkFraction(ink, event-panel-bg, fraction)` with BASE.dark-measured fractions so the panel reads with the dark built-in's typographic hierarchy on any canvas.
-- **Task priority** (4, sourceless): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`. Each token feeds both the background (tinted toward canvas) and the label text; the Kanban column reads these directly and picks legible text through `pickReadableForeground`.
+- **Calendar details** (4, sourceless): Today marker (pair of circle + inner text), now line, break marker, and focus marker. These carry semantic meaning that does not reduce to the source palette, so the snapshot stores the BASE CSS value on clone; users can still isolate any of them to repaint them.
+- **Event panel** (4 visible, sourceless): `--event-panel-bg`, `--event-panel-contrast`, `--event-panel-text`, and `--event-panel-muted-text`. Visible row descriptions include "Background of the event creation/edit panel.", "Background strip behind section rows.", "Overrides --foreground inside the panel.", and "Secondary text color inside the panel." Runtime-only siblings (`--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, and `--event-panel-placeholder`) are derived from the panel surfaces and are not stored as user-editable tokens.
+- **Task priority** (4, sourceless): `--priority-easy`, `--priority-medium`, `--priority-hard`, `--priority-epic`. Each row uses "Applied as a tint for background and solid for text." Each token feeds both the background (tinted toward canvas) and the label text; the Kanban column reads these directly and picks legible text through `pickReadableForeground`.
 
-Four tokens carry alpha: `--event-panel-edge`, `--event-panel-shadow`, `--cal-description-editor-bg`, `--cal-drag-preview-border`. `ColorField` accepts and emits 8-digit `#rrggbbaa` for them, with a fourth slider (A) in the picker popover and a checkerboard swatch on the trigger so transparency is visible. Alpha-bearing tokens skip the Tailwind `@theme inline` alias and are consumed via plain CSS variables in scoped styles or inline `style` attributes.
+Runtime-only implementation colors include `--event-panel-edge`, `--event-panel-shadow`, `--event-panel-divider`, `--event-panel-input-text`, `--event-panel-placeholder`, and `--form-indicator`. They are resolved for painting, but they are not exported, imported, stored in `theme_tokens`, or shown in the visual editor. The event color picker outline, description editor edit tint, and all-day drag-preview border are component-derived styles rather than theme tokens.
 
-Sourceless semantic tokens are stored in the snapshot like every other token: their seed value matches the BASE CSS hex on clone, so a user who never opens those rows sees the byte-for-byte default values; a user who isolates one gets a surgical override that survives theme export/import.
+Pomodoro break and idle overlay colors are intentionally outside this app theme editor. Today they use static code defaults from the Pomodoro UI; a future independent break/idle screen theme editor should own those colors in a separate place.
+
+Sourceless visible semantic tokens are stored in the snapshot like every other editable token: their seed value matches the BASE CSS hex on clone, so a user who never opens those rows sees the byte-for-byte default values; a user who isolates one gets a surgical override that survives theme export/import.
 
 ## Engine version and rebaking
 

@@ -39,8 +39,7 @@
   const APP_TOKEN_INFO: Record<string, TokenInfo> = {
     "--background": {
       title: "App canvas",
-      description:
-        "Visible in Settings and between panels. Most views paint their own surface over it.",
+      description: "Most views paint their own surface over it.",
     },
     "--foreground": {
       title: "Text color",
@@ -72,48 +71,19 @@
     },
     "--event-panel-bg": {
       title: "Event panel surface",
-      description:
-        "Background of the event creation/edit panel opened from the calendar.",
+      description: "Background of the event creation/edit panel.",
     },
     "--event-panel-contrast": {
       title: "Event panel section header",
-      description:
-        "Background strip behind section rows (location, recurrence, pomodoro, etc.).",
-    },
-    "--event-panel-edge": {
-      title: "Event panel edge",
-      description: "Outer border tint around the event panel. Accepts alpha.",
-    },
-    "--event-panel-shadow": {
-      title: "Event panel shadow",
-      description: "Drop shadow beneath the event panel. Accepts alpha.",
-    },
-    "--event-panel-divider": {
-      title: "Event panel divider",
-      description: "Thin separator line under the title input.",
-    },
-    "--event-panel-input-text": {
-      title: "Event panel input text",
-      description: "Text color inside numeric and text inputs within the panel.",
-    },
-    "--event-panel-placeholder": {
-      title: "Event panel placeholder",
-      description: "Placeholder text color in the title and other inputs.",
+      description: "Background strip behind section rows.",
     },
     "--event-panel-text": {
       title: "Event panel body text",
-      description:
-        "Default text color used across the event panel surface. Overrides --foreground inside the panel.",
+      description: "Overrides --foreground inside the panel.",
     },
     "--event-panel-muted-text": {
       title: "Event panel muted text",
-      description:
-        "Secondary text color inside the panel (captions, hints, inactive rows).",
-    },
-    "--form-indicator": {
-      title: "Form indicator",
-      description:
-        "Filled dot inside radio/checkbox pills in calendar sub-sections (recurrence, notifications, pomodoro).",
+      description: "Secondary text color inside the panel.",
     },
     "--action-confirm": {
       title: "Confirm action",
@@ -159,48 +129,19 @@
     },
     "--priority-easy": {
       title: "Easy priority",
-      description:
-        "Kanban badge color for easy-difficulty tasks. Applied as a tint for background and solid for text.",
+      description: "Applied as a tint for background and solid for text.",
     },
     "--priority-medium": {
       title: "Medium priority",
-      description:
-        "Kanban badge color for medium-difficulty tasks. Applied as a tint for background and solid for text.",
+      description: "Applied as a tint for background and solid for text.",
     },
     "--priority-hard": {
       title: "Hard priority",
-      description:
-        "Kanban badge color for hard-difficulty tasks. Applied as a tint for background and solid for text.",
+      description: "Applied as a tint for background and solid for text.",
     },
     "--priority-epic": {
       title: "Epic priority",
-      description:
-        "Kanban badge color for epic-difficulty tasks. Applied as a tint for background and solid for text.",
-    },
-    "--pomodoro-idle-text": {
-      title: "Pomodoro idle caption",
-      description:
-        "Caption text shown over the dark idle overlay during a paused focus session.",
-    },
-    "--pomodoro-idle-timer": {
-      title: "Pomodoro idle timer",
-      description:
-        "Color of the large paused timer inside the idle overlay.",
-    },
-    "--cal-color-picker-outline": {
-      title: "Event color outline",
-      description:
-        "Outline drawn around the selected swatch inside the event color picker.",
-    },
-    "--cal-description-editor-bg": {
-      title: "Description editor tint",
-      description:
-        "Background wash on the event description editor while in edit mode. Accepts alpha.",
-    },
-    "--cal-drag-preview-border": {
-      title: "All-day drag preview border",
-      description:
-        "Border around the ghost tile shown while dragging an all-day event on the calendar. Accepts alpha.",
+      description: "Applied as a tint for background and solid for text.",
     },
   };
 
@@ -312,8 +253,7 @@
           bg: "--muted",
           fg: "--muted-foreground",
           title: "Muted surface",
-          description:
-            "Subtle wells and the default hint-text color. Intentionally recessed: foreground is tuned to AA-large (3:1) so captions and past-day numbers fade without disappearing.",
+          description: "Subtle wells and the default hint-text color.",
           scope: "app",
           target: 3,
         },
@@ -347,8 +287,7 @@
     {
       sourceKey: null,
       title: "Calendar surface",
-      description:
-        "Calendar background, header, gridlines, and timeline. The background auto-tracks the app canvas by default; isolate --cal-bg to pin a specific surface color.",
+      description: "Calendar background, header, gridlines, and timeline.",
       navTarget: "calendar",
       rows: [
         { kind: "single", key: "--cal-bg", scope: "cal" },
@@ -361,8 +300,7 @@
     {
       sourceKey: null,
       title: "Calendar details",
-      description:
-        "Semantic markers and accents on the calendar grid. Each edits independently.",
+      description: "Semantic markers and accents on the calendar grid.",
       rows: [
         {
           kind: "pair",
@@ -376,9 +314,6 @@
         { kind: "single", key: "--cal-current-time", scope: "cal" },
         { kind: "single", key: "--cal-timeline-break", scope: "cal" },
         { kind: "single", key: "--cal-timeline-focus", scope: "cal" },
-        { kind: "single", key: "--cal-color-picker-outline", scope: "app" },
-        { kind: "single", key: "--cal-description-editor-bg", scope: "app" },
-        { kind: "single", key: "--cal-drag-preview-border", scope: "app" },
       ],
     },
     {
@@ -389,11 +324,6 @@
       rows: [
         { kind: "single", key: "--event-panel-bg", scope: "app" },
         { kind: "single", key: "--event-panel-contrast", scope: "app" },
-        { kind: "single", key: "--event-panel-edge", scope: "app" },
-        { kind: "single", key: "--event-panel-shadow", scope: "app" },
-        { kind: "single", key: "--event-panel-divider", scope: "app" },
-        { kind: "single", key: "--event-panel-input-text", scope: "app" },
-        { kind: "single", key: "--event-panel-placeholder", scope: "app" },
         { kind: "single", key: "--event-panel-text", scope: "app" },
         { kind: "single", key: "--event-panel-muted-text", scope: "app" },
       ],
@@ -401,14 +331,10 @@
     {
       sourceKey: "ink",
       title: "Ink",
-      description:
-        "Base text color. Drives body text, form indicators, and secondary captions.",
+      description: "Base text color.",
       navTarget: "signals",
       rows: [
         { kind: "single", key: "--foreground", scope: "app" },
-        { kind: "single", key: "--form-indicator", scope: "app" },
-        { kind: "single", key: "--pomodoro-idle-text", scope: "app" },
-        { kind: "single", key: "--pomodoro-idle-timer", scope: "app" },
       ],
     },
     {
@@ -420,8 +346,7 @@
     {
       sourceKey: "destructive",
       title: "Destructive",
-      description:
-        "Danger signal. Drives delete buttons, the armed-delete state, and the declined attendance tile.",
+      description: "Danger signal.",
       rows: [
         {
           kind: "pair",
@@ -454,8 +379,7 @@
     {
       sourceKey: "confirm",
       title: "Confirm",
-      description:
-        "Positive signal. Drives the save button, the active scope pill, and the accepted attendance tile.",
+      description: "Positive signal.",
       rows: [
         {
           kind: "pair",
@@ -479,8 +403,7 @@
     {
       sourceKey: "warning",
       title: "Warning",
-      description:
-        "Caution signal. Drives the tentative attendance tile; reserved for future notification warnings and deadlines.",
+      description: "Caution signal.",
       rows: [
         {
           kind: "pair",
@@ -496,8 +419,7 @@
     {
       sourceKey: null,
       title: "Task priority",
-      description:
-        "Kanban badge colors per difficulty tier. Each token tints the badge background and colors the label text.",
+      description: "Kanban badge colors per difficulty tier.",
       navTarget: "todo",
       rows: [
         { kind: "single", key: "--priority-easy", scope: "app" },
@@ -1235,9 +1157,8 @@
     <div class="flex items-center justify-between px-1">
       <h2 class="text-[13px] font-semibold text-foreground">Event palette</h2>
       <span class="text-[11px] text-muted-foreground">
-        {isBuiltin
-          ? "24 colors events can be tagged with."
-          : "24 color slots events can be tagged with. Each slot also has a faded variant for past events, blended toward Calendar background."}
+        24 color slots. Each one has a faded variant for past events, blended
+        toward Calendar background.
       </span>
     </div>
     <div

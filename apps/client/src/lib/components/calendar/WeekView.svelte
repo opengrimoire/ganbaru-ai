@@ -573,6 +573,8 @@
               style="
                 background-color: {dpColor.bg};
                 color: {dpColor.text};
+                --event-bg: {dpColor.bg};
+                --outline-mix: {dpColor.text};
               "
             >
               {#if dpHasRepeat || dpHasNotification}
@@ -653,7 +655,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    border: 1px solid var(--cal-drag-preview-border);
+    border: 1px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
     border-radius: inherit;
     pointer-events: none;
     z-index: 3;
