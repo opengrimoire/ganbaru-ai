@@ -21,7 +21,6 @@ All documentation lives in `docs/`. Top-level overviews:
 - **docs/TECH_STACK.md**: how it's built
 - **docs/ROADMAP.md**: phased development plan
 - **docs/PERFORMANCE.md**: memory, startup, and package size measurements
-- **docs/RESPONSIVE_UX_PLAN.md**: responsive UX audit and implementation plan
 
 Granular docs (read the relevant one when working on a feature):
 
@@ -147,6 +146,20 @@ After `pnpm -w run validate` passes, finish the task without extra dev-server, T
 
 - Do not use em dash characters or two consecutive hyphens in markdown, code comments, or commit messages. Restructure sentences using periods, commas, colons, semicolons, or parentheses instead.
 - Avoid unnecessary capitalization. Use sentence case in markdown headings, code comments, documentation, branch names, and commit messages unless capitalization is required by grammar, proper nouns, acronyms, or official names. Correct nearby text that violates this when editing files.
+
+### Responsive UI
+
+- Design UI against the app minimum window size of 280 by 180, but treat it as a recoverability floor, not a promise that every feature is comfortable there.
+- Prefer fit-based responsive behavior over viewport-class-only behavior. Use actual container width, available viewport space, anchor position, and measured content when those determine whether a layout fits.
+- Keep desktop and floating affordances until they no longer fit. Use full-width, bottom sheet, or fullscreen layouts only when the viewport physically leaves no practical room for the normal layout.
+- Prefer container queries for local component layout. Use the shared viewport store for route-level decisions. Use JavaScript layout only for measured controls, pointer anchors, viewport clamping, or collision avoidance.
+- Preserve user state across responsive render variants. Changing from a wide layout to a compact layout must not reset selected tabs, draft fields, scroll intent, or active edits.
+- Keep primary actions reachable at every size. Use internal scrolling for long surfaces, with save, close, destructive, or navigation actions pinned or otherwise always recoverable.
+- Avoid hover-only controls on narrow or touch-like layouts. Provide visible buttons, menus, or overflow controls.
+- Text must not overlap, clip awkwardly, or resize the layout unexpectedly. Use stable dimensions, minmax grid tracks, truncation, wrapping, or explicit compact variants.
+- Do not scale font size with viewport width. Reduce gaps, chrome, and nonessential decoration before reducing readability.
+- Nested popovers must be viewport-aware. Cap their height, keep triggers visible when practical, and switch large pickers to sheets when popovers cannot fit.
+- For UI changes, add or update pure responsive helper tests when layout decisions are logic-heavy, then run `pnpm -w run validate`.
 
 ### Project philosophy
 
