@@ -4,7 +4,6 @@
   import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
-  import GripHorizontal from "@lucide/svelte/icons/grip-horizontal";
   import { cn } from "$lib/utils";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
@@ -62,7 +61,7 @@
 
   function clampY(y: number): number {
     if (typeof window === "undefined") return y;
-    // Keep at least the drag handle row visible so the panel can always be
+    // Keep at least the draggable header row visible so the panel can always be
     // grabbed and moved back on screen.
     const minVisible = 48;
     const maxY = window.innerHeight - minVisible;
@@ -125,15 +124,17 @@
 {#if editing}
   <div
     class="fixed z-[75] flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
-    style="left: {posX}px; top: {posY}px; width: {PANEL_WIDTH}px; max-height: min({PANEL_MAX_HEIGHT_VH}vh, {PANEL_MAX_HEIGHT_PX}px);"
+    style="left: {posX}px; top: {posY}px; width: {PANEL_WIDTH}px; height: {collapsed
+      ? 'auto'
+      : `min(${PANEL_MAX_HEIGHT_VH}vh, ${PANEL_MAX_HEIGHT_PX}px)`}; max-height: min({PANEL_MAX_HEIGHT_VH}vh, {PANEL_MAX_HEIGHT_PX}px);"
     role="dialog"
     aria-label="Theme editor"
   >
-    <!-- Drag handle -->
+    <!-- Draggable header -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <header
       class={cn(
-        "flex shrink-0 items-center gap-2 border-b border-border bg-background/60 px-3 py-2 dark:bg-black/30",
+        "flex shrink-0 items-center gap-2 border-b border-border bg-sidebar px-5 py-2",
         dragging ? "cursor-grabbing" : "cursor-grab",
       )}
       onpointerdown={onHeaderPointerDown}
@@ -141,14 +142,7 @@
       onpointerup={onHeaderPointerUp}
       onpointercancel={onHeaderPointerUp}
     >
-      <GripHorizontal
-        size={14}
-        strokeWidth={2}
-        class="shrink-0 text-muted-foreground"
-      />
-      <span class="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">
-        Editing: {editing.displayName}
-      </span>
+      <div class="min-w-0 flex-1" aria-hidden="true"></div>
       <button
         type="button"
         onclick={toggleCollapsed}
@@ -167,14 +161,14 @@
 
     <!-- Scrollable body (hidden while collapsed) -->
     {#if !collapsed}
-      <div class="flex-1 overflow-y-auto bg-background/40 px-5 py-4 dark:bg-black/20">
+      <div class="min-h-0 flex-1 bg-background/40 dark:bg-black/20">
         <ThemeEditor theme={editing} />
       </div>
     {/if}
 
     <!-- Sticky footer -->
     <footer
-      class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/60 px-3 py-2 dark:bg-black/30"
+      class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-sidebar px-5 py-2"
     >
       <button
         type="button"

@@ -255,24 +255,25 @@
     target?: number;
   };
   type GroupRow = GroupSingleRow | GroupPairRow;
+  type ThemeNavTarget = "general" | "calendar" | "signals" | "todo" | "json";
   type SourceGroup = {
     sourceKey: keyof ThemeSources | null;
     title: string;
     description: string;
+    navTarget?: Exclude<ThemeNavTarget, "json">;
     rows: GroupRow[];
   };
 
   // Three-tier layout the user edits top-to-bottom:
   //
-  //   Tier 1 (App foundation): the four shell sources every surface reads
-  //   from, ordered canvas then ink then primary then destructive.
+  //   Tier 1 (app and calendar foundation): app canvas first, then the
+  //   calendar surface, details, and event panel users tune against that
+  //   canvas, followed by ink, primary, and destructive.
   //
-  //   Tier 2 (Semantic signals): positive and cautionary accents that
+  //   Tier 2 (semantic signals): positive and cautionary accents that
   //   communicate intent across buttons and status tiles.
   //
-  //   Tier 3 (Per-feature): colors scoped to a single feature (calendar,
-  //   event panel, kanban). Calendar canvas and its semantic details live
-  //   adjacent so all calendar editing happens in one place.
+  //   Tier 3 (other feature surfaces): colors scoped to kanban badges.
   //
   // Collapse button is gated on (sourceKey != null && rows.length > 1):
   // only source-driven multi-row groups benefit from the accordion, since
@@ -280,12 +281,13 @@
   // Sourceless groups show all rows inline; source-driven single-row groups
   // render the row as a peer of the source via groupHeaderStyleRow.
   const SOURCE_GROUPS: SourceGroup[] = [
-    // Tier 1: App foundation
+    // Tier 1: app and calendar foundation
     {
       sourceKey: "canvas",
       title: "App canvas",
       description:
         "Dominant background color. Most surfaces tint automatically from it.",
+      navTarget: "general",
       rows: [
         { kind: "single", key: "--background", scope: "app" },
         { kind: "single", key: "--card", scope: "app" },
@@ -343,104 +345,11 @@
       ],
     },
     {
-      sourceKey: "ink",
-      title: "Ink",
-      description:
-        "Base text color. Drives body text, form indicators, and secondary captions.",
-      rows: [
-        { kind: "single", key: "--foreground", scope: "app" },
-        { kind: "single", key: "--form-indicator", scope: "app" },
-        { kind: "single", key: "--pomodoro-idle-text", scope: "app" },
-        { kind: "single", key: "--pomodoro-idle-timer", scope: "app" },
-      ],
-    },
-    {
-      sourceKey: "primary",
-      title: "Primary action",
-      description: "Accent for highlighted buttons and links.",
-      rows: [{ kind: "single", key: "--primary-foreground", scope: "app" }],
-    },
-    {
-      sourceKey: "destructive",
-      title: "Destructive",
-      description:
-        "Danger signal. Drives delete buttons, the armed-delete state, and the declined attendance tile.",
-      rows: [
-        {
-          kind: "pair",
-          bg: "--destructive",
-          fg: "--destructive-foreground",
-          title: "Destructive button",
-          description: "Delete actions and the title bar close hover.",
-          scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--action-danger-armed",
-          fg: "--action-danger-armed-foreground",
-          title: "Armed delete",
-          description:
-            "Background and text of the delete button once armed (click-again-to-confirm state).",
-          scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--status-declined",
-          fg: "--status-declined-foreground",
-          title: "Declined attendee",
-          description: "Status tile for declined attendees on a calendar event.",
-          scope: "app",
-        },
-      ],
-    },
-    // Tier 2: Semantic signals
-    {
-      sourceKey: "confirm",
-      title: "Confirm",
-      description:
-        "Positive signal. Drives the save button, the active scope pill, and the accepted attendance tile.",
-      rows: [
-        {
-          kind: "pair",
-          bg: "--action-confirm",
-          fg: "--action-confirm-foreground",
-          title: "Confirm action button",
-          description:
-            "Save button and the active scope pill on the event panel.",
-          scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--status-accepted",
-          fg: "--status-accepted-foreground",
-          title: "Accepted attendee",
-          description: "Status tile for accepted attendees on a calendar event.",
-          scope: "app",
-        },
-      ],
-    },
-    {
-      sourceKey: "warning",
-      title: "Warning",
-      description:
-        "Caution signal. Drives the tentative attendance tile; reserved for future notification warnings and deadlines.",
-      rows: [
-        {
-          kind: "pair",
-          bg: "--status-tentative",
-          fg: "--status-tentative-foreground",
-          title: "Tentative attendee",
-          description: "Status tile for tentative attendees on a calendar event.",
-          scope: "app",
-        },
-      ],
-    },
-    // Tier 3: Per-feature
-    {
       sourceKey: null,
       title: "Calendar surface",
       description:
         "Calendar background, header, gridlines, and timeline. The background auto-tracks the app canvas by default; isolate --cal-bg to pin a specific surface color.",
+      navTarget: "calendar",
       rows: [
         { kind: "single", key: "--cal-bg", scope: "cal" },
         { kind: "single", key: "--cal-header-bg", scope: "cal" },
@@ -490,10 +399,106 @@
       ],
     },
     {
+      sourceKey: "ink",
+      title: "Ink",
+      description:
+        "Base text color. Drives body text, form indicators, and secondary captions.",
+      navTarget: "signals",
+      rows: [
+        { kind: "single", key: "--foreground", scope: "app" },
+        { kind: "single", key: "--form-indicator", scope: "app" },
+        { kind: "single", key: "--pomodoro-idle-text", scope: "app" },
+        { kind: "single", key: "--pomodoro-idle-timer", scope: "app" },
+      ],
+    },
+    {
+      sourceKey: "primary",
+      title: "Primary action",
+      description: "Accent for highlighted buttons and links.",
+      rows: [{ kind: "single", key: "--primary-foreground", scope: "app" }],
+    },
+    {
+      sourceKey: "destructive",
+      title: "Destructive",
+      description:
+        "Danger signal. Drives delete buttons, the armed-delete state, and the declined attendance tile.",
+      rows: [
+        {
+          kind: "pair",
+          bg: "--destructive",
+          fg: "--destructive-foreground",
+          title: "Destructive button",
+          description: "Delete actions and the title bar close hover.",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--action-danger-armed",
+          fg: "--action-danger-armed-foreground",
+          title: "Armed delete",
+          description:
+            "Background and text of the delete button once armed (click-again-to-confirm state).",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--status-declined",
+          fg: "--status-declined-foreground",
+          title: "Declined attendee",
+          description: "Status tile for declined attendees on a calendar event.",
+          scope: "app",
+        },
+      ],
+    },
+    // Tier 2: semantic signals
+    {
+      sourceKey: "confirm",
+      title: "Confirm",
+      description:
+        "Positive signal. Drives the save button, the active scope pill, and the accepted attendance tile.",
+      rows: [
+        {
+          kind: "pair",
+          bg: "--action-confirm",
+          fg: "--action-confirm-foreground",
+          title: "Confirm action button",
+          description:
+            "Save button and the active scope pill on the event panel.",
+          scope: "app",
+        },
+        {
+          kind: "pair",
+          bg: "--status-accepted",
+          fg: "--status-accepted-foreground",
+          title: "Accepted attendee",
+          description: "Status tile for accepted attendees on a calendar event.",
+          scope: "app",
+        },
+      ],
+    },
+    {
+      sourceKey: "warning",
+      title: "Warning",
+      description:
+        "Caution signal. Drives the tentative attendance tile; reserved for future notification warnings and deadlines.",
+      rows: [
+        {
+          kind: "pair",
+          bg: "--status-tentative",
+          fg: "--status-tentative-foreground",
+          title: "Tentative attendee",
+          description: "Status tile for tentative attendees on a calendar event.",
+          scope: "app",
+        },
+      ],
+    },
+    // Tier 3: other feature surfaces
+    {
       sourceKey: null,
       title: "Task priority",
       description:
         "Kanban badge colors per difficulty tier. Each token tints the badge background and colors the label text.",
+      navTarget: "todo",
       rows: [
         { kind: "single", key: "--priority-easy", scope: "app" },
         { kind: "single", key: "--priority-medium", scope: "app" },
@@ -501,6 +506,17 @@
         { kind: "single", key: "--priority-epic", scope: "app" },
       ],
     },
+  ];
+
+  const THEME_NAV_ITEMS: ReadonlyArray<{
+    label: string;
+    target: ThemeNavTarget;
+  }> = [
+    { label: "General", target: "general" },
+    { label: "Calendar", target: "calendar" },
+    { label: "Signals", target: "signals" },
+    { label: "To-do", target: "todo" },
+    { label: "JSON", target: "json" },
   ];
 
   let { theme }: { theme: Theme } = $props();
@@ -574,6 +590,13 @@
 
   function setName(next: string) {
     void themeStore.renameTheme(theme.id, next);
+  }
+
+  function scrollToThemeSection(target: ThemeNavTarget) {
+    const el = document.querySelector<HTMLElement>(
+      `[data-theme-nav-target="${target}"]`,
+    );
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function effectiveCalBg(t: Theme): string {
@@ -764,8 +787,8 @@
   }
 
   // Flat list of every pair row across every source group, used by the
-  // always-visible contrast summary so users don't have to hunt for warnings
-  // across modes and collapsed sections.
+  // floating contrast notice so users don't have to hunt for warnings across
+  // collapsed sections.
   type LocatedPair = { row: GroupPairRow; group: SourceGroup };
   const allPairs: LocatedPair[] = (() => {
     const out: LocatedPair[] = [];
@@ -865,48 +888,70 @@
   }
 </script>
 
-<div class="flex flex-col gap-6">
-  <!-- Header -->
-  <section class="flex flex-col gap-2">
+<div class="relative flex h-full min-h-0 flex-col">
+  <!-- Theme chrome sits above the editor scroll viewport so the scrollbar
+       starts with the editable sections. -->
+  <section
+    class="relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-border bg-sidebar px-5 py-2"
+  >
     <div
-      class="flex flex-col gap-3 overflow-hidden rounded-lg bg-card p-4 dark:bg-background"
+      class="flex h-9 min-w-0 items-center overflow-hidden rounded-md border border-border bg-card text-[11px] text-muted-foreground dark:bg-background"
     >
-      <div class="flex items-center gap-2">
-        {#if isBuiltin}
+      {#if isBuiltin}
+        <span
+          class="flex h-full w-9 shrink-0 items-center justify-center"
+        >
           <BaseIcon
-            size={15}
+            size={12}
             strokeWidth={1.75}
             aria-label={theme.iconLabel === "dark" ? "Dark theme" : "Light theme"}
-            class="shrink-0 text-muted-foreground"
           />
-          <span class="truncate text-[14px] font-semibold text-foreground">
-            {theme.displayName}
-          </span>
-        {:else}
+        </span>
+        <span class="h-5 border-r border-border" aria-hidden="true"></span>
+        <span class="min-w-0 flex-1 truncate px-3 font-medium">
+          {theme.displayName}
+        </span>
+      {:else}
+        <button
+          type="button"
+          onclick={() =>
+            themeStore.setThemeIconLabel(
+              theme.id,
+              theme.iconLabel === "dark" ? "light" : "dark",
+            )}
+          aria-label={`Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"} (decorative, click to flip)`}
+          title={`Decorative tag for ${theme.iconLabel === "dark" ? "night" : "day"} use. Click to flip.`}
+          class="flex h-full w-9 shrink-0 items-center justify-center transition-colors hover:bg-accent focus:outline-none"
+        >
+          <BaseIcon size={12} strokeWidth={1.75} />
+        </button>
+        <span class="h-5 border-r border-border" aria-hidden="true"></span>
+        <input
+          type="text"
+          value={theme.displayName}
+          oninput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
+          maxlength={60}
+          aria-label="Theme name"
+          class="h-full min-w-0 flex-1 bg-transparent px-3 font-medium text-muted-foreground focus:outline-none"
+        />
+      {/if}
+    </div>
+    {#if userTheme}
+      <nav
+        class="flex h-9 items-center gap-1 overflow-x-auto rounded-lg border border-border bg-card px-1 text-[11px] dark:bg-background"
+        aria-label="Theme editor sections"
+      >
+        {#each THEME_NAV_ITEMS as item}
           <button
             type="button"
-            onclick={() =>
-              themeStore.setThemeIconLabel(
-                theme.id,
-                theme.iconLabel === "dark" ? "light" : "dark",
-              )}
-            aria-label={`Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"} (decorative, click to flip)`}
-            title={`Decorative tag for ${theme.iconLabel === "dark" ? "night" : "day"} use. Click to flip.`}
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onclick={() => scrollToThemeSection(item.target)}
+            class="flex h-7 shrink-0 items-center rounded-md px-2 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <BaseIcon size={14} strokeWidth={1.75} />
+            {item.label}
           </button>
-          <input
-            type="text"
-            value={theme.displayName}
-            oninput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
-            maxlength={60}
-            aria-label="Theme name"
-            class="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-1.5 text-[14px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        {/if}
-      </div>
-    </div>
+        {/each}
+      </nav>
+    {/if}
   </section>
 
   {#snippet resetIconButton(
@@ -1112,6 +1157,8 @@
       group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
     <section
       class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
+      class:scroll-mt-4={group.navTarget !== undefined}
+      data-theme-nav-target={group.navTarget}
     >
       <header class="flex items-center justify-between gap-3 px-4 py-2.5">
         <div class="min-w-0 flex-1">
@@ -1148,11 +1195,11 @@
             >
               {#if isCollapsed}
                 <ChevronDown size={11} strokeWidth={2.25} />
-                <span>EXPAND</span>
+                <span>Expand</span>
                 <ChevronDown size={11} strokeWidth={2.25} />
               {:else}
                 <ChevronUp size={11} strokeWidth={2.25} />
-                <span>COLLAPSE</span>
+                <span>Collapse</span>
                 <ChevronUp size={11} strokeWidth={2.25} />
               {/if}
             </button>
@@ -1179,6 +1226,14 @@
     </section>
   {/snippet}
 
+  <div class="relative min-h-0 flex-1">
+    <div class="h-full overflow-y-auto">
+      <div
+        class={cn(
+          "flex flex-col gap-6 px-5 pt-6",
+          userTheme && failingPairs.length > 0 ? "pb-16" : "pb-4",
+        )}
+      >
   <!-- Body: grouped editor for user themes, JSON-only readout for built-ins. -->
   {#if userTheme}
     {#if offerRebake}
@@ -1216,57 +1271,6 @@
         </div>
       </section>
     {/if}
-
-    <!-- Contrast summary: always visible so edits that break contrast are
-         surfaced immediately. Jump-to-next cycles through failing rows
-         (auto-switching mode/expanding groups as needed); Fix all auto-picks
-         a legible foreground for every failing pair in one click. -->
-    <section
-      class={cn(
-        "flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[12px]",
-        failingPairs.length > 0
-          ? "border-amber-400/60 bg-amber-50 dark:bg-amber-950/30"
-          : "border-border bg-card dark:bg-background",
-      )}
-    >
-      {#if failingPairs.length > 0}
-        <div class="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-          <AlertTriangle size={13} strokeWidth={2.25} />
-          <span class="font-medium">
-            {failingPairs.length} contrast {failingPairs.length === 1
-              ? "issue"
-              : "issues"}
-          </span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <button
-            type="button"
-            onclick={jumpToNextFailingPair}
-            aria-label="Jump to next failing contrast row"
-            title="Scroll to the next row below its contrast target (cycles through the list). Muted surfaces target 3:1; everything else targets 4.5:1."
-            class="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            <ArrowDown size={11} strokeWidth={2.25} />
-            <span>Jump to next</span>
-          </button>
-          <button
-            type="button"
-            onclick={fixAllFailingPairs}
-            aria-label="Auto-fix every failing contrast row"
-            title="Pick a legible text color for every pair below its target"
-            class="flex items-center gap-1 rounded-md border border-primary bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Wand2 size={11} strokeWidth={2.25} />
-            <span>Fix all</span>
-          </button>
-        </div>
-      {:else}
-        <div class="flex items-center gap-2 text-muted-foreground">
-          <Check size={13} strokeWidth={2.25} />
-          <span>All contrast checks pass</span>
-        </div>
-      {/if}
-    </section>
 
     {#each SOURCE_GROUPS as group (group.title)}
       {@render groupCard(group)}
@@ -1356,7 +1360,7 @@
   </section>
 
   <!-- JSON -->
-  <section class="flex flex-col gap-2">
+  <section class="flex scroll-mt-4 flex-col gap-2" data-theme-nav-target="json">
     <div class="flex items-center justify-between px-1">
       <h2 class="text-[13px] font-semibold text-foreground">JSON</h2>
       <span class="text-[11px] text-muted-foreground">
@@ -1441,4 +1445,47 @@
       {/if}
     </div>
   </section>
+</div>
+</div>
+{#if userTheme && failingPairs.length > 0}
+  <section
+    class="absolute bottom-3 left-5 right-5 z-30 flex h-10 items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 text-[11px] shadow-xl dark:bg-background"
+  >
+    <div class="flex min-w-0 items-center gap-2 text-foreground">
+      <AlertTriangle
+        size={13}
+        strokeWidth={2.25}
+        class="shrink-0 text-amber-500"
+      />
+      <span class="font-medium">
+        {failingPairs.length} contrast {failingPairs.length === 1
+          ? "issue"
+          : "issues"}
+      </span>
+    </div>
+    <div class="flex shrink-0 items-center gap-1.5">
+      <button
+        type="button"
+        onclick={jumpToNextFailingPair}
+        aria-label="Jump to next failing contrast row"
+        title="Scroll to the next row below its contrast target (cycles through the list). Muted surfaces target 3:1; everything else targets 4.5:1."
+        class="flex h-6 items-center gap-1 rounded-md border border-border bg-card px-2 text-[10px] font-medium text-foreground transition-colors hover:bg-accent"
+      >
+        <ArrowDown size={11} strokeWidth={2.25} />
+        <span>Jump to next</span>
+      </button>
+      <button
+        type="button"
+        onclick={fixAllFailingPairs}
+        aria-label="Auto-fix every failing contrast row"
+        title="Pick a legible text color for every pair below its target"
+        class="flex h-6 items-center gap-1 rounded-md border border-primary bg-primary px-2 text-[10px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        <Wand2 size={11} strokeWidth={2.25} />
+        <span>Fix all</span>
+      </button>
+    </div>
+  </section>
+{/if}
+</div>
 </div>
