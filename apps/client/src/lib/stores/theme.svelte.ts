@@ -734,6 +734,43 @@ function resetPaletteSlot(id: ThemeId, slot: number): boolean {
   return true;
 }
 
+function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+function canResetThemeToSeed(id: ThemeId): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  for (const key of Object.keys(current.seedSources) as Array<keyof ThemeSources>) {
+    if (current.sources[key] !== current.seedSources[key]) return true;
+  }
+  for (const key of Object.keys(current.seedAppTokens)) {
+    if (current.appTokens[key] !== current.seedAppTokens[key]) return true;
+  }
+  for (const key of Object.keys(current.seedCalendarTokens)) {
+    if (current.calendarTokens[key] !== current.seedCalendarTokens[key]) {
+      return true;
+    }
+  }
+  if (
+    !setsEqual(current.appIsolated, current.seedAppIsolated) ||
+    !setsEqual(current.calendarIsolated, current.seedCalendarIsolated)
+  ) {
+    return true;
+  }
+  if (current.eventPalette.length !== current.seedEventPalette.length) {
+    return true;
+  }
+  for (let i = 0; i < current.eventPalette.length; i++) {
+    if (current.eventPalette[i] !== current.seedEventPalette[i]) return true;
+  }
+  if (current.blendCanvas !== current.seedBlendCanvas) return true;
+  if (current.iconLabel !== current.seedIconLabel) return true;
+  return false;
+}
+
 /**
  * Restore every token, palette slot, and blend canvas to their seed
  * values.
@@ -1016,6 +1053,7 @@ export function getTheme() {
     setTokenValue,
     resetTokenToSeed,
     resetPaletteSlot,
+    canResetThemeToSeed,
     resetThemeToSeed,
     setThemeIconLabel,
     setPaletteSlot,

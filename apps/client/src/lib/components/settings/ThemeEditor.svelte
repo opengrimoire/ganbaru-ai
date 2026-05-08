@@ -685,54 +685,6 @@
     void themeStore.resetTokenToSeed(theme.id, "calendar", key);
   }
 
-  // "Reset all" restores every snapshot value AND every isolated flag back
-  // to clone-time. Sources drift back to their seeds, pinned tokens that
-  // weren't pinned originally unpin (and vice-versa), event palette and
-  // blend canvas rewind, all in one transaction.
-  function canResetAll(): boolean {
-    if (!userTheme) return false;
-    for (const key of Object.keys(userTheme.seedSources) as Array<
-      keyof ThemeSources
-    >) {
-      if (userTheme.sources[key] !== userTheme.seedSources[key]) return true;
-    }
-    for (const k of Object.keys(userTheme.seedAppTokens)) {
-      if (userTheme.appTokens[k] !== userTheme.seedAppTokens[k]) return true;
-    }
-    for (const k of Object.keys(userTheme.seedCalendarTokens)) {
-      if (userTheme.calendarTokens[k] !== userTheme.seedCalendarTokens[k]) {
-        return true;
-      }
-    }
-    if (
-      !setsEqual(userTheme.appIsolated, userTheme.seedAppIsolated) ||
-      !setsEqual(userTheme.calendarIsolated, userTheme.seedCalendarIsolated)
-    ) {
-      return true;
-    }
-    if (userTheme.eventPalette.length !== userTheme.seedEventPalette.length) {
-      return true;
-    }
-    for (let i = 0; i < userTheme.eventPalette.length; i++) {
-      if (userTheme.eventPalette[i] !== userTheme.seedEventPalette[i]) {
-        return true;
-      }
-    }
-    if (userTheme.blendCanvas !== userTheme.seedBlendCanvas) return true;
-    return false;
-  }
-
-  function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
-    if (a.size !== b.size) return false;
-    for (const v of a) if (!b.has(v)) return false;
-    return true;
-  }
-
-  function resetAll() {
-    if (!canResetAll()) return;
-    void themeStore.resetThemeToSeed(theme.id);
-  }
-
   function rebake() {
     if (!userTheme) return;
     void themeStore.rebakeTheme(theme.id);
@@ -1276,26 +1228,6 @@
       {@render groupCard(group)}
     {/each}
 
-    <div class="flex justify-end">
-      <button
-        type="button"
-        onclick={resetAll}
-        disabled={!canResetAll()}
-        aria-label="Reset every source, override, and palette slot to its clone-time value"
-        title={canResetAll()
-          ? "Restore every value to the clone-time snapshot"
-          : "Nothing has changed since this theme was cloned"}
-        class={cn(
-          "flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] font-medium transition-colors",
-          canResetAll()
-            ? "text-foreground hover:border-foreground/30 hover:bg-accent"
-            : "cursor-not-allowed text-muted-foreground opacity-50",
-        )}
-      >
-        <RotateCcw size={12} strokeWidth={2.25} />
-        <span>Reset all to seed</span>
-      </button>
-    </div>
   {/if}
 
   <!-- Event palette -->

@@ -4,6 +4,7 @@
   import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
@@ -23,6 +24,12 @@
   const isBuiltin = $derived(
     themeEditor.editingId
       ? themeStore.isBuiltin(themeEditor.editingId)
+      : false,
+  );
+
+  const canResetToSeed = $derived(
+    editing?.kind === "user"
+      ? themeStore.canResetThemeToSeed(editing.id)
       : false,
   );
 
@@ -107,7 +114,7 @@
     collapsed = !collapsed;
   }
 
-  // Back rolls the session back to its pre-edit state and returns to the
+  // Cancel rolls the session back to its pre-edit state and returns to the
   // Settings list. Save keeps the edits as the committed state. Both close
   // the panel through the same callback into TitleBar.
   async function onCancel() {
@@ -118,6 +125,12 @@
   async function onCommit() {
     await themeEditor.commit();
     onBackToList();
+  }
+
+  function onResetAllToSeed() {
+    if (editing?.kind !== "user") return;
+    if (!canResetToSeed) return;
+    themeStore.resetThemeToSeed(editing.id);
   }
 </script>
 
@@ -170,14 +183,36 @@
     <footer
       class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-sidebar px-5 py-2"
     >
-      <button
-        type="button"
-        onclick={onCancel}
-        class="flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
-      >
-        <ArrowLeft size={11} strokeWidth={2.25} />
-        <span>Back to themes</span>
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          onclick={onCancel}
+          class="flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
+        >
+          <ArrowLeft size={11} strokeWidth={2.25} />
+          <span>Cancel</span>
+        </button>
+        {#if editing.kind === "user"}
+          <button
+            type="button"
+            onclick={onResetAllToSeed}
+            aria-disabled={!canResetToSeed}
+            aria-label="Reset every source, override, palette slot, and icon tag to its clone-time value"
+            title={canResetToSeed
+              ? "Restore every value to the clone-time snapshot"
+              : "Nothing has changed since this theme was cloned"}
+            class={cn(
+              "flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground transition-colors",
+              canResetToSeed
+                ? "hover:bg-destructive/90"
+                : "cursor-not-allowed",
+            )}
+          >
+            <RotateCcw size={11} strokeWidth={2.25} />
+            <span>Reset all to seed</span>
+          </button>
+        {/if}
+      </div>
       <button
         type="button"
         onclick={onCommit}
