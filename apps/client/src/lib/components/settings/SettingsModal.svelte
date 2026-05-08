@@ -3,8 +3,10 @@
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import X from "@lucide/svelte/icons/x";
   import AppearanceSection from "./AppearanceSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import { getViewport } from "$lib/stores/viewport.svelte";
   import type { SectionId } from "./types";
 
   let {
@@ -13,6 +15,7 @@
   }: { onClose: () => void; initialSection?: SectionId } = $props();
 
   const themeEditor = getThemeEditor();
+  const viewport = getViewport();
 
   // When the user opens a theme in the floating editor, step out of the way
   // so the modal backdrop does not block clicking through to the app.
@@ -41,6 +44,8 @@
   ];
 
   let activeSection = $state<SectionId>("appearance");
+  const useTopNav = $derived(viewport.below("compact"));
+  const useIconRail = $derived(!useTopNav && viewport.below("regular"));
   type CalendarsSectionComponent = typeof import("./CalendarsSection.svelte").default;
   let CalendarsSection = $state<CalendarsSectionComponent | null>(null);
   let loadingCalendarsSection: Promise<void> | null = null;
@@ -88,7 +93,10 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="fixed inset-0 z-[70] flex items-center justify-center"
+  class={cn(
+    "fixed inset-0 z-[70] flex",
+    useTopNav ? "items-stretch justify-center p-1" : "items-center justify-center p-2",
+  )}
   onclick={(e) => {
     e.stopPropagation();
     onClose();
@@ -96,21 +104,20 @@
 >
   <div class="absolute inset-0 bg-black/50"></div>
   <div
-    class="relative z-10 flex h-[80vh] w-[min(900px,90vw)] overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
+    class={cn(
+      "relative z-10 flex overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
+      useTopNav
+        ? "h-[calc(100dvh-0.5rem)] w-full flex-col rounded-md"
+        : "h-[80vh] rounded-lg",
+      !useTopNav && useIconRail ? "w-[min(760px,94vw)]" : "",
+      !useTopNav && !useIconRail ? "w-[min(900px,90vw)]" : "",
+    )}
     onclick={(e) => e.stopPropagation()}
   >
-    <!-- Sidebar -->
-    <aside
-      class="flex w-60 shrink-0 flex-col gap-4 border-r border-border bg-background/40 px-2 py-4 dark:bg-black/20"
-    >
-      {#each SECTION_GROUPS as group}
-        <div class="flex flex-col gap-1">
-          <h3
-            class="px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-          >
-            {group.heading}
-          </h3>
-          <nav class="flex flex-col gap-0.5">
+    {#if useTopNav}
+      <header class="flex shrink-0 items-center gap-2 border-b border-border bg-background/40 px-2 py-2 dark:bg-black/20">
+        <nav class="flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-md bg-card/60 p-0.5 dark:bg-background/60">
+          {#each SECTION_GROUPS as group}
             {#each group.items as section}
               {@const Icon = section.icon}
               <button
@@ -118,24 +125,95 @@
                   activeSection = section.id;
                 }}
                 class={cn(
-                  "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-[13px] font-medium transition-colors",
+                  "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[12px] font-medium transition-colors",
                   activeSection === section.id
                     ? "bg-accent text-accent-foreground"
                     : "text-foreground hover:bg-accent/60",
                 )}
               >
-                <Icon size={15} strokeWidth={1.75} class="shrink-0" />
+                <Icon size={14} strokeWidth={1.75} class="shrink-0" />
                 <span>{section.label}</span>
               </button>
             {/each}
-          </nav>
+          {/each}
+        </nav>
+        <button
+          type="button"
+          onclick={onClose}
+          aria-label="Close settings"
+          title="Close settings"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
+      </header>
+    {:else}
+      <!-- Sidebar -->
+      <aside
+        class={cn(
+          "flex shrink-0 flex-col gap-4 border-r border-border bg-background/40 dark:bg-black/20",
+          useIconRail ? "w-14 px-1 py-3" : "w-60 px-2 py-4",
+        )}
+      >
+        <div class={cn("flex items-center", useIconRail ? "justify-center" : "justify-between px-2")}>
+          {#if !useIconRail}
+            <span class="text-[12px] font-semibold text-foreground">Settings</span>
+          {/if}
+          <button
+            type="button"
+            onclick={onClose}
+            aria-label="Close settings"
+            title="Close settings"
+            class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
         </div>
-      {/each}
-    </aside>
+        {#each SECTION_GROUPS as group}
+          <div class="flex flex-col gap-1">
+            <h3
+              class={cn(
+                "px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
+                useIconRail ? "sr-only" : "",
+              )}
+            >
+              {group.heading}
+            </h3>
+            <nav class="flex flex-col gap-0.5">
+              {#each group.items as section}
+                {@const Icon = section.icon}
+                <button
+                  onclick={() => {
+                    activeSection = section.id;
+                  }}
+                  title={section.label}
+                  aria-label={section.label}
+                  class={cn(
+                    "flex items-center rounded-md text-left text-[13px] font-medium transition-colors",
+                    useIconRail ? "h-9 justify-center px-0" : "gap-2.5 px-3 py-1.5",
+                    activeSection === section.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-accent/60",
+                  )}
+                >
+                  <Icon size={15} strokeWidth={1.75} class="shrink-0" />
+                  {#if !useIconRail}
+                    <span>{section.label}</span>
+                  {/if}
+                </button>
+              {/each}
+            </nav>
+          </div>
+        {/each}
+      </aside>
+    {/if}
 
     <!-- Content -->
     <section
-      class="flex-1 overflow-y-auto bg-background/40 px-8 py-6 dark:bg-black/20"
+      class={cn(
+        "min-h-0 flex-1 overflow-y-auto bg-background/40 dark:bg-black/20",
+        useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "px-8 py-6",
+      )}
     >
       {#if activeSection === "appearance"}
         <AppearanceSection />

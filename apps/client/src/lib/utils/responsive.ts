@@ -1,4 +1,10 @@
 export type ViewportSizeClass = "micro" | "narrow" | "compact" | "regular" | "wide";
+export type EventPanelLayout = "anchored" | "centered" | "bottom" | "fullscreen";
+
+export const EVENT_PANEL_MAX_WIDTH = 320;
+export const EVENT_PANEL_EDGE_MARGIN = 8;
+export const EVENT_PANEL_TITLE_BAR_HEIGHT = 42;
+export const EVENT_PANEL_MIN_USABLE_HEIGHT = 280;
 
 const SIZE_ORDER: readonly ViewportSizeClass[] = [
   "micro",
@@ -18,6 +24,26 @@ export interface PanelRect {
   y: number;
   width: number;
   height: number;
+}
+
+export interface EventPanelAnchor {
+  /**
+   * Right edge of the trigger rect. This matches the existing calendar panel
+   * anchor shape.
+   */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface EventPanelLayoutInput {
+  viewport: ViewportSize;
+  anchor: EventPanelAnchor;
+  panelWidth?: number;
+  edgeMargin?: number;
+  titleBarHeight?: number;
+  minUsableHeight?: number;
 }
 
 export interface RectMargins {
@@ -95,6 +121,51 @@ export function pickToolbarItems<TId extends string>(
     visible: items.filter((item) => visible.has(item.id)).map((item) => item.id),
     overflow: items.filter((item) => !visible.has(item.id)).map((item) => item.id),
   };
+}
+
+export function getResponsivePanelWidth(
+  viewportWidth: number,
+  maxWidth = EVENT_PANEL_MAX_WIDTH,
+  margin = EVENT_PANEL_EDGE_MARGIN,
+): number {
+  const width = finiteOrZero(viewportWidth);
+  const cap = finiteOrZero(maxWidth);
+  const edge = finiteOrZero(margin);
+  return Math.max(0, Math.min(cap, width - edge * 2));
+}
+
+export function getEventPanelUsableHeight(
+  viewportHeight: number,
+  titleBarHeight = EVENT_PANEL_TITLE_BAR_HEIGHT,
+  edgeMargin = EVENT_PANEL_EDGE_MARGIN,
+): number {
+  return Math.max(
+    0,
+    finiteOrZero(viewportHeight) - finiteOrZero(titleBarHeight) - finiteOrZero(edgeMargin) * 2,
+  );
+}
+
+export function pickEventPanelLayout(input: EventPanelLayoutInput): EventPanelLayout {
+  const width = finiteOrZero(input.viewport.width);
+  const edge = finiteOrZero(input.edgeMargin ?? EVENT_PANEL_EDGE_MARGIN);
+  const panelWidth = finiteOrZero(input.panelWidth ?? EVENT_PANEL_MAX_WIDTH);
+  const minUsableHeight = finiteOrZero(input.minUsableHeight ?? EVENT_PANEL_MIN_USABLE_HEIGHT);
+  const usableHeight = getEventPanelUsableHeight(
+    input.viewport.height,
+    input.titleBarHeight ?? EVENT_PANEL_TITLE_BAR_HEIGHT,
+    edge,
+  );
+
+  if (usableHeight < minUsableHeight) return "fullscreen";
+  if (width < panelWidth + edge * 2) return "bottom";
+
+  const anchorLeft = finiteOrZero(input.anchor.x) - finiteOrZero(input.anchor.width);
+  const anchorRight = finiteOrZero(input.anchor.x);
+  const requiredSideSpace = panelWidth + edge * 2;
+  const fitsLeft = anchorLeft >= requiredSideSpace;
+  const fitsRight = width - anchorRight >= requiredSideSpace;
+
+  return fitsLeft || fitsRight ? "anchored" : "centered";
 }
 
 export function normalizeMargins(margins: number | Partial<RectMargins>): RectMargins {

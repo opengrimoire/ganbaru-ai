@@ -49,7 +49,7 @@
 
 <div
   class={cn(
-    "flex items-center justify-between gap-4 px-4 py-3 transition-colors",
+    "flex items-center justify-between gap-4 px-4 py-3 transition-colors max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-3 max-[520px]:px-3",
     isActive ? "bg-accent/50" : "hover:bg-accent/30",
   )}
 >
@@ -101,7 +101,7 @@
     </div>
   </button>
 
-  <div class="flex shrink-0 items-center gap-1">
+  <div class="flex shrink-0 items-center justify-end gap-1 max-[520px]:border-t max-[520px]:border-border/60 max-[520px]:pt-2">
     <button
       type="button"
       onclick={onDuplicate}
@@ -110,7 +110,7 @@
       class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
       <Copy size={13} strokeWidth={2} />
-      <span>Duplicate and edit</span>
+      <span class="max-[380px]:hidden">Duplicate and edit</span>
     </button>
     <button
       type="button"

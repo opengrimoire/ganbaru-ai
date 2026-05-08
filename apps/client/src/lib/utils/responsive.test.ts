@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   clampPanelRect,
   classifyViewport,
+  getResponsivePanelWidth,
   isSizeClassAtLeast,
+  pickEventPanelLayout,
   pickToolbarItems,
 } from "./responsive";
 
@@ -72,6 +74,78 @@ describe("pickToolbarItems", () => {
       visible: ["close", "timer", "settings", "help"],
       overflow: ["reset"],
     });
+  });
+});
+
+describe("getResponsivePanelWidth", () => {
+  it("uses the max width when the viewport can fit it with margins", () => {
+    expect(getResponsivePanelWidth(900, 320, 8)).toBe(320);
+    expect(getResponsivePanelWidth(336, 320, 8)).toBe(320);
+  });
+
+  it("shrinks to the viewport width minus both margins", () => {
+    expect(getResponsivePanelWidth(280, 320, 8)).toBe(264);
+    expect(getResponsivePanelWidth(335, 320, 8)).toBe(319);
+  });
+
+  it("never returns a negative width", () => {
+    expect(getResponsivePanelWidth(12, 320, 8)).toBe(0);
+  });
+});
+
+describe("pickEventPanelLayout", () => {
+  const anchorWithSideRoom = { x: 360, y: 120, width: 80, height: 40 };
+  const centeredAnchor = { x: 220, y: 120, width: 80, height: 40 };
+
+  it("uses anchored mode on wide viewports when the panel fits beside the anchor", () => {
+    expect(
+      pickEventPanelLayout({
+        viewport: { width: 1200, height: 700 },
+        anchor: anchorWithSideRoom,
+      }),
+    ).toBe("anchored");
+  });
+
+  it("keeps anchored mode on medium viewports when side placement still fits", () => {
+    expect(
+      pickEventPanelLayout({
+        viewport: { width: 700, height: 500 },
+        anchor: anchorWithSideRoom,
+      }),
+    ).toBe("anchored");
+  });
+
+  it("uses centered mode when side placement does not fit but the panel width does", () => {
+    expect(
+      pickEventPanelLayout({
+        viewport: { width: 400, height: 500 },
+        anchor: centeredAnchor,
+      }),
+    ).toBe("centered");
+  });
+
+  it("uses bottom sheet mode below the full-width threshold when height is usable", () => {
+    expect(
+      pickEventPanelLayout({
+        viewport: { width: 335, height: 500 },
+        anchor: centeredAnchor,
+      }),
+    ).toBe("bottom");
+  });
+
+  it("uses fullscreen mode when usable height is below the minimum", () => {
+    expect(
+      pickEventPanelLayout({
+        viewport: { width: 700, height: 337 },
+        anchor: anchorWithSideRoom,
+      }),
+    ).toBe("fullscreen");
+    expect(
+      pickEventPanelLayout({
+        viewport: { width: 335, height: 337 },
+        anchor: centeredAnchor,
+      }),
+    ).toBe("fullscreen");
   });
 });
 

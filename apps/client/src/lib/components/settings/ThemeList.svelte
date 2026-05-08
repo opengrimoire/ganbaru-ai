@@ -171,7 +171,7 @@
 </script>
 
 <div class="flex flex-col gap-4">
-  <header class="flex items-start justify-between gap-3 px-1">
+  <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
       <h2 class="text-[13px] font-semibold text-foreground">Themes</h2>
       <p class="mt-0.5 text-[12px] text-muted-foreground">
@@ -179,7 +179,7 @@
         Duplicate to fork one into an editable copy.
       </p>
     </div>
-    <div class="flex shrink-0 items-center gap-1.5">
+    <div class="flex shrink-0 items-center gap-1.5 max-[520px]:w-full max-[520px]:justify-end">
       <button
         type="button"
         onclick={handleImportToggle}
@@ -232,8 +232,8 @@
           {/each}
         </ul>
       {/if}
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5">
+      <div class="flex items-center justify-between gap-2 max-[520px]:flex-col max-[520px]:items-stretch">
+        <div class="flex items-center gap-1.5 max-[520px]:flex-wrap">
           <button
             type="button"
             onclick={handlePasteFromClipboard}
@@ -253,7 +253,7 @@
         <button
           type="button"
           onclick={handleImport}
-          class="rounded-md border border-border bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          class="rounded-md border border-border bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 max-[520px]:self-end"
         >
           Import
         </button>

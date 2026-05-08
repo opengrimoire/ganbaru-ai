@@ -203,17 +203,17 @@
   {#if expanded && recurrence}
     <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="repeat" class="flex flex-col gap-2.5 p-2.5" style="background-color: var(--panel-bg);">
       <!-- Every N [frequency] -->
-      <div class="flex items-center gap-2">
-        <span class="text-[11px] text-muted-foreground">Every</span>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="shrink-0 text-[11px] text-muted-foreground">Every</span>
         <input type="number" value={recInterval}
           oninput={(e) => updateInterval(parseInt(e.currentTarget.value, 10) || 1)}
           min={1} max={99}
-          class="num-input w-10 rounded-none bg-black/5 dark:bg-black/15 px-1 py-1 text-center text-[11px] text-event-panel-input-text outline-none"
+          class="num-input w-10 shrink-0 rounded-none bg-black/5 px-1 py-1 text-center text-[11px] text-event-panel-input-text outline-none dark:bg-black/15"
           onkeydown={(e) => e.stopPropagation()} />
-        <div class="flex gap-1">
+        <div class="flex min-w-0 flex-1 flex-wrap gap-1">
           {#each FREQ_OPTIONS as opt}
             <button onclick={() => updateFrequency(opt.value)}
-              class="rounded-none px-2 py-1 text-[11px]
+              class="min-w-0 flex-1 rounded-none px-2 py-1 text-[11px]
                 {recFrequency === opt.value
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-muted-foreground'}"
@@ -243,26 +243,26 @@
       {#if recFrequency === "monthly"}
         <div class="flex flex-col gap-1.5">
           <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Repeat on</span>
-          <div class="flex gap-1.5">
+          <div class="flex flex-wrap gap-1.5">
             <button onclick={() => setMonthlyMode("day")}
-              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]
+              class="flex min-w-0 items-center gap-2 rounded-none px-2 py-1.5 text-[11px]
                 {monthlyMode === 'day'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
               <div class="size-[11px] shrink-0 rounded-full
                 {monthlyMode === 'day' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
-              <span>Day {getEventDayOfMonth()}</span>
+              <span class="truncate">Day {getEventDayOfMonth()}</span>
             </button>
             <button onclick={() => setMonthlyMode("ordinal")}
-              class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]
+              class="flex min-w-0 items-center gap-2 rounded-none px-2 py-1.5 text-[11px]
                 {monthlyMode === 'ordinal'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
               <div class="size-[11px] shrink-0 rounded-full
                 {monthlyMode === 'ordinal' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
-              <span>{getEventOrdinalWeekday().label}</span>
+              <span class="truncate">{getEventOrdinalWeekday().label}</span>
             </button>
           </div>
         </div>

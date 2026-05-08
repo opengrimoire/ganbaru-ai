@@ -16,24 +16,33 @@
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { getViewport } from "$lib/stores/viewport.svelte";
+  import { cn } from "$lib/utils";
+  import {
+    EVENT_PANEL_EDGE_MARGIN,
+    EVENT_PANEL_MAX_WIDTH,
+    EVENT_PANEL_TITLE_BAR_HEIGHT,
+    getEventPanelUsableHeight,
+    getResponsivePanelWidth,
+    pickEventPanelLayout,
+    type EventPanelLayout,
+  } from "$lib/utils/responsive";
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Music from "@lucide/svelte/icons/music";
-  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import Sun from "@lucide/svelte/icons/sun";
   import Eye from "@lucide/svelte/icons/eye";
-  import Check from "@lucide/svelte/icons/check";
   import Shield from "@lucide/svelte/icons/shield";
   import Lock from "@lucide/svelte/icons/lock";
 
 
   const theme = getTheme();
+  const viewport = getViewport();
 
-  const PANEL_WIDTH = 320;
-  const PANEL_GAP = 8;
-  const TITLE_BAR_HEIGHT = 40;
+  const PANEL_MAX_WIDTH = EVENT_PANEL_MAX_WIDTH;
+  const PANEL_GAP = EVENT_PANEL_EDGE_MARGIN;
+  const TITLE_BAR_HEIGHT = EVENT_PANEL_TITLE_BAR_HEIGHT;
 
   let {
     mode,
@@ -257,6 +266,20 @@
   type Section = "meeting" | "pomodoro" | "notifications" | "repeat" | "music";
   let openSection: Section | null = $state(null);
 
+  const panelWidth = $derived(getResponsivePanelWidth(viewport.width, PANEL_MAX_WIDTH, PANEL_GAP));
+  const panelLayout = $derived.by((): EventPanelLayout => (
+    pickEventPanelLayout({
+      viewport: { width: viewport.width, height: viewport.height },
+      anchor,
+      panelWidth: PANEL_MAX_WIDTH,
+      edgeMargin: PANEL_GAP,
+      titleBarHeight: TITLE_BAR_HEIGHT,
+    })
+  ));
+  const panelCanDrag = $derived(panelLayout === "anchored" || panelLayout === "centered");
+  const stackedDateTime = $derived(panelWidth < 300);
+  const compactMetadata = $derived(panelWidth < 300);
+
   function isSectionEnabled(s: Section): boolean {
     if (s === "meeting") return meetingEnabled;
     if (s === "pomodoro") return pomodoroEnabled;
@@ -304,10 +327,10 @@
     }
     const opening = openSection !== s;
     openSection = opening ? s : null;
-    if (opening && panelEl) {
+    if (opening && panelEl && panelCanDrag) {
       // Decide pinning direction only when opening
       const rect = panelEl.getBoundingClientRect();
-      const vh = window.innerHeight;
+      const vh = viewport.height;
       const roomBelow = vh - PANEL_GAP - rect.bottom;
       const roomAbove = rect.top - minTop;
       // Pin bottom when there's less room below, so panel expands upward
@@ -317,6 +340,8 @@
       } else {
         pinnedBottom = 0;
       }
+    } else if (opening) {
+      pinnedBottom = 0;
     } else if (!opening && pinnedBottom > 0) {
       // Closing: keep the same pinning from open, release after animation.
       // Bake the rendered position into baseTop so rawTop matches after clearing.
@@ -341,6 +366,17 @@
   let dragStart = { x: 0, y: 0 };
   let baseLeft = $state(0);
   let baseTop = $state(0);
+  const minTop = TITLE_BAR_HEIGHT + PANEL_GAP;
+
+  function clampFloatingLeft(left: number, viewportWidth: number, width: number): number {
+    const maxLeft = Math.max(PANEL_GAP, viewportWidth - width - PANEL_GAP);
+    return Math.max(PANEL_GAP, Math.min(maxLeft, left));
+  }
+
+  function clampFloatingTop(top: number, viewportHeight: number, visibleHeight: number): number {
+    const maxTop = Math.max(minTop, viewportHeight - visibleHeight - PANEL_GAP);
+    return Math.max(minTop, Math.min(maxTop, top));
+  }
 
   const isRecurring = $derived(
     mode === "edit" && !!event && (!!event.recurringParentId || !!event.recurrence),
@@ -588,20 +624,40 @@
   // Skip repositioning if the user has manually dragged the panel.
   $effect(() => {
     const _a = anchor;
+    const layout = panelLayout;
+    const width = panelWidth;
+    const vw = viewport.width;
+    const vh = viewport.height;
+    if (!panelCanDrag) {
+      dragOffset = { x: 0, y: 0 };
+      pinnedBottom = 0;
+      userDragged = false;
+      return;
+    }
     if (userDragged) return;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
     const ph = untrack(() => panelHeight) || 520;
+    const availableHeight = Math.max(
+      96,
+      getEventPanelUsableHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP),
+    );
+    const visibleHeight = Math.min(ph, availableHeight);
 
     let left: number;
-    const leftSpace = _a.x - _a.width - PANEL_GAP;
-    const rightSpace = vw - _a.x - PANEL_GAP;
-    if (leftSpace >= PANEL_WIDTH) left = _a.x - _a.width - PANEL_GAP - PANEL_WIDTH;
-    else if (rightSpace >= PANEL_WIDTH) left = _a.x + PANEL_GAP;
-    else left = Math.max(PANEL_GAP, (vw - PANEL_WIDTH) / 2);
+    if (layout === "centered") {
+      left = Math.round((vw - width) / 2);
+    } else {
+      const anchorLeft = _a.x - _a.width;
+      const requiredSideSpace = width + PANEL_GAP * 2;
+      const rightSpace = vw - _a.x;
+      if (anchorLeft >= requiredSideSpace) left = anchorLeft - PANEL_GAP - width;
+      else if (rightSpace >= requiredSideSpace) left = _a.x + PANEL_GAP;
+      else left = Math.round((vw - width) / 2);
+    }
 
-    baseLeft = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, left));
-    baseTop = Math.max(minTop, Math.min(vh - ph - PANEL_GAP, _a.y));
+    const top = layout === "centered" ? Math.round((vh - visibleHeight) / 2) : _a.y;
+
+    baseLeft = clampFloatingLeft(left, vw, width);
+    baseTop = clampFloatingTop(top, vh, visibleHeight);
     dragOffset = { x: 0, y: 0 };
   });
 
@@ -676,14 +732,28 @@
   // its pre-expansion position so it only grows upward. Otherwise the
   // top is pinned and the panel grows downward, nudging up only if
   // it would overflow the viewport.
-  const minTop = TITLE_BAR_HEIGHT + PANEL_GAP;
-
   const panelStyle = $derived.by(() => {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vw = viewport.width;
+    const vh = viewport.height;
+    const width = panelWidth;
+    const availableHeight = Math.max(
+      96,
+      getEventPanelUsableHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP),
+    );
+    const layout = panelLayout;
     const ph = panelHeight || 520;
+    const visibleHeight = Math.min(ph, availableHeight);
 
-    const left = Math.max(PANEL_GAP, Math.min(vw - PANEL_WIDTH - PANEL_GAP, baseLeft + dragOffset.x));
+    if (layout === "fullscreen") {
+      return `position:fixed; left:${PANEL_GAP}px; right:${PANEL_GAP}px; top:${minTop}px; bottom:${PANEL_GAP}px; z-index:50;`;
+    }
+
+    if (layout === "bottom") {
+      const maxHeight = Math.min(560, availableHeight);
+      return `position:fixed; left:${PANEL_GAP}px; right:${PANEL_GAP}px; bottom:${PANEL_GAP}px; max-height:${Math.round(maxHeight)}px; z-index:50;`;
+    }
+
+    const left = clampFloatingLeft(baseLeft + dragOffset.x, vw, width);
     const rawTop = Math.max(minTop, baseTop + dragOffset.y);
 
     if (pinnedBottom > 0) {
@@ -691,20 +761,22 @@
       // The browser keeps it fixed frame-by-frame without JS timing issues.
       const dragDelta = dragOffset.y - pinnedDragY;
       const bottomCss = Math.max(PANEL_GAP, Math.round(vh - pinnedBottom - dragDelta));
-      const maxH = Math.round(pinnedBottom + dragDelta - minTop);
-      return `position:fixed; left:${Math.round(left)}px; bottom:${bottomCss}px; max-height:${maxH}px; width:${PANEL_WIDTH}px; z-index:50;`;
+      const maxH = Math.max(96, Math.round(pinnedBottom + dragDelta - minTop));
+      return `position:fixed; left:${Math.round(left)}px; bottom:${bottomCss}px; max-height:${maxH}px; width:${Math.round(width)}px; z-index:50;`;
     }
 
     // Normal: pin top, nudge up if overflowing bottom
     let top = rawTop;
-    const overflow = top + ph + PANEL_GAP - vh;
+    const overflow = top + visibleHeight + PANEL_GAP - vh;
     if (overflow > 0) {
       top = Math.max(minTop, top - overflow);
     }
 
-    return `position:fixed; left:${Math.round(left)}px; top:${Math.round(top)}px; width:${PANEL_WIDTH}px; z-index:50;`;
+    return `position:fixed; left:${Math.round(left)}px; top:${Math.round(top)}px; width:${Math.round(width)}px; max-height:${Math.round(availableHeight)}px; z-index:50;`;
   });
-  const parkedPanelStyle = `position:fixed; left:-10000px; top:-10000px; width:${PANEL_WIDTH}px; z-index:-1; pointer-events:none;`;
+  const parkedPanelStyle = $derived(
+    `position:fixed; left:-10000px; top:-10000px; width:${Math.round(panelWidth)}px; z-index:-1; pointer-events:none;`,
+  );
 
 
   const shortDate = $derived.by(() => {
@@ -820,16 +892,32 @@
     if (e.key === "Escape") return;
     e.stopPropagation();
   }
+
+  function metadataButtonClass(active: boolean, extra?: string): string {
+    return cn(
+      "flex min-w-0 items-center gap-1 rounded-none px-2 py-2 hover:bg-black/5 dark:hover:bg-black/15",
+      compactMetadata ? "w-full justify-center" : "",
+      active ? "text-foreground" : "text-muted-foreground",
+      extra,
+    );
+  }
+
   function handleScopeClick(s: RecurringScope) { scope = s; onScopeChange?.(s); }
 
   function handleDragStart(e: PointerEvent) {
+    if (!panelCanDrag) return;
     if (parked) return;
     isDragging = true;
     dragStart = { x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
-  function handleDragMove(e: PointerEvent) { if (isDragging) dragOffset = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }; }
-  function handleDragEnd() { isDragging = false; userDragged = true; }
+  function handleDragMove(e: PointerEvent) {
+    if (isDragging && panelCanDrag) dragOffset = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y };
+  }
+  function handleDragEnd() {
+    if (isDragging) userDragged = panelCanDrag;
+    isDragging = false;
+  }
 
   // Global shortcut handling: active whenever the panel is mounted, so the
   // user does not have to click a field inside the panel first. If a modal
@@ -865,16 +953,20 @@
 <div
   bind:this={panelEl}
   class="panel-root flex flex-col"
+  data-layout={panelLayout}
   data-readonly={controlsDisabled || undefined}
   data-parked={parked || undefined}
   aria-hidden={parked || undefined}
   style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {parked ? parkedPanelStyle : panelStyle} background-color: var(--panel-bg); visibility: {initialized && !parked ? 'visible' : 'hidden'};"
   onclick={handlePanelClick}
 >
-  <!-- Drag handle bar with close button -->
+  <!-- Drag handle bar -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="sticky top-0 z-10 flex items-center pl-3.5 pr-1.5 cursor-grab active:cursor-grabbing"
+    class={cn(
+      "sticky top-0 z-10 flex items-center pl-3.5 pr-1.5",
+      panelCanDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+    )}
     style="background-color: var(--sidebar);"
     onpointerdown={handleDragStart}
     onpointermove={handleDragMove}
@@ -885,7 +977,8 @@
     </div>
   </div>
 
-  <!-- Fixed top: title + date -->
+  <div class="event-panel-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+  <!-- Main editor: title + date -->
   <div class="shrink-0 flex flex-col gap-2.5 px-3.5 pt-2.5">
 
     <!-- Scope selector (recurring events only) -->
@@ -925,11 +1018,14 @@
     <hr class="border-event-panel-divider -mt-2 mx-1" />
 
     <!-- Date + time -->
-    <div class="relative -mt-1 flex items-center px-1 text-[12px]">
-      <!-- Start date (left) -->
-      <div class="relative z-[1] shrink-0">
+    <div
+      class="date-time-grid relative -mt-1 px-1 text-[12px]"
+      data-stacked={stackedDateTime || undefined}
+    >
+      <!-- Start date -->
+      <div class="relative z-[1] min-w-0 justify-self-start">
         <button onclick={toggleDatepicker}
-          class="rounded py-1 text-event-panel-input-text
+          class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
         </button>
@@ -947,11 +1043,8 @@
         {/if}
       </div>
 
-      <div class="flex-1"></div>
-
-      <!-- Time group (absolutely centered on the panel, hidden when all-day) -->
-      <div class="absolute inset-x-0 z-[2] flex items-center justify-center gap-1 py-1 pointer-events-none" class:hidden={allDay}>
-        <div class="pointer-events-auto relative flex items-center gap-1">
+      <!-- Time group, hidden when all-day -->
+      <div class="time-group relative z-[2] flex items-center justify-center gap-1 py-1" class:hidden={allDay}>
         <input type="text" bind:value={startTime}
           oninput={emitChange}
           onclick={() => openTimePicker("start")}
@@ -960,7 +1053,7 @@
           class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
-        <span class="text-muted-foreground/60">&ndash;</span>
+        <span class="text-muted-foreground/60">-</span>
         <input type="text" bind:value={endTime}
           oninput={emitChange}
           onclick={() => openTimePicker("end")}
@@ -986,13 +1079,12 @@
               onselect={selectTime} />
           </div>
         {/if}
-        </div>
       </div>
 
-      <!-- End date (right) -->
-      <div class="relative z-[1] shrink-0">
+      <!-- End date -->
+      <div class="relative z-[1] min-w-0 justify-self-end text-right">
         <button onclick={toggleEndDatepicker}
-          class="rounded py-1 text-event-panel-input-text
+          class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
         </button>
@@ -1010,11 +1102,17 @@
     </div>
   </div>
 
-  <!-- Middle: metadata strip (always visible) -->
+  <!-- Metadata strip -->
   <div class="flex flex-col gap-3 px-3.5 py-1.5">
 
     <!-- All-day / Availability / Status / Visibility -->
-    <div class="-mt-1 flex items-center rounded-none px-0.5 text-[10px] leading-none" style="background-color: var(--panel-contrast);">
+    <div
+      class={cn(
+        "-mt-1 rounded-none px-0.5 text-[10px] leading-none",
+        compactMetadata ? "grid grid-cols-2" : "flex items-center",
+      )}
+      style="background-color: var(--panel-contrast);"
+    >
       <!-- All day -->
       <button
         onclick={() => {
@@ -1046,25 +1144,29 @@
           emitChange();
         }}
         disabled={controlsDisabled}
-        class="flex items-center gap-1 rounded-none px-2 py-2
-          {allDay ? 'bg-black/5 dark:bg-black/15 text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5 dark:hover:bg-black/15'}"
+        class={cn(
+          "flex min-w-0 items-center gap-1 rounded-none px-2 py-2",
+          compactMetadata ? "w-full justify-center" : "",
+          allDay
+            ? "bg-black/5 text-foreground dark:bg-black/15"
+            : "text-muted-foreground/40 hover:bg-black/5 hover:text-muted-foreground dark:hover:bg-black/15",
+        )}
         title="All day"
       >
         <Sun size={12} class="shrink-0" />
-        <span>All day</span>
+        <span class="truncate">All day</span>
       </button>
 
       <!-- Show as -->
-      <div class="relative">
+      <div class="relative min-w-0">
         <button
           onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={controlsDisabled}
-          class="flex items-center gap-1 rounded-none px-2 py-2 hover:bg-black/5 dark:hover:bg-black/15
-            {showAsPicker ? 'text-foreground' : 'text-muted-foreground'}"
+          class={metadataButtonClass(showAsPicker)}
           title="Show as"
         >
           <Eye size={12} class="shrink-0" />
-          <span class="text-foreground">{transparency === "transparent" ? "Free" : "Busy"}</span>
+          <span class="truncate text-foreground">{transparency === "transparent" ? "Free" : "Busy"}</span>
         </button>
         {#if showAsPicker}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -1083,16 +1185,15 @@
       </div>
 
       <!-- Status -->
-      <div class="relative">
+      <div class="relative min-w-0">
         <button
           onclick={() => { statusPicker = !statusPicker; showAsPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={controlsDisabled}
-          class="flex items-center gap-1 rounded-none px-2 py-2 capitalize hover:bg-black/5 dark:hover:bg-black/15
-            {statusPicker ? 'text-foreground' : 'text-muted-foreground'}"
+          class={metadataButtonClass(statusPicker, "capitalize")}
           title="Status"
         >
           <CircleCheck size={12} class="shrink-0" />
-          <span class="text-foreground">{eventStatus}</span>
+          <span class="truncate text-foreground">{eventStatus}</span>
         </button>
         {#if statusPicker}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -1111,12 +1212,11 @@
       </div>
 
       {#if showHeavySections}
-        <div class="relative">
+        <div class="relative min-w-0">
           <button
             onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
             disabled={controlsDisabled}
-            class="flex items-center gap-1 rounded-none px-2 py-2 capitalize hover:bg-black/5 dark:hover:bg-black/15
-              {visibilityPicker ? 'text-foreground' : 'text-muted-foreground'}"
+            class={metadataButtonClass(visibilityPicker, "capitalize")}
             title="Visibility"
           >
             {#if visibility === "public"}
@@ -1124,7 +1224,7 @@
             {:else}
               <Lock size={12} class="shrink-0" />
             {/if}
-            <span class="{visibility !== 'public' ? 'text-foreground' : ''}">{visibility}</span>
+            <span class="truncate {visibility !== 'public' ? 'text-foreground' : ''}">{visibility}</span>
           </button>
           {#if visibilityPicker}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -1146,7 +1246,7 @@
 
   </div>
 
-  <!-- Fixed bottom: feature sections (always visible) -->
+  <!-- Feature sections -->
   <div class="shrink-0 flex flex-col gap-1.5 px-3.5 py-1.5">
 
       <!-- 1) Meeting -->
@@ -1217,9 +1317,16 @@
         {/if}
       </div>
   </div>
+  </div>
 
   <!-- Save (pinned outside scroll) -->
-  <div class="shrink-0 px-3.5 pb-3.5 pt-1.5" style="background-color: var(--panel-bg);">
+  <div
+    class={cn(
+      "shrink-0 px-3.5",
+      panelLayout === "fullscreen" ? "pb-2 pt-1" : "pb-3.5 pt-1.5",
+    )}
+    style="background-color: var(--panel-bg);"
+  >
     {#if readOnly}
       <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[11px] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
@@ -1276,6 +1383,35 @@
     --foreground: var(--event-panel-text);
     --muted-foreground: var(--event-panel-muted-text);
     font-variant-numeric: tabular-nums;
+  }
+
+  .event-panel-scroll {
+    scrollbar-width: thin;
+  }
+
+  .date-time-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 0.375rem;
+  }
+
+  .date-time-grid[data-stacked] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    row-gap: 0.125rem;
+  }
+
+  .date-time-grid[data-stacked] .time-group {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+  }
+
+  .date-chip {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .title-wrapper::after {

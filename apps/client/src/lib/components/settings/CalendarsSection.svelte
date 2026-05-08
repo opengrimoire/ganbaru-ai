@@ -234,7 +234,7 @@
 </script>
 
 <div class="flex flex-col gap-6">
-  <header class="flex items-start justify-between gap-3 px-1">
+  <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
       <h2 class="text-[13px] font-semibold text-foreground">Calendars</h2>
       <p class="mt-0.5 text-[12px] text-muted-foreground">
@@ -244,7 +244,7 @@
         event UID, so it stays safe to test against your real export.
       </p>
     </div>
-    <div class="flex shrink-0 items-center gap-1.5">
+    <div class="flex shrink-0 items-center gap-1.5 max-[520px]:w-full max-[520px]:justify-end">
       <button
         type="button"
         onclick={handleImport}
@@ -280,7 +280,7 @@
     class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
   >
     {#each calendarsStore.list as cal (cal.id)}
-      <div class="flex items-center gap-3 px-3 py-2.5">
+      <div class="flex items-center gap-3 px-3 py-2.5 max-[520px]:flex-col max-[520px]:items-stretch">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <span class="truncate text-[13px] font-medium text-foreground">
@@ -299,7 +299,7 @@
             {/if}
           </div>
         </div>
-        <div class="flex shrink-0 items-center gap-1.5">
+        <div class="flex shrink-0 items-center justify-end gap-1.5">
           <button
             type="button"
             onclick={() => handleExport(cal)}

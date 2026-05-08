@@ -181,14 +181,16 @@ In `MonthView.svelte`:
 
 In `EventPanel.svelte`:
 
-- Replace fixed `PANEL_WIDTH = 320` with a responsive width: `min(320px, calc(100vw - 2 * margin))`.
-- Use anchored side panel at `regular` and above.
-- Use side sheet or centered sheet at `compact`.
-- Use bottom sheet at `narrow`.
-- Use full-height editor sheet at `micro` or short-height windows.
-- Rework the date and time row so it can stack. The current absolutely centered time group is fragile on narrow widths.
-- Keep section expansion pinned to viewport bounds in every mode.
-- Add resize handling while the panel is open. A live window resize should recompute panel mode and clamp position without waiting for unrelated state changes.
+- Implemented: replace the fixed panel width with `min(320px, calc(100vw - 2 * margin))`.
+- Implemented: keep the normal anchored side panel whenever a 320px panel fits beside the anchor.
+- Implemented: use a centered floating panel when side placement does not fit but the viewport can still fit 320px with margins.
+- Implemented: use a bottom sheet only below 336px wide when usable height is at least 280px.
+- Implemented: use a full-height editor sheet when usable height drops below 280px.
+- Implemented: rework the date and time row so it stacks only when the actual panel width drops below 300px.
+- Implemented: rework the metadata strip so it stacks only when the actual panel width drops below 300px.
+- Implemented: keep event controls reachable through an internal scrolling area with the save action pinned outside the scroll.
+- Implemented: add resize handling while the panel is open through the shared viewport store.
+- Remaining: move large nested pickers to responsive sheets where the current popover would not fit.
 
 ### Popovers inside calendar
 
@@ -218,12 +220,13 @@ Task cards should expose key actions without hover-only controls at touch-like o
 
 In `SettingsModal.svelte`:
 
-- `regular` and above: current sidebar modal.
-- `compact`: narrower sidebar or icon-only rail.
-- `narrow`: full-screen settings sheet with section tabs or a section picker at top.
-- `micro`: one setting group per screen, with back navigation.
+- Implemented: `regular` and above keep the sidebar modal.
+- Implemented: `compact` uses an icon-only rail.
+- Implemented: `narrow` and `micro` use a near full-screen settings sheet with top section tabs.
+- Implemented: compact settings rows stack controls below their labels at narrow widths.
+- Remaining: split `micro` into one setting group per screen with back navigation if settings grows beyond the current two sections.
 
-Reduce content padding from `px-8 py-6` at compact sizes. Preserve scroll position per section.
+Implemented: reduce content padding from `px-8 py-6` at compact sizes. Remaining: preserve scroll position per section if sections become long enough for it to matter.
 
 ### Floating theme editor
 

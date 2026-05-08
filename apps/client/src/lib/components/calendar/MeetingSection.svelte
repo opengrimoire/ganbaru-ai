@@ -191,7 +191,7 @@
         <div class="flex items-center gap-2 pb-1">
           <span class="text-[9px] uppercase tracking-wider text-muted-foreground">Guests</span>
           {#if !readOnly && attendees.length > 0}
-            <div class="ml-auto flex items-center gap-1">
+            <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
               {#each [
                 { icon: Pencil, label: "Edit", title: "Modify event", get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; onchange(); } },
                 { icon: UserPlus, label: "Invite", title: "Invite others", get: () => guestCanInviteOthers, set: (v: boolean) => { guestCanInviteOthers = v; onchange(); } },
@@ -201,7 +201,7 @@
                   class="flex items-center gap-1 rounded px-1 py-0.5 active:scale-95
                     {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
                   <perm.icon size={11} strokeWidth={2} />
-                  <span class="text-[9px]">{perm.label}</span>
+                  <span class="text-[9px] max-[320px]:hidden">{perm.label}</span>
                 </button>
               {/each}
             </div>

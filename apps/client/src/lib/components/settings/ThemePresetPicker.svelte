@@ -54,7 +54,7 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div
-  class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+  class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 max-[520px]:p-2"
   role="dialog"
   aria-modal="true"
   aria-label="Pick a starting preset"
@@ -68,7 +68,7 @@
   ></div>
 
   <div
-    class="relative flex max-h-[90vh] w-[560px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl"
+    class="relative flex max-h-[90vh] w-[min(560px,100%)] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl max-[520px]:p-3"
   >
     <header class="flex items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
@@ -90,7 +90,7 @@
       </button>
     </header>
 
-    <div class="grid grid-cols-3 gap-3">
+    <div class="grid grid-cols-3 gap-3 max-[520px]:grid-cols-1">
       {#each THEME_PRESETS as preset (preset.id)}
         <button
           type="button"
@@ -157,14 +157,14 @@
       {/each}
     </div>
 
-    <div class="flex items-center justify-between gap-3 border-t border-border pt-3">
+    <div class="flex items-center justify-between gap-3 border-t border-border pt-3 max-[520px]:flex-col max-[520px]:items-stretch">
       <span class="text-[11px] text-muted-foreground">
         Prefer to start from your current theme?
       </span>
       <button
         type="button"
         onclick={onStartBlank}
-        class="rounded-md border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
+        class="rounded-md border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent max-[520px]:self-end"
       >
         Start blank
       </button>
