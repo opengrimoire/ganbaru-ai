@@ -249,7 +249,7 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: var(--sidebar);
+    background: transparent;
   }
   * {
     @apply border-border outline-ring/50;
@@ -257,6 +257,10 @@
   body {
     @apply text-foreground;
   }
+}
+
+.app-shell {
+  background: var(--sidebar);
 }
 
 .app-shell[data-size-class="compact"] {

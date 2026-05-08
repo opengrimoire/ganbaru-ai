@@ -19,7 +19,7 @@
         "minHeight": 180,
         "maximized": true,
         "decorations": false,
-        "transparent": false,
+        "transparent": true,
         "zoomHotkeysEnabled": false
       }
     ],
