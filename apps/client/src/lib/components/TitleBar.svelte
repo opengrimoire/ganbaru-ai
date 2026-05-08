@@ -162,6 +162,8 @@
     showUtilityOverflowMenu = false;
     if (id === "theme") {
       theme.toggle();
+    } else if (id === "performance") {
+      togglePerfMenu();
     } else if (id === "reset") {
       showResetConfirm = true;
     } else if (id === "help") {
@@ -249,15 +251,14 @@
   const autoCompactTabs = $derived(
     preferences.titleBarVisibility.compactTabs || viewport.below("regular"),
   );
+  const activeTabOnly = $derived(viewport.below("narrow"));
   const compactOverflowIds = $derived.by(() => {
     const ids = new Set<TitleBarControlId>();
     if (viewport.below("regular")) {
       ids.add("theme");
+      ids.add("performance");
       ids.add("reset");
       ids.add("help");
-    }
-    if (viewport.below("narrow")) {
-      ids.add("settings");
     }
     return ids;
   });
@@ -267,6 +268,9 @@
       && preferences.titleBarVisibility[control.id]
       && compactOverflowIds.has(control.id),
     ),
+  );
+  const performanceInOverflow = $derived(
+    overflowActionControls.some((control) => control.id === "performance"),
   );
 
   function titleBarControlVisible(id: TitleBarControlId): boolean {
@@ -369,6 +373,7 @@
   $effect(() => {
     void nav.current;
     void autoCompactTabs;
+    void activeTabOnly;
     requestAnimationFrame(updateIndicator);
   });
 
@@ -414,6 +419,35 @@
 
 <svelte:window onkeydown={handleModalKeydown} />
 
+{#snippet performancePopover()}
+  {#if showPerfMenu}
+    {#if !perfPinned}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="fixed inset-0 z-40"
+        onclick={() => { showPerfMenu = false; }}
+        onkeydown={(e) => { if (e.key === "Escape") showPerfMenu = false; }}
+      ></div>
+    {/if}
+    {#if PerformancePopover}
+      {@const Popover = PerformancePopover}
+      <Popover
+        {shellStartupMs}
+        {startupMemorySnapshot}
+        pinned={perfPinned}
+        onPinnedChange={(nextPinned: boolean) => { perfPinned = nextPinned; }}
+        {ensureBenchmarkOverlay}
+      />
+    {:else}
+      <div
+        class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
+      >
+        Loading...
+      </div>
+    {/if}
+  {/if}
+{/snippet}
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-tauri-drag-region
@@ -423,7 +457,7 @@
   oncontextmenu={openTitleBarMenu}
 >
   <!-- Navigation tabs -->
-  <div class="relative flex items-center gap-0.5 pl-1.5">
+  <div class="relative flex min-w-0 items-center gap-0.5 overflow-hidden pl-1.5">
     <div
       class="tab-indicator absolute top-0 h-full rounded-md bg-background dark:bg-accent"
       style="{indicatorStyle} box-shadow: 0 0 0 1px {theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.1)'};"
@@ -434,6 +468,7 @@
         onclick={() => nav.navigate(tab.view)}
         class={cn(
           "relative z-[1] flex h-8 items-center rounded-md text-sm font-medium transition-colors",
+          activeTabOnly && nav.current !== tab.view ? "hidden" : "",
           autoCompactTabs
             ? "w-8 justify-center"
             : "gap-1.5 px-3",
@@ -455,7 +490,7 @@
   <div class="flex-1"></div>
 
   <!-- Utility buttons -->
-  <div class="flex items-center gap-0.5">
+  <div class="flex shrink-0 items-center gap-0.5">
     <!-- Pomodoro progress ring with dropdown -->
     {#if titleBarControlVisible("pomodoro")}
       <div class="relative">
@@ -560,32 +595,7 @@
         >
           <CircleGauge size={14} strokeWidth={1.75} />
         </button>
-        {#if showPerfMenu}
-          {#if !perfPinned}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="fixed inset-0 z-40"
-              onclick={() => { showPerfMenu = false; }}
-              onkeydown={(e) => { if (e.key === "Escape") showPerfMenu = false; }}
-            ></div>
-          {/if}
-          {#if PerformancePopover}
-            {@const Popover = PerformancePopover}
-            <Popover
-              {shellStartupMs}
-              {startupMemorySnapshot}
-              pinned={perfPinned}
-              onPinnedChange={(nextPinned: boolean) => { perfPinned = nextPinned; }}
-              {ensureBenchmarkOverlay}
-            />
-          {:else}
-            <div
-              class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
-            >
-              Loading...
-            </div>
-          {/if}
-        {/if}
+        {@render performancePopover()}
       </div>
     {/if}
 
@@ -650,6 +660,9 @@
         >
           <MoreHorizontal size={15} strokeWidth={1.75} />
         </button>
+        {#if performanceInOverflow}
+          {@render performancePopover()}
+        {/if}
         {#if showUtilityOverflowMenu}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -680,7 +693,7 @@
   </div>
 
   <!-- Window controls -->
-  <div class="flex items-center gap-0.5 pr-1.5">
+  <div class="flex shrink-0 items-center gap-0.5 pr-1.5">
     <button
       onclick={() => win.minimize()}
       class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
