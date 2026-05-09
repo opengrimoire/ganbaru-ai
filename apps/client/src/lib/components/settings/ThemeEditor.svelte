@@ -1474,7 +1474,7 @@
 </div>
 {#if userTheme && failingPairs.length > 0}
   <section
-    class="absolute bottom-3 left-5 right-5 z-30 flex h-10 items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 text-[11px] shadow-xl dark:bg-background"
+    class="absolute bottom-3 left-1/2 z-30 flex h-10 w-fit max-w-[calc(100%-2.5rem)] -translate-x-1/2 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] shadow-xl dark:bg-background"
   >
     <div class="flex min-w-0 items-center gap-2 text-foreground">
       <AlertTriangle
