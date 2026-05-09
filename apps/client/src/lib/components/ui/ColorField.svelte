@@ -141,6 +141,20 @@
     return rgbaToHex(r, g, b, alpha);
   }
 
+  function clampPickerHue(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    const wrapped = clampHue(value);
+    return wrapped === 0 && value > 0 && value % 360 === 0 ? 360 : wrapped;
+  }
+
+  function pointerRatio(e: PointerEvent, el: HTMLElement | undefined): number | null {
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0) return null;
+    const x = Math.min(Math.max(e.clientX - rect.left, 0), rect.width);
+    return x / rect.width;
+  }
+
   function updateThumbContour() {
     if (typeof document === "undefined") return;
     const styles = getComputedStyle(popoverEl ?? document.documentElement);
@@ -159,7 +173,7 @@
 
   function emit(next: HsvColor, nextAlpha: number = alpha) {
     hsv = {
-      h: clampHue(next.h),
+      h: clampPickerHue(next.h),
       s: clampPercent(next.s),
       v: clampPercent(next.v),
     };
@@ -200,10 +214,9 @@
   }
 
   function pointerToHue(e: PointerEvent) {
-    if (!hueEl) return;
-    const rect = hueEl.getBoundingClientRect();
-    const x = Math.min(Math.max(e.clientX - rect.left, 0), rect.width);
-    const h = (x / rect.width) * 360;
+    const ratio = pointerRatio(e, hueEl);
+    if (ratio === null) return;
+    const h = ratio * 360;
     emit({ h, s: hsv.s, v: hsv.v });
   }
 
@@ -227,10 +240,9 @@
   }
 
   function pointerToAlpha(e: PointerEvent) {
-    if (!alphaEl) return;
-    const rect = alphaEl.getBoundingClientRect();
-    const x = Math.min(Math.max(e.clientX - rect.left, 0), rect.width);
-    const a = Math.round((x / rect.width) * 255);
+    const ratio = pointerRatio(e, alphaEl);
+    if (ratio === null) return;
+    const a = Math.round(ratio * 255);
     emit(hsv, a);
   }
 
