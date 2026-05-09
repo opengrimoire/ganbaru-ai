@@ -195,7 +195,19 @@
     // intent as a bug.
     target?: number;
   };
-  type GroupRow = GroupSingleRow | GroupPairRow;
+  type GroupSourcePairRow = {
+    kind: "source-pair";
+    bg: string;
+    fg: string;
+    bgSource: keyof ThemeSources;
+    fgSource: keyof ThemeSources;
+    title: string;
+    description: string;
+    scope: "app";
+    target?: number;
+  };
+  type GroupContrastRow = GroupPairRow | GroupSourcePairRow;
+  type GroupRow = GroupSingleRow | GroupPairRow | GroupSourcePairRow;
   type ThemeNavTarget = "general" | "calendar" | "signals" | "todo" | "json";
   type SourceGroup = {
     sourceKey: keyof ThemeSources | null;
@@ -356,73 +368,56 @@
       rows: [{ kind: "single", key: "--primary-foreground", scope: "app" }],
     },
     {
-      sourceKey: "destructive",
+      sourceKey: null,
       title: "Destructive",
       description: "Danger signal",
       rows: [
         {
-          kind: "pair",
+          kind: "source-pair",
           bg: "--destructive",
           fg: "--destructive-foreground",
-          title: "Destructive button",
-          description: "Delete actions and the title bar close hover",
+          bgSource: "destructive",
+          fgSource: "destructiveText",
+          title: "Destructive",
+          description: "Delete actions, armed delete, and declined status",
           scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--action-danger-armed",
-          fg: "--action-danger-armed-foreground",
-          title: "Armed delete",
-          description:
-            "Background and text of the delete button once armed (click-again-to-confirm state)",
-          scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--status-declined",
-          fg: "--status-declined-foreground",
-          title: "Declined attendee",
-          description: "Status tile for declined attendees on a calendar event",
-          scope: "app",
+          target: 3,
         },
       ],
     },
     {
-      sourceKey: "confirm",
+      sourceKey: null,
       title: "Confirm",
       description: "Positive signal",
       rows: [
         {
-          kind: "pair",
+          kind: "source-pair",
           bg: "--action-confirm",
           fg: "--action-confirm-foreground",
-          title: "Confirm action button",
-          description:
-            "Save button and the active scope pill on the event panel",
+          bgSource: "confirm",
+          fgSource: "confirmText",
+          title: "Confirm",
+          description: "Save actions, active pills, and accepted status",
           scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--status-accepted",
-          fg: "--status-accepted-foreground",
-          title: "Accepted attendee",
-          description: "Status tile for accepted attendees on a calendar event",
-          scope: "app",
+          target: 3,
         },
       ],
     },
     {
-      sourceKey: "warning",
+      sourceKey: null,
       title: "Warning",
       description: "Caution signal",
       rows: [
         {
-          kind: "pair",
+          kind: "source-pair",
           bg: "--status-tentative",
           fg: "--status-tentative-foreground",
-          title: "Tentative attendee",
-          description: "Status tile for tentative attendees on a calendar event",
+          bgSource: "warning",
+          fgSource: "warningText",
+          title: "Warning",
+          description: "Tentative status and caution surfaces",
           scope: "app",
+          target: 3,
         },
       ],
     },
@@ -725,7 +720,7 @@
   // recede, not pass 4.5:1).
   const AA_BODY_TARGET = 4.5;
 
-  function pairTarget(row: GroupPairRow): number {
+  function pairTarget(row: GroupContrastRow): number {
     return row.target ?? AA_BODY_TARGET;
   }
 
@@ -741,7 +736,7 @@
   }
 
   type PairContrast = { ratio: number; passes: boolean; target: number };
-  function pairContrast(row: GroupPairRow): PairContrast {
+  function pairContrast(row: GroupContrastRow): PairContrast {
     const bg = effectiveColor(row.bg, row.scope);
     const fg = effectiveColor(row.fg, row.scope);
     const ratio = contrastRatio(fg, bg);
@@ -749,7 +744,7 @@
     return { ratio, passes: ratio >= target, target };
   }
 
-  function autoFixPair(row: GroupPairRow) {
+  function autoFixPair(row: GroupContrastRow) {
     const bg = effectiveColor(row.bg, row.scope);
     const ink = resolvedApp["--foreground"];
     const canvas = resolvedApp["--background"];
@@ -758,19 +753,26 @@
       canvas,
       target: pairTarget(row),
     });
-    if (row.scope === "app") setAppToken(row.fg, next);
-    else setCalToken(row.fg, next);
+    if (row.kind === "source-pair") {
+      setSource(row.fgSource, next);
+    } else if (row.scope === "app") {
+      setAppToken(row.fg, next);
+    } else {
+      setCalToken(row.fg, next);
+    }
   }
 
   // Flat list of every pair row across every source group, used by the
   // floating contrast notice so users don't have to hunt for warnings across
   // collapsed sections.
-  type LocatedPair = { row: GroupPairRow; group: SourceGroup };
+  type LocatedPair = { row: GroupContrastRow; group: SourceGroup };
   const allPairs: LocatedPair[] = (() => {
     const out: LocatedPair[] = [];
     for (const g of SOURCE_GROUPS) {
       for (const r of g.rows) {
-        if (r.kind === "pair") out.push({ row: r, group: g });
+        if (r.kind === "pair" || r.kind === "source-pair") {
+          out.push({ row: r, group: g });
+        }
       }
     }
     return out;
@@ -782,7 +784,7 @@
 
   let nextPairCursor = $state(0);
 
-  function pairKey(row: GroupPairRow): string {
+  function pairKey(row: GroupContrastRow): string {
     return `${row.scope}:${row.bg}:${row.fg}`;
   }
 
@@ -1033,6 +1035,25 @@
     </div>
   {/snippet}
 
+  {#snippet sourceEditor(
+    key: keyof ThemeSources,
+    ariaLabel: string,
+  )}
+    <div class="flex items-center gap-1.5">
+      <ColorField
+        value={userTheme?.sources[key] ?? ""}
+        onChange={(hex) => setSource(key, hex)}
+        label={ariaLabel}
+      />
+      {@render resetIconButton(
+        () => resetSource(key),
+        ariaLabel,
+        canResetSource(key),
+      )}
+      <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+    </div>
+  {/snippet}
+
   {#snippet groupSingleRow(row: GroupSingleRow)}
     {@const info = tokenInfo(row)}
     <div class="flex items-center justify-between gap-3 px-1 py-2.5">
@@ -1136,74 +1157,134 @@
     </div>
   {/snippet}
 
+  {#snippet groupSourcePairRow(row: GroupSourcePairRow)}
+    {@const contrast = pairContrast(row)}
+    <div
+      data-pair-key={pairKey(row)}
+      class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-1 py-2.5"
+    >
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[13px] font-semibold text-foreground">
+            {row.title}
+          </span>
+          {#if !contrast.passes}
+            <button
+              type="button"
+              onclick={() => autoFixPair(row)}
+              aria-label="Auto-fix {row.title} text contrast"
+              title="Contrast {contrast.ratio.toFixed(2)}:1. This pair targets {contrast.target}:1{contrast.target >= 4.5
+                ? ' (AA body text)'
+                : ' (AA large/UI)'}. Click to auto-pick a legible text color."
+              class="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+            >
+              <AlertTriangle size={11} strokeWidth={2.25} />
+              <span>{contrast.ratio.toFixed(1)}:1</span>
+              <Wand2 size={10} strokeWidth={2.25} />
+            </button>
+          {/if}
+        </div>
+        <div class="text-[11px] text-muted-foreground">{row.description}</div>
+      </div>
+      <div class="flex shrink-0 flex-col items-end gap-2">
+        <div class="flex items-center gap-1.5">
+          <span
+            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
+            Bg
+          </span>
+          {@render sourceEditor(row.bgSource, `${row.title} background`)}
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span
+            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
+            Text
+          </span>
+          {@render sourceEditor(row.fgSource, `${row.title} text`)}
+        </div>
+      </div>
+    </div>
+  {/snippet}
+
   {#snippet groupSection(group: SourceGroup)}
+    {@const onlySourcePair =
+      group.rows.length === 1 && group.rows[0].kind === "source-pair"
+        ? group.rows[0]
+        : undefined}
     {@const isCollapsible = group.rows.length > 1}
     {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
     {@const showRows =
       group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
     <section class="flex flex-col">
-      <header class="flex items-center justify-between gap-3 px-1 py-2.5">
-        <div class="min-w-0 flex-1">
-          <div class="text-[13px] font-semibold text-foreground">
-            {group.title}
+      {#if onlySourcePair}
+        {@render groupSourcePairRow(onlySourcePair)}
+      {:else}
+        <header class="flex items-center justify-between gap-3 px-1 py-2.5">
+          <div class="min-w-0 flex-1">
+            <div class="text-[13px] font-semibold text-foreground">
+              {group.title}
+            </div>
+            <div class="text-[11px] text-muted-foreground">
+              {group.description}
+            </div>
           </div>
-          <div class="text-[11px] text-muted-foreground">
-            {group.description}
+          <div class="flex shrink-0 items-center gap-1.5">
+            {#if group.sourceKey !== null && userTheme}
+              {@const sourceKey = group.sourceKey}
+              <ColorField
+                value={userTheme.sources[sourceKey]}
+                onChange={(hex) => setSource(sourceKey, hex)}
+                label="{group.title} source"
+              />
+              {@render resetIconButton(
+                () => resetSource(sourceKey),
+                group.title,
+                canResetSource(sourceKey),
+              )}
+            {/if}
+            {#if isCollapsible}
+              <button
+                type="button"
+                onclick={() => toggleGroup(group.title)}
+                aria-expanded={!isCollapsed}
+                aria-label="{isCollapsed
+                  ? 'Expand'
+                  : 'Collapse'} {group.title} options"
+                class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+              >
+                {#if isCollapsed}
+                  <ChevronDown size={11} strokeWidth={2.25} />
+                  <span>Expand</span>
+                  <ChevronDown size={11} strokeWidth={2.25} />
+                {:else}
+                  <ChevronUp size={11} strokeWidth={2.25} />
+                  <span>Collapse</span>
+                  <ChevronUp size={11} strokeWidth={2.25} />
+                {/if}
+              </button>
+            {:else}
+              <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+            {/if}
           </div>
-        </div>
-        <div class="flex shrink-0 items-center gap-1.5">
-          {#if group.sourceKey !== null && userTheme}
-            {@const sourceKey = group.sourceKey}
-            <ColorField
-              value={userTheme.sources[sourceKey]}
-              onChange={(hex) => setSource(sourceKey, hex)}
-              label="{group.title} source"
-            />
-            {@render resetIconButton(
-              () => resetSource(sourceKey),
-              group.title,
-              canResetSource(sourceKey),
-            )}
-          {/if}
-          {#if isCollapsible}
-            <button
-              type="button"
-              onclick={() => toggleGroup(group.title)}
-              aria-expanded={!isCollapsed}
-              aria-label="{isCollapsed
-                ? 'Expand'
-                : 'Collapse'} {group.title} options"
-              class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
-            >
-              {#if isCollapsed}
-                <ChevronDown size={11} strokeWidth={2.25} />
-                <span>Expand</span>
-                <ChevronDown size={11} strokeWidth={2.25} />
-              {:else}
-                <ChevronUp size={11} strokeWidth={2.25} />
-                <span>Collapse</span>
-                <ChevronUp size={11} strokeWidth={2.25} />
-              {/if}
-            </button>
-          {:else}
-            <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
-          {/if}
-        </div>
-      </header>
-      {#if showRows}
-        <div class="divide-y divide-border border-t border-border">
-          {#if group.sourceKey !== null && group.rows.length === 1 && group.rows[0].kind === "single"}
-            {@render groupHeaderStyleRow(group.rows[0])}
-          {:else}
-            {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
-              {#if row.kind === "single"}
-                {@render groupSingleRow(row)}
-              {:else}
-                {@render groupPairRow(row)}
-              {/if}
-            {/each}
-          {/if}
-        </div>
+        </header>
+        {#if showRows}
+          <div class="divide-y divide-border border-t border-border">
+            {#if group.sourceKey !== null && group.rows.length === 1 && group.rows[0].kind === "single"}
+              {@render groupHeaderStyleRow(group.rows[0])}
+            {:else}
+              {#each group.rows as row (row.kind === "single" ? row.key : row.bg)}
+                {#if row.kind === "single"}
+                  {@render groupSingleRow(row)}
+                {:else if row.kind === "pair"}
+                  {@render groupPairRow(row)}
+                {:else}
+                  {@render groupSourcePairRow(row)}
+                {/if}
+              {/each}
+            {/if}
+          </div>
+        {/if}
       {/if}
     </section>
   {/snippet}

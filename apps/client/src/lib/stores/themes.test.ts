@@ -35,8 +35,11 @@ const SAMPLE_SOURCES_DARK: ThemeSources = {
   ink: "#E9EAEE",
   primary: "#90A5FF",
   destructive: "#F06060",
+  destructiveText: "#FFFFFF",
   confirm: "#44C48A",
+  confirmText: "#000000",
   warning: "#F5B143",
+  warningText: "#000000",
 };
 
 const SAMPLE_SOURCES_LIGHT: ThemeSources = {
@@ -44,8 +47,11 @@ const SAMPLE_SOURCES_LIGHT: ThemeSources = {
   ink: "#1F1B16",
   primary: "#2563EB",
   destructive: "#B42318",
+  destructiveText: "#FFFFFF",
   confirm: "#047857",
+  confirmText: "#FFFFFF",
   warning: "#B45309",
+  warningText: "#FFFFFF",
 };
 
 function paletteOf(hex: string): string[] {
@@ -427,6 +433,26 @@ describe("validateThemeJson v1 branch", () => {
     }
   });
 
+  it("drops isolated flags for synchronized semantic signal tokens", () => {
+    const result = validateThemeJson(
+      buildV1Input({
+        appIsolated: [
+          "--primary",
+          "--destructive",
+          "--action-confirm-foreground",
+        ],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.appIsolated.has("--primary")).toBe(true);
+      expect(result.theme.appIsolated.has("--destructive")).toBe(false);
+      expect(
+        result.theme.appIsolated.has("--action-confirm-foreground"),
+      ).toBe(false);
+    }
+  });
+
   it("preserves an explicit iconLabel that disagrees with canvas luminance", () => {
     const result = validateThemeJson(buildV1Input({ iconLabel: "light" }));
     expect(result.ok).toBe(true);
@@ -508,6 +534,30 @@ describe("validateThemeJson legacy branch", () => {
     if (result.ok) {
       expect(result.theme.calendarTokens["--cal-bg"]).toBe("#0E0F11");
       expect(result.theme.calendarIsolated.has("--cal-bg")).toBe(true);
+    }
+  });
+
+  it("promotes legacy semantic token overrides into source pairs", () => {
+    const result = validateThemeJson(
+      buildLegacyInput({
+        appTokenOverrides: {
+          "--action-confirm": "#123456",
+          "--action-confirm-foreground": "#FDFDFD",
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.sources.confirm).toBe("#123456");
+      expect(result.theme.sources.confirmText).toBe("#FDFDFD");
+      expect(result.theme.appTokens["--status-accepted"]).toBe("#123456");
+      expect(result.theme.appTokens["--status-accepted-foreground"]).toBe(
+        "#FDFDFD",
+      );
+      expect(result.theme.appIsolated.has("--action-confirm")).toBe(false);
+      expect(
+        result.theme.appIsolated.has("--action-confirm-foreground"),
+      ).toBe(false);
     }
   });
 

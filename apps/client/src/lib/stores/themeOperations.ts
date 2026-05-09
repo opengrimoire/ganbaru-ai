@@ -8,8 +8,10 @@
 
 import {
   DERIVATION_ENGINE_VERSION,
+  normalizeSemanticSignalAppIsolated,
   resolveAppTokens,
   resolveCalendarTokens,
+  syncSemanticSignalAppTokens,
   type Theme,
   type ThemeId,
   type ThemeSources,
@@ -51,7 +53,7 @@ export function cloneTheme(
       : synthesizeSourcesFromResolved(resolvedApp);
   const appIsolated =
     source.kind === "user"
-      ? new Set(source.appIsolated)
+      ? normalizeSemanticSignalAppIsolated(source.appIsolated)
       : new Set<string>();
   const calIsolated =
     source.kind === "user"
@@ -73,12 +75,12 @@ export function cloneTheme(
         ? source.derivationEngineVersion
         : DERIVATION_ENGINE_VERSION,
     sources,
-    appTokens: { ...resolvedApp },
+    appTokens: syncSemanticSignalAppTokens(sources, resolvedApp),
     calendarTokens: { ...resolvedCal },
     appIsolated,
     calendarIsolated: calIsolated,
     seedSources: { ...sources },
-    seedAppTokens: { ...resolvedApp },
+    seedAppTokens: syncSemanticSignalAppTokens(sources, resolvedApp),
     seedCalendarTokens: { ...resolvedCal },
     seedAppIsolated: new Set(appIsolated),
     seedCalendarIsolated: new Set(calIsolated),
@@ -89,7 +91,7 @@ export function cloneTheme(
 }
 
 /**
- * Synthesize a six-color sources palette from a resolved app-token
+ * Synthesize a source palette from a resolved app-token
  * snapshot. Used when cloning a built-in theme into a user theme: every
  * UserTheme requires sources, and the resolved tokens carry the right
  * starting points (canvas = --background, ink = --foreground, etc.).
@@ -102,8 +104,11 @@ export function synthesizeSourcesFromResolved(
     ink: resolvedApp["--foreground"],
     primary: resolvedApp["--primary"],
     destructive: resolvedApp["--destructive"],
+    destructiveText: resolvedApp["--destructive-foreground"],
     confirm: resolvedApp["--action-confirm"],
+    confirmText: resolvedApp["--action-confirm-foreground"],
     warning: resolvedApp["--status-tentative"],
+    warningText: resolvedApp["--status-tentative-foreground"],
   };
 }
 

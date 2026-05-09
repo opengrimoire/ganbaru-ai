@@ -13,6 +13,7 @@ import {
   CALENDAR_TOKEN_KEYS,
   DERIVATION_ENGINE_VERSION,
   darkTheme,
+  isSemanticSignalAppToken,
   lightTheme,
   type BuiltinTheme,
   type ThemeSources,
@@ -24,8 +25,11 @@ const DEFAULT_SOURCES_DARK: ThemeSources = {
   ink: "#eaeaea",
   primary: "#5a8cff",
   destructive: "#f06060",
+  destructiveText: "#ffffff",
   confirm: "#44c48a",
+  confirmText: "#000000",
   warning: "#f5b143",
+  warningText: "#000000",
 };
 
 function paletteOf(hex: string): string[] {
@@ -128,8 +132,11 @@ describe("cloneTheme", () => {
       ink: BASE_APP_TOKENS.light["--foreground"],
       primary: BASE_APP_TOKENS.light["--primary"],
       destructive: BASE_APP_TOKENS.light["--destructive"],
+      destructiveText: BASE_APP_TOKENS.light["--destructive-foreground"],
       confirm: BASE_APP_TOKENS.light["--action-confirm"],
+      confirmText: BASE_APP_TOKENS.light["--action-confirm-foreground"],
       warning: BASE_APP_TOKENS.light["--status-tentative"],
+      warningText: BASE_APP_TOKENS.light["--status-tentative-foreground"],
     });
   });
 
@@ -139,8 +146,11 @@ describe("cloneTheme", () => {
       ink: "#eeeeee",
       primary: "#00aaff",
       destructive: "#ff0033",
+      destructiveText: "#ffffff",
       confirm: "#00cc88",
+      confirmText: "#000000",
       warning: "#f5a524",
+      warningText: "#000000",
     };
     const source = makeUserTheme({ sources: theSources });
     const copy = cloneTheme(source, "fork", "Fork");
@@ -156,9 +166,13 @@ describe("cloneTheme", () => {
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.appTokens["--primary"]).toBe("#abc123");
     for (const key of APP_TOKEN_KEYS) {
-      if (key === "--primary") continue;
+      if (key === "--primary" || isSemanticSignalAppToken(key)) continue;
       expect(copy.appTokens[key]).toBe(BASE_APP_TOKENS.dark[key]);
     }
+    expect(copy.appTokens["--destructive"]).toBe(source.sources.destructive);
+    expect(copy.appTokens["--destructive-foreground"]).toBe(
+      source.sources.destructiveText,
+    );
   });
 
   it("snapshots calendarTokens from the resolved source palette", () => {

@@ -13,9 +13,12 @@ import {
   deriveCalendarTokens,
   getThemeById,
   isBuiltinThemeId,
+  isSemanticSignalAppToken,
   isThemeDark,
   generateThemeId,
+  normalizeSemanticSignalAppIsolated,
   serializeTheme,
+  syncSemanticSignalAppTokens,
   validateThemeJson,
   darkTheme,
   lightTheme,
@@ -228,19 +231,24 @@ function orderedTokenRows(
  * Shape a {@link UserTheme} into the row groups the DB layer expects.
  */
 function userThemeToWrite(theme: UserTheme): UserThemeWrite {
+  const appTokens = syncSemanticSignalAppTokens(theme.sources, theme.appTokens);
+  const seedAppTokens = syncSemanticSignalAppTokens(
+    theme.seedSources,
+    theme.seedAppTokens,
+  );
   const tokens = orderedTokenRows(
     theme.sources,
-    theme.appTokens,
+    appTokens,
     theme.calendarTokens,
-    theme.appIsolated,
+    normalizeSemanticSignalAppIsolated(theme.appIsolated),
     theme.calendarIsolated,
   );
   const palette = theme.eventPalette.map((value, slot) => ({ slot, value }));
   const seedTokens = orderedTokenRows(
     theme.seedSources,
-    theme.seedAppTokens,
+    seedAppTokens,
     theme.seedCalendarTokens,
-    theme.seedAppIsolated,
+    normalizeSemanticSignalAppIsolated(theme.seedAppIsolated),
     theme.seedCalendarIsolated,
   );
   const seedPalette = theme.seedEventPalette.map((value, slot) => ({
@@ -270,42 +278,54 @@ function userThemeToWrite(theme: UserTheme): UserThemeWrite {
  * defaults regardless of which built-in family it originally came from.
  */
 function userThemeFromRead(read: UserThemeRead): UserTheme {
+  const tokenSourceRows = read.tokens.filter((t) => t.kind === "source");
+  const tokenAppRows = read.tokens.filter((t) => t.kind === "app");
+  const seedSourceRows = read.seedTokens.filter((t) => t.kind === "source");
+  const seedAppRows = read.seedTokens.filter((t) => t.kind === "app");
   const sources = sourcesFromRows(
-    read.tokens.filter((t) => t.kind === "source"),
+    tokenSourceRows,
+    tokenAppRows,
   );
   const seedSources = sourcesFromRows(
-    read.seedTokens.filter((t) => t.kind === "source"),
+    seedSourceRows,
+    seedAppRows,
   );
   const fallbackBase = defaultIconLabelFromCanvas(sources.canvas);
   const seedFallbackBase = defaultIconLabelFromCanvas(seedSources.canvas);
-  const appTokens = snapshotFromRows(
-    read.tokens.filter((t) => t.kind === "app"),
-    APP_TOKEN_KEYS,
-    BASE_APP_TOKENS[fallbackBase],
+  const appTokens = syncSemanticSignalAppTokens(
+    sources,
+    snapshotFromRows(
+      tokenAppRows,
+      APP_TOKEN_KEYS,
+      BASE_APP_TOKENS[fallbackBase],
+    ),
   );
   const calendarTokens = snapshotFromRows(
     read.tokens.filter((t) => t.kind === "calendar"),
     CALENDAR_TOKEN_KEYS,
     BASE_CALENDAR_TOKENS[fallbackBase],
   );
-  const seedAppTokens = snapshotFromRows(
-    read.seedTokens.filter((t) => t.kind === "app"),
-    APP_TOKEN_KEYS,
-    BASE_APP_TOKENS[seedFallbackBase],
+  const seedAppTokens = syncSemanticSignalAppTokens(
+    seedSources,
+    snapshotFromRows(
+      seedAppRows,
+      APP_TOKEN_KEYS,
+      BASE_APP_TOKENS[seedFallbackBase],
+    ),
   );
   const seedCalendarTokens = snapshotFromRows(
     read.seedTokens.filter((t) => t.kind === "calendar"),
     CALENDAR_TOKEN_KEYS,
     BASE_CALENDAR_TOKENS[seedFallbackBase],
   );
-  const appIsolated = isolatedFromRows(
-    read.tokens.filter((t) => t.kind === "app"),
+  const appIsolated = normalizeSemanticSignalAppIsolated(
+    isolatedFromRows(tokenAppRows),
   );
   const calendarIsolated = isolatedFromRows(
     read.tokens.filter((t) => t.kind === "calendar"),
   );
-  const seedAppIsolated = isolatedFromRows(
-    read.seedTokens.filter((t) => t.kind === "app"),
+  const seedAppIsolated = normalizeSemanticSignalAppIsolated(
+    isolatedFromRows(seedAppRows),
   );
   const seedCalendarIsolated = isolatedFromRows(
     read.seedTokens.filter((t) => t.kind === "calendar"),
@@ -350,8 +370,10 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
 
 function sourcesFromRows(
   rows: ReadonlyArray<{ key: string; value: string }>,
+  appRows: ReadonlyArray<{ key: string; value: string }> = [],
 ): ThemeSources {
   const map = new Map(rows.map((r) => [r.key, r.value]));
+  const appMap = new Map(appRows.map((r) => [r.key, r.value]));
   // If the canvas row is missing entirely, fall back to the dark BASE
   // canvas; otherwise pick a fallback table from the canvas luminance.
   const canvas = map.get("canvas") ?? BASE_APP_TOKENS.dark["--background"];
@@ -362,9 +384,21 @@ function sourcesFromRows(
     primary: map.get("primary") ?? BASE_APP_TOKENS[fallback]["--primary"],
     destructive:
       map.get("destructive") ?? BASE_APP_TOKENS[fallback]["--destructive"],
+    destructiveText:
+      map.get("destructiveText") ??
+      appMap.get("--destructive-foreground") ??
+      BASE_APP_TOKENS[fallback]["--destructive-foreground"],
     confirm: map.get("confirm") ?? BASE_APP_TOKENS[fallback]["--action-confirm"],
+    confirmText:
+      map.get("confirmText") ??
+      appMap.get("--action-confirm-foreground") ??
+      BASE_APP_TOKENS[fallback]["--action-confirm-foreground"],
     warning:
       map.get("warning") ?? BASE_APP_TOKENS[fallback]["--status-tentative"],
+    warningText:
+      map.get("warningText") ??
+      appMap.get("--status-tentative-foreground") ??
+      BASE_APP_TOKENS[fallback]["--status-tentative-foreground"],
   };
 }
 
@@ -558,6 +592,9 @@ function updateSourceValue(
   const nextSources: ThemeSources = { ...current.sources, [sourceKey]: value };
   const derivedApp = deriveAppTokens(nextSources);
   const derivedCal = deriveCalendarTokens(nextSources);
+  const nextAppIsolated = normalizeSemanticSignalAppIsolated(
+    current.appIsolated,
+  );
   const calBgIsolated = current.calendarIsolated.has("--cal-bg");
   const nextBlendCanvas =
     !calBgIsolated && derivedCal["--cal-bg"]
@@ -565,7 +602,7 @@ function updateSourceValue(
       : undefined;
   const nextAppTokens: Record<string, string> = { ...current.appTokens };
   for (const key of APP_TOKEN_KEYS) {
-    if (current.appIsolated.has(key)) continue;
+    if (nextAppIsolated.has(key) && !isSemanticSignalAppToken(key)) continue;
     if (derivedApp[key] !== undefined) nextAppTokens[key] = derivedApp[key];
   }
   const nextCalTokens: Record<string, string> = { ...current.calendarTokens };
@@ -576,8 +613,9 @@ function updateSourceValue(
   customThemes[id] = {
     ...current,
     sources: nextSources,
-    appTokens: nextAppTokens,
+    appTokens: syncSemanticSignalAppTokens(nextSources, nextAppTokens),
     calendarTokens: nextCalTokens,
+    appIsolated: nextAppIsolated,
     blendCanvas: nextBlendCanvas ?? current.blendCanvas,
   };
   if (id === activeId) applyThemeToDom();
@@ -789,9 +827,12 @@ function resetThemeToSeed(id: ThemeId): boolean {
   customThemes[id] = {
     ...current,
     sources: { ...current.seedSources },
-    appTokens: { ...current.seedAppTokens },
+    appTokens: syncSemanticSignalAppTokens(
+      current.seedSources,
+      current.seedAppTokens,
+    ),
     calendarTokens: { ...current.seedCalendarTokens },
-    appIsolated: new Set(current.seedAppIsolated),
+    appIsolated: normalizeSemanticSignalAppIsolated(current.seedAppIsolated),
     calendarIsolated: new Set(current.seedCalendarIsolated),
     eventPalette: [...current.seedEventPalette],
     blendCanvas: current.seedBlendCanvas,
@@ -886,6 +927,9 @@ function rebakeTheme(id: ThemeId): boolean {
   if (!current) return false;
   const derivedApp = deriveAppTokens(current.sources);
   const derivedCal = deriveCalendarTokens(current.sources);
+  const nextAppIsolated = normalizeSemanticSignalAppIsolated(
+    current.appIsolated,
+  );
   const calBgIsolated = current.calendarIsolated.has("--cal-bg");
   const nextBlendCanvas =
     !calBgIsolated && derivedCal["--cal-bg"]
@@ -893,7 +937,7 @@ function rebakeTheme(id: ThemeId): boolean {
       : undefined;
   const nextApp: Record<string, string> = { ...current.appTokens };
   for (const key of APP_TOKEN_KEYS) {
-    if (current.appIsolated.has(key)) continue;
+    if (nextAppIsolated.has(key) && !isSemanticSignalAppToken(key)) continue;
     if (derivedApp[key] !== undefined) nextApp[key] = derivedApp[key];
   }
   const nextCal: Record<string, string> = { ...current.calendarTokens };
@@ -903,7 +947,8 @@ function rebakeTheme(id: ThemeId): boolean {
   }
   customThemes[id] = {
     ...current,
-    appTokens: nextApp,
+    appTokens: syncSemanticSignalAppTokens(current.sources, nextApp),
+    appIsolated: nextAppIsolated,
     calendarTokens: nextCal,
     blendCanvas: nextBlendCanvas ?? current.blendCanvas,
     derivationEngineVersion: DERIVATION_ENGINE_VERSION,

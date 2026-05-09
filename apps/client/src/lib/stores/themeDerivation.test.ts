@@ -30,8 +30,11 @@ const LIGHT_SOURCES: ThemeSources = {
   ink: BASE_APP_TOKENS.light["--foreground"],
   primary: BASE_APP_TOKENS.light["--primary"],
   destructive: BASE_APP_TOKENS.light["--destructive"],
+  destructiveText: BASE_APP_TOKENS.light["--destructive-foreground"],
   confirm: BASE_APP_TOKENS.light["--action-confirm"],
+  confirmText: BASE_APP_TOKENS.light["--action-confirm-foreground"],
   warning: BASE_APP_TOKENS.light["--status-tentative"],
+  warningText: BASE_APP_TOKENS.light["--status-tentative-foreground"],
 };
 
 const DARK_SOURCES: ThemeSources = {
@@ -39,8 +42,11 @@ const DARK_SOURCES: ThemeSources = {
   ink: BASE_APP_TOKENS.dark["--foreground"],
   primary: BASE_APP_TOKENS.dark["--primary"],
   destructive: BASE_APP_TOKENS.dark["--destructive"],
+  destructiveText: BASE_APP_TOKENS.dark["--destructive-foreground"],
   confirm: BASE_APP_TOKENS.dark["--action-confirm"],
+  confirmText: BASE_APP_TOKENS.dark["--action-confirm-foreground"],
   warning: BASE_APP_TOKENS.dark["--status-tentative"],
+  warningText: BASE_APP_TOKENS.dark["--status-tentative-foreground"],
 };
 
 /**
@@ -165,14 +171,18 @@ describe("deriveAppTokens", () => {
     expect(light["--foreground"]).toBe(LIGHT_SOURCES.ink);
     expect(light["--primary"]).toBe(LIGHT_SOURCES.primary);
     expect(light["--destructive"]).toBe(LIGHT_SOURCES.destructive);
+    expect(light["--destructive-foreground"]).toBe(LIGHT_SOURCES.destructiveText);
     expect(light["--action-confirm"]).toBe(LIGHT_SOURCES.confirm);
+    expect(light["--action-confirm-foreground"]).toBe(LIGHT_SOURCES.confirmText);
     expect(light["--status-tentative"]).toBe(LIGHT_SOURCES.warning);
+    expect(light["--status-tentative-foreground"]).toBe(LIGHT_SOURCES.warningText);
 
     const dark = deriveAppTokens(DARK_SOURCES);
     expect(dark["--background"]).toBe(DARK_SOURCES.canvas);
     expect(dark["--foreground"]).toBe(DARK_SOURCES.ink);
     expect(dark["--primary"]).toBe(DARK_SOURCES.primary);
     expect(dark["--destructive"]).toBe(DARK_SOURCES.destructive);
+    expect(dark["--destructive-foreground"]).toBe(DARK_SOURCES.destructiveText);
   });
 
   it("lifts card and popover away from canvas toward ink", () => {
@@ -302,8 +312,11 @@ describe("deriveAppTokens", () => {
       ink: "#FFFFFF",
       primary: "#FFD700",
       destructive: "#FF1493",
+      destructiveText: "#FFFFFF",
       confirm: "#00FF7F",
+      confirmText: "#000000",
       warning: "#FFA500",
+      warningText: "#000000",
     };
     const tokens = deriveAppTokens(extreme);
     for (const [fg, bg] of AA_BODY_PAIRS) {
@@ -343,7 +356,6 @@ describe("deriveAppTokens", () => {
       "--action-danger-armed",
       "--action-danger-armed-foreground",
       "--status-accepted",
-      "--status-accepted-foreground",
       "--status-tentative",
       "--status-tentative-foreground",
       "--status-declined",

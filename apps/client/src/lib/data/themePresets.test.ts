@@ -30,15 +30,15 @@ const AA_BODY_PAIRS: ReadonlyArray<[string, string]> = [
  * BASE palettes paint white over these at roughly 3-4:1; that reads as
  * bold-weight-compliant button labels. Enforcing 4.5 here would flag
  * BASE's own design intent (see themeDerivation.test.ts for parity).
- * `--status-tentative-foreground` is excluded: BASE.dark/light both paint
- * white on #F59E0B at 1.46:1, an intentional low-contrast signal; any
- * preset with a bright warning color inherits that pattern by design.
+ * Warning is included now that presets provide an explicit warning text
+ * source instead of inheriting the old built-in white-on-amber pairing.
  */
 const AA_LARGE_PAIRS: ReadonlyArray<[string, string]> = [
   ["--destructive-foreground", "--destructive"],
   ["--action-confirm-foreground", "--action-confirm"],
   ["--action-danger-armed-foreground", "--action-danger-armed"],
   ["--status-accepted-foreground", "--status-accepted"],
+  ["--status-tentative-foreground", "--status-tentative"],
   ["--status-declined-foreground", "--status-declined"],
 ];
 

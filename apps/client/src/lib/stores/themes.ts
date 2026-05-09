@@ -1,6 +1,5 @@
 import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
-  contrastRatio,
   pickBrightForeground,
   pickReadableBorder,
   pickReadableForeground,
@@ -16,7 +15,7 @@ import {
 export type ThemeId = string;
 
 /**
- * Six source colors that drive most of the shell palette through the
+ * Source colors that drive most of the shell palette through the
  * derivation formulas in {@link deriveAppTokens} / {@link deriveCalendarTokens}.
  *
  * - **canvas:** app background. The color visible in framing gaps and the
@@ -30,12 +29,15 @@ export type ThemeId = string;
  *   surface mixes a small fraction of to tint it. Also drives secondary
  *   text tokens (form indicator and event panel text).
  * - **primary:** brand/action accent used on highlighted buttons and links.
- * - **destructive:** danger signal. Identity-drives the destructive tile,
- *   armed-delete state, and declined attendance status.
- * - **confirm:** positive/success signal. Identity-drives the confirm
- *   button (save, active scope pill) and accepted attendance status.
- * - **warning:** caution signal. Identity-drives the tentative attendance
- *   status today; reserved for future notification warnings and deadlines.
+ * - **destructive / destructiveText:** danger background and text. These
+ *   drive delete actions, armed-delete state, and declined attendance
+ *   status as one semantic pair.
+ * - **confirm / confirmText:** positive background and text. These drive
+ *   the confirm button (save, active scope pill) and accepted attendance
+ *   status as one semantic pair.
+ * - **warning / warningText:** caution background and text. These drive
+ *   the tentative attendance status today and future warning surfaces as
+ *   one semantic pair.
  *
  * Themes without `sources` fall back to the base CSS tokens unchanged;
  * sources exist purely to let a small number of color choices drive a
@@ -46,8 +48,11 @@ export interface ThemeSources {
   ink: string;
   primary: string;
   destructive: string;
+  destructiveText: string;
   confirm: string;
+  confirmText: string;
   warning: string;
+  warningText: string;
 }
 
 export const SOURCE_KEY_ORDER = Object.freeze([
@@ -55,8 +60,11 @@ export const SOURCE_KEY_ORDER = Object.freeze([
   "ink",
   "primary",
   "destructive",
+  "destructiveText",
   "confirm",
+  "confirmText",
   "warning",
+  "warningText",
 ] as const satisfies readonly (keyof ThemeSources)[]);
 
 /**
@@ -81,7 +89,7 @@ export type EventPaletteHexes = readonly string[];
  * a stored theme's stamp and this constant to render an opt-in "rebake"
  * banner so non-pinned colors do not silently drift across app updates.
  */
-export const DERIVATION_ENGINE_VERSION = 2;
+export const DERIVATION_ENGINE_VERSION = 3;
 
 /**
  * A built-in theme ships with the app, never persists to SQLite, and paints
@@ -137,7 +145,7 @@ export interface UserTheme {
   blendCanvas: string;
   /** Engine version stamp; drives the rebake banner. */
   derivationEngineVersion: number;
-  /** Six-color palette that powers source-edit derivation. */
+  /** Source palette that powers source-edit derivation. */
   sources: ThemeSources;
   /** Full snapshot of every app-shell CSS token. */
   appTokens: Readonly<Record<string, string>>;
@@ -413,6 +421,81 @@ export const CALENDAR_TOKEN_KEYS = Object.freeze([
 export type AppTokenKey = (typeof APP_TOKEN_KEYS)[number];
 export type CalendarTokenKey = (typeof CALENDAR_TOKEN_KEYS)[number];
 export type ThemeTokenKind = "source" | "app" | "calendar";
+
+const SEMANTIC_SIGNAL_TOKEN_ALIASES: ReadonlyArray<
+  Readonly<{
+    sourceKey: keyof ThemeSources;
+    tokens: readonly AppTokenKey[];
+  }>
+> = Object.freeze([
+  {
+    sourceKey: "destructive",
+    tokens: ["--destructive", "--action-danger-armed", "--status-declined"],
+  },
+  {
+    sourceKey: "destructiveText",
+    tokens: [
+      "--destructive-foreground",
+      "--action-danger-armed-foreground",
+      "--status-declined-foreground",
+    ],
+  },
+  {
+    sourceKey: "confirm",
+    tokens: ["--action-confirm", "--status-accepted"],
+  },
+  {
+    sourceKey: "confirmText",
+    tokens: [
+      "--action-confirm-foreground",
+      "--status-accepted-foreground",
+    ],
+  },
+  {
+    sourceKey: "warning",
+    tokens: ["--status-tentative"],
+  },
+  {
+    sourceKey: "warningText",
+    tokens: ["--status-tentative-foreground"],
+  },
+] as const);
+
+const SEMANTIC_SIGNAL_APP_TOKEN_KEY_SET: ReadonlySet<string> = new Set(
+  SEMANTIC_SIGNAL_TOKEN_ALIASES.flatMap((alias) => alias.tokens),
+);
+
+/**
+ * The semantic signal families are no longer independently pinnable app
+ * tokens. They are aliases of the visible background/text source pairs, so
+ * old isolated flags for these tokens are dropped during load/import/clone
+ * and ignored during source cascades.
+ */
+export function normalizeSemanticSignalAppIsolated(
+  set: ReadonlySet<string>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const key of set) {
+    if (!SEMANTIC_SIGNAL_APP_TOKEN_KEY_SET.has(key)) out.add(key);
+  }
+  return out;
+}
+
+export function isSemanticSignalAppToken(key: string): boolean {
+  return SEMANTIC_SIGNAL_APP_TOKEN_KEY_SET.has(key);
+}
+
+export function syncSemanticSignalAppTokens(
+  sources: ThemeSources,
+  appTokens: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const out: Record<string, string> = { ...appTokens };
+  for (const alias of SEMANTIC_SIGNAL_TOKEN_ALIASES) {
+    for (const token of alias.tokens) out[token] = sources[alias.sourceKey];
+  }
+  return out;
+}
+
 export type ThemeTokenRowOrderEntry =
   | Readonly<{ kind: "source"; key: keyof ThemeSources }>
   | Readonly<{ kind: "app"; key: AppTokenKey }>
@@ -460,6 +543,7 @@ export const THEME_TOKEN_ROW_ORDER = Object.freeze([
   { kind: "app", key: "--primary" },
   { kind: "app", key: "--primary-foreground" },
   { kind: "source", key: "destructive" },
+  { kind: "source", key: "destructiveText" },
   { kind: "app", key: "--destructive" },
   { kind: "app", key: "--destructive-foreground" },
   { kind: "app", key: "--action-danger-armed" },
@@ -467,11 +551,13 @@ export const THEME_TOKEN_ROW_ORDER = Object.freeze([
   { kind: "app", key: "--status-declined" },
   { kind: "app", key: "--status-declined-foreground" },
   { kind: "source", key: "confirm" },
+  { kind: "source", key: "confirmText" },
   { kind: "app", key: "--action-confirm" },
   { kind: "app", key: "--action-confirm-foreground" },
   { kind: "app", key: "--status-accepted" },
   { kind: "app", key: "--status-accepted-foreground" },
   { kind: "source", key: "warning" },
+  { kind: "source", key: "warningText" },
   { kind: "app", key: "--status-tentative" },
   { kind: "app", key: "--status-tentative-foreground" },
 ] as const satisfies readonly ThemeTokenRowOrderEntry[]);
@@ -686,17 +772,6 @@ const APP_FRACTIONS = {
 } as const;
 
 /**
- * Lightness shift that maps `confirm` (source green) to the confirm
- * foreground. Dark BASE confirm #065F46 (L=0.4318) pairs with
- * --action-confirm-foreground #D1FAE5 (L=0.9505), a ΔL of +0.5187.
- * Light BASE confirm #059669 (L=0.5960) shifts to L=1.1147 which
- * clamps to #FFFFFF, matching BASE.light's white confirm-foreground.
- * User-picked confirm colors get a pale tint of their own hue when
- * dark enough, or clamp to white when bright.
- */
-const CONFIRM_FG_DELTA_L = 0.518657;
-
-/**
  * Calendar-surface derivation offsets, measured from the built-ins.
  * - `calCanvasDarkDeltaL`: BASE.dark --cal-bg #131314 sits at ΔL -0.0894
  *   below canvas #27282A.
@@ -737,9 +812,10 @@ const CAL_FRACTIONS = {
  * and muted captions are recomputed from contrast math so the pairing
  * stays legible regardless of which sources the user picks:
  * `pickReadableForeground` guarantees AA 4.5:1 on body text,
- * `pickBrightForeground` snaps to pure white (or ink, or black) on status
- * surfaces so signal colors read consistently, and `walkFraction` parks
- * recessed captions at the exact OKLab-L position BASE.dark uses.
+ * `pickBrightForeground` snaps title-bar text to pure white (or ink, or
+ * black), semantic signal text comes from the matching text sources, and
+ * `walkFraction` parks recessed captions at the exact OKLab-L position
+ * BASE.dark uses.
  *
  * The `base` parameter is kept for call-site compatibility with the
  * current resolver path but is intentionally unused: toggling the label
@@ -752,7 +828,17 @@ const CAL_FRACTIONS = {
 export function deriveAppTokens(
   sources: ThemeSources,
 ): Record<string, string> {
-  const { canvas, ink, primary, destructive, confirm, warning } = sources;
+  const {
+    canvas,
+    ink,
+    primary,
+    destructive,
+    destructiveText,
+    confirm,
+    confirmText,
+    warning,
+    warningText,
+  } = sources;
   const d = APP_DERIVATION;
   const f = APP_FRACTIONS;
   const shift = (deltaL: number) => shiftPerceptualL(canvas, deltaL);
@@ -784,16 +870,6 @@ export function deriveAppTokens(
   const sidebarAccent = shift(d.sidebarAccentDeltaL);
   const eventPanelBg = shift(d.eventPanelBgDeltaL);
   const eventPanelContrast = shift(d.eventPanelContrastDeltaL);
-  // Confirm foreground: shift by the calibrated ΔL to reproduce BASE.dark's
-  // pale-green #D1FAE5 on #065F46 and BASE.light's white on #059669. When
-  // the source confirm is too bright for the shift to produce >=3:1 (e.g.,
-  // a pure bright-green source), fall back to a contrast-aware pick so
-  // button labels stay readable.
-  const confirmShift = shiftPerceptualL(confirm, CONFIRM_FG_DELTA_L);
-  const confirmFg =
-    contrastRatio(confirmShift, confirm) >= 3
-      ? confirmShift
-      : pickReadableForeground(confirm, { ink, canvas, target: 3 });
   return {
     "--background": canvas,
     "--card": card,
@@ -825,17 +901,17 @@ export function deriveAppTokens(
     "--primary": primary,
     "--primary-foreground": fg(primary),
     "--destructive": destructive,
-    "--destructive-foreground": bright(destructive, 3),
+    "--destructive-foreground": destructiveText,
     "--action-danger-armed": destructive,
-    "--action-danger-armed-foreground": bright(destructive, 3),
+    "--action-danger-armed-foreground": destructiveText,
     "--status-declined": destructive,
-    "--status-declined-foreground": bright(destructive, 3),
+    "--status-declined-foreground": destructiveText,
     "--action-confirm": confirm,
-    "--action-confirm-foreground": confirmFg,
+    "--action-confirm-foreground": confirmText,
     "--status-accepted": confirm,
-    "--status-accepted-foreground": bright(confirm, 3),
+    "--status-accepted-foreground": confirmText,
     "--status-tentative": warning,
-    "--status-tentative-foreground": "#FFFFFF",
+    "--status-tentative-foreground": warningText,
   };
 }
 
@@ -904,8 +980,12 @@ export function deriveCalendarTokens(
 export function resolveAppTokens(theme: Theme): Record<string, string> {
   if (theme.kind === "user") {
     const derived = deriveAppTokens(theme.sources);
+    const editable = syncSemanticSignalAppTokens(
+      theme.sources,
+      pickTokens(theme.appTokens, APP_TOKEN_KEYS),
+    );
     return {
-      ...pickTokens(theme.appTokens, APP_TOKEN_KEYS),
+      ...editable,
       ...pickTokens(derived, DERIVED_APP_TOKEN_KEYS),
     };
   }
@@ -1043,11 +1123,17 @@ export function serializeTheme(theme: Theme): string {
     iconLabel: theme.iconLabel,
     derivationEngineVersion: theme.derivationEngineVersion,
     sources: orderedSources(theme.sources),
-    appTokens: orderedTokens(theme.appTokens, APP_TOKEN_KEYS),
+    appTokens: orderedTokens(
+      syncSemanticSignalAppTokens(theme.sources, theme.appTokens),
+      APP_TOKEN_KEYS,
+    ),
     calendarTokens: orderedTokens(theme.calendarTokens, CALENDAR_TOKEN_KEYS),
     eventPalette: orderedPalette(theme.eventPalette),
     blendCanvas: theme.blendCanvas,
-    appIsolated: orderedIsolated(theme.appIsolated, APP_TOKEN_KEYS),
+    appIsolated: orderedIsolated(
+      normalizeSemanticSignalAppIsolated(theme.appIsolated),
+      APP_TOKEN_KEYS,
+    ),
     calendarIsolated: orderedIsolated(theme.calendarIsolated, CALENDAR_TOKEN_KEYS),
   };
   return JSON.stringify(ordered, null, 2);
@@ -1083,6 +1169,47 @@ function orderedTokens(
     if (Object.hasOwn(source, key)) out[key] = source[key];
   }
   return out;
+}
+
+function sourceFallbacksFromAppTokens(
+  appTokens: Readonly<Record<string, string>>,
+): Partial<Record<keyof ThemeSources, string>> {
+  return {
+    canvas: appTokens["--background"],
+    ink: appTokens["--foreground"],
+    primary: appTokens["--primary"],
+    destructive: appTokens["--destructive"],
+    destructiveText: appTokens["--destructive-foreground"],
+    confirm: appTokens["--action-confirm"],
+    confirmText: appTokens["--action-confirm-foreground"],
+    warning: appTokens["--status-tentative"],
+    warningText: appTokens["--status-tentative-foreground"],
+  };
+}
+
+function sourcesFromAppTokenFallbacks(
+  appTokens: Readonly<Record<string, string>>,
+): ThemeSources {
+  const fallback = defaultIconLabelFromCanvas(
+    appTokens["--background"] ?? BASE_APP_TOKENS.dark["--background"],
+  );
+  const fallbacks = sourceFallbacksFromAppTokens(appTokens);
+  return {
+    canvas: fallbacks.canvas ?? defaultSourceValue("canvas", fallback),
+    ink: fallbacks.ink ?? defaultSourceValue("ink", fallback),
+    primary: fallbacks.primary ?? defaultSourceValue("primary", fallback),
+    destructive:
+      fallbacks.destructive ?? defaultSourceValue("destructive", fallback),
+    destructiveText:
+      fallbacks.destructiveText ??
+      defaultSourceValue("destructiveText", fallback),
+    confirm: fallbacks.confirm ?? defaultSourceValue("confirm", fallback),
+    confirmText:
+      fallbacks.confirmText ?? defaultSourceValue("confirmText", fallback),
+    warning: fallbacks.warning ?? defaultSourceValue("warning", fallback),
+    warningText:
+      fallbacks.warningText ?? defaultSourceValue("warningText", fallback),
+  };
 }
 
 export type ThemeValidationResult =
@@ -1213,12 +1340,7 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     ? defaultIconLabelFromCanvas(rawCanvas)
     : "dark";
 
-  const cleanSources = sanitizeSources(input.sources, errors, "sources", fallbackBase);
-  if (!cleanSources && !errors.some((e) => e.startsWith("sources"))) {
-    errors.push("sources is required on v1 themes");
-  }
-
-  const cleanAppTokens = sanitizeFullTokenSnapshot(
+  const cleanAppTokensRaw = sanitizeFullTokenSnapshot(
     input.appTokens,
     APP_TOKEN_KEYS,
     APP_TOKEN_KEY_SET,
@@ -1235,11 +1357,28 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     errors,
   );
 
-  const cleanAppIsolated = sanitizeIsolatedList(
-    input.appIsolated,
-    APP_TOKEN_KEY_SET,
-    "appIsolated",
+  const cleanSources = sanitizeSources(
+    input.sources,
     errors,
+    "sources",
+    fallbackBase,
+    sourceFallbacksFromAppTokens(cleanAppTokensRaw),
+  );
+  if (!cleanSources && !errors.some((e) => e.startsWith("sources"))) {
+    errors.push("sources is required on v1 themes");
+  }
+
+  const cleanAppTokens = cleanSources
+    ? syncSemanticSignalAppTokens(cleanSources, cleanAppTokensRaw)
+    : cleanAppTokensRaw;
+
+  const cleanAppIsolated = normalizeSemanticSignalAppIsolated(
+    sanitizeIsolatedList(
+      input.appIsolated,
+      APP_TOKEN_KEY_SET,
+      "appIsolated",
+      errors,
+    ),
   );
   const cleanCalIsolated = sanitizeIsolatedList(
     input.calendarIsolated,
@@ -1302,17 +1441,6 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     validateIdentity(input, errors);
   const cleanBase = sanitizeLegacyBase(input.base, errors);
 
-  const cleanSourcesPartial = sanitizeSources(
-    input.sources,
-    errors,
-    "sources",
-    cleanBase,
-  );
-  // Legacy files without `sources` resolve to defaults derived from BASE.
-  // The new model always carries sources, so synthesize a valid set here.
-  const cleanSources: ThemeSources =
-    cleanSourcesPartial ?? defaultSources(cleanBase);
-
   const cleanAppOverrides =
     sanitizeOverrides(
       input.appTokenOverrides,
@@ -1327,6 +1455,21 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
       "calendarTokenOverrides",
       errors,
     ) ?? {};
+  const sourceFallbackTokens = {
+    ...BASE_APP_TOKENS[cleanBase],
+    ...cleanAppOverrides,
+  };
+  const cleanSourcesPartial = sanitizeSources(
+    input.sources,
+    errors,
+    "sources",
+    cleanBase,
+    sourceFallbacksFromAppTokens(sourceFallbackTokens),
+  );
+  // Legacy files without `sources` resolve to defaults derived from BASE.
+  // The new model always carries sources, so synthesize a valid set here.
+  const cleanSources: ThemeSources =
+    cleanSourcesPartial ?? sourcesFromAppTokenFallbacks(sourceFallbackTokens);
 
   // Legacy themes that stored calCanvas as a 7th source meant "keep the
   // calendar surface independent of canvas", which maps to an isolated
@@ -1342,11 +1485,14 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
   // then layer the overrides on top to produce the full snapshot.
   const derivedApp = deriveAppTokens(cleanSources);
   const derivedCal = deriveCalendarTokens(cleanSources);
-  const appTokens = buildSnapshot(
-    APP_TOKEN_KEYS,
-    BASE_APP_TOKENS[cleanBase],
-    derivedApp,
-    cleanAppOverrides,
+  const appTokens = syncSemanticSignalAppTokens(
+    cleanSources,
+    buildSnapshot(
+      APP_TOKEN_KEYS,
+      BASE_APP_TOKENS[cleanBase],
+      derivedApp,
+      cleanAppOverrides,
+    ),
   );
   const calTokens = buildSnapshot(
     CALENDAR_TOKEN_KEYS,
@@ -1354,17 +1500,11 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     derivedCal,
     cleanCalOverrides,
   );
-  const appIsolated = new Set(Object.keys(cleanAppOverrides));
+  const appIsolated = normalizeSemanticSignalAppIsolated(
+    new Set(Object.keys(cleanAppOverrides)),
+  );
   const calIsolated = new Set(Object.keys(cleanCalOverrides));
 
-  // Legacy seed fields, if any, follow the same shape.
-  const seedSourcesPartial = sanitizeSources(
-    input.seedSources,
-    errors,
-    "seedSources",
-    cleanBase,
-  );
-  const seedSources: ThemeSources = seedSourcesPartial ?? { ...cleanSources };
   const seedAppOverrides =
     sanitizeOverrides(
       input.seedAppTokenOverrides,
@@ -1379,10 +1519,6 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
       "seedCalendarTokenOverrides",
       errors,
     ) ?? { ...cleanCalOverrides };
-  const legacySeedCalCanvas = extractLegacyCalCanvas(input.seedSources);
-  if (legacySeedCalCanvas && !seedCalOverrides["--cal-bg"]) {
-    seedCalOverrides["--cal-bg"] = legacySeedCalCanvas;
-  }
   const seedAppTokensProvided = sanitizeOverrides(
     input.seedAppTokens,
     APP_TOKEN_KEY_SET,
@@ -1395,6 +1531,26 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     "seedCalendarTokens",
     errors,
   );
+  const seedSourceFallbackTokens = {
+    ...BASE_APP_TOKENS[cleanBase],
+    ...(seedAppTokensProvided ?? {}),
+    ...seedAppOverrides,
+  };
+
+  // Legacy seed fields, if any, follow the same shape.
+  const seedSourcesPartial = sanitizeSources(
+    input.seedSources,
+    errors,
+    "seedSources",
+    cleanBase,
+    sourceFallbacksFromAppTokens(seedSourceFallbackTokens),
+  );
+  const seedSources: ThemeSources = seedSourcesPartial ?? { ...cleanSources };
+
+  const legacySeedCalCanvas = extractLegacyCalCanvas(input.seedSources);
+  if (legacySeedCalCanvas && !seedCalOverrides["--cal-bg"]) {
+    seedCalOverrides["--cal-bg"] = legacySeedCalCanvas;
+  }
   const seedPalette =
     sanitizeSeedPalette(input.seedEventPalette, errors) ?? [...cleanPalette];
   let seedBlend = cleanBlend;
@@ -1412,19 +1568,22 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
   // re-derive from seedSources and layer seed overrides.
   const seedDerivedApp = deriveAppTokens(seedSources);
   const seedDerivedCal = deriveCalendarTokens(seedSources);
-  const seedAppTokens = seedAppTokensProvided
-    ? buildSnapshot(
-        APP_TOKEN_KEYS,
-        BASE_APP_TOKENS[cleanBase],
-        seedDerivedApp,
-        { ...seedAppTokensProvided, ...seedAppOverrides },
-      )
-    : buildSnapshot(
-        APP_TOKEN_KEYS,
-        BASE_APP_TOKENS[cleanBase],
-        seedDerivedApp,
-        seedAppOverrides,
-      );
+  const seedAppTokens = syncSemanticSignalAppTokens(
+    seedSources,
+    seedAppTokensProvided
+      ? buildSnapshot(
+          APP_TOKEN_KEYS,
+          BASE_APP_TOKENS[cleanBase],
+          seedDerivedApp,
+          { ...seedAppTokensProvided, ...seedAppOverrides },
+        )
+      : buildSnapshot(
+          APP_TOKEN_KEYS,
+          BASE_APP_TOKENS[cleanBase],
+          seedDerivedApp,
+          seedAppOverrides,
+        ),
+  );
   const seedCalTokens = seedCalTokensProvided
     ? buildSnapshot(
         CALENDAR_TOKEN_KEYS,
@@ -1438,7 +1597,9 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
         seedDerivedCal,
         seedCalOverrides,
       );
-  const seedAppIsolated = new Set(Object.keys(seedAppOverrides));
+  const seedAppIsolated = normalizeSemanticSignalAppIsolated(
+    new Set(Object.keys(seedAppOverrides)),
+  );
   const seedCalIsolated = new Set(Object.keys(seedCalOverrides));
 
   const cleanIconLabel = sanitizeIconLabel(
@@ -1581,8 +1742,11 @@ function defaultSources(base: "light" | "dark"): ThemeSources {
     ink: defaultSourceValue("ink", base),
     primary: defaultSourceValue("primary", base),
     destructive: defaultSourceValue("destructive", base),
+    destructiveText: defaultSourceValue("destructiveText", base),
     confirm: defaultSourceValue("confirm", base),
+    confirmText: defaultSourceValue("confirmText", base),
     warning: defaultSourceValue("warning", base),
+    warningText: defaultSourceValue("warningText", base),
   };
 }
 
@@ -1626,9 +1790,9 @@ function sanitizeSeedPalette(
 
 /**
  * Default value for each source channel, sampled from the base CSS tokens
- * so legacy themes missing newer source fields (confirm, warning) pick up
- * sensible defaults without erroring. Each channel reads from the token it
- * identity-drives in {@link deriveAppTokens}.
+ * so legacy themes missing newer source fields pick up sensible defaults
+ * without erroring. Each channel reads from the token it identity-drives in
+ * {@link deriveAppTokens}.
  */
 function defaultSourceValue(
   key: keyof ThemeSources,
@@ -1643,10 +1807,16 @@ function defaultSourceValue(
       return BASE_APP_TOKENS[base]["--primary"];
     case "destructive":
       return BASE_APP_TOKENS[base]["--destructive"];
+    case "destructiveText":
+      return BASE_APP_TOKENS[base]["--destructive-foreground"];
     case "confirm":
       return BASE_APP_TOKENS[base]["--action-confirm"];
+    case "confirmText":
+      return BASE_APP_TOKENS[base]["--action-confirm-foreground"];
     case "warning":
       return BASE_APP_TOKENS[base]["--status-tentative"];
+    case "warningText":
+      return BASE_APP_TOKENS[base]["--status-tentative-foreground"];
   }
 }
 
@@ -1655,6 +1825,7 @@ function sanitizeSources(
   errors: string[],
   fieldName: string = "sources",
   base: "light" | "dark" = "dark",
+  fallbacks: Partial<Record<keyof ThemeSources, string>> = {},
 ): ThemeSources | undefined {
   if (source === undefined) return undefined;
   if (!isPlainObject(source)) {
@@ -1669,7 +1840,7 @@ function sanitizeSources(
     // (written before a source was introduced) keep loading; only an
     // actively-invalid hex is an error.
     if (value === undefined) {
-      out[key] = defaultSourceValue(key, base);
+      out[key] = fallbacks[key] ?? defaultSourceValue(key, base);
       continue;
     }
     if (!isHexColor(value)) {

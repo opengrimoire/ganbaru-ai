@@ -1,7 +1,7 @@
 /**
  * Curated theme presets surfaced by the "New theme" picker.
  *
- * Each preset is a full set of sources (the six colors that feed
+ * Each preset is a full set of sources (the colors that feed
  * `deriveAppTokens` / `deriveCalendarTokens`) plus a base mode. A user that
  * picks a preset starts from a palette pre-validated to meet AA contrast
  * across every derived foreground / border / gridline: see
@@ -33,8 +33,11 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       ink: "#1F1B16",
       primary: "#2563EB",
       destructive: "#B42318",
+      destructiveText: "#FFFFFF",
       confirm: "#047857",
+      confirmText: "#FFFFFF",
       warning: "#B45309",
+      warningText: "#FFFFFF",
     },
   },
   {
@@ -47,8 +50,11 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       ink: "#E9EAEE",
       primary: "#90A5FF",
       destructive: "#F06060",
+      destructiveText: "#FFFFFF",
       confirm: "#44C48A",
+      confirmText: "#000000",
       warning: "#F5B143",
+      warningText: "#000000",
     },
   },
   {
@@ -61,8 +67,11 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       ink: "#3A2A17",
       primary: "#7A4D1F",
       destructive: "#922D18",
+      destructiveText: "#FFFFFF",
       confirm: "#5A6B1C",
+      confirmText: "#FFFFFF",
       warning: "#B07410",
+      warningText: "#FFFFFF",
     },
   },
   {
@@ -75,8 +84,11 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       ink: "#2E3440",
       primary: "#5E81AC",
       destructive: "#BF616A",
+      destructiveText: "#FFFFFF",
       confirm: "#6A8B5C",
+      confirmText: "#FFFFFF",
       warning: "#B58F3C",
+      warningText: "#FFFFFF",
     },
   },
   {
@@ -89,8 +101,11 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       ink: "#FFFFFF",
       primary: "#8AB4F8",
       destructive: "#FF6B6B",
+      destructiveText: "#000000",
       confirm: "#3BD482",
+      confirmText: "#000000",
       warning: "#FFD666",
+      warningText: "#000000",
     },
   },
   {
@@ -103,8 +118,11 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       ink: "#2A1F4A",
       primary: "#7C5AC7",
       destructive: "#C24567",
+      destructiveText: "#FFFFFF",
       confirm: "#4F8365",
+      confirmText: "#FFFFFF",
       warning: "#AC7330",
+      warningText: "#FFFFFF",
     },
   },
 ];
