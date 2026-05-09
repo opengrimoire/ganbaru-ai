@@ -1075,7 +1075,7 @@
                 : "text-muted-foreground",
             )}
           >
-            <span class="min-w-0 truncate">{item.label}</span>
+            <span class="min-w-0 truncate uppercase">{item.label}</span>
           </button>
         {/each}
       </nav>
@@ -1504,7 +1504,7 @@
       class="flex scroll-mt-4 items-center gap-3 px-1 pt-1"
       data-theme-nav-target={target}
     >
-      <h2 class="shrink-0 text-[13px] font-semibold text-foreground">
+      <h2 class="shrink-0 text-[13px] font-semibold uppercase text-foreground">
         {THEME_SECTION_LABELS[target]}
       </h2>
       <div class="h-px min-w-4 flex-1 bg-border" aria-hidden="true"></div>
