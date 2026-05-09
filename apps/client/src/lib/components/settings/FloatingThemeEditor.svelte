@@ -140,6 +140,7 @@
     style="left: {posX}px; top: {posY}px; width: {PANEL_WIDTH}px; height: {collapsed
       ? 'auto'
       : `min(${PANEL_MAX_HEIGHT_VH}vh, ${PANEL_MAX_HEIGHT_PX}px)`}; max-height: min({PANEL_MAX_HEIGHT_VH}vh, {PANEL_MAX_HEIGHT_PX}px);"
+    data-app-shortcuts="ignore"
     role="dialog"
     aria-label="Theme editor"
   >

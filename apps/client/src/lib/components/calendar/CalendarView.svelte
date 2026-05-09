@@ -23,6 +23,7 @@
   import { createEditSession } from "./edit-session.svelte";
   import type { PanelAnchor } from "./edit-session.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
+  import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
   import { getCalendarNavHandle } from "./nav-handle.svelte";
   import {
     closedDisplay,
@@ -797,8 +798,15 @@
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
-      const active = document.activeElement;
-      if (active && (active as HTMLElement).isContentEditable) return;
+      if (
+        e.key !== "Escape" &&
+        (isEditableKeyboardTarget(e.target) ||
+          isEditableKeyboardTarget(document.activeElement) ||
+          isAppShortcutBlockedTarget(e.target) ||
+          isAppShortcutBlockedTarget(document.activeElement))
+      ) {
+        return;
+      }
 
       if (e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();

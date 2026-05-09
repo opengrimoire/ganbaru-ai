@@ -15,7 +15,7 @@
   import Wand2 from "@lucide/svelte/icons/wand-2";
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-  import { cn } from "$lib/utils";
+  import { cn, isEditableKeyboardTarget } from "$lib/utils";
   import { PALETTE_SIZE } from "$lib/components/calendar/types";
   import { blendHex } from "$lib/components/calendar/utils";
   import {
@@ -473,6 +473,14 @@
 
   const themeStore = getTheme();
   const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
+  const PANEL_SCROLL_KEYS = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "PageUp",
+    "PageDown",
+    "Home",
+    "End",
+  ]);
 
   const isBuiltin = $derived(theme.kind === "builtin");
   const userTheme = $derived(
@@ -491,11 +499,58 @@
   );
 
   let scrollViewport: HTMLDivElement | undefined;
+  let scrollContent: HTMLDivElement | undefined;
+  let scrollTrack: HTMLDivElement | undefined;
   let activeThemeSection = $state<ThemeNavTarget>("general");
   let scrollFrame: number | undefined;
+  let editorScrollTop = $state(0);
+  let editorScrollHeight = $state(0);
+  let editorClientHeight = $state(0);
+  let editorScrollTrackHeight = $state(0);
+  let draggingEditorScrollbar = $state(false);
+  const MIN_EDITOR_SCROLL_THUMB_HEIGHT = 24;
+  const editorScrollMaxTop = $derived(
+    Math.max(0, editorScrollHeight - editorClientHeight),
+  );
+  const editorScrollThumbHeight = $derived(
+    editorScrollHeight > editorClientHeight && editorScrollTrackHeight > 0
+      ? Math.max(
+          MIN_EDITOR_SCROLL_THUMB_HEIGHT,
+          (editorClientHeight / editorScrollHeight) *
+            editorScrollTrackHeight,
+        )
+      : 0,
+  );
+  const editorScrollThumbTop = $derived(
+    editorScrollMaxTop > 0
+      ? (editorScrollTop / editorScrollMaxTop) *
+          (editorScrollTrackHeight - editorScrollThumbHeight)
+      : 0,
+  );
+  const showEditorScrollbar = $derived(editorScrollThumbHeight > 0);
 
   onDestroy(() => {
     if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+  });
+
+  $effect(() => {
+    if (!scrollViewport) return;
+    syncEditorScrollMetrics();
+    const viewport = scrollViewport;
+    const content = scrollContent;
+    const track = scrollTrack;
+    const onScroll = () => {
+      editorScrollTop = viewport.scrollTop;
+    };
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(syncEditorScrollMetrics);
+    ro.observe(viewport);
+    if (content) ro.observe(content);
+    if (track) ro.observe(track);
+    return () => {
+      viewport.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
   });
 
   // Collapse state is ephemeral (not persisted across sessions). Every
@@ -616,6 +671,76 @@
       top: scrollViewport.scrollTop + targetTop - rootTop,
       behavior: "smooth",
     });
+  }
+
+  function syncEditorScrollMetrics() {
+    if (!scrollViewport) return;
+    editorScrollTop = scrollViewport.scrollTop;
+    editorScrollHeight = scrollViewport.scrollHeight;
+    editorClientHeight = scrollViewport.clientHeight;
+    editorScrollTrackHeight =
+      scrollTrack?.getBoundingClientRect().height ?? scrollViewport.clientHeight;
+  }
+
+  function shouldKeepPanelFocusTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    return target.closest("button, a[href], [role='button'], [role='combobox'], [role='listbox']") === null;
+  }
+
+  function focusScrollViewportFromPointer(e: PointerEvent) {
+    if (!scrollViewport) return;
+    if (isEditableKeyboardTarget(e.target)) return;
+    if (!shouldKeepPanelFocusTarget(e.target)) return;
+    scrollViewport.focus({ preventScroll: true });
+  }
+
+  function keepPanelScrollKey(e: KeyboardEvent) {
+    if (!PANEL_SCROLL_KEYS.has(e.key)) return;
+    if (isEditableKeyboardTarget(e.target)) return;
+    e.stopPropagation();
+  }
+
+  function handleEditorScrollbarPointerDown(e: PointerEvent) {
+    if (!scrollViewport || !scrollTrack) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const trackRect = scrollTrack.getBoundingClientRect();
+    const trackAvailable = trackRect.height - editorScrollThumbHeight;
+    const localMaxScroll = editorScrollMaxTop;
+    if (trackAvailable <= 0 || localMaxScroll <= 0) return;
+
+    const clickY = e.clientY - trackRect.top;
+    const onThumb =
+      clickY >= editorScrollThumbTop &&
+      clickY <= editorScrollThumbTop + editorScrollThumbHeight;
+    if (!onThumb) {
+      const desiredThumbTop = Math.max(
+        0,
+        Math.min(trackAvailable, clickY - editorScrollThumbHeight / 2),
+      );
+      scrollViewport.scrollTop =
+        (desiredThumbTop / trackAvailable) * localMaxScroll;
+    }
+
+    const anchorScrollTop = scrollViewport.scrollTop;
+    const anchorClientY = e.clientY;
+    draggingEditorScrollbar = true;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    function onMove(ev: PointerEvent) {
+      if (!scrollViewport) return;
+      const dy = ev.clientY - anchorClientY;
+      scrollViewport.scrollTop =
+        anchorScrollTop + (dy / trackAvailable) * localMaxScroll;
+    }
+    function onUp() {
+      draggingEditorScrollbar = false;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }
 
   function effectiveCalBg(t: Theme): string {
@@ -1389,12 +1514,19 @@
   {/snippet}
 
   <div class="relative min-h-0 flex-1">
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={scrollViewport}
-      class="h-full overflow-y-auto"
+      class="theme-editor-scroll h-full overflow-y-auto focus:outline-none"
+      role="region"
+      aria-label="Theme editor controls"
+      tabindex="-1"
+      onpointerdown={focusScrollViewportFromPointer}
+      onkeydown={keepPanelScrollKey}
       onscroll={queueActiveThemeSectionUpdate}
     >
       <div
+        bind:this={scrollContent}
         class={cn(
           "flex flex-col gap-6 px-5 pt-6",
           userTheme && failingPairs.length > 0 ? "pb-16" : "pb-4",
@@ -1555,6 +1687,22 @@
   </section>
 </div>
 </div>
+<div
+  bind:this={scrollTrack}
+  class="theme-editor-scrollbar-track absolute right-1 top-1 bottom-1 z-20 w-2 select-none"
+  onpointerdown={handleEditorScrollbarPointerDown}
+  aria-hidden="true"
+>
+  {#if showEditorScrollbar}
+    <div
+      class={cn(
+        "theme-editor-scrollbar-thumb pointer-events-none absolute left-0.5 right-0.5 rounded-full",
+        draggingEditorScrollbar && "is-dragging",
+      )}
+      style="top: {editorScrollThumbTop}px; height: {editorScrollThumbHeight}px;"
+    ></div>
+  {/if}
+</div>
 </div>
 {#if userTheme && failingPairs.length > 0}
   <section
@@ -1598,3 +1746,29 @@
 {/if}
 </div>
 </div>
+
+<style>
+  .theme-editor-scroll {
+    scrollbar-width: none;
+  }
+
+  .theme-editor-scroll::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  .theme-editor-scrollbar-track {
+    border-radius: 999px;
+  }
+
+  .theme-editor-scrollbar-thumb {
+    background-color: var(--border);
+    transition: background-color 120ms ease-out;
+  }
+
+  .theme-editor-scrollbar-track:hover .theme-editor-scrollbar-thumb,
+  .theme-editor-scrollbar-thumb.is-dragging {
+    background-color: var(--muted-foreground);
+  }
+</style>
