@@ -147,7 +147,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <header
       class={cn(
-        "flex shrink-0 items-center gap-2 border-b border-border bg-sidebar px-5 py-2",
+        "flex shrink-0 items-center gap-2 border-b border-border bg-sidebar px-3 py-2",
         dragging ? "cursor-grabbing" : "cursor-grab",
       )}
       onpointerdown={onHeaderPointerDown}
@@ -181,7 +181,7 @@
 
     <!-- Sticky footer -->
     <footer
-      class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-sidebar px-5 py-2"
+      class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-sidebar px-3 py-2"
     >
       <div class="flex items-center gap-2">
         <button

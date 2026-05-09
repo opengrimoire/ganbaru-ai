@@ -868,7 +868,7 @@
   <!-- Theme chrome sits above the editor scroll viewport so the scrollbar
        starts with the editable sections. -->
   <section
-    class="relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-border bg-sidebar px-5 py-2"
+    class="relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-border bg-sidebar px-3 py-2"
   >
     <div
       class="flex h-9 min-w-0 items-center overflow-hidden rounded-md border border-border bg-card text-[11px] text-muted-foreground dark:bg-background"
