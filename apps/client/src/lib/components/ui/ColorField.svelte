@@ -344,7 +344,7 @@
       }
     }}
     class={cn(
-      "h-7 rounded-md border border-border bg-card px-2 text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+      "h-7 rounded-md border border-border bg-card px-2 text-[12px] leading-[26px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
       fluid ? "min-w-0 flex-1" : "w-[76px]",
       readOnly && "cursor-not-allowed opacity-60",
     )}
@@ -499,7 +499,7 @@
               (e.currentTarget as HTMLInputElement).blur();
             }
           }}
-          class="h-7 w-full rounded-md border border-border bg-card px-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          class="h-7 w-full rounded-md border border-border bg-card px-2 text-[12px] leading-[26px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
 
