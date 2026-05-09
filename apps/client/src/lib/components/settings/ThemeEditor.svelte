@@ -945,15 +945,18 @@
   )}
     <button
       type="button"
-      onclick={onClick}
-      disabled={!canReset}
+      onclick={() => {
+        if (!canReset) return;
+        onClick();
+      }}
+      aria-disabled={!canReset}
       aria-label="Reset {label} to its original value"
       title={canReset ? "Restore original value" : "Already at original value"}
       class={cn(
-        "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors",
+        "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-border bg-card transition-colors",
         canReset
-          ? "hover:border-foreground/30 hover:bg-accent hover:text-foreground"
-          : "cursor-not-allowed opacity-40",
+          ? "text-foreground hover:border-foreground/30 hover:bg-accent"
+          : "cursor-not-allowed text-muted-foreground",
       )}
     >
       <RotateCcw size={11} strokeWidth={2.25} />
