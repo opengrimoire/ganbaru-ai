@@ -1486,7 +1486,7 @@
           readonly={isBuiltin}
           spellcheck={false}
           rows={12}
-          class="w-full resize-y rounded-md border border-border bg-background p-2 font-mono text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          class="w-full resize-y rounded-md border border-border bg-background p-2 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         ></textarea>
       {#if jsonErrors.length > 0}
         <ul
