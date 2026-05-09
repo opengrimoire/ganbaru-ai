@@ -1677,7 +1677,7 @@
             : "Edit directly, apply to commit changes"}
         </div>
       </header>
-      <div class="flex flex-col gap-2 border-t border-border pt-2">
+      <div class="flex flex-col gap-2">
         <textarea
           value={jsonDraft}
           oninput={isBuiltin ? undefined : onJsonInput}
