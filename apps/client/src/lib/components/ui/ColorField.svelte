@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
@@ -39,12 +40,23 @@
     class?: string;
   } = $props();
 
+  type ColorFormat = "hex" | "rgb" | "hsv";
+
+  const COLOR_FORMAT_OPTIONS: ReadonlyArray<{
+    value: ColorFormat;
+    label: string;
+  }> = [
+    { value: "hex", label: "HEX" },
+    { value: "rgb", label: "RGB" },
+    { value: "hsv", label: "HSV" },
+  ];
+
   // Width of the popover; kept in sync with the rendered class so position
   // math can keep the panel inside the viewport without a measurement pass.
   const POPOVER_WIDTH = 228;
   // Rough height estimate; used only for off-bottom flipping. Slightly
   // overestimating is safe: it just biases towards opening upward sooner.
-  const POPOVER_HEIGHT = 360;
+  const POPOVER_HEIGHT = 280;
   const VIEWPORT_MARGIN = 8;
   const THUMB_OUTLINE_LIGHT = "#ffffff";
   const THUMB_OUTLINE_DARK = "#000000";
@@ -69,6 +81,9 @@
   let svEl: HTMLDivElement | undefined = $state();
   let hueEl: HTMLDivElement | undefined = $state();
   let alphaEl: HTMLDivElement | undefined = $state();
+  let formatMenuEl: HTMLDivElement | undefined = $state();
+  let activeFormat = $state<ColorFormat>("hex");
+  let formatMenuOpen = $state(false);
   let thumbContour = $state(THUMB_OUTLINE_DARK);
   let hexDraft = $state(untrack(() => normalizeHex(value) ?? "#000000"));
   let hsv = $state<HsvColor>(
@@ -138,6 +153,10 @@
   const solidHex = $derived(hsvToHex(hsv.h, hsv.s, hsv.v));
   const transparentHex = $derived(rgbaToHex(rgb.r, rgb.g, rgb.b, 0));
   const alphaPercentDisplay = $derived(Math.round((alpha / 255) * 100));
+  const activeFormatLabel = $derived(
+    COLOR_FORMAT_OPTIONS.find((option) => option.value === activeFormat)?.label ??
+      "HEX",
+  );
 
   function currentEmittedHex(): string {
     const { r, g, b } = hsvToRgb(hsv.h, hsv.s, hsv.v);
@@ -279,6 +298,11 @@
     emit(rgbToHsv(rgba.r, rgba.g, rgba.b), rgba.a);
   }
 
+  function selectFormat(format: ColorFormat) {
+    activeFormat = format;
+    formatMenuOpen = false;
+  }
+
   function selectHexInput(e: FocusEvent | MouseEvent | PointerEvent) {
     const target = e.currentTarget;
     if (!(target instanceof HTMLInputElement)) return;
@@ -306,12 +330,6 @@
     if (field === "v") emit({ h: hsv.h, s: hsv.s, v: value });
   }
 
-  function setAlphaPercent(value: number) {
-    if (!Number.isFinite(value)) return;
-    const clamped = Math.min(Math.max(value, 0), 100);
-    emit(hsv, Math.round((clamped / 100) * 255));
-  }
-
   function close() {
     open = false;
   }
@@ -321,6 +339,10 @@
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
+      if (formatMenuOpen) {
+        formatMenuOpen = false;
+        return;
+      }
       close();
     }
   }
@@ -336,6 +358,9 @@
     });
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node;
+      if (formatMenuOpen && !formatMenuEl?.contains(target)) {
+        formatMenuOpen = false;
+      }
       if (triggerEl?.contains(target)) return;
       if (popoverEl?.contains(target)) return;
       close();
@@ -491,129 +516,141 @@
         ></div>
       </div>
 
-      <div class="mt-3 grid grid-cols-4 gap-2 text-[11px]">
-        <label class="flex flex-col gap-0.5">
-          <span class="text-muted-foreground">H</span>
+      <div class="relative mt-3 flex items-center gap-2 text-[11px]">
+        <div bind:this={formatMenuEl} class="relative shrink-0">
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={formatMenuOpen}
+            onclick={() => (formatMenuOpen = !formatMenuOpen)}
+            class="flex h-7 w-[62px] items-center justify-between rounded-md border border-border bg-card px-2 font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <span>{activeFormatLabel}</span>
+            <ChevronDown size={12} strokeWidth={2.25} />
+          </button>
+          {#if formatMenuOpen}
+            <div
+              role="listbox"
+              aria-label="Color value format"
+              class="absolute bottom-full left-0 z-10 mb-1 w-[72px] overflow-hidden rounded-md border border-border bg-popover p-1 shadow-lg"
+            >
+              {#each COLOR_FORMAT_OPTIONS as option}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={activeFormat === option.value}
+                  onclick={() => selectFormat(option.value)}
+                  class={cn(
+                    "flex h-7 w-full items-center rounded px-2 text-left font-medium transition-colors",
+                    activeFormat === option.value
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  {option.label}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+        {#if activeFormat === "hex"}
           <input
-            type="number"
-            min="0"
-            max="360"
-            value={Math.round(hsv.h)}
-            onchange={(e) =>
-              setHsv("h", Number((e.currentTarget as HTMLInputElement).value))}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            type="text"
+            spellcheck={false}
+            bind:value={hexDraft}
+            onpointerdown={handleHexPointerDown}
+            onfocus={selectHexInput}
+            onclick={selectHexInput}
+            onblur={commitHexDraft}
+            onkeydown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitHexDraft();
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }}
+            aria-label="Hex color value"
+            class="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-[12px] leading-[26px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-muted-foreground">S</span>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={Math.round(hsv.s)}
-            onchange={(e) =>
-              setHsv("s", Number((e.currentTarget as HTMLInputElement).value))}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-muted-foreground">V</span>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={Math.round(hsv.v)}
-            onchange={(e) =>
-              setHsv("v", Number((e.currentTarget as HTMLInputElement).value))}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-muted-foreground">A%</span>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={alphaPercentDisplay}
-            onchange={(e) =>
-              setAlphaPercent(
-                Number((e.currentTarget as HTMLInputElement).value),
-              )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
-      </div>
-
-      <div class="mt-2 flex flex-col gap-0.5 text-[11px]">
-        <span class="text-muted-foreground">HEX</span>
-        <input
-          type="text"
-          spellcheck={false}
-          bind:value={hexDraft}
-          onpointerdown={handleHexPointerDown}
-          onfocus={selectHexInput}
-          onclick={selectHexInput}
-          onblur={commitHexDraft}
-          onkeydown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitHexDraft();
-              (e.currentTarget as HTMLInputElement).blur();
-            }
-          }}
-          class="h-7 w-full rounded-md border border-border bg-card px-2 text-[12px] leading-[26px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-
-      <div class="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-        <label class="flex flex-col gap-0.5">
-          <span class="text-muted-foreground">R</span>
-          <input
-            type="number"
-            min="0"
-            max="255"
-            value={rgb.r}
-            onchange={(e) =>
-              setRgb(
-                Number((e.currentTarget as HTMLInputElement).value),
-                rgb.g,
-                rgb.b,
-              )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-muted-foreground">G</span>
-          <input
-            type="number"
-            min="0"
-            max="255"
-            value={rgb.g}
-            onchange={(e) =>
-              setRgb(
-                rgb.r,
-                Number((e.currentTarget as HTMLInputElement).value),
-                rgb.b,
-              )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-muted-foreground">B</span>
-          <input
-            type="number"
-            min="0"
-            max="255"
-            value={rgb.b}
-            onchange={(e) =>
-              setRgb(
-                rgb.r,
-                rgb.g,
-                Number((e.currentTarget as HTMLInputElement).value),
-              )}
-            class="h-7 w-full rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
+        {:else if activeFormat === "rgb"}
+          <div class="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
+            <input
+              type="number"
+              min="0"
+              max="255"
+              value={rgb.r}
+              onchange={(e) =>
+                setRgb(
+                  Number((e.currentTarget as HTMLInputElement).value),
+                  rgb.g,
+                  rgb.b,
+                )}
+              aria-label="Red channel"
+              class="h-7 min-w-0 rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <input
+              type="number"
+              min="0"
+              max="255"
+              value={rgb.g}
+              onchange={(e) =>
+                setRgb(
+                  rgb.r,
+                  Number((e.currentTarget as HTMLInputElement).value),
+                  rgb.b,
+                )}
+              aria-label="Green channel"
+              class="h-7 min-w-0 rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <input
+              type="number"
+              min="0"
+              max="255"
+              value={rgb.b}
+              onchange={(e) =>
+                setRgb(
+                  rgb.r,
+                  rgb.g,
+                  Number((e.currentTarget as HTMLInputElement).value),
+                )}
+              aria-label="Blue channel"
+              class="h-7 min-w-0 rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+        {:else}
+          <div class="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
+            <input
+              type="number"
+              min="0"
+              max="360"
+              value={Math.round(hsv.h)}
+              onchange={(e) =>
+                setHsv("h", Number((e.currentTarget as HTMLInputElement).value))}
+              aria-label="Hue channel"
+              class="h-7 min-w-0 rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={Math.round(hsv.s)}
+              onchange={(e) =>
+                setHsv("s", Number((e.currentTarget as HTMLInputElement).value))}
+              aria-label="Saturation channel"
+              class="h-7 min-w-0 rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={Math.round(hsv.v)}
+              onchange={(e) =>
+                setHsv("v", Number((e.currentTarget as HTMLInputElement).value))}
+              aria-label="Value channel"
+              class="h-7 min-w-0 rounded-md border border-border bg-card px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+        {/if}
       </div>
     </div>
   {/if}
