@@ -39,144 +39,144 @@
   const APP_TOKEN_INFO: Record<string, TokenInfo> = {
     "--background": {
       title: "App canvas",
-      description: "Most views paint their own surface over it.",
+      description: "Most views paint their own surface over it",
     },
     "--foreground": {
       title: "Text color",
-      description: "Applied to text across the app.",
+      description: "Applied to text across the app",
     },
     "--card": {
       title: "Card",
-      description: "Background of grouped panels, dialogs, and tinted cards.",
+      description: "Background of grouped panels, dialogs, and tinted cards",
     },
     "--primary": {
       title: "Primary action",
-      description: "Main accent color for highlighted buttons and links.",
+      description: "Main accent color for highlighted buttons and links",
     },
     "--primary-foreground": {
       title: "Button text",
-      description: "Text on primary buttons.",
+      description: "Text on primary buttons",
     },
     "--destructive": {
       title: "Destructive",
-      description: "Color used for delete actions and warnings.",
+      description: "Color used for delete actions and warnings",
     },
     "--destructive-foreground": {
       title: "Destructive text",
-      description: "Text color on destructive buttons and the title bar close hover.",
+      description: "Text color on destructive buttons and the title bar close hover",
     },
     "--ring": {
       title: "Focus ring",
-      description: "Outline shown around focused inputs and buttons.",
+      description: "Outline shown around focused inputs and buttons",
     },
     "--event-panel-bg": {
       title: "Event panel surface",
-      description: "Background of the event creation/edit panel.",
+      description: "Background of the event creation/edit panel",
     },
     "--event-panel-contrast": {
       title: "Event panel section header",
-      description: "Background strip behind section rows.",
+      description: "Background strip behind section rows",
     },
     "--event-panel-text": {
       title: "Event panel body text",
-      description: "Overrides --foreground inside the panel.",
+      description: "Overrides --foreground inside the panel",
     },
     "--event-panel-muted-text": {
       title: "Event panel muted text",
-      description: "Secondary text color inside the panel.",
+      description: "Secondary text color inside the panel",
     },
     "--action-confirm": {
       title: "Confirm action",
       description:
-        "Background of the Save button and the active scope selector pill in the event panel.",
+        "Background of the Save button and the active scope selector pill in the event panel",
     },
     "--action-confirm-foreground": {
       title: "Confirm action text",
-      description: "Text color on the Save button and active scope pill.",
+      description: "Text color on the Save button and active scope pill",
     },
     "--action-danger-armed": {
       title: "Armed delete",
       description:
-        "Background of the delete button once it has been armed (click-again-to-confirm state).",
+        "Background of the delete button once it has been armed (click-again-to-confirm state)",
     },
     "--action-danger-armed-foreground": {
       title: "Armed delete text",
-      description: "Text color on the delete button in its armed state.",
+      description: "Text color on the delete button in its armed state",
     },
     "--status-accepted": {
       title: "Accepted attendee",
-      description: "Status tile color for accepted attendees on a calendar event.",
+      description: "Status tile color for accepted attendees on a calendar event",
     },
     "--status-accepted-foreground": {
       title: "Accepted attendee text",
-      description: "Text color on the accepted attendance tile.",
+      description: "Text color on the accepted attendance tile",
     },
     "--status-tentative": {
       title: "Tentative attendee",
-      description: "Status tile color for tentative attendees on a calendar event.",
+      description: "Status tile color for tentative attendees on a calendar event",
     },
     "--status-tentative-foreground": {
       title: "Tentative attendee text",
-      description: "Text color on the tentative attendance tile.",
+      description: "Text color on the tentative attendance tile",
     },
     "--status-declined": {
       title: "Declined attendee",
-      description: "Status tile color for declined attendees on a calendar event.",
+      description: "Status tile color for declined attendees on a calendar event",
     },
     "--status-declined-foreground": {
       title: "Declined attendee text",
-      description: "Text color on the declined attendance tile.",
+      description: "Text color on the declined attendance tile",
     },
     "--priority-easy": {
       title: "Easy priority",
-      description: "Applied as a tint for background and solid for text.",
+      description: "Applied as a tint for background and solid for text",
     },
     "--priority-medium": {
       title: "Medium priority",
-      description: "Applied as a tint for background and solid for text.",
+      description: "Applied as a tint for background and solid for text",
     },
     "--priority-hard": {
       title: "Hard priority",
-      description: "Applied as a tint for background and solid for text.",
+      description: "Applied as a tint for background and solid for text",
     },
     "--priority-epic": {
       title: "Epic priority",
-      description: "Applied as a tint for background and solid for text.",
+      description: "Applied as a tint for background and solid for text",
     },
   };
 
   const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
     "--cal-bg": {
       title: "Calendar background",
-      description: "Background of the calendar grid.",
+      description: "Background of the calendar grid",
     },
     "--cal-header-bg": {
       title: "Calendar header",
-      description: "Background of the day and time headers.",
+      description: "Background of the day and time headers",
     },
     "--cal-gridline": {
       title: "Grid lines",
-      description: "Color of the hour and day separator lines.",
+      description: "Color of the hour and day separator lines",
     },
     "--cal-time-label": {
       title: "Time labels",
-      description: "Hour numbers down the side of the calendar.",
+      description: "Hour numbers down the side of the calendar",
     },
     "--cal-current-time": {
       title: "Now line",
-      description: "Horizontal line marking the current time.",
+      description: "Horizontal line marking the current time",
     },
     "--cal-timeline-rail": {
       title: "Session rail track",
-      description: "Background strip beside an event during a pomodoro.",
+      description: "Background strip beside an event during a pomodoro",
     },
     "--cal-timeline-break": {
       title: "Break marker",
-      description: "Color of break segments on the session rail.",
+      description: "Color of break segments on the session rail",
     },
     "--cal-timeline-focus": {
       title: "Focus marker",
-      description: "Color of focus segments on the session rail.",
+      description: "Color of focus segments on the session rail",
     },
   };
 
@@ -226,7 +226,7 @@
       sourceKey: "canvas",
       title: "App canvas",
       description:
-        "Dominant background color. Most surfaces tint automatically from it.",
+        "Dominant background color, most surfaces tint automatically from it",
       navTarget: "general",
       rows: [
         { kind: "single", key: "--background", scope: "app" },
@@ -236,7 +236,7 @@
           bg: "--popover",
           fg: "--popover-foreground",
           title: "Popover",
-          description: "Dropdowns, menus, and floating panels.",
+          description: "Dropdowns, menus, and floating panels",
           scope: "app",
         },
         {
@@ -244,7 +244,7 @@
           bg: "--secondary",
           fg: "--secondary-foreground",
           title: "Secondary surface",
-          description: "Less emphasized buttons.",
+          description: "Less emphasized buttons",
           scope: "app",
         },
         {
@@ -252,7 +252,7 @@
           bg: "--muted",
           fg: "--muted-foreground",
           title: "Muted surface",
-          description: "Subtle wells and the default hint-text color.",
+          description: "Subtle wells and the default hint-text color",
           scope: "app",
           target: 3,
         },
@@ -261,7 +261,7 @@
           bg: "--accent",
           fg: "--accent-foreground",
           title: "Hover highlight",
-          description: "Soft tint shown when hovering rows and buttons.",
+          description: "Soft tint shown when hovering rows and buttons",
           scope: "app",
         },
         { kind: "single", key: "--ring", scope: "app" },
@@ -270,7 +270,7 @@
           bg: "--sidebar",
           fg: "--sidebar-foreground",
           title: "Title bar",
-          description: "Top frame of the app window.",
+          description: "Top frame of the app window",
           scope: "app",
         },
         {
@@ -278,7 +278,7 @@
           bg: "--sidebar-accent",
           fg: "--sidebar-accent-foreground",
           title: "Title bar hover",
-          description: "Tint shown when hovering title bar buttons.",
+          description: "Tint shown when hovering title bar buttons",
           scope: "app",
         },
       ],
@@ -286,7 +286,7 @@
     {
       sourceKey: null,
       title: "Calendar surface",
-      description: "Calendar background, header, gridlines, and timeline.",
+      description: "Calendar background, header, gridlines, and timeline",
       rows: [
         { kind: "single", key: "--cal-bg", scope: "cal" },
         { kind: "single", key: "--cal-header-bg", scope: "cal" },
@@ -298,7 +298,7 @@
     {
       sourceKey: null,
       title: "Calendar details",
-      description: "Semantic markers and accents on the calendar grid.",
+      description: "Semantic markers and accents on the calendar grid",
       rows: [
         {
           kind: "pair",
@@ -306,7 +306,7 @@
           fg: "--cal-today-circle-text",
           title: "Today marker",
           description:
-            "Filled circle around today's date and the number inside.",
+            "Filled circle around today's date and the number inside",
           scope: "cal",
         },
         { kind: "single", key: "--cal-current-time", scope: "cal" },
@@ -318,7 +318,7 @@
       sourceKey: null,
       title: "Event panel",
       description:
-        "Surfaces on the event creation and edit panel opened from the calendar.",
+        "Surfaces on the event creation and edit panel opened from the calendar",
       rows: [
         { kind: "single", key: "--event-panel-bg", scope: "app" },
         { kind: "single", key: "--event-panel-contrast", scope: "app" },
@@ -330,7 +330,7 @@
     {
       sourceKey: null,
       title: "Task priority",
-      description: "Kanban badge colors per difficulty tier.",
+      description: "Kanban badge colors per difficulty tier",
       navTarget: "todo",
       rows: [
         { kind: "single", key: "--priority-easy", scope: "app" },
@@ -343,7 +343,7 @@
     {
       sourceKey: "ink",
       title: "Ink",
-      description: "Base text color.",
+      description: "Base text color",
       navTarget: "signals",
       rows: [
         { kind: "single", key: "--foreground", scope: "app" },
@@ -352,20 +352,20 @@
     {
       sourceKey: "primary",
       title: "Primary action",
-      description: "Accent for highlighted buttons and links.",
+      description: "Accent for highlighted buttons and links",
       rows: [{ kind: "single", key: "--primary-foreground", scope: "app" }],
     },
     {
       sourceKey: "destructive",
       title: "Destructive",
-      description: "Danger signal.",
+      description: "Danger signal",
       rows: [
         {
           kind: "pair",
           bg: "--destructive",
           fg: "--destructive-foreground",
           title: "Destructive button",
-          description: "Delete actions and the title bar close hover.",
+          description: "Delete actions and the title bar close hover",
           scope: "app",
         },
         {
@@ -374,7 +374,7 @@
           fg: "--action-danger-armed-foreground",
           title: "Armed delete",
           description:
-            "Background and text of the delete button once armed (click-again-to-confirm state).",
+            "Background and text of the delete button once armed (click-again-to-confirm state)",
           scope: "app",
         },
         {
@@ -382,7 +382,7 @@
           bg: "--status-declined",
           fg: "--status-declined-foreground",
           title: "Declined attendee",
-          description: "Status tile for declined attendees on a calendar event.",
+          description: "Status tile for declined attendees on a calendar event",
           scope: "app",
         },
       ],
@@ -390,7 +390,7 @@
     {
       sourceKey: "confirm",
       title: "Confirm",
-      description: "Positive signal.",
+      description: "Positive signal",
       rows: [
         {
           kind: "pair",
@@ -398,7 +398,7 @@
           fg: "--action-confirm-foreground",
           title: "Confirm action button",
           description:
-            "Save button and the active scope pill on the event panel.",
+            "Save button and the active scope pill on the event panel",
           scope: "app",
         },
         {
@@ -406,7 +406,7 @@
           bg: "--status-accepted",
           fg: "--status-accepted-foreground",
           title: "Accepted attendee",
-          description: "Status tile for accepted attendees on a calendar event.",
+          description: "Status tile for accepted attendees on a calendar event",
           scope: "app",
         },
       ],
@@ -414,14 +414,14 @@
     {
       sourceKey: "warning",
       title: "Warning",
-      description: "Caution signal.",
+      description: "Caution signal",
       rows: [
         {
           kind: "pair",
           bg: "--status-tentative",
           fg: "--status-tentative-foreground",
           title: "Tentative attendee",
-          description: "Status tile for tentative attendees on a calendar event.",
+          description: "Status tile for tentative attendees on a calendar event",
           scope: "app",
         },
       ],
@@ -1229,7 +1229,7 @@
       class="flex scroll-mt-4 items-center gap-3 px-1 pt-1"
       data-theme-nav-target={target}
     >
-      <h2 class="shrink-0 text-[12px] font-semibold text-foreground">
+      <h2 class="shrink-0 text-[13px] font-semibold text-foreground">
         {THEME_SECTION_LABELS[target]}
       </h2>
       <div class="h-px min-w-4 flex-1 bg-border" aria-hidden="true"></div>
@@ -1248,8 +1248,8 @@
           Event palette
         </h2>
         <div class="text-[11px] text-muted-foreground">
-          24 color slots. Each one has a faded variant for past events, blended
-          toward Calendar background.
+          24 color slots, each one has a faded variant for past events, blended
+          toward Calendar background
         </div>
       </header>
       <div
@@ -1391,8 +1391,8 @@
         <h2 class="text-[13px] font-semibold text-foreground">Schema</h2>
         <div class="text-[11px] text-muted-foreground">
           {isBuiltin
-            ? "Read-only representation of the theme."
-            : "Edit directly. Apply to commit changes."}
+            ? "Read-only representation of the theme"
+            : "Edit directly, apply to commit changes"}
         </div>
       </header>
       <div class="flex flex-col gap-2 border-t border-border pt-2">
