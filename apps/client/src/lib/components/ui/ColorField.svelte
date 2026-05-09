@@ -244,6 +244,21 @@
     emit(rgbToHsv(rgba.r, rgba.g, rgba.b), rgba.a);
   }
 
+  function selectHexInput(e: FocusEvent | MouseEvent | PointerEvent) {
+    const target = e.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    target.select();
+  }
+
+  function handleHexPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    const target = e.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    e.preventDefault();
+    target.focus({ preventScroll: true });
+    target.select();
+  }
+
   function setRgb(r: number, g: number, b: number) {
     const next = rgbToHsv(clampChannel(r), clampChannel(g), clampChannel(b));
     emit(next);
@@ -334,7 +349,9 @@
     spellcheck={false}
     bind:value={hexDraft}
     disabled={readOnly}
-    onfocus={(e) => (e.currentTarget as HTMLInputElement).select()}
+    onpointerdown={handleHexPointerDown}
+    onfocus={selectHexInput}
+    onclick={selectHexInput}
     onblur={commitHexDraft}
     onkeydown={(e) => {
       if (e.key === "Enter") {
@@ -490,7 +507,9 @@
           type="text"
           spellcheck={false}
           bind:value={hexDraft}
-          onfocus={(e) => (e.currentTarget as HTMLInputElement).select()}
+          onpointerdown={handleHexPointerDown}
+          onfocus={selectHexInput}
+          onclick={selectHexInput}
           onblur={commitHexDraft}
           onkeydown={(e) => {
             if (e.key === "Enter") {
