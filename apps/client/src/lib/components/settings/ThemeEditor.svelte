@@ -914,7 +914,7 @@
     </div>
     {#if userTheme}
       <nav
-        class="flex h-9 items-center gap-1 overflow-x-auto rounded-lg border border-border bg-card px-1 text-[11px] dark:bg-background"
+        class="grid h-9 grid-cols-5 items-center gap-1 rounded-lg border border-border bg-card px-1 text-[11px] dark:bg-background"
         aria-label="Theme editor sections"
       >
         {#each THEME_NAV_ITEMS as item}
@@ -925,13 +925,13 @@
               ? "location"
               : undefined}
             class={cn(
-              "flex h-7 shrink-0 items-center rounded-md px-2 font-medium transition-colors hover:bg-accent hover:text-foreground",
+              "flex h-7 min-w-0 items-center justify-center rounded-md px-2 text-center font-medium transition-colors hover:bg-accent hover:text-foreground",
               activeThemeSection === item.target
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground",
             )}
           >
-            {item.label}
+            <span class="min-w-0 truncate">{item.label}</span>
           </button>
         {/each}
       </nav>
