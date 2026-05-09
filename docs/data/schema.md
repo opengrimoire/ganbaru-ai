@@ -231,6 +231,8 @@ Migration v9 removes app-token rows that used to store implementation paint hook
 
 Primary key: `(theme_id, kind, key)`. Index: `(theme_id, kind)` for fast per-kind lookups.
 
+The key is identity, not presentation order. Theme token reads use the client-side `THEME_TOKEN_ROW_ORDER` in their SQL `ORDER BY`, and writes iterate the same order, so raw token rows follow the token-bearing theme editor sections without storing a separate sort column. Event palette slot rows are ordered in their own table.
+
 The `isolated` flag replaces the old override/derived split. `isolated=1` means "do not re-derive this token when sources change"; `isolated=0` means it participates in the next source-edit cascade. Toggling Isolated on a row does not touch `value` because the snapshot already holds the auto-derived value at the moment the user pinned it.
 
 ### `theme_event_palette`

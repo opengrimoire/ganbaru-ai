@@ -10,6 +10,9 @@
  *   kind='app'      keys are `--prefixed` CSS custom property names
  *   kind='calendar' keys are `--prefixed` calendar token names
  *
+ * Reads and writes follow `THEME_TOKEN_ROW_ORDER` so raw rows stay aligned
+ * with the editor's section order without adding a persisted sort column.
+ *
  * `theme_seed_tokens` mirrors the same shape; per-row reset and
  * "Reset all" copy from seed back to live.
  *
@@ -24,6 +27,7 @@
  */
 
 import { execute, select } from "./db";
+import { THEME_TOKEN_ROW_ORDER } from "$lib/stores/themes";
 
 export type TokenKind = "source" | "app" | "calendar";
 
@@ -106,22 +110,35 @@ export interface UserThemeRead {
   seedPalette: PaletteRow[];
 }
 
+const TOKEN_ORDER_CASE = [
+  "CASE",
+  ...THEME_TOKEN_ROW_ORDER.map(
+    (entry, index) =>
+      `WHEN kind = '${entry.kind}' AND key = '${entry.key}' THEN ${index}`,
+  ),
+  `ELSE ${THEME_TOKEN_ROW_ORDER.length}`,
+  "END",
+].join(" ");
+
+const TOKEN_ORDER_BY = `theme_id ASC, ${TOKEN_ORDER_CASE}, kind ASC, key ASC`;
+const PALETTE_ORDER_BY = "theme_id ASC, slot ASC";
+
 export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
   const themes = await select<ThemeRow>(
     "SELECT * FROM themes ORDER BY created_at ASC",
   );
   if (themes.length === 0) return [];
   const tokens = await select<TokenRow>(
-    "SELECT theme_id, kind, key, value, isolated FROM theme_tokens",
+    `SELECT theme_id, kind, key, value, isolated FROM theme_tokens ORDER BY ${TOKEN_ORDER_BY}`,
   );
   const palette = await select<PaletteRow>(
-    "SELECT theme_id, slot, value FROM theme_event_palette",
+    `SELECT theme_id, slot, value FROM theme_event_palette ORDER BY ${PALETTE_ORDER_BY}`,
   );
   const seedTokens = await select<TokenRow>(
-    "SELECT theme_id, kind, key, value, isolated FROM theme_seed_tokens",
+    `SELECT theme_id, kind, key, value, isolated FROM theme_seed_tokens ORDER BY ${TOKEN_ORDER_BY}`,
   );
   const seedPalette = await select<PaletteRow>(
-    "SELECT theme_id, slot, value FROM theme_seed_event_palette",
+    `SELECT theme_id, slot, value FROM theme_seed_event_palette ORDER BY ${PALETTE_ORDER_BY}`,
   );
   const tokensByTheme = groupBy(tokens, (r) => r.theme_id);
   const paletteByTheme = groupBy(palette, (r) => r.theme_id);

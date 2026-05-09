@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import AlertTriangle from "@lucide/svelte/icons/alert-triangle";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import Check from "@lucide/svelte/icons/check";
@@ -207,20 +207,19 @@
 
   // Three-tier layout the user edits top-to-bottom:
   //
-  //   Tier 1 (app and calendar foundation): app canvas first, then the
-  //   calendar surface, details, and event panel users tune against that
-  //   canvas, followed by ink, primary, and destructive.
+  //   Tier 1 (app and calendar foundation): app canvas first, then
+  //   calendar surface, event palette, calendar details, and event panel.
   //
-  //   Tier 2 (semantic signals): positive and cautionary accents that
-  //   communicate intent across buttons and status tiles.
+  //   Tier 2 (feature surfaces): colors scoped to kanban badges.
   //
-  //   Tier 3 (other feature surfaces): colors scoped to kanban badges.
+  //   Tier 3 (semantic signals): ink and accents that communicate intent
+  //   across buttons, text, and status tiles.
   //
-  // Collapse button is gated on (sourceKey != null && rows.length > 1):
-  // only source-driven multi-row groups benefit from the accordion, since
-  // the header's ColorField is the "change everything together" affordance.
-  // Sourceless groups show all rows inline; source-driven single-row groups
-  // render the row as a peer of the source via groupHeaderStyleRow.
+  // Collapse button is gated on rows.length > 1. Multi-row groups start
+  // collapsed so the editor opens as a scannable page. Sourceless groups
+  // keep the same collapse affordance, just without a source ColorField to
+  // the left of the button. Source-driven single-row groups render the row
+  // as a peer of the source via groupHeaderStyleRow.
   const SOURCE_GROUPS: SourceGroup[] = [
     // Tier 1: app and calendar foundation
     {
@@ -288,7 +287,6 @@
       sourceKey: null,
       title: "Calendar surface",
       description: "Calendar background, header, gridlines, and timeline.",
-      navTarget: "calendar",
       rows: [
         { kind: "single", key: "--cal-bg", scope: "cal" },
         { kind: "single", key: "--cal-header-bg", scope: "cal" },
@@ -328,6 +326,20 @@
         { kind: "single", key: "--event-panel-muted-text", scope: "app" },
       ],
     },
+    // Tier 2: feature surfaces
+    {
+      sourceKey: null,
+      title: "Task priority",
+      description: "Kanban badge colors per difficulty tier.",
+      navTarget: "todo",
+      rows: [
+        { kind: "single", key: "--priority-easy", scope: "app" },
+        { kind: "single", key: "--priority-medium", scope: "app" },
+        { kind: "single", key: "--priority-hard", scope: "app" },
+        { kind: "single", key: "--priority-epic", scope: "app" },
+      ],
+    },
+    // Tier 3: semantic signals
     {
       sourceKey: "ink",
       title: "Ink",
@@ -375,7 +387,6 @@
         },
       ],
     },
-    // Tier 2: semantic signals
     {
       sourceKey: "confirm",
       title: "Confirm",
@@ -415,19 +426,6 @@
         },
       ],
     },
-    // Tier 3: other feature surfaces
-    {
-      sourceKey: null,
-      title: "Task priority",
-      description: "Kanban badge colors per difficulty tier.",
-      navTarget: "todo",
-      rows: [
-        { kind: "single", key: "--priority-easy", scope: "app" },
-        { kind: "single", key: "--priority-medium", scope: "app" },
-        { kind: "single", key: "--priority-hard", scope: "app" },
-        { kind: "single", key: "--priority-epic", scope: "app" },
-      ],
-    },
   ];
 
   const THEME_NAV_ITEMS: ReadonlyArray<{
@@ -436,10 +434,45 @@
   }> = [
     { label: "General", target: "general" },
     { label: "Calendar", target: "calendar" },
-    { label: "Signals", target: "signals" },
     { label: "To-do", target: "todo" },
+    { label: "Text and actions", target: "signals" },
     { label: "JSON", target: "json" },
   ];
+
+  const THEME_SECTION_LABELS: Record<ThemeNavTarget, string> = {
+    general: "General",
+    calendar: "Calendar",
+    todo: "To-do",
+    signals: "Text and actions",
+    json: "JSON",
+  };
+
+  const TEXT_ACTION_GROUP_TITLES = new Set([
+    "Ink",
+    "Primary action",
+    "Destructive",
+    "Confirm",
+    "Warning",
+  ]);
+  const TEXT_ACTION_GROUPS = SOURCE_GROUPS.filter((group) =>
+    TEXT_ACTION_GROUP_TITLES.has(group.title),
+  );
+  const CALENDAR_GROUP_TITLES = new Set([
+    "Calendar surface",
+    "Calendar details",
+    "Event panel",
+  ]);
+  const CALENDAR_GROUPS = SOURCE_GROUPS.filter((group) =>
+    CALENDAR_GROUP_TITLES.has(group.title),
+  );
+
+  function isTextActionGroup(group: SourceGroup): boolean {
+    return TEXT_ACTION_GROUP_TITLES.has(group.title);
+  }
+
+  function isCalendarGroup(group: SourceGroup): boolean {
+    return CALENDAR_GROUP_TITLES.has(group.title);
+  }
 
   let { theme }: { theme: Theme } = $props();
 
@@ -462,17 +495,24 @@
     userTheme ? themeStore.shouldOfferRebake(userTheme) : false,
   );
 
-  // Collapse state is ephemeral (not persisted across sessions). Only
-  // source-driven multi-row groups are collapsible: the source color at the
-  // header is the "change everything together" affordance that gives the
-  // accordion a purpose. Sourceless groups show every row inline, and
-  // single-row source groups render the row as a peer of the header.
+  let scrollViewport: HTMLDivElement | undefined;
+  let activeThemeSection = $state<ThemeNavTarget>("general");
+  let scrollFrame: number | undefined;
+
+  onDestroy(() => {
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+  });
+
+  // Collapse state is ephemeral (not persisted across sessions). Every
+  // multi-row group is collapsible; single-row source groups still render
+  // their row as a peer of the header.
   let collapsed = $state<Record<string, boolean>>(
     untrack(() =>
       Object.fromEntries(
-        SOURCE_GROUPS.filter(
-          (g) => g.sourceKey !== null && g.rows.length > 1,
-        ).map((g) => [g.title, true]),
+        SOURCE_GROUPS.filter((g) => g.rows.length > 1).map((g) => [
+          g.title,
+          true,
+        ]),
       ),
     ),
   );
@@ -514,11 +554,73 @@
     void themeStore.renameTheme(theme.id, next);
   }
 
+  function sectionSelector(target: ThemeNavTarget): string {
+    return `[data-theme-nav-target="${target}"]`;
+  }
+
+  function themeSectionElements(): Array<{
+    target: ThemeNavTarget;
+    el: HTMLElement;
+  }> {
+    if (!scrollViewport) return [];
+    const out: Array<{ target: ThemeNavTarget; el: HTMLElement }> = [];
+    for (const item of THEME_NAV_ITEMS) {
+      const el = scrollViewport.querySelector<HTMLElement>(
+        sectionSelector(item.target),
+      );
+      if (el) out.push({ target: item.target, el });
+    }
+    return out;
+  }
+
+  function updateActiveThemeSection() {
+    if (!scrollViewport) return;
+    const sections = themeSectionElements();
+    if (sections.length === 0) return;
+    const atBottom =
+      scrollViewport.scrollTop + scrollViewport.clientHeight >=
+      scrollViewport.scrollHeight - 2;
+    if (atBottom) {
+      activeThemeSection = sections[sections.length - 1].target;
+      return;
+    }
+    const viewportTop = scrollViewport.getBoundingClientRect().top;
+    const threshold = viewportTop + 8;
+    let next = sections[0].target;
+    for (const section of sections) {
+      if (section.el.getBoundingClientRect().top <= threshold) {
+        next = section.target;
+      } else {
+        break;
+      }
+    }
+    activeThemeSection = next;
+  }
+
+  function queueActiveThemeSectionUpdate() {
+    if (scrollFrame !== undefined) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = undefined;
+      updateActiveThemeSection();
+    });
+  }
+
   function scrollToThemeSection(target: ThemeNavTarget) {
-    const el = document.querySelector<HTMLElement>(
-      `[data-theme-nav-target="${target}"]`,
-    );
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const el =
+      scrollViewport?.querySelector<HTMLElement>(sectionSelector(target)) ??
+      document.querySelector<HTMLElement>(sectionSelector(target));
+    if (!el) return;
+    activeThemeSection = target;
+    if (!scrollViewport) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const rootTop = scrollViewport.getBoundingClientRect().top;
+    const targetTop = el.getBoundingClientRect().top;
+    scrollViewport.scrollTo({
+      top: scrollViewport.scrollTop + targetTop - rootTop,
+      behavior: "smooth",
+    });
   }
 
   function effectiveCalBg(t: Theme): string {
@@ -819,7 +921,15 @@
           <button
             type="button"
             onclick={() => scrollToThemeSection(item.target)}
-            class="flex h-7 shrink-0 items-center rounded-md px-2 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-current={activeThemeSection === item.target
+              ? "location"
+              : undefined}
+            class={cn(
+              "flex h-7 shrink-0 items-center rounded-md px-2 font-medium transition-colors hover:bg-accent hover:text-foreground",
+              activeThemeSection === item.target
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground",
+            )}
           >
             {item.label}
           </button>
@@ -922,7 +1032,7 @@
 
   {#snippet groupSingleRow(row: GroupSingleRow)}
     {@const info = tokenInfo(row)}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+    <div class="flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[12px] text-foreground">{info.title}</div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
@@ -948,7 +1058,7 @@
       row.scope === "app"
         ? canResetAppToken(row.key)
         : canResetCalToken(row.key)}
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+    <div class="flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[13px] font-semibold text-foreground">{info.title}</div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
@@ -979,7 +1089,7 @@
     {@const contrast = pairContrast(row)}
     <div
       data-pair-key={pairKey(row)}
-      class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5"
+      class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-1 py-2.5"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
@@ -1023,18 +1133,13 @@
     </div>
   {/snippet}
 
-  {#snippet groupCard(group: SourceGroup)}
-    {@const isCollapsible =
-      group.sourceKey !== null && group.rows.length > 1}
+  {#snippet groupSection(group: SourceGroup)}
+    {@const isCollapsible = group.rows.length > 1}
     {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
     {@const showRows =
       group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
-    <section
-      class="overflow-hidden rounded-lg ring-1 ring-border bg-card dark:bg-background"
-      class:scroll-mt-4={group.navTarget !== undefined}
-      data-theme-nav-target={group.navTarget}
-    >
-      <header class="flex items-center justify-between gap-3 px-4 py-2.5">
+    <section class="flex flex-col">
+      <header class="flex items-center justify-between gap-3 px-1 py-2.5">
         <div class="min-w-0 flex-1">
           <div class="text-[13px] font-semibold text-foreground">
             {group.title}
@@ -1100,8 +1205,111 @@
     </section>
   {/snippet}
 
+  {#snippet textActionsSection()}
+    <section class="flex flex-col divide-y divide-border">
+      {#each TEXT_ACTION_GROUPS as group (group.title)}
+        {@render groupSection(group)}
+      {/each}
+    </section>
+  {/snippet}
+
+  {#snippet calendarSection()}
+    <section class="flex flex-col divide-y divide-border">
+      {#each CALENDAR_GROUPS as group (group.title)}
+        {#if group.title === "Calendar details"}
+          {@render eventPaletteSection()}
+        {/if}
+        {@render groupSection(group)}
+      {/each}
+    </section>
+  {/snippet}
+
+  {#snippet sectionHeader(target: ThemeNavTarget, note?: string)}
+    <div
+      class="flex scroll-mt-4 items-center gap-3 px-1 pt-1"
+      data-theme-nav-target={target}
+    >
+      <h2 class="shrink-0 text-[12px] font-semibold text-foreground">
+        {THEME_SECTION_LABELS[target]}
+      </h2>
+      <div class="h-px min-w-4 flex-1 bg-border" aria-hidden="true"></div>
+      {#if note}
+        <span class="shrink-0 text-[11px] text-muted-foreground">
+          {note}
+        </span>
+      {/if}
+    </div>
+  {/snippet}
+
+  {#snippet eventPaletteSection()}
+    <section class="flex flex-col gap-2 py-2.5">
+      <header class="px-1">
+        <h2 class="text-[13px] font-semibold text-foreground">
+          Event palette
+        </h2>
+        <div class="text-[11px] text-muted-foreground">
+          24 color slots. Each one has a faded variant for past events, blended
+          toward Calendar background.
+        </div>
+      </header>
+      <div
+        class="flex flex-col gap-3 p-3"
+        style="background-color: {effectiveCalBg(theme)};"
+      >
+        <div class="grid grid-cols-4 gap-x-2 gap-y-1.5">
+          {#each paletteIndices as index}
+            {@const base = theme.eventPalette[index]}
+            {@const past = blendHex(
+              base,
+              effectiveCalBg(theme),
+              isThemeCalendarDark(theme) ? 0.5 : 0.3,
+            )}
+            {#if isBuiltin}
+              <div class="flex min-w-0 items-center gap-1.5">
+                <span
+                  class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                  style="background-color: {past};"
+                  title="Past {past}"
+                ></span>
+                <span
+                  class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                  style="background-color: {base};"
+                  title="Normal {base}"
+                ></span>
+                <span
+                  class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
+                >
+                  {base}
+                </span>
+              </div>
+            {:else}
+              <div class="flex min-w-0 items-center gap-1.5">
+                <span
+                  class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
+                  style="background-color: {past};"
+                  title="Past variant {past}"
+                ></span>
+                <ColorField
+                  value={base}
+                  onChange={(hex) => setSlot(index, hex)}
+                  fluid
+                  swatchSize={22}
+                  class="min-w-0 flex-1"
+                />
+              </div>
+            {/if}
+          {/each}
+        </div>
+      </div>
+    </section>
+  {/snippet}
+
   <div class="relative min-h-0 flex-1">
-    <div class="h-full overflow-y-auto">
+    <div
+      bind:this={scrollViewport}
+      class="h-full overflow-y-auto"
+      onscroll={queueActiveThemeSectionUpdate}
+    >
       <div
         class={cn(
           "flex flex-col gap-6 px-5 pt-6",
@@ -1147,92 +1355,55 @@
     {/if}
 
     {#each SOURCE_GROUPS as group (group.title)}
-      {@render groupCard(group)}
+      {#if isCalendarGroup(group)}
+        {#if group.title === "Calendar surface"}
+          <div class="flex flex-col gap-2">
+            {@render sectionHeader("calendar")}
+            {@render calendarSection()}
+          </div>
+        {/if}
+      {:else if isTextActionGroup(group)}
+        {#if group.title === "Ink"}
+          <div class="flex flex-col gap-2">
+            {@render sectionHeader("signals")}
+            {@render textActionsSection()}
+          </div>
+        {/if}
+      {:else if group.navTarget}
+        <div class="flex flex-col gap-2">
+          {@render sectionHeader(group.navTarget)}
+          {@render groupSection(group)}
+        </div>
+      {:else}
+        {@render groupSection(group)}
+      {/if}
     {/each}
 
+  {:else}
+    {@render eventPaletteSection()}
   {/if}
 
-  <!-- Event palette -->
-  <section class="flex flex-col gap-2">
-    <div class="flex items-center justify-between px-1">
-      <h2 class="text-[13px] font-semibold text-foreground">Event palette</h2>
-      <span class="text-[11px] text-muted-foreground">
-        24 color slots. Each one has a faded variant for past events, blended
-        toward Calendar background.
-      </span>
-    </div>
-    <div
-      class="flex flex-col gap-3 rounded-lg p-3 ring-1 ring-border"
-      style="background-color: {effectiveCalBg(theme)};"
-    >
-      <div class="grid grid-cols-4 gap-x-2 gap-y-1.5">
-        {#each paletteIndices as index}
-          {@const base = theme.eventPalette[index]}
-          {@const past = blendHex(
-            base,
-            effectiveCalBg(theme),
-            isThemeCalendarDark(theme) ? 0.5 : 0.3,
-          )}
-          {#if isBuiltin}
-            <div class="flex min-w-0 items-center gap-1.5">
-              <span
-                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {past};"
-                title="Past {past}"
-              ></span>
-              <span
-                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {base};"
-                title="Normal {base}"
-              ></span>
-              <span
-                class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
-              >
-                {base}
-              </span>
-            </div>
-          {:else}
-            <div class="flex min-w-0 items-center gap-1.5">
-              <span
-                class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                style="background-color: {past};"
-                title="Past variant {past}"
-              ></span>
-              <ColorField
-                value={base}
-                onChange={(hex) => setSlot(index, hex)}
-                fluid
-                swatchSize={22}
-                class="min-w-0 flex-1"
-              />
-            </div>
-          {/if}
-        {/each}
-      </div>
-    </div>
-  </section>
-
   <!-- JSON -->
-  <section class="flex scroll-mt-4 flex-col gap-2" data-theme-nav-target="json">
-    <div class="flex items-center justify-between px-1">
-      <h2 class="text-[13px] font-semibold text-foreground">JSON</h2>
-      <span class="text-[11px] text-muted-foreground">
-        {isBuiltin
-          ? "Read-only representation of the theme."
-          : "Edit the theme directly. Apply to commit your changes."}
-      </span>
-    </div>
-    <div
-      class="flex flex-col gap-2 rounded-lg bg-card p-3 dark:bg-background"
-    >
-      <textarea
-        value={jsonDraft}
-        oninput={isBuiltin ? undefined : onJsonInput}
-        readonly={isBuiltin}
-        spellcheck={false}
-        rows={12}
-        class="w-full resize-y rounded-md border border-border bg-background p-2 font-mono text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-      ></textarea>
+  <div class="flex flex-col gap-2">
+    {@render sectionHeader("json")}
+    <section class="flex flex-col">
+      <header class="px-1 py-2.5">
+        <h2 class="text-[13px] font-semibold text-foreground">Schema</h2>
+        <div class="text-[11px] text-muted-foreground">
+          {isBuiltin
+            ? "Read-only representation of the theme."
+            : "Edit directly. Apply to commit changes."}
+        </div>
+      </header>
+      <div class="flex flex-col gap-2 border-t border-border pt-2">
+        <textarea
+          value={jsonDraft}
+          oninput={isBuiltin ? undefined : onJsonInput}
+          readonly={isBuiltin}
+          spellcheck={false}
+          rows={12}
+          class="w-full resize-y rounded-md border border-border bg-background p-2 font-mono text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        ></textarea>
       {#if jsonErrors.length > 0}
         <ul
           class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive"
@@ -1298,6 +1469,7 @@
       {/if}
     </div>
   </section>
+</div>
 </div>
 </div>
 {#if userTheme && failingPairs.length > 0}

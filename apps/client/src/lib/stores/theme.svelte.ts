@@ -22,6 +22,7 @@ import {
   resolveCalendarTokens,
   APP_TOKEN_KEYS,
   CALENDAR_TOKEN_KEYS,
+  THEME_TOKEN_ROW_ORDER,
   BASE_APP_TOKENS,
   BASE_CALENDAR_TOKENS,
 } from "./themes";
@@ -184,57 +185,64 @@ async function migrateVaultThemesIfPresent(): Promise<void> {
   await flushConfig();
 }
 
+type TokenWrite = UserThemeWrite["tokens"][number];
+
+function orderedTokenRows(
+  sources: ThemeSources,
+  appTokens: Readonly<Record<string, string>>,
+  calendarTokens: Readonly<Record<string, string>>,
+  appIsolated: ReadonlySet<string>,
+  calendarIsolated: ReadonlySet<string>,
+): TokenWrite[] {
+  const rows: TokenWrite[] = [];
+  for (const entry of THEME_TOKEN_ROW_ORDER) {
+    if (entry.kind === "source") {
+      rows.push({
+        kind: "source",
+        key: entry.key,
+        value: sources[entry.key],
+        isolated: false,
+      });
+      continue;
+    }
+    if (entry.kind === "app") {
+      rows.push({
+        kind: "app",
+        key: entry.key,
+        value: appTokens[entry.key],
+        isolated: appIsolated.has(entry.key),
+      });
+      continue;
+    }
+    rows.push({
+      kind: "calendar",
+      key: entry.key,
+      value: calendarTokens[entry.key],
+      isolated: calendarIsolated.has(entry.key),
+    });
+  }
+  return rows;
+}
+
 /**
  * Shape a {@link UserTheme} into the row groups the DB layer expects.
  */
 function userThemeToWrite(theme: UserTheme): UserThemeWrite {
-  type TokenWrite = {
-    kind: TokenKind;
-    key: string;
-    value: string;
-    isolated: boolean;
-  };
-  const tokens: TokenWrite[] = [];
-  for (const [key, value] of Object.entries(theme.sources)) {
-    tokens.push({ kind: "source", key, value, isolated: false });
-  }
-  for (const key of APP_TOKEN_KEYS) {
-    tokens.push({
-      kind: "app",
-      key,
-      value: theme.appTokens[key],
-      isolated: theme.appIsolated.has(key),
-    });
-  }
-  for (const key of CALENDAR_TOKEN_KEYS) {
-    tokens.push({
-      kind: "calendar",
-      key,
-      value: theme.calendarTokens[key],
-      isolated: theme.calendarIsolated.has(key),
-    });
-  }
+  const tokens = orderedTokenRows(
+    theme.sources,
+    theme.appTokens,
+    theme.calendarTokens,
+    theme.appIsolated,
+    theme.calendarIsolated,
+  );
   const palette = theme.eventPalette.map((value, slot) => ({ slot, value }));
-  const seedTokens: TokenWrite[] = [];
-  for (const [key, value] of Object.entries(theme.seedSources)) {
-    seedTokens.push({ kind: "source", key, value, isolated: false });
-  }
-  for (const key of APP_TOKEN_KEYS) {
-    seedTokens.push({
-      kind: "app",
-      key,
-      value: theme.seedAppTokens[key],
-      isolated: theme.seedAppIsolated.has(key),
-    });
-  }
-  for (const key of CALENDAR_TOKEN_KEYS) {
-    seedTokens.push({
-      kind: "calendar",
-      key,
-      value: theme.seedCalendarTokens[key],
-      isolated: theme.seedCalendarIsolated.has(key),
-    });
-  }
+  const seedTokens = orderedTokenRows(
+    theme.seedSources,
+    theme.seedAppTokens,
+    theme.seedCalendarTokens,
+    theme.seedAppIsolated,
+    theme.seedCalendarIsolated,
+  );
   const seedPalette = theme.seedEventPalette.map((value, slot) => ({
     slot,
     value,

@@ -631,15 +631,21 @@ describe("serializeTheme round-trip", () => {
       "id",
       "displayName",
       "iconLabel",
-      "blendCanvas",
       "derivationEngineVersion",
       "sources",
       "appTokens",
       "calendarTokens",
+      "eventPalette",
+      "blendCanvas",
       "appIsolated",
       "calendarIsolated",
-      "eventPalette",
     ]);
+    expect(Object.keys(parsed.appTokens as Record<string, unknown>)).toEqual(
+      APP_TOKEN_KEYS,
+    );
+    expect(Object.keys(parsed.calendarTokens as Record<string, unknown>)).toEqual(
+      CALENDAR_TOKEN_KEYS,
+    );
   });
 
   it("does not emit seeds in the export", () => {
