@@ -1,12 +1,9 @@
 <script lang="ts">
   import type { CalendarViewMode } from "./types";
   import {
+    formatDatePart,
     formatMonthYear,
-    getMonthGrid,
-    getWeekDays,
     isToday,
-    isSameDay,
-    isPastDay,
   } from "./utils";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { onMount } from "svelte";
@@ -20,6 +17,7 @@
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
+  import MiniDatePicker from "./MiniDatePicker.svelte";
 
   const calendarsStore = getCalendars();
   const settingsLauncher = getSettingsLauncher();
@@ -30,20 +28,6 @@
 
   // Mini calendar popover state
   let showMiniCalendar = $state(false);
-
-  // Picker drill-down: days (default) -> months -> years
-  type PickerMode = "days" | "months" | "years";
-  let pickerMode: PickerMode = $state("days");
-  let pickerYear = $state(new Date().getFullYear());
-  let yearPageStart = $state(new Date().getFullYear() - 4);
-
-  const shortMonths = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const yearPageYears = $derived(
-    Array.from({ length: 12 }, (_, i) => yearPageStart + i),
-  );
 
   let {
     anchorDate,
@@ -116,128 +100,37 @@
   });
 
   const isOnToday = $derived(isToday(anchorDate));
-
-  // Mini calendar state (independent month navigation)
-  let miniDate = $state(new Date());
-
-  // Sync mini calendar when anchorDate changes month
-  $effect(() => {
-    const a = anchorDate;
-    if (
-      miniDate.getFullYear() !== a.getFullYear() ||
-      miniDate.getMonth() !== a.getMonth()
-    ) {
-      miniDate = new Date(a);
-    }
-  });
-
-  const miniMonth = $derived(miniDate.getMonth());
-  const miniYear = $derived(miniDate.getFullYear());
-  const miniWeeks = $derived(getMonthGrid(miniYear, miniMonth));
-  const miniLabel = $derived(formatMonthYear(miniDate));
-
-  // Reset picker to days when anchorDate changes (navigation or selection),
-  // unless the change came from scrolling within the picker itself.
-  let skipPickerReset = false;
-  $effect(() => {
-    anchorDate;
-    if (skipPickerReset) {
-      skipPickerReset = false;
-      return;
-    }
-    pickerMode = "days";
-  });
+  const anchorDateStr = $derived(formatDatePart(anchorDate));
+  const pickerHighlightMode = $derived(
+    viewMode === "day" ? "day" : viewMode === "week" ? "week" : "none",
+  );
 
   function handleHeaderClick() {
-    if (!showMiniCalendar) {
-      showMiniCalendar = true;
-      return;
-    }
-    // Drill-down within the open popover
-    if (pickerMode === "days") {
-      pickerYear = anchorDate.getFullYear();
-      pickerMode = "months";
-    } else if (pickerMode === "months") {
-      yearPageStart = pickerYear - 4;
-      pickerMode = "years";
-    } else {
-      pickerMode = "days";
-    }
+    showMiniCalendar = !showMiniCalendar;
   }
 
   function closeMiniCalendar() {
     showMiniCalendar = false;
-    pickerMode = "days";
   }
 
-  function selectMonth(monthIndex: number) {
-    const d = new Date(pickerYear, monthIndex, 1);
-    onDaySelect(d);
-    closeMiniCalendar();
-  }
-
-  function selectYear(year: number) {
-    pickerYear = year;
-    pickerMode = "months";
-  }
-
-  // Current viewed week days (for week view highlight)
-  const anchorWeekDays = $derived(getWeekDays(anchorDate));
-
-  function isInAnchorWeek(day: Date): boolean {
-    return anchorWeekDays.some((wd) => isSameDay(wd, day));
-  }
-
-  const dayLetters = ["M", "T", "W", "T", "F", "S", "S"];
-
-  // Wheel navigation on mini calendar popover
+  // Wheel navigation on the header row mirrors the arrow controls.
   let wheelCooldown = false;
 
-  function handlePickerWheel(e: WheelEvent) {
+  function handleToolbarWheel(e: WheelEvent) {
     e.preventDefault();
     if (wheelCooldown) return;
     if (Math.abs(e.deltaY) < 5) return;
     wheelCooldown = true;
 
     const delta = e.deltaY > 0 ? 1 : -1;
-
-    if (pickerMode === "days") {
-      if (showMiniCalendar) {
-        // Browse months inside the popover without changing main view
-        const d = new Date(miniDate);
-        d.setMonth(d.getMonth() + delta);
-        miniDate = d;
-      } else {
-        onNavigate(delta > 0 ? "forward" : "back");
-      }
-    } else if (pickerMode === "months") {
-      const d = new Date(anchorDate);
-      d.setMonth(d.getMonth() + delta);
-      d.setDate(1);
-      pickerYear = d.getFullYear();
-      skipPickerReset = true;
-      onDaySelect(d);
-    } else {
-      yearPageStart += delta * 12;
-    }
+    onNavigate(delta > 0 ? "forward" : "back");
 
     setTimeout(() => { wheelCooldown = false; }, 300);
   }
 
-  function miniPrev() {
-    const d = new Date(miniDate);
-    d.setMonth(d.getMonth() - 1);
-    miniDate = d;
-  }
-
-  function miniNext() {
-    const d = new Date(miniDate);
-    d.setMonth(d.getMonth() + 1);
-    miniDate = d;
-  }
-
-  function selectDay(date: Date) {
-    onDaySelect(date);
+  function selectPickerDay(dateStr: string) {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    onDaySelect(new Date(year, month - 1, day));
     closeMiniCalendar();
   }
 </script>
@@ -247,7 +140,7 @@
 <div
   class="flex shrink-0 items-center gap-1 px-3"
   style="height: var(--cal-header-row-h); background-color: var(--cal-header-bg); border-bottom: 1px solid var(--sidebar);"
-  onwheel={handlePickerWheel}
+  onwheel={handleToolbarWheel}
 >
   <!-- Back arrow -->
   <button
@@ -264,11 +157,7 @@
       onclick={handleHeaderClick}
       class="flex h-7 items-center rounded-md px-1.5 text-sm font-semibold leading-none text-foreground transition-colors {showMiniCalendar ? 'bg-accent' : 'hover:bg-accent'}"
     >
-      {#if pickerMode === "days" || !showMiniCalendar}
-        {formatMonthYear(anchorDate)}
-      {:else}
-        {pickerYear}
-      {/if}
+      {formatMonthYear(anchorDate)}
     </button>
 
     {#if showMiniCalendar}
@@ -279,127 +168,12 @@
       <div
         class="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg"
         style="--foreground: var(--card-foreground);"
-        onwheel={handlePickerWheel}
       >
-        {#if pickerMode === "days"}
-          <!-- Popover header with month navigation -->
-          <div class="mb-1 flex items-center justify-between">
-            <button
-              onclick={miniPrev}
-              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <button
-              onclick={() => { pickerYear = miniYear; pickerMode = "months"; }}
-              class="rounded-md px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-accent"
-            >
-              {miniLabel}
-            </button>
-            <button
-              onclick={miniNext}
-              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-
-          <!-- Day letters -->
-          <div class="grid grid-cols-7 gap-x-0 text-center">
-            {#each dayLetters as letter}
-              <span class="py-1 text-xs text-muted-foreground">{letter}</span>
-            {/each}
-          </div>
-
-          <!-- Date grid -->
-          {#each miniWeeks as week}
-            <div class="grid grid-cols-7 gap-x-0 text-center">
-              {#each week as day}
-                {@const inMonth = day.getMonth() === miniMonth}
-                {@const today = isToday(day)}
-                {@const selected = viewMode === "day" && isSameDay(day, anchorDate)}
-                {@const inWeek = viewMode === "week" && isInAnchorWeek(day)}
-                {@const past = isPastDay(day)}
-                <button
-                  onclick={() => selectDay(day)}
-                  class="flex h-6 w-full items-center justify-center rounded-sm text-xs hover:bg-accent"
-                  style={today
-                    ? "background-color: var(--cal-today-circle); color: var(--cal-today-circle-text); font-weight: 700;"
-                    : selected
-                      ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-                      : inWeek
-                        ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
-                        : !inMonth
-                          ? "color: color-mix(in srgb, var(--foreground) 25%, var(--background));"
-                          : past
-                            ? "color: color-mix(in srgb, var(--foreground) 45%, var(--background));"
-                            : "color: var(--foreground);"}
-                >
-                  {day.getDate()}
-                </button>
-              {/each}
-            </div>
-          {/each}
-
-        {:else if pickerMode === "months"}
-          <!-- Month grid header -->
-          <div class="mb-1 flex items-center justify-center">
-            <button
-              onclick={() => { yearPageStart = pickerYear - 4; pickerMode = "years"; }}
-              class="rounded-md px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-accent"
-            >
-              {pickerYear}
-            </button>
-          </div>
-          <!-- Month grid (4 rows x 3 cols) -->
-          <div class="grid grid-cols-3 gap-1 py-1">
-            {#each shortMonths as name, i}
-              {@const isAnchor = pickerYear === anchorDate.getFullYear() && i === anchorDate.getMonth()}
-              <button
-                onclick={() => selectMonth(i)}
-                class="rounded-sm py-2 text-center text-xs font-medium {isAnchor
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'text-foreground hover:bg-accent'}"
-              >
-                {name}
-              </button>
-            {/each}
-          </div>
-
-        {:else}
-          <!-- Year grid header -->
-          <div class="mb-1 flex items-center justify-between">
-            <button
-              onclick={() => { yearPageStart -= 12; }}
-              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span class="text-xs font-semibold text-foreground">
-              {yearPageStart} - {yearPageStart + 11}
-            </span>
-            <button
-              onclick={() => { yearPageStart += 12; }}
-              class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-          <!-- Year grid (4 rows x 3 cols) -->
-          <div class="grid grid-cols-3 gap-1 py-1">
-            {#each yearPageYears as year}
-              {@const isAnchor = year === anchorDate.getFullYear()}
-              <button
-                onclick={() => selectYear(year)}
-                class="rounded-sm py-2 text-center text-xs font-medium {isAnchor
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'text-foreground hover:bg-accent'}"
-              >
-                {year}
-              </button>
-            {/each}
-          </div>
-        {/if}
+        <MiniDatePicker
+          selectedDate={anchorDateStr}
+          highlightMode={pickerHighlightMode}
+          onselect={selectPickerDay}
+        />
       </div>
     {/if}
   </div>

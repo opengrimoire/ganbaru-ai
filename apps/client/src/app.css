@@ -275,8 +275,6 @@
   --cal-bg: #FFFFFF;
   --cal-header-bg: #F4F4F7;
   --cal-gridline: #DDDDE3;
-  --cal-today-circle: #38383F;
-  --cal-today-circle-text: #FFFFFF;
   --cal-time-label: #646470;
   --cal-current-time: #B83A3A;
   --cal-hover: rgba(0, 0, 20, 0.04);
@@ -290,8 +288,6 @@
   --cal-bg: #131314;
   --cal-header-bg: #27282A;
   --cal-gridline: #333537;
-  --cal-today-circle: #A4C4F7;
-  --cal-today-circle-text: #0A1929;
   --cal-time-label: #9494A0;
   --cal-current-time: #B83A3A;
   --cal-hover: rgba(255, 255, 255, 0.04);

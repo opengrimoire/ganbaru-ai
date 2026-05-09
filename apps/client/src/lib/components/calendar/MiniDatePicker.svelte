@@ -1,29 +1,61 @@
 <script lang="ts">
-  import { type CalDay, buildCalendarGrid, SHORT_MONTHS, DAY_LETTERS } from "./event-panel-utils";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import {
+    type DatePickerDay,
+    buildCalendarGrid,
+    SHORT_MONTHS,
+    DAY_LETTERS,
+  } from "./date-picker-utils";
 
   let {
     selectedDate,
     minDate,
     small = false,
+    highlightMode = "day",
     onselect,
   }: {
     selectedDate: string;
     minDate?: string;
     small?: boolean;
+    highlightMode?: "day" | "week" | "none";
     onselect: (dateStr: string) => void;
   } = $props();
 
   type PickerMode = "days" | "months" | "years";
 
-  // svelte-ignore state_referenced_locally (component remounts per use, initial-only capture is correct)
-  const initParts = selectedDate ? selectedDate.split("-").map(Number) : [];
-  const initYear = initParts[0] || new Date().getFullYear();
-  const initMonth = initParts[1] || new Date().getMonth() + 1;
+  function parseDateParts(dateStr: string): { year: number; month: number; day: number } | undefined {
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) return undefined;
+    const [year, month, day] = parts;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+    return { year, month, day };
+  }
+
+  function formatDateStr(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  function selectedDateParts(): { year: number; month: number; day: number } {
+    const parsed = parseDateParts(selectedDate);
+    if (parsed) return parsed;
+    const today = new Date();
+    return {
+      year: today.getFullYear(),
+      month: today.getMonth() + 1,
+      day: today.getDate(),
+    };
+  }
+
+  const initParts = selectedDateParts();
+  const initYear = initParts.year;
+  const initMonth = initParts.month;
 
   let year = $state(initYear);
   let month = $state(initMonth);
   let pickerMode: PickerMode = $state("days");
   let yearPageStart = $state(initYear - 4);
+  let previousSelectedDate = $state<string | undefined>();
   let wheelCooldown = false;
 
   const monthLabel = $derived(
@@ -36,6 +68,34 @@
   const todayStr = $derived.by(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
+
+  const selectedWeekRange = $derived.by(() => {
+    if (highlightMode !== "week") return undefined;
+    const parsed = parseDateParts(selectedDate);
+    if (!parsed) return undefined;
+    const selected = new Date(parsed.year, parsed.month - 1, parsed.day);
+    const mondayOffset = selected.getDay() === 0 ? -6 : 1 - selected.getDay();
+    const start = new Date(selected);
+    start.setDate(selected.getDate() + mondayOffset);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return { start: formatDateStr(start), end: formatDateStr(end) };
+  });
+
+  $effect(() => {
+    if (previousSelectedDate === undefined) {
+      previousSelectedDate = selectedDate;
+      return;
+    }
+    if (selectedDate === previousSelectedDate) return;
+    previousSelectedDate = selectedDate;
+    const parsed = parseDateParts(selectedDate);
+    if (!parsed) return;
+    year = parsed.year;
+    month = parsed.month;
+    yearPageStart = parsed.year - 4;
+    pickerMode = "days";
   });
 
   function prevMonth() {
@@ -56,6 +116,7 @@
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
+    e.stopPropagation();
     if (wheelCooldown) return;
     if (Math.abs(e.deltaY) < 5) return;
     wheelCooldown = true;
@@ -74,7 +135,17 @@
     setTimeout(() => { wheelCooldown = false; }, 300);
   }
 
-  function selectDay(day: CalDay) {
+  function dayIsSelected(day: DatePickerDay): boolean {
+    return highlightMode === "day" && day.selected;
+  }
+
+  function dayIsInWeek(day: DatePickerDay): boolean {
+    return !!selectedWeekRange
+      && day.dateStr >= selectedWeekRange.start
+      && day.dateStr <= selectedWeekRange.end;
+  }
+
+  function selectDay(day: DatePickerDay) {
     if (minDate && day.dateStr < minDate) return;
     onselect(day.dateStr);
     const [y, m] = day.dateStr.split("-").map(Number);
@@ -94,15 +165,53 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="mb-1 flex items-center justify-center" onwheel={handleWheel}>
+<div class="mb-1 flex items-center justify-between" onwheel={handleWheel}>
+  {#if pickerMode === "days"}
+    <button
+      onclick={prevMonth}
+      class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      <ChevronLeft size={14} />
+    </button>
+  {:else if pickerMode === "years"}
+    <button
+      onclick={() => { yearPageStart -= 12; }}
+      class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      <ChevronLeft size={14} />
+    </button>
+  {:else}
+    <div class="h-6 w-6" aria-hidden="true"></div>
+  {/if}
+
   <button onclick={handleHeaderClick}
-    class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+    class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-accent">
     {#if pickerMode === "days"}
       {monthLabel}
-    {:else}
+    {:else if pickerMode === "months"}
       {year}
+    {:else}
+      {yearPageStart} - {yearPageStart + 11}
     {/if}
   </button>
+
+  {#if pickerMode === "days"}
+    <button
+      onclick={nextMonth}
+      class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      <ChevronRight size={14} />
+    </button>
+  {:else if pickerMode === "years"}
+    <button
+      onclick={() => { yearPageStart += 12; }}
+      class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      <ChevronRight size={14} />
+    </button>
+  {:else}
+    <div class="h-6 w-6" aria-hidden="true"></div>
+  {/if}
 </div>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -119,11 +228,13 @@
         {@const past = day.currentMonth && day.dateStr < todayStr}
         <button onclick={() => selectDay(day)}
           class="flex h-6 w-full items-center justify-center rounded-sm {textSize}
-            {belowMin ? 'cursor-not-allowed' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-          style={day.selected
-            ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
-            : day.today
-              ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
+            {belowMin ? 'cursor-not-allowed' : 'hover:bg-accent'}"
+          style={day.today
+            ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
+            : dayIsSelected(day)
+              ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+            : dayIsInWeek(day)
+              ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
               : belowMin
                 ? "color: color-mix(in srgb, var(--foreground) 20%, var(--background));"
                 : !day.currentMonth
@@ -139,7 +250,7 @@
       {#each SHORT_MONTHS as name, i}
         <button onclick={() => selectMonth(i)}
           class="rounded-sm py-2 text-center {textSize} font-medium
-            {i + 1 === month ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
+            {i + 1 === month ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-foreground hover:bg-accent'}">
           {name}
         </button>
       {/each}
@@ -149,7 +260,7 @@
       {#each yearPageYears as y}
         <button onclick={() => selectYear(y)}
           class="rounded-sm py-2 text-center {textSize} font-medium
-            {y === year ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
+            {y === year ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-foreground hover:bg-accent'}">
           {y}
         </button>
       {/each}

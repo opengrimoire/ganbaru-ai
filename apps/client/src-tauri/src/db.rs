@@ -371,5 +371,28 @@ pub fn migrations() -> Vec<Migration> {
               );
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 10,
+        description: "remove obsolete calendar today marker theme rows",
+        // Date picker today chips now use the primary action colors. The
+        // old calendar-specific rows are no longer painted or editable, so
+        // existing user themes should not keep stale token data.
+        sql: "
+            DELETE FROM theme_tokens
+            WHERE kind = 'calendar'
+              AND key IN (
+                '--cal-today-circle',
+                '--cal-today-circle-text'
+              );
+
+            DELETE FROM theme_seed_tokens
+            WHERE kind = 'calendar'
+              AND key IN (
+                '--cal-today-circle',
+                '--cal-today-circle-text'
+              );
+        ",
+        kind: MigrationKind::Up,
     }]
 }

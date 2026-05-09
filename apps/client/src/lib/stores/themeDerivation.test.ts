@@ -424,12 +424,9 @@ describe("deriveCalendarTokens", () => {
     expect(derived["--cal-time-label"]).toBeDefined();
     expect(derived["--cal-timeline-rail"]).toBeDefined();
     expect(derived["--cal-timeline-break"]).toBeDefined();
-    // today-circle (hand-tuned blue on dark, dark-gray on light),
     // current-time (red "now" line) and timeline-focus (green pomodoro
     // marker) carry hard-coded semantic meaning and stay undefined in
     // the derivation so the base CSS defaults win.
-    expect(derived["--cal-today-circle"]).toBeUndefined();
-    expect(derived["--cal-today-circle-text"]).toBeUndefined();
     expect(derived["--cal-current-time"]).toBeUndefined();
     expect(derived["--cal-timeline-focus"]).toBeUndefined();
   });

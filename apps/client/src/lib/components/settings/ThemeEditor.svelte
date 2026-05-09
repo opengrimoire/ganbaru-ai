@@ -312,15 +312,6 @@
       title: "Calendar details",
       description: "Semantic markers and accents on the calendar grid",
       rows: [
-        {
-          kind: "pair",
-          bg: "--cal-today-circle",
-          fg: "--cal-today-circle-text",
-          title: "Today marker",
-          description:
-            "Filled circle around today's date and the number inside",
-          scope: "cal",
-        },
         { kind: "single", key: "--cal-current-time", scope: "cal" },
         { kind: "single", key: "--cal-timeline-break", scope: "cal" },
         { kind: "single", key: "--cal-timeline-focus", scope: "cal" },
