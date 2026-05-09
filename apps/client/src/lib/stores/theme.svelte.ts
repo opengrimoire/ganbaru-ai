@@ -10,7 +10,6 @@ import {
   computeThemeTokenOps,
   defaultIconLabelFromCanvas,
   deriveAppTokens,
-  deriveCalendarTokens,
   getThemeById,
   isBuiltinThemeId,
   isSemanticSignalAppToken,
@@ -28,6 +27,9 @@ import {
   THEME_TOKEN_ROW_ORDER,
   BASE_APP_TOKENS,
   BASE_CALENDAR_TOKENS,
+  DEFAULT_CALENDAR_DEFAULT_CUSTOM,
+  deriveCalendarColorDefaultBundle,
+  type CalendarColorDefaultMode,
 } from "./themes";
 import {
   cloneTheme,
@@ -263,6 +265,10 @@ function userThemeToWrite(theme: UserTheme): UserThemeWrite {
     blendCanvas: theme.blendCanvas,
     seedBlendCanvas: theme.seedBlendCanvas,
     derivationEngineVersion: theme.derivationEngineVersion,
+    calendarDefaultMode: theme.calendarDefaultMode,
+    calendarDefaultCustom: theme.calendarDefaultCustom,
+    seedCalendarDefaultMode: theme.seedCalendarDefaultMode,
+    seedCalendarDefaultCustom: theme.seedCalendarDefaultCustom,
     tokens,
     palette,
     seedTokens,
@@ -344,6 +350,20 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
     read.theme.seed_icon_label === "dark"
       ? read.theme.seed_icon_label
       : seedFallbackBase;
+  const calendarDefaultMode = calendarDefaultModeFromRow(
+    read.theme.calendar_default_mode,
+  );
+  const seedCalendarDefaultMode = calendarDefaultModeFromRow(
+    read.theme.seed_calendar_default_mode,
+  );
+  const calendarDefaultCustom = calendarDefaultCustomFromRow(
+    read.theme.calendar_default_custom,
+    sources.canvas,
+  );
+  const seedCalendarDefaultCustom = calendarDefaultCustomFromRow(
+    read.theme.seed_calendar_default_custom,
+    seedSources.canvas,
+  );
   return {
     kind: "user",
     id: read.theme.id,
@@ -352,6 +372,8 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
     blendCanvas: read.theme.blend_canvas,
     eventPalette,
     derivationEngineVersion: read.theme.derivation_engine_version,
+    calendarDefaultMode,
+    calendarDefaultCustom,
     sources,
     appTokens,
     calendarTokens,
@@ -364,6 +386,8 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
     seedCalendarIsolated,
     seedEventPalette,
     seedBlendCanvas: read.theme.seed_blend_canvas,
+    seedCalendarDefaultMode,
+    seedCalendarDefaultCustom,
     seedIconLabel,
   };
 }
@@ -429,6 +453,24 @@ function paletteFromRows(
     if (r.slot >= 0 && r.slot < PALETTE_SIZE) out[r.slot] = r.value;
   }
   return out;
+}
+
+function calendarDefaultModeFromRow(value: string): CalendarColorDefaultMode {
+  if (
+    value === "light" ||
+    value === "dark" ||
+    value === "app-canvas" ||
+    value === "custom"
+  ) {
+    return value;
+  }
+  return "app-canvas";
+}
+
+function calendarDefaultCustomFromRow(value: string, fallback: string): string {
+  if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value)) return value;
+  if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(fallback)) return fallback;
+  return DEFAULT_CALENDAR_DEFAULT_CUSTOM;
 }
 
 function setTheme(id: ThemeId): void {
@@ -591,7 +633,12 @@ function updateSourceValue(
   if (!current) return false;
   const nextSources: ThemeSources = { ...current.sources, [sourceKey]: value };
   const derivedApp = deriveAppTokens(nextSources);
-  const derivedCal = deriveCalendarTokens(nextSources);
+  const calendarBundle = deriveCalendarColorDefaultBundle(
+    nextSources,
+    current.calendarDefaultMode,
+    current.calendarDefaultCustom,
+  );
+  const derivedCal = calendarBundle.calendarTokens;
   const nextAppIsolated = normalizeSemanticSignalAppIsolated(
     current.appIsolated,
   );
@@ -662,11 +709,17 @@ function relinkToken(
   const derived =
     kind === "app"
       ? deriveAppTokens(current.sources)
-      : deriveCalendarTokens(current.sources);
+      : deriveCalendarColorDefaultBundle(
+          current.sources,
+          current.calendarDefaultMode,
+          current.calendarDefaultCustom,
+        ).calendarTokens;
   const fallbackBase = defaultIconLabelFromCanvas(current.sources.canvas);
   const baseTokens =
     kind === "app" ? BASE_APP_TOKENS[fallbackBase] : BASE_CALENDAR_TOKENS[fallbackBase];
-  const nextValue = derived[key] ?? baseTokens[key];
+  const derivedTokens = derived as Readonly<Record<string, string>>;
+  const nextValue =
+    derivedTokens[key] ?? (baseTokens as Readonly<Record<string, string>>)[key];
   const nextSet = new Set(set);
   nextSet.delete(key);
   const nextSnapshot =
@@ -756,6 +809,8 @@ function resetTokenToSeed(
       : new Set(current.calendarIsolated);
   if (nextIsolatedFlag) liveIsolatedSet.add(key);
   else liveIsolatedSet.delete(key);
+  const nextBlendCanvas =
+    kind === "calendar" && key === "--cal-bg" ? nextValue : current.blendCanvas;
   customThemes[id] = {
     ...current,
     appTokens: kind === "app" ? liveSnapshot : current.appTokens,
@@ -764,6 +819,7 @@ function resetTokenToSeed(
     appIsolated: kind === "app" ? liveIsolatedSet : current.appIsolated,
     calendarIsolated:
       kind === "calendar" ? liveIsolatedSet : current.calendarIsolated,
+    blendCanvas: nextBlendCanvas,
   };
   if (id === activeId) applyThemeToDom();
   return true;
@@ -813,6 +869,10 @@ function canResetThemeToSeed(id: ThemeId): boolean {
     if (current.eventPalette[i] !== current.seedEventPalette[i]) return true;
   }
   if (current.blendCanvas !== current.seedBlendCanvas) return true;
+  if (current.calendarDefaultMode !== current.seedCalendarDefaultMode) return true;
+  if (current.calendarDefaultCustom !== current.seedCalendarDefaultCustom) {
+    return true;
+  }
   if (current.iconLabel !== current.seedIconLabel) return true;
   return false;
 }
@@ -836,6 +896,8 @@ function resetThemeToSeed(id: ThemeId): boolean {
     calendarIsolated: new Set(current.seedCalendarIsolated),
     eventPalette: [...current.seedEventPalette],
     blendCanvas: current.seedBlendCanvas,
+    calendarDefaultMode: current.seedCalendarDefaultMode,
+    calendarDefaultCustom: current.seedCalendarDefaultCustom,
     iconLabel: current.seedIconLabel,
   };
   if (id === activeId) applyThemeToDom();
@@ -854,6 +916,53 @@ function setThemeIconLabel(id: ThemeId, iconLabel: "light" | "dark"): boolean {
   if (current.iconLabel === iconLabel) return false;
   customThemes[id] = { ...current, iconLabel };
   return true;
+}
+
+function applyCalendarDefault(
+  id: ThemeId,
+  mode: CalendarColorDefaultMode,
+  customBasis?: string,
+): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  const nextCustomBasis = customBasis ?? current.calendarDefaultCustom;
+  const bundle = deriveCalendarColorDefaultBundle(
+    current.sources,
+    mode,
+    nextCustomBasis,
+  );
+  const nextCalendarIsolated = new Set(current.calendarIsolated);
+  for (const key of CALENDAR_TOKEN_KEYS) nextCalendarIsolated.delete(key);
+  customThemes[id] = {
+    ...current,
+    calendarDefaultMode: mode,
+    calendarDefaultCustom: nextCustomBasis,
+    calendarTokens: { ...current.calendarTokens, ...bundle.calendarTokens },
+    calendarIsolated: nextCalendarIsolated,
+    eventPalette: [...bundle.eventPalette],
+    blendCanvas: bundle.blendCanvas,
+  };
+  if (id === activeId) applyThemeToDom();
+  return true;
+}
+
+function canResetCalendarDefault(id: ThemeId): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  return (
+    current.calendarDefaultMode !== current.seedCalendarDefaultMode ||
+    current.calendarDefaultCustom !== current.seedCalendarDefaultCustom
+  );
+}
+
+function resetCalendarDefaultToSeed(id: ThemeId): boolean {
+  const current = customThemes[id];
+  if (!current) return false;
+  return applyCalendarDefault(
+    id,
+    current.seedCalendarDefaultMode,
+    current.seedCalendarDefaultCustom,
+  );
 }
 
 function setPaletteSlot(id: ThemeId, slot: number, value: string): boolean {
@@ -890,27 +999,40 @@ function applyPreset(id: ThemeId, preset: ThemePreset): boolean {
   if (!current) return false;
   const sources: ThemeSources = { ...preset.sources };
   const derivedApp = deriveAppTokens(sources);
-  const derivedCal = deriveCalendarTokens(sources);
+  const calendarDefaultCustom = sources.canvas;
+  const calendarBundle = deriveCalendarColorDefaultBundle(
+    sources,
+    "app-canvas",
+    calendarDefaultCustom,
+  );
   const appTokens: Record<string, string> = { ...BASE_APP_TOKENS[preset.base] };
   for (const [k, v] of Object.entries(derivedApp)) appTokens[k] = v;
   const calTokens: Record<string, string> = {
     ...BASE_CALENDAR_TOKENS[preset.base],
   };
-  for (const [k, v] of Object.entries(derivedCal)) calTokens[k] = v;
+  for (const [k, v] of Object.entries(calendarBundle.calendarTokens)) {
+    calTokens[k] = v;
+  }
   const next: UserTheme = {
     ...current,
     sources,
     appTokens,
     calendarTokens: calTokens,
+    calendarDefaultMode: "app-canvas",
+    calendarDefaultCustom,
     appIsolated: new Set(),
     calendarIsolated: new Set(),
-    blendCanvas: derivedCal["--cal-bg"] ?? appTokens["--background"],
+    eventPalette: [...calendarBundle.eventPalette],
+    blendCanvas: calendarBundle.blendCanvas,
     seedSources: { ...sources },
     seedAppTokens: { ...appTokens },
     seedCalendarTokens: { ...calTokens },
+    seedCalendarDefaultMode: "app-canvas",
+    seedCalendarDefaultCustom: calendarDefaultCustom,
     seedAppIsolated: new Set(),
     seedCalendarIsolated: new Set(),
-    seedBlendCanvas: derivedCal["--cal-bg"] ?? appTokens["--background"],
+    seedEventPalette: [...calendarBundle.eventPalette],
+    seedBlendCanvas: calendarBundle.blendCanvas,
   };
   customThemes[id] = next;
   if (id === activeId) applyThemeToDom();
@@ -926,7 +1048,11 @@ function rebakeTheme(id: ThemeId): boolean {
   const current = customThemes[id];
   if (!current) return false;
   const derivedApp = deriveAppTokens(current.sources);
-  const derivedCal = deriveCalendarTokens(current.sources);
+  const derivedCal = deriveCalendarColorDefaultBundle(
+    current.sources,
+    current.calendarDefaultMode,
+    current.calendarDefaultCustom,
+  ).calendarTokens;
   const nextAppIsolated = normalizeSemanticSignalAppIsolated(
     current.appIsolated,
   );
@@ -1109,6 +1235,9 @@ export function getTheme() {
     canResetThemeToSeed,
     resetThemeToSeed,
     setThemeIconLabel,
+    applyCalendarDefault,
+    canResetCalendarDefault,
+    resetCalendarDefaultToSeed,
     setPaletteSlot,
     setBlendCanvas,
     applyPreset,

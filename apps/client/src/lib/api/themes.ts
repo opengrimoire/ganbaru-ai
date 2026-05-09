@@ -51,6 +51,10 @@ export interface ThemeRow {
   blend_canvas: string;
   seed_blend_canvas: string;
   derivation_engine_version: number;
+  calendar_default_mode: string;
+  calendar_default_custom: string;
+  seed_calendar_default_mode: string;
+  seed_calendar_default_custom: string;
   /**
    * Decorative sun/moon tag for the theme list and editor icon. Nullable
    * because rows created before migration v5 do not carry it; the hydrate
@@ -82,6 +86,10 @@ export interface UserThemeWrite {
   blendCanvas: string;
   seedBlendCanvas: string;
   derivationEngineVersion: number;
+  calendarDefaultMode: string;
+  calendarDefaultCustom: string;
+  seedCalendarDefaultMode: string;
+  seedCalendarDefaultCustom: string;
   tokens: ReadonlyArray<{
     kind: TokenKind;
     key: string;
@@ -159,8 +167,10 @@ export async function insertTheme(write: UserThemeWrite): Promise<void> {
     await execute(
       `INSERT INTO themes
         (id, display_name, icon_label, seed_icon_label, blend_canvas,
-         seed_blend_canvas, derivation_engine_version, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+         seed_blend_canvas, derivation_engine_version, calendar_default_mode,
+         calendar_default_custom, seed_calendar_default_mode,
+         seed_calendar_default_custom, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
       [
         write.id,
         write.displayName,
@@ -169,6 +179,10 @@ export async function insertTheme(write: UserThemeWrite): Promise<void> {
         write.blendCanvas,
         write.seedBlendCanvas,
         write.derivationEngineVersion,
+        write.calendarDefaultMode,
+        write.calendarDefaultCustom,
+        write.seedCalendarDefaultMode,
+        write.seedCalendarDefaultCustom,
         now,
       ],
     );
@@ -234,8 +248,12 @@ export async function replaceThemeContent(write: UserThemeWrite): Promise<void> 
             blend_canvas = $4,
             seed_blend_canvas = $5,
             derivation_engine_version = $6,
-            updated_at = $7
-      WHERE id = $8`,
+            calendar_default_mode = $7,
+            calendar_default_custom = $8,
+            seed_calendar_default_mode = $9,
+            seed_calendar_default_custom = $10,
+            updated_at = $11
+      WHERE id = $12`,
     [
       write.displayName,
       write.iconLabel,
@@ -243,6 +261,10 @@ export async function replaceThemeContent(write: UserThemeWrite): Promise<void> 
       write.blendCanvas,
       write.seedBlendCanvas,
       write.derivationEngineVersion,
+      write.calendarDefaultMode,
+      write.calendarDefaultCustom,
+      write.seedCalendarDefaultMode,
+      write.seedCalendarDefaultCustom,
       now,
       write.id,
     ],
@@ -524,7 +546,10 @@ export async function resetThemeToSeed(id: string): Promise<void> {
   );
   await execute(
     `UPDATE themes
-       SET blend_canvas = seed_blend_canvas, updated_at = $1
+       SET blend_canvas = seed_blend_canvas,
+           calendar_default_mode = seed_calendar_default_mode,
+           calendar_default_custom = seed_calendar_default_custom,
+           updated_at = $1
      WHERE id = $2`,
     [Date.now(), id],
   );

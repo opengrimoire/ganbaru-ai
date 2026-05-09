@@ -78,6 +78,9 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
     eventPalette,
     derivationEngineVersion:
       overrides.derivationEngineVersion ?? DERIVATION_ENGINE_VERSION,
+    calendarDefaultMode: overrides.calendarDefaultMode ?? "app-canvas",
+    calendarDefaultCustom:
+      overrides.calendarDefaultCustom ?? sources.canvas,
     sources,
     appTokens,
     calendarTokens,
@@ -95,6 +98,14 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
       overrides.seedEventPalette ?? [...eventPalette],
     seedBlendCanvas:
       overrides.seedBlendCanvas ?? overrides.blendCanvas ?? "#202020",
+    seedCalendarDefaultMode:
+      overrides.seedCalendarDefaultMode ??
+      overrides.calendarDefaultMode ??
+      "app-canvas",
+    seedCalendarDefaultCustom:
+      overrides.seedCalendarDefaultCustom ??
+      overrides.calendarDefaultCustom ??
+      sources.canvas,
     seedIconLabel: overrides.seedIconLabel ?? iconLabel,
   };
 }
@@ -123,6 +134,18 @@ function buildV1Input(overrides: Record<string, unknown> = {}): Record<string, u
     appIsolated: [],
     calendarIsolated: [],
     eventPalette: paletteOf("#abcdef"),
+    ...overrides,
+  };
+}
+
+function buildV2Input(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...buildV1Input(),
+    schemaVersion: 2,
+    calendarDefaults: {
+      mode: "custom",
+      customBasis: "#334455",
+    },
     ...overrides,
   };
 }
@@ -235,12 +258,36 @@ describe("computeThemeTokenOps", () => {
     expect(result.toSet.get("--primary")).toBe("#abc");
     expect(result.toSet.get("--background")).toBe("#fff");
     expect(result.toSet.get("--cal-bg")).toBe("#eee");
+    expect(result.toSet.get("--cal-scrollbar-thumb")).toBeDefined();
     expect(result.toClear.size).toBe(0);
     expect(result.toSet.has("--event-panel-edge")).toBe(true);
     expect(result.toSet.has("--pomodoro-idle-text")).toBe(false);
     // Every editable app and calendar key participates in the snapshot.
     expect(result.applied.has("--primary")).toBe(true);
     expect(result.applied.has("--cal-bg")).toBe(true);
+    expect(result.applied.has("--cal-scrollbar-thumb")).toBe(true);
+  });
+
+  it("uses curated scrollbar colors for light and dark calendar defaults", () => {
+    const lightDefault = makeUserTheme({
+      calendarDefaultMode: "light",
+      sources: SAMPLE_SOURCES_DARK,
+    });
+    const darkDefault = makeUserTheme({
+      calendarDefaultMode: "dark",
+      sources: SAMPLE_SOURCES_LIGHT,
+    });
+
+    expect(
+      computeThemeTokenOps(lightDefault, new Set()).toSet.get(
+        "--cal-scrollbar-thumb",
+      ),
+    ).toBe(BASE_APP_TOKENS.light["--muted"]);
+    expect(
+      computeThemeTokenOps(darkDefault, new Set()).toSet.get(
+        "--cal-scrollbar-thumb",
+      ),
+    ).toBe(BASE_APP_TOKENS.dark["--muted"]);
   });
 
   it("clears stale implementation tokens that user themes no longer paint", () => {
@@ -372,6 +419,36 @@ describe("generateThemeId", () => {
   });
 });
 
+describe("validateThemeJson v2 branch", () => {
+  it("accepts calendar defaults", () => {
+    const result = validateThemeJson(buildV2Input());
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.calendarDefaultMode).toBe("custom");
+      expect(result.theme.calendarDefaultCustom).toBe("#334455");
+      expect(result.theme.seedCalendarDefaultMode).toBe("custom");
+      expect(result.theme.seedCalendarDefaultCustom).toBe("#334455");
+    }
+  });
+
+  it("rejects invalid calendar defaults", () => {
+    const result = validateThemeJson(
+      buildV2Input({
+        calendarDefaults: { mode: "rainbow", customBasis: "blue" },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.errors.some((e) => e.includes("calendarDefaults.mode")),
+      ).toBe(true);
+      expect(
+        result.errors.some((e) => e.includes("calendarDefaults.customBasis")),
+      ).toBe(true);
+    }
+  });
+});
+
 describe("validateThemeJson v1 branch", () => {
   it("accepts a fully valid v1 theme", () => {
     const result = validateThemeJson(buildV1Input());
@@ -385,6 +462,8 @@ describe("validateThemeJson v1 branch", () => {
         DERIVATION_ENGINE_VERSION,
       );
       expect(result.theme.sources).toEqual(SAMPLE_SOURCES_DARK);
+      expect(result.theme.calendarDefaultMode).toBe("app-canvas");
+      expect(result.theme.calendarDefaultCustom).toBe(SAMPLE_SOURCES_DARK.canvas);
     }
   });
 
@@ -409,6 +488,30 @@ describe("validateThemeJson v1 branch", () => {
       expect(result.theme.appIsolated.has("--primary")).toBe(true);
       expect(result.theme.appIsolated.has("--card")).toBe(true);
       expect(result.theme.calendarIsolated.has("--cal-bg")).toBe(true);
+    }
+  });
+
+  it("moves a v1 calendar header snapshot into app tokens", () => {
+    const appTokens = { ...BASE_APP_TOKENS.dark };
+    delete appTokens["--cal-header-bg"];
+    const result = validateThemeJson(
+      buildV1Input({
+        appTokens,
+        calendarTokens: {
+          ...BASE_CALENDAR_TOKENS.dark,
+          "--cal-header-bg": "#123456",
+        },
+        calendarIsolated: ["--cal-header-bg"],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.appTokens["--cal-header-bg"]).toBe("#123456");
+      expect(result.theme.appIsolated.has("--cal-header-bg")).toBe(true);
+      expect(
+        Object.hasOwn(result.theme.calendarTokens, "--cal-header-bg"),
+      ).toBe(false);
+      expect(result.theme.calendarIsolated.has("--cal-header-bg")).toBe(false);
     }
   });
 
@@ -537,6 +640,23 @@ describe("validateThemeJson legacy branch", () => {
     }
   });
 
+  it("moves legacy calendar header overrides into app tokens", () => {
+    const result = validateThemeJson(
+      buildLegacyInput({
+        calendarTokenOverrides: { "--cal-header-bg": "#445566" },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.appTokens["--cal-header-bg"]).toBe("#445566");
+      expect(result.theme.appIsolated.has("--cal-header-bg")).toBe(true);
+      expect(
+        Object.hasOwn(result.theme.calendarTokens, "--cal-header-bg"),
+      ).toBe(false);
+      expect(result.theme.calendarIsolated.has("--cal-header-bg")).toBe(false);
+    }
+  });
+
   it("promotes legacy semantic token overrides into source pairs", () => {
     const result = validateThemeJson(
       buildLegacyInput({
@@ -637,12 +757,14 @@ describe("validateThemeJson rejection cases", () => {
 });
 
 describe("serializeTheme round-trip", () => {
-  it("survives validate(serialize(t)) for a v1 user theme", () => {
+  it("survives validate(serialize(t)) for a v2 user theme", () => {
     const original = makeUserTheme({
       id: "round-trip",
       displayName: "Round Trip",
       iconLabel: "light",
       blendCanvas: "#202020",
+      calendarDefaultMode: "custom",
+      calendarDefaultCustom: "#334455",
       sources: SAMPLE_SOURCES_DARK,
       appIsolated: new Set(["--primary"]),
       calendarIsolated: new Set(["--cal-bg"]),
@@ -659,18 +781,20 @@ describe("serializeTheme round-trip", () => {
         original.derivationEngineVersion,
       );
       expect(reparsed.theme.sources).toEqual(original.sources);
+      expect(reparsed.theme.calendarDefaultMode).toBe("custom");
+      expect(reparsed.theme.calendarDefaultCustom).toBe("#334455");
       expect(reparsed.theme.appIsolated.has("--primary")).toBe(true);
       expect(reparsed.theme.calendarIsolated.has("--cal-bg")).toBe(true);
     }
   });
 
-  it("emits user themes with schemaVersion: 1", () => {
+  it("emits user themes with schemaVersion: 2", () => {
     const theme = makeUserTheme();
     const parsed = JSON.parse(serializeTheme(theme)) as Record<string, unknown>;
-    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.schemaVersion).toBe(2);
   });
 
-  it("emits keys in canonical order for v1 themes", () => {
+  it("emits keys in canonical order for v2 themes", () => {
     const theme = makeUserTheme({
       appIsolated: new Set(["--primary"]),
     });
@@ -682,6 +806,7 @@ describe("serializeTheme round-trip", () => {
       "displayName",
       "iconLabel",
       "derivationEngineVersion",
+      "calendarDefaults",
       "sources",
       "appTokens",
       "calendarTokens",
@@ -693,6 +818,9 @@ describe("serializeTheme round-trip", () => {
     expect(Object.keys(parsed.appTokens as Record<string, unknown>)).toEqual(
       APP_TOKEN_KEYS,
     );
+    expect(
+      Object.keys(parsed.calendarDefaults as Record<string, unknown>),
+    ).toEqual(["mode", "customBasis"]);
     expect(Object.keys(parsed.calendarTokens as Record<string, unknown>)).toEqual(
       CALENDAR_TOKEN_KEYS,
     );
@@ -704,6 +832,7 @@ describe("serializeTheme round-trip", () => {
     expect(json).not.toContain("seedSources");
     expect(json).not.toContain("seedAppTokens");
     expect(json).not.toContain("seedBlendCanvas");
+    expect(json).not.toContain("seedCalendarDefault");
   });
 
   it("emits a minimal payload for built-ins without schemaVersion", () => {

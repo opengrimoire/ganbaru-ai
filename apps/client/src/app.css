@@ -281,6 +281,8 @@
   --cal-timeline-rail: #E5E7EB;
   --cal-timeline-break: #A1A1AA;
   --cal-timeline-focus: #4ADE80;
+  --cal-scrollbar-thumb: var(--muted);
+  --cal-scrollbar-thumb-hover: var(--muted-foreground);
   --cal-header-row-h: 42px;
 }
 

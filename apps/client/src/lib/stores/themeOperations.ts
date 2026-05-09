@@ -7,10 +7,13 @@
  */
 
 import {
+  APP_TOKEN_KEYS,
+  BASE_CALENDAR_TOKENS,
+  CALENDAR_TOKEN_KEYS,
   DERIVATION_ENGINE_VERSION,
+  DEFAULT_CALENDAR_DEFAULT_CUSTOM,
   normalizeSemanticSignalAppIsolated,
   resolveAppTokens,
-  resolveCalendarTokens,
   syncSemanticSignalAppTokens,
   type Theme,
   type ThemeId,
@@ -27,11 +30,10 @@ const NAME_SUFFIX_CAP = 999;
  * The clone always carries a `sources` palette:
  * - User-theme source: copy the existing sources, isolated flags, snapshots.
  * - Built-in source: synthesize sources by sampling canvas, ink, primary,
- *   destructive, confirm, and warning from the resolved tokens. Calendar
- *   canvas is not a source: it auto-derives from the app canvas via a
- *   direction-aware OKLab ΔL offset and is pinnable through the
- *   `calendarIsolated` flag set on `--cal-bg` when the user wants to
- *   isolate it from the app canvas.
+ *   destructive, confirm, and warning from the resolved tokens, then seed
+ *   the calendar default from the built-in base (`light` or `dark`).
+ *   Calendar canvas is not a source; the selected calendar default writes
+ *   the snapshot and `--cal-bg` remains pinnable through `calendarIsolated`.
  *
  * Identity overrides for derived tokens are NOT captured: the derivation
  * is calibrated to reproduce the dark built-in's surface hierarchy on any
@@ -44,8 +46,11 @@ export function cloneTheme(
   id: ThemeId,
   displayName: string,
 ): UserTheme {
-  const resolvedApp = resolveAppTokens(source);
-  const resolvedCal = resolveCalendarTokens(source);
+  const resolvedApp = pickTokenSnapshot(resolveAppTokens(source), APP_TOKEN_KEYS);
+  const resolvedCal =
+    source.kind === "user"
+      ? pickTokenSnapshot(source.calendarTokens, CALENDAR_TOKEN_KEYS)
+      : { ...BASE_CALENDAR_TOKENS[source.base] };
   const palette = [...source.eventPalette];
   const sources: ThemeSources =
     source.kind === "user"
@@ -63,6 +68,12 @@ export function cloneTheme(
   // so a clone of "Light" starts as iconLabel=light. Cloning a user theme
   // that was manually flipped preserves the flip on the clone.
   const iconLabel = source.iconLabel;
+  const calendarDefaultMode =
+    source.kind === "user" ? source.calendarDefaultMode : source.base;
+  const calendarDefaultCustom =
+    source.kind === "user"
+      ? source.calendarDefaultCustom
+      : (sources.canvas ?? DEFAULT_CALENDAR_DEFAULT_CUSTOM);
   return {
     kind: "user",
     id,
@@ -74,6 +85,8 @@ export function cloneTheme(
       source.kind === "user"
         ? source.derivationEngineVersion
         : DERIVATION_ENGINE_VERSION,
+    calendarDefaultMode,
+    calendarDefaultCustom,
     sources,
     appTokens: syncSemanticSignalAppTokens(sources, resolvedApp),
     calendarTokens: { ...resolvedCal },
@@ -86,8 +99,22 @@ export function cloneTheme(
     seedCalendarIsolated: new Set(calIsolated),
     seedEventPalette: [...palette],
     seedBlendCanvas: source.blendCanvas,
+    seedCalendarDefaultMode: calendarDefaultMode,
+    seedCalendarDefaultCustom: calendarDefaultCustom,
     seedIconLabel: iconLabel,
   };
+}
+
+function pickTokenSnapshot(
+  source: Readonly<Record<string, string>>,
+  keys: readonly string[],
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
 }
 
 /**

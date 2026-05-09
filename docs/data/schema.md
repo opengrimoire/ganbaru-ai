@@ -207,11 +207,15 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 |---|---|---|
 | `id` | text | Primary key. `CHECK (id NOT IN ('light', 'dark'))` so an import cannot shadow a built-in. |
 | `display_name` | text | User-visible name. Trimmed and length-capped at 60 chars by the client. |
-| `icon_label` | text or null | `'light'` or `'dark'`. Purely decorative sun/moon tag ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or the calendar palette pick. Nullable for backward compatibility (rows from before migration v5 are filled in on hydrate via canvas luminance). Previously named `scheme`; renamed to `icon_label` in migration v7 to make clear it is a label, not a rendering switch. The dropped `base` column previously played the same role for legacy imports, but the v1 snapshot model derives any required fallback from canvas luminance at hydrate time, so it was removed in migration v6. |
+| `icon_label` | text or null | `'light'` or `'dark'`. Purely decorative sun/moon tag ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or calendar contrast behavior. Nullable for backward compatibility (rows from before migration v5 are filled in on hydrate via canvas luminance). Previously named `scheme`; renamed to `icon_label` in migration v7 to make clear it is a label, not a rendering switch. The dropped `base` column previously played the same role for legacy imports, but the snapshot model derives any required fallback from canvas luminance at hydrate time, so it was removed in migration v6. |
 | `seed_icon_label` | text or null | Clone-time snapshot of `icon_label` for "Reset all". Nullable on the same grounds. |
 | `blend_canvas` | text | Hex bg the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated, otherwise the user pins it directly. |
 | `seed_blend_canvas` | text | Clone-time snapshot of `blend_canvas` for "Reset all". |
 | `derivation_engine_version` | integer | The `DERIVATION_ENGINE_VERSION` constant in force when the snapshot was written. The editor surfaces a rebake banner when this trails the code constant and no row in `theme_upgrade_dismissals` matches. |
+| `calendar_default_mode` | text | One of `'light'`, `'dark'`, `'app-canvas'`, or `'custom'`. Selects the default bundle used for the internal calendar surface, event palette, and calendar details. Migration v11 backfills existing themes to `'app-canvas'`, preserving the previous behavior. |
+| `calendar_default_custom` | text | Hex basis used when `calendar_default_mode = 'custom'`. |
+| `seed_calendar_default_mode` | text | Clone-time snapshot of `calendar_default_mode` for "Reset all". |
+| `seed_calendar_default_custom` | text | Clone-time snapshot of `calendar_default_custom` for "Reset all". |
 | `created_at` | integer | Unix epoch ms. |
 | `updated_at` | integer | Unix epoch ms. Bumped on every mutator transaction. |
 
@@ -220,6 +224,8 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 One row per resolved color value, across three peer kinds. Sources drive multi-token derivation when one of them is edited; app and calendar tokens are the rendered shell snapshot. Source key names are bare (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`); app and calendar key names keep their `--prefixed` CSS form.
 
 Migration v9 removes app-token rows that used to store implementation paint hooks now derived at runtime or owned by component code. This keeps existing vaults aligned with the current token catalog instead of preserving obsolete live or seed rows.
+
+Migration v11 moves `--cal-header-bg` from `kind='calendar'` to `kind='app'` because Calendar header now follows App canvas by default while remaining independently pinnable. The remaining calendar tokens cover the internal grid surface and details only.
 
 | Field | Type | Description |
 |---|---|---|
@@ -293,7 +299,7 @@ The editor only suppresses the banner when a dismissal exists for the *current* 
 
 Three motivations lined up at once. First, structural changes to the token catalog (renames, additions, splits) need a row-level migration path; a JSON blob is opaque to schema migration and forces every saved theme through a tolerant validator. Second, the snapshot model decouples saved themes from the live derivation engine: a theme written today still paints the exact same colors next year, even if the engine bumps. Third, sources are no longer privileged storage; they sit as peer rows next to the app and calendar tokens, which matches the user's intuition that surface tokens like `--card` and `--popover` are not "less important" than the source palette.
 
-JSON keeps a role as the export format only: `serializeTheme` emits a v1 envelope (`schemaVersion: 1`, full snapshot, `appIsolated` / `calendarIsolated` arrays) and `validateThemeJson` accepts both v1 and the legacy `appTokenOverrides` / `calendarTokenOverrides` shape (the legacy branch re-derives at import time and folds overrides into the isolated-flag sets).
+JSON keeps a role as the export format only: `serializeTheme` emits a v2 envelope (`schemaVersion: 2`, full snapshot, `calendarDefaults`, `appIsolated` / `calendarIsolated` arrays) and `validateThemeJson` accepts v2, v1, and the legacy `appTokenOverrides` / `calendarTokenOverrides` shape. Older v1 or legacy calendar-header rows are migrated into the app-token header row during import.
 
 ## Other features (stub)
 

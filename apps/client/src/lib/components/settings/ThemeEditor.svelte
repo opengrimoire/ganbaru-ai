@@ -27,6 +27,7 @@
     isThemeCalendarDark,
     resolveAppTokens,
     resolveCalendarTokens,
+    type CalendarColorDefaultMode,
     type Theme,
     type ThemeSources,
     type UserTheme,
@@ -40,6 +41,10 @@
     "--background": {
       title: "App canvas",
       description: "Most views paint their own surface over it",
+    },
+    "--cal-header-bg": {
+      title: "Calendar header",
+      description: "Calendar toolbar and day/time headers",
     },
     "--foreground": {
       title: "Text color",
@@ -150,10 +155,6 @@
       title: "Calendar background",
       description: "Background of the calendar grid",
     },
-    "--cal-header-bg": {
-      title: "Calendar header",
-      description: "Background of the day and time headers",
-    },
     "--cal-gridline": {
       title: "Grid lines",
       description: "Color of the hour and day separator lines",
@@ -242,6 +243,7 @@
       navTarget: "general",
       rows: [
         { kind: "single", key: "--background", scope: "app" },
+        { kind: "single", key: "--cal-header-bg", scope: "app" },
         { kind: "single", key: "--card", scope: "app" },
         {
           kind: "pair",
@@ -298,10 +300,9 @@
     {
       sourceKey: null,
       title: "Calendar surface",
-      description: "Calendar background, header, gridlines, and timeline",
+      description: "Calendar background, gridlines, and timeline",
       rows: [
         { kind: "single", key: "--cal-bg", scope: "cal" },
-        { kind: "single", key: "--cal-header-bg", scope: "cal" },
         { kind: "single", key: "--cal-gridline", scope: "cal" },
         { kind: "single", key: "--cal-time-label", scope: "cal" },
         { kind: "single", key: "--cal-timeline-rail", scope: "cal" },
@@ -432,6 +433,16 @@
     signals: "Text and actions",
     json: "JSON",
   };
+
+  const CALENDAR_DEFAULT_OPTIONS: ReadonlyArray<{
+    mode: CalendarColorDefaultMode;
+    label: string;
+  }> = [
+    { mode: "light", label: "Light-based" },
+    { mode: "dark", label: "Dark-based" },
+    { mode: "app-canvas", label: "App canvas-based" },
+    { mode: "custom", label: "Custom-based" },
+  ];
 
   const TEXT_ACTION_GROUP_TITLES = new Set([
     "Ink",
@@ -754,6 +765,21 @@
 
   function setSource(key: keyof ThemeSources, hex: string) {
     void themeStore.updateSourceValue(theme.id, key, hex);
+  }
+
+  function applyCalendarDefault(mode: CalendarColorDefaultMode) {
+    if (!userTheme) return;
+    void themeStore.applyCalendarDefault(theme.id, mode);
+  }
+
+  function setCalendarDefaultCustom(hex: string) {
+    if (!userTheme) return;
+    void themeStore.applyCalendarDefault(theme.id, "custom", hex);
+  }
+
+  function resetCalendarDefault() {
+    if (!userTheme) return;
+    void themeStore.resetCalendarDefaultToSeed(theme.id);
   }
 
   // Isolating a token pins the current snapshot value against future
@@ -1413,8 +1439,57 @@
     </section>
   {/snippet}
 
+  {#snippet calendarDefaultsSection()}
+    <section class="flex flex-col gap-2 px-1 py-2.5">
+      <header>
+        <div class="min-w-0 flex-1">
+          <h2 class="text-[13px] font-semibold text-foreground">
+            Color defaults
+          </h2>
+          <div class="text-[11px] text-muted-foreground">
+            Surface, palette, and details
+          </div>
+        </div>
+      </header>
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          {#each CALENDAR_DEFAULT_OPTIONS as option}
+            <button
+              type="button"
+              onclick={() => applyCalendarDefault(option.mode)}
+              aria-pressed={userTheme?.calendarDefaultMode === option.mode}
+              class={cn(
+                "min-h-7 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                userTheme?.calendarDefaultMode === option.mode
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {option.label}
+            </button>
+          {/each}
+          {#if userTheme?.calendarDefaultMode === "custom"}
+            <ColorField
+              value={userTheme.calendarDefaultCustom}
+              onChange={setCalendarDefaultCustom}
+              label="Custom calendar default"
+            />
+          {/if}
+        </div>
+        <div class="shrink-0">
+          {@render resetIconButton(
+            resetCalendarDefault,
+            "Color defaults",
+            themeStore.canResetCalendarDefault(theme.id),
+          )}
+        </div>
+      </div>
+    </section>
+  {/snippet}
+
   {#snippet calendarSection()}
     <section class="flex flex-col divide-y divide-border">
+      {@render calendarDefaultsSection()}
       {#each CALENDAR_GROUPS as group (group.title)}
         {#if group.title === "Calendar details"}
           {@render eventPaletteSection()}

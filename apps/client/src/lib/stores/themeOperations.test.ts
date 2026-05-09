@@ -55,6 +55,9 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
     eventPalette: overrides.eventPalette ?? eventPalette,
     derivationEngineVersion:
       overrides.derivationEngineVersion ?? DERIVATION_ENGINE_VERSION,
+    calendarDefaultMode: overrides.calendarDefaultMode ?? "app-canvas",
+    calendarDefaultCustom:
+      overrides.calendarDefaultCustom ?? sources.canvas,
     sources,
     appTokens,
     calendarTokens,
@@ -71,6 +74,14 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
     seedEventPalette:
       overrides.seedEventPalette ?? [...(overrides.eventPalette ?? eventPalette)],
     seedBlendCanvas: overrides.seedBlendCanvas ?? overrides.blendCanvas ?? "#101010",
+    seedCalendarDefaultMode:
+      overrides.seedCalendarDefaultMode ??
+      overrides.calendarDefaultMode ??
+      "app-canvas",
+    seedCalendarDefaultCustom:
+      overrides.seedCalendarDefaultCustom ??
+      overrides.calendarDefaultCustom ??
+      sources.canvas,
     seedIconLabel: overrides.seedIconLabel ?? iconLabel,
   };
 }
@@ -255,6 +266,18 @@ describe("cloneTheme", () => {
     expect(copy.seedIconLabel).toBe("light");
   });
 
+  it("carries calendar defaults on user clones", () => {
+    const source = makeUserTheme({
+      calendarDefaultMode: "custom",
+      calendarDefaultCustom: "#334455",
+    });
+    const copy = cloneTheme(source, "fork", "Fork");
+    expect(copy.calendarDefaultMode).toBe("custom");
+    expect(copy.calendarDefaultCustom).toBe("#334455");
+    expect(copy.seedCalendarDefaultMode).toBe("custom");
+    expect(copy.seedCalendarDefaultCustom).toBe("#334455");
+  });
+
   it("pegs iconLabel to base on built-in clones", () => {
     const fromLight = cloneTheme(lightTheme, "fork-light", "Fork Light");
     const fromDark = cloneTheme(darkTheme, "fork-dark", "Fork Dark");
@@ -262,6 +285,22 @@ describe("cloneTheme", () => {
     expect(fromLight.seedIconLabel).toBe("light");
     expect(fromDark.iconLabel).toBe("dark");
     expect(fromDark.seedIconLabel).toBe("dark");
+  });
+
+  it("starts built-in clones with calendar defaults matching their base", () => {
+    const fromLight = cloneTheme(lightTheme, "fork-light", "Fork Light");
+    const fromDark = cloneTheme(darkTheme, "fork-dark", "Fork Dark");
+
+    expect(fromLight.calendarDefaultMode).toBe("light");
+    expect(fromLight.seedCalendarDefaultMode).toBe("light");
+    expect(fromLight.calendarDefaultCustom).toBe(
+      BASE_APP_TOKENS.light["--background"],
+    );
+    expect(fromDark.calendarDefaultMode).toBe("dark");
+    expect(fromDark.seedCalendarDefaultMode).toBe("dark");
+    expect(fromDark.calendarDefaultCustom).toBe(
+      BASE_APP_TOKENS.dark["--background"],
+    );
   });
 });
 

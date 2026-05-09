@@ -109,7 +109,9 @@
       style="
         top: {thumbTop}px;
         height: {thumbHeight}px;
-        background-color: var(--muted);
+        background-color: {dragging || hovering
+          ? 'var(--cal-scrollbar-thumb-hover, var(--muted-foreground))'
+          : 'var(--cal-scrollbar-thumb, var(--muted))'};
       "
     ></div>
   {/if}

@@ -16,15 +16,15 @@ export type ThemeId = string;
 
 /**
  * Source colors that drive most of the shell palette through the
- * derivation formulas in {@link deriveAppTokens} / {@link deriveCalendarTokens}.
+ * derivation formulas in {@link deriveAppTokens} and, when the calendar
+ * default mode is app-canvas, {@link deriveCalendarColorDefaultBundle}.
  *
  * - **canvas:** app background. The color visible in framing gaps and the
  *   Settings modal; also the reference the other app surfaces lift toward
- *   ink from. Also drives calendar canvas by a direction-aware OKLab ΔL
- *   (darker for dark canvases, slightly brighter for light) so the
- *   calendar reads as a distinct surface without requiring a separate
- *   source color. Users can still isolate `--cal-bg` through
- *   `calendarTokenOverrides` when they want a fully independent value.
+ *   ink from. Calendar header follows this color by default. The internal
+ *   calendar surface follows it only when the calendar default mode is
+ *   app-canvas; users can still isolate `--cal-bg` when they want a fully
+ *   independent value.
  * - **ink:** text base. Default text color and the color every "lifted"
  *   surface mixes a small fraction of to tint it. Also drives secondary
  *   text tokens (form indicator and event panel text).
@@ -81,6 +81,12 @@ export const SOURCE_KEY_ORDER = Object.freeze([
  */
 export type EventPaletteHexes = readonly string[];
 
+export type CalendarColorDefaultMode =
+  | "light"
+  | "dark"
+  | "app-canvas"
+  | "custom";
+
 /**
  * Engine version stamp written onto every user theme at create, clone, or
  * import time. Bump whenever the derivation engine (APP_DERIVATION,
@@ -89,7 +95,7 @@ export type EventPaletteHexes = readonly string[];
  * a stored theme's stamp and this constant to render an opt-in "rebake"
  * banner so non-pinned colors do not silently drift across app updates.
  */
-export const DERIVATION_ENGINE_VERSION = 3;
+export const DERIVATION_ENGINE_VERSION = 4;
 
 /**
  * A built-in theme ships with the app, never persists to SQLite, and paints
@@ -108,8 +114,8 @@ export interface BuiltinTheme {
    * Built-in themes pin this to their base; user themes carry it as a
    * separate editable label so the user can mark a theme for "day" or
    * "night" use independently of canvas luminance. The runtime `.dark`
-   * class and event-palette pick still come from the actual canvas through
-   * `isThemeDark` / `isThemeCalendarDark`.
+   * class and event contrast bucket still come from the actual canvas
+   * through `isThemeDark` / `isThemeCalendarDark`.
    */
   iconLabel: "light" | "dark";
   eventPalette: EventPaletteHexes;
@@ -137,7 +143,7 @@ export interface UserTheme {
   /**
    * Decorative sun/moon tag; flips the icon in the editor header and the
    * theme list. Has no effect on the runtime `.dark` class or the calendar
-   * event palette (both still derive from canvas luminance).
+   * event contrast bucket, which still derive from canvas luminance.
    */
   iconLabel: "light" | "dark";
   eventPalette: EventPaletteHexes;
@@ -145,6 +151,14 @@ export interface UserTheme {
   blendCanvas: string;
   /** Engine version stamp; drives the rebake banner. */
   derivationEngineVersion: number;
+  /**
+   * Default bundle used for the internal calendar area: calendar surface,
+   * event palette, and calendar details. The header follows app canvas
+   * separately through `--cal-header-bg`.
+   */
+  calendarDefaultMode: CalendarColorDefaultMode;
+  /** Custom basis used when `calendarDefaultMode` is "custom". */
+  calendarDefaultCustom: string;
   /** Source palette that powers source-edit derivation. */
   sources: ThemeSources;
   /** Full snapshot of every app-shell CSS token. */
@@ -163,6 +177,8 @@ export interface UserTheme {
   seedCalendarIsolated: ReadonlySet<string>;
   seedEventPalette: EventPaletteHexes;
   seedBlendCanvas: string;
+  seedCalendarDefaultMode: CalendarColorDefaultMode;
+  seedCalendarDefaultCustom: string;
   /** Clone-time iconLabel; "Reset all" restores `iconLabel` to this. */
   seedIconLabel: "light" | "dark";
 }
@@ -351,6 +367,7 @@ export function computeThemeTokenOps(
  */
 export const APP_TOKEN_KEYS = Object.freeze([
   "--background",
+  "--cal-header-bg",
   "--card",
   "--card-foreground",
   "--popover",
@@ -407,7 +424,6 @@ const DERIVED_APP_TOKEN_KEYS: readonly string[] = Object.freeze([
  */
 export const CALENDAR_TOKEN_KEYS = Object.freeze([
   "--cal-bg",
-  "--cal-header-bg",
   "--cal-gridline",
   "--cal-time-label",
   "--cal-timeline-rail",
@@ -502,6 +518,7 @@ export type ThemeTokenRowOrderEntry =
 export const THEME_TOKEN_ROW_ORDER = Object.freeze([
   { kind: "source", key: "canvas" },
   { kind: "app", key: "--background" },
+  { kind: "app", key: "--cal-header-bg" },
   { kind: "app", key: "--card" },
   { kind: "app", key: "--card-foreground" },
   { kind: "app", key: "--popover" },
@@ -518,7 +535,6 @@ export const THEME_TOKEN_ROW_ORDER = Object.freeze([
   { kind: "app", key: "--sidebar-accent" },
   { kind: "app", key: "--sidebar-accent-foreground" },
   { kind: "calendar", key: "--cal-bg" },
-  { kind: "calendar", key: "--cal-header-bg" },
   { kind: "calendar", key: "--cal-gridline" },
   { kind: "calendar", key: "--cal-time-label" },
   { kind: "calendar", key: "--cal-timeline-rail" },
@@ -573,6 +589,7 @@ export const BASE_APP_TOKENS: Readonly<
 > = Object.freeze({
   light: Object.freeze({
     "--background": "#F4F4F7",
+    "--cal-header-bg": "#F4F4F7",
     "--card": "#FFFFFF",
     "--card-foreground": "#141420",
     "--popover": "#FFFFFF",
@@ -620,6 +637,7 @@ export const BASE_APP_TOKENS: Readonly<
   }),
   dark: Object.freeze({
     "--background": "#27282A",
+    "--cal-header-bg": "#27282A",
     "--card": "#2E2F31",
     "--card-foreground": "#ECECF2",
     "--popover": "#353638",
@@ -675,7 +693,6 @@ export const BASE_CALENDAR_TOKENS: Readonly<
 > = Object.freeze({
   light: Object.freeze({
     "--cal-bg": "#FFFFFF",
-    "--cal-header-bg": "#F4F4F7",
     "--cal-gridline": "#DDDDE3",
     "--cal-time-label": "#646470",
     "--cal-timeline-rail": "#E5E7EB",
@@ -685,7 +702,6 @@ export const BASE_CALENDAR_TOKENS: Readonly<
   }),
   dark: Object.freeze({
     "--cal-bg": "#131314",
-    "--cal-header-bg": "#27282A",
     "--cal-gridline": "#333537",
     "--cal-time-label": "#9494A0",
     "--cal-timeline-rail": "#3F3F46",
@@ -694,6 +710,16 @@ export const BASE_CALENDAR_TOKENS: Readonly<
     "--cal-timeline-focus": "#4ADE80",
   }),
 });
+
+export const DEFAULT_CALENDAR_DEFAULT_CUSTOM =
+  BASE_APP_TOKENS.dark["--background"];
+
+const CALENDAR_COLOR_DEFAULT_MODES: ReadonlySet<string> = new Set([
+  "light",
+  "dark",
+  "app-canvas",
+  "custom",
+]);
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -864,6 +890,7 @@ export function deriveAppTokens(
   const eventPanelContrast = shift(d.eventPanelContrastDeltaL);
   return {
     "--background": canvas,
+    "--cal-header-bg": canvas,
     "--card": card,
     "--card-foreground": fg(card),
     "--popover": popover,
@@ -910,11 +937,11 @@ export function deriveAppTokens(
 /**
  * Derive the calendar-shell tokens that can be computed from sources.
  *
- * `--cal-bg` is auto-tracked from `canvas` via a direction-aware OKLab ΔL
- * so editing the app canvas cascades through the calendar surface by
- * default. Users who want a calendar surface that does NOT track canvas
- * can isolate `--cal-bg` through `calendarTokenOverrides`: the resolver
- * walks override first, so a pinned value wins over the auto-derived one.
+ * `--cal-bg` is derived from the bundle basis via a direction-aware OKLab
+ * ΔL. In app-canvas mode the basis is the app canvas, so editing App
+ * canvas cascades through the internal calendar surface. Users who want a
+ * fully independent surface can isolate `--cal-bg`; pinned values win over
+ * derived values during source edits and rebakes.
  *
  * Gridlines (and the timeline-break marker) are parked just above a
  * minimum-visibility contrast against `--cal-bg`. The target is
@@ -948,7 +975,6 @@ export function deriveCalendarTokens(
     pickReadableForeground(bg, { ink, canvas, target: 4.5 });
   return {
     "--cal-bg": calCanvas,
-    "--cal-header-bg": canvas,
     "--cal-gridline": pickReadableBorder(calCanvas, ink, { target: 1.4 }),
     "--cal-time-label": walkFraction(
       anchorFor(calCanvas),
@@ -961,6 +987,105 @@ export function deriveCalendarTokens(
       calCanvas,
       CAL_FRACTIONS.calTimelineBreak,
     ),
+  };
+}
+
+export interface CalendarColorDefaultBundle {
+  calendarTokens: Record<CalendarTokenKey, string>;
+  runtimeTokens: Record<CalendarRuntimeTokenKey, string>;
+  eventPalette: EventPaletteHexes;
+  blendCanvas: string;
+  paletteBase: "light" | "dark";
+}
+
+type CalendarRuntimeTokenKey =
+  | "--cal-scrollbar-thumb"
+  | "--cal-scrollbar-thumb-hover";
+
+const CALENDAR_RUNTIME_TOKEN_KEYS = Object.freeze([
+  "--cal-scrollbar-thumb",
+  "--cal-scrollbar-thumb-hover",
+] as const satisfies readonly CalendarRuntimeTokenKey[]);
+
+const CALENDAR_SCROLLBAR_THUMB_CONTRAST_TARGET = 1.6;
+const CALENDAR_SCROLLBAR_THUMB_HOVER_CONTRAST_TARGET = 4.5;
+
+function calendarRuntimeTokensFromAppTokens(
+  appTokens: Readonly<Record<string, string>>,
+): Record<CalendarRuntimeTokenKey, string> {
+  return {
+    "--cal-scrollbar-thumb":
+      appTokens["--muted"] ?? BASE_APP_TOKENS.dark["--muted"],
+    "--cal-scrollbar-thumb-hover":
+      appTokens["--muted-foreground"] ??
+      BASE_APP_TOKENS.dark["--muted-foreground"],
+  };
+}
+
+function calendarRuntimeTokensFromCalCanvas(
+  calCanvas: string,
+): Record<CalendarRuntimeTokenKey, string> {
+  const contrastAnchor =
+    relativeLuminance(calCanvas) < 0.5 ? "#FFFFFF" : "#000000";
+  return {
+    "--cal-scrollbar-thumb": pickReadableBorder(calCanvas, contrastAnchor, {
+      target: CALENDAR_SCROLLBAR_THUMB_CONTRAST_TARGET,
+    }),
+    "--cal-scrollbar-thumb-hover": pickReadableBorder(
+      calCanvas,
+      contrastAnchor,
+      {
+        target: CALENDAR_SCROLLBAR_THUMB_HOVER_CONTRAST_TARGET,
+      },
+    ),
+  };
+}
+
+function fullCalendarSnapshot(
+  base: "light" | "dark",
+  derived: Readonly<Record<string, string>>,
+): Record<CalendarTokenKey, string> {
+  return buildSnapshot(
+    CALENDAR_TOKEN_KEYS,
+    BASE_CALENDAR_TOKENS[base],
+    derived,
+    {},
+  ) as Record<CalendarTokenKey, string>;
+}
+
+export function deriveCalendarColorDefaultBundle(
+  sources: ThemeSources,
+  mode: CalendarColorDefaultMode,
+  customBasis: string = DEFAULT_CALENDAR_DEFAULT_CUSTOM,
+): CalendarColorDefaultBundle {
+  if (mode === "light" || mode === "dark") {
+    return {
+      calendarTokens: { ...BASE_CALENDAR_TOKENS[mode] } as Record<
+        CalendarTokenKey,
+        string
+      >,
+      runtimeTokens: calendarRuntimeTokensFromAppTokens(BASE_APP_TOKENS[mode]),
+      eventPalette: mode === "light" ? LIGHT_EVENT_PALETTE : DARK_EVENT_PALETTE,
+      blendCanvas: BASE_CALENDAR_TOKENS[mode]["--cal-bg"],
+      paletteBase: mode,
+    };
+  }
+
+  const basis = mode === "custom" ? customBasis : sources.canvas;
+  const basisSources: ThemeSources = { ...sources, canvas: basis };
+  const derived = deriveCalendarTokens(basisSources);
+  const calCanvas = derived["--cal-bg"] ?? basis;
+  const paletteBase: "light" | "dark" = defaultIconLabelFromCanvas(calCanvas);
+  const calendarTokens = fullCalendarSnapshot(paletteBase, derived);
+  return {
+    calendarTokens,
+    runtimeTokens: calendarRuntimeTokensFromCalCanvas(
+      calendarTokens["--cal-bg"],
+    ),
+    eventPalette:
+      paletteBase === "light" ? LIGHT_EVENT_PALETTE : DARK_EVENT_PALETTE,
+    blendCanvas: calendarTokens["--cal-bg"],
+    paletteBase,
   };
 }
 
@@ -1003,15 +1128,26 @@ function pickTokens(
  */
 export function resolveCalendarTokens(theme: Theme): Record<string, string> {
   if (theme.kind === "user") {
-    return pickTokens(theme.calendarTokens, CALENDAR_TOKEN_KEYS);
+    const runtime = deriveCalendarColorDefaultBundle(
+      theme.sources,
+      theme.calendarDefaultMode,
+      theme.calendarDefaultCustom,
+    ).runtimeTokens;
+    return {
+      ...pickTokens(theme.calendarTokens, CALENDAR_TOKEN_KEYS),
+      ...pickTokens(runtime, CALENDAR_RUNTIME_TOKEN_KEYS),
+    };
   }
-  return { ...BASE_CALENDAR_TOKENS[theme.base] };
+  return {
+    ...BASE_CALENDAR_TOKENS[theme.base],
+    ...calendarRuntimeTokensFromAppTokens(BASE_APP_TOKENS[theme.base]),
+  };
 }
 
 /**
  * Luminance cutoff below which a surface is treated as "dark" for binary
- * decisions like applying Tailwind's `.dark` class or picking the dark
- * event-tile palette. Sits at 0.4 so any sub-midpoint canvas is treated
+ * decisions like applying Tailwind's `.dark` class or picking dark-calendar
+ * contrast behavior. Sits at 0.4 so any sub-midpoint canvas is treated
  * as dark, but a mid-gray canvas (~#888 at 0.5) still resolves as light.
  * Only a bucket test, not a WCAG contrast check.
  */
@@ -1020,8 +1156,8 @@ const DARK_SURFACE_THRESHOLD = 0.4;
 /**
  * Resolve the effective app background a theme will actually paint. Reads
  * the token snapshot for user themes and the base CSS rule for built-ins.
- * Used to drive luminance-aware decisions (dark-mode class, event-tile
- * palette) from the actual painted color rather than the cosmetic label.
+ * Used to drive luminance-aware decisions from the actual painted color
+ * rather than the cosmetic label.
  */
 export function resolveCanvas(theme: Theme): string {
   if (theme.kind === "user") return theme.appTokens["--background"];
@@ -1029,8 +1165,8 @@ export function resolveCanvas(theme: Theme): string {
 }
 
 /**
- * Resolve the effective calendar background. Used to pick the event-tile
- * palette and calendar outline mixes based on the actual painted surface.
+ * Resolve the effective calendar background. Used to pick event text,
+ * dimming, and calendar outline mixes based on the actual painted surface.
  */
 export function resolveCalCanvas(theme: Theme): string {
   if (theme.kind === "user") return theme.calendarTokens["--cal-bg"];
@@ -1091,7 +1227,7 @@ export function generateThemeId(
  *
  * Built-ins emit a minimal read-only payload (id, name, base, palette,
  * blendCanvas) used by the editor's "View JSON" affordance; built-ins are
- * never round-tripped through import. User themes emit `schemaVersion: 1`
+ * never round-tripped through import. User themes emit `schemaVersion: 2`
  * with the full token snapshot, sources, isolated-flag arrays, engine
  * version stamp, and palette. Seeds are install-local reset state and are
  * intentionally omitted from the export.
@@ -1109,11 +1245,15 @@ export function serializeTheme(theme: Theme): string {
     return JSON.stringify(ordered, null, 2);
   }
   const ordered: Record<string, unknown> = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: theme.id,
     displayName: theme.displayName,
     iconLabel: theme.iconLabel,
     derivationEngineVersion: theme.derivationEngineVersion,
+    calendarDefaults: {
+      mode: theme.calendarDefaultMode,
+      customBasis: theme.calendarDefaultCustom,
+    },
     sources: orderedSources(theme.sources),
     appTokens: orderedTokens(
       syncSemanticSignalAppTokens(theme.sources, theme.appTokens),
@@ -1216,10 +1356,12 @@ export type ThemeValidationResult =
  * are stripped silently because dropping a stale token name should not
  * block an otherwise valid theme.
  *
- * Two import paths share validation of common identity fields:
- * * - **v1** (`schemaVersion: 1`): expects full token snapshots, source
- *   palette, isolated-flag arrays, and an engine version stamp. Used by
- *   exports written by this app version onward.
+ * Three import paths share validation of common identity fields:
+ * - **v2** (`schemaVersion: 2`): expects full token snapshots, calendar
+ *   defaults, source palette, isolated-flag arrays, and an engine version
+ *   stamp. Used by exports written by this app version onward.
+ * - **v1** (`schemaVersion: 1`): same snapshot shape without calendar
+ *   defaults. Imported as `app-canvas` to preserve the old behavior.
  * - **Legacy** (no schemaVersion): walks the old `sources?` /
  *   `appTokenOverrides?` / `calendarTokenOverrides?` shape. The current
  *   derivation engine runs at import time to compute the missing tokens,
@@ -1231,6 +1373,7 @@ export function validateThemeJson(input: unknown): ThemeValidationResult {
   if (!isPlainObject(input)) {
     return { ok: false, errors: ["theme must be a JSON object"] };
   }
+  if (input.schemaVersion === 2) return validateV2(input);
   if (input.schemaVersion === 1) return validateV1(input);
   return validateLegacy(input);
 }
@@ -1315,6 +1458,17 @@ function sanitizeLegacyBase(
 }
 
 function validateV1(input: Record<string, unknown>): ThemeValidationResult {
+  return validateSnapshot(input, false);
+}
+
+function validateV2(input: Record<string, unknown>): ThemeValidationResult {
+  return validateSnapshot(input, true);
+}
+
+function validateSnapshot(
+  input: Record<string, unknown>,
+  readCalendarDefaults: boolean,
+): ThemeValidationResult {
   const errors: string[] = [];
   const { cleanId, cleanDisplayName, cleanBlend, cleanPalette } =
     validateIdentity(input, errors);
@@ -1340,6 +1494,10 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     "appTokens",
     errors,
   );
+  const legacyHeader = extractTokenHex(input.calendarTokens, "--cal-header-bg");
+  if (legacyHeader && !extractTokenHex(input.appTokens, "--cal-header-bg")) {
+    cleanAppTokensRaw["--cal-header-bg"] = legacyHeader;
+  }
   const cleanCalTokens = sanitizeFullTokenSnapshot(
     input.calendarTokens,
     CALENDAR_TOKEN_KEYS,
@@ -1372,6 +1530,9 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
       errors,
     ),
   );
+  if (isolatedListIncludes(input.calendarIsolated, "--cal-header-bg")) {
+    cleanAppIsolated.add("--cal-header-bg");
+  }
   const cleanCalIsolated = sanitizeIsolatedList(
     input.calendarIsolated,
     CALENDAR_TOKEN_KEY_SET,
@@ -1399,6 +1560,16 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     "iconLabel",
     errors,
   );
+  const calendarDefaults = readCalendarDefaults
+    ? sanitizeCalendarDefaults(
+        input.calendarDefaults,
+        cleanSources?.canvas ?? cleanBlend,
+        errors,
+      )
+    : {
+        mode: "app-canvas" as CalendarColorDefaultMode,
+        customBasis: cleanSources?.canvas ?? cleanBlend,
+      };
 
   if (errors.length > 0) return { ok: false, errors };
 
@@ -1410,6 +1581,8 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
     derivationEngineVersion: cleanEngineVersion,
+    calendarDefaultMode: calendarDefaults.mode,
+    calendarDefaultCustom: calendarDefaults.customBasis,
     sources: cleanSources as ThemeSources,
     appTokens: cleanAppTokens,
     calendarTokens: cleanCalTokens,
@@ -1422,6 +1595,8 @@ function validateV1(input: Record<string, unknown>): ThemeValidationResult {
     seedCalendarIsolated: new Set(cleanCalIsolated),
     seedEventPalette: [...cleanPalette],
     seedBlendCanvas: cleanBlend,
+    seedCalendarDefaultMode: calendarDefaults.mode,
+    seedCalendarDefaultCustom: calendarDefaults.customBasis,
     seedIconLabel: cleanIconLabel,
   };
   return { ok: true, theme };
@@ -1440,6 +1615,13 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
       "appTokenOverrides",
       errors,
     ) ?? {};
+  const legacyHeader = extractTokenHex(
+    input.calendarTokenOverrides,
+    "--cal-header-bg",
+  );
+  if (legacyHeader && !cleanAppOverrides["--cal-header-bg"]) {
+    cleanAppOverrides["--cal-header-bg"] = legacyHeader;
+  }
   const cleanCalOverrides =
     sanitizeOverrides(
       input.calendarTokenOverrides,
@@ -1504,6 +1686,13 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
       "seedAppTokenOverrides",
       errors,
     ) ?? { ...cleanAppOverrides };
+  const legacySeedHeader = extractTokenHex(
+    input.seedCalendarTokenOverrides,
+    "--cal-header-bg",
+  );
+  if (legacySeedHeader && !seedAppOverrides["--cal-header-bg"]) {
+    seedAppOverrides["--cal-header-bg"] = legacySeedHeader;
+  }
   const seedCalOverrides =
     sanitizeOverrides(
       input.seedCalendarTokenOverrides,
@@ -1609,6 +1798,8 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     blendCanvas: cleanBlend,
     eventPalette: cleanPalette,
     derivationEngineVersion: DERIVATION_ENGINE_VERSION,
+    calendarDefaultMode: "app-canvas",
+    calendarDefaultCustom: cleanSources.canvas,
     sources: cleanSources,
     appTokens,
     calendarTokens: calTokens,
@@ -1621,6 +1812,8 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     seedCalendarIsolated: seedCalIsolated,
     seedEventPalette: seedPalette,
     seedBlendCanvas: seedBlend,
+    seedCalendarDefaultMode: "app-canvas",
+    seedCalendarDefaultCustom: seedSources.canvas,
     seedIconLabel: cleanIconLabel,
   };
   return { ok: true, theme };
@@ -1664,6 +1857,52 @@ function sanitizeIconLabel(
   if (raw === "light" || raw === "dark") return raw;
   errors.push(`${fieldName} must be "light" or "dark"`);
   return defaultIconLabelFromCanvas(fallbackCanvasHex);
+}
+
+function sanitizeCalendarDefaults(
+  raw: unknown,
+  fallbackCustomBasis: string,
+  errors: string[],
+): { mode: CalendarColorDefaultMode; customBasis: string } {
+  const fallbackBasis = isHexColor(fallbackCustomBasis)
+    ? fallbackCustomBasis
+    : DEFAULT_CALENDAR_DEFAULT_CUSTOM;
+  if (raw === undefined) {
+    return { mode: "app-canvas", customBasis: fallbackBasis };
+  }
+  if (!isPlainObject(raw)) {
+    errors.push("calendarDefaults must be an object");
+    return { mode: "app-canvas", customBasis: fallbackBasis };
+  }
+  const mode = raw.mode;
+  let cleanMode: CalendarColorDefaultMode = "app-canvas";
+  if (typeof mode !== "string" || !CALENDAR_COLOR_DEFAULT_MODES.has(mode)) {
+    errors.push(
+      'calendarDefaults.mode must be "light", "dark", "app-canvas", or "custom"',
+    );
+  } else {
+    cleanMode = mode as CalendarColorDefaultMode;
+  }
+  const customBasis = raw.customBasis;
+  if (customBasis === undefined) {
+    return { mode: cleanMode, customBasis: fallbackBasis };
+  }
+  if (!isHexColor(customBasis)) {
+    errors.push("calendarDefaults.customBasis must be a hex color");
+    return { mode: cleanMode, customBasis: fallbackBasis };
+  }
+  return { mode: cleanMode, customBasis };
+}
+
+function extractTokenHex(source: unknown, key: string): string | undefined {
+  if (!isPlainObject(source)) return undefined;
+  const value = source[key];
+  return isHexColor(value) ? value : undefined;
+}
+
+function isolatedListIncludes(source: unknown, key: string): boolean {
+  if (!Array.isArray(source)) return false;
+  return source.includes(key);
 }
 
 function sanitizeIsolatedList(

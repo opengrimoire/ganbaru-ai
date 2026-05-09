@@ -4,8 +4,11 @@ import {
   BASE_APP_TOKENS,
   BASE_CALENDAR_TOKENS,
   CALENDAR_TOKEN_KEYS,
+  darkTheme,
   deriveAppTokens,
+  deriveCalendarColorDefaultBundle,
   deriveCalendarTokens,
+  lightTheme,
   type ThemeSources,
 } from "./themes";
 import {
@@ -168,6 +171,7 @@ describe("deriveAppTokens", () => {
   it("pins the source colors to the tokens they represent", () => {
     const light = deriveAppTokens(LIGHT_SOURCES);
     expect(light["--background"]).toBe(LIGHT_SOURCES.canvas);
+    expect(light["--cal-header-bg"]).toBe(LIGHT_SOURCES.canvas);
     expect(light["--foreground"]).toBe(LIGHT_SOURCES.ink);
     expect(light["--primary"]).toBe(LIGHT_SOURCES.primary);
     expect(light["--destructive"]).toBe(LIGHT_SOURCES.destructive);
@@ -339,6 +343,7 @@ describe("deriveAppTokens", () => {
     const derived = deriveAppTokens(DARK_SOURCES);
     const exactKeys = [
       "--background",
+      "--cal-header-bg",
       "--foreground",
       "--card-foreground",
       "--popover-foreground",
@@ -419,7 +424,6 @@ describe("deriveCalendarTokens", () => {
   it("returns entries for every derivable key, not for the fully-semantic ones", () => {
     const derived = deriveCalendarTokens(LIGHT_SOURCES);
     expect(derived["--cal-bg"]).toBeDefined();
-    expect(derived["--cal-header-bg"]).toBeDefined();
     expect(derived["--cal-gridline"]).toBeDefined();
     expect(derived["--cal-time-label"]).toBeDefined();
     expect(derived["--cal-timeline-rail"]).toBeDefined();
@@ -431,9 +435,8 @@ describe("deriveCalendarTokens", () => {
     expect(derived["--cal-timeline-focus"]).toBeUndefined();
   });
 
-  it("pins the calendar header to the app canvas and derives cal-bg from it", () => {
+  it("derives cal-bg from the app canvas", () => {
     const light = deriveCalendarTokens(LIGHT_SOURCES);
-    expect(light["--cal-header-bg"]).toBe(LIGHT_SOURCES.canvas);
     // cal-bg is no longer a source: on a light canvas it lifts slightly
     // above canvas, so the two should diverge but stay close.
     expect(light["--cal-bg"]).not.toBe(LIGHT_SOURCES.canvas);
@@ -522,13 +525,6 @@ describe("deriveCalendarTokens", () => {
    * walk-derived stay within a small OKLab-L tolerance (chroma drift
    * from ink anchor).
    */
-  it("reproduces BASE.dark exactly on cal-header-bg", () => {
-    const derived = deriveCalendarTokens(DARK_SOURCES);
-    expect(derived["--cal-header-bg"]?.toLowerCase()).toBe(
-      BASE_CALENDAR_TOKENS.dark["--cal-header-bg"].toLowerCase(),
-    );
-  });
-
   it("lands within 2 OKLab-L units of BASE.dark on derived calendar tokens", () => {
     const derived = deriveCalendarTokens(DARK_SOURCES);
     const L = (hex: string) => hexToOklab(hex)!.L;
@@ -554,5 +550,95 @@ describe("deriveCalendarTokens", () => {
       const hasBase = BASE_CALENDAR_TOKENS.dark[key] !== undefined;
       expect(hasDerived || hasBase).toBe(true);
     }
+  });
+});
+
+describe("deriveCalendarColorDefaultBundle", () => {
+  it("returns the curated light calendar tokens and palette", () => {
+    const bundle = deriveCalendarColorDefaultBundle(
+      DARK_SOURCES,
+      "light",
+      "#000000",
+    );
+    expect(bundle.calendarTokens).toEqual(BASE_CALENDAR_TOKENS.light);
+    expect(bundle.runtimeTokens["--cal-scrollbar-thumb"]).toBe(
+      BASE_APP_TOKENS.light["--muted"],
+    );
+    expect(bundle.runtimeTokens["--cal-scrollbar-thumb-hover"]).toBe(
+      BASE_APP_TOKENS.light["--muted-foreground"],
+    );
+    expect(bundle.eventPalette).toEqual(lightTheme.eventPalette);
+    expect(bundle.blendCanvas).toBe(BASE_CALENDAR_TOKENS.light["--cal-bg"]);
+  });
+
+  it("returns the curated dark calendar tokens and palette", () => {
+    const bundle = deriveCalendarColorDefaultBundle(
+      LIGHT_SOURCES,
+      "dark",
+      "#ffffff",
+    );
+    expect(bundle.calendarTokens).toEqual(BASE_CALENDAR_TOKENS.dark);
+    expect(bundle.runtimeTokens["--cal-scrollbar-thumb"]).toBe(
+      BASE_APP_TOKENS.dark["--muted"],
+    );
+    expect(bundle.runtimeTokens["--cal-scrollbar-thumb-hover"]).toBe(
+      BASE_APP_TOKENS.dark["--muted-foreground"],
+    );
+    expect(bundle.eventPalette).toEqual(darkTheme.eventPalette);
+    expect(bundle.blendCanvas).toBe(BASE_CALENDAR_TOKENS.dark["--cal-bg"]);
+  });
+
+  it("uses app canvas mode to derive calendar tokens without a header token", () => {
+    const bundle = deriveCalendarColorDefaultBundle(
+      LIGHT_SOURCES,
+      "app-canvas",
+      "#000000",
+    );
+    expect(bundle.calendarTokens["--cal-bg"]).not.toBe(LIGHT_SOURCES.canvas);
+    expect(
+      contrastRatio(
+        bundle.runtimeTokens["--cal-scrollbar-thumb"],
+        bundle.calendarTokens["--cal-bg"],
+      ),
+    ).toBeGreaterThanOrEqual(1.6);
+    expect(
+      contrastRatio(
+        bundle.runtimeTokens["--cal-scrollbar-thumb-hover"],
+        bundle.calendarTokens["--cal-bg"],
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(bundle.runtimeTokens["--cal-scrollbar-thumb"]).not.toBe(
+      deriveAppTokens(LIGHT_SOURCES)["--muted"],
+    );
+    expect(
+      Object.hasOwn(bundle.calendarTokens, "--cal-header-bg"),
+    ).toBe(false);
+  });
+
+  it("uses custom mode to derive from the supplied basis", () => {
+    const bundle = deriveCalendarColorDefaultBundle(
+      LIGHT_SOURCES,
+      "custom",
+      "#101010",
+    );
+    expect(hexToOklab(bundle.calendarTokens["--cal-bg"])!.L).toBeLessThan(
+      hexToOklab(LIGHT_SOURCES.canvas)!.L,
+    );
+    expect(
+      contrastRatio(
+        bundle.runtimeTokens["--cal-scrollbar-thumb"],
+        bundle.calendarTokens["--cal-bg"],
+      ),
+    ).toBeGreaterThanOrEqual(1.6);
+    expect(
+      contrastRatio(
+        bundle.runtimeTokens["--cal-scrollbar-thumb-hover"],
+        bundle.calendarTokens["--cal-bg"],
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(bundle.runtimeTokens["--cal-scrollbar-thumb"]).not.toBe(
+      deriveAppTokens({ ...LIGHT_SOURCES, canvas: "#101010" })["--muted"],
+    );
+    expect(bundle.eventPalette).toEqual(darkTheme.eventPalette);
   });
 });

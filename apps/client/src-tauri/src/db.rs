@@ -394,5 +394,38 @@ pub fn migrations() -> Vec<Migration> {
               );
         ",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 11,
+        description: "add calendar color defaults and move calendar header to app tokens",
+        sql: "
+            ALTER TABLE themes
+                ADD COLUMN calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas'
+                CHECK (calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom'));
+            ALTER TABLE themes
+                ADD COLUMN calendar_default_custom TEXT NOT NULL DEFAULT '#27282A';
+            ALTER TABLE themes
+                ADD COLUMN seed_calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas'
+                CHECK (seed_calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom'));
+            ALTER TABLE themes
+                ADD COLUMN seed_calendar_default_custom TEXT NOT NULL DEFAULT '#27282A';
+
+            INSERT OR REPLACE INTO theme_tokens (theme_id, kind, key, value, isolated)
+            SELECT theme_id, 'app', key, value, isolated
+            FROM theme_tokens
+            WHERE kind = 'calendar' AND key = '--cal-header-bg';
+
+            INSERT OR REPLACE INTO theme_seed_tokens (theme_id, kind, key, value, isolated)
+            SELECT theme_id, 'app', key, value, isolated
+            FROM theme_seed_tokens
+            WHERE kind = 'calendar' AND key = '--cal-header-bg';
+
+            DELETE FROM theme_tokens
+            WHERE kind = 'calendar' AND key = '--cal-header-bg';
+
+            DELETE FROM theme_seed_tokens
+            WHERE kind = 'calendar' AND key = '--cal-header-bg';
+        ",
+        kind: MigrationKind::Up,
     }]
 }
