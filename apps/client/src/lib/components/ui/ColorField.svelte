@@ -134,6 +134,7 @@
   const rgb = $derived(hsvToRgb(hsv.h, hsv.s, hsv.v));
   const hueColor = $derived(hsvToHex(hsv.h, 100, 100));
   const solidHex = $derived(hsvToHex(hsv.h, hsv.s, hsv.v));
+  const transparentHex = $derived(rgbaToHex(rgb.r, rgb.g, rgb.b, 0));
   const alphaPercentDisplay = $derived(Math.round((alpha / 255) * 100));
 
   function currentEmittedHex(): string {
@@ -480,7 +481,7 @@
       >
         <div
           class="pointer-events-none absolute inset-0 rounded-full"
-          style="background: linear-gradient(to right, transparent 0%, {solidHex} 100%);"
+          style="background: linear-gradient(to right, {transparentHex} 0%, {solidHex} 100%);"
         ></div>
         <div
           class="pointer-events-none absolute top-1/2 z-10 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-transparent shadow"
