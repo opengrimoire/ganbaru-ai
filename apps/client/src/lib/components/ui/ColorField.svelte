@@ -48,17 +48,19 @@
   const VIEWPORT_MARGIN = 8;
   const THUMB_OUTLINE_LIGHT = "#ffffff";
   const THUMB_OUTLINE_DARK = "#000000";
+  const CHECKER_TILE_SIZE = 12;
 
   // Checkerboard background rendered from chrome tokens so the pattern stays
   // visible against any editor-chrome background and adapts to light/dark.
-  // The conic-gradient quadrants lay out a 2x2 checker inside each 10px tile.
+  // The conic-gradient quadrants lay out a 2x2 checker inside each tile.
+  // The alpha rail is 12px tall, so this renders exactly two cells high.
   const CHECKER_BG =
     "conic-gradient(" +
     "var(--editor-chrome-checker-b) 25%, " +
     "var(--editor-chrome-checker-a) 25% 50%, " +
     "var(--editor-chrome-checker-b) 50% 75%, " +
     "var(--editor-chrome-checker-a) 75%" +
-    ") 0 0/10px 10px";
+    `) 0 0/${CHECKER_TILE_SIZE}px ${CHECKER_TILE_SIZE}px`;
 
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
