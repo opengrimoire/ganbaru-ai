@@ -70,10 +70,9 @@
   --priority-hard: #F97316;
   --priority-epic: #A855F7;
 
-  /* Color picker thumb + alpha checker (fixed, visibility against any gradient) */
+  /* Color picker alpha checker (fixed, visibility against transparency) */
   --editor-chrome-checker-a: #CCCCCC;
   --editor-chrome-checker-b: #FFFFFF;
-  --editor-chrome-thumb-border: #FFFFFF;
 
   --shell-gap: 0.375rem;
   --content-radius: 0.5rem;
@@ -148,10 +147,9 @@
   --priority-hard: #FB923C;
   --priority-epic: #C084FC;
 
-  /* Color picker thumb + alpha checker (fixed, visibility against any gradient) */
+  /* Color picker alpha checker (fixed, visibility against transparency) */
   --editor-chrome-checker-a: #3A3A3F;
   --editor-chrome-checker-b: #5A5A60;
-  --editor-chrome-thumb-border: #FFFFFF;
 }
 
 @theme inline {

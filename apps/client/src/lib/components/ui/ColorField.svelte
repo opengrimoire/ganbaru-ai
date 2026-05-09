@@ -8,6 +8,7 @@
     clampChannel,
     clampHue,
     clampPercent,
+    contrastRatio,
     hexToRgba,
     hsvToHex,
     hsvToRgb,
@@ -45,6 +46,8 @@
   // overestimating is safe: it just biases towards opening upward sooner.
   const POPOVER_HEIGHT = 360;
   const VIEWPORT_MARGIN = 8;
+  const THUMB_OUTLINE_LIGHT = "#ffffff";
+  const THUMB_OUTLINE_DARK = "#000000";
 
   // Checkerboard background rendered from chrome tokens so the pattern stays
   // visible against any editor-chrome background and adapts to light/dark.
@@ -64,6 +67,7 @@
   let svEl: HTMLDivElement | undefined = $state();
   let hueEl: HTMLDivElement | undefined = $state();
   let alphaEl: HTMLDivElement | undefined = $state();
+  let thumbContour = $state(THUMB_OUTLINE_DARK);
   let hexDraft = $state(untrack(() => normalizeHex(value) ?? "#000000"));
   let hsv = $state<HsvColor>(
     untrack(() => {
@@ -135,6 +139,22 @@
   function currentEmittedHex(): string {
     const { r, g, b } = hsvToRgb(hsv.h, hsv.s, hsv.v);
     return rgbaToHex(r, g, b, alpha);
+  }
+
+  function updateThumbContour() {
+    if (typeof document === "undefined") return;
+    const styles = getComputedStyle(popoverEl ?? document.documentElement);
+    const popover = normalizeHex(styles.getPropertyValue("--popover"));
+    if (!popover) {
+      thumbContour = document.documentElement.classList.contains("dark")
+        ? THUMB_OUTLINE_LIGHT
+        : THUMB_OUTLINE_DARK;
+      return;
+    }
+    const lightContrast = contrastRatio(THUMB_OUTLINE_LIGHT, popover);
+    const darkContrast = contrastRatio(THUMB_OUTLINE_DARK, popover);
+    thumbContour =
+      lightContrast >= darkContrast ? THUMB_OUTLINE_LIGHT : THUMB_OUTLINE_DARK;
   }
 
   function emit(next: HsvColor, nextAlpha: number = alpha) {
@@ -292,6 +312,13 @@
 
   $effect(() => {
     if (!open) return;
+    updateThumbContour();
+    const root = document.documentElement;
+    const chromeObserver = new MutationObserver(updateThumbContour);
+    chromeObserver.observe(root, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node;
       if (triggerEl?.contains(target)) return;
@@ -315,6 +342,7 @@
       window.removeEventListener("mousedown", handleClickOutside, true);
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", handleResize);
+      chromeObserver.disconnect();
     };
   });
 </script>
@@ -408,7 +436,7 @@
       >
         <div
           class="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow"
-          style="left: {hsv.s}%; top: {100 - hsv.v}%; border-color: var(--editor-chrome-thumb-border);"
+          style="left: {hsv.s}%; top: {100 - hsv.v}%; border-color: {thumbContour};"
         ></div>
       </div>
 
@@ -424,7 +452,7 @@
       >
         <div
           class="pointer-events-none absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-transparent shadow"
-          style="left: {(hsv.h / 360) * 100}%; border-color: var(--editor-chrome-thumb-border);"
+          style="left: {(hsv.h / 360) * 100}%; border-color: {thumbContour};"
         ></div>
       </div>
 
@@ -435,7 +463,7 @@
         aria-label="Alpha"
         aria-valuenow={alphaPercentDisplay}
         tabindex="0"
-        class="relative mt-2 h-3 w-full touch-none overflow-hidden rounded-full"
+        class="relative mt-2 h-3 w-full touch-none rounded-full"
         style="background: {CHECKER_BG};"
       >
         <div
@@ -443,8 +471,8 @@
           style="background: linear-gradient(to right, transparent 0%, {solidHex} 100%);"
         ></div>
         <div
-          class="pointer-events-none absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-transparent shadow"
-          style="left: {(alpha / 255) * 100}%; border-color: var(--editor-chrome-thumb-border);"
+          class="pointer-events-none absolute top-1/2 z-10 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-transparent shadow"
+          style="left: {(alpha / 255) * 100}%; border-color: {thumbContour};"
         ></div>
       </div>
 

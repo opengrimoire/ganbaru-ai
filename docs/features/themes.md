@@ -288,7 +288,7 @@ A floating **contrast notice** appears at the bottom of the editor body when at 
 
 The editor panel paints from the live user theme: `bg-card`, `text-foreground`, `border-border`, and every other Tailwind class inside the editor resolves to the user's current resolved tokens. Editing canvas therefore gives immediate visual feedback on the panel itself, not just on the app underneath. Legibility is handled by the contrast-aware derivation rather than by shadowing: `--foreground` and `--card-foreground` are `pickReadableForeground` against their paired surfaces with the endpoint-preference fallback, so even when the user drags canvas close to ink the foregrounds snap decisively to black or white instead of settling on a muddy mid-gray.
 
-The only exceptions are three fixed base-only tokens used by `ColorField`: `--editor-chrome-thumb-border` (SV / hue / alpha slider thumb outlines) and `--editor-chrome-checker-a` / `-b` (the conic-gradient checker pattern behind the alpha slider). These stay independent of the live theme so the thumbs and the transparency pattern remain visible against any gradient the picker renders.
+The only fixed base-only tokens used by `ColorField` are `--editor-chrome-checker-a` / `-b`, the conic-gradient checker pattern behind the alpha slider. The SV / hue / alpha selector contour is not theme-editable: `ColorField` keeps the selector bodies transparent and picks the higher-contrast endpoint (`#000000` or `#ffffff`) against the picker popover background so the controls stay consistent with the editor chrome.
 
 ### Semantic tokens
 
