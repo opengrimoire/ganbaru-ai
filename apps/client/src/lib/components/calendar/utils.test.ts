@@ -38,6 +38,7 @@ import {
   deriveAcronymFromLongName,
   compactOffsetFromLong,
   computeViewWindow,
+  visibleMinuteRangeForScroll,
 } from "./utils";
 import type { CalendarEvent } from "./types";
 import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
@@ -210,6 +211,35 @@ describe("clampMinute", () => {
     expect(clampMinute(-10)).toBe(0);
     expect(clampMinute(720)).toBe(720);
     expect(clampMinute(1500)).toBe(1440);
+  });
+});
+
+describe("visibleMinuteRangeForScroll", () => {
+  it("subtracts sticky chrome before converting pixels to minutes", () => {
+    expect(visibleMinuteRangeForScroll({
+      scrollTop: 300,
+      viewportHeight: 600,
+      stickyTop: 120,
+      hourHeight: 60,
+    })).toEqual({ startMinute: 180, endMinute: 780 });
+  });
+
+  it("clamps to the day bounds", () => {
+    expect(visibleMinuteRangeForScroll({
+      scrollTop: 0,
+      viewportHeight: 2000,
+      stickyTop: 0,
+      hourHeight: 60,
+    })).toEqual({ startMinute: 0, endMinute: 1440 });
+  });
+
+  it("falls back to the full day for invalid geometry", () => {
+    expect(visibleMinuteRangeForScroll({
+      scrollTop: 0,
+      viewportHeight: 0,
+      stickyTop: 0,
+      hourHeight: 60,
+    })).toEqual({ startMinute: 0, endMinute: 1440 });
   });
 });
 

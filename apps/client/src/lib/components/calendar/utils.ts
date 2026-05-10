@@ -716,6 +716,36 @@ export function clampMinute(minute: number): number {
   return Math.max(0, Math.min(1440, Math.round(minute)));
 }
 
+/**
+ * Convert a scroll viewport over the timed calendar body into minute bounds.
+ * Sticky headers occupy scroll space before the body, so they are subtracted
+ * before converting pixels to minutes.
+ */
+export function visibleMinuteRangeForScroll(opts: {
+  scrollTop: number;
+  viewportHeight: number;
+  stickyTop: number;
+  hourHeight: number;
+}): { startMinute: number; endMinute: number } {
+  const dayHeight = 24 * opts.hourHeight;
+  if (
+    opts.viewportHeight <= 0 ||
+    opts.hourHeight <= 0 ||
+    !Number.isFinite(dayHeight)
+  ) {
+    return { startMinute: 0, endMinute: 1440 };
+  }
+  const topPx = Math.max(0, opts.scrollTop - opts.stickyTop);
+  const bottomPx = Math.max(
+    topPx,
+    Math.min(dayHeight, opts.scrollTop + opts.viewportHeight - opts.stickyTop),
+  );
+  return {
+    startMinute: clampMinute((topPx / opts.hourHeight) * 60),
+    endMinute: clampMinute((bottomPx / opts.hourHeight) * 60),
+  };
+}
+
 // Cross-midnight helpers
 
 /**

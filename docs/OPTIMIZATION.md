@@ -218,7 +218,7 @@ Keep Svelte as the UI layer, but make rendering explicitly bounded.
 Work:
 
 - Ensure week and month views render only events in the current window response.
-- Add virtualization or compact overflow rendering for dense day columns and all-day rows.
+- Add virtualization or compact overflow rendering for dense day columns and all-day rows. Done for timed day and week columns through scroll-window rendering; all-day rows already use compact overflow.
 - Avoid retaining previous navigation windows beyond a small cache.
 - Keep benchmark, settings, event details, ICS, and theme editor modules out of the boot path.
 
@@ -300,7 +300,7 @@ If Tauri and WebKit impose a higher fixed empty-app memory floor than desired, t
 5. Replace frontend `rawBlocks` dependencies with typed window, detail, existence, active-block, import, and export commands.
 6. Remove global Temporal from the normal boot path.
 7. Remove parked event panel mounting and replace it with intent-based prefetch. Done for boot mounting; panel reuse after an actual user open remains.
-8. Add dense-day virtualization or compact overflow rendering.
+8. Add dense-day virtualization or compact overflow rendering. Done for timed day and week columns.
 9. Run the full core benchmark suite and record the final result in `docs/PERFORMANCE.md`.
 
 This is the refactor sequence I would execute. It directly targets the core benchmark rows and the 10,000-event requirement.

@@ -8,6 +8,7 @@
     parseCalendarDate,
     GUTTER_WIDTH_PER_TZ,
     createSmoothScroll,
+    visibleMinuteRangeForScroll,
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
@@ -73,8 +74,28 @@
   let wheelCooldown = false;
   let ready = $state(false);
   let stickyHeaderHeight = $state(0);
+  let visibleStartMinute = $state(0);
+  let visibleEndMinute = $state(1440);
   const calZoom = getCalendarZoom();
   const smoothScroll = createSmoothScroll(() => scrollContainer);
+
+  function renderedHourHeight(): number {
+    const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
+    const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : calZoom.hourHeight;
+  }
+
+  function updateVisibleMinuteRange() {
+    if (!scrollContainer) return;
+    const range = visibleMinuteRangeForScroll({
+      scrollTop: scrollContainer.scrollTop,
+      viewportHeight: scrollContainer.clientHeight,
+      stickyTop: gutterTopHeight,
+      hourHeight: renderedHourHeight(),
+    });
+    visibleStartMinute = range.startMinute;
+    visibleEndMinute = range.endMinute;
+  }
 
   function onWheel(e: WheelEvent) {
     smoothScroll(e);
@@ -195,6 +216,7 @@
 
       scrollContainer.addEventListener("scroll", handleScroll);
       scrollContainer.addEventListener("cancel-smooth-scroll", () => smoothScroll.cancel());
+      updateVisibleMinuteRange();
       ready = true;
     }
 
@@ -263,10 +285,17 @@
     } else {
       scrollContainer.style.setProperty("--hour-h", String(newH));
     }
+    updateVisibleMinuteRange();
+  });
+
+  $effect(() => {
+    void gutterTopHeight;
+    updateVisibleMinuteRange();
   });
 
   function handleScroll() {
     lastScrollAt = performance.now();
+    updateVisibleMinuteRange();
     if (!scrollContainer || !onScrollChange || calZoom.isAnimating) return;
     const minute = (scrollContainer.scrollTop / calZoom.hourHeight) * 60;
     onScrollChange(Math.round(minute));
@@ -434,6 +463,8 @@
           createPreview={drag.getCreatePreviewForDate(dateStr)}
           dragGuideMinute={drag.getDragGuideMinuteForDate(dateStr)}
           createGuideMinute={drag.getCreateGuideMinuteForDate(dateStr)}
+          {visibleStartMinute}
+          {visibleEndMinute}
           onEventClick={onEventClick}
           onEventPrefetch={onEventPrefetch}
           onDragStart={drag.handleDragStart}

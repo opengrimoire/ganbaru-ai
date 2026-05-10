@@ -53,6 +53,8 @@
     draggingEventId,
     grabbingId,
     didDrag = false,
+    visibleStartMinute = 0,
+    visibleEndMinute = 1440,
   }: {
     date: Date;
     events: CalendarEvent[];
@@ -69,6 +71,8 @@
     draggingEventId?: string;
     grabbingId?: string;
     didDrag?: boolean;
+    visibleStartMinute?: number;
+    visibleEndMinute?: number;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventPrefetch?: (event: CalendarEvent) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
@@ -83,6 +87,7 @@
     pickBrightForeground(hoverGuideColor, resolvedAppTokens["--foreground"]),
   );
 
+  const TIMED_RENDER_BUFFER_MINUTES = 90;
   const panelOpen = $derived(!!editingId);
 
   const dateStr = $derived(formatDatePart(date));
@@ -132,6 +137,17 @@
 
   const effectivePositioned = $derived(layoutWithPreview.items);
   const layoutedPreview = $derived(layoutWithPreview.preview);
+  const renderedPositioned = $derived.by(() => {
+    const minMinute = Math.max(0, visibleStartMinute - TIMED_RENDER_BUFFER_MINUTES);
+    const maxMinute = Math.min(1440, visibleEndMinute + TIMED_RENDER_BUFFER_MINUTES);
+    return effectivePositioned.filter((pos) => {
+      if (pos.event.id === editingId || pos.event.id === grabbingId) return true;
+      if (previewedIds?.has(pos.event.id) === true) return true;
+      const start = pos.startMinute;
+      const end = pos.startMinute + pos.durationMinutes;
+      return end >= minMinute && start <= maxMinute;
+    });
+  });
 
   // Centralized pomodoro timeline
   const pomodoro = getPomodoro();
@@ -164,6 +180,12 @@
       }
     }
     return merged;
+  });
+
+  const visibleRailSegments = $derived.by(() => {
+    const minMinute = Math.max(0, visibleStartMinute - TIMED_RENDER_BUFFER_MINUTES);
+    const maxMinute = Math.min(1440, visibleEndMinute + TIMED_RENDER_BUFFER_MINUTES);
+    return railSegments.filter((seg) => seg.end >= minMinute && seg.start <= maxMinute);
   });
 
 
@@ -343,7 +365,7 @@
 
   // Re-check resize proximity when block layout changes (e.g. new block saved)
   $effect(() => {
-    void effectivePositioned;
+    void renderedPositioned;
     if (lastClientX === null || lastClientY === null || !columnEl) return;
     recheckProximity();
   });
@@ -453,7 +475,7 @@
 
     // First pass: find the block that strictly contains the mouse (standard bounding box)
     // At boundaries, blocks are [top, bottom) so only one block contains any given point
-    for (const pos of effectivePositioned) {
+    for (const pos of renderedPositioned) {
       if (pos.event.id === "__create__") continue;
       if (panelOpen && pos.event.id !== editingId) continue;
 
@@ -554,7 +576,7 @@
     const rawMinute = (offsetY / hh) * 60;
     const outsideDay = offsetY < 0 || offsetY > dayHeight;
     const overBlockedRail = offsetX < 0
-      && railSegments.some((seg) => seg.start <= rawMinute && seg.end >= rawMinute);
+      && visibleRailSegments.some((seg) => seg.start <= rawMinute && seg.end >= rawMinute);
     const unavailable = !!draggingEventId || !!dragPreview || !!createPreview
       || overBlockedRail
       || outsideDay;
@@ -688,7 +710,7 @@
     if (e.clientX >= colRect.left) return;
     const offsetY = e.clientY - colRect.top;
     const rawMinute = (offsetY / getRenderedHourHeight()) * 60;
-    if (railSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
+    if (visibleRailSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
     const minute = getCreateMinuteFromOffset(offsetY);
 
     onCreateStart(dateStr, minute, e);
@@ -725,7 +747,7 @@
   {/if}
 
   <!-- Pomodoro timeline rails (one per contiguous group of pomodoro events) -->
-  {#each railSegments as seg}
+  {#each visibleRailSegments as seg}
     <div
       class="pointer-events-none absolute z-[3] overflow-hidden"
       style="
@@ -769,7 +791,7 @@
     onpointerdown={handleColumnAreaPointerDown}
   >
   <!-- Events (use layout-aware positions that account for drag/create preview) -->
-  {#each effectivePositioned as pos (pos.event.id)}
+  {#each renderedPositioned as pos (pos.event.id)}
     <EventBlock
       positioned={pos}
       {theme}
