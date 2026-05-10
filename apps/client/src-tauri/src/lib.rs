@@ -4,7 +4,9 @@ use tauri::Manager;
 
 mod db;
 mod db_batch;
+mod db_path;
 mod notification;
+mod themes;
 mod tray;
 mod vault;
 
@@ -540,6 +542,11 @@ pub fn run() {
             vault::vault_write_text,
             vault::vault_read_ics_zip_entries,
             db_batch::db_execute_batch,
+            themes::theme_insert,
+            themes::theme_replace_content,
+            themes::theme_delete,
+            themes::theme_backfill_icon_label,
+            themes::theme_record_dismissal,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;

@@ -7,8 +7,8 @@
  *
  * Tokens live as one row per (theme_id, kind, key) in `theme_tokens`:
  *   kind='source'   keys are bare names (canvas, ink, primary, ...)
- *   kind='app'      keys are `--prefixed` CSS custom property names
- *   kind='calendar' keys are `--prefixed` calendar token names
+ *   kind='app'      keys are app CSS custom property names
+ *   kind='calendar' keys are calendar CSS custom property names
  *
  * Reads and writes follow `THEME_TOKEN_ROW_ORDER` so raw rows stay aligned
  * with the editor's section order without adding a persisted sort column.
@@ -16,18 +16,15 @@
  * `theme_seed_tokens` mirrors the same shape; per-row reset and
  * "Reset all" copy from seed back to live.
  *
- * Note on atomicity: tauri-plugin-sql exposes only `execute(sql, args)`
- * over a sqlx connection pool, so raw `BEGIN`/`COMMIT` payloads do not
- * compose into a real transaction (each statement may run on a different
- * connection). Multi-statement mutators below run as a sequence of
- * auto-committed statements; `insertTheme` cleans up after itself on
- * failure (DELETE cascades children) so a half-inserted theme cannot
- * survive. Update mutators are inherently recoverable: a partially
- * applied source cascade can be retried by the user.
+ * Note on atomicity: full snapshot writes go through Rust commands backed
+ * by one sqlx transaction. Narrow row-level editor helpers remain here and
+ * are recoverable: a partially applied source cascade can be retried by
+ * the user.
  */
 
-import { execute, select } from "./db";
+import { invoke } from "@tauri-apps/api/core";
 import { THEME_TOKEN_ROW_ORDER } from "$lib/stores/themes";
+import { dbUrl, execute, getDb, select } from "./db";
 
 export type TokenKind = "source" | "app" | "calendar";
 
@@ -131,6 +128,11 @@ const TOKEN_ORDER_CASE = [
 const TOKEN_ORDER_BY = `theme_id ASC, ${TOKEN_ORDER_CASE}, kind ASC, key ASC`;
 const PALETTE_ORDER_BY = "theme_id ASC, slot ASC";
 
+async function activeDbUrl(): Promise<string> {
+  await getDb();
+  return dbUrl();
+}
+
 export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
   const themes = await select<ThemeRow>(
     "SELECT * FROM themes ORDER BY created_at ASC",
@@ -162,68 +164,11 @@ export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
 }
 
 export async function insertTheme(write: UserThemeWrite): Promise<void> {
-  const now = Date.now();
-  try {
-    await execute(
-      `INSERT INTO themes
-        (id, display_name, icon_label, seed_icon_label, blend_canvas,
-         seed_blend_canvas, derivation_engine_version, calendar_default_mode,
-         calendar_default_custom, seed_calendar_default_mode,
-         seed_calendar_default_custom, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
-      [
-        write.id,
-        write.displayName,
-        write.iconLabel,
-        write.seedIconLabel,
-        write.blendCanvas,
-        write.seedBlendCanvas,
-        write.derivationEngineVersion,
-        write.calendarDefaultMode,
-        write.calendarDefaultCustom,
-        write.seedCalendarDefaultMode,
-        write.seedCalendarDefaultCustom,
-        now,
-      ],
-    );
-    for (const t of write.tokens) {
-      await execute(
-        "INSERT INTO theme_tokens (theme_id, kind, key, value, isolated) VALUES ($1, $2, $3, $4, $5)",
-        [write.id, t.kind, t.key, t.value, t.isolated ? 1 : 0],
-      );
-    }
-    for (const p of write.palette) {
-      await execute(
-        "INSERT INTO theme_event_palette (theme_id, slot, value) VALUES ($1, $2, $3)",
-        [write.id, p.slot, p.value],
-      );
-    }
-    for (const t of write.seedTokens) {
-      await execute(
-        "INSERT INTO theme_seed_tokens (theme_id, kind, key, value, isolated) VALUES ($1, $2, $3, $4, $5)",
-        [write.id, t.kind, t.key, t.value, t.isolated ? 1 : 0],
-      );
-    }
-    for (const p of write.seedPalette) {
-      await execute(
-        "INSERT INTO theme_seed_event_palette (theme_id, slot, value) VALUES ($1, $2, $3)",
-        [write.id, p.slot, p.value],
-      );
-    }
-  } catch (err) {
-    try {
-      await execute("DELETE FROM themes WHERE id = $1", [write.id]);
-    } catch {
-      // best-effort cleanup; if the parent row never inserted there is
-      // nothing to clean up, and if it did the cascade above clears
-      // every child row.
-    }
-    throw err;
-  }
+  await invoke<void>("theme_insert", { dbUrl: await activeDbUrl(), write });
 }
 
 export async function deleteTheme(id: string): Promise<void> {
-  await execute("DELETE FROM themes WHERE id = $1", [id]);
+  await invoke<void>("theme_delete", { dbUrl: await activeDbUrl(), id });
 }
 
 /**
@@ -239,71 +184,10 @@ export async function deleteTheme(id: string): Promise<void> {
  * created_at survives and dismissals are not cascaded.
  */
 export async function replaceThemeContent(write: UserThemeWrite): Promise<void> {
-  const now = Date.now();
-  await execute(
-    `UPDATE themes
-        SET display_name = $1,
-            icon_label = $2,
-            seed_icon_label = $3,
-            blend_canvas = $4,
-            seed_blend_canvas = $5,
-            derivation_engine_version = $6,
-            calendar_default_mode = $7,
-            calendar_default_custom = $8,
-            seed_calendar_default_mode = $9,
-            seed_calendar_default_custom = $10,
-            updated_at = $11
-      WHERE id = $12`,
-    [
-      write.displayName,
-      write.iconLabel,
-      write.seedIconLabel,
-      write.blendCanvas,
-      write.seedBlendCanvas,
-      write.derivationEngineVersion,
-      write.calendarDefaultMode,
-      write.calendarDefaultCustom,
-      write.seedCalendarDefaultMode,
-      write.seedCalendarDefaultCustom,
-      now,
-      write.id,
-    ],
-  );
-  await execute("DELETE FROM theme_tokens WHERE theme_id = $1", [write.id]);
-  await execute("DELETE FROM theme_event_palette WHERE theme_id = $1", [
-    write.id,
-  ]);
-  await execute("DELETE FROM theme_seed_tokens WHERE theme_id = $1", [
-    write.id,
-  ]);
-  await execute(
-    "DELETE FROM theme_seed_event_palette WHERE theme_id = $1",
-    [write.id],
-  );
-  for (const t of write.tokens) {
-    await execute(
-      "INSERT INTO theme_tokens (theme_id, kind, key, value, isolated) VALUES ($1, $2, $3, $4, $5)",
-      [write.id, t.kind, t.key, t.value, t.isolated ? 1 : 0],
-    );
-  }
-  for (const p of write.palette) {
-    await execute(
-      "INSERT INTO theme_event_palette (theme_id, slot, value) VALUES ($1, $2, $3)",
-      [write.id, p.slot, p.value],
-    );
-  }
-  for (const t of write.seedTokens) {
-    await execute(
-      "INSERT INTO theme_seed_tokens (theme_id, kind, key, value, isolated) VALUES ($1, $2, $3, $4, $5)",
-      [write.id, t.kind, t.key, t.value, t.isolated ? 1 : 0],
-    );
-  }
-  for (const p of write.seedPalette) {
-    await execute(
-      "INSERT INTO theme_seed_event_palette (theme_id, slot, value) VALUES ($1, $2, $3)",
-      [write.id, p.slot, p.value],
-    );
-  }
+  await invoke<void>("theme_replace_content", {
+    dbUrl: await activeDbUrl(),
+    write,
+  });
 }
 
 export async function renameTheme(
@@ -564,22 +448,22 @@ export async function backfillIconLabel(
   id: string,
   iconLabel: "light" | "dark",
 ): Promise<void> {
-  await execute(
-    "UPDATE themes SET icon_label = $1, seed_icon_label = $1 WHERE id = $2",
-    [iconLabel, id],
-  );
+  await invoke<void>("theme_backfill_icon_label", {
+    dbUrl: await activeDbUrl(),
+    id,
+    iconLabel,
+  });
 }
 
 export async function recordDismissal(
   id: string,
   engineVersion: number,
 ): Promise<void> {
-  await execute(
-    `INSERT OR REPLACE INTO theme_upgrade_dismissals
-       (theme_id, engine_version, dismissed_at)
-     VALUES ($1, $2, $3)`,
-    [id, engineVersion, Date.now()],
-  );
+  await invoke<void>("theme_record_dismissal", {
+    dbUrl: await activeDbUrl(),
+    id,
+    engineVersion,
+  });
 }
 
 export async function loadDismissals(): Promise<DismissalRow[]> {

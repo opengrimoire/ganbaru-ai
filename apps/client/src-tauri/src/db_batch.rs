@@ -15,8 +15,10 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use sqlx::{Connection, Executor, SqliteConnection};
-use tauri::{AppHandle, Manager, Runtime};
+use sqlx::{Connection, Executor};
+use tauri::{AppHandle, Runtime};
+
+use crate::db_path::connect_sqlite;
 
 #[derive(Deserialize)]
 pub struct DbStatement {
@@ -34,19 +36,6 @@ pub struct DbStatement {
 pub struct DbBatchResult {
     /// `rows_affected` for each statement, in the input order.
     pub rows_affected: Vec<u64>,
-}
-
-fn resolve_db_path<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Result<String, String> {
-    let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    let suffix = db_url
-        .split_once(':')
-        .ok_or_else(|| format!("invalid db url '{db_url}', expected 'sqlite:<path>'"))?
-        .1;
-    path.push(suffix);
-    let p = path
-        .to_str()
-        .ok_or_else(|| "db path contains non-utf8 characters".to_string())?;
-    Ok(format!("sqlite:{p}"))
 }
 
 fn bind_value<'q>(
@@ -81,10 +70,7 @@ pub async fn db_execute_batch<R: Runtime>(
     db_url: String,
     statements: Vec<DbStatement>,
 ) -> Result<DbBatchResult, String> {
-    let conn_url = resolve_db_path(&app, &db_url)?;
-    let mut conn = SqliteConnection::connect(&conn_url)
-        .await
-        .map_err(|e| format!("connect: {e}"))?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
 
     let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
 
