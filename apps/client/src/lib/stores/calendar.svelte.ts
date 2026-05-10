@@ -20,9 +20,8 @@ import {
   type DbAlarm, type DbAttendee, type DbCalendarEvent, type DbOverride,
 } from "./map-row";
 import {
-  buildBulkImportStatements,
-  classifyImportEvents,
-  type ExistingEventRow,
+  buildBulkImportPayload,
+  type CalendarBulkImportResult,
 } from "./calendar-bulk-import";
 import type { IcsImportSummary } from "$lib/calendar/ics/types";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
@@ -1139,11 +1138,9 @@ export function getCalendar() {
      * equal SEQUENCE counts as an update so re-importing the same file leaves
      * the DB clean. Child rows (attendees, alarms, overrides) are replaced.
      *
-     * The whole batch ships as a single SQLite transaction via the Rust
-     * `db_execute_batch` command. SQLite auto-commits one statement at a time
-     * when called through `tauri-plugin-sql`'s pool; that fsynced every
-     * statement, turning a few-thousand-row import into a multi-minute job.
-     * One transaction means one fsync at commit, even for ~5k events.
+     * The whole batch ships as a typed payload to the Rust
+     * `calendar_bulk_import` command. Rust deduplicates by UID, compares
+     * SEQUENCE, replaces child rows, and commits once.
      */
     async bulkImport(
       events: CalendarEvent[],
@@ -1152,45 +1149,25 @@ export function getCalendar() {
       const now = nowLocal();
       const fallbackZone = localTimezone();
 
-      // Pre-fetch existing rows for every imported sourceUid so we can
-      // classify add/update/skip without per-event SELECT roundtrips.
-      const SELECT_CHUNK = 500;
-      const uniqueUids = [...new Set(
-        events.map((e) => e.sourceUid).filter((u): u is string => Boolean(u)),
-      )];
-      const existing: ExistingEventRow[] = [];
-      for (let i = 0; i < uniqueUids.length; i += SELECT_CHUNK) {
-        const slice = uniqueUids.slice(i, i + SELECT_CHUNK);
-        const placeholders = slice.map((_, idx) => `$${idx + 2}`).join(",");
-        const rows = await select<{ id: string; source_uid: string; sequence: number | null }>(
-          `SELECT id, source_uid, sequence FROM calendar_events
-           WHERE calendar_id = $1 AND source_uid IN (${placeholders})`,
-          [targetCalendarId, ...slice],
-        );
-        for (const r of rows) {
-          existing.push({ id: r.id, source_uid: r.source_uid, sequence: r.sequence ?? 0 });
-        }
-      }
-
-      const classification = classifyImportEvents(
-        events, existing, () => crypto.randomUUID(),
+      const payload = buildBulkImportPayload(
+        events, targetCalendarId, now, fallbackZone, () => crypto.randomUUID(),
       );
+      const eventByCandidateId = new Map(
+        payload.events.map((event, index) => [event.candidateId, events[index]]),
+      );
+      const result = await invoke<CalendarBulkImportResult>("calendar_bulk_import", {
+        dbUrl: dbUrl(),
+        payload,
+      });
 
-      // Skip the IPC roundtrip entirely when there is nothing to write
-      // (every event was either missing a UID or had an older sequence).
-      if (classification.toAdd.length === 0 && classification.toUpdate.length === 0) {
+      if (result.applied.length === 0) {
         return {
           added: 0,
           updated: 0,
-          skippedOlder: classification.skippedOlder,
-          warnings: classification.warnings,
+          skippedOlder: result.skippedOlder,
+          warnings: result.warnings,
         };
       }
-
-      const statements = buildBulkImportStatements(
-        classification, targetCalendarId, now, fallbackZone,
-      );
-      await invoke("db_execute_batch", { dbUrl: dbUrl(), statements });
 
       // In-memory state update: the previous implementation called
       // `store.load()` to re-read the universe from disk. Now that we know
@@ -1206,25 +1183,15 @@ export function getCalendar() {
         const next = [...rawBlocks];
         for (let i = 0; i < next.length; i++) idToIdx.set(next[i].id, i);
 
-        for (const { event, newId } of classification.toAdd) {
+        for (const applied of result.applied) {
+          const event = eventByCandidateId.get(applied.candidateId);
+          if (!event) continue;
           const homeZone = event.timezone || fallbackZone;
-          next.push(slimEvent({
-            ...event,
-            id: newId,
-            calendarId: targetCalendarId,
-            timezone: homeZone,
-            start: event.allDay ? event.start : reZone(event.start, homeZone),
-            end: event.allDay ? event.end : reZone(event.end, homeZone),
-          }));
-        }
-
-        for (const { event, existingId } of classification.toUpdate) {
-          const homeZone = event.timezone || fallbackZone;
-          const idx = idToIdx.get(existingId);
+          const idx = idToIdx.get(applied.eventId);
           const merged: CalendarEvent = slimEvent({
             ...(idx !== undefined ? next[idx] : {} as CalendarEvent),
             ...event,
-            id: existingId,
+            id: applied.eventId,
             calendarId: targetCalendarId,
             timezone: homeZone,
             start: event.allDay ? event.start : reZone(event.start, homeZone),
@@ -1240,10 +1207,10 @@ export function getCalendar() {
       }
 
       return {
-        added: classification.added,
-        updated: classification.updated,
-        skippedOlder: classification.skippedOlder,
-        warnings: classification.warnings,
+        added: result.added,
+        updated: result.updated,
+        skippedOlder: result.skippedOlder,
+        warnings: result.warnings,
       };
     },
 

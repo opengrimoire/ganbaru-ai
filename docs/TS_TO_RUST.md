@@ -10,7 +10,8 @@ The current performance baseline before this plan is `2026-05-09-01` in
 
 ## Implementation status
 
-Started with the Phase 0 foundation and the first Phase 4 slice:
+Started with the Phase 0 foundation, Phase 2 import application, and Phase 4
+theme persistence:
 
 - Added a shared Rust SQLite resolver for the registered app databases.
 - Enabled `PRAGMA foreign_keys=ON` on direct sqlx connections used by the
@@ -22,6 +23,11 @@ Started with the Phase 0 foundation and the first Phase 4 slice:
 - Moved row-level theme editor helpers, source cascade, rebake, reset, and
   dismissal loading behind focused Rust commands. This completes Phase 4 for
   durable theme writes.
+- Replaced the calendar bulk import raw SQL batch path with the typed Rust
+  `calendar_bulk_import` command. TypeScript still parses ICS and performs the
+  existing wall-clock conversions; Rust now owns deduplication, SEQUENCE
+  comparison, parent and child row replacement, validation, and the transaction.
+- Removed the generic `db_execute_batch` command from the Tauri command surface.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
@@ -54,8 +60,9 @@ Rust currently owns:
 - SQLite migrations in `apps/client/src-tauri/src/db.rs`.
 - Vault file I/O, generic text file read/write, and safe `.ics.zip` extraction
   in `apps/client/src-tauri/src/vault.rs`.
-- A generic transactional executor, `db_execute_batch`, in
-  `apps/client/src-tauri/src/db_batch.rs`.
+- Typed theme persistence commands in `apps/client/src-tauri/src/themes.rs`.
+- Typed calendar bulk import application in
+  `apps/client/src-tauri/src/calendar_import.rs`.
 
 TypeScript currently owns most normal SQLite writes through
 `apps/client/src/lib/api/db.ts`, including calendar, Pomodoro, theme, and
@@ -169,6 +176,10 @@ Replace the current TypeScript SQL statement builder in
 `apps/client/src/lib/stores/calendar-bulk-import.ts` with a typed Rust import
 application command.
 
+Current implementation uses `calendar_bulk_import` for the database application
+layer. TypeScript still builds a typed import payload after ICS parsing and
+wall-clock conversion.
+
 The command should receive either parsed event DTOs or a higher-level import
 payload and should:
 
@@ -181,8 +192,8 @@ payload and should:
 
 Why this should move:
 
-- Rust already executes the transaction through `db_execute_batch`; building
-  raw SQL in TypeScript is an intermediate state.
+- The previous intermediate state used a generic `db_execute_batch` command;
+  that path allowed frontend-built SQL to cross the IPC boundary.
 - Import applies untrusted external data to durable state.
 - A typed Rust command reduces IPC payload size and removes arbitrary SQL
   statement execution from the import path.
