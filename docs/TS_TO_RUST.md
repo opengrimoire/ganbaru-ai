@@ -32,6 +32,9 @@ theme persistence:
   commands. Patch covers parent fields, attendees, alarms, and Pomodoro config.
 - Routed simple recurrence exception and repeat-until updates, plus clear-all,
   through Rust commands.
+- Moved detach-instance and split-series database transactions behind Rust
+  commands, including parent row updates, child row copies, and Pomodoro segment
+  reassignment for detached instances.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
@@ -141,9 +144,10 @@ Initial Rust commands should cover:
 
 Current implementation has Rust commands for basic event creation, patch, and
 deletion. Patch covers parent fields, attendees, alarms, and Pomodoro config.
-Simple exception and repeat-until updates also use the patch command.
-Per-instance overrides, detach, split, Pomodoro segment protection, and typed
-reads are still Phase 1 work.
+Simple exception and repeat-until updates also use the patch command. Detach
+and split now use focused Rust transactions. Per-instance override writes,
+historical Pomodoro segment protection before structural edits, and typed reads
+are still Phase 1 work.
 
 Why this should move:
 

@@ -546,6 +546,8 @@ pub fn run() {
             calendar_events::calendar_delete_event,
             calendar_events::calendar_clear_events,
             calendar_events::calendar_update_event,
+            calendar_events::calendar_detach_instance,
+            calendar_events::calendar_split_series,
             calendar_import::calendar_bulk_import,
             themes::theme_insert,
             themes::theme_replace_content,

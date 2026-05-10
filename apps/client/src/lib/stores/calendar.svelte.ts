@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { dbUrl, execute, select } from "$lib/api/db";
+import { dbUrl, select } from "$lib/api/db";
 import type {
   Calendar, CalendarEvent, EventAttendee, EventColor, EventOverride,
   EventOrganizer, EventStatus, EventTransparency, EventVisibility,
@@ -836,89 +836,32 @@ export function getCalendar() {
       const instanceDate = instanceEvent.start.split(" ")[0];
       const exceptions = [...(parent.exceptions ?? []), instanceDate];
       const now = nowLocal();
-
-      // Add exception to parent
-      await execute(
-        `UPDATE calendar_events SET exceptions = $1, updated_at = $2 WHERE id = $3`,
-        [JSON.stringify(exceptions), now, parentId],
-      );
-
-      // Create standalone event by copying heavy columns straight from the
-      // parent's DB row. Identity, time, color, notifications, and the
-      // recurrence-related columns come in as bind params; everything the
-      // slim in-memory parent no longer carries (description, url,
-      // organizer, geo, categories, extended_properties, guest_can_*,
-      // visibility, priority, sequence) flows through the INSERT...SELECT.
       const newId = crypto.randomUUID();
       const timezone = parent.timezone || localTimezone();
       const notifJson = parent.notifications && parent.notifications.length > 0
         ? JSON.stringify(parent.notifications) : null;
-      await execute(
-        `INSERT INTO calendar_events (
-           id, title, start_time, end_time, timezone, calendar_id,
-           color, notifications, rrule, repeat_until, exceptions, rdate,
-           all_day, location, transparency, status,
-           source_uid,
-           description, url, visibility, priority, categories, geo,
-           sequence, extended_properties, organizer,
-           guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-           created_at, updated_at
-         )
-         SELECT $1, $2, $3, $4, $5, $6,
-                $7, $8, NULL, NULL, NULL, NULL,
-                $9, $10, $11, $12,
-                NULL,
-                description, url, visibility, priority, categories, geo,
-                sequence, extended_properties, organizer,
-                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-                $13, $14
-         FROM calendar_events WHERE id = $15`,
-        [
-          newId, instanceEvent.title,
-          toDbTime(instanceEvent.start, timezone, parent.allDay),
-          toDbTime(instanceEvent.end, timezone, parent.allDay),
-          timezone, parent.calendarId,
-          instanceEvent.color ?? null, notifJson,
-          parent.allDay ? 1 : 0,
-          parent.location ?? "",
-          parent.transparency ?? "opaque",
-          parent.status ?? "confirmed",
-          now, now,
+      await invoke("calendar_detach_instance", {
+        dbUrl: dbUrl(),
+        input: {
           parentId,
-        ],
-      );
-      if (parent.pomodoroConfig) {
-        await execute(
-          `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [newId, parent.pomodoroConfig.focusDurationMinutes,
-           parent.pomodoroConfig.shortBreakMinutes,
-           parent.pomodoroConfig.longBreakMinutes,
-           parent.pomodoroConfig.pomodoroCount,
-           parent.pomodoroConfig.idleTimeoutMinutes],
-        );
-      }
+          instanceDate,
+          exceptions: JSON.stringify(exceptions),
+          newId,
+          title: instanceEvent.title,
+          startTime: toDbTime(instanceEvent.start, timezone, parent.allDay),
+          endTime: toDbTime(instanceEvent.end, timezone, parent.allDay),
+          timezone,
+          calendarId: parent.calendarId,
+          color: instanceEvent.color ?? null,
+          notifications: notifJson,
+          allDay: parent.allDay ?? false,
+          location: parent.location ?? "",
+          transparency: parent.transparency ?? "opaque",
+          status: parent.status ?? "confirmed",
+          now,
+        },
+      });
 
-      // Copy attendees from parent's DB row. lower(hex(randomblob(16)))
-      // gives 32 hex chars; the schema PK is TEXT, no UUID format required.
-      await execute(
-        `INSERT INTO calendar_event_attendees
-           (id, event_id, name, email, role, status, rsvp, sort_order)
-         SELECT lower(hex(randomblob(16))), $1, name, email, role, status, rsvp, sort_order
-         FROM calendar_event_attendees WHERE event_id = $2`,
-        [newId, parentId],
-      );
-
-      // Migrate pomodoro segments from parent template to the new standalone event
-      // Segments may be stored with event_id = parentId or event_id = parentId::date
-      await execute(
-        `UPDATE pomodoro_segments SET event_id = $1
-         WHERE event_id IN ($2, $2 || '::' || $3) AND event_date = $3`,
-        [newId, parentId, instanceDate],
-      );
-
-      // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
       );
@@ -1030,10 +973,6 @@ export function getCalendar() {
         ? { ...parent.recurrence, end: { type: "until", date: dayBefore } }
         : undefined;
       const cappedRrule = cappedRecurrence ? recurrenceToRrule(cappedRecurrence) : null;
-      await execute(
-        `UPDATE calendar_events SET repeat_until = $1, rrule = $2, updated_at = $3 WHERE id = $4`,
-        [dayBefore, cappedRrule, now, parentId],
-      );
 
       // Create new recurring template starting at changes' full position
       const newId = crypto.randomUUID();
@@ -1063,69 +1002,33 @@ export function getCalendar() {
       const descriptionPatch = "description" in changes
         ? (changes.description ?? "") : null;
       const urlPatch = "url" in changes ? (changes.url ?? "") : null;
-      await execute(
-        `INSERT INTO calendar_events (
-           id, title, start_time, end_time, timezone, calendar_id,
-           color, notifications, rrule, repeat_until, exceptions, rdate,
-           all_day, location, transparency, status,
-           source_uid,
-           description, url, visibility, priority, categories, geo,
-           sequence, extended_properties, organizer,
-           guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-           created_at, updated_at
-         )
-         SELECT $1, $2, $3, $4, $5, $6,
-                $7, $8, $9, NULL, NULL, NULL,
-                $10, $11, $12, $13,
-                NULL,
-                COALESCE($14, description),
-                COALESCE($15, url),
-                visibility, priority, categories, geo,
-                sequence, extended_properties, organizer,
-                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-                $16, $17
-         FROM calendar_events WHERE id = $18`,
-        [
-          newId, merged.title ?? parent.title,
-          toDbTime(newStart, homeZone, merged.allDay),
-          toDbTime(newEnd, homeZone, merged.allDay),
-          homeZone, parent.calendarId,
-          merged.color ?? null,
-          splitNotifJson,
+      const pomConfig = merged.pomodoroConfig ?? parent.pomodoroConfig;
+      await invoke("calendar_split_series", {
+        dbUrl: dbUrl(),
+        input: {
+          parentId,
+          dayBefore,
+          cappedRrule,
+          newId,
+          title: merged.title ?? parent.title,
+          startTime: toDbTime(newStart, homeZone, merged.allDay),
+          endTime: toDbTime(newEnd, homeZone, merged.allDay),
+          timezone: homeZone,
+          calendarId: parent.calendarId,
+          color: merged.color ?? null,
+          notifications: splitNotifJson,
           rrule,
-          merged.allDay ? 1 : 0,
-          merged.location ?? "",
-          merged.transparency ?? "opaque",
-          merged.status ?? "confirmed",
+          allDay: merged.allDay ?? false,
+          location: merged.location ?? "",
+          transparency: merged.transparency ?? "opaque",
+          status: merged.status ?? "confirmed",
           descriptionPatch,
           urlPatch,
-          now, now,
-          parentId,
-        ],
-      );
+          pomodoroConfig: pomConfig ?? null,
+          now,
+        },
+      });
 
-      const pomConfig = merged.pomodoroConfig ?? parent.pomodoroConfig;
-      if (pomConfig) {
-        await execute(
-          `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [newId, pomConfig.focusDurationMinutes, pomConfig.shortBreakMinutes,
-           pomConfig.longBreakMinutes, pomConfig.pomodoroCount,
-           pomConfig.idleTimeoutMinutes],
-        );
-      }
-
-      // Copy attendees from parent's DB row
-      await execute(
-        `INSERT INTO calendar_event_attendees
-           (id, event_id, name, email, role, status, rsvp, sort_order)
-         SELECT lower(hex(randomblob(16))), $1, name, email, role, status, rsvp, sort_order
-         FROM calendar_event_attendees WHERE event_id = $2`,
-        [newId, parentId],
-      );
-
-      // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, recurrence: cappedRecurrence } : b,
       );

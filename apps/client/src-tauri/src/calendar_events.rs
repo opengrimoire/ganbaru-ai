@@ -159,6 +159,52 @@ enum CalendarPomodoroConfigPatch {
     Clear,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarDetachInstance {
+    parent_id: String,
+    instance_date: String,
+    exceptions: String,
+    new_id: String,
+    title: String,
+    start_time: String,
+    end_time: String,
+    timezone: String,
+    calendar_id: String,
+    color: Option<i64>,
+    notifications: Option<String>,
+    all_day: bool,
+    location: String,
+    transparency: String,
+    status: String,
+    now: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarSplitSeries {
+    parent_id: String,
+    day_before: String,
+    capped_rrule: Option<String>,
+    new_id: String,
+    title: String,
+    start_time: String,
+    end_time: String,
+    timezone: String,
+    calendar_id: String,
+    color: Option<i64>,
+    notifications: Option<String>,
+    rrule: Option<String>,
+    all_day: bool,
+    location: String,
+    transparency: String,
+    status: String,
+    description_patch: Option<String>,
+    url_patch: Option<String>,
+    pomodoro_config: Option<CalendarPomodoroConfig>,
+    now: String,
+}
+
 #[tauri::command]
 pub async fn calendar_add_event<R: Runtime>(
     app: AppHandle<R>,
@@ -398,6 +444,228 @@ pub async fn calendar_update_event<R: Runtime>(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn calendar_detach_instance<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    input: CalendarDetachInstance,
+) -> Result<(), String> {
+    validate_detach_instance(&input)?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+
+    let result =
+        sqlx::query("UPDATE calendar_events SET exceptions = ?, updated_at = ? WHERE id = ?")
+            .bind(&input.exceptions)
+            .bind(&input.now)
+            .bind(&input.parent_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("update detached parent exceptions: {e}"))?;
+    if result.rows_affected() == 0 {
+        return Err(format!("calendar event '{}' not found", input.parent_id));
+    }
+
+    sqlx::query(
+        "INSERT INTO calendar_events (
+           id, title, start_time, end_time, timezone, calendar_id,
+           color, notifications, rrule, repeat_until, exceptions, rdate,
+           all_day, location, transparency, status,
+           source_uid,
+           description, url, visibility, priority, categories, geo,
+           sequence, extended_properties, organizer,
+           guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+           created_at, updated_at
+         )
+         SELECT ?, ?, ?, ?, ?, ?,
+                ?, ?, NULL, NULL, NULL, NULL,
+                ?, ?, ?, ?,
+                NULL,
+                description, url, visibility, priority, categories, geo,
+                sequence, extended_properties, organizer,
+                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+                ?, ?
+         FROM calendar_events WHERE id = ?",
+    )
+    .bind(&input.new_id)
+    .bind(&input.title)
+    .bind(&input.start_time)
+    .bind(&input.end_time)
+    .bind(&input.timezone)
+    .bind(&input.calendar_id)
+    .bind(input.color)
+    .bind(&input.notifications)
+    .bind(if input.all_day { 1_i64 } else { 0_i64 })
+    .bind(&input.location)
+    .bind(&input.transparency)
+    .bind(&input.status)
+    .bind(&input.now)
+    .bind(&input.now)
+    .bind(&input.parent_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("insert detached event: {e}"))?;
+
+    copy_pomodoro_config(&mut tx, &input.parent_id, &input.new_id).await?;
+    copy_attendees(&mut tx, &input.parent_id, &input.new_id).await?;
+
+    sqlx::query(
+        "UPDATE pomodoro_segments SET event_id = ?
+         WHERE event_id IN (?, ? || '::' || ?) AND event_date = ?",
+    )
+    .bind(&input.new_id)
+    .bind(&input.parent_id)
+    .bind(&input.parent_id)
+    .bind(&input.instance_date)
+    .bind(&input.instance_date)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("move detached pomodoro segments: {e}"))?;
+
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn calendar_split_series<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    input: CalendarSplitSeries,
+) -> Result<(), String> {
+    validate_split_series(&input)?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+
+    let result = sqlx::query(
+        "UPDATE calendar_events SET repeat_until = ?, rrule = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(&input.day_before)
+    .bind(&input.capped_rrule)
+    .bind(&input.now)
+    .bind(&input.parent_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("cap split parent series: {e}"))?;
+    if result.rows_affected() == 0 {
+        return Err(format!("calendar event '{}' not found", input.parent_id));
+    }
+
+    sqlx::query(
+        "INSERT INTO calendar_events (
+           id, title, start_time, end_time, timezone, calendar_id,
+           color, notifications, rrule, repeat_until, exceptions, rdate,
+           all_day, location, transparency, status,
+           source_uid,
+           description, url, visibility, priority, categories, geo,
+           sequence, extended_properties, organizer,
+           guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+           created_at, updated_at
+         )
+         SELECT ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, NULL, NULL, NULL,
+                ?, ?, ?, ?,
+                NULL,
+                COALESCE(?, description),
+                COALESCE(?, url),
+                visibility, priority, categories, geo,
+                sequence, extended_properties, organizer,
+                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+                ?, ?
+         FROM calendar_events WHERE id = ?",
+    )
+    .bind(&input.new_id)
+    .bind(&input.title)
+    .bind(&input.start_time)
+    .bind(&input.end_time)
+    .bind(&input.timezone)
+    .bind(&input.calendar_id)
+    .bind(input.color)
+    .bind(&input.notifications)
+    .bind(&input.rrule)
+    .bind(if input.all_day { 1_i64 } else { 0_i64 })
+    .bind(&input.location)
+    .bind(&input.transparency)
+    .bind(&input.status)
+    .bind(&input.description_patch)
+    .bind(&input.url_patch)
+    .bind(&input.now)
+    .bind(&input.now)
+    .bind(&input.parent_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("insert split series event: {e}"))?;
+
+    if let Some(config) = &input.pomodoro_config {
+        insert_pomodoro_config(&mut tx, &input.new_id, config).await?;
+    } else {
+        copy_pomodoro_config(&mut tx, &input.parent_id, &input.new_id).await?;
+    }
+    copy_attendees(&mut tx, &input.parent_id, &input.new_id).await?;
+
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+async fn copy_pomodoro_config(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_event_id: &str,
+    target_event_id: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO pomodoro_configs
+           (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes
+         FROM pomodoro_configs WHERE event_id = ?",
+    )
+    .bind(target_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("copy pomodoro config: {e}"))?;
+    Ok(())
+}
+
+async fn insert_pomodoro_config(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    config: &CalendarPomodoroConfig,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO pomodoro_configs
+           (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(event_id)
+    .bind(config.focus_duration_minutes)
+    .bind(config.short_break_minutes)
+    .bind(config.long_break_minutes)
+    .bind(config.pomodoro_count)
+    .bind(config.idle_timeout_minutes)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("insert pomodoro config: {e}"))?;
+    Ok(())
+}
+
+async fn copy_attendees(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_event_id: &str,
+    target_event_id: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO calendar_event_attendees
+           (id, event_id, name, email, role, status, rsvp, sort_order)
+         SELECT lower(hex(randomblob(16))), ?, name, email, role, status, rsvp, sort_order
+         FROM calendar_event_attendees WHERE event_id = ?",
+    )
+    .bind(target_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("copy attendees: {e}"))?;
+    Ok(())
+}
+
 async fn apply_update_field(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
@@ -619,6 +887,58 @@ fn validate_event_update(patch: &CalendarEventUpdate) -> Result<(), String> {
         validate_pomodoro_config(config)?;
     }
     Ok(())
+}
+
+fn validate_detach_instance(input: &CalendarDetachInstance) -> Result<(), String> {
+    require_non_empty(&input.parent_id, "parent_id")?;
+    require_non_empty(&input.instance_date, "instance_date")?;
+    require_non_empty(&input.new_id, "new_id")?;
+    require_non_empty(&input.title, "title")?;
+    require_non_empty(&input.start_time, "start_time")?;
+    require_non_empty(&input.end_time, "end_time")?;
+    require_non_empty(&input.timezone, "timezone")?;
+    require_non_empty(&input.calendar_id, "calendar_id")?;
+    require_non_empty(&input.now, "now")?;
+    validate_json_option(&Some(input.exceptions.clone()), "exceptions")?;
+    validate_color(input.color, "color")?;
+    validate_json_option(&input.notifications, "notifications")?;
+    validate_enum(
+        &input.transparency,
+        "transparency",
+        &["opaque", "transparent"],
+    )?;
+    validate_enum(
+        &input.status,
+        "status",
+        &["confirmed", "tentative", "cancelled"],
+    )
+}
+
+fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
+    require_non_empty(&input.parent_id, "parent_id")?;
+    require_non_empty(&input.day_before, "day_before")?;
+    require_non_empty(&input.new_id, "new_id")?;
+    require_non_empty(&input.title, "title")?;
+    require_non_empty(&input.start_time, "start_time")?;
+    require_non_empty(&input.end_time, "end_time")?;
+    require_non_empty(&input.timezone, "timezone")?;
+    require_non_empty(&input.calendar_id, "calendar_id")?;
+    require_non_empty(&input.now, "now")?;
+    validate_color(input.color, "color")?;
+    validate_json_option(&input.notifications, "notifications")?;
+    if let Some(config) = &input.pomodoro_config {
+        validate_pomodoro_config(config)?;
+    }
+    validate_enum(
+        &input.transparency,
+        "transparency",
+        &["opaque", "transparent"],
+    )?;
+    validate_enum(
+        &input.status,
+        "status",
+        &["confirmed", "tentative", "cancelled"],
+    )
 }
 
 fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String> {
