@@ -39,6 +39,9 @@ persistence:
 - Moved calendar list add, visibility toggle, and remove operations behind Rust
   commands. Calendar removal now deletes events and the calendar row in one
   transaction.
+- Moved calendar Pomodoro progress detection for recurring instances behind
+  Rust commands, so the decision to protect historical progress before
+  structural recurrence edits no longer relies on frontend SQL.
 - Moved Pomodoro segment insertion, segment status and pause updates, orphan
   cleanup, and completed session writes behind Rust commands. Rust now
   validates segment enums and pause-log JSON, computes focus score for
@@ -157,9 +160,9 @@ Initial Rust commands should cover:
 Current implementation has Rust commands for basic event creation, patch, and
 deletion. Patch covers parent fields, attendees, alarms, and Pomodoro config.
 Simple exception and repeat-until updates also use the patch command. Detach
-and split now use focused Rust transactions. Per-instance override writes,
-historical Pomodoro segment protection before structural edits, and typed reads
-are still Phase 1 work.
+and split now use focused Rust transactions. Historical Pomodoro progress
+detection before structural edits also uses Rust. Per-instance override writes
+and typed reads are still Phase 1 work.
 
 Why this should move:
 

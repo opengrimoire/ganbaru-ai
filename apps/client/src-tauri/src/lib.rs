@@ -550,6 +550,8 @@ pub fn run() {
             calendar_events::calendar_update_event,
             calendar_events::calendar_detach_instance,
             calendar_events::calendar_split_series,
+            calendar_events::calendar_has_progress_segments,
+            calendar_events::calendar_progress_dates_before,
             calendar_import::calendar_bulk_import,
             calendars::calendar_add_calendar,
             calendars::calendar_set_visibility,

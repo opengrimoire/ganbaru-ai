@@ -606,6 +606,65 @@ pub async fn calendar_split_series<R: Runtime>(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn calendar_has_progress_segments<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    template_id: String,
+    date: String,
+) -> Result<bool, String> {
+    require_non_empty(&template_id, "template_id")?;
+    require_non_empty(&date, "date")?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM pomodoro_segments
+         WHERE event_id IN (?, ? || '::' || ?) AND event_date = ?
+           AND status IN ('completed', 'interrupted', 'skipped')
+           AND actual_start IS NOT NULL",
+    )
+    .bind(&template_id)
+    .bind(&template_id)
+    .bind(&date)
+    .bind(&date)
+    .fetch_one(&mut conn)
+    .await
+    .map_err(|e| format!("count progress segments: {e}"))?;
+    Ok(count > 0)
+}
+
+#[tauri::command]
+pub async fn calendar_progress_dates_before<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    template_id: String,
+    cutoff_date: String,
+    exclude_date: Option<String>,
+) -> Result<Vec<String>, String> {
+    require_non_empty(&template_id, "template_id")?;
+    require_non_empty(&cutoff_date, "cutoff_date")?;
+    if let Some(date) = &exclude_date {
+        require_non_empty(date, "exclude_date")?;
+    }
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let dates = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT event_date
+         FROM pomodoro_segments
+         WHERE (event_id = ? OR event_id = ? || '::' || event_date)
+           AND event_date < ?
+           AND status IN ('completed', 'interrupted', 'skipped')
+           AND actual_start IS NOT NULL
+         ORDER BY event_date ASC",
+    )
+    .bind(&template_id)
+    .bind(&template_id)
+    .bind(&cutoff_date)
+    .fetch_all(&mut conn)
+    .await
+    .map_err(|e| format!("load progress dates: {e}"))?;
+    Ok(filter_excluded_dates(dates, exclude_date.as_deref()))
+}
+
 async fn copy_pomodoro_config(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     source_event_id: &str,
@@ -1084,6 +1143,13 @@ fn validate_json_option(value: &Option<String>, field: &str) -> Result<(), Strin
     Ok(())
 }
 
+fn filter_excluded_dates(dates: Vec<String>, exclude_date: Option<&str>) -> Vec<String> {
+    match exclude_date {
+        Some(exclude) => dates.into_iter().filter(|date| date != exclude).collect(),
+        None => dates,
+    }
+}
+
 fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         Err(format!("{field} cannot be empty"))
@@ -1094,7 +1160,10 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_color, validate_non_negative, validate_positive, validate_priority};
+    use super::{
+        filter_excluded_dates, validate_color, validate_non_negative, validate_positive,
+        validate_priority,
+    };
 
     #[test]
     fn validates_event_color_and_priority_ranges() {
@@ -1111,5 +1180,18 @@ mod tests {
         assert!(validate_positive(0, "focus_duration_minutes").is_err());
         assert!(validate_non_negative(0, "idle_timeout_minutes").is_ok());
         assert!(validate_non_negative(-1, "idle_timeout_minutes").is_err());
+    }
+
+    #[test]
+    fn filters_excluded_progress_dates() {
+        let dates = vec![
+            "2026-05-07".to_string(),
+            "2026-05-08".to_string(),
+            "2026-05-09".to_string(),
+        ];
+        assert_eq!(
+            filter_excluded_dates(dates, Some("2026-05-08")),
+            vec!["2026-05-07".to_string(), "2026-05-09".to_string()]
+        );
     }
 }

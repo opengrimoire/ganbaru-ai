@@ -1155,14 +1155,11 @@ export function getCalendar() {
      * Check whether a specific recurring instance date has completed progress segments.
      */
     async hasProgressSegments(templateId: string, date: string): Promise<boolean> {
-      const rows = await select<{ cnt: number }>(
-        `SELECT COUNT(*) as cnt FROM pomodoro_segments
-         WHERE event_id IN ($1, $1 || '::' || $2) AND event_date = $2
-           AND status IN ('completed', 'interrupted', 'skipped')
-           AND actual_start IS NOT NULL`,
-        [templateId, date],
-      );
-      return rows.length > 0 && rows[0].cnt > 0;
+      return invoke<boolean>("calendar_has_progress_segments", {
+        dbUrl: dbUrl(),
+        templateId,
+        date,
+      });
     },
 
     /**
@@ -1184,18 +1181,12 @@ export function getCalendar() {
       cutoffDate: string,
       excludeDate?: string,
     ): Promise<string[]> {
-      const rows = await select<{ event_date: string }>(
-        `SELECT DISTINCT event_date FROM pomodoro_segments
-         WHERE (event_id = $1 OR event_id = $1 || '::' || event_date)
-           AND event_date < $2
-           AND status IN ('completed', 'interrupted', 'skipped')
-           AND actual_start IS NOT NULL`,
-        [templateId, cutoffDate],
-      );
-
-      const datesToProtect = rows
-        .map((r) => r.event_date)
-        .filter((d) => d !== excludeDate);
+      const datesToProtect = await invoke<string[]>("calendar_progress_dates_before", {
+        dbUrl: dbUrl(),
+        templateId,
+        cutoffDate,
+        excludeDate: excludeDate ?? null,
+      });
 
       if (datesToProtect.length === 0) return [];
 
