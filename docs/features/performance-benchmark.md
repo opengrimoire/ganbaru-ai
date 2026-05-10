@@ -105,12 +105,31 @@ Non-startup scenarios currently cost two benchmark passes plus restarts. The sta
 
 If the process is killed during a benchmark pass, the partial result is not comparable. The next boot discards the isolated benchmark DB instead of trying to resume from data that may contain half-finished setup or workload state. Explicit Cancel still aborts the active run and restarts on the user's real DB.
 
+## Lazy loading
+
+Normal app startup must not import benchmark scenario implementation code. The
+title bar may load only `benchmarkStatus` and the normal UI shell. The
+performance popover may load lightweight scenario metadata for button labels,
+but it must not import the runner store, synthetic data generator, scenario
+modules, or operation benchmark helpers until a user starts a benchmark.
+
+Benchmark resume is the other allowed load path. On boot, `App.svelte` reads
+the persisted benchmark state through a small Tauri command. If no state exists,
+the runner is not imported. If pending state exists, the benchmark overlay and
+runner load, then `registry.ts` dynamically imports only the scenario named in
+the state file.
+
+`lib/benchmark/registry.ts` is the boundary. `BENCHMARK_SCENARIOS` contains
+metadata only. `loadScenarioById()` owns dynamic imports for executable
+scenario modules.
+
 ## Scenario contract
 
-A scenario is one module exporting a `BenchmarkScenario`.
+A scenario has lightweight metadata in `registry.ts` and one executable module
+exporting a `BenchmarkScenario`.
 
 ```ts
-export interface BenchmarkScenario {
+export interface BenchmarkScenarioMetadata {
   id: string;
   label: string;
   description: string;
@@ -127,6 +146,9 @@ export interface BenchmarkScenario {
     memoryMode: "none" | "post-workload";
   };
   defaultSeedSize: number;
+}
+
+export interface BenchmarkScenario extends BenchmarkScenarioMetadata {
   setup(): Promise<void>;
   runWorkload(signal: AbortSignal): Promise<void | BenchmarkMetric[]>;
   seed(version: string, seedSize: number): Promise<{ calendarId: string; eventCount: number }>;
@@ -136,6 +158,8 @@ export interface BenchmarkScenario {
 
 Implementation rules:
 
+- Metadata must stay dependency-light. Do not import scenario modules, stores,
+  synthetic generators, or operation helpers from the metadata path.
 - `setup()` places the app in the deterministic starting state for both passes.
 - `runWorkload()` performs the measured action and must honor the abort signal.
 - Scenarios that need a fixed measurement window should keep the workload alive for `workload.durationMs`.
@@ -205,10 +229,10 @@ The copied markdown intentionally avoids slash-packed memory cells, repeated glo
 ## Critical files
 
 - `lib/benchmark/types.ts`: scenario contract, pass result types, suite state, versions, sampling constants.
+- `lib/benchmark/registry.ts`: lightweight scenario metadata and dynamic scenario loaders.
 - `lib/benchmark/runner.ts`: pass orchestration, persisted state, restart wiring.
 - `lib/benchmark/sampler.ts`: memory sampling and boot timing capture.
 - `lib/benchmark/output.ts`: benchmark result markdown formatter.
-- `lib/benchmark/registry.ts`: installed scenario list.
 - `lib/stores/benchmarkRunner.svelte.ts`: UI-facing runner state and suite continuation.
 - `lib/components/benchmark/BenchmarkOverlay.svelte`: confirmation, running, summary, and error overlays.
 - `lib/components/perf/PerformancePopover.svelte`: benchmark buttons.

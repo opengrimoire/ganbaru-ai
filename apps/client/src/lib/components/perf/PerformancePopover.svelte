@@ -8,7 +8,7 @@
   import Play from "@lucide/svelte/icons/play";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { cn } from "$lib/utils";
-  import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
+  import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import { BENCHMARK_SCENARIOS } from "$lib/benchmark/registry";
   import { perfLog, type PerfLogEntry, clear as clearPerfLog, setTracking } from "$lib/stores/perflog.svelte";
   import MemoryChart from "$lib/components/perf/MemoryChart.svelte";
@@ -30,7 +30,7 @@
     ensureBenchmarkOverlay?: () => Promise<void>;
   } = $props();
 
-  const benchmarkRunner = getBenchmarkRunner();
+  const benchmarkStatus = getBenchmarkStatus();
 
   let perfLive = $state(true);
   // One slot for the most recently copied button so each one can flash a
@@ -310,21 +310,21 @@
   async function requestBenchmark(scenarioId: string): Promise<void> {
     try {
       await ensureBenchmarkOverlay();
+      const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
+      getBenchmarkRunner().request(scenarioId);
     } catch (e) {
       console.error("benchmark overlay load failed", e);
-      return;
     }
-    benchmarkRunner.request(scenarioId);
   }
 
   async function requestAllBenchmarks(): Promise<void> {
     try {
       await ensureBenchmarkOverlay();
+      const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
+      getBenchmarkRunner().requestAll();
     } catch (e) {
       console.error("benchmark overlay load failed", e);
-      return;
     }
-    benchmarkRunner.requestAll();
   }
 </script>
 
@@ -559,7 +559,7 @@
     <div class="mt-1.5 flex flex-col gap-1">
       <button
         onclick={() => void requestAllBenchmarks()}
-        disabled={benchmarkRunner.status !== "idle"}
+        disabled={benchmarkStatus.status !== "idle"}
         class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <Play size={12} />
@@ -568,7 +568,7 @@
       {#each BENCHMARK_SCENARIOS as scenario (scenario.id)}
         <button
           onclick={() => void requestBenchmark(scenario.id)}
-          disabled={benchmarkRunner.status !== "idle"}
+          disabled={benchmarkStatus.status !== "idle"}
           class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Play size={12} />

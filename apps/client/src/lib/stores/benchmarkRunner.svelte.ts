@@ -53,6 +53,7 @@ import {
   type BenchmarkSuiteState,
   type BenchmarkState,
   type BenchmarkScenario,
+  type BenchmarkScenarioMetadata,
   type PhaseResult,
   type SampleLabel,
   type StartupBootSample,
@@ -68,7 +69,11 @@ import {
   loadPersistedState,
   clearPersistedState,
 } from "$lib/benchmark/runner";
-import { BENCHMARK_SCENARIOS, getScenarioById } from "$lib/benchmark/registry";
+import {
+  BENCHMARK_SCENARIOS,
+  getScenarioMetadataById,
+  loadScenarioById,
+} from "$lib/benchmark/registry";
 
 type PendingRequest = { mode: "single" | "suite"; scenarioIds: string[] };
 
@@ -131,7 +136,7 @@ class BenchmarkRunnerStore {
 
   get pendingScenarioLabels(): string[] {
     return (this.pendingRequest?.scenarioIds ?? [])
-      .map((id) => getScenarioById(id)?.label ?? id);
+      .map((id) => getScenarioMetadataById(id)?.label ?? id);
   }
 
   /**
@@ -144,7 +149,7 @@ class BenchmarkRunnerStore {
     const pending = this.pendingRequest;
     const scenarioId = pending?.scenarioIds[0];
     if (!pending || !scenarioId) return;
-    const scenario = getScenarioById(scenarioId);
+    const scenario = getScenarioMetadataById(scenarioId);
     if (!scenario) {
       this.errorMessage = `Unknown scenario: ${scenarioId}`;
       this.status = "error";
@@ -252,7 +257,18 @@ class BenchmarkRunnerStore {
     // pending stage; we still defend against a scenario that has been
     // removed and against a `phase-b-pending` state that is missing the data
     // needed to run it.
-    const scenario = getScenarioById(state.scenarioId);
+    const scenarioMetadata = getScenarioMetadataById(state.scenarioId);
+    if (!scenarioMetadata) {
+      await this.#abandonStale();
+      return;
+    }
+    let scenario: BenchmarkScenario | undefined;
+    try {
+      scenario = await loadScenarioById(state.scenarioId);
+    } catch (e) {
+      this.#failWith(`Loading scenario failed: ${this.#errMsg(e)}`);
+      return;
+    }
     if (!scenario) {
       await this.#abandonStale();
       return;
@@ -510,7 +526,7 @@ class BenchmarkRunnerStore {
   ): Promise<void> {
     const nextIndex = suite.index + 1;
     const nextScenarioId = suite.scenarioIds[nextIndex];
-    const nextScenario = getScenarioById(nextScenarioId);
+    const nextScenario = getScenarioMetadataById(nextScenarioId);
     if (!nextScenario) {
       this.#failWith(`Unknown suite scenario: ${nextScenarioId}`);
       return;
@@ -660,11 +676,11 @@ function notifyBenchmarkDone(title: string, body: string): void {
   });
 }
 
-function isStartupScenario(scenario: BenchmarkScenario): boolean {
+function isStartupScenario(scenario: BenchmarkScenarioMetadata): boolean {
   return scenario.workload.kind === "startup";
 }
 
-function restartForScenario(scenario: BenchmarkScenario): void {
+function restartForScenario(scenario: BenchmarkScenarioMetadata): void {
   if (isStartupScenario(scenario)) {
     restartAppAfterDelay(STARTUP_RELAUNCH_COOLDOWN_MS);
     return;

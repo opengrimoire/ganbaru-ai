@@ -1,35 +1,170 @@
 /**
- * Registry of installed benchmark scenarios. Adding a scenario means
- * dropping a new module under `scenarios/` and pushing it onto this
- * array. The Settings developer section reads this list directly so a
- * new scenario surfaces in the UI without any other UI change.
+ * Registry of installed benchmark scenarios. Adding a scenario means adding
+ * lightweight metadata here and a dynamic loader for the matching module.
+ * UI paths read only the metadata list so normal app startup never pulls in
+ * scenario implementation modules.
  *
  * Order is rendered order; keep startup and memory baselines first so
  * pasted suite output is easy to place in PERFORMANCE.md.
  */
-import type { BenchmarkScenario } from "./types";
-import { startupBootScenario } from "./scenarios/startup-boot";
-import { idleMemoryScenario } from "./scenarios/idle-memory";
-import { calendarNavScenario } from "./scenarios/calendar-nav";
-import { eventPanelOpenScenario } from "./scenarios/event-panel-open";
-import { calendarCreateCancelScenario } from "./scenarios/calendar-create-cancel";
-import { calendarWriteOpsScenario } from "./scenarios/calendar-write-ops";
-import { calendarImportOpsScenario } from "./scenarios/calendar-import-ops";
-import { themePersistenceOpsScenario } from "./scenarios/theme-persistence-ops";
-import { pomodoroPersistenceOpsScenario } from "./scenarios/pomodoro-persistence-ops";
+import { STRESS_DURATION_MS, type BenchmarkScenario, type BenchmarkScenarioMetadata } from "./types";
 
-export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
-  startupBootScenario,
-  idleMemoryScenario,
-  calendarNavScenario,
-  eventPanelOpenScenario,
-  calendarCreateCancelScenario,
-  calendarWriteOpsScenario,
-  calendarImportOpsScenario,
-  themePersistenceOpsScenario,
-  pomodoroPersistenceOpsScenario,
+type BenchmarkScenarioLoader = () => Promise<BenchmarkScenario>;
+
+export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
+  {
+    id: "startup-boot",
+    label: "Startup boot",
+    description:
+      "Captures repeated process launch samples to usable calendar paint without adding a memory settling window. Use this for startup-time regressions.",
+    workload: {
+      kind: "startup",
+      question: "How fast does the app launch into the calendar?",
+      label: "calendar startup launch samples",
+      durationMs: 0,
+      memoryMode: "none",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "idle-memory",
+    label: "Idle memory",
+    description:
+      "Boots into the calendar and performs no interaction for the workload window. Use this as the canonical idle-RAM baseline instead of manual panel snapshots.",
+    workload: {
+      kind: "idle-memory",
+      question: "How much memory does the calendar hold while idle?",
+      label: "idle calendar baseline",
+      durationMs: STRESS_DURATION_MS,
+      memoryMode: "post-workload",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "calendar-nav",
+    label: "Calendar week-view nav",
+    description:
+      "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline and a 1000-event synthetic calendar. Both datasets use an isolated benchmark DB; your real calendar is never touched.",
+    workload: {
+      kind: "stress-memory",
+      question: "How much memory does repeated week navigation use?",
+      label: "programmatic week-view navigation stress",
+      durationMs: STRESS_DURATION_MS,
+      memoryMode: "post-workload",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "event-panel-open",
+    label: "Event panel open",
+    description:
+      "Measures edit-panel open from a closed calendar and switch while the panel is already mounted. It reports the same module, details, state, flush, and paint timing pieces shown in the Speed log.",
+    workload: {
+      kind: "interaction-latency",
+      question: "How quickly does the event panel paint for existing events?",
+      label: "scripted event-panel open interactions",
+      durationMs: 0,
+      memoryMode: "none",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "calendar-create-cancel",
+    label: "Calendar create cancel",
+    description:
+      "Opens a create panel on a deterministic empty slot, waits past the close guard, then cancels it. This protects the create-preview teardown path that is separate from editing an existing event.",
+    workload: {
+      kind: "interaction-latency",
+      question: "How quickly does the create panel open and cancel?",
+      label: "scripted create-panel open and cancel",
+      durationMs: 0,
+      memoryMode: "none",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "calendar-write-ops",
+    label: "Calendar write operations",
+    description:
+      "Measures Rust-backed calendar event create, patch, delete, detach, and split commands through Tauri IPC against the isolated benchmark DB.",
+    workload: {
+      kind: "operation-latency",
+      question: "How quickly do Rust-backed calendar write commands finish?",
+      label: "scripted calendar write commands",
+      durationMs: 0,
+      memoryMode: "none",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "calendar-import-ops",
+    label: "Calendar import operations",
+    description:
+      "Measures the Rust calendar_bulk_import command for repeated 100-event imports and one 1000-event add/update pass.",
+    workload: {
+      kind: "operation-latency",
+      question: "How quickly does Rust apply typed calendar import payloads?",
+      label: "scripted calendar bulk import commands",
+      durationMs: 0,
+      memoryMode: "none",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "theme-persistence-ops",
+    label: "Theme persistence operations",
+    description:
+      "Measures Rust-backed theme snapshot insert, replace, load, source cascade, and reset commands against normalized theme tables.",
+    workload: {
+      kind: "operation-latency",
+      question: "How quickly do Rust-backed theme persistence commands finish?",
+      label: "scripted theme persistence commands",
+      durationMs: 0,
+      memoryMode: "none",
+    },
+    defaultSeedSize: 1000,
+  },
+  {
+    id: "pomodoro-persistence-ops",
+    label: "Pomodoro persistence operations",
+    description:
+      "Measures Rust-backed Pomodoro segment insert, update, cleanup, orphan cleanup, and completed-session persistence commands.",
+    workload: {
+      kind: "operation-latency",
+      question: "How quickly do Rust-backed Pomodoro persistence commands finish?",
+      label: "scripted Pomodoro persistence commands",
+      durationMs: 0,
+      memoryMode: "none",
+    },
+    defaultSeedSize: 1000,
+  },
 ];
 
-export function getScenarioById(id: string): BenchmarkScenario | undefined {
-  return BENCHMARK_SCENARIOS.find((s) => s.id === id);
+const SCENARIO_LOADERS: Record<string, BenchmarkScenarioLoader> = {
+  "startup-boot": () => import("./scenarios/startup-boot").then((module) => module.startupBootScenario),
+  "idle-memory": () => import("./scenarios/idle-memory").then((module) => module.idleMemoryScenario),
+  "calendar-nav": () => import("./scenarios/calendar-nav").then((module) => module.calendarNavScenario),
+  "event-panel-open": () => import("./scenarios/event-panel-open").then((module) => module.eventPanelOpenScenario),
+  "calendar-create-cancel": () => import("./scenarios/calendar-create-cancel")
+    .then((module) => module.calendarCreateCancelScenario),
+  "calendar-write-ops": () => import("./scenarios/calendar-write-ops")
+    .then((module) => module.calendarWriteOpsScenario),
+  "calendar-import-ops": () => import("./scenarios/calendar-import-ops")
+    .then((module) => module.calendarImportOpsScenario),
+  "theme-persistence-ops": () => import("./scenarios/theme-persistence-ops")
+    .then((module) => module.themePersistenceOpsScenario),
+  "pomodoro-persistence-ops": () => import("./scenarios/pomodoro-persistence-ops")
+    .then((module) => module.pomodoroPersistenceOpsScenario),
+};
+
+export function getScenarioMetadataById(id: string): BenchmarkScenarioMetadata | undefined {
+  return BENCHMARK_SCENARIOS.find((scenario) => scenario.id === id);
+}
+
+export function hasScenarioLoader(id: string): boolean {
+  return SCENARIO_LOADERS[id] !== undefined;
+}
+
+export async function loadScenarioById(id: string): Promise<BenchmarkScenario | undefined> {
+  return SCENARIO_LOADERS[id]?.();
 }

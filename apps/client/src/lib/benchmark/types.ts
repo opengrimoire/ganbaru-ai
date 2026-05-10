@@ -240,11 +240,10 @@ export interface StartupRunState {
 }
 
 /**
- * Implemented by every scenario module. The runner is scenario-agnostic;
- * adding a new scenario means dropping a new module under
- * `lib/benchmark/scenarios/` and registering it in `registry.ts`.
+ * Lightweight scenario data safe to import in normal UI paths. This must not
+ * carry executable scenario code or imports that pull in benchmark workloads.
  */
-export interface BenchmarkScenario {
+export interface BenchmarkScenarioMetadata {
   /** Stable id used in the persisted state file and markdown output. */
   id: string;
   /** Human label rendered on the perf-panel Run button. */
@@ -255,6 +254,14 @@ export interface BenchmarkScenario {
   workload: BenchmarkWorkload;
   /** Default seed size used by `seed()` for the synthetic dataset. */
   defaultSeedSize: number;
+}
+
+/**
+ * Implemented by every scenario module. The runner is scenario-agnostic;
+ * adding a new scenario means dropping a new module under
+ * `lib/benchmark/scenarios/` and registering it in `registry.ts`.
+ */
+export interface BenchmarkScenario extends BenchmarkScenarioMetadata {
   /**
    * Configure the app into the precondition required by the stress phase.
    * Runs at the start of every phase (A and B).

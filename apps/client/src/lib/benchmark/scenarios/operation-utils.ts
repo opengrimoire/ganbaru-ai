@@ -64,14 +64,6 @@ export function scalarMsMetric(label: string, value: number): BenchmarkMetric {
   };
 }
 
-export function scalarCountMetric(label: string, value: number): BenchmarkMetric {
-  return {
-    label,
-    unit: "count",
-    value,
-  };
-}
-
 export function nowLocal(): string {
   const d = new Date();
   const y = d.getFullYear();

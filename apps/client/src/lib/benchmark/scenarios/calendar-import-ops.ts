@@ -17,7 +17,6 @@ import {
   measureMs,
   nowLocal,
   repeatedMeasuredTimingMetric,
-  scalarCountMetric,
   scalarMsMetric,
 } from "./operation-utils";
 
@@ -107,7 +106,6 @@ async function largeImportMetrics(signal: AbortSignal): Promise<BenchmarkMetric[
   return [
     scalarMsMetric("bulk import 1000 add", addMs),
     scalarMsMetric("bulk import 1000 update", updateMs),
-    scalarCountMetric("bulk import large event count", LARGE_IMPORT_EVENTS),
   ];
 }
 
