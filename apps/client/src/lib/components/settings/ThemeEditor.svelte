@@ -1663,7 +1663,7 @@
         class="flex flex-col gap-3 p-3"
         style="background-color: {effectiveCalBg(theme)};"
       >
-        <div class="theme-palette-grid grid grid-cols-4 gap-x-2 gap-y-1.5">
+        <div class="theme-palette-grid grid gap-x-2 gap-y-1.5">
           {#each paletteIndices as index}
             {@const base = theme.eventPalette[index]}
             {@const past = blendHex(
@@ -2027,6 +2027,10 @@
     white-space: nowrap;
   }
 
+  .theme-palette-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  }
+
   @container theme-editor (max-width: 620px) {
     .theme-editor-chrome {
       padding-inline: 0.625rem;
@@ -2099,10 +2103,6 @@
       align-items: center;
     }
 
-    .theme-palette-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
     .theme-json-actions {
       align-items: stretch;
       flex-direction: column;
@@ -2153,10 +2153,6 @@
       justify-content: flex-start;
     }
 
-    .theme-palette-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .theme-contrast-notice {
       align-items: center;
       justify-content: center;
@@ -2199,10 +2195,6 @@
   @container theme-editor (max-width: 330px) {
     .theme-editor-content {
       padding-inline: 0.5rem;
-    }
-
-    .theme-palette-grid {
-      grid-template-columns: 1fr;
     }
   }
 </style>
