@@ -93,7 +93,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-10-02` with harness v6.
+Latest recorded canonical baseline: `2026-05-10-03` with harness v7.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
@@ -107,6 +107,7 @@ Harness v7 keeps v6 methodology comparable for existing 1,000-event rows and add
 | 2026-05-09-01 | v6 | 0.1.0+e3c35c7 | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-10-01 | v6 | 0.1.0+5589e3f | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-10-02 | v6 | 0.1.0+f3bd22b | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-10-03 | v7 | 0.1.0+bf7b282 | Linux Ubuntu 24.04.4 LTS |  |
 
 ### Core benchmarks
 
@@ -126,6 +127,9 @@ Harness v6 and later report repeated process launches. Before each startup sampl
 | 2026-05-10-01 | synth-v1-1000 | 5 | 144 | 642 | 1125 | 1171 | 1171 | 1132 |
 | 2026-05-10-02 | base-0 | 5 | 141 | 231 | 746 | 1197 | 1197 | 768 |
 | 2026-05-10-02 | synth-v1-1000 | 5 | 142 | 630 | 1119 | 1530 | 1530 | 1143 |
+| 2026-05-10-03 | base-0 | 5 | 149 | 247 | 725 | 827 | 827 | 728 |
+| 2026-05-10-03 | synth-v1-1000 | 5 | 146 | 501 | 978 | 1007 | 1007 | 995 |
+| 2026-05-10-03 | synth-v1-10000 | 5 | 143 | 1969 | 2452 | 2883 | 2883 | 2470 |
 
 #### Idle memory
 
@@ -157,6 +161,15 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-02 | synth-v1-1000 | workload peak | 119.2 | 270.3 | 19.9 | 409 |
 | 2026-05-10-02 | synth-v1-1000 | workload end | 119.0 | 245.1 | 19.9 | 384 |
 | 2026-05-10-02 | synth-v1-1000 | +30s | 118.4 | 249.4 | 20.0 | 388 |
+| 2026-05-10-03 | base-0 | workload peak | 106.4 | 196.3 | 17.4 | 320 |
+| 2026-05-10-03 | base-0 | workload end | 106.0 | 191.9 | 17.4 | 315 |
+| 2026-05-10-03 | base-0 | +30s | 105.4 | 190.2 | 17.5 | 313 |
+| 2026-05-10-03 | synth-v1-1000 | workload peak | 107.1 | 272.3 | 17.4 | 397 |
+| 2026-05-10-03 | synth-v1-1000 | workload end | 107.0 | 233.8 | 17.4 | 358 |
+| 2026-05-10-03 | synth-v1-1000 | +30s | 106.3 | 234.9 | 17.5 | 359 |
+| 2026-05-10-03 | synth-v1-10000 | workload peak | 112.8 | 406.0 | 17.3 | 536 |
+| 2026-05-10-03 | synth-v1-10000 | workload end | 112.9 | 397.0 | 17.4 | 527 |
+| 2026-05-10-03 | synth-v1-10000 | +30s | 112.3 | 366.0 | 17.4 | 496 |
 
 #### Calendar navigation stress memory
 
@@ -186,6 +199,15 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-02 | synth-v1-1000 | workload peak | 118.5 | 328.4 | 19.7 | 467 |
 | 2026-05-10-02 | synth-v1-1000 | workload end | 118.5 | 319.3 | 19.7 | 458 |
 | 2026-05-10-02 | synth-v1-1000 | +30s | 117.8 | 294.3 | 19.8 | 432 |
+| 2026-05-10-03 | base-0 | workload peak | 106.0 | 231.0 | 17.4 | 354 |
+| 2026-05-10-03 | base-0 | workload end | 106.0 | 235.8 | 17.4 | 359 |
+| 2026-05-10-03 | base-0 | +30s | 105.4 | 221.9 | 17.5 | 345 |
+| 2026-05-10-03 | synth-v1-1000 | workload peak | 106.4 | 376.5 | 17.2 | 500 |
+| 2026-05-10-03 | synth-v1-1000 | workload end | 106.3 | 331.9 | 17.2 | 455 |
+| 2026-05-10-03 | synth-v1-1000 | +30s | 105.5 | 321.3 | 17.3 | 444 |
+| 2026-05-10-03 | synth-v1-10000 | workload peak | 113.9 | 414.0 | 17.1 | 545 |
+| 2026-05-10-03 | synth-v1-10000 | workload end | 116.2 | 613.8 | 17.2 | 747 |
+| 2026-05-10-03 | synth-v1-10000 | +30s | 115.3 | 815.2 | 17.2 | 948 |
 
 #### Event panel latency
 
@@ -209,6 +231,12 @@ Rows report user-visible elapsed time. Internal module, detail-load, state, and 
 | 2026-05-10-02 | synth-v1-1002 | edit open from closed avg | 79 | ms | 10 | 66 | 80 | 85 | 85 |
 | 2026-05-10-02 | base-2 | edit switch while open avg | 16 | ms | 10 | 15 | 16 | 17 | 17 |
 | 2026-05-10-02 | synth-v1-1002 | edit switch while open avg | 46 | ms | 10 | 33 | 47 | 62 | 62 |
+| 2026-05-10-03 | base-2 | edit open from closed avg | 32 | ms | 10 | 16 | 29 | 65 | 65 |
+| 2026-05-10-03 | synth-v1-1002 | edit open from closed avg | 73 | ms | 10 | 50 | 67 | 141 | 141 |
+| 2026-05-10-03 | synth-v1-10002 | edit open from closed avg | 396 | ms | 10 | 351 | 364 | 671 | 671 |
+| 2026-05-10-03 | base-2 | edit switch while open avg | 16 | ms | 10 | 15 | 16 | 17 | 17 |
+| 2026-05-10-03 | synth-v1-1002 | edit switch while open avg | 24 | ms | 10 | 16 | 20 | 34 | 34 |
+| 2026-05-10-03 | synth-v1-10002 | edit switch while open avg | 94 | ms | 10 | 84 | 94 | 101 | 101 |
 
 #### Create panel latency
 
@@ -232,6 +260,12 @@ The cancel timing includes the fixed 500 ms guard used by the scenario before cl
 | 2026-05-10-02 | synth-v1-1000 | create panel open avg | 58 | ms | 6 | 50 | 50 | 67 | 67 |
 | 2026-05-10-02 | base-0 | create cancel after guard avg | 59 | ms | 6 | 58 | 59 | 59 | 59 |
 | 2026-05-10-02 | synth-v1-1000 | create cancel after guard avg | 82 | ms | 6 | 75 | 76 | 97 | 97 |
+| 2026-05-10-03 | base-0 | create panel open avg | 36 | ms | 6 | 24 | 27 | 74 | 74 |
+| 2026-05-10-03 | synth-v1-1000 | create panel open avg | 50 | ms | 6 | 32 | 33 | 135 | 135 |
+| 2026-05-10-03 | synth-v1-10000 | create panel open avg | 434 | ms | 6 | 383 | 385 | 649 | 649 |
+| 2026-05-10-03 | base-0 | create cancel after guard avg | 61 | ms | 6 | 58 | 60 | 66 | 66 |
+| 2026-05-10-03 | synth-v1-1000 | create cancel after guard avg | 62 | ms | 6 | 59 | 59 | 74 | 74 |
+| 2026-05-10-03 | synth-v1-10000 | create cancel after guard avg | 427 | ms | 6 | 417 | 420 | 456 | 456 |
 
 ### Backend benchmarks
 
