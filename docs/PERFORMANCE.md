@@ -60,6 +60,10 @@ Harness v6 exposes individual buttons plus one `Run all benchmarks` button. Each
 | `calendar-nav` | How much memory does repeated week navigation use? | PSS memory by process | Yes |
 | `event-panel-open` | How quickly does the event panel paint for existing events? | Average panel open and switch timings | No |
 | `calendar-create-cancel` | How quickly does the create panel open and cancel? | Average create open and cancel timings | No |
+| `calendar-write-ops` | How quickly do Rust-backed calendar write commands finish? | Average event create, patch, delete, detach, and split timings | No |
+| `calendar-import-ops` | How quickly does Rust apply typed calendar import payloads? | Average 100-event import timings plus 1000-event scalar timings | No |
+| `theme-persistence-ops` | How quickly do Rust-backed theme persistence commands finish? | Average theme insert, replace, load, cascade, and reset timings | No |
+| `pomodoro-persistence-ops` | How quickly do Rust-backed Pomodoro persistence commands finish? | Average segment insert, update, cleanup, orphan cleanup, and session-save timings | No |
 
 ### Dataset ids
 

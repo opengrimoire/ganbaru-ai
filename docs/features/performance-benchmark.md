@@ -153,6 +153,10 @@ Implementation rules:
 | `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Week-view navigation stress RAM |
 | `event-panel-open` | `lib/benchmark/scenarios/event-panel-open.ts` | Existing-event panel open and switch latency |
 | `calendar-create-cancel` | `lib/benchmark/scenarios/calendar-create-cancel.ts` | Create-panel open and cancel latency |
+| `calendar-write-ops` | `lib/benchmark/scenarios/calendar-write-ops.ts` | Rust-backed calendar create, patch, delete, detach, and split latency |
+| `calendar-import-ops` | `lib/benchmark/scenarios/calendar-import-ops.ts` | Rust-backed calendar bulk import latency |
+| `theme-persistence-ops` | `lib/benchmark/scenarios/theme-persistence-ops.ts` | Rust-backed theme persistence latency |
+| `pomodoro-persistence-ops` | `lib/benchmark/scenarios/pomodoro-persistence-ops.ts` | Rust-backed Pomodoro persistence latency |
 
 ## Synthetic event generator
 
