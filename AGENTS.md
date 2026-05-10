@@ -21,7 +21,6 @@ All documentation lives in `docs/`. Top-level overviews:
 - **docs/TECH_STACK.md**: how it's built
 - **docs/ROADMAP.md**: phased development plan
 - **docs/PERFORMANCE.md**: memory, startup, and package size measurements
-- **docs/OPTIMIZATION.md**: decided startup and RAM optimization direction
 
 Granular docs (read the relevant one when working on a feature):
 
