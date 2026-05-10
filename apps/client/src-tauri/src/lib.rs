@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use tauri::Manager;
 
+mod calendar_events;
 mod calendar_import;
 mod db;
 mod db_path;
@@ -541,6 +542,8 @@ pub fn run() {
             vault::vault_read_text,
             vault::vault_write_text,
             vault::vault_read_ics_zip_entries,
+            calendar_events::calendar_add_event,
+            calendar_events::calendar_delete_event,
             calendar_import::calendar_bulk_import,
             themes::theme_insert,
             themes::theme_replace_content,

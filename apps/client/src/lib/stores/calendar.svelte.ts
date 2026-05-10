@@ -537,52 +537,52 @@ export function getCalendar() {
         ? opts.recurrence.end.date : null;
       const notifJson = opts.notifications && opts.notifications.length > 0
         ? JSON.stringify(opts.notifications) : null;
-      await execute(
-        `INSERT INTO calendar_events
-           (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, rrule, notifications, repeat_until,
-            all_day, location, url, transparency, status,
-            source_uid, visibility, priority, categories, geo,
-            sequence, rdate, extended_properties, organizer,
-            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-            created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                 $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                 $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
-        [id, opts.title,
-         toDbTime(sanitizedStart, timezone, opts.allDay),
-         toDbTime(sanitizedEnd, timezone, opts.allDay),
-         timezone, calendarId, opts.color ?? null, opts.description ?? "",
-         rrule, notifJson, repeatUntil,
-         opts.allDay ? 1 : 0, opts.location ?? "", opts.url ?? "",
-         opts.transparency ?? "opaque", opts.status ?? "confirmed",
-         opts.sourceUid ?? null,
-         opts.visibility ?? "public",
-         opts.priority ?? null,
-         opts.categories ? JSON.stringify(opts.categories) : null,
-         opts.geo ? JSON.stringify(opts.geo) : null,
-         opts.sequence ?? 0,
-         opts.rdate ? JSON.stringify(opts.rdate) : null,
-         opts.extendedProperties ? JSON.stringify(opts.extendedProperties) : null,
-         opts.organizer ? JSON.stringify(opts.organizer) : null,
-         opts.guestPermissions?.canModify ? 1 : 0,
-         opts.guestPermissions?.canInviteOthers === false ? 0 : 1,
-         opts.guestPermissions?.canSeeOtherGuests === false ? 0 : 1,
-         now, now],
-      );
-      if (opts.pomodoroConfig) {
-        await execute(
-          `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [id, opts.pomodoroConfig.focusDurationMinutes, opts.pomodoroConfig.shortBreakMinutes,
-           opts.pomodoroConfig.longBreakMinutes, opts.pomodoroConfig.pomodoroCount,
-           opts.pomodoroConfig.idleTimeoutMinutes],
-        );
-      }
-      if (opts.attendees && opts.attendees.length > 0) {
-        await saveAttendees(id, opts.attendees);
-      }
+      await invoke("calendar_add_event", {
+        dbUrl: dbUrl(),
+        event: {
+          id,
+          title: opts.title,
+          startTime: toDbTime(sanitizedStart, timezone, opts.allDay),
+          endTime: toDbTime(sanitizedEnd, timezone, opts.allDay),
+          timezone,
+          calendarId,
+          color: opts.color ?? null,
+          description: opts.description ?? "",
+          rrule,
+          notifications: notifJson,
+          repeatUntil,
+          allDay: opts.allDay ?? false,
+          location: opts.location ?? "",
+          url: opts.url ?? "",
+          transparency: opts.transparency ?? "opaque",
+          status: opts.status ?? "confirmed",
+          sourceUid: opts.sourceUid ?? null,
+          visibility: opts.visibility ?? "public",
+          priority: opts.priority ?? null,
+          categories: opts.categories ? JSON.stringify(opts.categories) : null,
+          geo: opts.geo ? JSON.stringify(opts.geo) : null,
+          sequence: opts.sequence ?? 0,
+          rdate: opts.rdate ? JSON.stringify(opts.rdate) : null,
+          extendedProperties: opts.extendedProperties
+            ? JSON.stringify(opts.extendedProperties)
+            : null,
+          organizer: opts.organizer ? JSON.stringify(opts.organizer) : null,
+          guestCanModify: opts.guestPermissions?.canModify ?? false,
+          guestCanInviteOthers: opts.guestPermissions?.canInviteOthers ?? true,
+          guestCanSeeOtherGuests: opts.guestPermissions?.canSeeOtherGuests ?? true,
+          createdAt: now,
+          updatedAt: now,
+          pomodoroConfig: opts.pomodoroConfig ?? null,
+          attendees: (opts.attendees ?? []).map((attendee) => ({
+            id: attendee.id,
+            name: attendee.name ?? null,
+            email: attendee.email,
+            role: attendee.role,
+            status: attendee.status,
+            rsvp: attendee.rsvp,
+          })),
+        },
+      });
       const event: CalendarEvent = slimEvent({
         id, title: opts.title, start: sanitizedStart, end: sanitizedEnd,
         timezone, calendarId,
@@ -808,7 +808,7 @@ export function getCalendar() {
     async deleteBlock(id: string) {
       // Resolve recurring instance to parent
       const parentId = id.includes("::") ? id.split("::")[0] : id;
-      await execute("DELETE FROM calendar_events WHERE id = $1", [parentId]);
+      await invoke("calendar_delete_event", { dbUrl: dbUrl(), id: parentId });
       rawBlocks = rawBlocks.filter((b) => b.id !== parentId);
       invalidate();
     },

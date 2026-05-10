@@ -28,6 +28,7 @@ theme persistence:
   existing wall-clock conversions; Rust now owns deduplication, SEQUENCE
   comparison, parent and child row replacement, validation, and the transaction.
 - Removed the generic `db_execute_batch` command from the Tauri command surface.
+- Moved basic calendar event create and delete paths behind Rust commands.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
@@ -134,6 +135,10 @@ Initial Rust commands should cover:
 - Split a recurring series.
 - Protect historical Pomodoro segments before structural recurrence edits.
 - Load slim event rows and full event rows with runtime validation.
+
+Current implementation has Rust commands for basic event creation and deletion.
+Patch, recurrence, child-row replacement outside create/import, and typed reads
+are still Phase 1 work.
 
 Why this should move:
 
