@@ -30,6 +30,8 @@ theme persistence:
 - Removed the generic `db_execute_batch` command from the Tauri command surface.
 - Moved basic calendar event create, patch, and delete paths behind Rust
   commands. Patch covers parent fields, attendees, alarms, and Pomodoro config.
+- Routed simple recurrence exception and repeat-until updates, plus clear-all,
+  through Rust commands.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
@@ -139,8 +141,9 @@ Initial Rust commands should cover:
 
 Current implementation has Rust commands for basic event creation, patch, and
 deletion. Patch covers parent fields, attendees, alarms, and Pomodoro config.
-Per-instance overrides, recurrence structural edits, Pomodoro segment
-protection, and typed reads are still Phase 1 work.
+Simple exception and repeat-until updates also use the patch command.
+Per-instance overrides, detach, split, Pomodoro segment protection, and typed
+reads are still Phase 1 work.
 
 Why this should move:
 

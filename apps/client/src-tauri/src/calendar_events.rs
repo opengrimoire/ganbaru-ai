@@ -279,6 +279,19 @@ pub async fn calendar_delete_event<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn calendar_clear_events<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+) -> Result<(), String> {
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    sqlx::query("DELETE FROM calendar_events")
+        .execute(&mut conn)
+        .await
+        .map_err(|e| format!("clear calendar events: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn calendar_update_event<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,

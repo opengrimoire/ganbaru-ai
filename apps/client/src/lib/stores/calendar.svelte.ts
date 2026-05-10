@@ -951,10 +951,17 @@ export function getCalendar() {
 
       const exceptions = [...(parent.exceptions ?? []), date];
       const now = nowLocal();
-      await execute(
-        `UPDATE calendar_events SET exceptions = $1, updated_at = $2 WHERE id = $3`,
-        [JSON.stringify(exceptions), now, parentId],
-      );
+      await invoke("calendar_update_event", {
+        dbUrl: dbUrl(),
+        patch: {
+          id: parentId,
+          updatedAt: now,
+          fields: [{ field: "exceptions", value: JSON.stringify(exceptions) }],
+          attendees: null,
+          alarms: null,
+          pomodoroConfig: null,
+        },
+      });
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
       );
@@ -974,10 +981,20 @@ export function getCalendar() {
         end: { type: "until", date },
       };
       const rrule = recurrenceToRrule(updatedRecurrence);
-      await execute(
-        `UPDATE calendar_events SET repeat_until = $1, rrule = $2, updated_at = $3 WHERE id = $4`,
-        [date, rrule, now, parentId],
-      );
+      await invoke("calendar_update_event", {
+        dbUrl: dbUrl(),
+        patch: {
+          id: parentId,
+          updatedAt: now,
+          fields: [
+            { field: "repeatUntil", value: date },
+            { field: "rrule", value: rrule },
+          ],
+          attendees: null,
+          alarms: null,
+          pomodoroConfig: null,
+        },
+      });
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, recurrence: updatedRecurrence } : b,
       );
@@ -1130,7 +1147,7 @@ export function getCalendar() {
     },
 
     async clearAll() {
-      await execute("DELETE FROM calendar_events");
+      await invoke("calendar_clear_events", { dbUrl: dbUrl() });
       rawBlocks = [];
       invalidate();
     },
