@@ -58,6 +58,8 @@ persistence:
   conversion.
 - Moved full user-theme row loading behind Rust validation. TypeScript still
   preserves editor display order after the backend returns grouped rows.
+- Removed the unused frontend `execute()` helper so TypeScript no longer
+  exposes a generic SQLite write bridge.
 
 ## Decision rule
 
@@ -93,11 +95,13 @@ Rust currently owns:
 - Typed theme persistence commands in `apps/client/src-tauri/src/themes.rs`.
 - Typed calendar bulk import application in
   `apps/client/src-tauri/src/calendar_import.rs`.
+- Typed timezone hydration row application in
+  `apps/client/src-tauri/src/timezone_migration.rs`.
 
-TypeScript currently owns most normal SQLite writes through
-`apps/client/src/lib/api/db.ts`, including calendar, Pomodoro, theme, and
-Kanban mutations. That is acceptable for early development, but it becomes a
-weak boundary as data invariants and CLI access grow.
+TypeScript still owns UI-oriented SQLite reads through
+`apps/client/src/lib/api/db.ts` where they feed rendering, cache hydration, or
+Temporal-based conversion. The generic frontend write helper has been removed;
+durable app writes now go through focused Rust commands.
 
 ## Target architecture
 
@@ -170,7 +174,9 @@ deletion. Patch covers parent fields, attendees, alarms, and Pomodoro config.
 Simple exception and repeat-until updates also use the patch command. Detach
 and split now use focused Rust transactions. Historical Pomodoro progress
 detection before structural edits also uses Rust. Per-instance override writes
-and typed reads are still Phase 1 work.
+currently happen through the Rust import path; normal interactive override
+editing has not been introduced yet. Calendar event UI reads remain in
+TypeScript until they become shared with the CLI or need backend validation.
 
 Why this should move:
 
@@ -333,9 +339,8 @@ transactions.
 
 Current implementation routes snapshot insert, snapshot replacement, theme
 delete, row-level token and palette edits, source cascade, rebake, resets,
-legacy icon-label backfill, and upgrade-dismissal record/load through Rust
-commands. Full user-theme row loading stays in TypeScript until Phase 6 typed
-reads.
+legacy icon-label backfill, upgrade-dismissal record/load, and full user-theme
+row loading through Rust commands.
 
 Rust should own:
 
