@@ -886,7 +886,6 @@ async fn update_optional_i64(
 
 fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
     require_non_empty(&event.id, "id")?;
-    require_non_empty(&event.title, "title")?;
     require_non_empty(&event.start_time, "start_time")?;
     require_non_empty(&event.end_time, "end_time")?;
     require_non_empty(&event.timezone, "timezone")?;
@@ -952,7 +951,6 @@ fn validate_detach_instance(input: &CalendarDetachInstance) -> Result<(), String
     require_non_empty(&input.parent_id, "parent_id")?;
     require_non_empty(&input.instance_date, "instance_date")?;
     require_non_empty(&input.new_id, "new_id")?;
-    require_non_empty(&input.title, "title")?;
     require_non_empty(&input.start_time, "start_time")?;
     require_non_empty(&input.end_time, "end_time")?;
     require_non_empty(&input.timezone, "timezone")?;
@@ -977,7 +975,6 @@ fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
     require_non_empty(&input.parent_id, "parent_id")?;
     require_non_empty(&input.day_before, "day_before")?;
     require_non_empty(&input.new_id, "new_id")?;
-    require_non_empty(&input.title, "title")?;
     require_non_empty(&input.start_time, "start_time")?;
     require_non_empty(&input.end_time, "end_time")?;
     require_non_empty(&input.timezone, "timezone")?;
@@ -1002,7 +999,7 @@ fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
 
 fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String> {
     match field {
-        CalendarEventUpdateField::Title(value) => require_non_empty(value, "title"),
+        CalendarEventUpdateField::Title(_) => Ok(()),
         CalendarEventUpdateField::StartTime(value) => require_non_empty(value, "start_time"),
         CalendarEventUpdateField::EndTime(value) => require_non_empty(value, "end_time"),
         CalendarEventUpdateField::Timezone(value) => require_non_empty(value, "timezone"),
@@ -1161,9 +1158,47 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        filter_excluded_dates, validate_color, validate_non_negative, validate_positive,
-        validate_priority,
+        filter_excluded_dates, validate_color, validate_event_create, validate_non_negative,
+        validate_positive, validate_priority, validate_update_field, CalendarEventCreate,
+        CalendarEventUpdateField,
     };
+
+    fn event_create() -> CalendarEventCreate {
+        CalendarEventCreate {
+            id: "event-1".to_string(),
+            title: "Focus".to_string(),
+            start_time: "2026-05-09T10:00:00Z".to_string(),
+            end_time: "2026-05-09T11:00:00Z".to_string(),
+            timezone: "America/Monterrey".to_string(),
+            calendar_id: "local".to_string(),
+            color: None,
+            description: String::new(),
+            rrule: None,
+            notifications: None,
+            repeat_until: None,
+            all_day: false,
+            location: String::new(),
+            url: String::new(),
+            transparency: "opaque".to_string(),
+            status: "confirmed".to_string(),
+            source_uid: None,
+            visibility: "public".to_string(),
+            priority: None,
+            categories: None,
+            geo: None,
+            sequence: 0,
+            rdate: None,
+            extended_properties: None,
+            organizer: None,
+            guest_can_modify: false,
+            guest_can_invite_others: true,
+            guest_can_see_other_guests: true,
+            created_at: "2026-05-09 10:00:00".to_string(),
+            updated_at: "2026-05-09 10:00:00".to_string(),
+            pomodoro_config: None,
+            attendees: Vec::new(),
+        }
+    }
 
     #[test]
     fn validates_event_color_and_priority_ranges() {
@@ -1180,6 +1215,14 @@ mod tests {
         assert!(validate_positive(0, "focus_duration_minutes").is_err());
         assert!(validate_non_negative(0, "idle_timeout_minutes").is_ok());
         assert!(validate_non_negative(-1, "idle_timeout_minutes").is_err());
+    }
+
+    #[test]
+    fn accepts_empty_event_titles() {
+        let mut event = event_create();
+        event.title = String::new();
+        assert!(validate_event_create(&event).is_ok());
+        assert!(validate_update_field(&CalendarEventUpdateField::Title(String::new())).is_ok());
     }
 
     #[test]

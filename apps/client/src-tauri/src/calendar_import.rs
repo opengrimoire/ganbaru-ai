@@ -475,7 +475,6 @@ fn validate_payload(payload: &CalendarBulkImportPayload) -> Result<(), String> {
 
 fn validate_event(event: &CalendarImportEvent) -> Result<(), String> {
     require_non_empty(&event.candidate_id, "candidate_id")?;
-    require_non_empty(&event.title, "title")?;
     require_non_empty(&event.start_time, "start_time")?;
     require_non_empty(&event.end_time, "end_time")?;
     require_non_empty(&event.timezone, "timezone")?;
