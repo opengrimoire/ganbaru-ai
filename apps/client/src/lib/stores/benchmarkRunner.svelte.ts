@@ -333,7 +333,7 @@ class BenchmarkRunnerStore {
     };
     this.#abort = new AbortController();
     const calendarStore = getCalendar();
-    const runner = createRunner(() => calendarStore.rawBlocks.length);
+    const runner = createRunner(() => calendarStore.eventCount);
     try {
       await persistBenchmarkState({ ...state, stage: "phase-a-running" });
     } catch (e) {
@@ -445,7 +445,7 @@ class BenchmarkRunnerStore {
     };
     this.#abort = new AbortController();
     const calendarStore = getCalendar();
-    const runner = createRunner(() => calendarStore.rawBlocks.length);
+    const runner = createRunner(() => calendarStore.eventCount);
     try {
       await persistBenchmarkState({ ...state, stage: "phase-b-running" });
     } catch (e) {

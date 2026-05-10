@@ -13,7 +13,7 @@ import {
   type ExpansionIndex,
 } from "$lib/components/calendar/calendar-index";
 import {
-  sanitizeCalendarTime, utcIsoToWallClock, wallClockToUtcIso,
+  computeViewWindow, sanitizeCalendarTime, utcIsoToWallClock, wallClockToUtcIso,
 } from "$lib/components/calendar/utils";
 import {
   mapAlarm, mapAttendee, mapOverride, mapRow, safeJsonParse, toDbTime,
@@ -117,9 +117,14 @@ function hasStructuralChanges(
 
 // Store
 
-/** DB-backed template events (no virtual instances). */
+/** DB-backed template events for the current render window plus recurring templates. */
 let rawBlocks = $state<CalendarEvent[]>([]);
 let loaded = $state(false);
+let totalEventCount = $state(0);
+let currentWindowKey: string | null = null;
+let pendingWindowKey: string | null = null;
+let pendingWindowPromise: Promise<void> | null = null;
+let windowRequestId = 0;
 let batchDepth = 0;
 const PANEL_EVENT_CACHE_LIMIT = 64;
 const panelEventCache = new Map<string, Promise<CalendarEvent | undefined>>();
@@ -148,9 +153,10 @@ type DbFullOverride = DbOverride & {
   extended_properties: string | null;
 };
 
-interface CalendarBootstrapRows {
+interface CalendarWindowRows {
   events: DbCalendarEvent[];
   overrides: DbOverride[];
+  total_event_count: number;
 }
 
 interface CalendarPanelEventRows {
@@ -166,11 +172,12 @@ interface CalendarFullEventRows {
 }
 
 /**
- * Sorted lookup over `rawBlocks`, rebuilt lazily after each invalidate. The
- * non-recurring events are sorted ascending by start so window queries can
+ * Sorted lookup over the current render-window rows, rebuilt lazily after
+ * each invalidate. The non-recurring events are sorted ascending by start so window queries can
  * bisect-and-walk in `O(log N + K)` instead of scanning every template.
  * Recurring templates stay in a small list and are walked exhaustively per
- * query (count is bounded; cost dominated by per-template RRULE walks).
+ * query. Until recurrence moves to Rust, the window command includes
+ * recurring templates so TypeScript can preserve existing expansion behavior.
  */
 let expansionIndex: ExpansionIndex | null = null;
 
@@ -264,11 +271,86 @@ function mapOverrides(rows: DbOverride[], renderZone: string): Map<string, Event
   return map;
 }
 
+function calendarWindowKey(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  renderZone: string,
+): string {
+  return `${renderZone}:${windowStart.toString()}:${windowEnd.toString()}`;
+}
+
+function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEvent[] {
+  const mapped = rows.events.map((r) => mapRow(r, renderZone));
+  if (mapped.length === 0) return mapped;
+
+  const overrideMap = mapOverrides(rows.overrides, renderZone);
+  for (const evt of mapped) {
+    const ovr = overrideMap.get(evt.id);
+    if (ovr?.length) evt.overrides = ovr;
+  }
+  return mapped;
+}
+
+async function loadWindowIntoState(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  markBoot: boolean,
+): Promise<void> {
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  if (!markBoot && loaded && currentWindowKey === key) return;
+  if (pendingWindowKey === key && pendingWindowPromise) {
+    await pendingWindowPromise;
+    return;
+  }
+
+  const requestId = ++windowRequestId;
+  const promise = (async () => {
+    const url = await ensureDbUrl();
+    const windowStartDate = windowStart.toString();
+    const windowEndDate = windowEnd.toString();
+    const windowEndExclusiveDate = windowEnd.add({ days: 1 }).toString();
+    const rows = await invoke<CalendarWindowRows>("calendar_load_window", {
+      dbUrl: url,
+      windowStartDate,
+      windowEndDate,
+      windowStartUtc: wallClockToUtcIso(`${windowStartDate} 00:00`, renderZone),
+      windowEndExclusiveUtc: wallClockToUtcIso(`${windowEndExclusiveDate} 00:00`, renderZone),
+    });
+    if (requestId !== windowRequestId) return;
+
+    if (markBoot) perfMark("boot.sql-main-done", { rows: rows.events.length, total: rows.total_event_count });
+    const mapped = mapWindowRows(rows, renderZone);
+    if (markBoot) perfMark("boot.maprow-done");
+
+    rawBlocks = mapped;
+    totalEventCount = rows.total_event_count;
+    currentWindowKey = key;
+    loaded = true;
+    invalidate();
+    if (markBoot) {
+      perfMark("boot.sql-children-done");
+      perfMark("boot.rawblocks-set", { events: rawBlocks.length, total: totalEventCount });
+    }
+  })();
+
+  pendingWindowKey = key;
+  pendingWindowPromise = promise;
+  try {
+    await promise;
+  } finally {
+    if (pendingWindowPromise === promise) {
+      pendingWindowKey = null;
+      pendingWindowPromise = null;
+    }
+  }
+}
+
 /**
  * Build a slim copy of `e` containing only the keys the in-memory render,
  * expansion, and notification scheduler care about. Used at the boundary
  * where heavy events (ICS imports, addBlock opts) are pushed into
- * `rawBlocks`, so heavy fields stay in the DB and out of long-lived RAM.
+ * render state, so heavy fields stay in the DB and out of long-lived RAM.
  */
 function slimEvent(e: CalendarEvent): CalendarEvent {
   const slim: CalendarEvent = {
@@ -323,6 +405,10 @@ export function getCalendar() {
       return rawBlocks;
     },
 
+    get eventCount(): number {
+      return totalEventCount;
+    },
+
     get loaded(): boolean {
       return loaded;
     },
@@ -335,30 +421,19 @@ export function getCalendar() {
       perfMark("boot.sql-start");
       try {
         loaded = false;
-        const url = await ensureDbUrl();
-        const renderZone = localTimezone();
-        const rows = await invoke<CalendarBootstrapRows>("calendar_load_bootstrap", { dbUrl: url });
-        perfMark("boot.sql-main-done", { rows: rows.events.length });
-        const mapped = rows.events.map((r) => mapRow(r, renderZone));
-        perfMark("boot.maprow-done");
-
-        if (mapped.length > 0) {
-          const overrideMap = mapOverrides(rows.overrides, renderZone);
-          for (const evt of mapped) {
-            const ovr = overrideMap.get(evt.id);
-            if (ovr?.length) evt.overrides = ovr;
-          }
-        }
-        perfMark("boot.sql-children-done");
-
-        rawBlocks = mapped;
-        loaded = true;
-        invalidate();
-        perfMark("boot.rawblocks-set", { events: rawBlocks.length });
+        const initialWindow = computeViewWindow(new Date(), "week");
+        await loadWindowIntoState(initialWindow.start, initialWindow.end, true);
       } catch (e) {
         console.error("[calendar] load() failed:", e);
         throw e;
       }
+    },
+
+    async loadWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<void> {
+      await loadWindowIntoState(windowStart, windowEnd, false);
     },
 
     /**
@@ -399,8 +474,8 @@ export function getCalendar() {
 
     /**
      * Fetch the full DB row for one event id and return a fully populated
-     * `CalendarEvent`. The boot path holds only a slim subset of columns in
-     * `rawBlocks`; this is what ICS export and undo / redo call when they
+     * `CalendarEvent`. The render path holds only a slim subset of columns in
+     * the current window; this is what ICS export and undo / redo call when they
      * need every heavy field, including alarms and override mirrors.
      */
     async loadFullEvent(id: string): Promise<CalendarEvent | undefined> {
@@ -535,6 +610,7 @@ export function getCalendar() {
         transparency: opts.transparency, status: opts.status,
       });
       rawBlocks = [...rawBlocks, event];
+      totalEventCount++;
       invalidate();
       return event;
     },
@@ -779,6 +855,7 @@ export function getCalendar() {
       const parentId = id.includes("::") ? id.split("::")[0] : id;
       await invoke("calendar_delete_event", { dbUrl: dbUrl(), id: parentId });
       rawBlocks = rawBlocks.filter((b) => b.id !== parentId);
+      totalEventCount = Math.max(0, totalEventCount - 1);
       invalidate();
     },
 
@@ -847,6 +924,7 @@ export function getCalendar() {
         pomodoroConfig: parent.pomodoroConfig,
       });
       rawBlocks = [...rawBlocks, standalone];
+      totalEventCount++;
       invalidate();
       return standalone;
     },
@@ -1011,6 +1089,7 @@ export function getCalendar() {
         pomodoroConfig: pomConfig,
       });
       rawBlocks = [...rawBlocks, newTemplate];
+      totalEventCount++;
       invalidate();
       return newTemplate;
     },
@@ -1018,6 +1097,7 @@ export function getCalendar() {
     async clearAll() {
       await invoke("calendar_clear_events", { dbUrl: dbUrl() });
       rawBlocks = [];
+      totalEventCount = 0;
       invalidate();
     },
 
@@ -1058,10 +1138,9 @@ export function getCalendar() {
         };
       }
 
-      // In-memory state update: the previous implementation called
-      // `store.load()` to re-read the universe from disk. Now that we know
-      // exactly which rows we touched, splice them into `rawBlocks` directly
-      // and run one invalidate at the end so cached window expansions drop.
+      // In-memory state update: splice touched rows into the current render
+      // state directly and run one invalidate at the end so cached window
+      // expansions drop.
       store.beginBatch();
       try {
         const reZone = (wallClock: string, sourceZone: string): string => {
@@ -1091,6 +1170,7 @@ export function getCalendar() {
         }
 
         rawBlocks = next;
+        totalEventCount += result.added;
       } finally {
         store.endBatch();
       }
@@ -1105,13 +1185,16 @@ export function getCalendar() {
 
     /**
      * Serialize every event of `calendar` into a `.ics` string ready to write
-     * to disk. `rawBlocks` carries only the slim render shape, so heavy fields
-     * (description, attendees, alarms, organizer, etc.) are loaded on demand
-     * via `loadFullEvent` before serialization so the export is lossless.
+     * to disk. Event ids come from Rust because the render path owns only
+     * the visible window. Heavy fields are loaded on demand via
+     * `loadFullEvent` before serialization so the export is lossless.
      */
     async exportCalendarAsIcs(calendar: Calendar): Promise<string> {
-      const slim = rawBlocks.filter((e) => e.calendarId === calendar.id);
-      const full = await Promise.all(slim.map((e) => store.loadFullEvent(e.id)));
+      const ids = await invoke<string[]>("calendar_list_event_ids_for_calendar", {
+        dbUrl: dbUrl(),
+        calendarId: calendar.id,
+      });
+      const full = await Promise.all(ids.map((id) => store.loadFullEvent(id)));
       const calendarEvents = full.filter((e): e is CalendarEvent => e !== undefined);
       const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
       return serializeCalendarToIcs(calendar, calendarEvents);

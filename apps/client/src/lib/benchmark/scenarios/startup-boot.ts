@@ -6,6 +6,7 @@ import {
 } from "../types";
 import {
   parseCalendarBenchmarkAnchor,
+  loadCalendarBenchmarkWindow,
   seedCalendarSynth,
   waitForFrames,
 } from "./calendar-utils";
@@ -32,6 +33,7 @@ export const startupBootScenario: BenchmarkScenario = {
     }
     handle.setViewMode("week");
     handle.setAnchorDate(parseCalendarBenchmarkAnchor());
+    await loadCalendarBenchmarkWindow("week");
     await waitForFrames(1);
   },
 

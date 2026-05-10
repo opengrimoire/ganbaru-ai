@@ -14,6 +14,7 @@ import {
 } from "../types";
 import {
   CALENDAR_BENCHMARK_ANCHOR_ISO,
+  loadCalendarBenchmarkWindow,
   parseCalendarBenchmarkAnchor,
   seedCalendarSynth,
   timingStatsMetric,
@@ -93,6 +94,7 @@ export const calendarCreateCancelScenario: BenchmarkScenario = {
     }
     handle.setViewMode("week");
     handle.setAnchorDate(parseCalendarBenchmarkAnchor());
+    await loadCalendarBenchmarkWindow("week");
     await waitForFrames(2);
     await handle.closePanel();
   },

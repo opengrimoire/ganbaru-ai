@@ -229,6 +229,12 @@
   // are coalesced to one viewport update per animation frame.
   const viewWindow = $derived(computeViewWindow(anchorDate, viewMode));
 
+  $effect(() => {
+    if (!calendarStore.loaded) return;
+    void calendarStore.loadWindow(viewWindow.start, viewWindow.end)
+      .catch((e) => console.error("[CalendarView] load window failed:", e));
+  });
+
   // Keep the headless handle's cached view mode in sync so external drivers
   // (the benchmark harness) read the current value without polling.
   $effect(() => {
@@ -274,7 +280,7 @@
         bootUsablePaintMarked = true;
         perfMark("boot.usable-paint", {
           count: visibleEvents.length,
-          events: calendarStore.rawBlocks.length,
+          events: calendarStore.eventCount,
         });
       });
     });

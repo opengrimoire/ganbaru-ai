@@ -4,8 +4,8 @@ import { expandTemplate } from "./recurrence";
 
 /**
  * Pre-built lookup structure that bounds a window query by the visible event
- * count rather than the full template count. Built once per `rawBlocks`
- * mutation; queried per displayed viewport.
+ * count rather than the loaded template count. Built once per current
+ * render-window mutation; queried per displayed viewport.
  *
  * The `nonRecurringSorted` and `nonRecurringStarts` arrays are parallel
  * (same indices). Storing the start strings separately keeps the bisect
@@ -23,9 +23,9 @@ export interface ExpansionIndex {
 }
 
 /**
- * Build a window-query index from raw template events. O(N) classify plus
+ * Build a window-query index from loaded template events. O(N) classify plus
  * O(N log N) sort. Called once per load and after each mutation; the
- * resulting index aliases entries from `rawBlocks` (no event objects are
+ * resulting index aliases entries from the current window state (no event objects are
  * cloned), so memory cost is just the container arrays.
  */
 export function buildExpansionIndex(rawBlocks: CalendarEvent[]): ExpansionIndex {

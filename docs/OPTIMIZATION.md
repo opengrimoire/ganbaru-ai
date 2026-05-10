@@ -95,7 +95,7 @@ The app should preload panel code only from user intent signals, such as pointer
 
 The app previously used `@tauri-apps/plugin-sql` from the frontend for reads and custom Rust commands for writes. That split made boot reads, migrations, benchmark DB selection, and persistence ownership more complicated than necessary.
 
-GanbaruAI should own SQLite in Rust. The frontend should call typed commands. The first optimization slice removed frontend SQL plugin usage and gave the Rust side control over pooling, migrations, typed reads, and benchmark database routing. Window queries remain the next step.
+GanbaruAI should own SQLite in Rust. The frontend should call typed commands. The first optimization slice removed frontend SQL plugin usage and gave the Rust side control over pooling, migrations, typed reads, and benchmark database routing. The second slice added Rust calendar window reads so the render path no longer needs to load every non-recurring event on boot.
 
 ## Decided refactors
 
@@ -123,6 +123,8 @@ This is worth doing even before the windowed calendar work because it eliminates
 ### 2. Rust calendar window query
 
 Replace `calendar.load()` plus `rawBlocks` as the render source with a Rust command that returns only the current visible window.
+
+Current status: implemented for non-recurring event windows. The command returns overlapping non-recurring rows, all recurring templates for TypeScript expansion parity, slim overrides, and total DB event count for benchmark dataset labels. Recurrence expansion still needs to move to Rust before the window query is fully backend-owned.
 
 Proposed command shape:
 
@@ -291,7 +293,7 @@ If Tauri and WebKit impose a higher fixed empty-app memory floor than desired, t
 
 1. Implement Rust-owned SQLite service and remove frontend SQL reads.
 2. Add the 10,000-event scale to the existing core benchmark datasets.
-3. Implement Rust calendar window queries for non-recurring events.
+3. Implement Rust calendar window queries for non-recurring events. Done.
 4. Port recurrence expansion to Rust and switch render queries to backend expansion.
 5. Replace frontend `rawBlocks` dependencies with typed window, detail, existence, active-block, import, and export commands.
 6. Remove global Temporal from the normal boot path.

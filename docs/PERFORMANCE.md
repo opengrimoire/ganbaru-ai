@@ -407,7 +407,7 @@ The panel itself is lazy-loaded. Live memory polling starts only while the panel
 
 These notes explain the broad shape of current performance work. They should stay conceptual, not incident-specific.
 
-- Calendar event expansion is window-bounded through `calendar-index.ts`, with recurring templates handled separately from sorted non-recurring events.
+- Calendar render state is loaded through a Rust window query. Non-recurring rows are bounded by the visible date window, while recurring templates still return to TypeScript for current expansion parity.
 - Calendar render state uses slim event rows. Heavy fields such as description, attendees, alarms, extended properties, and organizer stay in SQLite until a workflow needs them.
 - EventPanel is dynamically imported and can be parked offscreen after first paint to trade a small measured RAM cost for faster first interaction.
 - Event detail loading uses a lighter `loadPanelEvent` path for panel opens and `loadFullEvent` only where full fidelity is required, such as ICS export and undo snapshots.

@@ -15,6 +15,7 @@ import {
 } from "../types";
 import {
   CALENDAR_BENCHMARK_ANCHOR_ISO,
+  loadCalendarBenchmarkWindow,
   parseCalendarBenchmarkAnchor,
   seedCalendarSynth,
   timingStatsMetric,
@@ -148,6 +149,7 @@ export const eventPanelOpenScenario: BenchmarkScenario = {
     }
     handle.setViewMode("week");
     handle.setAnchorDate(parseCalendarBenchmarkAnchor());
+    await loadCalendarBenchmarkWindow("week");
     await ensureTargetEvents();
     await waitForFrames(2);
     await handle.closePanel();

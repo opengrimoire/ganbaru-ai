@@ -126,6 +126,13 @@ pub struct CalendarBootstrapRows {
 }
 
 #[derive(Serialize)]
+pub struct CalendarWindowRows {
+    events: Vec<DbCalendarEventRow>,
+    overrides: Vec<DbOverrideRow>,
+    total_event_count: i64,
+}
+
+#[derive(Serialize)]
 pub struct CalendarPanelEventRows {
     event: Option<DbFullEventRow>,
     attendees: Vec<DbAttendeeRow>,
@@ -159,6 +166,49 @@ const SLIM_OVERRIDES_SQL: &str = r#"
     FROM calendar_event_overrides
 "#;
 
+const WINDOW_EVENTS_SQL: &str = r#"
+    SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
+           ce.calendar_id, ce.color, ce.rrule,
+           ce.notifications, ce.exceptions, ce.repeat_until,
+           ce.all_day, ce.location, ce.transparency, ce.status,
+           ce.rdate,
+           pc.focus_duration_minutes, pc.short_break_minutes,
+           pc.long_break_minutes, pc.pomodoro_count,
+           pc.idle_timeout_minutes
+    FROM calendar_events ce
+    LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
+    WHERE
+      (ce.rrule IS NOT NULL AND ce.rrule <> '')
+      OR (ce.rdate IS NOT NULL AND ce.rdate <> '' AND ce.rdate <> '[]')
+      OR (
+        (ce.rrule IS NULL OR ce.rrule = '')
+        AND (ce.rdate IS NULL OR ce.rdate = '' OR ce.rdate = '[]')
+        AND (
+          (ce.all_day = 1 AND substr(ce.end_time, 1, 10) >= ? AND substr(ce.start_time, 1, 10) <= ?)
+          OR (ce.all_day <> 1 AND ce.end_time >= ? AND ce.start_time < ?)
+        )
+      )
+    ORDER BY ce.start_time ASC
+"#;
+
+const WINDOW_OVERRIDES_SQL: &str = r#"
+    SELECT o.id, o.parent_event_id, o.recurrence_id, o.title, o.start_time,
+           o.end_time, o.color, o.status, o.transparency
+    FROM calendar_event_overrides o
+    JOIN calendar_events ce ON ce.id = o.parent_event_id
+    WHERE
+      (ce.rrule IS NOT NULL AND ce.rrule <> '')
+      OR (ce.rdate IS NOT NULL AND ce.rdate <> '' AND ce.rdate <> '[]')
+      OR (
+        (ce.rrule IS NULL OR ce.rrule = '')
+        AND (ce.rdate IS NULL OR ce.rdate = '' OR ce.rdate = '[]')
+        AND (
+          (ce.all_day = 1 AND substr(ce.end_time, 1, 10) >= ? AND substr(ce.start_time, 1, 10) <= ?)
+          OR (ce.all_day <> 1 AND ce.end_time >= ? AND ce.start_time < ?)
+        )
+      )
+"#;
+
 const FULL_EVENT_SQL: &str = r#"
     SELECT ce.*,
            pc.focus_duration_minutes, pc.short_break_minutes,
@@ -189,6 +239,64 @@ pub async fn calendar_load_bootstrap<R: Runtime>(
     };
 
     Ok(CalendarBootstrapRows { events, overrides })
+}
+
+#[tauri::command]
+pub async fn calendar_load_window<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    window_start_date: String,
+    window_end_date: String,
+    window_start_utc: String,
+    window_end_exclusive_utc: String,
+) -> Result<CalendarWindowRows, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let events = sqlx::query_as::<_, DbCalendarEventRow>(WINDOW_EVENTS_SQL)
+        .bind(&window_start_date)
+        .bind(&window_end_date)
+        .bind(&window_start_utc)
+        .bind(&window_end_exclusive_utc)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("load calendar window events: {e}"))?;
+    let overrides = if events.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as::<_, DbOverrideRow>(WINDOW_OVERRIDES_SQL)
+            .bind(&window_start_date)
+            .bind(&window_end_date)
+            .bind(&window_start_utc)
+            .bind(&window_end_exclusive_utc)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| format!("load calendar window overrides: {e}"))?
+    };
+    let total_event_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM calendar_events")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| format!("count calendar events: {e}"))?;
+
+    Ok(CalendarWindowRows {
+        events,
+        overrides,
+        total_event_count,
+    })
+}
+
+#[tauri::command]
+pub async fn calendar_list_event_ids_for_calendar<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    calendar_id: String,
+) -> Result<Vec<String>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM calendar_events WHERE calendar_id = ? ORDER BY start_time ASC",
+    )
+    .bind(&calendar_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("list calendar event ids: {e}"))
 }
 
 #[tauri::command]

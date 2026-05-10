@@ -161,7 +161,7 @@ export interface BootTimings {
 export interface StartupBootSample {
   /** Wall-clock ISO 8601 string captured when the sample was collected. */
   startedAt: string;
-  /** Number of events in `rawBlocks` for this launch sample. */
+  /** Total benchmark DB event count for this launch sample. */
   eventCountAtStart: number;
   /** Boot timings captured from process start to usable calendar paint. */
   boot: BootTimings;
@@ -191,7 +191,7 @@ export interface PhaseResult {
   startupMs?: number;
   /** Individual process-launch samples for startup benchmark phases. */
   startupSamples?: StartupBootSample[];
-  /** Number of events in `rawBlocks` at the moment the phase started. */
+  /** Total benchmark DB event count at the moment the phase started. */
   eventCountAtStart: number;
 }
 

@@ -16,7 +16,11 @@ import {
   STRESS_DURATION_MS,
   type BenchmarkScenario,
 } from "../types";
-import { parseCalendarBenchmarkAnchor, seedCalendarSynth } from "./calendar-utils";
+import {
+  loadCalendarBenchmarkWindow,
+  parseCalendarBenchmarkAnchor,
+  seedCalendarSynth,
+} from "./calendar-utils";
 
 export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
@@ -40,6 +44,7 @@ export const calendarNavScenario: BenchmarkScenario = {
     }
     handle.setViewMode("week");
     handle.setAnchorDate(parseCalendarBenchmarkAnchor());
+    await loadCalendarBenchmarkWindow("week");
     // One frame for the view to settle before peak sampling starts.
     await new Promise((r) => requestAnimationFrame(() => r(undefined)));
   },

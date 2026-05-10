@@ -1,6 +1,8 @@
 import { getCalendar } from "$lib/stores/calendar.svelte";
 import { getCalendars } from "$lib/stores/calendars.svelte";
 import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { CalendarViewMode } from "$lib/components/calendar/types";
+import { computeViewWindow } from "$lib/components/calendar/utils";
 import { generateSynthEvents, DEFAULT_SEED } from "../synth";
 import type { BenchmarkMetric, SynthEventDraft } from "../types";
 
@@ -15,6 +17,11 @@ export function synthCalendarFilename(version: string): string {
 export function parseCalendarBenchmarkAnchor(): Date {
   const [y, m, d] = CALENDAR_BENCHMARK_ANCHOR_ISO.split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+
+export async function loadCalendarBenchmarkWindow(mode: CalendarViewMode = "week"): Promise<void> {
+  const window = computeViewWindow(parseCalendarBenchmarkAnchor(), mode);
+  await getCalendar().loadWindow(window.start, window.end);
 }
 
 export function localTimezone(): string {

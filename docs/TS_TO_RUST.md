@@ -63,6 +63,9 @@ persistence:
   TypeScript no longer exposes a generic SQLite bridge.
 - Moved frontend calendar, calendar list, Kanban, Pomodoro segment, and
   timezone-hydration reads behind focused Rust commands.
+- Added a Rust calendar window read path for the render surface. The frontend
+  now loads visible non-recurring rows plus recurring templates instead of
+  booting every calendar event into long-lived WebKit state.
 
 ## Decision rule
 
@@ -98,6 +101,8 @@ Rust currently owns:
 - Typed theme persistence commands in `apps/client/src-tauri/src/themes.rs`.
 - Typed calendar bulk import application in
   `apps/client/src-tauri/src/calendar_import.rs`.
+- Calendar window, panel, full-event, and export-id reads in
+  `apps/client/src-tauri/src/calendar_reads.rs`.
 - Typed timezone hydration row application in
   `apps/client/src-tauri/src/timezone_migration.rs`.
 
