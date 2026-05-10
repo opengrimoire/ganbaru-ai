@@ -1,5 +1,6 @@
 import type { Task, TaskStatus, TaskPriority } from "@ganbaruai/shared-types";
-import { execute, select } from "$lib/api/db";
+import { invoke } from "@tauri-apps/api/core";
+import { dbUrl, select } from "$lib/api/db";
 
 let tasks = $state<Task[]>([]);
 let isLoaded = $state(false);
@@ -52,11 +53,18 @@ export function getKanban() {
     ) {
       const id = generateId();
       const now = new Date().toISOString();
-      await execute(
-        `INSERT INTO tasks (id, title, status, priority, sort_order, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, title, status, priority, tasks.length, now, now],
-      );
+      await invoke("kanban_add_task", {
+        dbUrl: dbUrl(),
+        task: {
+          id,
+          title,
+          status,
+          priority,
+          sortOrder: tasks.length,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
       tasks = [
         ...tasks,
         {
@@ -76,16 +84,19 @@ export function getKanban() {
       ];
     },
     async updateTaskStatus(taskId: string, newStatus: TaskStatus) {
-      await execute(
-        `UPDATE tasks SET status = $1, updated_at = $2 WHERE id = $3`,
-        [newStatus, new Date().toISOString(), taskId],
-      );
+      const updatedAt = new Date().toISOString();
+      await invoke("kanban_update_task_status", {
+        dbUrl: dbUrl(),
+        taskId,
+        status: newStatus,
+        updatedAt,
+      });
       tasks = tasks.map((t) =>
-        t.id === taskId ? { ...t, status: newStatus } : t,
+        t.id === taskId ? { ...t, status: newStatus, updatedAt } : t,
       );
     },
     async deleteTask(taskId: string) {
-      await execute(`DELETE FROM tasks WHERE id = $1`, [taskId]);
+      await invoke("kanban_delete_task", { dbUrl: dbUrl(), taskId });
       tasks = tasks.filter((t) => t.id !== taskId);
     },
   };

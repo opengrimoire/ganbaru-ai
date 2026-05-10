@@ -50,6 +50,9 @@ persistence:
 - Updated day-column persisted segment loading so rows stored against a
   recurring parent event id can still render under the visible virtual
   instance id for the matching date.
+- Moved the placeholder Kanban task add, status update, and delete writes
+  behind typed Rust commands. Kanban is not a large current feature yet, but
+  tasks are structured source-of-truth data and future CLI-visible state.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
@@ -82,6 +85,7 @@ Rust currently owns:
 - SQLite migrations in `apps/client/src-tauri/src/db.rs`.
 - Vault file I/O, generic text file read/write, and safe `.ics.zip` extraction
   in `apps/client/src-tauri/src/vault.rs`.
+- Typed Kanban task mutation commands in `apps/client/src-tauri/src/kanban.rs`.
 - Typed theme persistence commands in `apps/client/src-tauri/src/themes.rs`.
 - Typed calendar bulk import application in
   `apps/client/src-tauri/src/calendar_import.rs`.

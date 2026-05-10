@@ -7,6 +7,7 @@ mod calendar_import;
 mod calendars;
 mod db;
 mod db_path;
+mod kanban;
 mod notification;
 mod pomodoro;
 mod themes;
@@ -544,6 +545,9 @@ pub fn run() {
             vault::vault_read_text,
             vault::vault_write_text,
             vault::vault_read_ics_zip_entries,
+            kanban::kanban_add_task,
+            kanban::kanban_update_task_status,
+            kanban::kanban_delete_task,
             calendar_events::calendar_add_event,
             calendar_events::calendar_delete_event,
             calendar_events::calendar_clear_events,
