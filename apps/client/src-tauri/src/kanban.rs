@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
@@ -15,6 +15,38 @@ pub struct KanbanTaskCreate {
     updated_at: String,
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct KanbanTaskRead {
+    id: String,
+    title: String,
+    description: String,
+    status: String,
+    priority: String,
+    estimated_pomodoros: i64,
+    actual_pomodoros: i64,
+    session_block_id: Option<String>,
+    sort_order: i64,
+    created_at: String,
+    updated_at: String,
+}
+
+#[tauri::command]
+pub async fn kanban_load_tasks<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+) -> Result<Vec<KanbanTaskRead>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    sqlx::query_as::<_, KanbanTaskRead>(
+        "SELECT id, title, description, status, priority,
+                estimated_pomodoros, actual_pomodoros, session_block_id,
+                sort_order, created_at, updated_at
+         FROM tasks ORDER BY sort_order",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("load kanban tasks: {e}"))
+}
+
 #[tauri::command]
 pub async fn kanban_add_task<R: Runtime>(
     app: AppHandle<R>,
@@ -22,7 +54,7 @@ pub async fn kanban_add_task<R: Runtime>(
     task: KanbanTaskCreate,
 ) -> Result<(), String> {
     validate_task_create(&task)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query(
         "INSERT INTO tasks (id, title, status, priority, sort_order, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -34,7 +66,7 @@ pub async fn kanban_add_task<R: Runtime>(
     .bind(task.sort_order)
     .bind(task.created_at)
     .bind(task.updated_at)
-    .execute(&mut conn)
+    .execute(&pool)
     .await
     .map_err(|e| format!("insert kanban task: {e}"))?;
     Ok(())
@@ -51,12 +83,12 @@ pub async fn kanban_update_task_status<R: Runtime>(
     require_non_empty(&task_id, "task_id")?;
     validate_status(&status)?;
     require_non_empty(&updated_at, "updated_at")?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     let result = sqlx::query("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?")
         .bind(status)
         .bind(updated_at)
         .bind(task_id)
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("update kanban task status: {e}"))?;
     if result.rows_affected() == 0 {
@@ -72,10 +104,10 @@ pub async fn kanban_delete_task<R: Runtime>(
     task_id: String,
 ) -> Result<(), String> {
     require_non_empty(&task_id, "task_id")?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query("DELETE FROM tasks WHERE id = ?")
         .bind(task_id)
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("delete kanban task: {e}"))?;
     Ok(())

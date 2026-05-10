@@ -1,5 +1,4 @@
-use serde::Deserialize;
-use sqlx::Connection;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
@@ -29,6 +28,73 @@ pub struct OverrideTimezoneHydration {
     end_time: Option<String>,
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct LegacyEventRow {
+    id: String,
+    start_time: String,
+    end_time: String,
+    timezone: String,
+    all_day: i64,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct LegacyOverrideRow {
+    id: String,
+    recurrence_id: String,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    parent_event_id: String,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ParentZoneRow {
+    id: String,
+    timezone: String,
+    all_day: i64,
+}
+
+#[derive(Serialize)]
+pub struct CalendarTimezoneHydrationRows {
+    events: Vec<LegacyEventRow>,
+    overrides: Vec<LegacyOverrideRow>,
+    parent_zones: Vec<ParentZoneRow>,
+}
+
+#[tauri::command]
+pub async fn calendar_load_timezone_hydration_rows<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+) -> Result<CalendarTimezoneHydrationRows, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let events = sqlx::query_as::<_, LegacyEventRow>(
+        "SELECT id, start_time, end_time, timezone, all_day FROM calendar_events",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("load calendar timezone events: {e}"))?;
+    let overrides = sqlx::query_as::<_, LegacyOverrideRow>(
+        "SELECT id, recurrence_id, start_time, end_time, parent_event_id
+         FROM calendar_event_overrides",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("load calendar timezone overrides: {e}"))?;
+    let parent_zones = if overrides.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as::<_, ParentZoneRow>("SELECT id, timezone, all_day FROM calendar_events")
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| format!("load calendar timezone parent zones: {e}"))?
+    };
+
+    Ok(CalendarTimezoneHydrationRows {
+        events,
+        overrides,
+        parent_zones,
+    })
+}
+
 #[tauri::command]
 pub async fn calendar_apply_timezone_hydration<R: Runtime>(
     app: AppHandle<R>,
@@ -36,8 +102,8 @@ pub async fn calendar_apply_timezone_hydration<R: Runtime>(
     payload: CalendarTimezoneHydration,
 ) -> Result<(), String> {
     validate_payload(&payload)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     for event in payload.events {
         let result = sqlx::query(

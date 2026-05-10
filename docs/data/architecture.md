@@ -49,7 +49,7 @@ Backups go to a user-specified path **outside** the vault. Backing up the vault 
 
 In development the app uses `ganbaruai-dev.db`. In production it uses `ganbaruai.db`. Both live next to the vault root by default. Lazy initialization: the database connection is opened on first use, not at app startup, to keep cold start time low and to allow the vault to be on a slower-than-disk path (e.g. an encrypted volume) without delaying the UI.
 
-The Tauri integration uses `tauri-plugin-sql`. Higher-level ORMs were considered and rejected: they add code to maintain, do not earn enough productivity for an app this small, and obscure the actual queries that show up in performance profiles. Plain SQL with typed wrappers per table keeps the call sites direct.
+The Tauri integration owns SQLite in Rust through focused `sqlx` commands. Higher-level ORMs were considered and rejected: they add code to maintain, do not earn enough productivity for an app this small, and obscure the actual queries that show up in performance profiles. Plain SQL with typed command wrappers keeps the call sites direct.
 
 ## External tools and the CLI bridge
 

@@ -4,6 +4,7 @@ use tauri::Manager;
 
 mod calendar_events;
 mod calendar_import;
+mod calendar_reads;
 mod calendars;
 mod db;
 mod db_path;
@@ -36,7 +37,8 @@ fn force_quit(app: tauri::AppHandle) {
 /// Delete database files (main, WAL, SHM) and quit the app.
 /// Used to factory reset application state.
 #[tauri::command]
-fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
+async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
+    db_path::close_all_sqlite_pools(&app).await?;
     let mut db_path = app.path().app_config_dir().map_err(|e| e.to_string())?;
     let db_file = if cfg!(debug_assertions) {
         "ganbaruai-dev.db"
@@ -80,9 +82,8 @@ fn benchmark_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 /// Delete the benchmark DB file together with its WAL and SHM sidecars.
-/// SQLite on Linux unlinks open files cleanly; on Windows the SQL plugin
-/// opens with `FILE_SHARE_DELETE`, so unlinking succeeds even while a
-/// connection is held. The space is reclaimed when the process exits.
+/// SQLite on Linux unlinks open files cleanly. The benchmark commands close
+/// the managed pool before deleting files so Windows can release handles too.
 fn delete_benchmark_db_files(app: &tauri::AppHandle) -> Result<(), String> {
     let base = benchmark_db_path(app)?;
     for suffix in &["", "-wal", "-shm"] {
@@ -100,14 +101,16 @@ fn delete_benchmark_db_files(app: &tauri::AppHandle) -> Result<(), String> {
 /// Called from the runner when the user confirms a benchmark, so a crashed
 /// previous run does not feed stale data into Phase A.
 #[tauri::command]
-fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
+async fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
+    db_path::close_sqlite_pool(&app, "sqlite:ganbaruai-benchmark.db").await?;
     delete_benchmark_db_files(&app)
 }
 
 /// Same operation as `prepare_benchmark_db`. Separate command for intent
 /// clarity at the call site (run-finished cleanup vs run-starting cleanup).
 #[tauri::command]
-fn teardown_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
+async fn teardown_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
+    db_path::close_sqlite_pool(&app, "sqlite:ganbaruai-benchmark.db").await?;
     delete_benchmark_db_files(&app)
 }
 
@@ -504,24 +507,10 @@ pub fn run() {
     PROCESS_START.set(std::time::Instant::now()).ok();
 
     tauri::Builder::default()
+        .manage(db_path::DatabaseState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin({
-            let user_db = if cfg!(debug_assertions) {
-                "sqlite:ganbaruai-dev.db"
-            } else {
-                "sqlite:ganbaruai.db"
-            };
-            // The benchmark DB shares the schema with the user DB so the
-            // harness exercises the same code paths. Migrations are keyed
-            // per URL by the SQL plugin, so register both up front; whichever
-            // file the JS opens first will run them on demand.
-            tauri_plugin_sql::Builder::default()
-                .add_migrations(user_db, db::migrations())
-                .add_migrations("sqlite:ganbaruai-benchmark.db", db::migrations())
-                .build()
-        })
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
             notification::show_event_notification,
@@ -547,9 +536,14 @@ pub fn run() {
             vault::vault_write_text,
             vault::vault_read_ics_zip_entries,
             kanban::kanban_add_task,
+            kanban::kanban_load_tasks,
             kanban::kanban_update_task_status,
             kanban::kanban_delete_task,
+            timezone_migration::calendar_load_timezone_hydration_rows,
             timezone_migration::calendar_apply_timezone_hydration,
+            calendar_reads::calendar_load_bootstrap,
+            calendar_reads::calendar_load_panel_event,
+            calendar_reads::calendar_load_full_event,
             calendar_events::calendar_add_event,
             calendar_events::calendar_delete_event,
             calendar_events::calendar_clear_events,
@@ -559,10 +553,14 @@ pub fn run() {
             calendar_events::calendar_has_progress_segments,
             calendar_events::calendar_progress_dates_before,
             calendar_import::calendar_bulk_import,
+            calendars::calendar_list_calendars,
+            calendars::calendar_find_imported_calendar,
+            calendars::calendar_count_events,
             calendars::calendar_add_calendar,
             calendars::calendar_set_visibility,
             calendars::calendar_remove_calendar,
             themes::theme_load_all,
+            pomodoro::pomodoro_load_segments_for_events,
             pomodoro::pomodoro_insert_segments,
             pomodoro::pomodoro_update_segments,
             pomodoro::pomodoro_cleanup_event_segments,

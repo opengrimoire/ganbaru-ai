@@ -40,7 +40,6 @@ Key Tauri v2 capabilities used in this project:
 - **`setIgnoreCursorEvents`**. Allows the custom notification window to be non-interactive when desired, so it does not interrupt work in other apps.
 - **Tray icon API.** The app lives in the system tray when not focused, essential for an always-running productivity tool.
 - **`tauri-plugin-native-messaging`**. Bridges the browser extension with the Tauri backend for website blocking and work environment switching.
-- **`tauri-plugin-sql`**. SQLite access from the frontend via Tauri commands.
 - **File system plugin.** Reading and writing markdown files and vault assets to disk.
 
 **Desktop-only features** (not available on mobile due to OS sandboxing): process management, native messaging, global mouse position polling, always-on-top multi-window, edge panel, work environment switching, fullscreen break overlay, desktop activity monitoring.
@@ -181,7 +180,7 @@ See the vault directory tree in `AGENTS.md` for the canonical layout. Everything
 
 ## Data and state
 
-### SQLite (via `tauri-plugin-sql`)
+### SQLite (via Rust commands)
 
 Local database for all structured data in the app. This includes: metadata and search indexes for notes, tags, and bidirectional backlinks between notes; calendar event indexes and session block configurations; Kanban task state, priority tiers, estimated vs. actual Pomodoro counts, and task-to-session-block links; work environment configs and blocker rulesets; Pomodoro session history; requirement version diffs (timestamped changes to task descriptions, scope, and acceptance criteria within the project management framework); diary entry indexes (the entries themselves are markdown files, but mood, energy, sleep quality fields are indexed for trend analysis); and app settings.
 
@@ -619,7 +618,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Collaboration cursors     | `@tiptap/extension-collaboration-cursor`             | Live presence in shared workspaces                                                 |
 | Sync server               | Hocuspocus                                           | Yjs server with persistence, presence, and auth hooks                              |
 | Encryption                | libsodium / `@noble/ciphers`                         | E2E encryption, server sees only ciphertext                                        |
-| Local DB                  | SQLite via `tauri-plugin-sql`                        | Metadata, search, tags, pomodoro sessions, requirement diffs    |
+| Local DB                  | SQLite through Rust `sqlx` commands                  | Metadata, search, tags, pomodoro sessions, requirement diffs    |
 | Media engine (video)      | `ffmpeg-next`                                        | FFmpeg Rust bindings for full audio/video format support                           |
 | Media engine (audio-only) | Symphonia (optional)                                 | Pure-Rust audio decoding, lighter than FFmpeg for playlist-only use                |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |

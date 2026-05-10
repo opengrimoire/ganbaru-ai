@@ -1,8 +1,18 @@
-use sqlx::{Connection, Executor, SqliteConnection};
+use crate::db;
+use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tauri::{AppHandle, Manager, Runtime};
 
 const ALLOWED_SQLITE_FILES: &[&str] =
     &["ganbaruai.db", "ganbaruai-dev.db", "ganbaruai-benchmark.db"];
+
+#[derive(Clone, Default)]
+pub struct DatabaseState {
+    pools: Arc<Mutex<HashMap<String, SqlitePool>>>,
+}
 
 pub fn resolve_sqlite_url<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Result<String, String> {
     let file_name = db_url
@@ -22,17 +32,71 @@ pub fn resolve_sqlite_url<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Resul
 }
 
 pub async fn connect_sqlite<R: Runtime>(
-    app: &AppHandle<R>,
-    db_url: &str,
-) -> Result<SqliteConnection, String> {
-    let conn_url = resolve_sqlite_url(app, db_url)?;
-    let mut conn = SqliteConnection::connect(&conn_url)
+    app: AppHandle<R>,
+    db_url: String,
+) -> Result<SqlitePool, String> {
+    let conn_url = resolve_sqlite_url(&app, &db_url)?;
+    let state = app.state::<DatabaseState>().inner().clone();
+    drop(app);
+    drop(db_url);
+    if let Some(pool) = state
+        .pools
+        .lock()
+        .map_err(|_| "database pool lock poisoned".to_string())?
+        .get(&conn_url)
+        .cloned()
+    {
+        return Ok(pool);
+    }
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&conn_url)
         .await
         .map_err(|e| format!("connect: {e}"))?;
-    conn.execute("PRAGMA foreign_keys=ON")
+    sqlx::raw_sql("PRAGMA foreign_keys=ON")
+        .execute(&pool)
         .await
         .map_err(|e| format!("pragma foreign_keys: {e}"))?;
-    Ok(conn)
+    db::run_migrations(&pool).await?;
+
+    let mut pools = state
+        .pools
+        .lock()
+        .map_err(|_| "database pool lock poisoned".to_string())?;
+    if let Some(existing) = pools.get(&conn_url).cloned() {
+        return Ok(existing);
+    }
+    pools.insert(conn_url, pool.clone());
+    Ok(pool)
+}
+
+pub async fn close_sqlite_pool<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Result<(), String> {
+    let conn_url = resolve_sqlite_url(app, db_url)?;
+    let state = app.state::<DatabaseState>().inner().clone();
+    let pool = state
+        .pools
+        .lock()
+        .map_err(|_| "database pool lock poisoned".to_string())?
+        .remove(&conn_url);
+    if let Some(pool) = pool {
+        pool.close().await;
+    }
+    Ok(())
+}
+
+pub async fn close_all_sqlite_pools<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let state = app.state::<DatabaseState>().inner().clone();
+    let pools = std::mem::take(
+        &mut *state
+            .pools
+            .lock()
+            .map_err(|_| "database pool lock poisoned".to_string())?,
+    );
+    for pool in pools.into_values() {
+        pool.close().await;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

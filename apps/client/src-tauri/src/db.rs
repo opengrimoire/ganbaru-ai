@@ -1,4 +1,128 @@
-use tauri_plugin_sql::{Migration, MigrationKind};
+use std::collections::HashSet;
+
+use sqlx::{Row, SqlitePool};
+
+#[derive(Debug)]
+pub struct Migration {
+    pub version: i64,
+    pub description: &'static str,
+    pub sql: &'static str,
+}
+
+pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
+    sqlx::raw_sql(
+        "CREATE TABLE IF NOT EXISTS ganbaruai_schema_migrations (
+            version INTEGER PRIMARY KEY,
+            description TEXT NOT NULL,
+            installed_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("create migration table: {e}"))?;
+
+    import_legacy_sqlx_migrations(pool).await?;
+    let mut applied = load_applied_migration_versions(pool).await?;
+    for migration in migrations() {
+        if applied.contains(&migration.version) {
+            continue;
+        }
+        let version = migration.version;
+        apply_migration(pool, migration).await?;
+        applied.insert(version);
+    }
+    Ok(())
+}
+
+async fn import_legacy_sqlx_migrations(pool: &SqlitePool) -> Result<(), String> {
+    let has_legacy_table = sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("check legacy migration table: {e}"))?
+    .is_some();
+
+    if !has_legacy_table {
+        return Ok(());
+    }
+
+    let rows = sqlx::query(
+        "SELECT version, description FROM _sqlx_migrations WHERE success = 1 ORDER BY version",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("load legacy migrations: {e}"))?;
+
+    for row in rows {
+        let version: i64 = row
+            .try_get("version")
+            .map_err(|e| format!("read legacy migration version: {e}"))?;
+        let description: String = row
+            .try_get("description")
+            .map_err(|e| format!("read legacy migration description: {e}"))?;
+        sqlx::query(
+            "INSERT OR IGNORE INTO ganbaruai_schema_migrations (version, description)
+             VALUES (?, ?)",
+        )
+        .bind(version)
+        .bind(description)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("record legacy migration {version}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn load_applied_migration_versions(pool: &SqlitePool) -> Result<HashSet<i64>, String> {
+    let rows = sqlx::query("SELECT version FROM ganbaruai_schema_migrations")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("load migrations: {e}"))?;
+    let mut versions = HashSet::with_capacity(rows.len());
+    for row in rows {
+        let version: i64 = row
+            .try_get("version")
+            .map_err(|e| format!("read migration version: {e}"))?;
+        versions.insert(version);
+    }
+    Ok(versions)
+}
+
+async fn apply_migration(pool: &SqlitePool, migration: Migration) -> Result<(), String> {
+    let version = migration.version;
+    let description = migration.description;
+    let sql = migration.sql;
+
+    sqlx::raw_sql("BEGIN IMMEDIATE")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("begin migration {version}: {e}"))?;
+
+    if let Err(err) = sqlx::raw_sql(sql).execute(pool).await {
+        let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+        return Err(format!("run migration {version} {description}: {err}"));
+    }
+
+    if let Err(err) = sqlx::query(
+        "INSERT INTO ganbaruai_schema_migrations (version, description)
+         VALUES (?, ?)",
+    )
+    .bind(version)
+    .bind(description)
+    .execute(pool)
+    .await
+    {
+        let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+        return Err(format!("record migration {version}: {err}"));
+    }
+
+    sqlx::raw_sql("COMMIT")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("commit migration {version}: {e}"))?;
+    Ok(())
+}
 
 pub fn migrations() -> Vec<Migration> {
     vec![Migration {
@@ -183,13 +307,11 @@ pub fn migrations() -> Vec<Migration> {
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 2,
         description: "add event_id to pomodoro_sessions",
         sql: "ALTER TABLE pomodoro_sessions ADD COLUMN event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL;",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 3,
@@ -204,7 +326,6 @@ pub fn migrations() -> Vec<Migration> {
             ALTER TABLE calendar_event_overrides DROP COLUMN color;
             ALTER TABLE calendar_event_overrides ADD COLUMN color INTEGER;
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 4,
@@ -273,7 +394,6 @@ pub fn migrations() -> Vec<Migration> {
                 PRIMARY KEY (theme_id, engine_version)
             );
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 5,
@@ -288,7 +408,6 @@ pub fn migrations() -> Vec<Migration> {
             ALTER TABLE themes ADD COLUMN scheme TEXT;
             ALTER TABLE themes ADD COLUMN seed_scheme TEXT;
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 6,
@@ -298,7 +417,6 @@ pub fn migrations() -> Vec<Migration> {
         // dead weight. SQLite supports DROP COLUMN since 3.35.0; the
         // bundled libsqlite3-sys is well above that.
         sql: "ALTER TABLE themes DROP COLUMN base;",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 7,
@@ -312,7 +430,6 @@ pub fn migrations() -> Vec<Migration> {
             ALTER TABLE themes RENAME COLUMN scheme TO icon_label;
             ALTER TABLE themes RENAME COLUMN seed_scheme TO seed_icon_label;
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 8,
@@ -328,7 +445,6 @@ pub fn migrations() -> Vec<Migration> {
         sql: "
             UPDATE calendar_events SET timezone = 'UTC' WHERE timezone = '';
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 9,
@@ -370,7 +486,6 @@ pub fn migrations() -> Vec<Migration> {
                 '--cal-drag-preview-border'
               );
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 10,
@@ -393,7 +508,6 @@ pub fn migrations() -> Vec<Migration> {
                 '--cal-today-circle-text'
               );
         ",
-        kind: MigrationKind::Up,
     },
     Migration {
         version: 11,
@@ -426,6 +540,5 @@ pub fn migrations() -> Vec<Migration> {
             DELETE FROM theme_seed_tokens
             WHERE kind = 'calendar' AND key = '--cal-header-bg';
         ",
-        kind: MigrationKind::Up,
     }]
 }

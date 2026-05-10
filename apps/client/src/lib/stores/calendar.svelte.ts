@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { dbUrl, select } from "$lib/api/db";
+import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import type {
   Calendar, CalendarEvent, EventAttendee, EventColor, EventOverride,
   EventOrganizer, EventStatus, EventTransparency, EventVisibility,
@@ -148,6 +148,23 @@ type DbFullOverride = DbOverride & {
   extended_properties: string | null;
 };
 
+interface CalendarBootstrapRows {
+  events: DbCalendarEvent[];
+  overrides: DbOverride[];
+}
+
+interface CalendarPanelEventRows {
+  event: DbFullEvent | null;
+  attendees: DbAttendee[];
+}
+
+interface CalendarFullEventRows {
+  event: DbFullEvent | null;
+  attendees: DbAttendee[];
+  alarms: DbAlarm[];
+  overrides: DbFullOverride[];
+}
+
 /**
  * Sorted lookup over `rawBlocks`, rebuilt lazily after each invalidate. The
  * non-recurring events are sorted ascending by start so window queries can
@@ -237,12 +254,7 @@ function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
  * parent through the panel / full-event loaders when EventPanel, undo, or
  * ICS export needs them.
  */
-async function loadOverrides(renderZone: string): Promise<Map<string, EventOverride[]>> {
-  const rows = await select<DbOverride>(
-    `SELECT id, parent_event_id, recurrence_id, title, start_time, end_time,
-            color, status, transparency
-     FROM calendar_event_overrides`,
-  );
+function mapOverrides(rows: DbOverride[], renderZone: string): Map<string, EventOverride[]> {
   const map = new Map<string, EventOverride[]>();
   for (const r of rows) {
     const list = map.get(r.parent_event_id) ?? [];
@@ -323,26 +335,15 @@ export function getCalendar() {
       perfMark("boot.sql-start");
       try {
         loaded = false;
+        const url = await ensureDbUrl();
         const renderZone = localTimezone();
-        const rows = await select<DbCalendarEvent>(
-          `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
-                  ce.calendar_id, ce.color, ce.rrule,
-                  ce.notifications, ce.exceptions, ce.repeat_until,
-                  ce.all_day, ce.location, ce.transparency, ce.status,
-                  ce.rdate,
-                  pc.focus_duration_minutes, pc.short_break_minutes,
-                  pc.long_break_minutes, pc.pomodoro_count,
-                  pc.idle_timeout_minutes
-           FROM calendar_events ce
-           LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-           ORDER BY ce.start_time ASC`,
-        );
-        perfMark("boot.sql-main-done", { rows: rows.length });
-        const mapped = rows.map((r) => mapRow(r, renderZone));
+        const rows = await invoke<CalendarBootstrapRows>("calendar_load_bootstrap", { dbUrl: url });
+        perfMark("boot.sql-main-done", { rows: rows.events.length });
+        const mapped = rows.events.map((r) => mapRow(r, renderZone));
         perfMark("boot.maprow-done");
 
         if (mapped.length > 0) {
-          const overrideMap = await loadOverrides(renderZone);
+          const overrideMap = mapOverrides(rows.overrides, renderZone);
           for (const evt of mapped) {
             const ovr = overrideMap.get(evt.id);
             if (ovr?.length) evt.overrides = ovr;
@@ -372,27 +373,14 @@ export function getCalendar() {
 
       const promise = (async () => {
         const renderZone = localTimezone();
-        const [rows, attendeeRows] = await Promise.all([
-          select<DbFullEvent>(
-            `SELECT ce.*,
-                    pc.focus_duration_minutes, pc.short_break_minutes,
-                    pc.long_break_minutes, pc.pomodoro_count,
-                    pc.idle_timeout_minutes
-             FROM calendar_events ce
-             LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-             WHERE ce.id = $1`,
-            [id],
-          ),
-          select<DbAttendee>(
-            `SELECT * FROM calendar_event_attendees WHERE event_id = $1
-             ORDER BY sort_order ASC`,
-            [id],
-          ),
-        ]);
-        if (rows.length === 0) return undefined;
-        const event = mapRow(rows[0], renderZone);
-        applyFullEventFields(rows[0], event);
-        if (attendeeRows.length > 0) event.attendees = attendeeRows.map(mapAttendee);
+        const rows = await invoke<CalendarPanelEventRows>("calendar_load_panel_event", {
+          dbUrl: dbUrl(),
+          id,
+        });
+        if (!rows.event) return undefined;
+        const event = mapRow(rows.event, renderZone);
+        applyFullEventFields(rows.event, event);
+        if (rows.attendees.length > 0) event.attendees = rows.attendees.map(mapAttendee);
         return event;
       })().catch((e: unknown) => {
         if (panelEventCache.get(id) === promise) panelEventCache.delete(id);
@@ -417,45 +405,23 @@ export function getCalendar() {
      */
     async loadFullEvent(id: string): Promise<CalendarEvent | undefined> {
       const renderZone = localTimezone();
-      const [rows, attendeeRows, alarmRows, overrideRows] = await Promise.all([
-        select<DbFullEvent>(
-          `SELECT ce.*,
-                  pc.focus_duration_minutes, pc.short_break_minutes,
-                  pc.long_break_minutes, pc.pomodoro_count,
-                  pc.idle_timeout_minutes
-           FROM calendar_events ce
-           LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-           WHERE ce.id = $1`,
-          [id],
-        ),
-        select<DbAttendee>(
-          `SELECT * FROM calendar_event_attendees WHERE event_id = $1
-           ORDER BY sort_order ASC`,
-          [id],
-        ),
-        select<DbAlarm>(
-          `SELECT * FROM calendar_event_alarms WHERE event_id = $1
-           ORDER BY sort_order ASC`,
-          [id],
-        ),
-        select<DbFullOverride>(
-          `SELECT * FROM calendar_event_overrides WHERE parent_event_id = $1`,
-          [id],
-        ),
-      ]);
-      if (rows.length === 0) return undefined;
-      const row = rows[0];
+      const rows = await invoke<CalendarFullEventRows>("calendar_load_full_event", {
+        dbUrl: dbUrl(),
+        id,
+      });
+      if (!rows.event) return undefined;
+      const row = rows.event;
       const event = mapRow(row, renderZone);
       applyFullEventFields(row, event);
 
-      if (attendeeRows.length > 0) {
-        event.attendees = attendeeRows.map(mapAttendee);
+      if (rows.attendees.length > 0) {
+        event.attendees = rows.attendees.map(mapAttendee);
       }
-      if (alarmRows.length > 0) {
-        event.alarms = alarmRows.map(mapAlarm);
+      if (rows.alarms.length > 0) {
+        event.alarms = rows.alarms.map(mapAlarm);
       }
-      if (overrideRows.length > 0) {
-        event.overrides = overrideRows.map((r) => {
+      if (rows.overrides.length > 0) {
+        event.overrides = rows.overrides.map((r) => {
           const slim = mapOverride(r, renderZone);
           if (r.description) slim.description = r.description;
           if (r.location) slim.location = r.location;

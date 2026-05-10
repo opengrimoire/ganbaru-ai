@@ -15,14 +15,14 @@
  *     -> persistPhaseAPending(...)
  *     -> restart app, delayed for startup samples            # restart 1
  *   [boot, vaultMode=benchmark, stage=phase-a-pending]
- *     -> SQL plugin opens ganbaruai-benchmark.db (empty)
+ *     -> Rust database layer opens ganbaruai-benchmark.db (empty)
  *     -> stage becomes phase-a-running
  *     -> checkAndResume runs the baseline pass
  *     -> scenario.seed(synth)
  *     -> persistPhaseBPending(...)
  *     -> restart app, delayed for startup samples            # restart 2
  *   [boot, vaultMode=benchmark, stage=phase-b-pending]
- *     -> SQL plugin opens ganbaruai-benchmark.db (now seeded)
+ *     -> Rust database layer opens ganbaruai-benchmark.db (now seeded)
  *     -> stage becomes phase-b-running
  *     -> checkAndResume runs the synthetic pass
  *     -> teardown_benchmark_db (delete files)
@@ -32,7 +32,7 @@
  *     -> user clicks Close
  *     -> restart_app                                         # restart 3
  *   [boot, no state, default]
- *     -> SQL plugin opens user DB (untouched throughout)
+ *     -> Rust database layer opens user DB (untouched throughout)
  *   idle
  *
  * A later boot that sees a `*-running` stage treats the previous process as

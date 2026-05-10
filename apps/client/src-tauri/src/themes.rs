@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteQueryResult;
-use sqlx::{Connection, Row, Sqlite, Transaction};
+use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
@@ -127,7 +127,7 @@ pub async fn theme_load_all<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<UserThemeRead>, String> {
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     let themes = sqlx::query_as::<_, ThemeRowRead>(
         "SELECT id, display_name, blend_canvas, seed_blend_canvas,
                 derivation_engine_version, calendar_default_mode,
@@ -137,7 +137,7 @@ pub async fn theme_load_all<R: Runtime>(
          FROM themes
          ORDER BY created_at ASC",
     )
-    .fetch_all(&mut conn)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("load themes: {e}"))?;
     if themes.is_empty() {
@@ -149,7 +149,7 @@ pub async fn theme_load_all<R: Runtime>(
          FROM theme_tokens
          ORDER BY theme_id ASC, kind ASC, key ASC",
     )
-    .fetch_all(&mut conn)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("load theme tokens: {e}"))?;
     let palette = sqlx::query_as::<_, PaletteRowRead>(
@@ -157,7 +157,7 @@ pub async fn theme_load_all<R: Runtime>(
          FROM theme_event_palette
          ORDER BY theme_id ASC, slot ASC",
     )
-    .fetch_all(&mut conn)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("load theme palette: {e}"))?;
     let seed_tokens = sqlx::query_as::<_, TokenRowRead>(
@@ -165,7 +165,7 @@ pub async fn theme_load_all<R: Runtime>(
          FROM theme_seed_tokens
          ORDER BY theme_id ASC, kind ASC, key ASC",
     )
-    .fetch_all(&mut conn)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("load seed theme tokens: {e}"))?;
     let seed_palette = sqlx::query_as::<_, PaletteRowRead>(
@@ -173,7 +173,7 @@ pub async fn theme_load_all<R: Runtime>(
          FROM theme_seed_event_palette
          ORDER BY theme_id ASC, slot ASC",
     )
-    .fetch_all(&mut conn)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("load seed theme palette: {e}"))?;
 
@@ -207,8 +207,8 @@ pub async fn theme_insert<R: Runtime>(
 ) -> Result<(), String> {
     validate_theme_write(&write)?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     sqlx::query(
         "INSERT INTO themes
@@ -276,8 +276,8 @@ pub async fn theme_replace_content<R: Runtime>(
 ) -> Result<(), String> {
     validate_theme_write(&write)?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     let result = sqlx::query(
         "UPDATE themes
@@ -355,10 +355,10 @@ pub async fn theme_delete<R: Runtime>(
     id: String,
 ) -> Result<(), String> {
     validate_theme_id(&id)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query("DELETE FROM themes WHERE id = ?")
         .bind(id)
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("delete theme: {e}"))?;
     Ok(())
@@ -373,12 +373,12 @@ pub async fn theme_backfill_icon_label<R: Runtime>(
 ) -> Result<(), String> {
     validate_theme_id(&id)?;
     validate_icon_label(&icon_label, "icon_label")?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query("UPDATE themes SET icon_label = ?, seed_icon_label = ? WHERE id = ?")
         .bind(&icon_label)
         .bind(&icon_label)
         .bind(id)
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("backfill theme icon label: {e}"))?;
     Ok(())
@@ -396,7 +396,7 @@ pub async fn theme_record_dismissal<R: Runtime>(
         return Err("engine_version cannot be negative".to_string());
     }
     let dismissed_at = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query(
         "INSERT OR REPLACE INTO theme_upgrade_dismissals
             (theme_id, engine_version, dismissed_at)
@@ -405,7 +405,7 @@ pub async fn theme_record_dismissal<R: Runtime>(
     .bind(id)
     .bind(engine_version)
     .bind(dismissed_at)
-    .execute(&mut conn)
+    .execute(&pool)
     .await
     .map_err(|e| format!("record theme dismissal: {e}"))?;
     Ok(())
@@ -416,10 +416,10 @@ pub async fn theme_load_dismissals<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<DismissalRow>, String> {
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     let rows =
         sqlx::query("SELECT theme_id, engine_version, dismissed_at FROM theme_upgrade_dismissals")
-            .fetch_all(&mut conn)
+            .fetch_all(&pool)
             .await
             .map_err(|e| format!("load theme dismissals: {e}"))?;
 
@@ -450,12 +450,12 @@ pub async fn theme_rename<R: Runtime>(
     validate_theme_id(&id)?;
     validate_display_name(&display_name)?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     let result = sqlx::query("UPDATE themes SET display_name = ?, updated_at = ? WHERE id = ?")
         .bind(display_name)
         .bind(now)
         .bind(id)
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("rename theme: {e}"))?;
     ensure_row_changed(result, "rename theme")
@@ -474,8 +474,8 @@ pub async fn theme_update_token_value<R: Runtime>(
     validate_token_identity(&kind, &key, "token")?;
     validate_hex_color(&value, "value")?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let result = sqlx::query(
         "UPDATE theme_tokens SET value = ? WHERE theme_id = ? AND kind = ? AND key = ?",
     )
@@ -504,8 +504,8 @@ pub async fn theme_update_token_isolated<R: Runtime>(
     validate_theme_id(&id)?;
     validate_token_identity(&kind, &key, "token")?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let result = sqlx::query(
         "UPDATE theme_tokens SET isolated = ? WHERE theme_id = ? AND kind = ? AND key = ?",
     )
@@ -536,8 +536,8 @@ pub async fn theme_update_token_value_and_isolated<R: Runtime>(
     validate_token_identity(&kind, &key, "token")?;
     validate_hex_color(&value, "value")?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let result = sqlx::query(
         "UPDATE theme_tokens SET value = ?, isolated = ? WHERE theme_id = ? AND kind = ? AND key = ?",
     )
@@ -571,8 +571,8 @@ pub async fn theme_update_source_cascade<R: Runtime>(
     }
 
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let result = sqlx::query(
         "UPDATE theme_tokens SET value = ? WHERE theme_id = ? AND kind = 'source' AND key = ?",
     )
@@ -616,8 +616,8 @@ pub async fn theme_update_palette_slot<R: Runtime>(
     validate_palette_slot(slot, "slot")?;
     validate_hex_color(&value, "value")?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let result =
         sqlx::query("UPDATE theme_event_palette SET value = ? WHERE theme_id = ? AND slot = ?")
             .bind(value)
@@ -642,12 +642,12 @@ pub async fn theme_update_blend_canvas<R: Runtime>(
     validate_theme_id(&id)?;
     validate_hex_color(&value, "value")?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     let result = sqlx::query("UPDATE themes SET blend_canvas = ?, updated_at = ? WHERE id = ?")
         .bind(value)
         .bind(now)
         .bind(id)
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("update theme blend canvas: {e}"))?;
     ensure_row_changed(result, "update theme blend canvas")
@@ -674,8 +674,8 @@ pub async fn theme_rebake_non_isolated<R: Runtime>(
     }
 
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     update_non_isolated_token_values(&mut tx, &id, "app", &derived_app).await?;
     update_non_isolated_token_values(&mut tx, &id, "calendar", &derived_cal).await?;
 
@@ -721,8 +721,8 @@ pub async fn theme_reset_token_to_seed<R: Runtime>(
     validate_theme_id(&id)?;
     validate_token_identity(&kind, &key, "token")?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let result = sqlx::query(
         "UPDATE theme_tokens AS t
             SET value = (
@@ -757,8 +757,8 @@ pub async fn theme_reset_palette_slot_to_seed<R: Runtime>(
     validate_theme_id(&id)?;
     validate_palette_slot(slot, "slot")?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let result = sqlx::query(
         "UPDATE theme_event_palette AS p
             SET value = (
@@ -786,8 +786,8 @@ pub async fn theme_reset_to_seed<R: Runtime>(
 ) -> Result<(), String> {
     validate_theme_id(&id)?;
     let now = now_ms()?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     sqlx::query(
         "UPDATE theme_tokens AS t

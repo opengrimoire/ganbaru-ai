@@ -14,9 +14,10 @@ Started with the Phase 0 foundation, Phase 1 calendar persistence, Phase 2
 import application, Phase 3 Pomodoro persistence, and Phase 4 theme
 persistence:
 
-- Added a shared Rust SQLite resolver for the registered app databases.
-- Enabled `PRAGMA foreign_keys=ON` on direct sqlx connections used by the
-  backend transaction path.
+- Added a shared Rust SQLite resolver and managed pool for the registered app
+  databases.
+- Enabled `PRAGMA foreign_keys=ON` on pooled `sqlx` connections used by the
+  backend command path.
 - Moved full user-theme snapshot insert and replace writes behind Rust commands
   with one transaction per write.
 - Moved theme delete, legacy icon-label backfill, and upgrade-dismissal writes
@@ -58,8 +59,10 @@ persistence:
   conversion.
 - Moved full user-theme row loading behind Rust validation. TypeScript still
   preserves editor display order after the backend returns grouped rows.
-- Removed the unused frontend `execute()` helper so TypeScript no longer
-  exposes a generic SQLite write bridge.
+- Removed the unused frontend `execute()` helper and the frontend SQL plugin so
+  TypeScript no longer exposes a generic SQLite bridge.
+- Moved frontend calendar, calendar list, Kanban, Pomodoro segment, and
+  timezone-hydration reads behind focused Rust commands.
 
 ## Decision rule
 
@@ -98,10 +101,9 @@ Rust currently owns:
 - Typed timezone hydration row application in
   `apps/client/src-tauri/src/timezone_migration.rs`.
 
-TypeScript still owns UI-oriented SQLite reads through
-`apps/client/src/lib/api/db.ts` where they feed rendering, cache hydration, or
-Temporal-based conversion. The generic frontend write helper has been removed;
-durable app writes now go through focused Rust commands.
+TypeScript still owns UI state, rendering, and Temporal-based conversion, but
+frontend code no longer opens SQLite directly. `apps/client/src/lib/api/db.ts`
+now resolves only the active database URL for focused Rust commands.
 
 ## Target architecture
 
@@ -363,8 +365,8 @@ Keep in TypeScript:
 
 Why this should move:
 
-- The current TypeScript database layer explicitly notes that multi-statement
-  theme writes are not true transactions through the SQL plugin pool.
+- Earlier TypeScript write paths could not guarantee atomic multi-table theme
+  writes across the frontend database boundary.
 - Theme rows span several normalized tables and seed mirrors.
 - Import and replacement should never leave half a theme in SQLite.
 

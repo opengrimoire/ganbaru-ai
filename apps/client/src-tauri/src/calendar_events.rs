@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use sqlx::Connection;
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
@@ -212,8 +211,8 @@ pub async fn calendar_add_event<R: Runtime>(
     event: CalendarEventCreate,
 ) -> Result<(), String> {
     validate_event_create(&event)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     sqlx::query(
         "INSERT INTO calendar_events
@@ -315,10 +314,10 @@ pub async fn calendar_delete_event<R: Runtime>(
     id: String,
 ) -> Result<(), String> {
     require_non_empty(&id, "id")?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query("DELETE FROM calendar_events WHERE id = ?")
         .bind(id)
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("delete calendar event: {e}"))?;
     Ok(())
@@ -329,9 +328,9 @@ pub async fn calendar_clear_events<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<(), String> {
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query("DELETE FROM calendar_events")
-        .execute(&mut conn)
+        .execute(&pool)
         .await
         .map_err(|e| format!("clear calendar events: {e}"))?;
     Ok(())
@@ -344,8 +343,8 @@ pub async fn calendar_update_event<R: Runtime>(
     patch: CalendarEventUpdate,
 ) -> Result<(), String> {
     validate_event_update(&patch)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     for field in &patch.fields {
         apply_update_field(&mut tx, &patch.id, field).await?;
@@ -451,8 +450,8 @@ pub async fn calendar_detach_instance<R: Runtime>(
     input: CalendarDetachInstance,
 ) -> Result<(), String> {
     validate_detach_instance(&input)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     let result =
         sqlx::query("UPDATE calendar_events SET exceptions = ?, updated_at = ? WHERE id = ?")
@@ -533,8 +532,8 @@ pub async fn calendar_split_series<R: Runtime>(
     input: CalendarSplitSeries,
 ) -> Result<(), String> {
     validate_split_series(&input)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     let result = sqlx::query(
         "UPDATE calendar_events SET repeat_until = ?, rrule = ?, updated_at = ? WHERE id = ?",
@@ -615,7 +614,7 @@ pub async fn calendar_has_progress_segments<R: Runtime>(
 ) -> Result<bool, String> {
     require_non_empty(&template_id, "template_id")?;
     require_non_empty(&date, "date")?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)
          FROM pomodoro_segments
@@ -627,7 +626,7 @@ pub async fn calendar_has_progress_segments<R: Runtime>(
     .bind(&template_id)
     .bind(&date)
     .bind(&date)
-    .fetch_one(&mut conn)
+    .fetch_one(&pool)
     .await
     .map_err(|e| format!("count progress segments: {e}"))?;
     Ok(count > 0)
@@ -646,7 +645,7 @@ pub async fn calendar_progress_dates_before<R: Runtime>(
     if let Some(date) = &exclude_date {
         require_non_empty(date, "exclude_date")?;
     }
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     let dates = sqlx::query_scalar::<_, String>(
         "SELECT DISTINCT event_date
          FROM pomodoro_segments
@@ -659,7 +658,7 @@ pub async fn calendar_progress_dates_before<R: Runtime>(
     .bind(&template_id)
     .bind(&template_id)
     .bind(&cutoff_date)
-    .fetch_all(&mut conn)
+    .fetch_all(&pool)
     .await
     .map_err(|e| format!("load progress dates: {e}"))?;
     Ok(filter_excluded_dates(dates, exclude_date.as_deref()))

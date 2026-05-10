@@ -17,8 +17,9 @@
   import { computeDayTimelineBands } from "$lib/utils/pomodoro-segments";
   import { PENDING_CREATE_ID } from "./display-events";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
-  import { select } from "$lib/api/db";
+  import { dbUrl } from "$lib/api/db";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import EventBlock from "./EventBlock.svelte";
   import { CALENDAR_ZOOM_FRAME_EVENT, getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
@@ -216,17 +217,11 @@
     lastFetchKey = fetchKey;
     const tStart = performance.now();
     perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
-    const placeholders = queryEventIds.map((_, i) => `$${i + 1}`).join(",");
     const visibleIds = new Set(eventIds);
-    select<DbSegmentRow>(
-      `SELECT id, event_id, event_date, run_id, cycle_number, phase,
-              planned_start, planned_end, actual_start, actual_end, pause_log, status
-       FROM pomodoro_segments
-       WHERE event_id IN (${placeholders})
-         AND (status = 'completed' OR status = 'active' OR status = 'interrupted')
-       ORDER BY planned_start ASC`,
-      queryEventIds,
-    ).then((rows) => {
+    invoke<DbSegmentRow[]>("pomodoro_load_segments_for_events", {
+      dbUrl: dbUrl(),
+      eventIds: queryEventIds,
+    }).then((rows) => {
       const map = new Map<string, PersistedSegment[]>();
       for (const r of rows) {
         const virtualId = `${r.event_id}::${r.event_date}`;

@@ -91,11 +91,11 @@ The long-term fix is not to reimplement unsafe date math in ad hoc TypeScript. T
 
 The app should preload panel code only from user intent signals, such as pointer enter, pointer down, keyboard focus on an event, or explicit open. If first open latency becomes too high, the panel should be split into a small shell and lazy detail sections rather than mounted invisibly at boot.
 
-### The frontend SQL plugin keeps the database boundary split
+### The former frontend SQL plugin kept the database boundary split
 
-The app currently uses `@tauri-apps/plugin-sql` from the frontend for reads and custom Rust commands for writes. That split makes boot reads, migrations, benchmark DB selection, and persistence ownership more complicated than necessary.
+The app previously used `@tauri-apps/plugin-sql` from the frontend for reads and custom Rust commands for writes. That split made boot reads, migrations, benchmark DB selection, and persistence ownership more complicated than necessary.
 
-GanbaruAI should own SQLite in Rust. The frontend should call typed commands. This removes frontend SQL plugin usage from the hot path and gives the Rust side control over pooling, migrations, window queries, and benchmark database routing.
+GanbaruAI should own SQLite in Rust. The frontend should call typed commands. The first optimization slice removed frontend SQL plugin usage and gave the Rust side control over pooling, migrations, typed reads, and benchmark database routing. Window queries remain the next step.
 
 ## Decided refactors
 

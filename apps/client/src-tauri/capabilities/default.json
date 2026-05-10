@@ -18,11 +18,6 @@
     "core:window:allow-is-fullscreen",
     "core:webview:allow-set-webview-zoom",
     "opener:default",
-    "sql:default",
-    "sql:allow-load",
-    "sql:allow-execute",
-    "sql:allow-select",
-    "sql:allow-close",
     "global-shortcut:default",
     "dialog:default"
   ]

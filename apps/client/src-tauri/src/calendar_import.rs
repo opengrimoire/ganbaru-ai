@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use sqlx::{Connection, Row, Sqlite, Transaction};
+use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
@@ -128,8 +128,8 @@ pub async fn calendar_bulk_import<R: Runtime>(
     payload: CalendarBulkImportPayload,
 ) -> Result<CalendarBulkImportSummary, String> {
     validate_payload(&payload)?;
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     let existing = load_existing_events(&mut tx, &payload).await?;
     let mut seen_source_uids = HashSet::new();
     let mut skipped_older = 0;

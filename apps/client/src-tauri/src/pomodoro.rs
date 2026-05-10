@@ -1,5 +1,4 @@
-use serde::Deserialize;
-use sqlx::Connection;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
@@ -50,6 +49,56 @@ pub struct PomodoroSessionWrite {
     pauses: Vec<PomodoroPauseMs>,
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct PomodoroSegmentRead {
+    id: String,
+    event_id: String,
+    event_date: String,
+    run_id: String,
+    cycle_number: i64,
+    phase: String,
+    planned_start: String,
+    planned_end: String,
+    actual_start: Option<String>,
+    actual_end: Option<String>,
+    pause_log: Option<String>,
+    status: String,
+}
+
+#[tauri::command]
+pub async fn pomodoro_load_segments_for_events<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    event_ids: Vec<String>,
+) -> Result<Vec<PomodoroSegmentRead>, String> {
+    if event_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    for event_id in &event_ids {
+        require_non_empty(event_id, "event_id")?;
+    }
+
+    let placeholders = std::iter::repeat_n("?", event_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let query = format!(
+        "SELECT id, event_id, event_date, run_id, cycle_number, phase,
+                planned_start, planned_end, actual_start, actual_end, pause_log, status
+         FROM pomodoro_segments
+         WHERE event_id IN ({placeholders})
+           AND (status = 'completed' OR status = 'active' OR status = 'interrupted')
+         ORDER BY planned_start ASC"
+    );
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut q = sqlx::query_as::<_, PomodoroSegmentRead>(&query);
+    for event_id in event_ids {
+        q = q.bind(event_id);
+    }
+    q.fetch_all(&pool)
+        .await
+        .map_err(|e| format!("load pomodoro event segments: {e}"))
+}
+
 #[tauri::command]
 pub async fn pomodoro_insert_segments<R: Runtime>(
     app: AppHandle<R>,
@@ -60,8 +109,8 @@ pub async fn pomodoro_insert_segments<R: Runtime>(
         validate_segment_write(segment)?;
     }
 
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     for segment in segments {
         let event_id = canonical_event_id(&segment.event_id)?.to_string();
@@ -105,8 +154,8 @@ pub async fn pomodoro_update_segments<R: Runtime>(
         return Ok(());
     }
 
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     for segment in segments {
         let result = sqlx::query(
@@ -141,8 +190,8 @@ pub async fn pomodoro_cleanup_event_segments<R: Runtime>(
     let canonical_id = canonical_event_id(&event_id)?.to_string();
     require_non_empty(&event_date, "event_date")?;
 
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     sqlx::query(
         "UPDATE pomodoro_segments
@@ -183,8 +232,8 @@ pub async fn pomodoro_cleanup_orphans<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<(), String> {
-    let mut conn = connect_sqlite(&app, &db_url).await?;
-    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     sqlx::query(
         "UPDATE pomodoro_segments
@@ -218,7 +267,7 @@ pub async fn pomodoro_save_session<R: Runtime>(
     };
     let focus_score = compute_focus_score(session.start_ms, session.end_ms, &session.pauses)?;
 
-    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let pool = connect_sqlite(app, db_url).await?;
     sqlx::query(
         "INSERT INTO pomodoro_sessions
             (id, event_id, start_time, end_time, completed, focus_score, created_at)
@@ -230,7 +279,7 @@ pub async fn pomodoro_save_session<R: Runtime>(
     .bind(&session.end_time)
     .bind(focus_score)
     .bind(&session.end_time)
-    .execute(&mut conn)
+    .execute(&pool)
     .await
     .map_err(|e| format!("insert pomodoro session: {e}"))?;
     Ok(())

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { dbUrl, getDb } from "$lib/api/db";
+import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import { type BenchmarkMetric } from "../types";
 import { timingStatsMetric } from "./calendar-utils";
 
@@ -10,7 +10,7 @@ export function throwIfAborted(signal: AbortSignal): void {
 }
 
 export async function ensureBenchmarkDbReady(): Promise<void> {
-  await getDb();
+  await ensureDbUrl();
 }
 
 export async function invokeDb<T>(

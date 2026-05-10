@@ -22,7 +22,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { THEME_TOKEN_ROW_ORDER } from "$lib/stores/themes";
-import { dbUrl, getDb } from "./db";
+import { ensureDbUrl } from "./db";
 
 export type TokenKind = "source" | "app" | "calendar";
 
@@ -118,8 +118,7 @@ const TOKEN_ORDER_INDEX: ReadonlyMap<string, number> = new Map(
 );
 
 async function activeDbUrl(): Promise<string> {
-  await getDb();
-  return dbUrl();
+  return ensureDbUrl();
 }
 
 function compareTokenRows(a: TokenRow, b: TokenRow): number {

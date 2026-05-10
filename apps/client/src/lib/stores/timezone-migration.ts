@@ -20,7 +20,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { dbUrl, select } from "$lib/api/db";
+import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import { flushConfig, getConfigKey, setConfigKey } from "$lib/vault/config";
 
 const MIGRATION_MARKER_KEY = "preferences.calendarTimezoneMigratedV8";
@@ -45,6 +45,12 @@ interface ParentZoneRow {
   id: string;
   timezone: string;
   all_day: number;
+}
+
+interface CalendarTimezoneHydrationRows {
+  events: LegacyEventRow[];
+  overrides: LegacyOverrideRow[];
+  parent_zones: ParentZoneRow[];
 }
 
 interface EventTimezoneHydration {
@@ -113,12 +119,11 @@ export async function hydrateCalendarEventTimezones(): Promise<void> {
   try {
     const eventHydrations: EventTimezoneHydration[] = [];
     const overrideHydrations: OverrideTimezoneHydration[] = [];
-    const events = await select<LegacyEventRow>(
-      `SELECT id, start_time, end_time, timezone, all_day
-       FROM calendar_events`,
-    );
+    const rows = await invoke<CalendarTimezoneHydrationRows>("calendar_load_timezone_hydration_rows", {
+      dbUrl: await ensureDbUrl(),
+    });
 
-    for (const row of events) {
+    for (const row of rows.events) {
       // All-day events are floating: leave them alone, the all_day flag
       // tells the renderer to interpret the wall clock as a date.
       if (row.all_day === 1) continue;
@@ -150,27 +155,19 @@ export async function hydrateCalendarEventTimezones(): Promise<void> {
 
     // Overrides reference their parent's home zone for recurrence_id
     // matching. Pull the parent zones in one query and rewrite per-row.
-    const overrides = await select<LegacyOverrideRow>(
-      `SELECT id, recurrence_id, start_time, end_time, parent_event_id
-       FROM calendar_event_overrides`,
-    );
-
-    if (overrides.length > 0) {
-      const parentRows = await select<ParentZoneRow>(
-        `SELECT id, timezone, all_day FROM calendar_events`,
-      );
+    if (rows.overrides.length > 0) {
       const hydratedEventZoneById = new Map(
         eventHydrations.map((event) => [event.id, event.timezone] as const),
       );
       const parentZoneById = new Map<string, { timezone: string; allDay: boolean }>();
-      for (const p of parentRows) {
+      for (const p of rows.parent_zones) {
         parentZoneById.set(p.id, {
           timezone: hydratedEventZoneById.get(p.id) ?? (p.timezone || deviceZone),
           allDay: p.all_day === 1,
         });
       }
 
-      for (const row of overrides) {
+      for (const row of rows.overrides) {
         const parent = parentZoneById.get(row.parent_event_id);
         if (!parent || parent.allDay) continue;
         const homeZone = parent.timezone;

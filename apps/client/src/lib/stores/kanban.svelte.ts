@@ -1,9 +1,23 @@
 import type { Task, TaskStatus, TaskPriority } from "@ganbaruai/shared-types";
 import { invoke } from "@tauri-apps/api/core";
-import { dbUrl, select } from "$lib/api/db";
+import { dbUrl, ensureDbUrl } from "$lib/api/db";
 
 let tasks = $state<Task[]>([]);
 let isLoaded = $state(false);
+
+interface KanbanTaskRead {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  estimated_pomodoros: number;
+  actual_pomodoros: number;
+  session_block_id: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -27,20 +41,21 @@ export function getKanban() {
         });
     },
     async load() {
-      const rows = await select<
-        Task & { sortOrder: number; sort_order: number }
-      >(
-        `SELECT id, title, description, status, priority,
-                estimated_pomodoros as "estimatedPomodoros",
-                actual_pomodoros as "actualPomodoros",
-                session_block_id as "sessionBlockId",
-                sort_order as "sortOrder",
-                created_at as "createdAt",
-                updated_at as "updatedAt"
-         FROM tasks ORDER BY sort_order`,
-      );
+      const rows = await invoke<KanbanTaskRead[]>("kanban_load_tasks", {
+        dbUrl: await ensureDbUrl(),
+      });
       tasks = rows.map((r) => ({
-        ...r,
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        status: r.status,
+        priority: r.priority,
+        estimatedPomodoros: r.estimated_pomodoros,
+        actualPomodoros: r.actual_pomodoros,
+        sessionBlockId: r.session_block_id,
+        sortOrder: r.sort_order,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
         skillBranchIds: [],
         tags: [],
       }));

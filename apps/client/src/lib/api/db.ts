@@ -1,10 +1,9 @@
-import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import { HARNESS_VERSION, STATE_TTL_MS, SYNTH_VERSION } from "$lib/benchmark/types";
 
 /**
  * Connection string for the active database. Resolved exactly once on the
- * first call to `getDb()` and cached for the rest of the process lifetime.
+ * first call to `ensureDbUrl()` and cached for the rest of the process lifetime.
  *
  * The resolution checks the persisted benchmark state file: only fresh
  * `*-pending` states route to the isolated `ganbaruai-benchmark.db`.
@@ -48,26 +47,26 @@ async function resolveUrl(): Promise<string> {
 }
 
 /**
- * Returns the resolved DB URL. Throws if called before `getDb()` has been
- * awaited at least once. Both existing call sites (this module's own
- * `getDb` and `calendar.svelte.ts:bulkImport`) run after `getDb()` is in
- * flight, so the throw is a guard against accidental misuse.
+ * Returns the resolved DB URL. Throws if called before `ensureDbUrl()` has
+ * been awaited at least once. Boot paths call `ensureDbUrl()` before any
+ * command that needs a synchronous URL, so the throw is a guard against
+ * accidental misuse.
  */
 export function dbUrl(): string {
   if (cachedUrl === null) {
-    throw new Error("dbUrl() called before getDb()");
+    throw new Error("dbUrl() called before ensureDbUrl()");
   }
   return cachedUrl;
 }
 
-let dbPromise: Promise<Database> | null = null;
+let dbPromise: Promise<string> | null = null;
 
-export async function getDb(): Promise<Database> {
+export async function ensureDbUrl(): Promise<string> {
   if (!dbPromise) {
     dbPromise = (async () => {
       const url = await resolveUrl();
       cachedUrl = url;
-      return Database.load(url);
+      return url;
     })();
     dbPromise.catch(() => {
       dbPromise = null;
@@ -75,12 +74,4 @@ export async function getDb(): Promise<Database> {
     });
   }
   return dbPromise;
-}
-
-export async function select<T>(
-  query: string,
-  bindValues?: unknown[],
-): Promise<T[]> {
-  const database = await getDb();
-  return database.select<T[]>(query, bindValues);
 }

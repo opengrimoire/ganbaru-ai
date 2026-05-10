@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { dbUrl, select } from "$lib/api/db";
+import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import type { Calendar } from "$lib/components/calendar/types";
 
 interface DbCalendar {
@@ -50,9 +50,7 @@ export function getCalendars() {
     },
 
     async load() {
-      const rows = await select<DbCalendar>(
-        "SELECT id, name, color, source, visible, read_only, source_url, last_synced FROM calendars ORDER BY name ASC",
-      );
+      const rows = await invoke<DbCalendar[]>("calendar_list_calendars", { dbUrl: await ensureDbUrl() });
       calendars = rows.map(mapRow);
     },
 
@@ -113,12 +111,12 @@ export function getCalendars() {
      * every event from that file).
      */
     async findOrCreateImported(filename: string): Promise<Calendar> {
-      const rows = await select<DbCalendar>(
-        "SELECT id, name, color, source, visible, read_only, source_url, last_synced FROM calendars WHERE source = 'ics' AND source_url = $1 LIMIT 1",
-        [filename],
-      );
-      if (rows.length > 0) {
-        const cal = mapRow(rows[0]);
+      const row = await invoke<DbCalendar | null>("calendar_find_imported_calendar", {
+        dbUrl: dbUrl(),
+        filename,
+      });
+      if (row) {
+        const cal = mapRow(row);
         if (!calendars.some((c) => c.id === cal.id)) {
           calendars = [...calendars, cal];
         }
@@ -140,11 +138,7 @@ export function getCalendars() {
      * settings panel listing).
      */
     async countEvents(calendarId: string): Promise<number> {
-      const rows = await select<{ cnt: number }>(
-        "SELECT COUNT(*) as cnt FROM calendar_events WHERE calendar_id = $1",
-        [calendarId],
-      );
-      return rows[0]?.cnt ?? 0;
+      return invoke<number>("calendar_count_events", { dbUrl: dbUrl(), calendarId });
     },
 
     isReadOnly(calendarId: string): boolean {

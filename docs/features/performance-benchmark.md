@@ -31,7 +31,7 @@ Safety mechanisms:
 - `prepare_benchmark_db` deletes the benchmark DB and sidecars before a scenario starts.
 - `vaultMode: "benchmark"` in `benchmark-state.json` tells the boot path to open the benchmark DB.
 - `teardown_benchmark_db` deletes the benchmark DB when the summary closes, when the run is cancelled, or when stale state is detected.
-- The app restarts after teardown so the SQL plugin opens the real user DB again.
+- The app restarts after teardown so the Rust database layer returns to the real user DB.
 - Stale state is discarded when `HARNESS_VERSION`, `SYNTH_VERSION`, or the TTL check fails.
 
 ## Dataset ids
