@@ -19,9 +19,10 @@ Started with the Phase 0 foundation and the first Phase 4 slice:
   with one transaction per write.
 - Moved theme delete, legacy icon-label backfill, and upgrade-dismissal writes
   behind Rust commands so they use the same backend database boundary.
-- Kept row-level theme editor helpers in TypeScript for now. They are still a
-  Phase 4 follow-up because they need either command batching or focused Rust
-  commands for source-cascade, rebake, and reset operations.
+- Moved row-level theme editor helpers, source cascade, rebake, reset, and
+  dismissal loading behind focused Rust commands. This completes Phase 4 for
+  durable theme writes.
+- Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
 
@@ -267,9 +268,11 @@ Success criteria:
 Move durable theme writes from `apps/client/src/lib/api/themes.ts` into Rust
 transactions.
 
-Current implementation already routes snapshot insert, snapshot replacement,
-theme delete, legacy icon-label backfill, and upgrade-dismissal writes through
-Rust commands.
+Current implementation routes snapshot insert, snapshot replacement, theme
+delete, row-level token and palette edits, source cascade, rebake, resets,
+legacy icon-label backfill, and upgrade-dismissal record/load through Rust
+commands. Full user-theme row loading stays in TypeScript until Phase 6 typed
+reads.
 
 Rust should own:
 

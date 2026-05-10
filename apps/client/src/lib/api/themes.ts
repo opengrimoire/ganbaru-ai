@@ -16,15 +16,13 @@
  * `theme_seed_tokens` mirrors the same shape; per-row reset and
  * "Reset all" copy from seed back to live.
  *
- * Note on atomicity: full snapshot writes go through Rust commands backed
- * by one sqlx transaction. Narrow row-level editor helpers remain here and
- * are recoverable: a partially applied source cascade can be retried by
- * the user.
+ * Note on atomicity: durable theme writes go through Rust commands backed
+ * by sqlx. Multi-row mutations use one transaction.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import { THEME_TOKEN_ROW_ORDER } from "$lib/stores/themes";
-import { dbUrl, execute, getDb, select } from "./db";
+import { dbUrl, getDb, select } from "./db";
 
 export type TokenKind = "source" | "app" | "calendar";
 
@@ -194,10 +192,11 @@ export async function renameTheme(
   id: string,
   displayName: string,
 ): Promise<void> {
-  await execute(
-    "UPDATE themes SET display_name = $1, updated_at = $2 WHERE id = $3",
-    [displayName, Date.now(), id],
-  );
+  await invoke<void>("theme_rename", {
+    dbUrl: await activeDbUrl(),
+    id,
+    displayName,
+  });
 }
 
 export async function updateTokenValue(
@@ -206,14 +205,13 @@ export async function updateTokenValue(
   key: string,
   value: string,
 ): Promise<void> {
-  await execute(
-    "UPDATE theme_tokens SET value = $1 WHERE theme_id = $2 AND kind = $3 AND key = $4",
-    [value, id, kind, key],
-  );
-  await execute("UPDATE themes SET updated_at = $1 WHERE id = $2", [
-    Date.now(),
+  await invoke<void>("theme_update_token_value", {
+    dbUrl: await activeDbUrl(),
     id,
-  ]);
+    kind,
+    key,
+    value,
+  });
 }
 
 export async function updateTokenIsolated(
@@ -222,14 +220,13 @@ export async function updateTokenIsolated(
   key: string,
   isolated: boolean,
 ): Promise<void> {
-  await execute(
-    "UPDATE theme_tokens SET isolated = $1 WHERE theme_id = $2 AND kind = $3 AND key = $4",
-    [isolated ? 1 : 0, id, kind, key],
-  );
-  await execute("UPDATE themes SET updated_at = $1 WHERE id = $2", [
-    Date.now(),
+  await invoke<void>("theme_update_token_isolated", {
+    dbUrl: await activeDbUrl(),
     id,
-  ]);
+    kind,
+    key,
+    isolated,
+  });
 }
 
 /**
@@ -243,14 +240,14 @@ export async function updateTokenValueAndIsolated(
   value: string,
   isolated: boolean,
 ): Promise<void> {
-  await execute(
-    "UPDATE theme_tokens SET value = $1, isolated = $2 WHERE theme_id = $3 AND kind = $4 AND key = $5",
-    [value, isolated ? 1 : 0, id, kind, key],
-  );
-  await execute("UPDATE themes SET updated_at = $1 WHERE id = $2", [
-    Date.now(),
+  await invoke<void>("theme_update_token_value_and_isolated", {
+    dbUrl: await activeDbUrl(),
     id,
-  ]);
+    kind,
+    key,
+    value,
+    isolated,
+  });
 }
 
 /**
@@ -270,34 +267,17 @@ export async function updateSourceCascade(
   derivedCal: Readonly<Record<string, string>>,
   nextBlendCanvas?: string,
 ): Promise<void> {
-  const now = Date.now();
-  await execute(
-    "UPDATE theme_tokens SET value = $1 WHERE theme_id = $2 AND kind = 'source' AND key = $3",
-    [value, id, sourceKey],
-  );
-  for (const [k, v] of Object.entries(derivedApp)) {
-    await execute(
-      "UPDATE theme_tokens SET value = $1 WHERE theme_id = $2 AND kind = 'app' AND key = $3 AND isolated = 0",
-      [v, id, k],
-    );
-  }
-  for (const [k, v] of Object.entries(derivedCal)) {
-    await execute(
-      "UPDATE theme_tokens SET value = $1 WHERE theme_id = $2 AND kind = 'calendar' AND key = $3 AND isolated = 0",
-      [v, id, k],
-    );
-  }
-  if (nextBlendCanvas !== undefined) {
-    await execute(
-      "UPDATE themes SET blend_canvas = $1, updated_at = $2 WHERE id = $3",
-      [nextBlendCanvas, now, id],
-    );
-  } else {
-    await execute("UPDATE themes SET updated_at = $1 WHERE id = $2", [
-      now,
+  await invoke<void>("theme_update_source_cascade", {
+    dbUrl: await activeDbUrl(),
+    write: {
       id,
-    ]);
-  }
+      sourceKey,
+      value,
+      derivedApp,
+      derivedCal,
+      nextBlendCanvas: nextBlendCanvas ?? null,
+    },
+  });
 }
 
 export async function updatePaletteSlot(
@@ -305,24 +285,23 @@ export async function updatePaletteSlot(
   slot: number,
   value: string,
 ): Promise<void> {
-  await execute(
-    "UPDATE theme_event_palette SET value = $1 WHERE theme_id = $2 AND slot = $3",
-    [value, id, slot],
-  );
-  await execute("UPDATE themes SET updated_at = $1 WHERE id = $2", [
-    Date.now(),
+  await invoke<void>("theme_update_palette_slot", {
+    dbUrl: await activeDbUrl(),
     id,
-  ]);
+    slot,
+    value,
+  });
 }
 
 export async function updateBlendCanvas(
   id: string,
   value: string,
 ): Promise<void> {
-  await execute(
-    "UPDATE themes SET blend_canvas = $1, updated_at = $2 WHERE id = $3",
-    [value, Date.now(), id],
-  );
+  await invoke<void>("theme_update_blend_canvas", {
+    dbUrl: await activeDbUrl(),
+    id,
+    value,
+  });
 }
 
 /**
@@ -337,30 +316,14 @@ export async function rebakeNonIsolated(
   newEngineVersion: number,
   nextBlendCanvas?: string,
 ): Promise<void> {
-  const now = Date.now();
-  for (const [k, v] of Object.entries(derivedApp)) {
-    await execute(
-      "UPDATE theme_tokens SET value = $1 WHERE theme_id = $2 AND kind = 'app' AND key = $3 AND isolated = 0",
-      [v, id, k],
-    );
-  }
-  for (const [k, v] of Object.entries(derivedCal)) {
-    await execute(
-      "UPDATE theme_tokens SET value = $1 WHERE theme_id = $2 AND kind = 'calendar' AND key = $3 AND isolated = 0",
-      [v, id, k],
-    );
-  }
-  if (nextBlendCanvas !== undefined) {
-    await execute(
-      "UPDATE themes SET blend_canvas = $1, derivation_engine_version = $2, updated_at = $3 WHERE id = $4",
-      [nextBlendCanvas, newEngineVersion, now, id],
-    );
-  } else {
-    await execute(
-      "UPDATE themes SET derivation_engine_version = $1, updated_at = $2 WHERE id = $3",
-      [newEngineVersion, now, id],
-    );
-  }
+  await invoke<void>("theme_rebake_non_isolated", {
+    dbUrl: await activeDbUrl(),
+    id,
+    derivedApp,
+    derivedCal,
+    newEngineVersion,
+    nextBlendCanvas: nextBlendCanvas ?? null,
+  });
 }
 
 /**
@@ -372,19 +335,12 @@ export async function resetTokenToSeed(
   kind: TokenKind,
   key: string,
 ): Promise<void> {
-  await execute(
-    `UPDATE theme_tokens
-       SET value = (SELECT value FROM theme_seed_tokens
-                    WHERE theme_id = $1 AND kind = $2 AND key = $3),
-           isolated = (SELECT isolated FROM theme_seed_tokens
-                       WHERE theme_id = $1 AND kind = $2 AND key = $3)
-     WHERE theme_id = $1 AND kind = $2 AND key = $3`,
-    [id, kind, key],
-  );
-  await execute("UPDATE themes SET updated_at = $1 WHERE id = $2", [
-    Date.now(),
+  await invoke<void>("theme_reset_token_to_seed", {
+    dbUrl: await activeDbUrl(),
     id,
-  ]);
+    kind,
+    key,
+  });
 }
 
 /**
@@ -394,17 +350,11 @@ export async function resetPaletteSlotToSeed(
   id: string,
   slot: number,
 ): Promise<void> {
-  await execute(
-    `UPDATE theme_event_palette
-       SET value = (SELECT value FROM theme_seed_event_palette
-                    WHERE theme_id = $1 AND slot = $2)
-     WHERE theme_id = $1 AND slot = $2`,
-    [id, slot],
-  );
-  await execute("UPDATE themes SET updated_at = $1 WHERE id = $2", [
-    Date.now(),
+  await invoke<void>("theme_reset_palette_slot_to_seed", {
+    dbUrl: await activeDbUrl(),
     id,
-  ]);
+    slot,
+  });
 }
 
 /**
@@ -412,31 +362,7 @@ export async function resetPaletteSlotToSeed(
  * Used by the editor footer's "Reset all" button.
  */
 export async function resetThemeToSeed(id: string): Promise<void> {
-  await execute(
-    `UPDATE theme_tokens AS t
-       SET value = (SELECT value FROM theme_seed_tokens AS s
-                    WHERE s.theme_id = t.theme_id AND s.kind = t.kind AND s.key = t.key),
-           isolated = (SELECT isolated FROM theme_seed_tokens AS s
-                       WHERE s.theme_id = t.theme_id AND s.kind = t.kind AND s.key = t.key)
-     WHERE t.theme_id = $1`,
-    [id],
-  );
-  await execute(
-    `UPDATE theme_event_palette AS p
-       SET value = (SELECT value FROM theme_seed_event_palette AS s
-                    WHERE s.theme_id = p.theme_id AND s.slot = p.slot)
-     WHERE p.theme_id = $1`,
-    [id],
-  );
-  await execute(
-    `UPDATE themes
-       SET blend_canvas = seed_blend_canvas,
-           calendar_default_mode = seed_calendar_default_mode,
-           calendar_default_custom = seed_calendar_default_custom,
-           updated_at = $1
-     WHERE id = $2`,
-    [Date.now(), id],
-  );
+  await invoke<void>("theme_reset_to_seed", { dbUrl: await activeDbUrl(), id });
 }
 
 /**
@@ -467,9 +393,9 @@ export async function recordDismissal(
 }
 
 export async function loadDismissals(): Promise<DismissalRow[]> {
-  return select<DismissalRow>(
-    "SELECT theme_id, engine_version, dismissed_at FROM theme_upgrade_dismissals",
-  );
+  return invoke<DismissalRow[]>("theme_load_dismissals", {
+    dbUrl: await activeDbUrl(),
+  });
 }
 
 function groupBy<T, K>(rows: readonly T[], key: (row: T) => K): Map<K, T[]> {

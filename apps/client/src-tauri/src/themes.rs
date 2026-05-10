@@ -1,13 +1,15 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
-use sqlx::{Connection, Sqlite, Transaction};
+use serde::{Deserialize, Serialize};
+use sqlx::sqlite::SqliteQueryResult;
+use sqlx::{Connection, Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
 
 const PALETTE_SIZE: usize = 24;
+const MAX_DISPLAY_NAME_LENGTH: usize = 60;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +43,24 @@ struct ThemeTokenWrite {
 struct ThemePaletteWrite {
     slot: i64,
     value: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSourceCascadeWrite {
+    id: String,
+    source_key: String,
+    value: String,
+    derived_app: HashMap<String, String>,
+    derived_cal: HashMap<String, String>,
+    next_blend_canvas: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct DismissalRow {
+    theme_id: String,
+    engine_version: i64,
+    dismissed_at: i64,
 }
 
 #[tauri::command]
@@ -255,6 +275,432 @@ pub async fn theme_record_dismissal<R: Runtime>(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn theme_load_dismissals<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+) -> Result<Vec<DismissalRow>, String> {
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let rows =
+        sqlx::query("SELECT theme_id, engine_version, dismissed_at FROM theme_upgrade_dismissals")
+            .fetch_all(&mut conn)
+            .await
+            .map_err(|e| format!("load theme dismissals: {e}"))?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(DismissalRow {
+                theme_id: row
+                    .try_get("theme_id")
+                    .map_err(|e| format!("read dismissal theme_id: {e}"))?,
+                engine_version: row
+                    .try_get("engine_version")
+                    .map_err(|e| format!("read dismissal engine_version: {e}"))?,
+                dismissed_at: row
+                    .try_get("dismissed_at")
+                    .map_err(|e| format!("read dismissal dismissed_at: {e}"))?,
+            })
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub async fn theme_rename<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    display_name: String,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_display_name(&display_name)?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let result = sqlx::query("UPDATE themes SET display_name = ?, updated_at = ? WHERE id = ?")
+        .bind(display_name)
+        .bind(now)
+        .bind(id)
+        .execute(&mut conn)
+        .await
+        .map_err(|e| format!("rename theme: {e}"))?;
+    ensure_row_changed(result, "rename theme")
+}
+
+#[tauri::command]
+pub async fn theme_update_token_value<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    kind: String,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_token_identity(&kind, &key, "token")?;
+    validate_hex_color(&value, "value")?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let result = sqlx::query(
+        "UPDATE theme_tokens SET value = ? WHERE theme_id = ? AND kind = ? AND key = ?",
+    )
+    .bind(value)
+    .bind(&id)
+    .bind(kind)
+    .bind(key)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("update theme token value: {e}"))?;
+    ensure_row_changed(result, "update theme token value")?;
+    touch_theme(&mut tx, &id, now).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_update_token_isolated<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    kind: String,
+    key: String,
+    isolated: bool,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_token_identity(&kind, &key, "token")?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let result = sqlx::query(
+        "UPDATE theme_tokens SET isolated = ? WHERE theme_id = ? AND kind = ? AND key = ?",
+    )
+    .bind(if isolated { 1_i64 } else { 0_i64 })
+    .bind(&id)
+    .bind(kind)
+    .bind(key)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("update theme token isolation: {e}"))?;
+    ensure_row_changed(result, "update theme token isolation")?;
+    touch_theme(&mut tx, &id, now).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_update_token_value_and_isolated<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    kind: String,
+    key: String,
+    value: String,
+    isolated: bool,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_token_identity(&kind, &key, "token")?;
+    validate_hex_color(&value, "value")?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let result = sqlx::query(
+        "UPDATE theme_tokens SET value = ?, isolated = ? WHERE theme_id = ? AND kind = ? AND key = ?",
+    )
+    .bind(value)
+    .bind(if isolated { 1_i64 } else { 0_i64 })
+    .bind(&id)
+    .bind(kind)
+    .bind(key)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("update theme token value and isolation: {e}"))?;
+    ensure_row_changed(result, "update theme token value and isolation")?;
+    touch_theme(&mut tx, &id, now).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_update_source_cascade<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    write: ThemeSourceCascadeWrite,
+) -> Result<(), String> {
+    validate_theme_id(&write.id)?;
+    validate_token_identity("source", &write.source_key, "source token")?;
+    validate_hex_color(&write.value, "value")?;
+    validate_token_value_map(&write.derived_app, "derived_app")?;
+    validate_token_value_map(&write.derived_cal, "derived_cal")?;
+    if let Some(next) = &write.next_blend_canvas {
+        validate_hex_color(next, "next_blend_canvas")?;
+    }
+
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let result = sqlx::query(
+        "UPDATE theme_tokens SET value = ? WHERE theme_id = ? AND kind = 'source' AND key = ?",
+    )
+    .bind(write.value)
+    .bind(&write.id)
+    .bind(write.source_key)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("update source token: {e}"))?;
+    ensure_row_changed(result, "update source token")?;
+
+    update_non_isolated_token_values(&mut tx, &write.id, "app", &write.derived_app).await?;
+    update_non_isolated_token_values(&mut tx, &write.id, "calendar", &write.derived_cal).await?;
+
+    if let Some(next) = write.next_blend_canvas {
+        let result = sqlx::query("UPDATE themes SET blend_canvas = ?, updated_at = ? WHERE id = ?")
+            .bind(next)
+            .bind(now)
+            .bind(&write.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("update theme blend canvas: {e}"))?;
+        ensure_row_changed(result, "update theme blend canvas")?;
+    } else {
+        touch_theme(&mut tx, &write.id, now).await?;
+    }
+
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_update_palette_slot<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    slot: i64,
+    value: String,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_palette_slot(slot, "slot")?;
+    validate_hex_color(&value, "value")?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let result =
+        sqlx::query("UPDATE theme_event_palette SET value = ? WHERE theme_id = ? AND slot = ?")
+            .bind(value)
+            .bind(&id)
+            .bind(slot)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("update theme palette slot: {e}"))?;
+    ensure_row_changed(result, "update theme palette slot")?;
+    touch_theme(&mut tx, &id, now).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_update_blend_canvas<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    value: String,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_hex_color(&value, "value")?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let result = sqlx::query("UPDATE themes SET blend_canvas = ?, updated_at = ? WHERE id = ?")
+        .bind(value)
+        .bind(now)
+        .bind(id)
+        .execute(&mut conn)
+        .await
+        .map_err(|e| format!("update theme blend canvas: {e}"))?;
+    ensure_row_changed(result, "update theme blend canvas")
+}
+
+#[tauri::command]
+pub async fn theme_rebake_non_isolated<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    derived_app: HashMap<String, String>,
+    derived_cal: HashMap<String, String>,
+    new_engine_version: i64,
+    next_blend_canvas: Option<String>,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_token_value_map(&derived_app, "derived_app")?;
+    validate_token_value_map(&derived_cal, "derived_cal")?;
+    if new_engine_version < 0 {
+        return Err("new_engine_version cannot be negative".to_string());
+    }
+    if let Some(next) = &next_blend_canvas {
+        validate_hex_color(next, "next_blend_canvas")?;
+    }
+
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    update_non_isolated_token_values(&mut tx, &id, "app", &derived_app).await?;
+    update_non_isolated_token_values(&mut tx, &id, "calendar", &derived_cal).await?;
+
+    let result = if let Some(next) = next_blend_canvas {
+        sqlx::query(
+            "UPDATE themes
+                SET blend_canvas = ?, derivation_engine_version = ?, updated_at = ?
+              WHERE id = ?",
+        )
+        .bind(next)
+        .bind(new_engine_version)
+        .bind(now)
+        .bind(&id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("rebake theme: {e}"))?
+    } else {
+        sqlx::query(
+            "UPDATE themes
+                SET derivation_engine_version = ?, updated_at = ?
+              WHERE id = ?",
+        )
+        .bind(new_engine_version)
+        .bind(now)
+        .bind(&id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("rebake theme: {e}"))?
+    };
+    ensure_row_changed(result, "rebake theme")?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_reset_token_to_seed<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    kind: String,
+    key: String,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_token_identity(&kind, &key, "token")?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let result = sqlx::query(
+        "UPDATE theme_tokens AS t
+            SET value = (
+                    SELECT value FROM theme_seed_tokens AS s
+                    WHERE s.theme_id = t.theme_id AND s.kind = t.kind AND s.key = t.key
+                ),
+                isolated = (
+                    SELECT isolated FROM theme_seed_tokens AS s
+                    WHERE s.theme_id = t.theme_id AND s.kind = t.kind AND s.key = t.key
+                )
+          WHERE t.theme_id = ? AND t.kind = ? AND t.key = ?",
+    )
+    .bind(&id)
+    .bind(kind)
+    .bind(key)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("reset theme token to seed: {e}"))?;
+    ensure_row_changed(result, "reset theme token to seed")?;
+    touch_theme(&mut tx, &id, now).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_reset_palette_slot_to_seed<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+    slot: i64,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    validate_palette_slot(slot, "slot")?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+    let result = sqlx::query(
+        "UPDATE theme_event_palette AS p
+            SET value = (
+                SELECT value FROM theme_seed_event_palette AS s
+                WHERE s.theme_id = p.theme_id AND s.slot = p.slot
+            )
+          WHERE p.theme_id = ? AND p.slot = ?",
+    )
+    .bind(&id)
+    .bind(slot)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("reset theme palette slot to seed: {e}"))?;
+    ensure_row_changed(result, "reset theme palette slot to seed")?;
+    touch_theme(&mut tx, &id, now).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn theme_reset_to_seed<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+) -> Result<(), String> {
+    validate_theme_id(&id)?;
+    let now = now_ms()?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+
+    sqlx::query(
+        "UPDATE theme_tokens AS t
+            SET value = (
+                    SELECT value FROM theme_seed_tokens AS s
+                    WHERE s.theme_id = t.theme_id AND s.kind = t.kind AND s.key = t.key
+                ),
+                isolated = (
+                    SELECT isolated FROM theme_seed_tokens AS s
+                    WHERE s.theme_id = t.theme_id AND s.kind = t.kind AND s.key = t.key
+                )
+          WHERE t.theme_id = ?",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("reset theme tokens to seed: {e}"))?;
+
+    sqlx::query(
+        "UPDATE theme_event_palette AS p
+            SET value = (
+                SELECT value FROM theme_seed_event_palette AS s
+                WHERE s.theme_id = p.theme_id AND s.slot = p.slot
+            )
+          WHERE p.theme_id = ?",
+    )
+    .bind(&id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("reset theme palette to seed: {e}"))?;
+
+    let result = sqlx::query(
+        "UPDATE themes
+            SET blend_canvas = seed_blend_canvas,
+                calendar_default_mode = seed_calendar_default_mode,
+                calendar_default_custom = seed_calendar_default_custom,
+                updated_at = ?
+          WHERE id = ?",
+    )
+    .bind(now)
+    .bind(&id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("reset theme to seed: {e}"))?;
+    ensure_row_changed(result, "reset theme to seed")?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
 async fn delete_theme_children(
     tx: &mut Transaction<'_, Sqlite>,
     theme_id: &str,
@@ -312,11 +758,54 @@ async fn insert_palette_rows(
     Ok(())
 }
 
+async fn touch_theme(
+    tx: &mut Transaction<'_, Sqlite>,
+    theme_id: &str,
+    now: i64,
+) -> Result<(), String> {
+    let result = sqlx::query("UPDATE themes SET updated_at = ? WHERE id = ?")
+        .bind(now)
+        .bind(theme_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("touch theme: {e}"))?;
+    ensure_row_changed(result, "touch theme")
+}
+
+async fn update_non_isolated_token_values(
+    tx: &mut Transaction<'_, Sqlite>,
+    theme_id: &str,
+    kind: &str,
+    values: &HashMap<String, String>,
+) -> Result<(), String> {
+    for (key, value) in values {
+        sqlx::query(
+            "UPDATE theme_tokens
+                SET value = ?
+              WHERE theme_id = ? AND kind = ? AND key = ? AND isolated = 0",
+        )
+        .bind(value)
+        .bind(theme_id)
+        .bind(kind)
+        .bind(key)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("update non-isolated theme token '{kind}:{key}': {e}"))?;
+    }
+    Ok(())
+}
+
+fn ensure_row_changed(result: SqliteQueryResult, context: &str) -> Result<(), String> {
+    if result.rows_affected() == 0 {
+        Err(format!("{context}: no matching row"))
+    } else {
+        Ok(())
+    }
+}
+
 fn validate_theme_write(write: &UserThemeWrite) -> Result<(), String> {
     validate_theme_id(&write.id)?;
-    if write.display_name.trim().is_empty() {
-        return Err("display_name cannot be empty".to_string());
-    }
+    validate_display_name(&write.display_name)?;
     validate_icon_label(&write.icon_label, "icon_label")?;
     validate_icon_label(&write.seed_icon_label, "seed_icon_label")?;
     validate_hex_color(&write.blend_canvas, "blend_canvas")?;
@@ -341,12 +830,34 @@ fn validate_theme_write(write: &UserThemeWrite) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_display_name(value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err("display_name cannot be empty".to_string());
+    }
+    if value.chars().count() > MAX_DISPLAY_NAME_LENGTH {
+        return Err(format!(
+            "display_name cannot exceed {MAX_DISPLAY_NAME_LENGTH} characters"
+        ));
+    }
+    Ok(())
+}
+
 fn validate_theme_id(id: &str) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err("theme id cannot be empty".to_string());
     }
     if matches!(id, "light" | "dark") {
         return Err(format!("theme id '{id}' is reserved"));
+    }
+    Ok(())
+}
+
+fn validate_token_identity(kind: &str, key: &str, field: &str) -> Result<(), String> {
+    if !matches!(kind, "source" | "app" | "calendar") {
+        return Err(format!("{field} contains invalid token kind '{kind}'"));
+    }
+    if key.trim().is_empty() {
+        return Err(format!("{field} contains an empty token key"));
     }
     Ok(())
 }
@@ -400,13 +911,28 @@ fn validate_palette_rows(rows: &[ThemePaletteWrite], field: &str) -> Result<(), 
     }
     let mut seen = HashSet::with_capacity(rows.len());
     for row in rows {
-        if row.slot < 0 || row.slot >= PALETTE_SIZE as i64 {
-            return Err(format!("{field} contains invalid slot {}", row.slot));
-        }
+        validate_palette_slot(row.slot, field)?;
         validate_hex_color(&row.value, field)?;
         if !seen.insert(row.slot) {
             return Err(format!("{field} contains duplicate slot {}", row.slot));
         }
+    }
+    Ok(())
+}
+
+fn validate_palette_slot(slot: i64, field: &str) -> Result<(), String> {
+    if slot < 0 || slot >= PALETTE_SIZE as i64 {
+        return Err(format!("{field} contains invalid slot {slot}"));
+    }
+    Ok(())
+}
+
+fn validate_token_value_map(values: &HashMap<String, String>, field: &str) -> Result<(), String> {
+    for (key, value) in values {
+        if key.trim().is_empty() {
+            return Err(format!("{field} contains an empty token key"));
+        }
+        validate_hex_color(value, field)?;
     }
     Ok(())
 }
@@ -440,8 +966,10 @@ fn now_ms() -> Result<i64, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_hex_color, validate_palette_rows, validate_theme_id, ThemePaletteWrite, PALETTE_SIZE,
+        is_hex_color, validate_display_name, validate_palette_rows, validate_theme_id,
+        validate_token_identity, validate_token_value_map, ThemePaletteWrite, PALETTE_SIZE,
     };
+    use std::collections::HashMap;
 
     #[test]
     fn accepts_six_and_eight_digit_hex_colors() {
@@ -476,5 +1004,30 @@ mod tests {
             .collect();
         rows[1].slot = rows[0].slot;
         assert!(validate_palette_rows(&rows, "palette").is_err());
+    }
+
+    #[test]
+    fn validates_theme_display_names() {
+        assert!(validate_display_name("Custom").is_ok());
+        assert!(validate_display_name(" ").is_err());
+        assert!(validate_display_name(&"x".repeat(61)).is_err());
+    }
+
+    #[test]
+    fn validates_token_identity() {
+        assert!(validate_token_identity("source", "canvas", "token").is_ok());
+        assert!(validate_token_identity("app", "--background", "token").is_ok());
+        assert!(validate_token_identity("invalid", "canvas", "token").is_err());
+        assert!(validate_token_identity("source", " ", "token").is_err());
+    }
+
+    #[test]
+    fn validates_token_value_maps() {
+        let mut values = HashMap::new();
+        values.insert("--background".to_string(), "#123456".to_string());
+        assert!(validate_token_value_map(&values, "derived_app").is_ok());
+
+        values.insert("--foreground".to_string(), "red".to_string());
+        assert!(validate_token_value_map(&values, "derived_app").is_err());
     }
 }

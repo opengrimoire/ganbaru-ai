@@ -547,6 +547,18 @@ pub fn run() {
             themes::theme_delete,
             themes::theme_backfill_icon_label,
             themes::theme_record_dismissal,
+            themes::theme_load_dismissals,
+            themes::theme_rename,
+            themes::theme_update_token_value,
+            themes::theme_update_token_isolated,
+            themes::theme_update_token_value_and_isolated,
+            themes::theme_update_source_cascade,
+            themes::theme_update_palette_slot,
+            themes::theme_update_blend_canvas,
+            themes::theme_rebake_non_isolated,
+            themes::theme_reset_token_to_seed,
+            themes::theme_reset_palette_slot_to_seed,
+            themes::theme_reset_to_seed,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;
