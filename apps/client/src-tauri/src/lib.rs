@@ -11,6 +11,7 @@ mod kanban;
 mod notification;
 mod pomodoro;
 mod themes;
+mod timezone_migration;
 mod tray;
 mod vault;
 
@@ -548,6 +549,7 @@ pub fn run() {
             kanban::kanban_add_task,
             kanban::kanban_update_task_status,
             kanban::kanban_delete_task,
+            timezone_migration::calendar_apply_timezone_hydration,
             calendar_events::calendar_add_event,
             calendar_events::calendar_delete_event,
             calendar_events::calendar_clear_events,

@@ -19,7 +19,8 @@
  * any calendar code.
  */
 
-import { execute, select } from "$lib/api/db";
+import { invoke } from "@tauri-apps/api/core";
+import { dbUrl, select } from "$lib/api/db";
 import { flushConfig, getConfigKey, setConfigKey } from "$lib/vault/config";
 
 const MIGRATION_MARKER_KEY = "preferences.calendarTimezoneMigratedV8";
@@ -44,6 +45,20 @@ interface ParentZoneRow {
   id: string;
   timezone: string;
   all_day: number;
+}
+
+interface EventTimezoneHydration {
+  id: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}
+
+interface OverrideTimezoneHydration {
+  id: string;
+  recurrenceId: string;
+  startTime: string | null;
+  endTime: string | null;
 }
 
 /**
@@ -96,6 +111,8 @@ export async function hydrateCalendarEventTimezones(): Promise<void> {
   const deviceZone = getDeviceZone();
 
   try {
+    const eventHydrations: EventTimezoneHydration[] = [];
+    const overrideHydrations: OverrideTimezoneHydration[] = [];
     const events = await select<LegacyEventRow>(
       `SELECT id, start_time, end_time, timezone, all_day
        FROM calendar_events`,
@@ -123,12 +140,12 @@ export async function hydrateCalendarEventTimezones(): Promise<void> {
         ? legacyToUtcIso(row.end_time, homeZone)
         : row.end_time;
 
-      await execute(
-        `UPDATE calendar_events
-         SET start_time = ?, end_time = ?, timezone = ?
-         WHERE id = ?`,
-        [newStart, newEnd, homeZone, row.id],
-      );
+      eventHydrations.push({
+        id: row.id,
+        startTime: newStart,
+        endTime: newEnd,
+        timezone: homeZone,
+      });
     }
 
     // Overrides reference their parent's home zone for recurrence_id
@@ -142,10 +159,13 @@ export async function hydrateCalendarEventTimezones(): Promise<void> {
       const parentRows = await select<ParentZoneRow>(
         `SELECT id, timezone, all_day FROM calendar_events`,
       );
+      const hydratedEventZoneById = new Map(
+        eventHydrations.map((event) => [event.id, event.timezone] as const),
+      );
       const parentZoneById = new Map<string, { timezone: string; allDay: boolean }>();
       for (const p of parentRows) {
         parentZoneById.set(p.id, {
-          timezone: p.timezone || deviceZone,
+          timezone: hydratedEventZoneById.get(p.id) ?? (p.timezone || deviceZone),
           allDay: p.all_day === 1,
         });
       }
@@ -170,13 +190,23 @@ export async function hydrateCalendarEventTimezones(): Promise<void> {
           ? legacyToUtcIso(row.end_time as string, homeZone)
           : row.end_time;
 
-        await execute(
-          `UPDATE calendar_event_overrides
-           SET recurrence_id = ?, start_time = ?, end_time = ?
-           WHERE id = ?`,
-          [newRecId, newStart, newEnd, row.id],
-        );
+        overrideHydrations.push({
+          id: row.id,
+          recurrenceId: newRecId,
+          startTime: newStart,
+          endTime: newEnd,
+        });
       }
+    }
+
+    if (eventHydrations.length > 0 || overrideHydrations.length > 0) {
+      await invoke("calendar_apply_timezone_hydration", {
+        dbUrl: dbUrl(),
+        payload: {
+          events: eventHydrations,
+          overrides: overrideHydrations,
+        },
+      });
     }
 
     setConfigKey(MIGRATION_MARKER_KEY, true);

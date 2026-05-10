@@ -53,6 +53,9 @@ persistence:
 - Moved the placeholder Kanban task add, status update, and delete writes
   behind typed Rust commands. Kanban is not a large current feature yet, but
   tasks are structured source-of-truth data and future CLI-visible state.
+- Moved the timezone hydrator's durable row application behind one Rust
+  transaction while keeping browser `Temporal` responsible for IANA timezone
+  conversion.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
@@ -372,7 +375,11 @@ Move future durable data migrations toward Rust wherever practical.
 
 The current timezone hydration logic in
 `apps/client/src/lib/stores/timezone-migration.ts` is a special case because it
-uses browser `Temporal` and IANA timezone behavior. Do not rewrite it casually.
+uses browser `Temporal` and IANA timezone behavior. Current implementation
+keeps that conversion in TypeScript, but applies the resulting event and
+override row rewrites through the Rust `calendar_apply_timezone_hydration`
+command in one transaction.
+
 For future migrations:
 
 - Put durable schema and cleanup migrations near `src-tauri/src/db.rs`.
@@ -381,9 +388,9 @@ For future migrations:
 - Use transactions for every multi-row rewrite.
 - Add tests for old-row inputs and repeated runs.
 
-For timezone migration specifically, move only after a Rust timezone dependency
-review. The Rust implementation must match `Temporal` behavior for DST gaps and
-fall-back ambiguity.
+For timezone conversion specifically, move the IANA rules to Rust only after a
+Rust timezone dependency review. A Rust conversion implementation must match
+`Temporal` behavior for DST gaps and fall-back ambiguity.
 
 ## Phase 6: Runtime validation and typed reads
 
