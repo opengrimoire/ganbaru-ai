@@ -3,6 +3,7 @@
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import SettingsIcon from "@lucide/svelte/icons/settings";
   import X from "@lucide/svelte/icons/x";
   import AppearanceSection from "./AppearanceSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
@@ -29,18 +30,11 @@
     icon: Component;
   }
 
-  // Sections are grouped under headings (like Obsidian's "Options", "Core
-  // plugins"). Each group ships its own list. To add a new section, add an
-  // entry with an icon and a matching branch in the content switch below.
-  const SECTION_GROUPS: { heading: string; items: SectionMeta[] }[] = [
-    {
-      heading: "Options",
-      items: [{ id: "appearance", label: "Appearance", icon: Palette }],
-    },
-    {
-      heading: "Data",
-      items: [{ id: "calendars", label: "Calendars", icon: CalendarDays }],
-    },
+  // To add a new settings page, add an entry with an icon and a matching
+  // branch in the content switch below.
+  const SECTIONS: SectionMeta[] = [
+    { id: "appearance", label: "Appearance", icon: Palette },
+    { id: "calendars", label: "Calendars", icon: CalendarDays },
   ];
 
   let activeSection = $state<SectionId>("appearance");
@@ -117,24 +111,22 @@
     {#if useTopNav}
       <header class="flex shrink-0 items-center gap-2 border-b border-border bg-background/40 px-2 py-2 dark:bg-black/20">
         <nav class="flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-md bg-card/60 p-0.5 dark:bg-background/60">
-          {#each SECTION_GROUPS as group}
-            {#each group.items as section}
-              {@const Icon = section.icon}
-              <button
-                onclick={() => {
-                  activeSection = section.id;
-                }}
-                class={cn(
-                  "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[12px] font-medium transition-colors",
-                  activeSection === section.id
-                    ? "bg-accent text-accent-foreground"
-                    : "text-foreground hover:bg-accent/60",
-                )}
-              >
-                <Icon size={14} strokeWidth={1.75} class="shrink-0" />
-                <span>{section.label}</span>
-              </button>
-            {/each}
+          {#each SECTIONS as section}
+            {@const Icon = section.icon}
+            <button
+              onclick={() => {
+                activeSection = section.id;
+              }}
+              class={cn(
+                "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[12px] font-medium transition-colors",
+                activeSection === section.id
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground hover:bg-accent/60",
+              )}
+            >
+              <Icon size={14} strokeWidth={1.75} class="shrink-0" />
+              <span>{section.label}</span>
+            </button>
           {/each}
         </nav>
         <button
@@ -151,13 +143,16 @@
       <!-- Sidebar -->
       <aside
         class={cn(
-          "flex shrink-0 flex-col gap-4 border-r border-border bg-background/40 dark:bg-black/20",
+          "flex shrink-0 flex-col gap-3 border-r border-border bg-background/40 dark:bg-black/20",
           useIconRail ? "w-14 px-1 py-3" : "w-60 px-2 py-4",
         )}
       >
-        <div class={cn("flex items-center", useIconRail ? "justify-center" : "justify-between px-2")}>
+        <div class={cn("flex items-center", useIconRail ? "justify-center" : "justify-between")}>
           {#if !useIconRail}
-            <span class="text-[12px] font-semibold text-foreground">Settings</span>
+            <span class="flex h-7 min-w-0 items-center gap-2.5 px-3 text-[13px] font-semibold text-muted-foreground">
+              <SettingsIcon size={15} strokeWidth={1.75} class="shrink-0" />
+              <span class="truncate">Settings</span>
+            </span>
           {/if}
           <button
             type="button"
@@ -169,42 +164,30 @@
             <X size={14} strokeWidth={2} />
           </button>
         </div>
-        {#each SECTION_GROUPS as group}
-          <div class="flex flex-col gap-1">
-            <h3
+        <nav class="flex flex-col gap-0.5">
+          {#each SECTIONS as section}
+            {@const Icon = section.icon}
+            <button
+              onclick={() => {
+                activeSection = section.id;
+              }}
+              title={section.label}
+              aria-label={section.label}
               class={cn(
-                "px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
-                useIconRail ? "sr-only" : "",
+                "flex items-center rounded-md text-left text-[13px] font-medium transition-colors",
+                useIconRail ? "h-9 justify-center px-0" : "gap-2.5 px-3 py-1.5",
+                activeSection === section.id
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground hover:bg-accent/60",
               )}
             >
-              {group.heading}
-            </h3>
-            <nav class="flex flex-col gap-0.5">
-              {#each group.items as section}
-                {@const Icon = section.icon}
-                <button
-                  onclick={() => {
-                    activeSection = section.id;
-                  }}
-                  title={section.label}
-                  aria-label={section.label}
-                  class={cn(
-                    "flex items-center rounded-md text-left text-[13px] font-medium transition-colors",
-                    useIconRail ? "h-9 justify-center px-0" : "gap-2.5 px-3 py-1.5",
-                    activeSection === section.id
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-accent/60",
-                  )}
-                >
-                  <Icon size={15} strokeWidth={1.75} class="shrink-0" />
-                  {#if !useIconRail}
-                    <span>{section.label}</span>
-                  {/if}
-                </button>
-              {/each}
-            </nav>
-          </div>
-        {/each}
+              <Icon size={15} strokeWidth={1.75} class="shrink-0" />
+              {#if !useIconRail}
+                <span>{section.label}</span>
+              {/if}
+            </button>
+          {/each}
+        </nav>
       </aside>
     {/if}
 
@@ -212,7 +195,7 @@
     <section
       class={cn(
         "min-h-0 flex-1 overflow-y-auto bg-background/40 dark:bg-black/20",
-        useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "px-8 py-6",
+        useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
       )}
     >
       {#if activeSection === "appearance"}
