@@ -503,12 +503,18 @@
   let scrollViewport: HTMLDivElement | undefined;
   let scrollContent: HTMLDivElement | undefined;
   let scrollTrack: HTMLDivElement | undefined;
+  let themeNav: HTMLElement | undefined = $state();
   let activeThemeSection = $state<ThemeNavTarget>("general");
+  let lockedThemeSection = $state<ThemeNavTarget | undefined>(undefined);
   let scrollFrame: number | undefined;
+  let navScrollFrame: number | undefined;
+  let sectionLockTimer: ReturnType<typeof setTimeout> | undefined;
   let editorScrollTop = $state(0);
   let editorScrollHeight = $state(0);
   let editorClientHeight = $state(0);
   let editorScrollTrackHeight = $state(0);
+  let navCanScrollLeft = $state(false);
+  let navCanScrollRight = $state(false);
   let draggingEditorScrollbar = $state(false);
   const MIN_EDITOR_SCROLL_THUMB_HEIGHT = 24;
   const editorScrollMaxTop = $derived(
@@ -533,6 +539,8 @@
 
   onDestroy(() => {
     if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+    if (navScrollFrame !== undefined) cancelAnimationFrame(navScrollFrame);
+    if (sectionLockTimer) clearTimeout(sectionLockTimer);
   });
 
   $effect(() => {
@@ -553,6 +561,33 @@
       viewport.removeEventListener("scroll", onScroll);
       ro.disconnect();
     };
+  });
+
+  $effect(() => {
+    if (!themeNav) return;
+    const nav = themeNav;
+    syncThemeNavOverflow();
+    const onScroll = () => syncThemeNavOverflow();
+    const ro = new ResizeObserver(() => {
+      syncThemeNavOverflow();
+      scrollThemeNavTargetIntoView(activeThemeSection, "auto");
+    });
+    nav.addEventListener("scroll", onScroll, { passive: true });
+    ro.observe(nav);
+    return () => {
+      nav.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  });
+
+  $effect(() => {
+    const target = activeThemeSection;
+    if (!themeNav) return;
+    if (navScrollFrame !== undefined) cancelAnimationFrame(navScrollFrame);
+    navScrollFrame = requestAnimationFrame(() => {
+      navScrollFrame = undefined;
+      scrollThemeNavTargetIntoView(target, "smooth");
+    });
   });
 
   // Collapse state is ephemeral (not persisted across sessions). Every
@@ -627,6 +662,10 @@
 
   function updateActiveThemeSection() {
     if (!scrollViewport) return;
+    if (lockedThemeSection) {
+      activeThemeSection = lockedThemeSection;
+      return;
+    }
     const sections = themeSectionElements();
     if (sections.length === 0) return;
     const atBottom =
@@ -650,6 +689,11 @@
   }
 
   function queueActiveThemeSectionUpdate() {
+    if (lockedThemeSection) {
+      activeThemeSection = lockedThemeSection;
+      scheduleThemeSectionLockRelease();
+      return;
+    }
     if (scrollFrame !== undefined) return;
     scrollFrame = requestAnimationFrame(() => {
       scrollFrame = undefined;
@@ -657,12 +701,93 @@
     });
   }
 
+  function lockThemeSection(target: ThemeNavTarget) {
+    lockedThemeSection = target;
+    activeThemeSection = target;
+    scheduleThemeSectionLockRelease();
+  }
+
+  function scheduleThemeSectionLockRelease() {
+    if (!lockedThemeSection) return;
+    if (sectionLockTimer) clearTimeout(sectionLockTimer);
+    sectionLockTimer = setTimeout(() => {
+      lockedThemeSection = undefined;
+      sectionLockTimer = undefined;
+      updateActiveThemeSection();
+    }, 160);
+  }
+
+  function syncThemeNavOverflow() {
+    if (!themeNav) {
+      navCanScrollLeft = false;
+      navCanScrollRight = false;
+      return;
+    }
+    const maxScrollLeft = Math.max(0, themeNav.scrollWidth - themeNav.clientWidth);
+    navCanScrollLeft = themeNav.scrollLeft > 1;
+    navCanScrollRight = themeNav.scrollLeft < maxScrollLeft - 1;
+  }
+
+  function scrollThemeNavTargetIntoView(
+    target: ThemeNavTarget,
+    behavior: ScrollBehavior,
+  ) {
+    if (!themeNav) return;
+    const button = themeNav.querySelector<HTMLButtonElement>(
+      `[data-theme-nav-button="${target}"]`,
+    );
+    if (!button) return;
+    const navRect = themeNav.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    const edgePadding = 8;
+    const leftOverflow = buttonRect.left - navRect.left - edgePadding;
+    const rightOverflow = buttonRect.right - navRect.right + edgePadding;
+    let nextLeft = themeNav.scrollLeft;
+    if (leftOverflow < 0) {
+      nextLeft += leftOverflow;
+    } else if (rightOverflow > 0) {
+      nextLeft += rightOverflow;
+    } else {
+      syncThemeNavOverflow();
+      return;
+    }
+    const maxScrollLeft = Math.max(0, themeNav.scrollWidth - themeNav.clientWidth);
+    themeNav.scrollTo({
+      left: Math.min(Math.max(0, nextLeft), maxScrollLeft),
+      behavior,
+    });
+    syncThemeNavOverflow();
+  }
+
+  function handleThemeNavWheel(e: WheelEvent) {
+    if (!themeNav) return;
+    const maxScrollLeft = Math.max(0, themeNav.scrollWidth - themeNav.clientWidth);
+    if (maxScrollLeft <= 0) return;
+    const rawDelta =
+      Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (rawDelta === 0) return;
+    const deltaScale =
+      e.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 16
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? themeNav.clientWidth
+          : 1;
+    const nextLeft = Math.min(
+      Math.max(0, themeNav.scrollLeft + rawDelta * deltaScale),
+      maxScrollLeft,
+    );
+    if (nextLeft === themeNav.scrollLeft) return;
+    e.preventDefault();
+    themeNav.scrollTo({ left: nextLeft, behavior: "auto" });
+    syncThemeNavOverflow();
+  }
+
   function scrollToThemeSection(target: ThemeNavTarget) {
     const el =
       scrollViewport?.querySelector<HTMLElement>(sectionSelector(target)) ??
       document.querySelector<HTMLElement>(sectionSelector(target));
     if (!el) return;
-    activeThemeSection = target;
+    lockThemeSection(target);
     if (!scrollViewport) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
@@ -1008,11 +1133,11 @@
   }
 </script>
 
-<div class="relative flex h-full min-h-0 flex-col">
+<div class="theme-editor-root relative flex h-full min-h-0 flex-col">
   <!-- Theme chrome sits above the editor scroll viewport so the scrollbar
        starts with the editable sections. -->
   <section
-    class="relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-border bg-sidebar px-3 py-2"
+    class="theme-editor-chrome relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-border bg-sidebar px-3 py-2"
   >
     <div
       class="flex h-9 min-w-0 items-center overflow-hidden rounded-md border border-border bg-card text-[11px] text-muted-foreground dark:bg-background"
@@ -1057,28 +1182,37 @@
       {/if}
     </div>
     {#if userTheme}
-      <nav
-        class="grid h-9 grid-cols-5 items-center gap-1 rounded-lg border border-border bg-card px-1 text-[11px] dark:bg-background"
-        aria-label="Theme editor sections"
+      <div
+        class="theme-editor-nav-shell relative h-9 overflow-hidden rounded-lg border border-border bg-card text-[11px] dark:bg-background"
+        data-can-scroll-left={navCanScrollLeft}
+        data-can-scroll-right={navCanScrollRight}
+        onwheel={handleThemeNavWheel}
       >
-        {#each THEME_NAV_ITEMS as item}
-          <button
-            type="button"
-            onclick={() => scrollToThemeSection(item.target)}
-            aria-current={activeThemeSection === item.target
-              ? "location"
-              : undefined}
-            class={cn(
-              "flex h-7 min-w-0 items-center justify-center rounded-md px-2 text-center font-medium transition-colors hover:bg-accent hover:text-foreground",
-              activeThemeSection === item.target
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            <span class="min-w-0 truncate uppercase">{item.label}</span>
-          </button>
-        {/each}
-      </nav>
+        <nav
+          bind:this={themeNav}
+          class="theme-editor-nav grid h-full grid-cols-5 items-center gap-1 overflow-hidden px-1"
+          aria-label="Theme editor sections"
+        >
+          {#each THEME_NAV_ITEMS as item}
+            <button
+              type="button"
+              data-theme-nav-button={item.target}
+              onclick={() => scrollToThemeSection(item.target)}
+              aria-current={activeThemeSection === item.target
+                ? "location"
+                : undefined}
+              class={cn(
+                "flex h-7 min-w-0 items-center justify-center rounded-md px-2 text-center font-medium transition-colors",
+                activeThemeSection === item.target
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              <span class="min-w-0 truncate uppercase">{item.label}</span>
+            </button>
+          {/each}
+        </nav>
+      </div>
     {/if}
   </section>
 
@@ -1126,7 +1260,7 @@
     {@const displayVal = snapshot?.[key] ?? ""}
     {@const canResetRow =
       scope === "app" ? canResetAppToken(key) : canResetCalToken(key)}
-    <div class="flex items-center gap-1.5">
+    <div class="theme-token-editor flex items-center gap-1.5">
       <ColorField
         value={displayVal}
         onChange={(hex) => {
@@ -1154,7 +1288,7 @@
           }}
           aria-label="Isolated edit {ariaLabel}"
           title="Edit this color independently of its source"
-          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          class="theme-token-action flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Pencil size={10} strokeWidth={2.25} />
           <span>Isolated edit</span>
@@ -1168,7 +1302,7 @@
           }}
           aria-label="Link back {ariaLabel} to its source"
           title="Re-link this color to its source"
-          class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          class="theme-token-action flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Link2 size={10} strokeWidth={2.25} />
           <span>Link back</span>
@@ -1181,7 +1315,7 @@
     key: keyof ThemeSources,
     ariaLabel: string,
   )}
-    <div class="flex items-center gap-1.5">
+    <div class="theme-source-editor flex items-center gap-1.5">
       <ColorField
         value={userTheme?.sources[key] ?? ""}
         onChange={(hex) => setSource(key, hex)}
@@ -1192,13 +1326,13 @@
         ariaLabel,
         canResetSource(key),
       )}
-      <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+      <div class="theme-token-action-spacer min-w-[108px] shrink-0" aria-hidden="true"></div>
     </div>
   {/snippet}
 
   {#snippet groupSingleRow(row: GroupSingleRow)}
     {@const info = tokenInfo(row)}
-    <div class="flex items-center justify-between gap-3 px-1 py-2.5">
+    <div class="theme-control-row flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[12px] text-foreground">{info.title}</div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
@@ -1224,12 +1358,12 @@
       row.scope === "app"
         ? canResetAppToken(row.key)
         : canResetCalToken(row.key)}
-    <div class="flex items-center justify-between gap-3 px-1 py-2.5">
+    <div class="theme-control-row flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[13px] font-semibold text-foreground">{info.title}</div>
         <div class="text-[11px] text-muted-foreground">{info.description}</div>
       </div>
-      <div class="flex shrink-0 items-center gap-1.5">
+      <div class="theme-row-controls flex shrink-0 items-center gap-1.5">
         <ColorField
           value={displayVal}
           onChange={(hex) => {
@@ -1246,7 +1380,7 @@
           info.title,
           canResetRow,
         )}
-        <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+        <div class="theme-token-action-spacer min-w-[108px] shrink-0" aria-hidden="true"></div>
       </div>
     </div>
   {/snippet}
@@ -1255,7 +1389,7 @@
     {@const contrast = pairContrast(row)}
     <div
       data-pair-key={pairKey(row)}
-      class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-1 py-2.5"
+      class="theme-pair-row flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-1 py-2.5"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
@@ -1278,18 +1412,18 @@
         </div>
         <div class="text-[11px] text-muted-foreground">{row.description}</div>
       </div>
-      <div class="flex shrink-0 flex-col items-end gap-2">
-        <div class="flex items-center gap-1.5">
+      <div class="theme-pair-controls flex shrink-0 flex-col items-end gap-2">
+        <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Bg
           </span>
           {@render tokenEditor(row.bg, row.scope, `${row.title} background`)}
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Text
           </span>
@@ -1303,7 +1437,7 @@
     {@const contrast = pairContrast(row)}
     <div
       data-pair-key={pairKey(row)}
-      class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-1 py-2.5"
+      class="theme-pair-row flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-1 py-2.5"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
@@ -1328,18 +1462,18 @@
         </div>
         <div class="text-[11px] text-muted-foreground">{row.description}</div>
       </div>
-      <div class="flex shrink-0 flex-col items-end gap-2">
-        <div class="flex items-center gap-1.5">
+      <div class="theme-pair-controls flex shrink-0 flex-col items-end gap-2">
+        <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Bg
           </span>
           {@render sourceEditor(row.bgSource, `${row.title} background`)}
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Text
           </span>
@@ -1362,7 +1496,7 @@
       {#if onlySourcePair}
         {@render groupSourcePairRow(onlySourcePair)}
       {:else}
-        <header class="flex items-center justify-between gap-3 px-1 py-2.5">
+        <header class="theme-group-header flex items-center justify-between gap-3 px-1 py-2.5">
           <div class="min-w-0 flex-1">
             <div class="text-[13px] font-semibold text-foreground">
               {group.title}
@@ -1371,7 +1505,7 @@
               {group.description}
             </div>
           </div>
-          <div class="flex shrink-0 items-center gap-1.5">
+          <div class="theme-group-controls flex shrink-0 items-center gap-1.5">
             {#if group.sourceKey !== null && userTheme}
               {@const sourceKey = group.sourceKey}
               <ColorField
@@ -1393,20 +1527,20 @@
                 aria-label="{isCollapsed
                   ? 'Expand'
                   : 'Collapse'} {group.title} options"
-                class="flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+                class="theme-token-action theme-collapse-action flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
               >
                 {#if isCollapsed}
-                  <ChevronDown size={11} strokeWidth={2.25} />
+                  <ChevronDown class="theme-collapse-action-icon" size={11} strokeWidth={2.25} />
                   <span>Expand</span>
-                  <ChevronDown size={11} strokeWidth={2.25} />
+                  <ChevronDown class="theme-token-action-tail-icon" size={11} strokeWidth={2.25} />
                 {:else}
-                  <ChevronUp size={11} strokeWidth={2.25} />
+                  <ChevronUp class="theme-collapse-action-icon" size={11} strokeWidth={2.25} />
                   <span>Collapse</span>
-                  <ChevronUp size={11} strokeWidth={2.25} />
+                  <ChevronUp class="theme-token-action-tail-icon" size={11} strokeWidth={2.25} />
                 {/if}
               </button>
             {:else}
-              <div class="min-w-[108px] shrink-0" aria-hidden="true"></div>
+              <div class="theme-token-action-spacer min-w-[108px] shrink-0" aria-hidden="true"></div>
             {/if}
           </div>
         </header>
@@ -1451,32 +1585,30 @@
           </div>
         </div>
       </header>
-      <div class="flex items-start justify-between gap-2">
-        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-          {#each CALENDAR_DEFAULT_OPTIONS as option}
-            <button
-              type="button"
-              onclick={() => applyCalendarDefault(option.mode)}
-              aria-pressed={userTheme?.calendarDefaultMode === option.mode}
-              class={cn(
-                "min-h-7 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                userTheme?.calendarDefaultMode === option.mode
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground",
-              )}
-            >
-              {option.label}
-            </button>
-          {/each}
-          {#if userTheme?.calendarDefaultMode === "custom"}
-            <ColorField
-              value={userTheme.calendarDefaultCustom}
-              onChange={setCalendarDefaultCustom}
-              label="Custom calendar default"
-            />
-          {/if}
-        </div>
-        <div class="shrink-0">
+      <div class="theme-calendar-default-row flex min-w-0 flex-wrap items-center gap-1.5">
+        {#each CALENDAR_DEFAULT_OPTIONS as option}
+          <button
+            type="button"
+            onclick={() => applyCalendarDefault(option.mode)}
+            aria-pressed={userTheme?.calendarDefaultMode === option.mode}
+            class={cn(
+              "min-h-7 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              userTheme?.calendarDefaultMode === option.mode
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground",
+            )}
+          >
+            {option.label}
+          </button>
+        {/each}
+        {#if userTheme?.calendarDefaultMode === "custom"}
+          <ColorField
+            value={userTheme.calendarDefaultCustom}
+            onChange={setCalendarDefaultCustom}
+            label="Custom calendar default"
+          />
+        {/if}
+        <div class="ml-auto shrink-0">
           {@render resetIconButton(
             resetCalendarDefault,
             "Color defaults",
@@ -1501,7 +1633,7 @@
 
   {#snippet sectionHeader(target: ThemeNavTarget, note?: string)}
     <div
-      class="flex scroll-mt-4 items-center gap-3 px-1 pt-1"
+      class="theme-section-header flex scroll-mt-4 items-center gap-3 px-1 pt-1"
       data-theme-nav-target={target}
     >
       <h2 class="shrink-0 text-[13px] font-semibold uppercase text-foreground">
@@ -1531,7 +1663,7 @@
         class="flex flex-col gap-3 p-3"
         style="background-color: {effectiveCalBg(theme)};"
       >
-        <div class="grid grid-cols-4 gap-x-2 gap-y-1.5">
+        <div class="theme-palette-grid grid grid-cols-4 gap-x-2 gap-y-1.5">
           {#each paletteIndices as index}
             {@const base = theme.eventPalette[index]}
             {@const past = blendHex(
@@ -1594,8 +1726,10 @@
       <div
         bind:this={scrollContent}
         class={cn(
-          "flex flex-col gap-6 px-5 pt-6",
-          userTheme && failingPairs.length > 0 ? "pb-16" : "pb-4",
+          "theme-editor-content flex flex-col gap-6 px-5 pt-6",
+          userTheme && failingPairs.length > 0
+            ? "theme-editor-content-with-notice pb-16"
+            : "pb-4",
         )}
       >
   <!-- Body: grouped editor for user themes, JSON-only readout for built-ins. -->
@@ -1695,8 +1829,8 @@
           {/each}
         </ul>
       {/if}
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex flex-wrap items-center gap-1.5">
+      <div class="theme-json-actions flex flex-wrap items-center justify-between gap-2">
+        <div class="theme-json-action-group flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onclick={copyJsonToClipboard}
@@ -1715,7 +1849,7 @@
           </button>
         </div>
         {#if !isBuiltin}
-          <div class="flex flex-wrap items-center gap-1.5">
+          <div class="theme-json-action-group flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onclick={resetJsonDraft}
@@ -1772,9 +1906,9 @@
 </div>
 {#if userTheme && failingPairs.length > 0}
   <section
-    class="absolute bottom-3 left-1/2 z-30 flex h-10 w-fit max-w-[calc(100%-2.5rem)] -translate-x-1/2 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] shadow-xl dark:bg-background"
+    class="theme-contrast-notice absolute z-30 flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] shadow-xl dark:bg-background"
   >
-    <div class="flex min-w-0 items-center gap-2 text-foreground">
+    <div class="theme-contrast-message flex shrink-0 items-center gap-2 text-foreground">
       <AlertTriangle
         size={13}
         strokeWidth={2.25}
@@ -1786,7 +1920,7 @@
           : "issues"}
       </span>
     </div>
-    <div class="flex shrink-0 items-center gap-1.5">
+    <div class="theme-contrast-actions flex shrink-0 items-center gap-1.5">
       <button
         type="button"
         onclick={jumpToNextFailingPair}
@@ -1814,6 +1948,49 @@
 </div>
 
 <style>
+  .theme-editor-root {
+    container: theme-editor / inline-size;
+  }
+
+  .theme-editor-nav {
+    scrollbar-width: none;
+  }
+
+  .theme-editor-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .theme-editor-nav-shell::before,
+  .theme-editor-nav-shell::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    z-index: 2;
+    width: 1.25rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease-out;
+  }
+
+  .theme-editor-nav-shell::before {
+    left: 0;
+    background: linear-gradient(to right, var(--card), transparent);
+  }
+
+  .theme-editor-nav-shell::after {
+    right: 0;
+    background: linear-gradient(to left, var(--card), transparent);
+  }
+
+  :global(.dark) .theme-editor-nav-shell::before {
+    background: linear-gradient(to right, var(--background), transparent);
+  }
+
+  :global(.dark) .theme-editor-nav-shell::after {
+    background: linear-gradient(to left, var(--background), transparent);
+  }
+
   .theme-editor-scroll {
     scrollbar-width: none;
   }
@@ -1836,5 +2013,196 @@
   .theme-editor-scrollbar-track:hover .theme-editor-scrollbar-thumb,
   .theme-editor-scrollbar-thumb.is-dragging {
     background-color: var(--muted-foreground);
+  }
+
+  .theme-contrast-notice {
+    bottom: 0.75rem;
+    left: 50%;
+    max-width: calc(100% - 0.75rem);
+    width: max-content;
+    transform: translateX(-50%);
+  }
+
+  .theme-contrast-message {
+    white-space: nowrap;
+  }
+
+  @container theme-editor (max-width: 620px) {
+    .theme-editor-chrome {
+      padding-inline: 0.625rem;
+    }
+
+    .theme-editor-nav {
+      display: flex;
+      overflow-x: auto;
+      overflow-y: hidden;
+      grid-template-columns: none;
+      justify-content: flex-start;
+    }
+
+    .theme-editor-nav-shell[data-can-scroll-left="true"]::before,
+    .theme-editor-nav-shell[data-can-scroll-right="true"]::after {
+      opacity: 1;
+    }
+
+    .theme-editor-nav button {
+      flex: 0 0 auto;
+      min-width: max-content;
+    }
+
+    .theme-editor-content {
+      gap: 1rem;
+      padding-inline: 0.875rem;
+      padding-top: 1rem;
+    }
+
+    .theme-control-row,
+    .theme-group-header {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .theme-row-controls,
+    .theme-group-controls {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .theme-pair-row {
+      flex-direction: column;
+    }
+
+    .theme-pair-controls {
+      align-items: stretch;
+      width: 100%;
+    }
+
+    .theme-pair-control-line {
+      display: grid;
+      grid-template-columns: 2.25rem minmax(0, 1fr);
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .theme-pair-label {
+      width: auto;
+    }
+
+    .theme-token-editor,
+    .theme-source-editor {
+      justify-content: flex-start;
+    }
+
+    .theme-calendar-default-row {
+      align-items: center;
+    }
+
+    .theme-palette-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .theme-json-actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .theme-json-action-group {
+      justify-content: flex-end;
+    }
+
+    .theme-contrast-notice {
+      bottom: 0.75rem;
+      height: auto;
+      max-width: calc(100% - 0.75rem);
+      min-height: 2.5rem;
+    }
+  }
+
+  @container theme-editor (max-width: 430px) {
+    .theme-editor-content {
+      gap: 0.875rem;
+      padding-inline: 0.625rem;
+    }
+
+    .theme-section-header {
+      flex-wrap: wrap;
+    }
+
+    .theme-token-action {
+      min-width: 5.25rem;
+      padding-inline: 0.5rem;
+      width: auto;
+    }
+
+    .theme-collapse-action {
+      min-width: 4.75rem;
+    }
+
+    .theme-collapse-action-icon,
+    .theme-token-action-tail-icon,
+    .theme-token-action-spacer {
+      display: none;
+    }
+
+    .theme-token-editor,
+    .theme-source-editor {
+      flex-wrap: wrap;
+      min-width: 0;
+      justify-content: flex-start;
+    }
+
+    .theme-palette-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .theme-contrast-notice {
+      align-items: center;
+      justify-content: center;
+      max-width: calc(100% - 0.75rem);
+    }
+  }
+
+  @container theme-editor (max-width: 380px) {
+    .theme-editor-content-with-notice {
+      padding-bottom: 7rem;
+    }
+
+    .theme-contrast-notice {
+      left: 0.5rem;
+      right: 0.5rem;
+      width: auto;
+      max-width: none;
+      min-height: 4.25rem;
+      padding: 0.625rem;
+      flex-wrap: wrap;
+      transform: none;
+    }
+
+    .theme-contrast-message,
+    .theme-contrast-actions {
+      width: 100%;
+    }
+
+    .theme-contrast-message {
+      justify-content: center;
+    }
+
+    .theme-contrast-actions button {
+      flex: 1 1 0;
+      justify-content: center;
+      min-width: 0;
+    }
+  }
+
+  @container theme-editor (max-width: 330px) {
+    .theme-editor-content {
+      padding-inline: 0.5rem;
+    }
+
+    .theme-palette-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

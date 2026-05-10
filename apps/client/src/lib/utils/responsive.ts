@@ -1,10 +1,22 @@
 export type ViewportSizeClass = "micro" | "narrow" | "compact" | "regular" | "wide";
 export type EventPanelLayout = "anchored" | "centered" | "bottom" | "fullscreen";
+export type ThemeEditorLayout = "floating" | "sheet" | "fullscreen";
+export type ThemeEditorDensity = "comfortable" | "compact" | "micro";
+export type ColorPickerLayout = "popover" | "sheet" | "fullscreen";
 
 export const EVENT_PANEL_MAX_WIDTH = 320;
 export const EVENT_PANEL_EDGE_MARGIN = 8;
 export const EVENT_PANEL_TITLE_BAR_HEIGHT = 42;
 export const EVENT_PANEL_MIN_USABLE_HEIGHT = 280;
+export const THEME_EDITOR_WIDTH = 700;
+export const THEME_EDITOR_MAX_HEIGHT = 640;
+export const THEME_EDITOR_EDGE_MARGIN = 16;
+export const THEME_EDITOR_SHEET_HEIGHT_RATIO = 0.72;
+export const THEME_EDITOR_FLOATING_HEIGHT_RATIO = 0.8;
+export const THEME_EDITOR_MIN_SHEET_HEIGHT = 360;
+export const COLOR_PICKER_WIDTH = 228;
+export const COLOR_PICKER_HEIGHT = 280;
+export const COLOR_PICKER_EDGE_MARGIN = 8;
 
 const SIZE_ORDER: readonly ViewportSizeClass[] = [
   "micro",
@@ -44,6 +56,38 @@ export interface EventPanelLayoutInput {
   edgeMargin?: number;
   titleBarHeight?: number;
   minUsableHeight?: number;
+}
+
+export interface ThemeEditorLayoutInput {
+  viewport: ViewportSize;
+  preferredWidth?: number;
+  maxHeight?: number;
+  edgeMargin?: number;
+  titleBarHeight?: number;
+  floatingHeightRatio?: number;
+  sheetHeightRatio?: number;
+  minSheetHeight?: number;
+}
+
+export interface ThemeEditorGeometry {
+  layout: ThemeEditorLayout;
+  density: ThemeEditorDensity;
+  rect: PanelRect;
+  canDrag: boolean;
+}
+
+export interface ColorPickerLayoutInput {
+  viewport: ViewportSize;
+  trigger: PanelRect;
+  popoverWidth?: number;
+  popoverHeight?: number;
+  edgeMargin?: number;
+  titleBarHeight?: number;
+}
+
+export interface ColorPickerGeometry {
+  layout: ColorPickerLayout;
+  rect: PanelRect;
 }
 
 export interface RectMargins {
@@ -166,6 +210,128 @@ export function pickEventPanelLayout(input: EventPanelLayoutInput): EventPanelLa
   const fitsRight = width - anchorRight >= requiredSideSpace;
 
   return fitsLeft || fitsRight ? "anchored" : "centered";
+}
+
+export function pickThemeEditorGeometry(
+  input: ThemeEditorLayoutInput,
+): ThemeEditorGeometry {
+  const viewportWidth = finiteOrZero(input.viewport.width);
+  const viewportHeight = finiteOrZero(input.viewport.height);
+  const edge = finiteOrZero(input.edgeMargin ?? THEME_EDITOR_EDGE_MARGIN);
+  const titleBarHeight = finiteOrZero(
+    input.titleBarHeight ?? EVENT_PANEL_TITLE_BAR_HEIGHT,
+  );
+  const preferredWidth = finiteOrZero(input.preferredWidth ?? THEME_EDITOR_WIDTH);
+  const maxHeight = finiteOrZero(input.maxHeight ?? THEME_EDITOR_MAX_HEIGHT);
+  const floatingHeightRatio = finiteOrZero(
+    input.floatingHeightRatio ?? THEME_EDITOR_FLOATING_HEIGHT_RATIO,
+  );
+  const sheetHeightRatio = finiteOrZero(
+    input.sheetHeightRatio ?? THEME_EDITOR_SHEET_HEIGHT_RATIO,
+  );
+  const minSheetHeight = finiteOrZero(
+    input.minSheetHeight ?? THEME_EDITOR_MIN_SHEET_HEIGHT,
+  );
+  const sizeClass = classifyViewport(viewportWidth, viewportHeight);
+
+  if (sizeClass === "micro" || viewportHeight < titleBarHeight + minSheetHeight) {
+    const height = Math.max(0, viewportHeight - titleBarHeight);
+    return {
+      layout: "fullscreen",
+      density: "micro",
+      rect: { x: 0, y: titleBarHeight, width: viewportWidth, height },
+      canDrag: false,
+    };
+  }
+
+  if (viewportWidth < preferredWidth + edge * 2) {
+    const width = Math.max(0, viewportWidth - edge * 2);
+    const height = Math.min(
+      maxHeight,
+      Math.round(viewportHeight * sheetHeightRatio),
+      Math.max(0, viewportHeight - titleBarHeight - edge * 2),
+    );
+    return {
+      layout: "sheet",
+      density: width < 340 ? "micro" : width < 620 ? "compact" : "comfortable",
+      rect: {
+        x: edge,
+        y: Math.max(titleBarHeight, viewportHeight - height - edge),
+        width,
+        height,
+      },
+      canDrag: false,
+    };
+  }
+
+  const width = preferredWidth;
+  const height = Math.min(
+    maxHeight,
+    Math.round(viewportHeight * floatingHeightRatio),
+    Math.max(0, viewportHeight - edge * 2),
+  );
+  return {
+    layout: "floating",
+    density: "comfortable",
+    rect: {
+      x: Math.round((viewportWidth - width) / 2),
+      y: Math.max(edge, Math.round((viewportHeight - height) / 2)),
+      width,
+      height,
+    },
+    canDrag: true,
+  };
+}
+
+export function pickColorPickerGeometry(
+  input: ColorPickerLayoutInput,
+): ColorPickerGeometry {
+  const viewportWidth = finiteOrZero(input.viewport.width);
+  const viewportHeight = finiteOrZero(input.viewport.height);
+  const edge = finiteOrZero(input.edgeMargin ?? COLOR_PICKER_EDGE_MARGIN);
+  const titleBarHeight = finiteOrZero(
+    input.titleBarHeight ?? EVENT_PANEL_TITLE_BAR_HEIGHT,
+  );
+  const popoverWidth = finiteOrZero(input.popoverWidth ?? COLOR_PICKER_WIDTH);
+  const popoverHeight = finiteOrZero(input.popoverHeight ?? COLOR_PICKER_HEIGHT);
+
+  if (viewportWidth < 390 || viewportHeight < 360) {
+    const height = Math.max(0, viewportHeight - titleBarHeight);
+    return {
+      layout: "fullscreen",
+      rect: { x: 0, y: titleBarHeight, width: viewportWidth, height },
+    };
+  }
+
+  if (viewportWidth < 480 || viewportHeight < 430) {
+    const width = Math.max(0, viewportWidth - edge * 2);
+    const height = Math.min(
+      popoverHeight,
+      Math.max(0, viewportHeight - titleBarHeight - edge * 2),
+    );
+    return {
+      layout: "sheet",
+      rect: {
+        x: edge,
+        y: Math.max(titleBarHeight, viewportHeight - height - edge),
+        width,
+        height,
+      },
+    };
+  }
+
+  let left = finiteOrZero(input.trigger.x);
+  if (left + popoverWidth + edge > viewportWidth) {
+    left = Math.max(edge, viewportWidth - popoverWidth - edge);
+  }
+  let top = finiteOrZero(input.trigger.y) + finiteOrZero(input.trigger.height) + 6;
+  if (top + popoverHeight + edge > viewportHeight) {
+    top = Math.max(edge, finiteOrZero(input.trigger.y) - popoverHeight - 6);
+  }
+  return {
+    layout: "popover",
+    rect: { x: left, y: top, width: popoverWidth, height: popoverHeight },
+  };
 }
 
 export function normalizeMargins(margins: number | Partial<RectMargins>): RectMargins {

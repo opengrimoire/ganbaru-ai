@@ -5,6 +5,12 @@
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
   import {
+    COLOR_PICKER_EDGE_MARGIN,
+    COLOR_PICKER_HEIGHT,
+    COLOR_PICKER_WIDTH,
+    pickColorPickerGeometry,
+  } from "$lib/utils/responsive";
+  import {
     type HsvColor,
     clampChannel,
     clampHue,
@@ -51,13 +57,6 @@
     { value: "hsv", label: "HSV" },
   ];
 
-  // Width of the popover; kept in sync with the rendered class so position
-  // math can keep the panel inside the viewport without a measurement pass.
-  const POPOVER_WIDTH = 228;
-  // Rough height estimate; used only for off-bottom flipping. Slightly
-  // overestimating is safe: it just biases towards opening upward sooner.
-  const POPOVER_HEIGHT = 280;
-  const VIEWPORT_MARGIN = 8;
   const THUMB_OUTLINE_LIGHT = "#ffffff";
   const THUMB_OUTLINE_DARK = "#000000";
   const CHECKER_TILE_SIZE = 12;
@@ -77,7 +76,12 @@
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
   let popoverEl: HTMLDivElement | undefined = $state();
-  let popoverPos = $state({ top: 0, left: 0 });
+  let pickerGeometry = $state(
+    pickColorPickerGeometry({
+      viewport: { width: 1200, height: 800 },
+      trigger: { x: 0, y: 0, width: 0, height: 0 },
+    }),
+  );
   let svEl: HTMLDivElement | undefined = $state();
   let hueEl: HTMLDivElement | undefined = $state();
   let alphaEl: HTMLDivElement | undefined = $state();
@@ -98,21 +102,18 @@
   function computePosition() {
     if (!triggerEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    let left = rect.left;
-    if (left + POPOVER_WIDTH + VIEWPORT_MARGIN > viewportWidth) {
-      left = Math.max(
-        VIEWPORT_MARGIN,
-        viewportWidth - POPOVER_WIDTH - VIEWPORT_MARGIN,
-      );
-    }
-    let top = rect.bottom + 6;
-    if (top + POPOVER_HEIGHT + VIEWPORT_MARGIN > viewportHeight) {
-      // Flip above the trigger if there isn't room below.
-      top = Math.max(VIEWPORT_MARGIN, rect.top - POPOVER_HEIGHT - 6);
-    }
-    popoverPos = { top, left };
+    pickerGeometry = pickColorPickerGeometry({
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      trigger: {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+      popoverWidth: COLOR_PICKER_WIDTH,
+      popoverHeight: COLOR_PICKER_HEIGHT,
+      edgeMargin: COLOR_PICKER_EDGE_MARGIN,
+    });
   }
 
   function toggleOpen() {
@@ -369,7 +370,9 @@
     // tied to a specific anchor, so letting it drift with the layout looks
     // broken. Resize gets a reposition since users expect the panel to track
     // the trigger across window resizes.
-    function handleScroll() {
+    function handleScroll(e: Event) {
+      const target = e.target;
+      if (target instanceof Node && popoverEl?.contains(target)) return;
       close();
     }
     function handleResize() {
@@ -384,6 +387,20 @@
       window.removeEventListener("resize", handleResize);
       chromeObserver.disconnect();
     };
+  });
+
+  const pickerStyle = $derived.by(() => {
+    const { rect, layout } = pickerGeometry;
+    const sizeRule =
+      layout === "fullscreen"
+        ? `height: ${rect.height}px`
+        : `max-height: ${rect.height}px`;
+    return [
+      `top: ${rect.y}px`,
+      `left: ${rect.x}px`,
+      `width: ${rect.width}px`,
+      sizeRule,
+    ].join("; ");
   });
 </script>
 
@@ -458,8 +475,13 @@
       use:portal
       role="dialog"
       aria-label={label ? `${label} color picker` : "Color picker"}
-      class="fixed z-[80] w-[228px] rounded-lg border border-border bg-popover p-3 shadow-xl"
-      style="top: {popoverPos.top}px; left: {popoverPos.left}px;"
+      class={cn(
+        "fixed z-[80] overflow-y-auto border border-border bg-popover p-3 shadow-xl",
+        pickerGeometry.layout === "popover" && "rounded-lg",
+        pickerGeometry.layout === "sheet" && "rounded-lg",
+        pickerGeometry.layout === "fullscreen" && "rounded-none border-x-0 border-b-0",
+      )}
+      style={pickerStyle}
     >
       <div
         bind:this={svEl}

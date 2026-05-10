@@ -4,7 +4,9 @@ import {
   classifyViewport,
   getResponsivePanelWidth,
   isSizeClassAtLeast,
+  pickColorPickerGeometry,
   pickEventPanelLayout,
+  pickThemeEditorGeometry,
   pickToolbarItems,
 } from "./responsive";
 
@@ -146,6 +148,111 @@ describe("pickEventPanelLayout", () => {
         anchor: centeredAnchor,
       }),
     ).toBe("fullscreen");
+  });
+});
+
+describe("pickThemeEditorGeometry", () => {
+  it("uses the desktop floating panel when the preferred width fits", () => {
+    expect(pickThemeEditorGeometry({ viewport: { width: 1200, height: 800 } })).toEqual({
+      layout: "floating",
+      density: "comfortable",
+      rect: { x: 250, y: 80, width: 700, height: 640 },
+      canDrag: true,
+    });
+  });
+
+  it("keeps the floating editor when a compact desktop still fits it", () => {
+    expect(
+      pickThemeEditorGeometry({ viewport: { width: 760, height: 640 } }),
+    ).toEqual({
+      layout: "floating",
+      density: "comfortable",
+      rect: { x: 30, y: 64, width: 700, height: 512 },
+      canDrag: true,
+    });
+  });
+
+  it("uses a bottom sheet when width cannot fit the desktop editor", () => {
+    expect(
+      pickThemeEditorGeometry({ viewport: { width: 700, height: 640 } }),
+    ).toEqual({
+      layout: "sheet",
+      density: "comfortable",
+      rect: { x: 16, y: 163, width: 668, height: 461 },
+      canDrag: false,
+    });
+  });
+
+  it("uses compact sheet density on narrow viewports", () => {
+    expect(
+      pickThemeEditorGeometry({ viewport: { width: 420, height: 700 } }),
+    ).toEqual({
+      layout: "sheet",
+      density: "compact",
+      rect: { x: 16, y: 180, width: 388, height: 504 },
+      canDrag: false,
+    });
+  });
+
+  it("uses fullscreen recovery mode on micro or very short viewports", () => {
+    expect(
+      pickThemeEditorGeometry({ viewport: { width: 360, height: 700 } }).layout,
+    ).toBe("fullscreen");
+    expect(
+      pickThemeEditorGeometry({ viewport: { width: 700, height: 320 } }).layout,
+    ).toBe("fullscreen");
+  });
+});
+
+describe("pickColorPickerGeometry", () => {
+  const trigger = { x: 320, y: 120, width: 26, height: 26 };
+
+  it("uses an anchored popover when it fits", () => {
+    expect(
+      pickColorPickerGeometry({
+        viewport: { width: 900, height: 700 },
+        trigger,
+      }),
+    ).toEqual({
+      layout: "popover",
+      rect: { x: 320, y: 152, width: 228, height: 280 },
+    });
+  });
+
+  it("clamps anchored popovers inside the right edge", () => {
+    expect(
+      pickColorPickerGeometry({
+        viewport: { width: 500, height: 700 },
+        trigger: { x: 460, y: 120, width: 26, height: 26 },
+      }),
+    ).toEqual({
+      layout: "popover",
+      rect: { x: 264, y: 152, width: 228, height: 280 },
+    });
+  });
+
+  it("uses a sheet on narrow but usable viewports", () => {
+    expect(
+      pickColorPickerGeometry({
+        viewport: { width: 420, height: 700 },
+        trigger,
+      }),
+    ).toEqual({
+      layout: "sheet",
+      rect: { x: 8, y: 412, width: 404, height: 280 },
+    });
+  });
+
+  it("uses fullscreen mode when the picker cannot fit usefully", () => {
+    expect(
+      pickColorPickerGeometry({
+        viewport: { width: 320, height: 300 },
+        trigger,
+      }),
+    ).toEqual({
+      layout: "fullscreen",
+      rect: { x: 0, y: 42, width: 320, height: 258 },
+    });
   });
 });
 

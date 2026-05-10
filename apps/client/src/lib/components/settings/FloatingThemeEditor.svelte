@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -8,12 +7,19 @@
   import { cn } from "$lib/utils";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import { getViewport } from "$lib/stores/viewport.svelte";
+  import {
+    THEME_EDITOR_EDGE_MARGIN,
+    clampPanelRect,
+    pickThemeEditorGeometry,
+  } from "$lib/utils/responsive";
   import ThemeEditor from "./ThemeEditor.svelte";
 
   let { onBackToList }: { onBackToList: () => void } = $props();
 
   const themeStore = getTheme();
   const themeEditor = getThemeEditor();
+  const viewport = getViewport();
 
   const editing = $derived(
     themeEditor.editingId
@@ -33,49 +39,36 @@
       : false,
   );
 
-  // Width matches the old in-modal content area plus a small bump so rows
-  // breathe the same on both layouts; height is capped well below the
-  // viewport so the app underneath stays scannable.
-  const PANEL_WIDTH = 700;
-  const PANEL_MAX_HEIGHT_PX = 640;
-  const PANEL_MAX_HEIGHT_VH = 80;
-  const PANEL_MARGIN = 16;
+  const editorGeometry = $derived(
+    pickThemeEditorGeometry({
+      viewport: { width: viewport.width, height: viewport.height },
+    }),
+  );
 
-  function initialLeft(): number {
-    if (typeof window === "undefined") return 100;
-    return Math.max(PANEL_MARGIN, (window.innerWidth - PANEL_WIDTH) / 2);
-  }
-
-  function initialTop(): number {
-    if (typeof window === "undefined") return 80;
-    const viewportCap = (window.innerHeight * PANEL_MAX_HEIGHT_VH) / 100;
-    const panelHeight = Math.min(PANEL_MAX_HEIGHT_PX, viewportCap);
-    return Math.max(PANEL_MARGIN, (window.innerHeight - panelHeight) / 2);
-  }
-
-  let posX = $state(initialLeft());
-  let posY = $state(initialTop());
+  let posX = $state(0);
+  let posY = $state(0);
+  let positionInitialized = $state(false);
   let dragging = $state(false);
   let collapsed = $state(false);
   let dragOffsetX = 0;
   let dragOffsetY = 0;
 
-  function clampX(x: number): number {
-    if (typeof window === "undefined") return x;
-    const maxX = window.innerWidth - PANEL_WIDTH - PANEL_MARGIN;
-    return Math.min(Math.max(PANEL_MARGIN, x), Math.max(PANEL_MARGIN, maxX));
-  }
-
-  function clampY(y: number): number {
-    if (typeof window === "undefined") return y;
-    // Keep at least the draggable header row visible so the panel can always be
-    // grabbed and moved back on screen.
-    const minVisible = 48;
-    const maxY = window.innerHeight - minVisible;
-    return Math.min(Math.max(PANEL_MARGIN, y), Math.max(PANEL_MARGIN, maxY));
+  function clampFloatingPosition(x: number, y: number): { x: number; y: number } {
+    const clamped = clampPanelRect(
+      {
+        x,
+        y,
+        width: editorGeometry.rect.width,
+        height: editorGeometry.rect.height,
+      },
+      { width: viewport.width, height: viewport.height },
+      THEME_EDITOR_EDGE_MARGIN,
+    );
+    return { x: clamped.x, y: clamped.y };
   }
 
   function onHeaderPointerDown(e: PointerEvent) {
+    if (!editorGeometry.canDrag) return;
     if (e.button !== 0) return;
     // Do not steal drags from buttons inside the header row.
     const target = e.target as HTMLElement | null;
@@ -89,8 +82,12 @@
 
   function onHeaderPointerMove(e: PointerEvent) {
     if (!dragging) return;
-    posX = clampX(e.clientX - dragOffsetX);
-    posY = clampY(e.clientY - dragOffsetY);
+    const next = clampFloatingPosition(
+      e.clientX - dragOffsetX,
+      e.clientY - dragOffsetY,
+    );
+    posX = next.x;
+    posY = next.y;
   }
 
   function onHeaderPointerUp(e: PointerEvent) {
@@ -100,14 +97,24 @@
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
   }
 
-  // Keep the panel on-screen if the user resizes the window mid-edit.
-  onMount(() => {
-    function onResize() {
-      posX = clampX(posX);
-      posY = clampY(posY);
+  $effect(() => {
+    const geometry = editorGeometry;
+    if (!geometry.canDrag) {
+      dragging = false;
+      posX = geometry.rect.x;
+      posY = geometry.rect.y;
+      positionInitialized = true;
+      return;
     }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    if (!positionInitialized) {
+      posX = geometry.rect.x;
+      posY = geometry.rect.y;
+      positionInitialized = true;
+      return;
+    }
+    const next = clampFloatingPosition(posX, posY);
+    posX = next.x;
+    posY = next.y;
   });
 
   function toggleCollapsed() {
@@ -132,14 +139,45 @@
     if (!canResetToSeed) return;
     themeStore.resetThemeToSeed(editing.id);
   }
+
+  const panelStyle = $derived.by(() => {
+    const geometry = editorGeometry;
+    const height = collapsed ? "auto" : `${geometry.rect.height}px`;
+    const maxHeight = `${geometry.rect.height}px`;
+    const x = geometry.canDrag ? posX : geometry.rect.x;
+
+    if (geometry.layout === "sheet" && collapsed) {
+      return [
+        `left: ${x}px`,
+        `bottom: ${THEME_EDITOR_EDGE_MARGIN}px`,
+        `width: ${geometry.rect.width}px`,
+        "height: auto",
+        `max-height: ${maxHeight}`,
+      ].join("; ");
+    }
+
+    const y = geometry.canDrag ? posY : geometry.rect.y;
+    return [
+      `left: ${x}px`,
+      `top: ${y}px`,
+      `width: ${geometry.rect.width}px`,
+      `height: ${height}`,
+      `max-height: ${maxHeight}`,
+    ].join("; ");
+  });
 </script>
 
 {#if editing}
   <div
-    class="fixed z-[75] flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
-    style="left: {posX}px; top: {posY}px; width: {PANEL_WIDTH}px; height: {collapsed
-      ? 'auto'
-      : `min(${PANEL_MAX_HEIGHT_VH}vh, ${PANEL_MAX_HEIGHT_PX}px)`}; max-height: min({PANEL_MAX_HEIGHT_VH}vh, {PANEL_MAX_HEIGHT_PX}px);"
+    class={cn(
+      "fixed z-[75] flex flex-col overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
+      editorGeometry.layout === "fullscreen"
+        ? "rounded-none border-x-0 border-b-0"
+        : "rounded-lg",
+    )}
+    style={panelStyle}
+    data-theme-editor-layout={editorGeometry.layout}
+    data-theme-editor-density={editorGeometry.density}
     data-app-shortcuts="ignore"
     role="dialog"
     aria-label="Theme editor"
@@ -149,7 +187,11 @@
     <header
       class={cn(
         "flex shrink-0 items-center gap-2 border-b border-border bg-sidebar px-3 py-2",
-        dragging ? "cursor-grabbing" : "cursor-grab",
+        editorGeometry.canDrag
+          ? dragging
+            ? "cursor-grabbing"
+            : "cursor-grab"
+          : "cursor-default",
       )}
       onpointerdown={onHeaderPointerDown}
       onpointermove={onHeaderPointerMove}
@@ -182,9 +224,9 @@
 
     <!-- Sticky footer -->
     <footer
-      class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-sidebar px-3 py-2"
+      class="theme-editor-footer flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-sidebar px-3 py-2"
     >
-      <div class="flex items-center gap-2">
+      <div class="flex min-w-0 items-center gap-2">
         <button
           type="button"
           onclick={onCancel}
@@ -203,14 +245,14 @@
               ? "Restore every value to the clone-time snapshot"
               : "Nothing has changed since this theme was cloned"}
             class={cn(
-              "flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground transition-colors",
+              "theme-editor-reset-all flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground transition-colors",
               canResetToSeed
                 ? "hover:bg-destructive/90"
                 : "cursor-not-allowed",
             )}
           >
             <RotateCcw size={11} strokeWidth={2.25} />
-            <span>Reset all to seed</span>
+            <span class="theme-editor-optional-label">Reset all to seed</span>
           </button>
         {/if}
       </div>
@@ -225,3 +267,25 @@
     </footer>
   </div>
 {/if}
+
+<style>
+  [data-theme-editor-density="micro"] .theme-editor-footer {
+    gap: 0.375rem;
+    padding-inline: 0.5rem;
+  }
+
+  [data-theme-editor-density="micro"] .theme-editor-footer button {
+    min-height: 2rem;
+  }
+
+  [data-theme-editor-density="micro"] .theme-editor-reset-all {
+    min-width: 2rem;
+    width: 2rem;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  [data-theme-editor-density="micro"] .theme-editor-optional-label {
+    display: none;
+  }
+</style>
