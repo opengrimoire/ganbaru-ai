@@ -75,7 +75,9 @@ import {
   loadScenarioById,
 } from "$lib/benchmark/registry";
 
-type PendingRequest = { mode: "single" | "suite"; scenarioIds: string[] };
+type PendingRequest =
+  | { mode: "single"; scenarioIds: string[] }
+  | { mode: "suite"; scenarioIds: string[]; suiteLabel: string };
 
 export interface RunningInfo {
   phase: "A" | "B";
@@ -116,10 +118,20 @@ class BenchmarkRunnerStore {
 
   /** Open the confirmation dialog for every registered scenario. */
   requestAll() {
+    this.requestSuite(
+      BENCHMARK_SCENARIOS.map((scenario) => scenario.id),
+      "all benchmarks",
+    );
+  }
+
+  /** Open the confirmation dialog for an arbitrary benchmark suite. */
+  requestSuite(scenarioIds: string[], suiteLabel: string) {
     if (this.status !== "idle") return;
+    if (scenarioIds.length === 0) return;
     this.pendingRequest = {
       mode: "suite",
-      scenarioIds: BENCHMARK_SCENARIOS.map((scenario) => scenario.id),
+      scenarioIds: [...scenarioIds],
+      suiteLabel,
     };
     this.status = "confirming";
   }
@@ -132,6 +144,10 @@ class BenchmarkRunnerStore {
 
   get pendingMode(): "single" | "suite" | undefined {
     return this.pendingRequest?.mode;
+  }
+
+  get pendingSuiteLabel(): string | undefined {
+    return this.pendingRequest?.mode === "suite" ? this.pendingRequest.suiteLabel : undefined;
   }
 
   get pendingScenarioLabels(): string[] {

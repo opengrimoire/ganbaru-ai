@@ -23,7 +23,7 @@ To capture a comparable run:
 1. Build and install a release package.
 2. Open GanbaruAI from the installed app, not `pnpm tauri dev`. **This is important! Tauri uses more resources in dev mode.**
 3. Open the title-bar performance panel.
-4. Under Benchmarks, click `Run all benchmarks`.
+4. Under Benchmarks, click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks` depending on the change being measured.
 5. Do not interact with the app while the overlay is running.
 6. When the summary appears, review the readable tables, copy the markdown, and send it to an agent for careful placement here.
 
@@ -51,7 +51,13 @@ Do not paste ad hoc `Live RAM`, `Startup RAM snapshot`, or `Speed log` panel cop
 
 ## Benchmark questions
 
-Harness v6 exposes individual buttons plus one `Run all benchmarks` button. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample.
+Harness v6 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample.
+
+| Suite | Includes | Use when |
+|---|---|---|
+| Core benchmarks | Startup, idle memory, calendar navigation stress, event panel latency, create panel latency | Measuring user-perceived startup, memory, and interaction speed |
+| Backend benchmarks | Calendar write, calendar import, theme persistence, Pomodoro persistence | Measuring Rust-backed persistence and storage command latency |
+| All benchmarks | Core plus backend | Recording a complete release baseline or validating a broad refactor |
 
 | Scenario | Primary question | Primary output | Post-workload RAM wait |
 |---|---|---|---|
@@ -86,7 +92,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-10-01` with harness v6.
+Latest recorded canonical baseline: `2026-05-10-02` with harness v6.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
@@ -97,8 +103,13 @@ Harness v6 keeps the core benchmark questions, removes low-value ICS import and 
 | 2026-05-05-01 | v6 | 0.1.0+889cc3c | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-09-01 | v6 | 0.1.0+e3c35c7 | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-10-01 | v6 | 0.1.0+5589e3f | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-10-02 | v6 | 0.1.0+f3bd22b | Linux Ubuntu 24.04.4 LTS |  |
 
-### Startup boot
+### Core benchmarks
+
+Core benchmark rows measure user-perceived startup, memory, and interaction latency.
+
+#### Startup boot
 
 Harness v6 reports repeated process launches. Before each startup sample, the app exits and a helper waits 10 seconds before reopening it. Use `Launch median ms` as the user-facing app-open comparison value. It measures Rust process start through `boot.usable-paint`, when the calendar data has loaded and the calendar has rendered a frame. `First paint median ms` is diagnostic and can happen before event rows are visible.
 
@@ -110,8 +121,10 @@ Harness v6 reports repeated process launches. Before each startup sample, the ap
 | 2026-05-09-01 | synth-v1-1000 | 5 | 113 | 576 | 1022 | 1517 | 1517 | 1060 |
 | 2026-05-10-01 | base-0 | 5 | 143 | 237 | 730 | 1230 | 1230 | 759 |
 | 2026-05-10-01 | synth-v1-1000 | 5 | 144 | 642 | 1125 | 1171 | 1171 | 1132 |
+| 2026-05-10-02 | base-0 | 5 | 141 | 231 | 746 | 1197 | 1197 | 768 |
+| 2026-05-10-02 | synth-v1-1000 | 5 | 142 | 630 | 1119 | 1530 | 1530 | 1143 |
 
-### Idle memory
+#### Idle memory
 
 Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes.
 
@@ -135,8 +148,14 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-01 | synth-v1-1000 | workload peak | 115.1 | 266.6 | 19.0 | 401 |
 | 2026-05-10-01 | synth-v1-1000 | workload end | 115.0 | 243.0 | 19.0 | 377 |
 | 2026-05-10-01 | synth-v1-1000 | +30s | 114.4 | 244.6 | 19.1 | 378 |
+| 2026-05-10-02 | base-0 | workload peak | 112.5 | 198.6 | 20.9 | 332 |
+| 2026-05-10-02 | base-0 | workload end | 112.2 | 196.4 | 19.9 | 328 |
+| 2026-05-10-02 | base-0 | +30s | 111.6 | 194.9 | 20.0 | 327 |
+| 2026-05-10-02 | synth-v1-1000 | workload peak | 119.2 | 270.3 | 19.9 | 409 |
+| 2026-05-10-02 | synth-v1-1000 | workload end | 119.0 | 245.1 | 19.9 | 384 |
+| 2026-05-10-02 | synth-v1-1000 | +30s | 118.4 | 249.4 | 20.0 | 388 |
 
-### Calendar navigation stress memory
+#### Calendar navigation stress memory
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
@@ -158,8 +177,14 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-01 | synth-v1-1000 | workload peak | 119.0 | 326.6 | 19.0 | 465 |
 | 2026-05-10-01 | synth-v1-1000 | workload end | 119.0 | 319.9 | 19.0 | 458 |
 | 2026-05-10-01 | synth-v1-1000 | +30s | 118.4 | 296.4 | 19.1 | 434 |
+| 2026-05-10-02 | base-0 | workload peak | 116.4 | 223.7 | 19.9 | 360 |
+| 2026-05-10-02 | base-0 | workload end | 116.4 | 220.9 | 19.9 | 357 |
+| 2026-05-10-02 | base-0 | +30s | 115.8 | 218.2 | 20.0 | 354 |
+| 2026-05-10-02 | synth-v1-1000 | workload peak | 118.5 | 328.4 | 19.7 | 467 |
+| 2026-05-10-02 | synth-v1-1000 | workload end | 118.5 | 319.3 | 19.7 | 458 |
+| 2026-05-10-02 | synth-v1-1000 | +30s | 117.8 | 294.3 | 19.8 | 432 |
 
-### Event panel latency
+#### Event panel latency
 
 Rows report user-visible elapsed time. Internal module, detail-load, state, and flush breakdowns are diagnostic and are not canonical.
 
@@ -177,8 +202,12 @@ Rows report user-visible elapsed time. Internal module, detail-load, state, and 
 | 2026-05-10-01 | synth-v1-1002 | edit open from closed avg | 84 | ms | 10 | 79 | 83 | 95 | 95 |
 | 2026-05-10-01 | base-2 | edit switch while open avg | 18 | ms | 10 | 16 | 18 | 19 | 19 |
 | 2026-05-10-01 | synth-v1-1002 | edit switch while open avg | 46 | ms | 10 | 33 | 47 | 54 | 54 |
+| 2026-05-10-02 | base-2 | edit open from closed avg | 23 | ms | 10 | 16 | 16 | 65 | 65 |
+| 2026-05-10-02 | synth-v1-1002 | edit open from closed avg | 79 | ms | 10 | 66 | 80 | 85 | 85 |
+| 2026-05-10-02 | base-2 | edit switch while open avg | 16 | ms | 10 | 15 | 16 | 17 | 17 |
+| 2026-05-10-02 | synth-v1-1002 | edit switch while open avg | 46 | ms | 10 | 33 | 47 | 62 | 62 |
 
-### Create panel latency
+#### Create panel latency
 
 The cancel timing includes the fixed 500 ms guard used by the scenario before closing the draft panel.
 
@@ -196,6 +225,83 @@ The cancel timing includes the fixed 500 ms guard used by the scenario before cl
 | 2026-05-10-01 | synth-v1-1000 | create panel open avg | 58 | ms | 6 | 49 | 50 | 81 | 81 |
 | 2026-05-10-01 | base-0 | create cancel after guard avg | 59 | ms | 6 | 59 | 59 | 60 | 60 |
 | 2026-05-10-01 | synth-v1-1000 | create cancel after guard avg | 81 | ms | 6 | 76 | 76 | 93 | 93 |
+| 2026-05-10-02 | base-0 | create panel open avg | 38 | ms | 6 | 28 | 30 | 74 | 74 |
+| 2026-05-10-02 | synth-v1-1000 | create panel open avg | 58 | ms | 6 | 50 | 50 | 67 | 67 |
+| 2026-05-10-02 | base-0 | create cancel after guard avg | 59 | ms | 6 | 58 | 59 | 59 | 59 |
+| 2026-05-10-02 | synth-v1-1000 | create cancel after guard avg | 82 | ms | 6 | 75 | 76 | 97 | 97 |
+
+### Backend benchmarks
+
+Backend benchmark rows measure Rust-backed persistence, import, and storage command latency.
+
+#### Calendar write operations
+
+Rows report Tauri IPC round-trip time for Rust-backed calendar write commands against the isolated benchmark database.
+
+| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|
+| 2026-05-10-02 | base-0 | event create save avg | 6 | ms | 8 | 3 | 4 | 16 | 16 |
+| 2026-05-10-02 | synth-v1-1000 | event create save avg | 9 | ms | 8 | 3 | 4 | 38 | 38 |
+| 2026-05-10-02 | base-0 | event patch save avg | 4 | ms | 8 | 3 | 3 | 6 | 6 |
+| 2026-05-10-02 | synth-v1-1000 | event patch save avg | 4 | ms | 8 | 3 | 4 | 7 | 7 |
+| 2026-05-10-02 | base-0 | event delete avg | 4 | ms | 8 | 3 | 3 | 8 | 8 |
+| 2026-05-10-02 | synth-v1-1000 | event delete avg | 3 | ms | 8 | 2 | 3 | 4 | 4 |
+| 2026-05-10-02 | base-0 | recurring detach avg | 5 | ms | 5 | 3 | 4 | 6 | 6 |
+| 2026-05-10-02 | synth-v1-1000 | recurring detach avg | 4 | ms | 5 | 3 | 4 | 4 | 4 |
+| 2026-05-10-02 | base-0 | recurring split avg | 4 | ms | 5 | 3 | 4 | 4 | 4 |
+| 2026-05-10-02 | synth-v1-1000 | recurring split avg | 4 | ms | 5 | 3 | 4 | 4 | 4 |
+
+#### Calendar import operations
+
+Repeated rows report 100-event import command timing. Scalar rows report one 1000-event add or update pass.
+
+| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|
+| 2026-05-10-02 | base-0 | bulk import 100 add avg | 38 | ms | 3 | 29 | 31 | 54 | 54 |
+| 2026-05-10-02 | synth-v1-1000 | bulk import 100 add avg | 56 | ms | 3 | 29 | 31 | 107 | 107 |
+| 2026-05-10-02 | base-0 | bulk import 100 update avg | 33 | ms | 3 | 32 | 33 | 35 | 35 |
+| 2026-05-10-02 | synth-v1-1000 | bulk import 100 update avg | 33 | ms | 3 | 31 | 32 | 36 | 36 |
+
+| Run | Dataset | Metric | Value | Unit |
+|---|---|---|---:|---|
+| 2026-05-10-02 | base-0 | bulk import 1000 add | 261 | ms |
+| 2026-05-10-02 | synth-v1-1000 | bulk import 1000 add | 234 | ms |
+| 2026-05-10-02 | base-0 | bulk import 1000 update | 277 | ms |
+| 2026-05-10-02 | synth-v1-1000 | bulk import 1000 update | 289 | ms |
+
+#### Theme persistence operations
+
+Rows report Tauri IPC round-trip time for Rust-backed theme persistence commands.
+
+| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|
+| 2026-05-10-02 | base-0 | theme snapshot insert avg | 8 | ms | 8 | 6 | 7 | 16 | 16 |
+| 2026-05-10-02 | synth-v1-1000 | theme snapshot insert avg | 12 | ms | 8 | 7 | 7 | 42 | 42 |
+| 2026-05-10-02 | base-0 | theme snapshot replace avg | 7 | ms | 8 | 6 | 7 | 10 | 10 |
+| 2026-05-10-02 | synth-v1-1000 | theme snapshot replace avg | 7 | ms | 8 | 6 | 7 | 9 | 9 |
+| 2026-05-10-02 | base-0 | theme load all avg | 5 | ms | 8 | 4 | 5 | 7 | 7 |
+| 2026-05-10-02 | synth-v1-1000 | theme load all avg | 5 | ms | 8 | 4 | 5 | 8 | 8 |
+| 2026-05-10-02 | base-0 | theme source cascade avg | 5 | ms | 8 | 3 | 4 | 6 | 6 |
+| 2026-05-10-02 | synth-v1-1000 | theme source cascade avg | 4 | ms | 8 | 4 | 4 | 5 | 5 |
+| 2026-05-10-02 | base-0 | theme reset to seed avg | 4 | ms | 8 | 3 | 4 | 5 | 5 |
+| 2026-05-10-02 | synth-v1-1000 | theme reset to seed avg | 3 | ms | 8 | 3 | 3 | 4 | 4 |
+
+#### Pomodoro persistence operations
+
+Rows report Tauri IPC round-trip time for Rust-backed Pomodoro persistence commands.
+
+| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|
+| 2026-05-10-02 | base-0 | pomodoro insert segments avg | 4 | ms | 8 | 3 | 3 | 5 | 5 |
+| 2026-05-10-02 | synth-v1-1000 | pomodoro insert segments avg | 13 | ms | 8 | 3 | 3 | 80 | 80 |
+| 2026-05-10-02 | base-0 | pomodoro update segments avg | 5 | ms | 8 | 3 | 4 | 7 | 7 |
+| 2026-05-10-02 | synth-v1-1000 | pomodoro update segments avg | 5 | ms | 8 | 3 | 4 | 7 | 7 |
+| 2026-05-10-02 | base-0 | pomodoro cleanup event segments avg | 3 | ms | 8 | 2 | 3 | 3 | 3 |
+| 2026-05-10-02 | synth-v1-1000 | pomodoro cleanup event segments avg | 4 | ms | 8 | 3 | 3 | 6 | 6 |
+| 2026-05-10-02 | base-0 | pomodoro cleanup orphans avg | 10 | ms | 8 | 3 | 4 | 48 | 48 |
+| 2026-05-10-02 | synth-v1-1000 | pomodoro cleanup orphans avg | 3 | ms | 8 | 3 | 3 | 5 | 5 |
+| 2026-05-10-02 | base-0 | pomodoro save session avg | 5 | ms | 8 | 3 | 3 | 7 | 7 |
+| 2026-05-10-02 | synth-v1-1000 | pomodoro save session avg | 3 | ms | 8 | 3 | 3 | 6 | 6 |
 
 ## Historical context
 

@@ -9,12 +9,22 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { cn } from "$lib/utils";
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
-  import { BENCHMARK_SCENARIOS } from "$lib/benchmark/registry";
+  import {
+    BENCHMARK_SCENARIOS,
+    BENCHMARK_SUITES,
+    type BenchmarkSuiteMetadata,
+  } from "$lib/benchmark/registry";
+  import type { BenchmarkScenarioMetadata } from "$lib/benchmark/types";
   import { perfLog, type PerfLogEntry, clear as clearPerfLog, setTracking } from "$lib/stores/perflog.svelte";
   import MemoryChart from "$lib/components/perf/MemoryChart.svelte";
   import type { MemorySample } from "$lib/components/perf/memorySamples";
   import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCSV } from "$lib/components/perf/memorySamples";
-  import type { MemoryReport, StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
+  import {
+    memoryDisplayRows,
+    type MemoryDisplayRow,
+    type MemoryReport,
+    type StartupMemorySnapshot,
+  } from "$lib/components/perf/memoryReport";
 
   let {
     shellStartupMs = null,
@@ -31,6 +41,7 @@
   } = $props();
 
   const benchmarkStatus = getBenchmarkStatus();
+  const sectionDividerClass = "mx-0 my-3 h-px bg-border";
 
   let perfLive = $state(true);
   // One slot for the most recently copied button so each one can flash a
@@ -45,6 +56,7 @@
 
   let liveReport = $state<MemoryReport | null>(null);
   let chartHoverSample = $state<MemorySample | null>(null);
+  let expandedBenchmarkSuites = $state<string[]>([]);
 
   const displayReport = $derived.by<MemoryReport | null>(() => {
     // While the user is hovering the live trend chart, the per-process panel
@@ -60,6 +72,7 @@
     if (perfLive) return liveReport;
     return startupMemorySnapshot.status === "ready" ? startupMemorySnapshot.report : null;
   });
+  const memoryRows = $derived.by<MemoryDisplayRow[]>(() => memoryDisplayRows(displayReport));
 
   // Recolor the numbers while hovering so the user can tell at a glance the
   // panel is reflecting a past sample instead of the live reading.
@@ -317,14 +330,29 @@
     }
   }
 
-  async function requestAllBenchmarks(): Promise<void> {
+  async function requestBenchmarkSuite(suite: BenchmarkSuiteMetadata): Promise<void> {
     try {
       await ensureBenchmarkOverlay();
       const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
-      getBenchmarkRunner().requestAll();
+      getBenchmarkRunner().requestSuite(suite.scenarioIds, suite.label.toLowerCase());
     } catch (e) {
       console.error("benchmark overlay load failed", e);
     }
+  }
+
+  function scenariosForSuite(suite: BenchmarkSuiteMetadata): BenchmarkScenarioMetadata[] {
+    const suiteIds = new Set(suite.scenarioIds);
+    return BENCHMARK_SCENARIOS.filter((scenario) => suiteIds.has(scenario.id));
+  }
+
+  function suiteExpanded(suiteId: string): boolean {
+    return expandedBenchmarkSuites.includes(suiteId);
+  }
+
+  function toggleBenchmarkSuite(suiteId: string): void {
+    expandedBenchmarkSuites = suiteExpanded(suiteId)
+      ? expandedBenchmarkSuites.filter((id) => id !== suiteId)
+      : [...expandedBenchmarkSuites, suiteId];
   }
 </script>
 
@@ -335,15 +363,16 @@
 -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 shadow-lg"
+  class="perf-scroll fixed z-50 overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-popover px-3 py-3 shadow-lg"
+  style="top: calc(var(--titlebar-h) + 4px); right: 8px; width: min(18rem, calc(100vw - 16px)); max-height: calc(100dvh - var(--titlebar-h) - 12px);"
   onwheel={(e) => e.stopPropagation()}
 >
-  <div class="flex items-center justify-between">
-    <div class="flex items-center gap-2 text-[10px] uppercase tracking-wider">
+  <div class="flex items-center justify-between gap-2">
+    <div class="flex min-w-0 flex-1 items-center gap-1.5 text-[10px] uppercase tracking-wider">
       <button
         onclick={() => { perfLive = true; }}
         class={cn(
-          "transition-colors",
+          "min-w-0 truncate transition-colors",
           perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
         )}
       >LIVE RAM</button>
@@ -351,7 +380,7 @@
       <button
         onclick={() => { perfLive = false; }}
         class={cn(
-          "transition-colors",
+          "min-w-0 truncate transition-colors",
           !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
         )}
       >STARTUP RAM (10s)</button>
@@ -376,26 +405,26 @@
     <div class="mt-2 text-xs text-muted-foreground">Startup snapshot pending...</div>
   {:else if !perfLive && startupMemorySnapshot.status === "failed"}
     <div class="mt-2 text-xs text-muted-foreground">Startup snapshot unavailable.</div>
-  {:else if displayReport && displayReport.processes.length > 0}
-    <div class="mt-2 space-y-1.5">
-      {#each displayReport.processes as proc}
-        <div class="flex items-baseline justify-between">
-          <span class="text-xs text-muted-foreground">{proc.name}</span>
-          <span class={cn("text-[11px] tabular-nums text-foreground", showingHoveredSample && "italic")}>{proc.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
-        </div>
-      {/each}
-      <div class="flex items-baseline justify-between">
-        <span class="text-xs text-muted-foreground">Total</span>
-        <span class={cn("text-[11px] tabular-nums text-foreground", showingHoveredSample && "italic")}>{displayReport.total_mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
-      </div>
-    </div>
   {/if}
 
+  <div class="mt-2 space-y-1.5" aria-busy={displayReport === null}>
+    {#each memoryRows as row (row.label)}
+      <div class="flex items-baseline justify-between">
+        <span class="text-xs text-muted-foreground">{row.label}</span>
+        {#if row.mb === null}
+          <span class="min-w-14 text-right text-[11px] tabular-nums text-muted-foreground/50">...</span>
+        {:else}
+          <span class={cn("min-w-14 text-right text-[11px] tabular-nums text-foreground", showingHoveredSample && "italic")}>{row.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+        {/if}
+      </div>
+    {/each}
+  </div>
+
   {#if perfLive}
-    <div class="mt-3">
+    <div class="mt-3 flex justify-center">
       <MemoryChart
         samples={memorySamples}
-        width={252}
+        width={240}
         height={64}
         onhover={(s) => { chartHoverSample = s; }}
       />
@@ -444,7 +473,7 @@
   {/if}
 
   {#if launchMs !== null}
-    <div class="mx-0 my-3 h-px bg-border"></div>
+    <div class={sectionDividerClass}></div>
     <button
       onclick={() => (launchExpanded = !launchExpanded)}
       class="flex w-full items-center justify-between rounded text-left transition-colors hover:bg-accent"
@@ -463,9 +492,9 @@
       {#if bootRows.length > 0}
         <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
           {#each bootRows as row (row.label)}
-            <div class="flex justify-between text-muted-foreground tabular-nums whitespace-nowrap">
-              <span>{row.label}</span>
-              <span>{row.deltaMs} ms</span>
+            <div class="flex min-w-0 justify-between gap-2 text-muted-foreground tabular-nums">
+              <span class="min-w-0 truncate">{row.label}</span>
+              <span class="shrink-0">{row.deltaMs} ms</span>
             </div>
           {/each}
         </div>
@@ -487,7 +516,7 @@
     {/if}
   {/if}
 
-  <div class="mx-0 my-3 h-px bg-border"></div>
+  <div class={sectionDividerClass}></div>
   <div class="flex items-center justify-between">
     <span class="text-[10px] uppercase tracking-wider text-foreground">
       Speed log ({actionChains.length})
@@ -514,10 +543,10 @@
   {#if actionChains.length > 0}
     <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
       {#each actionChains as row, i (i)}
-        <div class="text-muted-foreground tabular-nums">
-          <div class="flex justify-between whitespace-nowrap">
-            <span><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
-            <span>{row.durationMs} ms</span>
+        <div class="min-w-0 text-muted-foreground tabular-nums">
+          <div class="flex min-w-0 justify-between gap-2">
+            <span class="min-w-0 truncate"><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
+            <span class="shrink-0">{row.durationMs} ms</span>
           </div>
           {#if row.steps.length > 0}
             <div class="truncate pl-6 text-muted-foreground/60">
@@ -526,12 +555,6 @@
           {/if}
         </div>
       {/each}
-    </div>
-  {:else}
-    <div class="mt-1.5 text-[10px] text-muted-foreground/60">
-      {perfLog.tracking
-        ? "No actions recorded yet. Try navigating, switching view, or opening an event."
-        : "Turn on Track to record action durations."}
     </div>
   {/if}
   <button
@@ -548,32 +571,57 @@
     {/if}
   </button>
 
-  {#if BENCHMARK_SCENARIOS.length > 0}
-    <div class="mx-0 my-3 h-px bg-border"></div>
+  {#if BENCHMARK_SUITES.length > 0}
+    <div class={sectionDividerClass}></div>
     <div class="flex items-center justify-between">
       <span class="text-[10px] uppercase tracking-wider text-foreground">Benchmarks</span>
       <span class="text-[10px] uppercase tracking-wider text-muted-foreground/60"
         >restarts app</span
       >
     </div>
-    <div class="mt-1.5 flex flex-col gap-1">
-      <button
-        onclick={() => void requestAllBenchmarks()}
-        disabled={benchmarkStatus.status !== "idle"}
-        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <Play size={12} />
-        Run all benchmarks
-      </button>
-      {#each BENCHMARK_SCENARIOS as scenario (scenario.id)}
-        <button
-          onclick={() => void requestBenchmark(scenario.id)}
-          disabled={benchmarkStatus.status !== "idle"}
-          class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Play size={12} />
-          {scenario.label}
-        </button>
+    <div class="perf-scroll mt-1.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
+      {#each BENCHMARK_SUITES as suite (suite.id)}
+        <div class="flex flex-col gap-1">
+          <div class="flex gap-1">
+            <button
+              onclick={() => void requestBenchmarkSuite(suite)}
+              disabled={benchmarkStatus.status !== "idle"}
+              class="flex h-6 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md bg-primary px-2 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              title={suite.description}
+            >
+              <Play size={12} class="shrink-0" />
+              <span class="truncate">Run {suite.label.toLowerCase()}</span>
+            </button>
+            <button
+              type="button"
+              onclick={() => toggleBenchmarkSuite(suite.id)}
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
+              title={suiteExpanded(suite.id) ? `Hide ${suite.label.toLowerCase()}` : `Show ${suite.label.toLowerCase()}`}
+              aria-label={suiteExpanded(suite.id) ? `Hide ${suite.label}` : `Show ${suite.label}`}
+              aria-expanded={suiteExpanded(suite.id)}
+            >
+              <ChevronDown
+                size={13}
+                class={cn("transition-transform", suiteExpanded(suite.id) && "rotate-180")}
+              />
+            </button>
+          </div>
+          {#if suiteExpanded(suite.id)}
+            <div class="flex flex-col gap-1">
+              {#each scenariosForSuite(suite) as scenario (scenario.id)}
+                <button
+                  onclick={() => void requestBenchmark(scenario.id)}
+                  disabled={benchmarkStatus.status !== "idle"}
+                  class="flex h-6 w-full min-w-0 items-center justify-start gap-1.5 rounded-md bg-muted/70 px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  title={scenario.description}
+                >
+                  <Play size={11} class="shrink-0" />
+                  <span class="truncate">{scenario.label}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       {/each}
     </div>
   {/if}

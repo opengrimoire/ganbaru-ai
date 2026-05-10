@@ -6,14 +6,16 @@ Harness v6 runs scenarios against isolated benchmark databases, records only the
 
 ## User flow
 
-The performance panel shows one button per scenario plus `Run all benchmarks`.
+The performance panel shows compact grouped suite buttons. Each suite row has
+a primary run button and a square expand button that reveals individual
+scenario buttons.
 
 Recommended flow:
 
 1. Build and install a release package.
 2. Open the installed app.
 3. Open the title-bar performance panel.
-4. Click `Run all benchmarks`.
+4. Click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks`.
 5. Leave the app alone while the overlay runs.
 6. Review the readable summary tables.
 7. Click `Copy markdown` and send the markdown to an agent for careful placement in the performance record.
@@ -61,7 +63,7 @@ Single-scenario runs and suite runs use the same state file. Suite runs add a qu
 
 ```text
 idle
-  user clicks Run or Run all
+  user clicks Run on a scenario or suite
   user confirms
   prepare benchmark DB
   write phase-a-pending
@@ -169,6 +171,16 @@ Implementation rules:
 - `cleanup()` is usually a no-op because the benchmark DB is deleted wholesale after the run.
 
 ## Registered scenarios
+
+Registered suites:
+
+| Suite | Scenarios | Purpose |
+|---|---|---|
+| Core benchmarks | `startup-boot`, `idle-memory`, `calendar-nav`, `event-panel-open`, `calendar-create-cancel` | User-perceived startup, memory, and interaction latency |
+| Backend benchmarks | `calendar-write-ops`, `calendar-import-ops`, `theme-persistence-ops`, `pomodoro-persistence-ops` | Rust-backed persistence, import, and storage command latency |
+| All benchmarks | Core plus backend | Complete release baseline or broad refactor validation |
+
+Registered scenarios:
 
 | Scenario | Module | Primary measurement |
 |---|---|---|

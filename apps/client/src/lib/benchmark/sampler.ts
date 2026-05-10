@@ -11,6 +11,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { perfLog, snapshot as perfSnapshot, type PerfLogEntry } from "$lib/stores/perflog.svelte";
+import { categorizeMemoryProcessName } from "$lib/components/perf/memoryReport";
 import type { BootTimings, SampleLabel, SamplePoint } from "./types";
 import { STRESS_PEAK_INTERVAL_MS, SAMPLE_OFFSETS_MS, formatOffsetLabel } from "./types";
 
@@ -27,10 +28,9 @@ interface MemoryReport {
 
 /**
  * Read one memory snapshot from the backend. Maps the Rust report into the
- * `SamplePoint` shape (backend / frontend / network split). The names come
- * from `lib.rs` (`Backend (Rust)`, `Frontend (Svelte + WebKit)`,
- * `Network (WebKit)`); fallbacks keep the math sane on platforms that
- * label processes differently.
+ * `SamplePoint` shape (backend / frontend / network split). Process names
+ * come from `lib.rs`, while category mapping is shared with the live
+ * performance panel so both surfaces agree.
  */
 export async function readMemorySample(
   label: SampleLabel,
@@ -41,11 +41,9 @@ export async function readMemorySample(
   let frontend = 0;
   let network = 0;
   for (const p of report.processes) {
-    const name = p.name.toLowerCase();
-    if (name.includes("backend")) backend += p.mb;
-    else if (name.includes("frontend")) frontend += p.mb;
-    else if (name.includes("network")) network += p.mb;
-    else if (name.includes("webview")) frontend += p.mb;
+    const category = categorizeMemoryProcessName(p.name);
+    if (category === "Backend") backend += p.mb;
+    else if (category === "Network") network += p.mb;
     else frontend += p.mb;
   }
   return {

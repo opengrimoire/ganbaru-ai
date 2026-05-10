@@ -28,9 +28,10 @@
     return formatBenchmarkSuiteMarkdown(runner.results, {});
   });
 
-  const confirmTitle = $derived(
-    runner.pendingMode === "suite" ? "Run all benchmarks?" : "Run benchmark?",
-  );
+  const confirmTitle = $derived.by(() => {
+    if (runner.pendingMode !== "suite") return "Run benchmark?";
+    return `Run ${runner.pendingSuiteLabel ?? "benchmarks"}?`;
+  });
   const confirmMessage = $derived.by(() => {
     const labels = runner.pendingScenarioLabels;
     const prefix = runner.pendingMode === "suite"

@@ -11,6 +11,28 @@ import { STRESS_DURATION_MS, type BenchmarkScenario, type BenchmarkScenarioMetad
 
 type BenchmarkScenarioLoader = () => Promise<BenchmarkScenario>;
 
+export interface BenchmarkSuiteMetadata {
+  id: "core" | "backend" | "all";
+  label: string;
+  description: string;
+  scenarioIds: string[];
+}
+
+const CORE_BENCHMARK_SCENARIO_IDS = [
+  "startup-boot",
+  "idle-memory",
+  "calendar-nav",
+  "event-panel-open",
+  "calendar-create-cancel",
+];
+
+const BACKEND_BENCHMARK_SCENARIO_IDS = [
+  "calendar-write-ops",
+  "calendar-import-ops",
+  "theme-persistence-ops",
+  "pomodoro-persistence-ops",
+];
+
 export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
   {
     id: "startup-boot",
@@ -137,6 +159,27 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       memoryMode: "none",
     },
     defaultSeedSize: 1000,
+  },
+];
+
+export const BENCHMARK_SUITES: BenchmarkSuiteMetadata[] = [
+  {
+    id: "core",
+    label: "Core benchmarks",
+    description: "Startup, memory, and user-visible interaction latency.",
+    scenarioIds: CORE_BENCHMARK_SCENARIO_IDS,
+  },
+  {
+    id: "backend",
+    label: "Backend benchmarks",
+    description: "Rust-backed persistence, import, and storage command latency.",
+    scenarioIds: BACKEND_BENCHMARK_SCENARIO_IDS,
+  },
+  {
+    id: "all",
+    label: "All benchmarks",
+    description: "Complete core and backend benchmark suite.",
+    scenarioIds: [...CORE_BENCHMARK_SCENARIO_IDS, ...BACKEND_BENCHMARK_SCENARIO_IDS],
   },
 ];
 

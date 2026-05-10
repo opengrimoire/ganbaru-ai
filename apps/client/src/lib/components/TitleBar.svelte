@@ -269,10 +269,6 @@
       && compactOverflowIds.has(control.id),
     ),
   );
-  const performanceInOverflow = $derived(
-    overflowActionControls.some((control) => control.id === "performance"),
-  );
-
   function titleBarControlVisible(id: TitleBarControlId): boolean {
     return preferences.titleBarVisibility[id] && !compactOverflowIds.has(id);
   }
@@ -440,7 +436,8 @@
       />
     {:else}
       <div
-        class="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
+        class="fixed z-50 overflow-hidden rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
+        style="top: calc(var(--titlebar-h) + 4px); right: 8px; width: min(18rem, calc(100vw - 16px)); max-height: calc(100dvh - var(--titlebar-h) - 12px);"
       >
         Loading...
       </div>
@@ -595,7 +592,6 @@
         >
           <CircleGauge size={14} strokeWidth={1.75} />
         </button>
-        {@render performancePopover()}
       </div>
     {/if}
 
@@ -660,9 +656,6 @@
         >
           <MoreHorizontal size={15} strokeWidth={1.75} />
         </button>
-        {#if performanceInOverflow}
-          {@render performancePopover()}
-        {/if}
         {#if showUtilityOverflowMenu}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -727,6 +720,8 @@
     </button>
   </div>
 </div>
+
+{@render performancePopover()}
 
 {#if showTitleBarMenu}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
