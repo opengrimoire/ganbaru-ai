@@ -146,10 +146,11 @@
     const maxHeight = `${geometry.rect.height}px`;
     const x = geometry.canDrag ? posX : geometry.rect.x;
 
-    if (geometry.layout === "sheet" && collapsed) {
+    if (!geometry.canDrag && collapsed) {
+      const bottom = geometry.layout === "fullscreen" ? 0 : THEME_EDITOR_EDGE_MARGIN;
       return [
         `left: ${x}px`,
-        `bottom: ${THEME_EDITOR_EDGE_MARGIN}px`,
+        `bottom: ${bottom}px`,
         `width: ${geometry.rect.width}px`,
         "height: auto",
         `max-height: ${maxHeight}`,
@@ -191,7 +192,7 @@
           ? dragging
             ? "cursor-grabbing"
             : "cursor-grab"
-          : "cursor-default",
+          : "cursor-not-allowed",
       )}
       onpointerdown={onHeaderPointerDown}
       onpointermove={onHeaderPointerMove}
@@ -205,7 +206,7 @@
         aria-label={collapsed ? "Expand editor" : "Collapse editor"}
         aria-expanded={!collapsed}
         title={collapsed ? "Expand" : "Collapse"}
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         {#if collapsed}
           <ChevronDown size={13} strokeWidth={2} />
