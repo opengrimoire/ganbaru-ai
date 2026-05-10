@@ -1889,7 +1889,7 @@
 </div>
 <div
   bind:this={scrollTrack}
-  class="theme-editor-scrollbar-track absolute right-1 top-1 bottom-1 z-20 w-2 select-none"
+  class="theme-editor-scrollbar-track absolute right-0 top-1 bottom-1 z-20 w-2 select-none"
   onpointerdown={handleEditorScrollbarPointerDown}
   aria-hidden="true"
 >
