@@ -1,7 +1,11 @@
 use crate::db;
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    SqlitePool,
+};
 use std::{
     collections::HashMap,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 use tauri::{AppHandle, Manager, Runtime};
@@ -24,6 +28,7 @@ pub fn resolve_sqlite_url<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Resul
     }
 
     let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&path).map_err(|e| format!("create app config dir: {e}"))?;
     path.push(file_name);
     let path = path
         .to_str()
@@ -49,9 +54,12 @@ pub async fn connect_sqlite<R: Runtime>(
         return Ok(pool);
     }
 
+    let options = SqliteConnectOptions::from_str(&conn_url)
+        .map_err(|e| format!("parse sqlite url: {e}"))?
+        .create_if_missing(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
-        .connect(&conn_url)
+        .connect_with(options)
         .await
         .map_err(|e| format!("connect: {e}"))?;
     sqlx::raw_sql("PRAGMA foreign_keys=ON")

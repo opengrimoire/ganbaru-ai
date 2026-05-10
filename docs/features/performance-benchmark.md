@@ -32,7 +32,7 @@ Safety mechanisms:
 - `vaultMode: "benchmark"` in `benchmark-state.json` tells the boot path to open the benchmark DB.
 - `teardown_benchmark_db` deletes the benchmark DB when the summary closes, when the run is cancelled, or when stale state is detected.
 - The app restarts after teardown so the Rust database layer returns to the real user DB.
-- Stale state is discarded when `HARNESS_VERSION`, `SYNTH_VERSION`, or the TTL check fails.
+- Stale state is discarded when `HARNESS_VERSION`, `SYNTH_VERSION`, the total run TTL, or the short pending-restart TTL check fails.
 
 ## Dataset ids
 
@@ -110,6 +110,8 @@ phase-a-running or phase-b-running on boot
 Non-startup scenarios currently cost one baseline pass plus one pass per synthetic seed size. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each synthetic seed size. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
 
 If the process is killed during a benchmark pass, the partial result is not comparable. The next boot discards the isolated benchmark DB instead of trying to resume from data that may contain half-finished setup or workload state. Explicit Cancel still aborts the active run and restarts on the user's real DB.
+
+Pending state is different: it is valid only during the small gap between an intentional restart and the next boot claiming the pass. The state file carries both `startedAt` and `updatedAt`; `startedAt` caps the full benchmark run, while `updatedAt` caps the pending restart gap. If a relaunch helper fails or the frontend never reaches the runner, the pending state expires quickly and the next boot returns to the real user DB instead of repeatedly trying the benchmark DB.
 
 ## Lazy loading
 

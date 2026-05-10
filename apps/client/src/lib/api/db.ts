@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { HARNESS_VERSION, STATE_TTL_MS, SYNTH_VERSION } from "$lib/benchmark/types";
+import {
+  HARNESS_VERSION,
+  SYNTH_VERSION,
+  isBenchmarkPendingStage,
+  isFreshBenchmarkPendingAge,
+  isFreshBenchmarkTotalAge,
+} from "$lib/benchmark/types";
 
 /**
  * Connection string for the active database. Resolved exactly once on the
@@ -23,6 +29,7 @@ interface VaultModeProbe {
   harnessVersion?: string;
   synthVersion?: string;
   startedAt?: string;
+  updatedAt?: string;
 }
 
 async function resolveUrl(): Promise<string> {
@@ -30,12 +37,10 @@ async function resolveUrl(): Promise<string> {
     const json = await invoke<string | null>("read_benchmark_state");
     if (json) {
       const parsed = JSON.parse(json) as VaultModeProbe;
-      const ageMs = Date.now() - new Date(parsed.startedAt ?? "").getTime();
       const validVersion = parsed?.harnessVersion === HARNESS_VERSION
         && parsed?.synthVersion === SYNTH_VERSION;
-      const fresh = Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= STATE_TTL_MS;
-      const benchmarkPending = parsed?.stage === "phase-a-pending"
-        || parsed?.stage === "phase-b-pending";
+      const fresh = isFreshBenchmarkTotalAge(parsed) && isFreshBenchmarkPendingAge(parsed);
+      const benchmarkPending = isBenchmarkPendingStage(parsed?.stage);
       if (parsed?.vaultMode === "benchmark" && benchmarkPending && validVersion && fresh) {
         return "sqlite:ganbaruai-benchmark.db";
       }

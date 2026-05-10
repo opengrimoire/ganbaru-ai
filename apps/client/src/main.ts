@@ -3,8 +3,42 @@ import { Temporal } from "@js-temporal/polyfill";
 import "@fontsource-variable/inter";
 import "./app.css";
 import { mount } from "svelte";
+import { invoke } from "@tauri-apps/api/core";
 import { ensureConfigLoaded } from "./lib/vault/config";
 import { hydrateUserThemes } from "./lib/stores/theme.svelte";
+import {
+  HARNESS_VERSION,
+  SYNTH_VERSION,
+  isBenchmarkPendingStage,
+  isFreshBenchmarkPendingAge,
+  isFreshBenchmarkTotalAge,
+} from "./lib/benchmark/types";
+
+interface BenchmarkBootProbe {
+  vaultMode?: "user" | "benchmark";
+  stage?: string;
+  harnessVersion?: string;
+  synthVersion?: string;
+  startedAt?: string;
+  updatedAt?: string;
+}
+
+async function hasFreshBenchmarkResumeState(): Promise<boolean> {
+  try {
+    const json = await invoke<string | null>("read_benchmark_state");
+    if (!json) return false;
+    const parsed = JSON.parse(json) as BenchmarkBootProbe;
+    return parsed.vaultMode === "benchmark"
+      && isBenchmarkPendingStage(parsed.stage)
+      && parsed.harnessVersion === HARNESS_VERSION
+      && parsed.synthVersion === SYNTH_VERSION
+      && isFreshBenchmarkTotalAge(parsed)
+      && isFreshBenchmarkPendingAge(parsed);
+  } catch (err) {
+    console.error("benchmark boot probe failed", err);
+    return false;
+  }
+}
 
 // Boot order: hydrate vault/config.json, then load user themes from
 // SQLite, then mount App. Config and theme reads block first paint so
@@ -17,7 +51,14 @@ import { hydrateUserThemes } from "./lib/stores/theme.svelte";
 // chrome paints immediately.
 const appPromise = (async () => {
   await ensureConfigLoaded();
-  await hydrateUserThemes();
+  const benchmarkResumePending = await hasFreshBenchmarkResumeState();
+  if (!benchmarkResumePending) {
+    try {
+      await hydrateUserThemes();
+    } catch (err) {
+      console.error("theme hydration failed before mount", err);
+    }
+  }
   const { default: App } = await import("./App.svelte");
   return mount(App, {
     target: document.getElementById("app")!,

@@ -89,7 +89,22 @@ async fn load_applied_migration_versions(pool: &SqlitePool) -> Result<HashSet<i6
     Ok(versions)
 }
 
+async fn migration_version_exists(pool: &SqlitePool, version: i64) -> Result<bool, String> {
+    let exists =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM ganbaruai_schema_migrations WHERE version = ?")
+            .bind(version)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("check migration {version}: {e}"))?
+            .is_some();
+    Ok(exists)
+}
+
 async fn apply_migration(pool: &SqlitePool, migration: Migration) -> Result<(), String> {
+    if migration.version == 11 {
+        return apply_theme_calendar_default_migration(pool, migration).await;
+    }
+
     let version = migration.version;
     let description = migration.description;
     let sql = migration.sql;
@@ -98,6 +113,25 @@ async fn apply_migration(pool: &SqlitePool, migration: Migration) -> Result<(), 
         .execute(pool)
         .await
         .map_err(|e| format!("begin migration {version}: {e}"))?;
+
+    // A second pool can reach this point after `run_migrations` loaded the
+    // applied set but before this transaction acquired the SQLite write
+    // lock. Recheck under the lock so concurrent DB initialization does not
+    // re-run or re-record an already applied migration.
+    match migration_version_exists(pool, version).await {
+        Ok(true) => {
+            sqlx::raw_sql("COMMIT")
+                .execute(pool)
+                .await
+                .map_err(|e| format!("commit migration {version}: {e}"))?;
+            return Ok(());
+        }
+        Ok(false) => {}
+        Err(err) => {
+            let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+            return Err(err);
+        }
+    }
 
     if let Err(err) = sqlx::raw_sql(sql).execute(pool).await {
         let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
@@ -115,6 +149,128 @@ async fn apply_migration(pool: &SqlitePool, migration: Migration) -> Result<(), 
     {
         let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
         return Err(format!("record migration {version}: {err}"));
+    }
+
+    sqlx::raw_sql("COMMIT")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("commit migration {version}: {e}"))?;
+    Ok(())
+}
+
+async fn theme_column_exists(pool: &SqlitePool, column: &str) -> Result<bool, String> {
+    let rows = sqlx::query("PRAGMA table_info(themes)")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("inspect themes columns: {e}"))?;
+
+    for row in rows {
+        let name: String = row
+            .try_get("name")
+            .map_err(|e| format!("read themes column name: {e}"))?;
+        if name == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn add_theme_column_if_missing(
+    pool: &SqlitePool,
+    column: &str,
+    sql: &str,
+) -> Result<(), String> {
+    if theme_column_exists(pool, column).await? {
+        return Ok(());
+    }
+    sqlx::raw_sql(sql)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("add themes.{column}: {e}"))?;
+    Ok(())
+}
+
+async fn apply_theme_calendar_default_migration(
+    pool: &SqlitePool,
+    migration: Migration,
+) -> Result<(), String> {
+    let version = migration.version;
+    let description = migration.description;
+
+    sqlx::raw_sql("BEGIN IMMEDIATE")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("begin migration {version}: {e}"))?;
+
+    match migration_version_exists(pool, version).await {
+        Ok(true) => {
+            sqlx::raw_sql("COMMIT")
+                .execute(pool)
+                .await
+                .map_err(|e| format!("commit migration {version}: {e}"))?;
+            return Ok(());
+        }
+        Ok(false) => {}
+        Err(err) => {
+            let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+            return Err(err);
+        }
+    }
+
+    let result = async {
+        add_theme_column_if_missing(
+            pool,
+            "calendar_default_mode",
+            "ALTER TABLE themes
+                ADD COLUMN calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas'
+                CHECK (calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom'))",
+        )
+        .await?;
+        add_theme_column_if_missing(
+            pool,
+            "calendar_default_custom",
+            "ALTER TABLE themes
+                ADD COLUMN calendar_default_custom TEXT NOT NULL DEFAULT '#27282A'",
+        )
+        .await?;
+        add_theme_column_if_missing(
+            pool,
+            "seed_calendar_default_mode",
+            "ALTER TABLE themes
+                ADD COLUMN seed_calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas'
+                CHECK (seed_calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom'))",
+        )
+        .await?;
+        add_theme_column_if_missing(
+            pool,
+            "seed_calendar_default_custom",
+            "ALTER TABLE themes
+                ADD COLUMN seed_calendar_default_custom TEXT NOT NULL DEFAULT '#27282A'",
+        )
+        .await?;
+
+        sqlx::raw_sql(migration.sql)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("run migration {version} {description}: {e}"))?;
+
+        sqlx::query(
+            "INSERT INTO ganbaruai_schema_migrations (version, description)
+             VALUES (?, ?)",
+        )
+        .bind(version)
+        .bind(description)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("record migration {version}: {e}"))?;
+
+        Ok::<(), String>(())
+    }
+    .await;
+
+    if let Err(err) = result {
+        let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+        return Err(err);
     }
 
     sqlx::raw_sql("COMMIT")
@@ -512,18 +668,10 @@ pub fn migrations() -> Vec<Migration> {
     Migration {
         version: 11,
         description: "add calendar color defaults and move calendar header to app tokens",
+        // Column additions for this migration are handled by
+        // `apply_theme_calendar_default_migration` so interrupted or
+        // partially migrated DBs do not fail on duplicate column names.
         sql: "
-            ALTER TABLE themes
-                ADD COLUMN calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas'
-                CHECK (calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom'));
-            ALTER TABLE themes
-                ADD COLUMN calendar_default_custom TEXT NOT NULL DEFAULT '#27282A';
-            ALTER TABLE themes
-                ADD COLUMN seed_calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas'
-                CHECK (seed_calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom'));
-            ALTER TABLE themes
-                ADD COLUMN seed_calendar_default_custom TEXT NOT NULL DEFAULT '#27282A';
-
             INSERT OR REPLACE INTO theme_tokens (theme_id, kind, key, value, isolated)
             SELECT theme_id, 'app', key, value, isolated
             FROM theme_tokens

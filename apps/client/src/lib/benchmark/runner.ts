@@ -14,11 +14,13 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import {
-  STATE_TTL_MS,
   STRESS_DURATION_MS,
   HARNESS_VERSION,
   SYNTH_VERSION,
   SAMPLE_OFFSETS_MS,
+  isBenchmarkPendingStage,
+  isFreshBenchmarkPendingAge,
+  isFreshBenchmarkTotalAge,
   type BenchmarkScenario,
   type BenchmarkSuiteState,
   type BenchmarkState,
@@ -139,9 +141,11 @@ export async function persistPhaseAPending(opts: {
   syntheticSeedSizes?: number[];
   startupRuns?: StartupRunState;
 }): Promise<void> {
+  const now = new Date().toISOString();
   const state: BenchmarkState = {
     scenarioId: opts.scenarioId,
-    startedAt: opts.startedAt ?? new Date().toISOString(),
+    startedAt: opts.startedAt ?? now,
+    updatedAt: now,
     harnessVersion: HARNESS_VERSION,
     synthVersion: SYNTH_VERSION,
     platform: opts.platform,
@@ -174,9 +178,11 @@ export async function persistPhaseBPending(opts: {
   syntheticPhases?: PhaseResult[];
   startupRuns?: StartupRunState;
 }): Promise<void> {
+  const now = new Date().toISOString();
   const state: BenchmarkState = {
     scenarioId: opts.scenarioId,
     startedAt: opts.startedAt,
+    updatedAt: now,
     harnessVersion: HARNESS_VERSION,
     synthVersion: SYNTH_VERSION,
     platform: opts.platform,
@@ -195,7 +201,9 @@ export async function persistPhaseBPending(opts: {
 }
 
 export async function persistBenchmarkState(state: BenchmarkState): Promise<void> {
-  await invoke("write_benchmark_state", { json: JSON.stringify(state) });
+  await invoke("write_benchmark_state", {
+    json: JSON.stringify({ ...state, updatedAt: new Date().toISOString() }),
+  });
 }
 
 /** Trigger the relaunch. The Rust command never returns; do not await. */
@@ -245,12 +253,11 @@ export async function loadPersistedState(): Promise<BenchmarkState | null> {
     await discardStaleArtifacts();
     return null;
   }
-  if (parsed.stage !== "phase-a-pending" && parsed.stage !== "phase-b-pending") {
+  if (!isBenchmarkPendingStage(parsed.stage)) {
     await discardStaleArtifacts();
     return null;
   }
-  const ageMs = Date.now() - new Date(parsed.startedAt).getTime();
-  if (Number.isNaN(ageMs) || ageMs > STATE_TTL_MS) {
+  if (!isFreshBenchmarkTotalAge(parsed) || !isFreshBenchmarkPendingAge(parsed)) {
     await discardStaleArtifacts();
     return null;
   }

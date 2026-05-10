@@ -66,6 +66,20 @@
     await getBenchmarkRunner().checkAndResume();
   }
 
+  let benchmarkResumeScheduled = false;
+
+  function scheduleBenchmarkResume(): void {
+    if (benchmarkResumeScheduled) return;
+    benchmarkResumeScheduled = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resumeBenchmarkIfNeeded().catch((e) =>
+          console.error("benchmark resume failed:", e),
+        );
+      });
+    });
+  }
+
   function loadKanbanView(): Promise<void> {
     if (KanbanView) return Promise.resolve();
     loadingKanbanView ??= import("$lib/components/kanban/KanbanView.svelte")
@@ -101,6 +115,9 @@
 
   onMount(() => {
     perfMark("boot.app-mount");
+    // Benchmark resume must not depend on normal boot hydration. The
+    // scenario setup loads the deterministic benchmark window itself.
+    scheduleBenchmarkResume();
     calendars.load().catch((e) => console.error("Failed to load calendars:", e));
     // The legacy wall-clock to UTC ISO migration runs here instead of in
     // main.ts so first paint is not blocked by a per-event UPDATE pass on
@@ -114,18 +131,8 @@
         return calendar.load();
       })
       .then(() => {
-        // Hand control to the benchmark harness once calendar data is in
-        // memory. Pending benchmark state mounts the overlay and resumes the
-        // next pass; otherwise this is a no-op. Two rAFs ensure CalendarView
-        // has emitted boot.first-paint before the runner kicks off, so boot
-        // mark capture sees the same shape in both passes.
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resumeBenchmarkIfNeeded().catch((e) =>
-              console.error("benchmark resume failed:", e),
-            );
-          });
-        });
+        // Calendar startup marks are still produced for normal boots and
+        // for benchmark windows where the regular load wins the race.
       })
       .catch((e) => console.error("Failed to migrate or load calendar:", e));
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));

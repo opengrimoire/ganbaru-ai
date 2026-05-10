@@ -34,6 +34,12 @@ export const STARTUP_RELAUNCH_COOLDOWN_MS = 10_000;
 export const SAMPLE_OFFSETS_MS = [30_000];
 /** Stale state older than this on boot is discarded silently. */
 export const STATE_TTL_MS = 60 * 60 * 1000;
+/**
+ * Pending state exists only between an intentional benchmark restart and
+ * the next boot claiming that pass. If it survives longer than this, treat
+ * the relaunch as failed and fall back to the user's real DB.
+ */
+export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
 
 /**
  * Bumped manually when measurement methodology, sampling cadence, scenario
@@ -211,6 +217,8 @@ export interface BenchmarkState {
   scenarioId: string;
   /** ISO 8601 from when the run was confirmed. Drives the stale TTL check. */
   startedAt: string;
+  /** ISO 8601 from the last state write. Drives the pending-restart TTL check. */
+  updatedAt?: string;
   /** Pinned `HARNESS_VERSION` at write time. Mismatch on read clears state. */
   harnessVersion: string;
   /** Synth dataset version pinned at seed time. Currently `v1`. */
@@ -255,6 +263,40 @@ export interface StartupRunState {
   targetRuns: number;
   phaseA: PhaseResult[];
   phaseB: PhaseResult[];
+}
+
+interface BenchmarkStateTimeProbe {
+  startedAt?: string;
+  updatedAt?: string;
+}
+
+export type BenchmarkPendingStage = "phase-a-pending" | "phase-b-pending";
+
+export function isBenchmarkPendingStage(stage: string | undefined): stage is BenchmarkPendingStage {
+  return stage === "phase-a-pending" || stage === "phase-b-pending";
+}
+
+function timestampAgeMs(value: string | undefined, nowMs: number): number {
+  const timestampMs = Date.parse(value ?? "");
+  return Number.isFinite(timestampMs) ? nowMs - timestampMs : Number.NaN;
+}
+
+export function benchmarkTotalAgeMs(state: BenchmarkStateTimeProbe, nowMs = Date.now()): number {
+  return timestampAgeMs(state.startedAt, nowMs);
+}
+
+export function benchmarkPendingAgeMs(state: BenchmarkStateTimeProbe, nowMs = Date.now()): number {
+  return timestampAgeMs(state.updatedAt ?? state.startedAt, nowMs);
+}
+
+export function isFreshBenchmarkTotalAge(state: BenchmarkStateTimeProbe, nowMs = Date.now()): boolean {
+  const ageMs = benchmarkTotalAgeMs(state, nowMs);
+  return Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= STATE_TTL_MS;
+}
+
+export function isFreshBenchmarkPendingAge(state: BenchmarkStateTimeProbe, nowMs = Date.now()): boolean {
+  const ageMs = benchmarkPendingAgeMs(state, nowMs);
+  return Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= PENDING_STATE_TTL_MS;
 }
 
 /**
