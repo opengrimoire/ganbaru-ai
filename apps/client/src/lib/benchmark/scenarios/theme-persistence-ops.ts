@@ -9,7 +9,7 @@ import {
   SOURCE_KEY_ORDER,
   type ThemeSources,
 } from "$lib/stores/themes";
-import { type BenchmarkMetric, type BenchmarkScenario } from "../types";
+import { DEFAULT_SYNTHETIC_SEED_SIZE, type BenchmarkMetric, type BenchmarkScenario } from "../types";
 import { seedCalendarSynth } from "./calendar-utils";
 import {
   DEFAULT_OPERATION_RUNS,
@@ -219,7 +219,7 @@ export const themePersistenceOpsScenario: BenchmarkScenario = {
     durationMs: 0,
     memoryMode: "none",
   },
-  defaultSeedSize: 1000,
+  defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
 
   async setup(): Promise<void> {
     await ensureBenchmarkDbReady();

@@ -136,6 +136,7 @@ export async function persistPhaseAPending(opts: {
   buildRef?: string;
   startedAt?: string;
   suite?: BenchmarkSuiteState;
+  syntheticSeedSizes?: number[];
   startupRuns?: StartupRunState;
 }): Promise<void> {
   const state: BenchmarkState = {
@@ -148,6 +149,7 @@ export async function persistPhaseAPending(opts: {
     vaultMode: "benchmark",
     stage: "phase-a-pending",
     suite: opts.suite,
+    syntheticSeedSizes: opts.syntheticSeedSizes,
     startupRuns: opts.startupRuns,
   };
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });
@@ -167,6 +169,9 @@ export async function persistPhaseBPending(opts: {
   phaseA: PhaseResult;
   seedHandle: { calendarId: string; eventCount: number };
   suite?: BenchmarkSuiteState;
+  syntheticSeedSizes?: number[];
+  syntheticIndex?: number;
+  syntheticPhases?: PhaseResult[];
   startupRuns?: StartupRunState;
 }): Promise<void> {
   const state: BenchmarkState = {
@@ -181,6 +186,9 @@ export async function persistPhaseBPending(opts: {
     phaseA: opts.phaseA,
     seedHandle: opts.seedHandle,
     suite: opts.suite,
+    syntheticSeedSizes: opts.syntheticSeedSizes,
+    syntheticIndex: opts.syntheticIndex,
+    syntheticPhases: opts.syntheticPhases,
     startupRuns: opts.startupRuns,
   };
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });

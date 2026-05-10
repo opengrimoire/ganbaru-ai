@@ -7,7 +7,7 @@ exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing change
 
 | Run | Harness | Build ref | Platform | Notes |
 |---|---|---|---|---|
-| 2026-05-01-ID | v6 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
+| 2026-05-01-ID | v7 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
 
 ### Calendar navigation stress memory
 

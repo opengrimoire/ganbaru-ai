@@ -248,6 +248,19 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("| Platform |")).toBe(true);
   });
 
+  it("includes every synthetic scale recorded in a multi-pass result", () => {
+    const md = formatBenchmarkMarkdown({
+      ...RESULT,
+      syntheticPhases: [
+        RESULT.phaseB,
+        mockPhase("B", 620, 390, 10000),
+      ],
+    }, { date: "2026-05-01" });
+    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | synth-v1-1000 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | synth-v1-10000 | workload peak")).toBe(true);
+  });
+
   it("matches the golden snapshot so spacing changes are intentional", () => {
     const md = formatBenchmarkMarkdown(RESULT, {
       date: "2026-05-01",

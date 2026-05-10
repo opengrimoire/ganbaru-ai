@@ -1,5 +1,9 @@
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
-import { type BenchmarkScenario } from "../types";
+import {
+  CORE_SYNTHETIC_SEED_SIZES,
+  DEFAULT_SYNTHETIC_SEED_SIZE,
+  type BenchmarkScenario,
+} from "../types";
 import {
   parseCalendarBenchmarkAnchor,
   seedCalendarSynth,
@@ -18,7 +22,8 @@ export const startupBootScenario: BenchmarkScenario = {
     durationMs: 0,
     memoryMode: "none",
   },
-  defaultSeedSize: 1000,
+  defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+  syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
 
   async setup(): Promise<void> {
     const handle = getCalendarNavHandle();

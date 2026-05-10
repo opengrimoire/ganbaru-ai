@@ -51,7 +51,7 @@ Do not paste ad hoc `Live RAM`, `Startup RAM snapshot`, or `Speed log` panel cop
 
 ## Benchmark questions
 
-Harness v6 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample.
+Harness v7 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample. Core scenarios record both the 1,000-event and 10,000-event synthetic scales in one result.
 
 | Suite | Includes | Use when |
 |---|---|---|
@@ -86,7 +86,8 @@ Examples:
 |---|---|
 | `base-0` | Empty isolated benchmark DB. |
 | `base-2` | Baseline DB with two scenario setup events. |
-| `synth-v1-1000` | Synthetic dataset version 1 with 1000 events. |
+| `synth-v1-1000` | Synthetic dataset version 1 with 1,000 events. |
+| `synth-v1-10000` | Synthetic dataset version 1 with 10,000 events. |
 
 Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar setup data, record that context in run metadata or the scenario section instead of expanding the dataset id into prose.
 
@@ -95,6 +96,8 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 Latest recorded canonical baseline: `2026-05-10-02` with harness v6.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
+
+Harness v7 keeps v6 methodology comparable for existing 1,000-event rows and adds a second 10,000-event synthetic pass to each core scenario. New v7 rows should include both synthetic scales when evaluating startup, idle memory, calendar navigation, event panel, and create panel behavior.
 
 ### Run metadata
 
@@ -111,7 +114,7 @@ Core benchmark rows measure user-perceived startup, memory, and interaction late
 
 #### Startup boot
 
-Harness v6 reports repeated process launches. Before each startup sample, the app exits and a helper waits 10 seconds before reopening it. Use `Launch median ms` as the user-facing app-open comparison value. It measures Rust process start through `boot.usable-paint`, when the calendar data has loaded and the calendar has rendered a frame. `First paint median ms` is diagnostic and can happen before event rows are visible.
+Harness v6 and later report repeated process launches. Before each startup sample, the app exits and a helper waits 10 seconds before reopening it. Use `Launch median ms` as the user-facing app-open comparison value. It measures Rust process start through `boot.usable-paint`, when the calendar data has loaded and the calendar has rendered a frame. `First paint median ms` is diagnostic and can happen before event rows are visible.
 
 | Run | Dataset | Runs | First paint median ms | Usable paint median ms | Launch min ms | Launch P95 ms | Launch max ms | Launch median ms |
 |---|---|---:|---:|---:|---:|---:|---:|---:|

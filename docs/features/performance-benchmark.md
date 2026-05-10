@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v6 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`.
+Harness v7 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both the 1,000-event and 10,000-event synthetic scales.
 
 ## User flow
 
@@ -81,8 +81,12 @@ phase-a-pending
 phase-b-pending
   open isolated seeded DB
   write phase-b-running
-  run synthetic pass
+  run synthetic pass for the current seed size
   for startup only, repeat phase-b-pending until enough launch samples exist
+  if the scenario has more synthetic seed sizes:
+    seed the next synthetic size
+    write phase-b-pending with completed synthetic results
+    restart app
   if suite has more scenarios:
     prepare benchmark DB
     write next phase-a-pending with accumulated results
@@ -103,7 +107,7 @@ phase-a-running or phase-b-running on boot
   continue on the user's real DB
 ```
 
-Non-startup scenarios currently cost two benchmark passes plus restarts. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five synthetic restarts. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
+Non-startup scenarios currently cost one baseline pass plus one pass per synthetic seed size. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each synthetic seed size. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
 
 If the process is killed during a benchmark pass, the partial result is not comparable. The next boot discards the isolated benchmark DB instead of trying to resume from data that may contain half-finished setup or workload state. Explicit Cancel still aborts the active run and restarts on the user's real DB.
 
@@ -148,6 +152,7 @@ export interface BenchmarkScenarioMetadata {
     memoryMode: "none" | "post-workload";
   };
   defaultSeedSize: number;
+  syntheticSeedSizes?: number[];
 }
 
 export interface BenchmarkScenario extends BenchmarkScenarioMetadata {
@@ -196,7 +201,7 @@ Registered scenarios:
 
 ## Synthetic event generator
 
-`benchmark-synth-v1` is deterministic. It uses a `mulberry32` PRNG seeded with `0x1234` and produces 1000 events by default.
+`benchmark-synth-v1` is deterministic. It uses a `mulberry32` PRNG seeded with `0x1234` and produces 1,000 events by default. Core scenarios also run the same generator at 10,000 events so growth costs show up in the user-facing benchmark rows.
 
 Distribution:
 
@@ -229,7 +234,7 @@ The copied markdown is one suite-level block. It contains:
 
 Each scenario section contains exactly the table that matches the scenario's primary measurement:
 
-- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v6 waits 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
+- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v6 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
 - `idle-memory` and `stress-memory` emit the memory table.
 - `interaction-latency` and `operation-latency` emit repeated latency rows for metrics with run statistics.
 - Scalar metrics without run statistics, such as counts or one-off module load times, emit a compact `Run`, `Dataset`, `Metric`, `Value`, `Unit` table.

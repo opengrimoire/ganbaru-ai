@@ -6,7 +6,12 @@ import {
   snapshot as perfSnapshot,
   type PerfLogEntry,
 } from "$lib/stores/perflog.svelte";
-import { type BenchmarkMetric, type BenchmarkScenario } from "../types";
+import {
+  CORE_SYNTHETIC_SEED_SIZES,
+  DEFAULT_SYNTHETIC_SEED_SIZE,
+  type BenchmarkMetric,
+  type BenchmarkScenario,
+} from "../types";
 import {
   CALENDAR_BENCHMARK_ANCHOR_ISO,
   parseCalendarBenchmarkAnchor,
@@ -78,7 +83,8 @@ export const calendarCreateCancelScenario: BenchmarkScenario = {
     durationMs: 0,
     memoryMode: "none",
   },
-  defaultSeedSize: 1000,
+  defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+  syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
 
   async setup(): Promise<void> {
     const handle = getCalendarNavHandle();

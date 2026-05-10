@@ -1,8 +1,8 @@
 /**
  * Type contracts for the in-app performance benchmark harness.
  *
- * The harness drives deterministic workloads twice (baseline dataset, then
- * synthetic dataset) and emits compact markdown ready for
+ * The harness drives deterministic workloads against a baseline dataset and
+ * one or more synthetic dataset sizes, then emits compact markdown ready for
  * `docs/PERFORMANCE.md`. Each scenario declares whether it measures startup,
  * memory, or feature latency so the runner avoids unrelated waits. Both
  * passes run after a cold restart against an isolated
@@ -43,6 +43,8 @@ export const STATE_TTL_MS = 60 * 60 * 1000;
  * Stored on the persisted state file so stale baseline data captured by an
  * old build cannot accidentally feed the synthetic pass on a new build.
  *
+ * v7 (2026-05-10): core scenarios add a 10,000-event synthetic pass in the
+ * same result as the existing 1,000-event pass.
  * v6 (2026-05-05): startup benchmark uses a closed-process cooldown before
  * repeated relaunch samples.
  * v5 (2026-05-05): startup benchmark reports repeated end-to-end launch
@@ -51,10 +53,20 @@ export const STATE_TTL_MS = 60 * 60 * 1000;
  * sampling modes and primary-metric output.
  * v1/v2/v3 state files are silently discarded on read.
  */
-export const HARNESS_VERSION = "6";
+export const HARNESS_VERSION = "7";
 
 /** Synth dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const SYNTH_VERSION = "v1";
+
+/** Default synthetic scale used by all benchmark scenarios. */
+export const DEFAULT_SYNTHETIC_SEED_SIZE = 1_000;
+/** Large synthetic scale used by core benchmarks to expose growth costs. */
+export const LARGE_SYNTHETIC_SEED_SIZE = 10_000;
+/** Synthetic scales that core benchmarks must capture for the optimization gate. */
+export const CORE_SYNTHETIC_SEED_SIZES = [
+  DEFAULT_SYNTHETIC_SEED_SIZE,
+  LARGE_SYNTHETIC_SEED_SIZE,
+] as const;
 
 export type SampleLabel = string;
 
@@ -221,6 +233,12 @@ export interface BenchmarkState {
   phaseA?: PhaseResult;
   /** Calendar id holding the seeded synth events; absent during `phase-a-pending`. */
   seedHandle?: { calendarId: string; eventCount: number };
+  /** Synthetic seed sizes to run after the baseline pass. Defaults to the scenario's default size. */
+  syntheticSeedSizes?: number[];
+  /** Index into `syntheticSeedSizes` for the pending or running synthetic pass. */
+  syntheticIndex?: number;
+  /** Completed synthetic passes before the pending or running one. */
+  syntheticPhases?: PhaseResult[];
   /** Present when the user chose Run all instead of one scenario. */
   suite?: BenchmarkSuiteState;
   /** Accumulated repeated launch samples for the startup benchmark. */
@@ -254,6 +272,8 @@ export interface BenchmarkScenarioMetadata {
   workload: BenchmarkWorkload;
   /** Default seed size used by `seed()` for the synthetic dataset. */
   defaultSeedSize: number;
+  /** Optional ordered synthetic sizes. Defaults to `[defaultSeedSize]`. */
+  syntheticSeedSizes?: number[];
 }
 
 /**
@@ -296,6 +316,8 @@ export interface BenchmarkResult {
   buildRef?: string;
   phaseA: PhaseResult;
   phaseB: PhaseResult;
+  /** All synthetic passes. When absent, `phaseB` is the only synthetic pass. */
+  syntheticPhases?: PhaseResult[];
   /** Peak total memory (MB) observed in either phase, present only for memory benchmarks. */
   peakTotalMb?: number;
 }

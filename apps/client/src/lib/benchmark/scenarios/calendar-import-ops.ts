@@ -4,7 +4,7 @@ import {
   type CalendarBulkImportResult,
 } from "$lib/stores/calendar-bulk-import";
 import { generateSynthEvents, DEFAULT_SEED } from "../synth";
-import { type BenchmarkMetric, type BenchmarkScenario } from "../types";
+import { DEFAULT_SYNTHETIC_SEED_SIZE, type BenchmarkMetric, type BenchmarkScenario } from "../types";
 import {
   draftToEvent,
   parseCalendarBenchmarkAnchor,
@@ -121,7 +121,7 @@ export const calendarImportOpsScenario: BenchmarkScenario = {
     durationMs: 0,
     memoryMode: "none",
   },
-  defaultSeedSize: 1000,
+  defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
 
   async setup(): Promise<void> {
     await ensureBenchmarkDbReady();

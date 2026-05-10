@@ -25,6 +25,7 @@
  *     -> Rust database layer opens ganbaruai-benchmark.db (now seeded)
  *     -> stage becomes phase-b-running
  *     -> checkAndResume runs the synthetic pass
+ *     -> if more synthetic seed sizes exist, seed the next size and repeat phase B
  *     -> teardown_benchmark_db (delete files)
  *     -> clear_benchmark_state
  *     -> show summary
@@ -187,10 +188,12 @@ class BenchmarkRunnerStore {
     try {
       await invoke("prepare_benchmark_db");
       const platform = await this.#detectPlatform();
+      const syntheticSeedSizes = syntheticSeedSizesForScenario(scenario);
       await persistPhaseAPending({
         scenarioId: scenario.id,
         platform,
         buildRef: BUILD_REF,
+        syntheticSeedSizes,
         suite: pending.mode === "suite"
           ? { scenarioIds: pending.scenarioIds, index: 0, results: [] }
           : undefined,
@@ -371,6 +374,7 @@ class BenchmarkRunnerStore {
             buildRef: state.buildRef ?? BUILD_REF,
             startedAt: state.startedAt,
             suite: state.suite,
+            syntheticSeedSizes: state.syntheticSeedSizes,
             startupRuns,
           });
         } catch (e) {
@@ -383,10 +387,12 @@ class BenchmarkRunnerStore {
       phaseA = aggregateStartupPhase("A", startupRuns.phaseA);
     }
 
-    this.#updateStep(`Seeding ${scenario.defaultSeedSize} events`, /* clearCurve */ true);
+    const syntheticSeedSizes = state.syntheticSeedSizes ?? syntheticSeedSizesForScenario(scenario);
+    const seedSize = syntheticSeedSizes[0] ?? scenario.defaultSeedSize;
+    this.#updateStep(`Seeding ${seedSize} events`, /* clearCurve */ true);
     let seedHandle: { calendarId: string; eventCount: number };
     try {
-      seedHandle = await scenario.seed(SYNTH_VERSION, scenario.defaultSeedSize);
+      seedHandle = await scenario.seed(SYNTH_VERSION, seedSize);
     } catch (e) {
       this.#failWith(`Seeding failed: ${this.#errMsg(e)}`);
       return;
@@ -407,6 +413,9 @@ class BenchmarkRunnerStore {
         phaseA,
         seedHandle,
         suite: state.suite,
+        syntheticSeedSizes,
+        syntheticIndex: 0,
+        syntheticPhases: [],
         startupRuns,
       });
     } catch (e) {
@@ -461,6 +470,8 @@ class BenchmarkRunnerStore {
     }
     if (this.#abort?.signal.aborted) return;
 
+    const syntheticSeedSizes = state.syntheticSeedSizes ?? syntheticSeedSizesForScenario(scenario);
+    const syntheticIndex = state.syntheticIndex ?? 0;
     let finalPhaseA = phaseA;
     let startupRuns = state.startupRuns;
     if (isStartupScenario(scenario)) {
@@ -480,6 +491,9 @@ class BenchmarkRunnerStore {
             phaseA,
             seedHandle,
             suite: state.suite,
+            syntheticSeedSizes,
+            syntheticIndex,
+            syntheticPhases: state.syntheticPhases,
             startupRuns,
           });
         } catch (e) {
@@ -493,12 +507,56 @@ class BenchmarkRunnerStore {
       phaseB = aggregateStartupPhase("B", startupRuns.phaseB);
     }
 
-    // The benchmark DB is about to be torn down before summary, so
-    // per-calendar cleanup is redundant. Keep `seedHandle` referenced so
-    // the type stays load-bearing for future scenarios that need it.
-    void seedHandle;
+    const syntheticPhases = [...(state.syntheticPhases ?? []), phaseB];
+    if (syntheticIndex < syntheticSeedSizes.length - 1) {
+      const nextSyntheticIndex = syntheticIndex + 1;
+      const nextSeedSize = syntheticSeedSizes[nextSyntheticIndex];
+      if (nextSeedSize === undefined) {
+        this.#failWith("Synthetic benchmark scale is missing");
+        return;
+      }
+      this.#updateStep(`Seeding ${nextSeedSize} events`, /* clearCurve */ true);
+      let nextSeedHandle: { calendarId: string; eventCount: number };
+      try {
+        nextSeedHandle = await scenario.seed(SYNTH_VERSION, nextSeedSize);
+      } catch (e) {
+        this.#failWith(`Seeding failed: ${this.#errMsg(e)}`);
+        return;
+      }
+      if (this.#abort?.signal.aborted) return;
 
-    const peakTotals = [...finalPhaseA.peakSamples, ...phaseB.peakSamples].map((s) => s.totalMb);
+      this.#updateStep(
+        isStartupScenario(scenario)
+          ? `Closing for ${startupCooldownSeconds()} s cooldown before synthetic launch 1/${STARTUP_SAMPLE_RUNS}`
+          : "Restarting for next synthetic dataset",
+      );
+      try {
+        await persistPhaseBPending({
+          scenarioId: scenario.id,
+          platform: state.platform,
+          buildRef: state.buildRef ?? BUILD_REF,
+          startedAt: state.startedAt,
+          phaseA: finalPhaseA,
+          seedHandle: nextSeedHandle,
+          suite: state.suite,
+          syntheticSeedSizes,
+          syntheticIndex: nextSyntheticIndex,
+          syntheticPhases,
+          startupRuns: isStartupScenario(scenario)
+            ? resetSyntheticStartupRuns(startupRuns)
+            : startupRuns,
+        });
+      } catch (e) {
+        this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+        return;
+      }
+      restartForScenario(scenario);
+      return;
+    }
+
+    const peakTotals = [finalPhaseA, ...syntheticPhases]
+      .flatMap((phase) => phase.peakSamples)
+      .map((s) => s.totalMb);
     const peakTotalMb = peakTotals.length > 0 ? Math.max(...peakTotals) : undefined;
 
     const result: BenchmarkResult = {
@@ -510,7 +568,8 @@ class BenchmarkRunnerStore {
       platform: state.platform,
       buildRef: state.buildRef ?? BUILD_REF,
       phaseA: finalPhaseA,
-      phaseB,
+      phaseB: syntheticPhases[0] ?? phaseB,
+      syntheticPhases,
       peakTotalMb,
     };
 
@@ -569,6 +628,7 @@ class BenchmarkRunnerStore {
         scenarioId: nextScenario.id,
         platform,
         buildRef,
+        syntheticSeedSizes: syntheticSeedSizesForScenario(nextScenario),
         suite: nextSuite,
       });
     } catch (e) {
@@ -609,17 +669,19 @@ class BenchmarkRunnerStore {
   }
 
   #completionMessage(scenario: BenchmarkScenario, result: BenchmarkResult): string {
+    const syntheticPhases = resultSyntheticPhases(result);
+    const largestSynthetic = syntheticPhases[syntheticPhases.length - 1] ?? result.phaseB;
     if (result.workload.kind === "startup") {
       const baseMs = formatOptionalMs(result.phaseA.startupMs);
-      const synthMs = formatOptionalMs(result.phaseB.startupMs);
-      return `${scenario.label}: launch medians base ${baseMs}, synth ${synthMs}. Open the app to review the benchmark output.`;
+      const synthMs = formatOptionalMs(largestSynthetic.startupMs);
+      return `${scenario.label}: launch medians base ${baseMs}, largest synth ${synthMs}. Open the app to review the benchmark output.`;
     }
     if (result.peakTotalMb !== undefined) {
       return `${scenario.label}: peak ${Math.round(result.peakTotalMb)} MB. Open the app to review the benchmark output.`;
     }
     const metricCount = [
       ...(result.phaseA.metrics ?? []),
-      ...(result.phaseB.metrics ?? []),
+      ...syntheticPhases.flatMap((phase) => phase.metrics ?? []),
     ].length;
     return `${scenario.label}: ${metricCount} metric rows. Open the app to review the benchmark output.`;
   }
@@ -714,6 +776,31 @@ function normalizeStartupRunState(state: StartupRunState | undefined): StartupRu
     phaseA: state?.phaseA ?? [],
     phaseB: state?.phaseB ?? [],
   };
+}
+
+function resetSyntheticStartupRuns(state: StartupRunState | undefined): StartupRunState {
+  const current = normalizeStartupRunState(state);
+  return {
+    targetRuns: current.targetRuns,
+    phaseA: current.phaseA,
+    phaseB: [],
+  };
+}
+
+function syntheticSeedSizesForScenario(scenario: BenchmarkScenarioMetadata): number[] {
+  const sizes = scenario.syntheticSeedSizes && scenario.syntheticSeedSizes.length > 0
+    ? scenario.syntheticSeedSizes
+    : [scenario.defaultSeedSize];
+  const normalized = [...new Set(sizes)]
+    .filter((size) => Number.isInteger(size) && size > 0)
+    .sort((a, b) => a - b);
+  return normalized.length > 0 ? normalized : [scenario.defaultSeedSize];
+}
+
+function resultSyntheticPhases(result: BenchmarkResult): PhaseResult[] {
+  return result.syntheticPhases && result.syntheticPhases.length > 0
+    ? result.syntheticPhases
+    : [result.phaseB];
 }
 
 function appendStartupPhaseRun(

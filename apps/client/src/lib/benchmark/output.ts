@@ -222,6 +222,15 @@ function startupSamples(phase: PhaseResult): StartupBootSample[] {
     : [fallbackStartupSample(phase)];
 }
 
+function resultPhases(result: BenchmarkResult): PhaseResult[] {
+  return [
+    result.phaseA,
+    ...(result.syntheticPhases && result.syntheticPhases.length > 0
+      ? result.syntheticPhases
+      : [result.phaseB]),
+  ];
+}
+
 export function benchmarkDatasetLabel(result: BenchmarkResult, phase: PhaseResult): string {
   if (phase.phase === "A") {
     return `base-${phase.eventCountAtStart}`;
@@ -237,7 +246,7 @@ function timepointLabel(label: SampleLabel): string {
 }
 
 function buildStartupRows(result: BenchmarkResult, run: string): BenchmarkStartupRow[] {
-  return [result.phaseA, result.phaseB].map((phase) => {
+  return resultPhases(result).map((phase) => {
     const samples = startupSamples(phase);
     const firstPaintStats = numberStats(samples.map((sample) => sample.boot.marks[FIRST_PAINT_MARK]));
     const usablePaintStats = numberStats(samples.map((sample) => sample.boot.marks[USABLE_PAINT_MARK]));
@@ -258,7 +267,7 @@ function buildStartupRows(result: BenchmarkResult, run: string): BenchmarkStartu
 
 function buildMemoryRows(result: BenchmarkResult, run: string): BenchmarkMemoryRow[] {
   const rows: BenchmarkMemoryRow[] = [];
-  for (const phase of [result.phaseA, result.phaseB]) {
+  for (const phase of resultPhases(result)) {
     const samples = orderedSamples(phase);
     for (const label of SAMPLE_LABELS) {
       const sample = samples.get(label);
@@ -353,24 +362,24 @@ function buildMetricRows(
 ): { latencyRows: BenchmarkLatencyRow[]; scalarRows: BenchmarkScalarMetricRow[] } {
   const metricLabels = [
     ...new Set([
-      ...(result.phaseA.metrics ?? []).map((metric) => metric.label),
-      ...(result.phaseB.metrics ?? []).map((metric) => metric.label),
+      ...resultPhases(result).flatMap((phase) => (phase.metrics ?? []).map((metric) => metric.label)),
     ]),
   ];
-  const phaseAMetrics = metricsByLabel(result.phaseA);
-  const phaseBMetrics = metricsByLabel(result.phaseB);
+  const phases = resultPhases(result);
+  const phaseMetrics = phases.map((phase) => metricsByLabel(phase));
   const latencyRows: BenchmarkLatencyRow[] = [];
   const scalarRows: BenchmarkScalarMetricRow[] = [];
   for (const label of metricLabels) {
-    const aMetric = phaseAMetrics.get(label);
-    const bMetric = phaseBMetrics.get(label);
-    const unit = aMetric?.unit ?? bMetric?.unit ?? "";
-    if (hasStatDetails(aMetric) || hasStatDetails(bMetric)) {
-      latencyRows.push(buildLatencyRow(result, result.phaseA, run, label, unit, aMetric));
-      latencyRows.push(buildLatencyRow(result, result.phaseB, run, label, unit, bMetric));
+    const metrics = phaseMetrics.map((metricsForPhase) => metricsForPhase.get(label));
+    const unit = metrics.find((metric) => metric)?.unit ?? "";
+    if (metrics.some(hasStatDetails)) {
+      for (const [index, phase] of phases.entries()) {
+        latencyRows.push(buildLatencyRow(result, phase, run, label, unit, metrics[index]));
+      }
     } else {
-      scalarRows.push(buildScalarMetricRow(result, result.phaseA, run, label, unit, aMetric));
-      scalarRows.push(buildScalarMetricRow(result, result.phaseB, run, label, unit, bMetric));
+      for (const [index, phase] of phases.entries()) {
+        scalarRows.push(buildScalarMetricRow(result, phase, run, label, unit, metrics[index]));
+      }
     }
   }
   return { latencyRows, scalarRows };

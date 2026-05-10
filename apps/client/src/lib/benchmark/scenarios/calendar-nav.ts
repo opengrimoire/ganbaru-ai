@@ -10,14 +10,19 @@
  * per-calendar deletion would be redundant.
  */
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
-import { STRESS_DURATION_MS, type BenchmarkScenario } from "../types";
+import {
+  CORE_SYNTHETIC_SEED_SIZES,
+  DEFAULT_SYNTHETIC_SEED_SIZE,
+  STRESS_DURATION_MS,
+  type BenchmarkScenario,
+} from "../types";
 import { parseCalendarBenchmarkAnchor, seedCalendarSynth } from "./calendar-utils";
 
 export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
   label: "Calendar week-view nav",
   description:
-    "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline and a 1000-event synthetic calendar. Both datasets use an isolated benchmark DB; your real calendar is never touched.",
+    "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline plus 1,000-event and 10,000-event synthetic calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
   workload: {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
@@ -25,7 +30,8 @@ export const calendarNavScenario: BenchmarkScenario = {
     durationMs: STRESS_DURATION_MS,
     memoryMode: "post-workload",
   },
-  defaultSeedSize: 1000,
+  defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+  syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
 
   async setup(): Promise<void> {
     const handle = getCalendarNavHandle();

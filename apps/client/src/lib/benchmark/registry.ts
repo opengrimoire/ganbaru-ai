@@ -7,7 +7,13 @@
  * Order is rendered order; keep startup and memory baselines first so
  * pasted suite output is easy to place in PERFORMANCE.md.
  */
-import { STRESS_DURATION_MS, type BenchmarkScenario, type BenchmarkScenarioMetadata } from "./types";
+import {
+  CORE_SYNTHETIC_SEED_SIZES,
+  DEFAULT_SYNTHETIC_SEED_SIZE,
+  STRESS_DURATION_MS,
+  type BenchmarkScenario,
+  type BenchmarkScenarioMetadata,
+} from "./types";
 
 type BenchmarkScenarioLoader = () => Promise<BenchmarkScenario>;
 
@@ -46,7 +52,8 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: 0,
       memoryMode: "none",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+    syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
   },
   {
     id: "idle-memory",
@@ -60,13 +67,14 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: STRESS_DURATION_MS,
       memoryMode: "post-workload",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+    syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
   },
   {
     id: "calendar-nav",
     label: "Calendar week-view nav",
     description:
-      "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline and a 1000-event synthetic calendar. Both datasets use an isolated benchmark DB; your real calendar is never touched.",
+      "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline plus 1,000-event and 10,000-event synthetic calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
     workload: {
       kind: "stress-memory",
       question: "How much memory does repeated week navigation use?",
@@ -74,7 +82,8 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: STRESS_DURATION_MS,
       memoryMode: "post-workload",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+    syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
   },
   {
     id: "event-panel-open",
@@ -88,7 +97,8 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: 0,
       memoryMode: "none",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+    syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
   },
   {
     id: "calendar-create-cancel",
@@ -102,7 +112,8 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: 0,
       memoryMode: "none",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+    syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
   },
   {
     id: "calendar-write-ops",
@@ -116,7 +127,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: 0,
       memoryMode: "none",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
   },
   {
     id: "calendar-import-ops",
@@ -130,7 +141,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: 0,
       memoryMode: "none",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
   },
   {
     id: "theme-persistence-ops",
@@ -144,7 +155,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: 0,
       memoryMode: "none",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
   },
   {
     id: "pomodoro-persistence-ops",
@@ -158,7 +169,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       durationMs: 0,
       memoryMode: "none",
     },
-    defaultSeedSize: 1000,
+    defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
   },
 ];
 
