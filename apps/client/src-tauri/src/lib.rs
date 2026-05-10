@@ -4,6 +4,7 @@ use tauri::Manager;
 
 mod calendar_events;
 mod calendar_import;
+mod calendars;
 mod db;
 mod db_path;
 mod notification;
@@ -549,6 +550,9 @@ pub fn run() {
             calendar_events::calendar_detach_instance,
             calendar_events::calendar_split_series,
             calendar_import::calendar_bulk_import,
+            calendars::calendar_add_calendar,
+            calendars::calendar_set_visibility,
+            calendars::calendar_remove_calendar,
             themes::theme_insert,
             themes::theme_replace_content,
             themes::theme_delete,

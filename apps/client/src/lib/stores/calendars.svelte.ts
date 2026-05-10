@@ -1,4 +1,5 @@
-import { execute, select } from "$lib/api/db";
+import { invoke } from "@tauri-apps/api/core";
+import { dbUrl, select } from "$lib/api/db";
 import type { Calendar } from "$lib/components/calendar/types";
 
 interface DbCalendar {
@@ -58,11 +59,12 @@ export function getCalendars() {
     async toggleVisibility(id: string) {
       const cal = calendars.find((c) => c.id === id);
       if (!cal) return;
-      const newVisible = cal.visible ? 0 : 1;
-      await execute(
-        "UPDATE calendars SET visible = $1, updated_at = $2 WHERE id = $3",
-        [newVisible, nowLocal(), id],
-      );
+      await invoke("calendar_set_visibility", {
+        dbUrl: dbUrl(),
+        id,
+        visible: !cal.visible,
+        updatedAt: nowLocal(),
+      });
       calendars = calendars.map((c) =>
         c.id === id ? { ...c, visible: !c.visible } : c,
       );
@@ -71,18 +73,20 @@ export function getCalendars() {
     async add(cal: Omit<Calendar, "id" | "visible" | "readOnly"> & { id?: string; visible?: boolean; readOnly?: boolean }): Promise<Calendar> {
       const id = cal.id ?? crypto.randomUUID();
       const now = nowLocal();
-      await execute(
-        `INSERT INTO calendars
-           (id, name, color, source, visible, read_only, source_url, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          id, cal.name, cal.color, cal.source,
-          (cal.visible ?? true) ? 1 : 0,
-          (cal.readOnly ?? false) ? 1 : 0,
-          cal.sourceUrl ?? null,
-          now, now,
-        ],
-      );
+      await invoke("calendar_add_calendar", {
+        dbUrl: dbUrl(),
+        calendar: {
+          id,
+          name: cal.name,
+          color: cal.color,
+          source: cal.source,
+          visible: cal.visible ?? true,
+          readOnly: cal.readOnly ?? false,
+          sourceUrl: cal.sourceUrl ?? null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
       const entry: Calendar = {
         id,
         name: cal.name,
@@ -98,8 +102,7 @@ export function getCalendars() {
     },
 
     async remove(id: string) {
-      await execute("DELETE FROM calendar_events WHERE calendar_id = $1", [id]);
-      await execute("DELETE FROM calendars WHERE id = $1", [id]);
+      await invoke("calendar_remove_calendar", { dbUrl: dbUrl(), id });
       calendars = calendars.filter((c) => c.id !== id);
     },
 

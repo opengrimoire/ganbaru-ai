@@ -35,6 +35,9 @@ theme persistence:
 - Moved detach-instance and split-series database transactions behind Rust
   commands, including parent row updates, child row copies, and Pomodoro segment
   reassignment for detached instances.
+- Moved calendar list add, visibility toggle, and remove operations behind Rust
+  commands. Calendar removal now deletes events and the calendar row in one
+  transaction.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
