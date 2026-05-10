@@ -23,6 +23,12 @@ import {
   buildBulkImportPayload,
   type CalendarBulkImportResult,
 } from "./calendar-bulk-import";
+import {
+  BoundedWindowCache,
+  LatestWindowLoadCoordinator,
+  type WindowLoadEvent,
+  type WindowLoadOutcome,
+} from "./window-load-coordinator";
 import type { IcsImportSummary } from "$lib/calendar/ics/types";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
 
@@ -125,12 +131,36 @@ let totalEventCount = $state(0);
 let currentWindowKey: string | null = null;
 let currentWindowStart: Temporal.PlainDate | null = null;
 let currentWindowEnd: Temporal.PlainDate | null = null;
-let pendingWindowKey: string | null = null;
-let pendingWindowPromise: Promise<void> | null = null;
-let windowRequestId = 0;
 let batchDepth = 0;
 const PANEL_EVENT_CACHE_LIMIT = 64;
 const panelEventCache = new Map<string, Promise<CalendarEvent | undefined>>();
+const WINDOW_CACHE_LIMIT = 5;
+const PREFETCH_MAX_WINDOW_DAYS = 8;
+
+type CalendarWindowLoadMode = "apply" | "prefetch";
+
+interface CalendarWindowSnapshot {
+  key: string;
+  renderZone: string;
+  windowStart: Temporal.PlainDate;
+  windowEnd: Temporal.PlainDate;
+  rawBlocks: CalendarEvent[];
+  windowEvents: CalendarEvent[];
+  totalEventCount: number;
+}
+
+interface CalendarWindowLoadRequest {
+  key: string;
+  renderZone: string;
+  windowStart: Temporal.PlainDate;
+  windowEnd: Temporal.PlainDate;
+  markBoot: boolean;
+  force: boolean;
+  mode: CalendarWindowLoadMode;
+}
+
+const windowCache = new BoundedWindowCache<CalendarWindowSnapshot>(WINDOW_CACHE_LIMIT);
+let prefetchGeneration = 0;
 
 type DbFullEvent = DbCalendarEvent & {
   description: string | null;
@@ -198,9 +228,10 @@ let indexVersion = $state(0);
  * rebuilds the index lazily; mutations are rare relative to reads so
  * eager rebuild would just waste work.
  */
-function invalidate(recomputeWindow = true) {
+function invalidate(recomputeWindow = true, clearCachedWindows = true) {
   if (batchDepth > 0) return;
   expansionIndex = null;
+  if (clearCachedWindows) clearWindowCache();
   if (recomputeWindow && currentWindowStart && currentWindowEnd) {
     expansionIndex = buildExpansionIndex(rawBlocks);
     windowEvents = eventsInWindowFromIndex(expansionIndex, currentWindowStart, currentWindowEnd);
@@ -286,6 +317,76 @@ function calendarWindowKey(
   return `${renderZone}:${windowStart.toString()}:${windowEnd.toString()}`;
 }
 
+function windowQueueKey(mode: CalendarWindowLoadMode, key: string): string {
+  return `${mode}:${key}`;
+}
+
+function markWindowLoadEvent(event: WindowLoadEvent<CalendarWindowLoadRequest>): void {
+  const request = "request" in event ? event.request : undefined;
+  if (event.type === "start") {
+    perfMark("window.load-start", {
+      mode: request?.mode ?? "unknown",
+      queued: windowLoadCoordinator.queuedKey ? 1 : 0,
+    });
+  } else if (event.type === "queue") {
+    perfMark("window.load-queued", {
+      mode: request?.mode ?? "unknown",
+      replaced: event.replacedKey ? 1 : 0,
+    });
+  } else if (event.type === "drop") {
+    perfMark("window.load-dropped", { reason: event.reason });
+  } else if (event.type === "finish") {
+    perfMark("window.load-finished", { outcome: event.outcome });
+  } else {
+    perfMark("window.load-error");
+  }
+}
+
+function applyWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
+  rawBlocks = snapshot.rawBlocks;
+  windowEvents = snapshot.windowEvents;
+  totalEventCount = snapshot.totalEventCount;
+  currentWindowKey = snapshot.key;
+  currentWindowStart = snapshot.windowStart;
+  currentWindowEnd = snapshot.windowEnd;
+  loaded = true;
+  invalidate(false, false);
+  perfMark("window.applied", {
+    rows: snapshot.rawBlocks.length,
+    expanded: snapshot.windowEvents.length,
+    cache: windowCache.size,
+  });
+}
+
+function rememberWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
+  windowCache.set(snapshot.key, snapshot);
+  perfMark("window.cache-put", {
+    rows: snapshot.rawBlocks.length,
+    expanded: snapshot.windowEvents.length,
+    size: windowCache.size,
+  });
+}
+
+function adjacentWindowRequests(snapshot: CalendarWindowSnapshot): Array<{
+  start: Temporal.PlainDate;
+  end: Temporal.PlainDate;
+}> {
+  const spanDays = snapshot.windowStart.until(snapshot.windowEnd).days + 1;
+  if (!Number.isFinite(spanDays) || spanDays < 1 || spanDays > PREFETCH_MAX_WINDOW_DAYS) {
+    return [];
+  }
+  return [
+    {
+      start: snapshot.windowStart.add({ days: spanDays }),
+      end: snapshot.windowEnd.add({ days: spanDays }),
+    },
+    {
+      start: snapshot.windowStart.subtract({ days: spanDays }),
+      end: snapshot.windowEnd.subtract({ days: spanDays }),
+    },
+  ];
+}
+
 function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEvent[] {
   const mapped = rows.events.map((r) => mapRow(r, renderZone));
   if (mapped.length === 0) return mapped;
@@ -298,6 +399,93 @@ function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEv
   return mapped;
 }
 
+async function runWindowLoadRequest(
+  request: CalendarWindowLoadRequest,
+  isSuperseded: () => boolean,
+): Promise<WindowLoadOutcome> {
+  const {
+    key,
+    renderZone,
+    windowStart,
+    windowEnd,
+    markBoot,
+    mode,
+  } = request;
+  const url = await ensureDbUrl();
+  const windowStartDate = windowStart.toString();
+  const windowEndDate = windowEnd.toString();
+  const windowEndExclusiveDate = windowEnd.add({ days: 1 }).toString();
+  const rows = await invoke<CalendarWindowRows>("calendar_load_window", {
+    dbUrl: url,
+    windowStartDate,
+    windowEndDate,
+    windowStartUtc: wallClockToUtcIso(`${windowStartDate} 00:00`, renderZone),
+    windowEndExclusiveUtc: wallClockToUtcIso(`${windowEndExclusiveDate} 00:00`, renderZone),
+  });
+  perfMark("window.rows-done", {
+    mode,
+    rows: rows.events.length,
+    total: rows.total_event_count,
+  });
+
+  if (!markBoot && isSuperseded()) {
+    perfMark("window.load-superseded", { stage: "rows", mode });
+    return "superseded";
+  }
+
+  if (markBoot) perfMark("boot.sql-main-done", { rows: rows.events.length, total: rows.total_event_count });
+  const mapped = mapWindowRows(rows, renderZone);
+  if (markBoot) perfMark("boot.maprow-done");
+
+  if (!markBoot && isSuperseded()) {
+    perfMark("window.load-superseded", { stage: "map", mode });
+    return "superseded";
+  }
+
+  const expanded = await invoke<CalendarEvent[]>("calendar_expand_render_events", {
+    events: mapped,
+    windowStartDate,
+    windowEndDate,
+  });
+  perfMark("window.expand-done", {
+    mode,
+    rows: mapped.length,
+    expanded: expanded.length,
+  });
+
+  if (!markBoot && isSuperseded()) {
+    perfMark("window.load-superseded", { stage: "expand", mode });
+    return "superseded";
+  }
+
+  const snapshot: CalendarWindowSnapshot = {
+    key,
+    renderZone,
+    windowStart,
+    windowEnd,
+    rawBlocks: mapped,
+    windowEvents: expanded,
+    totalEventCount: rows.total_event_count,
+  };
+  rememberWindowSnapshot(snapshot);
+
+  if (mode === "apply") {
+    applyWindowSnapshot(snapshot);
+    if (markBoot) {
+      perfMark("boot.sql-children-done");
+      perfMark("boot.rawblocks-set", { events: rawBlocks.length, total: totalEventCount });
+    }
+    scheduleAdjacentPrefetch(snapshot);
+  }
+
+  return "applied";
+}
+
+const windowLoadCoordinator = new LatestWindowLoadCoordinator<CalendarWindowLoadRequest>(
+  runWindowLoadRequest,
+  markWindowLoadEvent,
+);
+
 async function loadWindowIntoState(
   windowStart: Temporal.PlainDate,
   windowEnd: Temporal.PlainDate,
@@ -307,60 +495,76 @@ async function loadWindowIntoState(
   const renderZone = localTimezone();
   const key = calendarWindowKey(windowStart, windowEnd, renderZone);
   if (!force && !markBoot && loaded && currentWindowKey === key) return;
-  if (!force && pendingWindowKey === key && pendingWindowPromise) {
-    await pendingWindowPromise;
-    return;
+  if (!force && !markBoot) {
+    const cached = windowCache.get(key);
+    if (cached) {
+      prefetchGeneration++;
+      windowLoadCoordinator.supersedePending();
+      perfMark("window.cache-hit", {
+        rows: cached.rawBlocks.length,
+        expanded: cached.windowEvents.length,
+        size: windowCache.size,
+      });
+      applyWindowSnapshot(cached);
+      scheduleAdjacentPrefetch(cached);
+      return;
+    }
   }
 
-  const requestId = ++windowRequestId;
-  const promise = (async () => {
-    const url = await ensureDbUrl();
-    const windowStartDate = windowStart.toString();
-    const windowEndDate = windowEnd.toString();
-    const windowEndExclusiveDate = windowEnd.add({ days: 1 }).toString();
-    const rows = await invoke<CalendarWindowRows>("calendar_load_window", {
-      dbUrl: url,
-      windowStartDate,
-      windowEndDate,
-      windowStartUtc: wallClockToUtcIso(`${windowStartDate} 00:00`, renderZone),
-      windowEndExclusiveUtc: wallClockToUtcIso(`${windowEndExclusiveDate} 00:00`, renderZone),
-    });
-    if (requestId !== windowRequestId) return;
+  prefetchGeneration++;
+  await windowLoadCoordinator.enqueue(windowQueueKey("apply", key), {
+    key,
+    renderZone,
+    windowStart,
+    windowEnd,
+    markBoot,
+    force,
+    mode: "apply",
+  });
+}
 
-    if (markBoot) perfMark("boot.sql-main-done", { rows: rows.events.length, total: rows.total_event_count });
-    const mapped = mapWindowRows(rows, renderZone);
-    if (markBoot) perfMark("boot.maprow-done");
-    const expanded = await invoke<CalendarEvent[]>("calendar_expand_render_events", {
-      events: mapped,
-      windowStartDate,
-      windowEndDate,
-    });
-    if (requestId !== windowRequestId) return;
+async function prefetchWindow(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  generation: number,
+): Promise<void> {
+  if (generation !== prefetchGeneration || !loaded) return;
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  if (currentWindowKey === key || windowCache.has(key)) return;
 
-    rawBlocks = mapped;
-    windowEvents = expanded;
-    totalEventCount = rows.total_event_count;
-    currentWindowKey = key;
-    currentWindowStart = windowStart;
-    currentWindowEnd = windowEnd;
-    loaded = true;
-    invalidate(false);
-    if (markBoot) {
-      perfMark("boot.sql-children-done");
-      perfMark("boot.rawblocks-set", { events: rawBlocks.length, total: totalEventCount });
+  await windowLoadCoordinator.enqueue(windowQueueKey("prefetch", key), {
+    key,
+    renderZone,
+    windowStart,
+    windowEnd,
+    markBoot: false,
+    force: false,
+    mode: "prefetch",
+  });
+}
+
+function scheduleAdjacentPrefetch(snapshot: CalendarWindowSnapshot): void {
+  const requests = adjacentWindowRequests(snapshot);
+  if (requests.length === 0) return;
+  const generation = ++prefetchGeneration;
+
+  void (async () => {
+    for (const request of requests) {
+      if (generation !== prefetchGeneration) return;
+      await prefetchWindow(request.start, request.end, generation);
     }
   })();
+}
 
-  pendingWindowKey = key;
-  pendingWindowPromise = promise;
-  try {
-    await promise;
-  } finally {
-    if (pendingWindowPromise === promise) {
-      pendingWindowKey = null;
-      pendingWindowPromise = null;
-    }
-  }
+async function waitForWindowIdle(): Promise<void> {
+  await windowLoadCoordinator.whenIdle();
+}
+
+function clearWindowCache(): void {
+  windowCache.clear();
+  prefetchGeneration++;
+  windowLoadCoordinator.supersedePending();
 }
 
 async function refreshCurrentWindow(): Promise<void> {
@@ -368,6 +572,7 @@ async function refreshCurrentWindow(): Promise<void> {
     invalidate(false);
     return;
   }
+  clearWindowCache();
   await loadWindowIntoState(currentWindowStart, currentWindowEnd, false, true);
 }
 
@@ -439,6 +644,14 @@ export function getCalendar() {
 
     get loaded(): boolean {
       return loaded;
+    },
+
+    get windowLoadBusy(): boolean {
+      return windowLoadCoordinator.busy;
+    },
+
+    async whenWindowIdle(): Promise<void> {
+      await waitForWindowIdle();
     },
 
     /** Suppress invalidate() during multi-step mutations. */

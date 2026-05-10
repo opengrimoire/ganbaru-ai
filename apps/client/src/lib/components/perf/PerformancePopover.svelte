@@ -188,6 +188,16 @@
     const results: ChainRow[] = [];
     const stacks: Record<string, PendingChain[]> = {};
     for (const e of perfLog.entries) {
+      if (e.tag === "nav.release-tail") {
+        const ms = e.detail?.ms;
+        results.push({
+          prefix: "nav",
+          action: "release tail",
+          durationMs: typeof ms === "number" ? ms : 0,
+          steps: [],
+        });
+        continue;
+      }
       const m = /^(nav|view|panel)\.(start|module-ready|details-ready|state-open|flush-done|paint-done)$/.exec(e.tag);
       if (!m) continue;
       const prefix = m[1];

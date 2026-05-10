@@ -686,6 +686,7 @@
   let navHeldDirection: "forward" | "back" | null = null;
   let navHoldTimer: ReturnType<typeof setTimeout> | null = null;
   let navRepeatTimer: ReturnType<typeof setTimeout> | null = null;
+  let navReleaseSeq = 0;
 
   function clearNavTimers() {
     if (navHoldTimer !== null) {
@@ -715,6 +716,7 @@
     clearNavTimers();
     navHeldKey = key;
     navHeldDirection = direction;
+    perfMark("nav.hold-start", { key });
     navigate(direction);
     navHoldTimer = setTimeout(() => {
       navHoldTimer = null;
@@ -724,9 +726,32 @@
 
   function stopNavHold(key?: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown") {
     if (key && navHeldKey !== key) return;
+    const stoppedKey = navHeldKey;
     navHeldKey = null;
     navHeldDirection = null;
     clearNavTimers();
+    if (stoppedKey) {
+      perfMark("nav.hold-stop", { key: stoppedKey });
+      markNavReleaseTail(stoppedKey);
+    }
+  }
+
+  function markNavReleaseTail(key: string) {
+    const seq = ++navReleaseSeq;
+    const releasedAt = performance.now();
+    void calendarStore.whenWindowIdle()
+      .then(() => tick())
+      .then(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      }))
+      .then(() => {
+        if (seq !== navReleaseSeq) return;
+        perfMark("nav.release-tail", {
+          key,
+          ms: Math.round(performance.now() - releasedAt),
+          count: visibleEvents.length,
+        });
+      });
   }
 
   function arrowScrollStep(ts: number) {

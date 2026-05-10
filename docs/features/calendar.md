@@ -88,6 +88,16 @@ The day and week views use a momentum-based scroll: dragging or wheeling builds 
 
 Vertical zoom maps minutes to pixels. The discrete zoom levels in pixels per hour are `[30, 45, 67, 100, 150, 200]`. The default is 45, where the 15min grid reads as 100% in settings. The header `-` and `+` controls and the Shift + - and Shift + + shortcuts snap to the nearest level. Shift + 0 resets the calendar timeline zoom while preserving the visible time position where possible.
 
+## Window loading and rapid navigation
+
+Calendar rendering is windowed. The frontend asks Rust for the visible date range instead of keeping the whole event database in memory. Non-recurring rows are bounded by the visible window, while recurring templates are expanded only for that requested range.
+
+Rapid navigation is latest-wins. If the user holds an arrow key or a scripted driver sends many forward/back requests, stale intermediate windows must not each force a full row map, recurrence expansion, state apply, and paint. The app may finish a native query that has already started, but once a newer target exists it should skip stale mapping, stale expansion where possible, and stale state application.
+
+The store keeps only a small bounded cache of render windows. Day and week views prefetch adjacent windows after a successful foreground load so normal previous/next navigation can swap from cache without blanking. Mutations clear the cache so saved edits, imports, deletes, detach, and split operations cannot reuse stale render state.
+
+Held keyboard navigation stops its timers on keyup and records a release-tail speed-log mark after calendar window loading is idle and the next paint has landed. This mark is diagnostic: it measures work still draining after the app receives keyup, not the physical delay before the browser can process keyup if the main thread is already blocked.
+
 ## All-day events
 
 All-day events render in a band at the top of the day or week view. They span columns when the event covers multiple days. Within the band, events stack into rows so that overlapping all-day events all remain visible.
