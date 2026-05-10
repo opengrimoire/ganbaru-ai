@@ -243,15 +243,15 @@ describe("pickColorPickerGeometry", () => {
     });
   });
 
-  it("uses fullscreen mode when the picker cannot fit usefully", () => {
+  it("uses a constrained sheet when the picker cannot fit at full height", () => {
     expect(
       pickColorPickerGeometry({
         viewport: { width: 320, height: 300 },
         trigger,
       }),
     ).toEqual({
-      layout: "fullscreen",
-      rect: { x: 0, y: 42, width: 320, height: 258 },
+      layout: "sheet",
+      rect: { x: 8, y: 50, width: 304, height: 242 },
     });
   });
 });

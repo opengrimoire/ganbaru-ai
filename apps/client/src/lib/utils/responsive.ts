@@ -295,14 +295,6 @@ export function pickColorPickerGeometry(
   const popoverWidth = finiteOrZero(input.popoverWidth ?? COLOR_PICKER_WIDTH);
   const popoverHeight = finiteOrZero(input.popoverHeight ?? COLOR_PICKER_HEIGHT);
 
-  if (viewportWidth < 390 || viewportHeight < 360) {
-    const height = Math.max(0, viewportHeight - titleBarHeight);
-    return {
-      layout: "fullscreen",
-      rect: { x: 0, y: titleBarHeight, width: viewportWidth, height },
-    };
-  }
-
   if (viewportWidth < 480 || viewportHeight < 430) {
     const width = Math.max(0, viewportWidth - edge * 2);
     const height = Math.min(
