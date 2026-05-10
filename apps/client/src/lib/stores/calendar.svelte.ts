@@ -119,9 +119,12 @@ function hasStructuralChanges(
 
 /** DB-backed template events for the current render window plus recurring templates. */
 let rawBlocks = $state<CalendarEvent[]>([]);
+let windowEvents = $state<CalendarEvent[]>([]);
 let loaded = $state(false);
 let totalEventCount = $state(0);
 let currentWindowKey: string | null = null;
+let currentWindowStart: Temporal.PlainDate | null = null;
+let currentWindowEnd: Temporal.PlainDate | null = null;
 let pendingWindowKey: string | null = null;
 let pendingWindowPromise: Promise<void> | null = null;
 let windowRequestId = 0;
@@ -195,9 +198,13 @@ let indexVersion = $state(0);
  * rebuilds the index lazily; mutations are rare relative to reads so
  * eager rebuild would just waste work.
  */
-function invalidate() {
+function invalidate(recomputeWindow = true) {
   if (batchDepth > 0) return;
   expansionIndex = null;
+  if (recomputeWindow && currentWindowStart && currentWindowEnd) {
+    expansionIndex = buildExpansionIndex(rawBlocks);
+    windowEvents = eventsInWindowFromIndex(expansionIndex, currentWindowStart, currentWindowEnd);
+  }
   panelEventCache.clear();
   indexVersion++;
 }
@@ -322,12 +329,21 @@ async function loadWindowIntoState(
     if (markBoot) perfMark("boot.sql-main-done", { rows: rows.events.length, total: rows.total_event_count });
     const mapped = mapWindowRows(rows, renderZone);
     if (markBoot) perfMark("boot.maprow-done");
+    const expanded = await invoke<CalendarEvent[]>("calendar_expand_render_events", {
+      events: mapped,
+      windowStartDate,
+      windowEndDate,
+    });
+    if (requestId !== windowRequestId) return;
 
     rawBlocks = mapped;
+    windowEvents = expanded;
     totalEventCount = rows.total_event_count;
     currentWindowKey = key;
+    currentWindowStart = windowStart;
+    currentWindowEnd = windowEnd;
     loaded = true;
-    invalidate();
+    invalidate(false);
     if (markBoot) {
       perfMark("boot.sql-children-done");
       perfMark("boot.rawblocks-set", { events: rawBlocks.length, total: totalEventCount });
@@ -389,6 +405,9 @@ export function getCalendar() {
       windowEnd: Temporal.PlainDate,
     ): CalendarEvent[] {
       void indexVersion;
+      if (currentWindowKey === calendarWindowKey(windowStart, windowEnd, localTimezone())) {
+        return windowEvents;
+      }
       return eventsInWindowFromIndex(getIndex(), windowStart, windowEnd);
     },
 

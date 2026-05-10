@@ -124,7 +124,7 @@ This is worth doing even before the windowed calendar work because it eliminates
 
 Replace `calendar.load()` plus `rawBlocks` as the render source with a Rust command that returns only the current visible window.
 
-Current status: implemented for non-recurring event windows. The command returns overlapping non-recurring rows, all recurring templates for TypeScript expansion parity, slim overrides, and total DB event count for benchmark dataset labels. Recurrence expansion still needs to move to Rust before the window query is fully backend-owned.
+Current status: implemented for non-recurring event windows. The command returns overlapping non-recurring rows, all recurring templates, slim overrides, and total DB event count for benchmark dataset labels. Render-window recurrence expansion now runs through a Rust command after rows are mapped to wall-clock render events; TypeScript recurrence remains for unsaved editor previews.
 
 Proposed command shape:
 
@@ -171,6 +171,8 @@ This is the most important refactor.
 ### 3. Rust recurrence expansion for render queries
 
 Port the recurrence expansion used by render queries from TypeScript to Rust.
+
+Current status: implemented for loaded render windows with Rust parity coverage for the main recurrence shapes. TypeScript still owns edit-preview expansion for unsaved changes because that is UI-local state rather than durable render loading.
 
 Work:
 
@@ -294,7 +296,7 @@ If Tauri and WebKit impose a higher fixed empty-app memory floor than desired, t
 1. Implement Rust-owned SQLite service and remove frontend SQL reads.
 2. Add the 10,000-event scale to the existing core benchmark datasets.
 3. Implement Rust calendar window queries for non-recurring events. Done.
-4. Port recurrence expansion to Rust and switch render queries to backend expansion.
+4. Port recurrence expansion to Rust and switch render queries to backend expansion. Done for loaded render windows; edit previews intentionally remain TypeScript.
 5. Replace frontend `rawBlocks` dependencies with typed window, detail, existence, active-block, import, and export commands.
 6. Remove global Temporal from the normal boot path.
 7. Remove parked event panel mounting and replace it with intent-based prefetch.

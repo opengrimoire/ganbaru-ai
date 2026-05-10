@@ -66,6 +66,9 @@ persistence:
 - Added a Rust calendar window read path for the render surface. The frontend
   now loads visible non-recurring rows plus recurring templates instead of
   booting every calendar event into long-lived WebKit state.
+- Added Rust recurrence expansion for loaded render windows. TypeScript keeps
+  recurrence helpers for unsaved edit previews, where the data is local UI
+  state rather than a database render read.
 
 ## Decision rule
 

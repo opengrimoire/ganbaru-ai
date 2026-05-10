@@ -11,6 +11,7 @@ mod db_path;
 mod kanban;
 mod notification;
 mod pomodoro;
+mod recurrence;
 mod themes;
 mod timezone_migration;
 mod tray;
@@ -546,6 +547,7 @@ pub fn run() {
             calendar_reads::calendar_load_panel_event,
             calendar_reads::calendar_load_full_event,
             calendar_reads::calendar_list_event_ids_for_calendar,
+            recurrence::calendar_expand_render_events,
             calendar_events::calendar_add_event,
             calendar_events::calendar_delete_event,
             calendar_events::calendar_clear_events,
