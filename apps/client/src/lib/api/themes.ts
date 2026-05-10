@@ -22,7 +22,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { THEME_TOKEN_ROW_ORDER } from "$lib/stores/themes";
-import { dbUrl, getDb, select } from "./db";
+import { dbUrl, getDb } from "./db";
 
 export type TokenKind = "source" | "app" | "calendar";
 
@@ -113,51 +113,38 @@ export interface UserThemeRead {
   seedPalette: PaletteRow[];
 }
 
-const TOKEN_ORDER_CASE = [
-  "CASE",
-  ...THEME_TOKEN_ROW_ORDER.map(
-    (entry, index) =>
-      `WHEN kind = '${entry.kind}' AND key = '${entry.key}' THEN ${index}`,
-  ),
-  `ELSE ${THEME_TOKEN_ROW_ORDER.length}`,
-  "END",
-].join(" ");
-
-const TOKEN_ORDER_BY = `theme_id ASC, ${TOKEN_ORDER_CASE}, kind ASC, key ASC`;
-const PALETTE_ORDER_BY = "theme_id ASC, slot ASC";
+const TOKEN_ORDER_INDEX: ReadonlyMap<string, number> = new Map(
+  THEME_TOKEN_ROW_ORDER.map((entry, index) => [`${entry.kind}:${entry.key}`, index] as const),
+);
 
 async function activeDbUrl(): Promise<string> {
   await getDb();
   return dbUrl();
 }
 
+function compareTokenRows(a: TokenRow, b: TokenRow): number {
+  const aOrder = TOKEN_ORDER_INDEX.get(`${a.kind}:${a.key}`) ?? THEME_TOKEN_ROW_ORDER.length;
+  const bOrder = TOKEN_ORDER_INDEX.get(`${b.kind}:${b.key}`) ?? THEME_TOKEN_ROW_ORDER.length;
+  return a.theme_id.localeCompare(b.theme_id)
+    || aOrder - bOrder
+    || a.kind.localeCompare(b.kind)
+    || a.key.localeCompare(b.key);
+}
+
+function comparePaletteRows(a: PaletteRow, b: PaletteRow): number {
+  return a.theme_id.localeCompare(b.theme_id) || a.slot - b.slot;
+}
+
 export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
-  const themes = await select<ThemeRow>(
-    "SELECT * FROM themes ORDER BY created_at ASC",
-  );
-  if (themes.length === 0) return [];
-  const tokens = await select<TokenRow>(
-    `SELECT theme_id, kind, key, value, isolated FROM theme_tokens ORDER BY ${TOKEN_ORDER_BY}`,
-  );
-  const palette = await select<PaletteRow>(
-    `SELECT theme_id, slot, value FROM theme_event_palette ORDER BY ${PALETTE_ORDER_BY}`,
-  );
-  const seedTokens = await select<TokenRow>(
-    `SELECT theme_id, kind, key, value, isolated FROM theme_seed_tokens ORDER BY ${TOKEN_ORDER_BY}`,
-  );
-  const seedPalette = await select<PaletteRow>(
-    `SELECT theme_id, slot, value FROM theme_seed_event_palette ORDER BY ${PALETTE_ORDER_BY}`,
-  );
-  const tokensByTheme = groupBy(tokens, (r) => r.theme_id);
-  const paletteByTheme = groupBy(palette, (r) => r.theme_id);
-  const seedTokensByTheme = groupBy(seedTokens, (r) => r.theme_id);
-  const seedPaletteByTheme = groupBy(seedPalette, (r) => r.theme_id);
-  return themes.map((theme) => ({
-    theme,
-    tokens: tokensByTheme.get(theme.id) ?? [],
-    palette: paletteByTheme.get(theme.id) ?? [],
-    seedTokens: seedTokensByTheme.get(theme.id) ?? [],
-    seedPalette: seedPaletteByTheme.get(theme.id) ?? [],
+  const rows = await invoke<UserThemeRead[]>("theme_load_all", {
+    dbUrl: await activeDbUrl(),
+  });
+  return rows.map((read) => ({
+    theme: read.theme,
+    tokens: [...read.tokens].sort(compareTokenRows),
+    palette: [...read.palette].sort(comparePaletteRows),
+    seedTokens: [...read.seedTokens].sort(compareTokenRows),
+    seedPalette: [...read.seedPalette].sort(comparePaletteRows),
   }));
 }
 
@@ -396,15 +383,4 @@ export async function loadDismissals(): Promise<DismissalRow[]> {
   return invoke<DismissalRow[]>("theme_load_dismissals", {
     dbUrl: await activeDbUrl(),
   });
-}
-
-function groupBy<T, K>(rows: readonly T[], key: (row: T) => K): Map<K, T[]> {
-  const out = new Map<K, T[]>();
-  for (const row of rows) {
-    const k = key(row);
-    const list = out.get(k);
-    if (list) list.push(row);
-    else out.set(k, [row]);
-  }
-  return out;
 }

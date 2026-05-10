@@ -56,7 +56,8 @@ persistence:
 - Moved the timezone hydrator's durable row application behind one Rust
   transaction while keeping browser `Temporal` responsible for IANA timezone
   conversion.
-- Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
+- Moved full user-theme row loading behind Rust validation. TypeScript still
+  preserves editor display order after the backend returns grouped rows.
 
 ## Decision rule
 
@@ -404,6 +405,14 @@ Candidates:
 - Pomodoro active state load.
 - Theme snapshot load.
 - Import conflict lookup.
+
+Current implementation status:
+
+- Theme snapshot load now uses the Rust `theme_load_all` command with backend
+  validation for theme rows, token rows, palette rows, icon labels, calendar
+  modes, and hex colors.
+- Calendar Pomodoro progress protection reads and calendar import conflict
+  handling already run through Rust commands.
 
 Why this should move:
 

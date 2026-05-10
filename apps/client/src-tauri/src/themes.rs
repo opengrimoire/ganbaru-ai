@@ -63,6 +63,142 @@ pub struct DismissalRow {
     dismissed_at: i64,
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ThemeRowRead {
+    id: String,
+    display_name: String,
+    blend_canvas: String,
+    seed_blend_canvas: String,
+    derivation_engine_version: i64,
+    calendar_default_mode: String,
+    calendar_default_custom: String,
+    seed_calendar_default_mode: String,
+    seed_calendar_default_custom: String,
+    icon_label: Option<String>,
+    seed_icon_label: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct TokenRowRead {
+    theme_id: String,
+    kind: String,
+    key: String,
+    value: String,
+    isolated: i64,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct PaletteRowRead {
+    theme_id: String,
+    slot: i64,
+    value: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserThemeRead {
+    theme: ThemeRowRead,
+    tokens: Vec<TokenRowRead>,
+    palette: Vec<PaletteRowRead>,
+    seed_tokens: Vec<TokenRowRead>,
+    seed_palette: Vec<PaletteRowRead>,
+}
+
+trait ThemeScoped {
+    fn theme_id(&self) -> &str;
+}
+
+impl ThemeScoped for TokenRowRead {
+    fn theme_id(&self) -> &str {
+        &self.theme_id
+    }
+}
+
+impl ThemeScoped for PaletteRowRead {
+    fn theme_id(&self) -> &str {
+        &self.theme_id
+    }
+}
+
+#[tauri::command]
+pub async fn theme_load_all<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+) -> Result<Vec<UserThemeRead>, String> {
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let themes = sqlx::query_as::<_, ThemeRowRead>(
+        "SELECT id, display_name, blend_canvas, seed_blend_canvas,
+                derivation_engine_version, calendar_default_mode,
+                calendar_default_custom, seed_calendar_default_mode,
+                seed_calendar_default_custom, icon_label, seed_icon_label,
+                created_at, updated_at
+         FROM themes
+         ORDER BY created_at ASC",
+    )
+    .fetch_all(&mut conn)
+    .await
+    .map_err(|e| format!("load themes: {e}"))?;
+    if themes.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let tokens = sqlx::query_as::<_, TokenRowRead>(
+        "SELECT theme_id, kind, key, value, isolated
+         FROM theme_tokens
+         ORDER BY theme_id ASC, kind ASC, key ASC",
+    )
+    .fetch_all(&mut conn)
+    .await
+    .map_err(|e| format!("load theme tokens: {e}"))?;
+    let palette = sqlx::query_as::<_, PaletteRowRead>(
+        "SELECT theme_id, slot, value
+         FROM theme_event_palette
+         ORDER BY theme_id ASC, slot ASC",
+    )
+    .fetch_all(&mut conn)
+    .await
+    .map_err(|e| format!("load theme palette: {e}"))?;
+    let seed_tokens = sqlx::query_as::<_, TokenRowRead>(
+        "SELECT theme_id, kind, key, value, isolated
+         FROM theme_seed_tokens
+         ORDER BY theme_id ASC, kind ASC, key ASC",
+    )
+    .fetch_all(&mut conn)
+    .await
+    .map_err(|e| format!("load seed theme tokens: {e}"))?;
+    let seed_palette = sqlx::query_as::<_, PaletteRowRead>(
+        "SELECT theme_id, slot, value
+         FROM theme_seed_event_palette
+         ORDER BY theme_id ASC, slot ASC",
+    )
+    .fetch_all(&mut conn)
+    .await
+    .map_err(|e| format!("load seed theme palette: {e}"))?;
+
+    validate_theme_rows(&themes, &tokens, &palette, &seed_tokens, &seed_palette)?;
+
+    let mut tokens_by_theme = group_by_theme(tokens);
+    let mut palette_by_theme = group_by_theme(palette);
+    let mut seed_tokens_by_theme = group_by_theme(seed_tokens);
+    let mut seed_palette_by_theme = group_by_theme(seed_palette);
+
+    Ok(themes
+        .into_iter()
+        .map(|theme| {
+            let id = theme.id.clone();
+            UserThemeRead {
+                theme,
+                tokens: tokens_by_theme.remove(&id).unwrap_or_default(),
+                palette: palette_by_theme.remove(&id).unwrap_or_default(),
+                seed_tokens: seed_tokens_by_theme.remove(&id).unwrap_or_default(),
+                seed_palette: seed_palette_by_theme.remove(&id).unwrap_or_default(),
+            }
+        })
+        .collect())
+}
+
 #[tauri::command]
 pub async fn theme_insert<R: Runtime>(
     app: AppHandle<R>,
@@ -803,6 +939,76 @@ fn ensure_row_changed(result: SqliteQueryResult, context: &str) -> Result<(), St
     }
 }
 
+fn group_by_theme<T: ThemeScoped>(rows: Vec<T>) -> HashMap<String, Vec<T>> {
+    let mut grouped = HashMap::new();
+    for row in rows {
+        grouped
+            .entry(row.theme_id().to_string())
+            .or_insert_with(Vec::new)
+            .push(row);
+    }
+    grouped
+}
+
+fn validate_theme_rows(
+    themes: &[ThemeRowRead],
+    tokens: &[TokenRowRead],
+    palette: &[PaletteRowRead],
+    seed_tokens: &[TokenRowRead],
+    seed_palette: &[PaletteRowRead],
+) -> Result<(), String> {
+    for theme in themes {
+        validate_theme_read(theme)?;
+    }
+    validate_token_read_rows(tokens, "theme_tokens")?;
+    validate_palette_read_rows(palette, "theme_event_palette")?;
+    validate_token_read_rows(seed_tokens, "theme_seed_tokens")?;
+    validate_palette_read_rows(seed_palette, "theme_seed_event_palette")
+}
+
+fn validate_theme_read(theme: &ThemeRowRead) -> Result<(), String> {
+    validate_theme_id(&theme.id)?;
+    validate_display_name(&theme.display_name)?;
+    validate_hex_color(&theme.blend_canvas, "blend_canvas")?;
+    validate_hex_color(&theme.seed_blend_canvas, "seed_blend_canvas")?;
+    if theme.derivation_engine_version < 0 {
+        return Err("derivation_engine_version cannot be negative".to_string());
+    }
+    validate_calendar_mode(&theme.calendar_default_mode, "calendar_default_mode")?;
+    validate_calendar_mode(
+        &theme.seed_calendar_default_mode,
+        "seed_calendar_default_mode",
+    )?;
+    validate_hex_color(&theme.calendar_default_custom, "calendar_default_custom")?;
+    validate_hex_color(
+        &theme.seed_calendar_default_custom,
+        "seed_calendar_default_custom",
+    )?;
+    validate_optional_icon_label(&theme.icon_label, "icon_label")?;
+    validate_optional_icon_label(&theme.seed_icon_label, "seed_icon_label")
+}
+
+fn validate_token_read_rows(rows: &[TokenRowRead], field: &str) -> Result<(), String> {
+    for row in rows {
+        validate_theme_id(&row.theme_id)?;
+        validate_token_identity(&row.kind, &row.key, field)?;
+        validate_hex_color(&row.value, field)?;
+        if !matches!(row.isolated, 0 | 1) {
+            return Err(format!("{field} isolated must be 0 or 1"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_palette_read_rows(rows: &[PaletteRowRead], field: &str) -> Result<(), String> {
+    for row in rows {
+        validate_theme_id(&row.theme_id)?;
+        validate_palette_slot(row.slot, field)?;
+        validate_hex_color(&row.value, field)?;
+    }
+    Ok(())
+}
+
 fn validate_theme_write(write: &UserThemeWrite) -> Result<(), String> {
     validate_theme_id(&write.id)?;
     validate_display_name(&write.display_name)?;
@@ -868,6 +1074,13 @@ fn validate_icon_label(value: &str, field: &str) -> Result<(), String> {
     } else {
         Err(format!("{field} must be 'light' or 'dark'"))
     }
+}
+
+fn validate_optional_icon_label(value: &Option<String>, field: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_icon_label(value, field)?;
+    }
+    Ok(())
 }
 
 fn validate_calendar_mode(value: &str, field: &str) -> Result<(), String> {

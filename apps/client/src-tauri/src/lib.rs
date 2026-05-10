@@ -562,6 +562,7 @@ pub fn run() {
             calendars::calendar_add_calendar,
             calendars::calendar_set_visibility,
             calendars::calendar_remove_calendar,
+            themes::theme_load_all,
             pomodoro::pomodoro_insert_segments,
             pomodoro::pomodoro_update_segments,
             pomodoro::pomodoro_cleanup_event_segments,
