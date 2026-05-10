@@ -13,7 +13,7 @@ import {
   type ExpansionIndex,
 } from "$lib/components/calendar/calendar-index";
 import {
-  computeViewWindow, sanitizeCalendarTime, utcIsoToWallClock, wallClockToUtcIso,
+  computeViewWindow, sanitizeCalendarTime, wallClockToUtcIso,
 } from "$lib/components/calendar/utils";
 import {
   mapAlarm, mapAttendee, mapOverride, mapRow, safeJsonParse, toDbTime,
@@ -302,11 +302,12 @@ async function loadWindowIntoState(
   windowStart: Temporal.PlainDate,
   windowEnd: Temporal.PlainDate,
   markBoot: boolean,
+  force = false,
 ): Promise<void> {
   const renderZone = localTimezone();
   const key = calendarWindowKey(windowStart, windowEnd, renderZone);
-  if (!markBoot && loaded && currentWindowKey === key) return;
-  if (pendingWindowKey === key && pendingWindowPromise) {
+  if (!force && !markBoot && loaded && currentWindowKey === key) return;
+  if (!force && pendingWindowKey === key && pendingWindowPromise) {
     await pendingWindowPromise;
     return;
   }
@@ -360,6 +361,14 @@ async function loadWindowIntoState(
       pendingWindowPromise = null;
     }
   }
+}
+
+async function refreshCurrentWindow(): Promise<void> {
+  if (!currentWindowStart || !currentWindowEnd) {
+    invalidate(false);
+    return;
+  }
+  await loadWindowIntoState(currentWindowStart, currentWindowEnd, false, true);
 }
 
 /**
@@ -1140,9 +1149,6 @@ export function getCalendar() {
       const payload = buildBulkImportPayload(
         events, targetCalendarId, now, fallbackZone, () => crypto.randomUUID(),
       );
-      const eventByCandidateId = new Map(
-        payload.events.map((event, index) => [event.candidateId, events[index]]),
-      );
       const result = await invoke<CalendarBulkImportResult>("calendar_bulk_import", {
         dbUrl: dbUrl(),
         payload,
@@ -1157,42 +1163,8 @@ export function getCalendar() {
         };
       }
 
-      // In-memory state update: splice touched rows into the current render
-      // state directly and run one invalidate at the end so cached window
-      // expansions drop.
-      store.beginBatch();
-      try {
-        const reZone = (wallClock: string, sourceZone: string): string => {
-          if (sourceZone === fallbackZone) return wallClock;
-          return utcIsoToWallClock(wallClockToUtcIso(wallClock, sourceZone), fallbackZone);
-        };
-        const idToIdx = new Map<string, number>();
-        const next = [...rawBlocks];
-        for (let i = 0; i < next.length; i++) idToIdx.set(next[i].id, i);
-
-        for (const applied of result.applied) {
-          const event = eventByCandidateId.get(applied.candidateId);
-          if (!event) continue;
-          const homeZone = event.timezone || fallbackZone;
-          const idx = idToIdx.get(applied.eventId);
-          const merged: CalendarEvent = slimEvent({
-            ...(idx !== undefined ? next[idx] : {} as CalendarEvent),
-            ...event,
-            id: applied.eventId,
-            calendarId: targetCalendarId,
-            timezone: homeZone,
-            start: event.allDay ? event.start : reZone(event.start, homeZone),
-            end: event.allDay ? event.end : reZone(event.end, homeZone),
-          });
-          if (idx !== undefined) next[idx] = merged;
-          else next.push(merged);
-        }
-
-        rawBlocks = next;
-        totalEventCount += result.added;
-      } finally {
-        store.endBatch();
-      }
+      totalEventCount += result.added;
+      await refreshCurrentWindow();
 
       return {
         added: result.added,

@@ -297,7 +297,7 @@ If Tauri and WebKit impose a higher fixed empty-app memory floor than desired, t
 2. Add the 10,000-event scale to the existing core benchmark datasets. Done.
 3. Implement Rust calendar window queries for non-recurring events. Done.
 4. Port recurrence expansion to Rust and switch render queries to backend expansion. Done for loaded render windows; edit previews intentionally remain TypeScript.
-5. Replace frontend `rawBlocks` dependencies with typed window, detail, existence, active-block, import, and export commands. Partly done for render windows, panel details, and ICS export; active-block and import cleanup remain follow-up work.
+5. Replace frontend `rawBlocks` dependencies with typed window, detail, existence, active-block, import, and export commands. Partly done for render windows, panel details, ICS export, and import refresh; active-block existence cleanup remains follow-up work.
 6. Remove global Temporal from the normal boot path. Deferred until edit previews and non-local timezone conversion no longer need synchronous frontend Temporal.
 7. Remove parked event panel mounting and replace it with intent-based prefetch. Done for boot mounting; panel reuse after an actual user open remains.
 8. Add dense-day virtualization or compact overflow rendering. Done for timed day and week columns.
