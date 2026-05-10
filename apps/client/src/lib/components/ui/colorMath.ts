@@ -201,9 +201,11 @@ export function hsvToHex(h: number, s: number, v: number): string {
 }
 
 /**
- * Linearly blend two hex colors in sRGB space. Alpha is ignored and the
- * output is always 6-digit opaque hex. `weightA` is the fraction of `a`
- * in the result (0..1), the rest is `b`. Invalid inputs fall back to `a`.
+ * Linearly blend two hex colors in sRGB space. The result keeps the alpha
+ * channel from `a`, because callers use this to tint a source color toward
+ * a canvas without changing that source color's opacity. `weightA` is the
+ * fraction of `a` in the result (0..1), the rest is `b`. Invalid inputs
+ * fall back to `a`.
  *
  * Note: sRGB-space blending is not perceptually uniform, but it matches
  * the legacy derivation weights used by `themes.ts` and the event palette
@@ -211,14 +213,15 @@ export function hsvToHex(h: number, s: number, v: number): string {
  * the OKLab pickers below instead.
  */
 export function blendHex(a: string, b: string, weightA: number): string {
-  const ra = hexToRgb(a);
-  const rb = hexToRgb(b);
+  const ra = hexToRgba(a);
+  const rb = hexToRgba(b);
   if (!ra || !rb) return a;
   const wb = 1 - weightA;
-  return rgbToHex(
+  return rgbaToHex(
     ra.r * weightA + rb.r * wb,
     ra.g * weightA + rb.g * wb,
     ra.b * weightA + rb.b * wb,
+    ra.a,
   );
 }
 

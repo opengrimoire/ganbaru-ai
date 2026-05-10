@@ -242,6 +242,10 @@ describe("blendHex", () => {
     expect(blendHex("#000000", "#ffffff", 0.5)).toBe("#808080");
   });
 
+  it("preserves the alpha channel from the source color", () => {
+    expect(blendHex("#00000080", "#ffffff", 0.5)).toBe("#80808080");
+  });
+
   it("falls back to a on bad input", () => {
     expect(blendHex("not-a-color", "#000000", 0.5)).toBe("not-a-color");
   });

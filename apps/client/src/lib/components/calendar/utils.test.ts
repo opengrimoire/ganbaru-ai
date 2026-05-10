@@ -821,6 +821,24 @@ describe("dimmed color variants", () => {
     expect(past.bg).not.toBe(outside.bg);
   });
 
+  it("preserves palette alpha when computing dimmed variants", () => {
+    const customPalette = [...lightTheme.eventPalette];
+    customPalette[2] = "#ff000080";
+    const customTheme: Theme = {
+      kind: "builtin",
+      id: "custom-alpha-test",
+      displayName: "Custom alpha test",
+      base: "light",
+      iconLabel: "light",
+      blendCanvas: "#ffffff",
+      eventPalette: customPalette,
+    };
+    expect(getPastEventColor(2, customTheme).bg).toBe("#ffb3b380");
+    expect(getCancelledEventColor(2, customTheme).bg.endsWith("80")).toBe(true);
+    expect(getFreeEventColor(2, customTheme).bg.endsWith("80")).toBe(true);
+    expect(getOutsideMonthEventColor(2, customTheme).bg.endsWith("80")).toBe(true);
+  });
+
   it("falls back to the dimmed fallback slot when color is undefined", () => {
     assertColorEntry(getPastEventColor(undefined, lightTheme));
     assertColorEntry(getCancelledEventColor(undefined, darkTheme));
@@ -1149,4 +1167,3 @@ describe("computeViewWindow", () => {
     expect(a.end.toString()).toBe(b.end.toString());
   });
 });
-

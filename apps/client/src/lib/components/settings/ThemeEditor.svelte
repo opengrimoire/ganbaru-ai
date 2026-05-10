@@ -19,7 +19,12 @@
   import { PALETTE_SIZE } from "$lib/components/calendar/types";
   import { blendHex } from "$lib/components/calendar/utils";
   import {
+    checkerboardBackgroundForCells,
+  } from "$lib/components/ui/colorDisplay";
+  import {
     contrastRatio,
+    hexToRgba,
+    normalizeHex,
     pickReadableForeground,
   } from "$lib/components/ui/colorMath";
   import {
@@ -878,7 +883,27 @@
     void themeStore.setPaletteSlot(theme.id, index, hex);
   }
 
+  const PALETTE_SWATCH_SIZE = 22;
+  const PALETTE_SWATCH_CHECKER_BG = checkerboardBackgroundForCells(
+    PALETTE_SWATCH_SIZE,
+    3,
+  );
   const paletteIndices = Array.from({ length: PALETTE_SIZE }, (_, i) => i);
+
+  function paletteSwatchHasTransparency(hex: string): boolean {
+    const rgba = hexToRgba(hex);
+    return rgba !== null && rgba.a < 255;
+  }
+
+  function paletteSwatchFrameStyle(hex: string): string {
+    return paletteSwatchHasTransparency(hex)
+      ? `background: ${PALETTE_SWATCH_CHECKER_BG};`
+      : "";
+  }
+
+  function paletteSwatchColor(hex: string): string {
+    return normalizeHex(hex) ?? "#000000";
+  }
 
   function setAppToken(key: string, hex: string) {
     void themeStore.setTokenValue(theme.id, "app", key, hex);
@@ -1648,6 +1673,24 @@
     </div>
   {/snippet}
 
+  {#snippet palettePreviewSwatch(value: string, title: string)}
+    <span
+      class={cn(
+        "relative block h-[22px] w-[22px] shrink-0 overflow-hidden rounded-md border",
+        paletteSwatchHasTransparency(value)
+          ? "border-transparent bg-clip-padding shadow-none"
+          : "border-border shadow-sm",
+      )}
+      style={paletteSwatchFrameStyle(value)}
+      title={title}
+    >
+      <span
+        class="absolute inset-0 block"
+        style="background: {paletteSwatchColor(value)};"
+      ></span>
+    </span>
+  {/snippet}
+
   {#snippet eventPaletteSection()}
     <section class="flex flex-col gap-2 py-2.5">
       <header class="px-1">
@@ -1673,16 +1716,8 @@
             )}
             {#if isBuiltin}
               <div class="flex min-w-0 items-center gap-1.5">
-                <span
-                  class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                  style="background-color: {past};"
-                  title="Past {past}"
-                ></span>
-                <span
-                  class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                  style="background-color: {base};"
-                  title="Normal {base}"
-                ></span>
+                {@render palettePreviewSwatch(past, `Past ${past}`)}
+                {@render palettePreviewSwatch(base, `Normal ${base}`)}
                 <span
                   class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
                 >
@@ -1691,11 +1726,7 @@
               </div>
             {:else}
               <div class="flex min-w-0 items-center gap-1.5">
-                <span
-                  class="h-[22px] w-[22px] shrink-0 rounded-md border border-border shadow-sm"
-                  style="background-color: {past};"
-                  title="Past variant {past}"
-                ></span>
+                {@render palettePreviewSwatch(past, `Past variant ${past}`)}
                 <ColorField
                   value={base}
                   onChange={(hex) => setSlot(index, hex)}

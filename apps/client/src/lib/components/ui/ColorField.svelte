@@ -11,6 +11,10 @@
     pickColorPickerGeometry,
   } from "$lib/utils/responsive";
   import {
+    checkerboardBackground,
+    checkerboardBackgroundForCells,
+  } from "./colorDisplay";
+  import {
     type HsvColor,
     clampChannel,
     clampHue,
@@ -59,19 +63,7 @@
 
   const THUMB_OUTLINE_LIGHT = "#ffffff";
   const THUMB_OUTLINE_DARK = "#000000";
-  const CHECKER_TILE_SIZE = 12;
-
-  // Checkerboard background rendered from chrome tokens so the pattern stays
-  // visible against any editor-chrome background and adapts to light/dark.
-  // The conic-gradient quadrants lay out a 2x2 checker inside each tile.
-  // The alpha rail is 12px tall, so this renders exactly two cells high.
-  const CHECKER_BG =
-    "conic-gradient(" +
-    "var(--editor-chrome-checker-b) 25%, " +
-    "var(--editor-chrome-checker-a) 25% 50%, " +
-    "var(--editor-chrome-checker-b) 50% 75%, " +
-    "var(--editor-chrome-checker-a) 75%" +
-    `) 0 0/${CHECKER_TILE_SIZE}px ${CHECKER_TILE_SIZE}px`;
+  const ALPHA_RAIL_CHECKER_BG = checkerboardBackground(12);
 
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
@@ -154,6 +146,10 @@
   const solidHex = $derived(hsvToHex(hsv.h, hsv.s, hsv.v));
   const transparentHex = $derived(rgbaToHex(rgb.r, rgb.g, rgb.b, 0));
   const alphaPercentDisplay = $derived(Math.round((alpha / 255) * 100));
+  const swatchHasTransparency = $derived(alpha < 255);
+  const swatchCheckerBg = $derived(
+    checkerboardBackgroundForCells(swatchSize, 3),
+  );
   const activeFormatLabel = $derived(
     COLOR_FORMAT_OPTIONS.find((option) => option.value === activeFormat)?.label ??
       "HEX",
@@ -419,10 +415,17 @@
     aria-label={label ? `Edit ${label}` : "Edit color"}
     onclick={toggleOpen}
     class={cn(
-      "relative shrink-0 overflow-hidden rounded-md border border-border shadow-sm transition-shadow",
-      readOnly ? "cursor-not-allowed" : "hover:shadow-md",
+      "relative shrink-0 overflow-hidden rounded-md border transition-shadow",
+      swatchHasTransparency
+        ? "border-transparent bg-clip-padding shadow-none"
+        : "border-border shadow-sm",
+      readOnly
+        ? "cursor-not-allowed"
+        : swatchHasTransparency
+          ? "hover:shadow-none"
+          : "hover:shadow-md",
     )}
-    style="width: {swatchSize}px; height: {swatchSize}px;{alpha < 255 ? ` background: ${CHECKER_BG};` : ''}"
+    style="width: {swatchSize}px; height: {swatchSize}px;{swatchHasTransparency ? ` background: ${swatchCheckerBg};` : ''}"
   >
     <span
       class="absolute inset-0 block"
@@ -526,7 +529,7 @@
         aria-valuenow={alphaPercentDisplay}
         tabindex="0"
         class="relative mt-2 h-3 w-full touch-none rounded-full"
-        style="background: {CHECKER_BG};"
+        style="background: {ALPHA_RAIL_CHECKER_BG};"
       >
         <div
           class="pointer-events-none absolute inset-0 rounded-full"
