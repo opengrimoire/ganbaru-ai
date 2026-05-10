@@ -10,6 +10,7 @@ import {
   parseCalendarBenchmarkAnchor,
   seedCalendarSynth,
 } from "./calendar-utils";
+import { namespaceImportChildIds } from "./calendar-import-ops-data";
 import {
   ensureBenchmarkDbReady,
   invokeDb,
@@ -61,7 +62,7 @@ function buildPayload(calendarId: string, count: number, label: string) {
     draftToEvent(draft, index, calendarId, `ops-${label}`),
   );
   return buildBulkImportPayload(
-    events,
+    namespaceImportChildIds(events, calendarId),
     calendarId,
     nowLocal(),
     localTimezone(),
