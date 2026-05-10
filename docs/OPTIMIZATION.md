@@ -198,7 +198,7 @@ Work:
 
 - Remove global Temporal loading from `main.ts` once Rust owns calendar timezone and recurrence work.
 - Lazy-load Temporal only for remaining import, export, and migration paths until those move to Rust.
-- Stop mounting the parked event panel after boot.
+- Stop mounting the parked event panel after boot. Done.
 - Keep event panel module prefetch based on intent signals.
 - Split the event panel into a lightweight shell and lazy sections if cold open regresses too much.
 - Load only the active theme snapshot at boot; load the full theme registry, dismissals, and editor-only theme data when settings or the theme editor opens.
@@ -299,7 +299,7 @@ If Tauri and WebKit impose a higher fixed empty-app memory floor than desired, t
 4. Port recurrence expansion to Rust and switch render queries to backend expansion. Done for loaded render windows; edit previews intentionally remain TypeScript.
 5. Replace frontend `rawBlocks` dependencies with typed window, detail, existence, active-block, import, and export commands.
 6. Remove global Temporal from the normal boot path.
-7. Remove parked event panel mounting and replace it with intent-based prefetch.
+7. Remove parked event panel mounting and replace it with intent-based prefetch. Done for boot mounting; panel reuse after an actual user open remains.
 8. Add dense-day virtualization or compact overflow rendering.
 9. Run the full core benchmark suite and record the final result in `docs/PERFORMANCE.md`.
 

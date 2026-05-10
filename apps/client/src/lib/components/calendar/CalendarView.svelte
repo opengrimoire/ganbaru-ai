@@ -41,10 +41,6 @@
   const theme = getTheme();
 
   type EventPanelComponent = typeof import("./EventPanel.svelte").default;
-  type IdleSchedulerWindow = Window & typeof globalThis & {
-    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
-    cancelIdleCallback?: (handle: number) => void;
-  };
   type ParkedPanelSnapshot =
     | {
         mode: "create";
@@ -89,17 +85,12 @@
         skipInlineDeleteConfirm: boolean;
       };
 
-  const PANEL_PARK_TIMEOUT_MS = 500;
   const CREATE_CLOSE_GUARD_MS = 500;
-  const PARKED_PANEL_ANCHOR: PanelAnchor = { x: -10000, y: -10000, width: 0, height: 0 };
 
   let EventPanel = $state<EventPanelComponent | null>(null);
   let loadingEventPanel: Promise<void> | null = null;
   let panelOpenRequestId = 0;
   let parkedPanelSnapshot = $state<ParkedPanelSnapshot | null>(null);
-  let panelParkScheduled = false;
-  let panelParkIdleHandle = 0;
-  let panelParkTimerHandle = 0;
 
   function loadEventPanel(): Promise<void> {
     if (EventPanel) return Promise.resolve();
@@ -129,46 +120,6 @@
     const snapshot = snapshotCurrentPanel();
     if (snapshot) parkedPanelSnapshot = snapshot;
     session.close();
-  }
-
-  function buildDefaultParkedPanelSnapshot(): ParkedPanelSnapshot {
-    const day = formatDatePart(new Date());
-    return {
-      mode: "create",
-      start: `${day} 00:00`,
-      end: `${day} 00:00`,
-      anchor: PARKED_PANEL_ANCHOR,
-      initialAllDay: false,
-    };
-  }
-
-  async function mountParkedPanel() {
-    panelParkIdleHandle = 0;
-    panelParkTimerHandle = 0;
-    if (parkedPanelSnapshot || session.state.mode !== "closed") return;
-    try {
-      await loadEventPanel();
-      if (session.state.mode === "closed" && !parkedPanelSnapshot) {
-        parkedPanelSnapshot = buildDefaultParkedPanelSnapshot();
-      }
-    } catch (e) {
-      console.error("[CalendarView] park event panel failed:", e);
-    }
-  }
-
-  function schedulePanelPark() {
-    if (panelParkScheduled) return;
-    panelParkScheduled = true;
-    const idleWindow = window as IdleSchedulerWindow;
-    if (idleWindow.requestIdleCallback) {
-      panelParkIdleHandle = idleWindow.requestIdleCallback(() => {
-        void mountParkedPanel();
-      }, { timeout: PANEL_PARK_TIMEOUT_MS });
-      return;
-    }
-    panelParkTimerHandle = window.setTimeout(() => {
-      void mountParkedPanel();
-    }, PANEL_PARK_TIMEOUT_MS);
   }
 
   function markPanelPaintDone(requestId: number) {
@@ -868,7 +819,6 @@
     tick().then(() => {
       requestAnimationFrame(() => {
         perfMark("boot.first-paint", { count: visibleEvents.length });
-        schedulePanelPark();
       });
     });
 
@@ -893,13 +843,6 @@
       if (anchorRaf !== 0) {
         cancelAnimationFrame(anchorRaf);
         anchorRaf = 0;
-      }
-      const idleWindow = window as IdleSchedulerWindow;
-      if (panelParkIdleHandle !== 0 && idleWindow.cancelIdleCallback) {
-        idleWindow.cancelIdleCallback(panelParkIdleHandle);
-      }
-      if (panelParkTimerHandle !== 0) {
-        window.clearTimeout(panelParkTimerHandle);
       }
       pendingAnchor = null;
       window.removeEventListener("keydown", handleKeydown);
