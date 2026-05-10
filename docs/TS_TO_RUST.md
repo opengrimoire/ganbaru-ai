@@ -10,8 +10,9 @@ The current performance baseline before this plan is `2026-05-09-01` in
 
 ## Implementation status
 
-Started with the Phase 0 foundation, Phase 2 import application, and Phase 4
-theme persistence:
+Started with the Phase 0 foundation, Phase 1 calendar persistence, Phase 2
+import application, Phase 3 Pomodoro persistence, and Phase 4 theme
+persistence:
 
 - Added a shared Rust SQLite resolver for the registered app databases.
 - Enabled `PRAGMA foreign_keys=ON` on direct sqlx connections used by the
@@ -38,6 +39,14 @@ theme persistence:
 - Moved calendar list add, visibility toggle, and remove operations behind Rust
   commands. Calendar removal now deletes events and the calendar row in one
   transaction.
+- Moved Pomodoro segment insertion, segment status and pause updates, orphan
+  cleanup, and completed session writes behind Rust commands. Rust now
+  validates segment enums and pause-log JSON, computes focus score for
+  completed sessions, and canonicalizes recurring instance ids to DB-backed
+  parent event ids before writing through the foreign-key boundary.
+- Updated day-column persisted segment loading so rows stored against a
+  recurring parent event id can still render under the visible virtual
+  instance id for the matching date.
 - Kept full user-theme row loading in TypeScript until Phase 6 typed reads.
 
 ## Decision rule
@@ -259,13 +268,18 @@ Why this should move:
   every async write before a crash.
 - The future CLI needs to read and explain Pomodoro state consistently.
 
-Schema issue to resolve first:
+Schema issue status:
 
 - The current implementation can use synthetic recurring ids such as
   `templateId::YYYY-MM-DD`, while `pomodoro_segments.event_id` is declared as a
   foreign key to `calendar_events(id)`. That relationship is inconsistent
   unless recurring instances are detached before progress is written or the
   schema changes to model run identity differently.
+- Current Rust segment and session writes resolve synthetic recurring ids to
+  the DB-backed parent event id and retain the concrete instance date on
+  `pomodoro_segments.event_date`. This keeps existing foreign keys intact and
+  lets detach-instance transactions move dated progress rows to standalone
+  events later.
 
 Recommended schema direction:
 
@@ -275,6 +289,16 @@ Recommended schema direction:
 - Prefer pause rows over JSON pause logs for recovery and analytics.
 - Preserve historical event references without requiring every recurring
   instance to be a physical `calendar_events` row.
+
+Current implementation status:
+
+- Segment insertion, segment updates, pause-log writes, completed-session
+  inserts, focus-score calculation, event-scoped cleanup, and startup orphan
+  cleanup now run through Rust commands.
+- Svelte still owns live timer decisions, transitions, notification timing,
+  native overlay calls, in-memory session state, and segment-plan construction.
+  Those are the next Phase 3 boundary if the full persisted runtime service is
+  implemented.
 
 Keep in TypeScript during this phase:
 

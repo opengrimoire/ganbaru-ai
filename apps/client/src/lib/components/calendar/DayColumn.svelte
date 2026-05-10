@@ -199,6 +199,9 @@
       .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId && p.event.id !== draggingEventId)
       .map((p) => p.event.id)
       .sort();
+    const queryEventIds = Array.from(new Set(
+      eventIds.flatMap((id) => id.includes("::") ? [id, id.split("::")[0]] : [id]),
+    )).sort();
     // Skip mark emission for the no-pomodoro path so a 1Hz effect on a column
     // with no pomodoro events does not flood the diagnostics ring buffer.
     if (eventIds.length === 0) {
@@ -213,7 +216,8 @@
     lastFetchKey = fetchKey;
     const tStart = performance.now();
     perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
-    const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
+    const placeholders = queryEventIds.map((_, i) => `$${i + 1}`).join(",");
+    const visibleIds = new Set(eventIds);
     select<DbSegmentRow>(
       `SELECT id, event_id, event_date, run_id, cycle_number, phase,
               planned_start, planned_end, actual_start, actual_end, pause_log, status
@@ -221,13 +225,19 @@
        WHERE event_id IN (${placeholders})
          AND (status = 'completed' OR status = 'active' OR status = 'interrupted')
        ORDER BY planned_start ASC`,
-      eventIds,
+      queryEventIds,
     ).then((rows) => {
       const map = new Map<string, PersistedSegment[]>();
       for (const r of rows) {
+        const virtualId = `${r.event_id}::${r.event_date}`;
+        const mapKey = visibleIds.has(r.event_id)
+          ? r.event_id
+          : visibleIds.has(virtualId)
+            ? virtualId
+            : r.event_id;
         const seg: PersistedSegment = {
           id: r.id,
-          eventId: r.event_id,
+          eventId: mapKey,
           eventDate: r.event_date,
           runId: r.run_id,
           cycleNumber: r.cycle_number,
@@ -239,9 +249,9 @@
           pauseLog: r.pause_log ? JSON.parse(r.pause_log) : [],
           status: r.status as PersistedSegment["status"],
         };
-        const arr = map.get(seg.eventId) ?? [];
+        const arr = map.get(mapKey) ?? [];
         arr.push(seg);
-        map.set(seg.eventId, arr);
+        map.set(mapKey, arr);
       }
       persistedSegmentsMap = map;
       perfMark("col.effect-done", {

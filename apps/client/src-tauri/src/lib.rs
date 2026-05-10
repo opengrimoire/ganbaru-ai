@@ -8,6 +8,7 @@ mod calendars;
 mod db;
 mod db_path;
 mod notification;
+mod pomodoro;
 mod themes;
 mod tray;
 mod vault;
@@ -553,6 +554,11 @@ pub fn run() {
             calendars::calendar_add_calendar,
             calendars::calendar_set_visibility,
             calendars::calendar_remove_calendar,
+            pomodoro::pomodoro_insert_segments,
+            pomodoro::pomodoro_update_segments,
+            pomodoro::pomodoro_cleanup_event_segments,
+            pomodoro::pomodoro_cleanup_orphans,
+            pomodoro::pomodoro_save_session,
             themes::theme_insert,
             themes::theme_replace_content,
             themes::theme_delete,
