@@ -1,12 +1,8 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
   import AlertTriangle from "@lucide/svelte/icons/alert-triangle";
-  import ArrowDown from "@lucide/svelte/icons/arrow-down";
-  import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
-  import Copy from "@lucide/svelte/icons/copy";
-  import Download from "@lucide/svelte/icons/download";
   import Link2 from "@lucide/svelte/icons/link-2";
   import Moon from "@lucide/svelte/icons/moon";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -16,20 +12,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { cn, isEditableKeyboardTarget } from "$lib/utils";
-  import { PALETTE_SIZE } from "$lib/components/calendar/types";
-  import { blendHex } from "$lib/components/calendar/utils";
-  import {
-    checkerboardBackgroundForCells,
-  } from "$lib/components/ui/colorDisplay";
   import {
     contrastRatio,
-    hexToRgba,
-    normalizeHex,
     pickReadableForeground,
   } from "$lib/components/ui/colorMath";
   import {
     DERIVATION_ENGINE_VERSION,
-    isThemeCalendarDark,
     resolveAppTokens,
     resolveCalendarTokens,
     type CalendarColorDefaultMode,
@@ -39,442 +27,27 @@
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
   import ColorField from "$lib/components/ui/ColorField.svelte";
-
-  type TokenInfo = { title: string; description: string };
-
-  const APP_TOKEN_INFO: Record<string, TokenInfo> = {
-    "--background": {
-      title: "App canvas",
-      description: "Most views paint their own surface over it",
-    },
-    "--cal-header-bg": {
-      title: "Calendar header",
-      description: "Calendar toolbar and day/time headers",
-    },
-    "--foreground": {
-      title: "Text color",
-      description: "Applied to text across the app",
-    },
-    "--card": {
-      title: "Card",
-      description: "Background of grouped panels, dialogs, and tinted cards",
-    },
-    "--primary": {
-      title: "Primary action",
-      description: "Main accent color for highlighted buttons and links",
-    },
-    "--primary-foreground": {
-      title: "Button text",
-      description: "Text on primary buttons",
-    },
-    "--destructive": {
-      title: "Destructive",
-      description: "Color used for delete actions and warnings",
-    },
-    "--destructive-foreground": {
-      title: "Destructive text",
-      description: "Text color on destructive buttons and the title bar close hover",
-    },
-    "--ring": {
-      title: "Focus ring",
-      description: "Outline shown around focused inputs and buttons",
-    },
-    "--event-panel-bg": {
-      title: "Event panel surface",
-      description: "Background of the event creation/edit panel",
-    },
-    "--event-panel-contrast": {
-      title: "Event panel section header",
-      description: "Background strip behind section rows",
-    },
-    "--event-panel-text": {
-      title: "Event panel body text",
-      description: "Overrides --foreground inside the panel",
-    },
-    "--event-panel-muted-text": {
-      title: "Event panel muted text",
-      description: "Secondary text color inside the panel",
-    },
-    "--action-confirm": {
-      title: "Confirm action",
-      description:
-        "Background of the Save button and the active scope selector pill in the event panel",
-    },
-    "--action-confirm-foreground": {
-      title: "Confirm action text",
-      description: "Text color on the Save button and active scope pill",
-    },
-    "--action-danger-armed": {
-      title: "Armed delete",
-      description:
-        "Background of the delete button once it has been armed (click-again-to-confirm state)",
-    },
-    "--action-danger-armed-foreground": {
-      title: "Armed delete text",
-      description: "Text color on the delete button in its armed state",
-    },
-    "--status-accepted": {
-      title: "Accepted attendee",
-      description: "Status tile color for accepted attendees on a calendar event",
-    },
-    "--status-accepted-foreground": {
-      title: "Accepted attendee text",
-      description: "Text color on the accepted attendance tile",
-    },
-    "--status-tentative": {
-      title: "Tentative attendee",
-      description: "Status tile color for tentative attendees on a calendar event",
-    },
-    "--status-tentative-foreground": {
-      title: "Tentative attendee text",
-      description: "Text color on the tentative attendance tile",
-    },
-    "--status-declined": {
-      title: "Declined attendee",
-      description: "Status tile color for declined attendees on a calendar event",
-    },
-    "--status-declined-foreground": {
-      title: "Declined attendee text",
-      description: "Text color on the declined attendance tile",
-    },
-    "--priority-easy": {
-      title: "Easy priority",
-      description: "Applied as a tint for background and solid for text",
-    },
-    "--priority-medium": {
-      title: "Medium priority",
-      description: "Applied as a tint for background and solid for text",
-    },
-    "--priority-hard": {
-      title: "Hard priority",
-      description: "Applied as a tint for background and solid for text",
-    },
-    "--priority-epic": {
-      title: "Epic priority",
-      description: "Applied as a tint for background and solid for text",
-    },
-  };
-
-  const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
-    "--cal-bg": {
-      title: "Calendar background",
-      description: "Background of the calendar grid",
-    },
-    "--cal-gridline": {
-      title: "Grid lines",
-      description: "Color of the hour and day separator lines",
-    },
-    "--cal-time-label": {
-      title: "Time labels",
-      description: "Hour numbers down the side of the calendar",
-    },
-    "--cal-current-time": {
-      title: "Now line",
-      description: "Horizontal line marking the current time",
-    },
-    "--cal-timeline-rail": {
-      title: "Session rail track",
-      description: "Background strip beside an event during a pomodoro",
-    },
-    "--cal-timeline-break": {
-      title: "Break marker",
-      description: "Color of break segments on the session rail",
-    },
-    "--cal-timeline-focus": {
-      title: "Focus marker",
-      description: "Color of focus segments on the session rail",
-    },
-  };
-
-  type GroupSingleRow = { kind: "single"; key: string; scope: "app" | "cal" };
-  type GroupPairRow = {
-    kind: "pair";
-    bg: string;
-    fg: string;
-    title: string;
-    description: string;
-    scope: "app" | "cal";
-    // WCAG contrast target for this pair's fg-against-bg check. Omit for
-    // body text (4.5:1). Set to 3 for intentionally-recessed pairs like
-    // the muted surface, whose foreground is designed to sit at AA-large
-    // so captions recede without the warning panel flagging the design
-    // intent as a bug.
-    target?: number;
-  };
-  type GroupSourcePairRow = {
-    kind: "source-pair";
-    bg: string;
-    fg: string;
-    bgSource: keyof ThemeSources;
-    fgSource: keyof ThemeSources;
-    title: string;
-    description: string;
-    scope: "app";
-    target?: number;
-  };
-  type GroupContrastRow = GroupPairRow | GroupSourcePairRow;
-  type GroupRow = GroupSingleRow | GroupPairRow | GroupSourcePairRow;
-  type ThemeNavTarget = "general" | "calendar" | "signals" | "todo" | "json";
-  type SourceGroup = {
-    sourceKey: keyof ThemeSources | null;
-    title: string;
-    description: string;
-    navTarget?: Exclude<ThemeNavTarget, "json">;
-    rows: GroupRow[];
-  };
-
-  // Three-tier layout the user edits top-to-bottom:
-  //
-  //   Tier 1 (app and calendar foundation): app canvas first, then
-  //   calendar surface, event palette, calendar details, and event panel.
-  //
-  //   Tier 2 (feature surfaces): colors scoped to kanban badges.
-  //
-  //   Tier 3 (semantic signals): ink and accents that communicate intent
-  //   across buttons, text, and status tiles.
-  //
-  // Collapse button is gated on rows.length > 1. Multi-row groups start
-  // collapsed so the editor opens as a scannable page. Sourceless groups
-  // keep the same collapse affordance, just without a source ColorField to
-  // the left of the button. Source-driven single-row groups render the row
-  // as a peer of the source via groupHeaderStyleRow.
-  const SOURCE_GROUPS: SourceGroup[] = [
-    // Tier 1: app and calendar foundation
-    {
-      sourceKey: "canvas",
-      title: "App canvas",
-      description:
-        "Dominant background color, most surfaces tint automatically from it",
-      navTarget: "general",
-      rows: [
-        { kind: "single", key: "--background", scope: "app" },
-        { kind: "single", key: "--cal-header-bg", scope: "app" },
-        { kind: "single", key: "--card", scope: "app" },
-        {
-          kind: "pair",
-          bg: "--popover",
-          fg: "--popover-foreground",
-          title: "Popover",
-          description: "Dropdowns, menus, and floating panels",
-          scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--secondary",
-          fg: "--secondary-foreground",
-          title: "Secondary surface",
-          description: "Less emphasized buttons",
-          scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--muted",
-          fg: "--muted-foreground",
-          title: "Muted surface",
-          description: "Subtle wells and the default hint-text color",
-          scope: "app",
-          target: 3,
-        },
-        {
-          kind: "pair",
-          bg: "--accent",
-          fg: "--accent-foreground",
-          title: "Hover highlight",
-          description: "Soft tint shown when hovering rows and buttons",
-          scope: "app",
-        },
-        { kind: "single", key: "--ring", scope: "app" },
-        {
-          kind: "pair",
-          bg: "--sidebar",
-          fg: "--sidebar-foreground",
-          title: "Title bar",
-          description: "Top frame of the app window",
-          scope: "app",
-        },
-        {
-          kind: "pair",
-          bg: "--sidebar-accent",
-          fg: "--sidebar-accent-foreground",
-          title: "Title bar hover",
-          description: "Tint shown when hovering title bar buttons",
-          scope: "app",
-        },
-      ],
-    },
-    {
-      sourceKey: null,
-      title: "Calendar surface",
-      description: "Calendar background, gridlines, and timeline",
-      rows: [
-        { kind: "single", key: "--cal-bg", scope: "cal" },
-        { kind: "single", key: "--cal-gridline", scope: "cal" },
-        { kind: "single", key: "--cal-time-label", scope: "cal" },
-        { kind: "single", key: "--cal-timeline-rail", scope: "cal" },
-      ],
-    },
-    {
-      sourceKey: null,
-      title: "Calendar details",
-      description: "Semantic markers and accents on the calendar grid",
-      rows: [
-        { kind: "single", key: "--cal-current-time", scope: "cal" },
-        { kind: "single", key: "--cal-timeline-break", scope: "cal" },
-        { kind: "single", key: "--cal-timeline-focus", scope: "cal" },
-      ],
-    },
-    {
-      sourceKey: null,
-      title: "Event panel",
-      description:
-        "Surfaces on the event creation and edit panel opened from the calendar",
-      rows: [
-        { kind: "single", key: "--event-panel-bg", scope: "app" },
-        { kind: "single", key: "--event-panel-contrast", scope: "app" },
-        { kind: "single", key: "--event-panel-text", scope: "app" },
-        { kind: "single", key: "--event-panel-muted-text", scope: "app" },
-      ],
-    },
-    // Tier 2: feature surfaces
-    {
-      sourceKey: null,
-      title: "Task priority",
-      description: "Kanban badge colors per difficulty tier",
-      navTarget: "todo",
-      rows: [
-        { kind: "single", key: "--priority-easy", scope: "app" },
-        { kind: "single", key: "--priority-medium", scope: "app" },
-        { kind: "single", key: "--priority-hard", scope: "app" },
-        { kind: "single", key: "--priority-epic", scope: "app" },
-      ],
-    },
-    // Tier 3: semantic signals
-    {
-      sourceKey: "ink",
-      title: "Ink",
-      description: "Base text color",
-      navTarget: "signals",
-      rows: [
-        { kind: "single", key: "--foreground", scope: "app" },
-      ],
-    },
-    {
-      sourceKey: "primary",
-      title: "Primary action",
-      description: "Accent for highlighted buttons and links",
-      rows: [{ kind: "single", key: "--primary-foreground", scope: "app" }],
-    },
-    {
-      sourceKey: null,
-      title: "Destructive",
-      description: "Danger signal",
-      rows: [
-        {
-          kind: "source-pair",
-          bg: "--destructive",
-          fg: "--destructive-foreground",
-          bgSource: "destructive",
-          fgSource: "destructiveText",
-          title: "Destructive",
-          description: "Delete actions, armed delete, and declined status",
-          scope: "app",
-          target: 3,
-        },
-      ],
-    },
-    {
-      sourceKey: null,
-      title: "Confirm",
-      description: "Positive signal",
-      rows: [
-        {
-          kind: "source-pair",
-          bg: "--action-confirm",
-          fg: "--action-confirm-foreground",
-          bgSource: "confirm",
-          fgSource: "confirmText",
-          title: "Confirm",
-          description: "Save actions, active pills, and accepted status",
-          scope: "app",
-          target: 3,
-        },
-      ],
-    },
-    {
-      sourceKey: null,
-      title: "Warning",
-      description: "Caution signal",
-      rows: [
-        {
-          kind: "source-pair",
-          bg: "--status-tentative",
-          fg: "--status-tentative-foreground",
-          bgSource: "warning",
-          fgSource: "warningText",
-          title: "Warning",
-          description: "Tentative status and caution surfaces",
-          scope: "app",
-          target: 3,
-        },
-      ],
-    },
-  ];
-
-  const THEME_NAV_ITEMS: ReadonlyArray<{
-    label: string;
-    target: ThemeNavTarget;
-  }> = [
-    { label: "General", target: "general" },
-    { label: "Calendar", target: "calendar" },
-    { label: "To-do", target: "todo" },
-    { label: "Text and actions", target: "signals" },
-    { label: "JSON", target: "json" },
-  ];
-
-  const THEME_SECTION_LABELS: Record<ThemeNavTarget, string> = {
-    general: "General",
-    calendar: "Calendar",
-    todo: "To-do",
-    signals: "Text and actions",
-    json: "JSON",
-  };
-
-  const CALENDAR_DEFAULT_OPTIONS: ReadonlyArray<{
-    mode: CalendarColorDefaultMode;
-    label: string;
-  }> = [
-    { mode: "light", label: "Light-based" },
-    { mode: "dark", label: "Dark-based" },
-    { mode: "app-canvas", label: "App canvas-based" },
-    { mode: "custom", label: "Custom-based" },
-  ];
-
-  const TEXT_ACTION_GROUP_TITLES = new Set([
-    "Ink",
-    "Primary action",
-    "Destructive",
-    "Confirm",
-    "Warning",
-  ]);
-  const TEXT_ACTION_GROUPS = SOURCE_GROUPS.filter((group) =>
-    TEXT_ACTION_GROUP_TITLES.has(group.title),
-  );
-  const CALENDAR_GROUP_TITLES = new Set([
-    "Calendar surface",
-    "Calendar details",
-    "Event panel",
-  ]);
-  const CALENDAR_GROUPS = SOURCE_GROUPS.filter((group) =>
-    CALENDAR_GROUP_TITLES.has(group.title),
-  );
-
-  function isTextActionGroup(group: SourceGroup): boolean {
-    return TEXT_ACTION_GROUP_TITLES.has(group.title);
-  }
-
-  function isCalendarGroup(group: SourceGroup): boolean {
-    return CALENDAR_GROUP_TITLES.has(group.title);
-  }
+  import ThemeContrastNotice from "./ThemeContrastNotice.svelte";
+  import ThemeEventPaletteSection from "./ThemeEventPaletteSection.svelte";
+  import ThemeJsonSection from "./ThemeJsonSection.svelte";
+  import ThemeRebakeBanner from "./ThemeRebakeBanner.svelte";
+  import {
+    CALENDAR_DEFAULT_OPTIONS,
+    CALENDAR_GROUPS,
+    SOURCE_GROUPS,
+    TEXT_ACTION_GROUPS,
+    THEME_NAV_ITEMS,
+    THEME_SECTION_LABELS,
+    isCalendarGroup,
+    isTextActionGroup,
+    tokenInfo,
+    type GroupContrastRow,
+    type GroupPairRow,
+    type GroupSingleRow,
+    type GroupSourcePairRow,
+    type SourceGroup,
+    type ThemeNavTarget,
+  } from "./themeEditorModel";
 
   let { theme }: { theme: Theme } = $props();
 
@@ -602,15 +175,15 @@
     untrack(() =>
       Object.fromEntries(
         SOURCE_GROUPS.filter((g) => g.rows.length > 1).map((g) => [
-          g.title,
+          g.id,
           true,
         ]),
       ),
     ),
   );
 
-  function toggleGroup(title: string) {
-    collapsed[title] = !collapsed[title];
+  function toggleGroup(id: SourceGroup["id"]) {
+    collapsed[id] = !collapsed[id];
   }
 
   // The JSON drawer mirrors the theme's serialized form. We only refresh it
@@ -633,13 +206,6 @@
     jsonNoticeTimer = setTimeout(() => {
       jsonNotice = undefined;
     }, 1800);
-  }
-
-  function humanize(token: string): string {
-    const stripped = token.replace(/^--/, "").replace(/^cal-/, "");
-    const spaced = stripped.replace(/-/g, " ");
-    if (spaced.length === 0) return spaced;
-    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   }
 
   function setName(next: string) {
@@ -875,34 +441,8 @@
     window.addEventListener("pointerup", onUp);
   }
 
-  function effectiveCalBg(t: Theme): string {
-    return resolveCalendarTokens(t)["--cal-bg"];
-  }
-
   function setSlot(index: number, hex: string) {
     void themeStore.setPaletteSlot(theme.id, index, hex);
-  }
-
-  const PALETTE_SWATCH_SIZE = 22;
-  const PALETTE_SWATCH_CHECKER_BG = checkerboardBackgroundForCells(
-    PALETTE_SWATCH_SIZE,
-    3,
-  );
-  const paletteIndices = Array.from({ length: PALETTE_SIZE }, (_, i) => i);
-
-  function paletteSwatchHasTransparency(hex: string): boolean {
-    const rgba = hexToRgba(hex);
-    return rgba !== null && rgba.a < 255;
-  }
-
-  function paletteSwatchFrameStyle(hex: string): string {
-    return paletteSwatchHasTransparency(hex)
-      ? `background: ${PALETTE_SWATCH_CHECKER_BG};`
-      : "";
-  }
-
-  function paletteSwatchColor(hex: string): string {
-    return normalizeHex(hex) ?? "#000000";
   }
 
   function setAppToken(key: string, hex: string) {
@@ -1089,7 +629,7 @@
     const idx = nextPairCursor % failingPairs.length;
     const target = failingPairs[idx];
     nextPairCursor = idx + 1;
-    collapsed = { ...collapsed, [target.group.title]: false };
+    collapsed = { ...collapsed, [target.group.id]: false };
     queueMicrotask(() => {
       const el = document.querySelector<HTMLElement>(
         `[data-pair-key="${pairKey(target.row)}"]`,
@@ -1151,11 +691,6 @@
     jsonErrors = [];
   }
 
-  function tokenInfo(row: GroupSingleRow): TokenInfo {
-    const lookup =
-      row.scope === "app" ? APP_TOKEN_INFO : CALENDAR_TOKEN_INFO;
-    return lookup[row.key] ?? { title: humanize(row.key), description: "" };
-  }
 </script>
 
 <div class="theme-editor-root relative flex h-full min-h-0 flex-col">
@@ -1514,7 +1049,7 @@
         ? group.rows[0]
         : undefined}
     {@const isCollapsible = group.rows.length > 1}
-    {@const isCollapsed = isCollapsible && collapsed[group.title] === true}
+    {@const isCollapsed = isCollapsible && collapsed[group.id] === true}
     {@const showRows =
       group.rows.length > 0 && (!isCollapsible || !isCollapsed)}
     <section class="flex flex-col">
@@ -1547,7 +1082,7 @@
             {#if isCollapsible}
               <button
                 type="button"
-                onclick={() => toggleGroup(group.title)}
+                onclick={() => toggleGroup(group.id)}
                 aria-expanded={!isCollapsed}
                 aria-label="{isCollapsed
                   ? 'Expand'
@@ -1592,7 +1127,7 @@
 
   {#snippet textActionsSection()}
     <section class="flex flex-col divide-y divide-border">
-      {#each TEXT_ACTION_GROUPS as group (group.title)}
+      {#each TEXT_ACTION_GROUPS as group (group.id)}
         {@render groupSection(group)}
       {/each}
     </section>
@@ -1647,9 +1182,13 @@
   {#snippet calendarSection()}
     <section class="flex flex-col divide-y divide-border">
       {@render calendarDefaultsSection()}
-      {#each CALENDAR_GROUPS as group (group.title)}
-        {#if group.title === "Calendar details"}
-          {@render eventPaletteSection()}
+      {#each CALENDAR_GROUPS as group (group.id)}
+        {#if group.id === "calendar-details"}
+          <ThemeEventPaletteSection
+            {theme}
+            {isBuiltin}
+            onSetSlot={setSlot}
+          />
         {/if}
         {@render groupSection(group)}
       {/each}
@@ -1671,75 +1210,6 @@
         </span>
       {/if}
     </div>
-  {/snippet}
-
-  {#snippet palettePreviewSwatch(value: string, title: string)}
-    <span
-      class={cn(
-        "relative block h-[22px] w-[22px] shrink-0 overflow-hidden rounded-md border",
-        paletteSwatchHasTransparency(value)
-          ? "border-transparent bg-clip-padding shadow-none"
-          : "border-border shadow-sm",
-      )}
-      style={paletteSwatchFrameStyle(value)}
-      title={title}
-    >
-      <span
-        class="absolute inset-0 block"
-        style="background: {paletteSwatchColor(value)};"
-      ></span>
-    </span>
-  {/snippet}
-
-  {#snippet eventPaletteSection()}
-    <section class="flex flex-col gap-2 py-2.5">
-      <header class="px-1">
-        <h2 class="text-[13px] font-semibold text-foreground">
-          Event palette
-        </h2>
-        <div class="text-[11px] text-muted-foreground">
-          24 color slots, each one has a faded variant for past events, blended
-          toward Calendar background
-        </div>
-      </header>
-      <div
-        class="flex flex-col gap-3 p-3"
-        style="background-color: {effectiveCalBg(theme)};"
-      >
-        <div class="theme-palette-grid grid gap-x-2 gap-y-1.5">
-          {#each paletteIndices as index}
-            {@const base = theme.eventPalette[index]}
-            {@const past = blendHex(
-              base,
-              effectiveCalBg(theme),
-              isThemeCalendarDark(theme) ? 0.5 : 0.3,
-            )}
-            {#if isBuiltin}
-              <div class="flex min-w-0 items-center gap-1.5">
-                {@render palettePreviewSwatch(past, `Past ${past}`)}
-                {@render palettePreviewSwatch(base, `Normal ${base}`)}
-                <span
-                  class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
-                >
-                  {base}
-                </span>
-              </div>
-            {:else}
-              <div class="flex min-w-0 items-center gap-1.5">
-                {@render palettePreviewSwatch(past, `Past variant ${past}`)}
-                <ColorField
-                  value={base}
-                  onChange={(hex) => setSlot(index, hex)}
-                  fluid
-                  swatchSize={22}
-                  class="min-w-0 flex-1"
-                />
-              </div>
-            {/if}
-          {/each}
-        </div>
-      </div>
-    </section>
   {/snippet}
 
   <div class="relative min-h-0 flex-1">
@@ -1766,51 +1236,24 @@
   <!-- Body: grouped editor for user themes, JSON-only readout for built-ins. -->
   {#if userTheme}
     {#if offerRebake}
-      <!-- Rebake banner: prompt the user to refresh non-isolated tokens
-           through the current derivation engine. Pinned tokens stay
-           untouched; the engine version stamp updates on accept. -->
-      <section
-        class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-[12px] dark:bg-amber-950/30"
-      >
-        <div class="flex min-w-0 flex-1 items-start gap-2 text-amber-800 dark:text-amber-300">
-          <AlertTriangle size={13} strokeWidth={2.25} class="mt-[2px] shrink-0" />
-          <span class="leading-snug">
-            This theme was saved against an older derivation engine
-            (v{userTheme.derivationEngineVersion}, current
-            v{DERIVATION_ENGINE_VERSION}). Rebake to refresh non-pinned
-            colors.
-          </span>
-        </div>
-        <div class="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onclick={dismissRebake}
-            class="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Maybe later
-          </button>
-          <button
-            type="button"
-            onclick={rebake}
-            class="flex items-center gap-1 rounded-md border border-primary bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Wand2 size={11} strokeWidth={2.25} />
-            <span>Rebake</span>
-          </button>
-        </div>
-      </section>
+      <ThemeRebakeBanner
+        savedVersion={userTheme.derivationEngineVersion}
+        currentVersion={DERIVATION_ENGINE_VERSION}
+        onDismiss={dismissRebake}
+        onRebake={rebake}
+      />
     {/if}
 
-    {#each SOURCE_GROUPS as group (group.title)}
+    {#each SOURCE_GROUPS as group (group.id)}
       {#if isCalendarGroup(group)}
-        {#if group.title === "Calendar surface"}
+        {#if group.id === "calendar-surface"}
           <div class="flex flex-col gap-2">
             {@render sectionHeader("calendar")}
             {@render calendarSection()}
           </div>
         {/if}
       {:else if isTextActionGroup(group)}
-        {#if group.title === "Ink"}
+        {#if group.id === "ink"}
           <div class="flex flex-col gap-2">
             {@render sectionHeader("signals")}
             {@render textActionsSection()}
@@ -1827,95 +1270,28 @@
     {/each}
 
   {:else}
-    {@render eventPaletteSection()}
+    <ThemeEventPaletteSection
+      {theme}
+      {isBuiltin}
+      onSetSlot={setSlot}
+    />
   {/if}
 
   <!-- JSON -->
   <div class="flex flex-col gap-2">
     {@render sectionHeader("json")}
-    <section class="flex flex-col">
-      <header class="px-1 py-2.5">
-        <h2 class="text-[13px] font-semibold text-foreground">Schema</h2>
-        <div class="text-[11px] text-muted-foreground">
-          {isBuiltin
-            ? "Read-only representation of the theme"
-            : "Edit directly, apply to commit changes"}
-        </div>
-      </header>
-      <div class="flex flex-col gap-2">
-        <textarea
-          value={jsonDraft}
-          oninput={isBuiltin ? undefined : onJsonInput}
-          readonly={isBuiltin}
-          spellcheck={false}
-          rows={12}
-          class="w-full resize-y rounded-md border border-border bg-background p-2 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        ></textarea>
-      {#if jsonErrors.length > 0}
-        <ul
-          class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive"
-        >
-          {#each jsonErrors as err}
-            <li>{err}</li>
-          {/each}
-        </ul>
-      {/if}
-      <div class="theme-json-actions flex flex-wrap items-center justify-between gap-2">
-        <div class="theme-json-action-group flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onclick={copyJsonToClipboard}
-            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent"
-          >
-            <Copy size={11} strokeWidth={2.25} />
-            <span>Copy JSON</span>
-          </button>
-          <button
-            type="button"
-            onclick={saveJsonToFile}
-            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent"
-          >
-            <Download size={11} strokeWidth={2.25} />
-            <span>Save to file</span>
-          </button>
-        </div>
-        {#if !isBuiltin}
-          <div class="theme-json-action-group flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onclick={resetJsonDraft}
-              disabled={!jsonDirty}
-              class={cn(
-                "flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] transition-colors",
-                jsonDirty
-                  ? "text-foreground hover:bg-accent"
-                  : "cursor-not-allowed text-muted-foreground opacity-60",
-              )}
-            >
-              <RotateCcw size={11} strokeWidth={2.25} />
-              <span>Discard edits</span>
-            </button>
-            <button
-              type="button"
-              onclick={applyJsonChanges}
-              disabled={!jsonDirty}
-              class={cn(
-                "rounded-md border border-border px-3 py-1 text-[11px] font-medium transition-colors",
-                jsonDirty
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "cursor-not-allowed bg-card text-muted-foreground opacity-60",
-              )}
-            >
-              Apply changes
-            </button>
-          </div>
-        {/if}
-      </div>
-      {#if jsonNotice}
-        <div class="text-[11px] text-muted-foreground">{jsonNotice}</div>
-      {/if}
-    </div>
-  </section>
+    <ThemeJsonSection
+      {isBuiltin}
+      {jsonDraft}
+      {jsonDirty}
+      {jsonErrors}
+      {jsonNotice}
+      onCopy={copyJsonToClipboard}
+      onSave={saveJsonToFile}
+      onApply={applyJsonChanges}
+      onReset={resetJsonDraft}
+      onInput={onJsonInput}
+    />
 </div>
 </div>
 <div
@@ -1936,44 +1312,11 @@
 </div>
 </div>
 {#if userTheme && failingPairs.length > 0}
-  <section
-    class="theme-contrast-notice absolute z-30 flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] shadow-xl dark:bg-background"
-  >
-    <div class="theme-contrast-message flex shrink-0 items-center gap-2 text-foreground">
-      <AlertTriangle
-        size={13}
-        strokeWidth={2.25}
-        class="shrink-0 text-amber-500"
-      />
-      <span class="font-medium">
-        {failingPairs.length} contrast {failingPairs.length === 1
-          ? "issue"
-          : "issues"}
-      </span>
-    </div>
-    <div class="theme-contrast-actions flex shrink-0 items-center gap-1.5">
-      <button
-        type="button"
-        onclick={jumpToNextFailingPair}
-        aria-label="Jump to next failing contrast row"
-        title="Scroll to the next row below its contrast target (cycles through the list). Muted surfaces target 3:1; everything else targets 4.5:1."
-        class="flex h-6 items-center gap-1 rounded-md border border-border bg-card px-2 text-[10px] font-medium text-foreground transition-colors hover:bg-accent"
-      >
-        <ArrowDown size={11} strokeWidth={2.25} />
-        <span>Jump to next</span>
-      </button>
-      <button
-        type="button"
-        onclick={fixAllFailingPairs}
-        aria-label="Auto-fix every failing contrast row"
-        title="Pick a legible text color for every pair below its target"
-        class="flex h-6 items-center gap-1 rounded-md border border-primary bg-primary px-2 text-[10px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-      >
-        <Wand2 size={11} strokeWidth={2.25} />
-        <span>Fix all</span>
-      </button>
-    </div>
-  </section>
+  <ThemeContrastNotice
+    count={failingPairs.length}
+    onJump={jumpToNextFailingPair}
+    onFixAll={fixAllFailingPairs}
+  />
 {/if}
 </div>
 </div>
@@ -2044,22 +1387,6 @@
   .theme-editor-scrollbar-track:hover .theme-editor-scrollbar-thumb,
   .theme-editor-scrollbar-thumb.is-dragging {
     background-color: var(--muted-foreground);
-  }
-
-  .theme-contrast-notice {
-    bottom: 0.75rem;
-    left: 50%;
-    max-width: calc(100% - 0.75rem);
-    width: max-content;
-    transform: translateX(-50%);
-  }
-
-  .theme-contrast-message {
-    white-space: nowrap;
-  }
-
-  .theme-palette-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
   }
 
   @container theme-editor (max-width: 620px) {
@@ -2134,21 +1461,6 @@
       align-items: center;
     }
 
-    .theme-json-actions {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .theme-json-action-group {
-      justify-content: flex-end;
-    }
-
-    .theme-contrast-notice {
-      bottom: 0.75rem;
-      height: auto;
-      max-width: calc(100% - 0.75rem);
-      min-height: 2.5rem;
-    }
   }
 
   @container theme-editor (max-width: 430px) {
@@ -2184,11 +1496,6 @@
       justify-content: flex-start;
     }
 
-    .theme-contrast-notice {
-      align-items: center;
-      justify-content: center;
-      max-width: calc(100% - 0.75rem);
-    }
   }
 
   @container theme-editor (max-width: 380px) {
@@ -2196,31 +1503,6 @@
       padding-bottom: 7rem;
     }
 
-    .theme-contrast-notice {
-      left: 0.5rem;
-      right: 0.5rem;
-      width: auto;
-      max-width: none;
-      min-height: 4.25rem;
-      padding: 0.625rem;
-      flex-wrap: wrap;
-      transform: none;
-    }
-
-    .theme-contrast-message,
-    .theme-contrast-actions {
-      width: 100%;
-    }
-
-    .theme-contrast-message {
-      justify-content: center;
-    }
-
-    .theme-contrast-actions button {
-      flex: 1 1 0;
-      justify-content: center;
-      min-width: 0;
-    }
   }
 
   @container theme-editor (max-width: 330px) {

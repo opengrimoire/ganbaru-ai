@@ -1,0 +1,121 @@
+<script lang="ts">
+  import { PALETTE_SIZE } from "$lib/components/calendar/types";
+  import { blendHex } from "$lib/components/calendar/utils";
+  import {
+    checkerboardBackgroundForCells,
+  } from "$lib/components/ui/colorDisplay";
+  import { hexToRgba, normalizeHex } from "$lib/components/ui/colorMath";
+  import ColorField from "$lib/components/ui/ColorField.svelte";
+  import {
+    isThemeCalendarDark,
+    resolveCalendarTokens,
+    type Theme,
+  } from "$lib/stores/themes";
+  import { cn } from "$lib/utils";
+
+  let {
+    theme,
+    isBuiltin,
+    onSetSlot,
+  }: {
+    theme: Theme;
+    isBuiltin: boolean;
+    onSetSlot: (index: number, hex: string) => void;
+  } = $props();
+
+  const PALETTE_SWATCH_SIZE = 22;
+  const PALETTE_SWATCH_CHECKER_BG = checkerboardBackgroundForCells(
+    PALETTE_SWATCH_SIZE,
+    3,
+  );
+  const paletteIndices = Array.from({ length: PALETTE_SIZE }, (_, i) => i);
+  const calendarBg = $derived(resolveCalendarTokens(theme)["--cal-bg"]);
+
+  function swatchHasTransparency(hex: string): boolean {
+    const rgba = hexToRgba(hex);
+    return rgba !== null && rgba.a < 255;
+  }
+
+  function swatchFrameStyle(hex: string): string {
+    return swatchHasTransparency(hex)
+      ? `background: ${PALETTE_SWATCH_CHECKER_BG};`
+      : "";
+  }
+
+  function swatchColor(hex: string): string {
+    return normalizeHex(hex) ?? "#000000";
+  }
+</script>
+
+{#snippet palettePreviewSwatch(value: string, title: string)}
+  <span
+    class={cn(
+      "relative block h-[22px] w-[22px] shrink-0 overflow-hidden rounded-md border",
+      swatchHasTransparency(value)
+        ? "border-transparent bg-clip-padding shadow-none"
+        : "border-border shadow-sm",
+    )}
+    style={swatchFrameStyle(value)}
+    title={title}
+  >
+    <span
+      class="absolute inset-0 block"
+      style="background: {swatchColor(value)};"
+    ></span>
+  </span>
+{/snippet}
+
+<section class="flex flex-col gap-2 py-2.5">
+  <header class="px-1">
+    <h2 class="text-[13px] font-semibold text-foreground">
+      Event palette
+    </h2>
+    <div class="text-[11px] text-muted-foreground">
+      24 color slots, each one has a faded variant for past events, blended
+      toward Calendar background
+    </div>
+  </header>
+  <div
+    class="flex flex-col gap-3 p-3"
+    style="background-color: {calendarBg};"
+  >
+    <div class="theme-palette-grid grid gap-x-2 gap-y-1.5">
+      {#each paletteIndices as index}
+        {@const base = theme.eventPalette[index]}
+        {@const past = blendHex(
+          base,
+          calendarBg,
+          isThemeCalendarDark(theme) ? 0.5 : 0.3,
+        )}
+        {#if isBuiltin}
+          <div class="flex min-w-0 items-center gap-1.5">
+            {@render palettePreviewSwatch(past, `Past ${past}`)}
+            {@render palettePreviewSwatch(base, `Normal ${base}`)}
+            <span
+              class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
+            >
+              {base}
+            </span>
+          </div>
+        {:else}
+          <div class="flex min-w-0 items-center gap-1.5">
+            {@render palettePreviewSwatch(past, `Past variant ${past}`)}
+            <ColorField
+              value={base}
+              onChange={(hex) => onSetSlot(index, hex)}
+              fluid
+              swatchSize={22}
+              class="min-w-0 flex-1"
+            />
+          </div>
+        {/if}
+      {/each}
+    </div>
+  </div>
+</section>
+
+<style>
+  .theme-palette-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  }
+</style>
