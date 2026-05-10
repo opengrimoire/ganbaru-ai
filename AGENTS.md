@@ -171,6 +171,7 @@ After `pnpm -w run validate` passes, finish the task without extra dev-server, T
 - Avoid hover-only controls on narrow or touch-like layouts. Provide visible buttons, menus, or overflow controls.
 - Text must not overlap, clip awkwardly, or resize the layout unexpectedly. Use stable dimensions, minmax grid tracks, truncation, wrapping, or explicit compact variants.
 - Do not scale font size with viewport width. Reduce gaps, chrome, and nonessential decoration before reducing readability.
+- When extracting responsive Svelte markup into child components, move the matching container-query rules with the DOM they style, or use intentionally scoped global selectors under a stable parent. Do not assume parent component styles will keep applying through child component boundaries.
 - Nested popovers must be viewport-aware. Cap their height, keep triggers visible when practical, and switch large pickers to sheets when popovers cannot fit.
 - For UI changes, add or update pure responsive helper tests when layout decisions are logic-heavy, then run `pnpm -w run validate`.
 
