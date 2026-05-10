@@ -82,7 +82,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-05-01` with harness v6.
+Latest recorded canonical baseline: `2026-05-09-01` with harness v6.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
@@ -91,6 +91,7 @@ Harness v6 keeps the core benchmark questions, removes low-value ICS import and 
 | Run | Harness | Build ref | Platform | Notes |
 |---|---|---|---|---|
 | 2026-05-05-01 | v6 | 0.1.0+889cc3c | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-09-01 | v6 | 0.1.0+e3c35c7 | Linux Ubuntu 24.04.4 LTS |  |
 
 ### Startup boot
 
@@ -100,6 +101,8 @@ Harness v6 reports repeated process launches. Before each startup sample, the ap
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | 2026-05-05-01 | base-0 | 5 | 120 | 215 | 855 | 987 | 987 | 868 |
 | 2026-05-05-01 | synth-v1-1000 | 5 | 121 | 722 | 1370 | 1550 | 1550 | 1444 |
+| 2026-05-09-01 | base-0 | 5 | 113 | 190 | 671 | 810 | 810 | 691 |
+| 2026-05-09-01 | synth-v1-1000 | 5 | 113 | 576 | 1022 | 1517 | 1517 | 1060 |
 
 ### Idle memory
 
@@ -113,6 +116,12 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-05-01 | synth-v1-1000 | workload peak | 113.7 | 272.1 | 17.7 | 404 |
 | 2026-05-05-01 | synth-v1-1000 | workload end | 113.7 | 236.9 | 17.7 | 368 |
 | 2026-05-05-01 | synth-v1-1000 | +30s | 112.9 | 242.8 | 17.7 | 373 |
+| 2026-05-09-01 | base-0 | workload peak | 103.5 | 188.4 | 17.0 | 309 |
+| 2026-05-09-01 | base-0 | workload end | 103.3 | 184.7 | 17.0 | 305 |
+| 2026-05-09-01 | base-0 | +30s | 102.7 | 183.3 | 17.0 | 303 |
+| 2026-05-09-01 | synth-v1-1000 | workload peak | 109.1 | 257.5 | 16.8 | 383 |
+| 2026-05-09-01 | synth-v1-1000 | workload end | 108.9 | 234.1 | 16.8 | 360 |
+| 2026-05-09-01 | synth-v1-1000 | +30s | 108.3 | 238.8 | 16.9 | 364 |
 
 ### Calendar navigation stress memory
 
@@ -124,6 +133,12 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-05-01 | synth-v1-1000 | workload peak | 114.7 | 359.9 | 17.7 | 492 |
 | 2026-05-05-01 | synth-v1-1000 | workload end | 114.7 | 332.1 | 17.7 | 464 |
 | 2026-05-05-01 | synth-v1-1000 | +30s | 114.0 | 301.4 | 17.8 | 433 |
+| 2026-05-09-01 | base-0 | workload peak | 102.5 | 221.5 | 16.6 | 341 |
+| 2026-05-09-01 | base-0 | workload end | 102.5 | 221.5 | 16.6 | 341 |
+| 2026-05-09-01 | base-0 | +30s | 102.0 | 218.3 | 16.7 | 337 |
+| 2026-05-09-01 | synth-v1-1000 | workload peak | 112.5 | 310.8 | 16.6 | 440 |
+| 2026-05-09-01 | synth-v1-1000 | workload end | 112.5 | 314.7 | 16.6 | 444 |
+| 2026-05-09-01 | synth-v1-1000 | +30s | 111.9 | 278.7 | 16.7 | 407 |
 
 ### Event panel latency
 
@@ -135,6 +150,10 @@ Rows report user-visible elapsed time. Internal module, detail-load, state, and 
 | 2026-05-05-01 | synth-v1-1002 | edit open from closed avg | 105 | ms | 10 | 87 | 95 | 169 | 169 |
 | 2026-05-05-01 | base-2 | edit switch while open avg | 17 | ms | 10 | 15 | 16 | 28 | 28 |
 | 2026-05-05-01 | synth-v1-1002 | edit switch while open avg | 52 | ms | 10 | 43 | 46 | 62 | 62 |
+| 2026-05-09-01 | base-2 | edit open from closed avg | 25 | ms | 10 | 19 | 20 | 72 | 72 |
+| 2026-05-09-01 | synth-v1-1002 | edit open from closed avg | 94 | ms | 10 | 74 | 83 | 184 | 184 |
+| 2026-05-09-01 | base-2 | edit switch while open avg | 19 | ms | 10 | 16 | 19 | 20 | 20 |
+| 2026-05-09-01 | synth-v1-1002 | edit switch while open avg | 50 | ms | 10 | 39 | 49 | 57 | 57 |
 
 ### Create panel latency
 
@@ -146,6 +165,10 @@ The cancel timing includes the fixed 500 ms guard used by the scenario before cl
 | 2026-05-05-01 | synth-v1-1000 | create panel open avg | 69 | ms | 6 | 53 | 68 | 78 | 78 |
 | 2026-05-05-01 | base-0 | create cancel after guard avg | 63 | ms | 6 | 59 | 60 | 72 | 72 |
 | 2026-05-05-01 | synth-v1-1000 | create cancel after guard avg | 98 | ms | 6 | 92 | 93 | 110 | 110 |
+| 2026-05-09-01 | base-0 | create panel open avg | 48 | ms | 6 | 32 | 33 | 100 | 100 |
+| 2026-05-09-01 | synth-v1-1000 | create panel open avg | 66 | ms | 6 | 50 | 66 | 95 | 95 |
+| 2026-05-09-01 | base-0 | create cancel after guard avg | 59 | ms | 6 | 55 | 59 | 61 | 61 |
+| 2026-05-09-01 | synth-v1-1000 | create cancel after guard avg | 83 | ms | 6 | 75 | 77 | 91 | 91 |
 
 ## Historical context
 
