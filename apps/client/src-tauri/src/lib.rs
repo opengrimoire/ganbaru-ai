@@ -544,6 +544,7 @@ pub fn run() {
             vault::vault_read_ics_zip_entries,
             calendar_events::calendar_add_event,
             calendar_events::calendar_delete_event,
+            calendar_events::calendar_update_event,
             calendar_import::calendar_bulk_import,
             themes::theme_insert,
             themes::theme_replace_content,

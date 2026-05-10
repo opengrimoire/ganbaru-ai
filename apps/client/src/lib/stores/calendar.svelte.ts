@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { dbUrl, execute, select } from "$lib/api/db";
 import type {
-  Calendar, CalendarEvent, EventAlarm, EventAttendee, EventColor, EventOverride,
+  Calendar, CalendarEvent, EventAttendee, EventColor, EventOverride,
   EventOrganizer, EventStatus, EventTransparency, EventVisibility,
   GeoCoordinates, GuestPermissions, PomodoroConfig, RecurrenceConfig,
 } from "$lib/components/calendar/types";
@@ -27,6 +27,45 @@ import type { IcsImportSummary } from "$lib/calendar/ics/types";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
 
 export { expandRecurring, parseYMD, fmtYMD };
+
+type CalendarUpdateField =
+  | { field: "title"; value: string }
+  | { field: "startTime"; value: string }
+  | { field: "endTime"; value: string }
+  | { field: "timezone"; value: string }
+  | { field: "calendarId"; value: string }
+  | { field: "color"; value: number | null }
+  | { field: "description"; value: string }
+  | { field: "rrule"; value: string | null }
+  | { field: "repeatUntil"; value: string | null }
+  | { field: "notifications"; value: string | null }
+  | { field: "exceptions"; value: string | null }
+  | { field: "allDay"; value: boolean }
+  | { field: "location"; value: string }
+  | { field: "url"; value: string }
+  | { field: "transparency"; value: EventTransparency }
+  | { field: "status"; value: EventStatus }
+  | { field: "sourceUid"; value: string | null }
+  | { field: "visibility"; value: EventVisibility }
+  | { field: "priority"; value: number | null }
+  | { field: "categories"; value: string | null }
+  | { field: "geo"; value: string | null }
+  | { field: "sequence"; value: number }
+  | { field: "rdate"; value: string | null }
+  | { field: "extendedProperties"; value: string | null }
+  | { field: "organizer"; value: string | null }
+  | {
+      field: "guestPermissions";
+      value: {
+        guestCanModify: boolean;
+        guestCanInviteOthers: boolean;
+        guestCanSeeOtherGuests: boolean;
+      };
+    };
+
+type PomodoroConfigPatch =
+  | { action: "set"; value: PomodoroConfig }
+  | { action: "clear" };
 
 function nowLocal(): string {
   const d = new Date();
@@ -189,69 +228,6 @@ function getIndex(): ExpansionIndex {
 function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
   const parentId = event.recurringParentId ?? event.id;
   return rawBlocks.find((b) => b.id === parentId);
-}
-
-/**
- * Replace all attendees for an event (delete + insert).
- */
-async function saveAttendees(eventId: string, attendees: EventAttendee[]): Promise<void> {
-  await execute("DELETE FROM calendar_event_attendees WHERE event_id = $1", [eventId]);
-  for (let i = 0; i < attendees.length; i++) {
-    const att = attendees[i];
-    await execute(
-      `INSERT INTO calendar_event_attendees (id, event_id, name, email, role, status, rsvp, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [att.id, eventId, att.name ?? null, att.email, att.role, att.status, att.rsvp ? 1 : 0, i],
-    );
-  }
-}
-
-/**
- * Replace all alarms for an event (delete + insert).
- */
-async function saveAlarms(eventId: string, alarms: EventAlarm[]): Promise<void> {
-  await execute("DELETE FROM calendar_event_alarms WHERE event_id = $1", [eventId]);
-  for (let i = 0; i < alarms.length; i++) {
-    const a = alarms[i];
-    await execute(
-      `INSERT INTO calendar_event_alarms
-         (id, event_id, action, trigger_type, trigger_value, description, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [a.id, eventId, a.action, a.triggerType, a.triggerValue, a.description ?? null, i],
-    );
-  }
-}
-
-/**
- * Replace all per-instance overrides for an event (delete + insert). Override
- * start/end are stored as UTC ISO 8601; the caller passes wall-clock plus the
- * event's home zone so the round-trip is lossless.
- */
-async function saveOverrides(
-  eventId: string,
-  overrides: EventOverride[],
-  zone: string,
-): Promise<void> {
-  await execute("DELETE FROM calendar_event_overrides WHERE parent_event_id = $1", [eventId]);
-  for (const o of overrides) {
-    const startTime = o.start ? wallClockToUtcIso(o.start, zone) : null;
-    const endTime = o.end ? wallClockToUtcIso(o.end, zone) : null;
-    await execute(
-      `INSERT INTO calendar_event_overrides
-         (id, parent_event_id, recurrence_id, title, start_time, end_time,
-          description, location, url, color, status, transparency, visibility,
-          extended_properties)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-      [
-        o.id, eventId, o.recurrenceId, o.title ?? null,
-        startTime, endTime,
-        o.description ?? null, o.location ?? null, o.url ?? null,
-        o.color ?? null, o.status ?? null, o.transparency ?? null,
-        o.visibility ?? null,
-        o.extendedProperties ? JSON.stringify(o.extendedProperties) : null,
-      ],
-    );
-  }
 }
 
 /**
@@ -651,12 +627,9 @@ export function getCalendar() {
       const homeZone = toUpdate.timezone ?? existing?.timezone ?? localTimezone();
       const allDayForDb = "allDay" in toUpdate ? !!toUpdate.allDay : !!existing?.allDay;
 
-      const sets: string[] = [];
-      const binds: unknown[] = [];
-      let p = 1;
-      const addSet = (column: string, value: unknown) => {
-        sets.push(`${column} = $${p++}`);
-        binds.push(value);
+      const fields: CalendarUpdateField[] = [];
+      const addField = (field: CalendarUpdateField) => {
+        fields.push(field);
       };
 
       const presentKeys = new Set(Object.keys(toUpdate));
@@ -671,131 +644,161 @@ export function getCalendar() {
           case "overrides":
             break;
           case "title":
-            addSet("title", toUpdate.title ?? "");
+            addField({ field: "title", value: toUpdate.title ?? "" });
             break;
           case "start":
-            addSet("start_time", toDbTime(String(toUpdate.start), homeZone, allDayForDb));
+            addField({
+              field: "startTime",
+              value: toDbTime(String(toUpdate.start), homeZone, allDayForDb),
+            });
             break;
           case "end":
-            addSet("end_time", toDbTime(String(toUpdate.end), homeZone, allDayForDb));
+            addField({
+              field: "endTime",
+              value: toDbTime(String(toUpdate.end), homeZone, allDayForDb),
+            });
             break;
           case "timezone":
-            addSet("timezone", toUpdate.timezone ?? "");
+            addField({ field: "timezone", value: toUpdate.timezone ?? "" });
             break;
           case "calendarId":
-            addSet("calendar_id", toUpdate.calendarId ?? "local");
+            addField({ field: "calendarId", value: toUpdate.calendarId ?? "local" });
             break;
           case "color":
-            addSet("color", toUpdate.color ?? null);
+            addField({ field: "color", value: toUpdate.color ?? null });
             break;
           case "description":
-            addSet("description", toUpdate.description ?? "");
+            addField({ field: "description", value: toUpdate.description ?? "" });
             break;
           case "recurrence": {
             const rrule = toUpdate.recurrence ? recurrenceToRrule(toUpdate.recurrence) : null;
             const repeatUntil = toUpdate.recurrence?.end.type === "until"
               ? toUpdate.recurrence.end.date : null;
-            addSet("rrule", rrule);
-            addSet("repeat_until", repeatUntil);
+            addField({ field: "rrule", value: rrule });
+            addField({ field: "repeatUntil", value: repeatUntil });
             break;
           }
           case "notifications": {
             const notifJson = toUpdate.notifications && toUpdate.notifications.length > 0
               ? JSON.stringify(toUpdate.notifications) : null;
-            addSet("notifications", notifJson);
+            addField({ field: "notifications", value: notifJson });
             break;
           }
           case "exceptions": {
             const exceptionsJson = toUpdate.exceptions && toUpdate.exceptions.length > 0
               ? JSON.stringify(toUpdate.exceptions) : null;
-            addSet("exceptions", exceptionsJson);
+            addField({ field: "exceptions", value: exceptionsJson });
             break;
           }
           case "allDay":
-            addSet("all_day", toUpdate.allDay ? 1 : 0);
+            addField({ field: "allDay", value: !!toUpdate.allDay });
             break;
           case "location":
-            addSet("location", toUpdate.location ?? "");
+            addField({ field: "location", value: toUpdate.location ?? "" });
             break;
           case "url":
-            addSet("url", toUpdate.url ?? "");
+            addField({ field: "url", value: toUpdate.url ?? "" });
             break;
           case "transparency":
-            addSet("transparency", toUpdate.transparency ?? "opaque");
+            addField({ field: "transparency", value: toUpdate.transparency ?? "opaque" });
             break;
           case "status":
-            addSet("status", toUpdate.status ?? "confirmed");
+            addField({ field: "status", value: toUpdate.status ?? "confirmed" });
             break;
           case "sourceUid":
-            addSet("source_uid", toUpdate.sourceUid ?? null);
+            addField({ field: "sourceUid", value: toUpdate.sourceUid ?? null });
             break;
           case "visibility":
-            addSet("visibility", toUpdate.visibility ?? "public");
+            addField({ field: "visibility", value: toUpdate.visibility ?? "public" });
             break;
           case "priority":
-            addSet("priority", toUpdate.priority ?? null);
+            addField({ field: "priority", value: toUpdate.priority ?? null });
             break;
           case "categories":
-            addSet("categories",
-              toUpdate.categories ? JSON.stringify(toUpdate.categories) : null);
+            addField({
+              field: "categories",
+              value: toUpdate.categories ? JSON.stringify(toUpdate.categories) : null,
+            });
             break;
           case "geo":
-            addSet("geo", toUpdate.geo ? JSON.stringify(toUpdate.geo) : null);
+            addField({
+              field: "geo",
+              value: toUpdate.geo ? JSON.stringify(toUpdate.geo) : null,
+            });
             break;
           case "sequence":
-            addSet("sequence", toUpdate.sequence ?? 0);
+            addField({ field: "sequence", value: toUpdate.sequence ?? 0 });
             break;
           case "rdate":
-            addSet("rdate", toUpdate.rdate ? JSON.stringify(toUpdate.rdate) : null);
+            addField({
+              field: "rdate",
+              value: toUpdate.rdate ? JSON.stringify(toUpdate.rdate) : null,
+            });
             break;
           case "extendedProperties":
-            addSet("extended_properties",
-              toUpdate.extendedProperties ? JSON.stringify(toUpdate.extendedProperties) : null);
+            addField({
+              field: "extendedProperties",
+              value: toUpdate.extendedProperties
+                ? JSON.stringify(toUpdate.extendedProperties)
+                : null,
+            });
             break;
           case "organizer":
-            addSet("organizer",
-              toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null);
+            addField({
+              field: "organizer",
+              value: toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null,
+            });
             break;
           case "guestPermissions": {
             const gp = toUpdate.guestPermissions;
-            addSet("guest_can_modify", gp?.canModify ? 1 : 0);
-            addSet("guest_can_invite_others", gp?.canInviteOthers === false ? 0 : 1);
-            addSet("guest_can_see_other_guests", gp?.canSeeOtherGuests === false ? 0 : 1);
+            addField({
+              field: "guestPermissions",
+              value: {
+                guestCanModify: gp?.canModify ?? false,
+                guestCanInviteOthers: gp?.canInviteOthers ?? true,
+                guestCanSeeOtherGuests: gp?.canSeeOtherGuests ?? true,
+              },
+            });
             break;
           }
         }
       }
 
       const now = nowLocal();
-      addSet("updated_at", now);
+      const pomodoroConfig: PomodoroConfigPatch | null = presentKeys.has("pomodoroConfig")
+        ? toUpdate.pomodoroConfig
+          ? { action: "set", value: toUpdate.pomodoroConfig }
+          : { action: "clear" }
+        : null;
 
-      await execute(
-        `UPDATE calendar_events SET ${sets.join(", ")} WHERE id = $${p}`,
-        [...binds, parentId],
-      );
-
-      if (presentKeys.has("attendees")) {
-        await saveAttendees(parentId, toUpdate.attendees ?? []);
-      }
-      if (presentKeys.has("alarms")) {
-        await saveAlarms(parentId, toUpdate.alarms ?? []);
-      }
-      if (presentKeys.has("pomodoroConfig")) {
-        if (toUpdate.pomodoroConfig) {
-          await execute(
-            `INSERT OR REPLACE INTO pomodoro_configs
-               (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [parentId, toUpdate.pomodoroConfig.focusDurationMinutes,
-             toUpdate.pomodoroConfig.shortBreakMinutes,
-             toUpdate.pomodoroConfig.longBreakMinutes,
-             toUpdate.pomodoroConfig.pomodoroCount,
-             toUpdate.pomodoroConfig.idleTimeoutMinutes],
-          );
-        } else {
-          await execute("DELETE FROM pomodoro_configs WHERE event_id = $1", [parentId]);
-        }
-      }
+      await invoke("calendar_update_event", {
+        dbUrl: dbUrl(),
+        patch: {
+          id: parentId,
+          updatedAt: now,
+          fields,
+          attendees: presentKeys.has("attendees")
+            ? (toUpdate.attendees ?? []).map((attendee) => ({
+                id: attendee.id,
+                name: attendee.name ?? null,
+                email: attendee.email,
+                role: attendee.role,
+                status: attendee.status,
+                rsvp: attendee.rsvp,
+              }))
+            : null,
+          alarms: presentKeys.has("alarms")
+            ? (toUpdate.alarms ?? []).map((alarm) => ({
+                id: alarm.id,
+                action: alarm.action,
+                triggerType: alarm.triggerType,
+                triggerValue: alarm.triggerValue,
+                description: alarm.description ?? null,
+              }))
+            : null,
+          pomodoroConfig,
+        },
+      });
 
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId

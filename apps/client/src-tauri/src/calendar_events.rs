@@ -64,6 +64,101 @@ struct CalendarEventAttendee {
     rsvp: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CalendarEventAlarm {
+    id: String,
+    action: String,
+    trigger_type: String,
+    trigger_value: String,
+    description: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEventUpdate {
+    id: String,
+    updated_at: String,
+    fields: Vec<CalendarEventUpdateField>,
+    attendees: Option<Vec<CalendarEventAttendee>>,
+    alarms: Option<Vec<CalendarEventAlarm>>,
+    pomodoro_config: Option<CalendarPomodoroConfigPatch>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "field", content = "value")]
+enum CalendarEventUpdateField {
+    #[serde(rename = "title")]
+    Title(String),
+    #[serde(rename = "startTime")]
+    StartTime(String),
+    #[serde(rename = "endTime")]
+    EndTime(String),
+    #[serde(rename = "timezone")]
+    Timezone(String),
+    #[serde(rename = "calendarId")]
+    CalendarId(String),
+    #[serde(rename = "color")]
+    Color(Option<i64>),
+    #[serde(rename = "description")]
+    Description(String),
+    #[serde(rename = "rrule")]
+    Rrule(Option<String>),
+    #[serde(rename = "repeatUntil")]
+    RepeatUntil(Option<String>),
+    #[serde(rename = "notifications")]
+    Notifications(Option<String>),
+    #[serde(rename = "exceptions")]
+    Exceptions(Option<String>),
+    #[serde(rename = "allDay")]
+    AllDay(bool),
+    #[serde(rename = "location")]
+    Location(String),
+    #[serde(rename = "url")]
+    Url(String),
+    #[serde(rename = "transparency")]
+    Transparency(String),
+    #[serde(rename = "status")]
+    Status(String),
+    #[serde(rename = "sourceUid")]
+    SourceUid(Option<String>),
+    #[serde(rename = "visibility")]
+    Visibility(String),
+    #[serde(rename = "priority")]
+    Priority(Option<i64>),
+    #[serde(rename = "categories")]
+    Categories(Option<String>),
+    #[serde(rename = "geo")]
+    Geo(Option<String>),
+    #[serde(rename = "sequence")]
+    Sequence(i64),
+    #[serde(rename = "rdate")]
+    Rdate(Option<String>),
+    #[serde(rename = "extendedProperties")]
+    ExtendedProperties(Option<String>),
+    #[serde(rename = "organizer")]
+    Organizer(Option<String>),
+    #[serde(rename = "guestPermissions")]
+    GuestPermissions(CalendarGuestPermissions),
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CalendarGuestPermissions {
+    guest_can_modify: bool,
+    guest_can_invite_others: bool,
+    guest_can_see_other_guests: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "action", content = "value")]
+enum CalendarPomodoroConfigPatch {
+    #[serde(rename = "set")]
+    Set(CalendarPomodoroConfig),
+    #[serde(rename = "clear")]
+    Clear,
+}
+
 #[tauri::command]
 pub async fn calendar_add_event<R: Runtime>(
     app: AppHandle<R>,
@@ -183,6 +278,272 @@ pub async fn calendar_delete_event<R: Runtime>(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn calendar_update_event<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    patch: CalendarEventUpdate,
+) -> Result<(), String> {
+    validate_event_update(&patch)?;
+    let mut conn = connect_sqlite(&app, &db_url).await?;
+    let mut tx = conn.begin().await.map_err(|e| format!("begin: {e}"))?;
+
+    for field in &patch.fields {
+        apply_update_field(&mut tx, &patch.id, field).await?;
+    }
+
+    if let Some(attendees) = &patch.attendees {
+        sqlx::query("DELETE FROM calendar_event_attendees WHERE event_id = ?")
+            .bind(&patch.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("delete calendar attendees: {e}"))?;
+        for (sort_order, attendee) in attendees.iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO calendar_event_attendees
+                   (id, event_id, name, email, role, status, rsvp, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&attendee.id)
+            .bind(&patch.id)
+            .bind(&attendee.name)
+            .bind(&attendee.email)
+            .bind(&attendee.role)
+            .bind(&attendee.status)
+            .bind(if attendee.rsvp { 1_i64 } else { 0_i64 })
+            .bind(sort_order as i64)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("insert calendar attendee: {e}"))?;
+        }
+    }
+
+    if let Some(alarms) = &patch.alarms {
+        sqlx::query("DELETE FROM calendar_event_alarms WHERE event_id = ?")
+            .bind(&patch.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("delete calendar alarms: {e}"))?;
+        for (sort_order, alarm) in alarms.iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO calendar_event_alarms
+                   (id, event_id, action, trigger_type, trigger_value, description, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&alarm.id)
+            .bind(&patch.id)
+            .bind(&alarm.action)
+            .bind(&alarm.trigger_type)
+            .bind(&alarm.trigger_value)
+            .bind(&alarm.description)
+            .bind(sort_order as i64)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("insert calendar alarm: {e}"))?;
+        }
+    }
+
+    if let Some(config_patch) = &patch.pomodoro_config {
+        match config_patch {
+            CalendarPomodoroConfigPatch::Set(config) => {
+                sqlx::query(
+                    "INSERT OR REPLACE INTO pomodoro_configs
+                       (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
+                     VALUES (?, ?, ?, ?, ?, ?)",
+                )
+                .bind(&patch.id)
+                .bind(config.focus_duration_minutes)
+                .bind(config.short_break_minutes)
+                .bind(config.long_break_minutes)
+                .bind(config.pomodoro_count)
+                .bind(config.idle_timeout_minutes)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| format!("upsert calendar pomodoro config: {e}"))?;
+            }
+            CalendarPomodoroConfigPatch::Clear => {
+                sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?")
+                    .bind(&patch.id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| format!("delete calendar pomodoro config: {e}"))?;
+            }
+        }
+    }
+
+    let result = sqlx::query("UPDATE calendar_events SET updated_at = ? WHERE id = ?")
+        .bind(&patch.updated_at)
+        .bind(&patch.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("touch calendar event: {e}"))?;
+    if result.rows_affected() == 0 {
+        return Err(format!("calendar event '{}' not found", patch.id));
+    }
+
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+async fn apply_update_field(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+    field: &CalendarEventUpdateField,
+) -> Result<(), String> {
+    match field {
+        CalendarEventUpdateField::Title(value) => update_text(tx, id, "title", value).await,
+        CalendarEventUpdateField::StartTime(value) => {
+            update_text(tx, id, "start_time", value).await
+        }
+        CalendarEventUpdateField::EndTime(value) => update_text(tx, id, "end_time", value).await,
+        CalendarEventUpdateField::Timezone(value) => update_text(tx, id, "timezone", value).await,
+        CalendarEventUpdateField::CalendarId(value) => {
+            update_text(tx, id, "calendar_id", value).await
+        }
+        CalendarEventUpdateField::Color(value) => {
+            update_optional_i64(tx, id, "color", *value).await
+        }
+        CalendarEventUpdateField::Description(value) => {
+            update_text(tx, id, "description", value).await
+        }
+        CalendarEventUpdateField::Rrule(value) => {
+            update_optional_text(tx, id, "rrule", value.as_deref()).await
+        }
+        CalendarEventUpdateField::RepeatUntil(value) => {
+            update_optional_text(tx, id, "repeat_until", value.as_deref()).await
+        }
+        CalendarEventUpdateField::Notifications(value) => {
+            update_optional_text(tx, id, "notifications", value.as_deref()).await
+        }
+        CalendarEventUpdateField::Exceptions(value) => {
+            update_optional_text(tx, id, "exceptions", value.as_deref()).await
+        }
+        CalendarEventUpdateField::AllDay(value) => {
+            update_i64(tx, id, "all_day", if *value { 1 } else { 0 }).await
+        }
+        CalendarEventUpdateField::Location(value) => update_text(tx, id, "location", value).await,
+        CalendarEventUpdateField::Url(value) => update_text(tx, id, "url", value).await,
+        CalendarEventUpdateField::Transparency(value) => {
+            update_text(tx, id, "transparency", value).await
+        }
+        CalendarEventUpdateField::Status(value) => update_text(tx, id, "status", value).await,
+        CalendarEventUpdateField::SourceUid(value) => {
+            update_optional_text(tx, id, "source_uid", value.as_deref()).await
+        }
+        CalendarEventUpdateField::Visibility(value) => {
+            update_text(tx, id, "visibility", value).await
+        }
+        CalendarEventUpdateField::Priority(value) => {
+            update_optional_i64(tx, id, "priority", *value).await
+        }
+        CalendarEventUpdateField::Categories(value) => {
+            update_optional_text(tx, id, "categories", value.as_deref()).await
+        }
+        CalendarEventUpdateField::Geo(value) => {
+            update_optional_text(tx, id, "geo", value.as_deref()).await
+        }
+        CalendarEventUpdateField::Sequence(value) => update_i64(tx, id, "sequence", *value).await,
+        CalendarEventUpdateField::Rdate(value) => {
+            update_optional_text(tx, id, "rdate", value.as_deref()).await
+        }
+        CalendarEventUpdateField::ExtendedProperties(value) => {
+            update_optional_text(tx, id, "extended_properties", value.as_deref()).await
+        }
+        CalendarEventUpdateField::Organizer(value) => {
+            update_optional_text(tx, id, "organizer", value.as_deref()).await
+        }
+        CalendarEventUpdateField::GuestPermissions(value) => {
+            sqlx::query(
+                "UPDATE calendar_events
+                    SET guest_can_modify = ?,
+                        guest_can_invite_others = ?,
+                        guest_can_see_other_guests = ?
+                  WHERE id = ?",
+            )
+            .bind(if value.guest_can_modify { 1_i64 } else { 0_i64 })
+            .bind(if value.guest_can_invite_others {
+                1_i64
+            } else {
+                0_i64
+            })
+            .bind(if value.guest_can_see_other_guests {
+                1_i64
+            } else {
+                0_i64
+            })
+            .bind(id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("update calendar guest permissions: {e}"))?;
+            Ok(())
+        }
+    }
+}
+
+async fn update_text(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+    column: &'static str,
+    value: &str,
+) -> Result<(), String> {
+    let query = format!("UPDATE calendar_events SET {column} = ? WHERE id = ?");
+    sqlx::query(&query)
+        .bind(value)
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("update calendar column {column}: {e}"))?;
+    Ok(())
+}
+
+async fn update_optional_text(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+    column: &'static str,
+    value: Option<&str>,
+) -> Result<(), String> {
+    let query = format!("UPDATE calendar_events SET {column} = ? WHERE id = ?");
+    sqlx::query(&query)
+        .bind(value)
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("update calendar column {column}: {e}"))?;
+    Ok(())
+}
+
+async fn update_i64(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+    column: &'static str,
+    value: i64,
+) -> Result<(), String> {
+    let query = format!("UPDATE calendar_events SET {column} = ? WHERE id = ?");
+    sqlx::query(&query)
+        .bind(value)
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("update calendar column {column}: {e}"))?;
+    Ok(())
+}
+
+async fn update_optional_i64(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+    column: &'static str,
+    value: Option<i64>,
+) -> Result<(), String> {
+    let query = format!("UPDATE calendar_events SET {column} = ? WHERE id = ?");
+    sqlx::query(&query)
+        .bind(value)
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("update calendar column {column}: {e}"))?;
+    Ok(())
+}
+
 fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
     require_non_empty(&event.id, "id")?;
     require_non_empty(&event.title, "title")?;
@@ -225,6 +586,69 @@ fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_event_update(patch: &CalendarEventUpdate) -> Result<(), String> {
+    require_non_empty(&patch.id, "id")?;
+    require_non_empty(&patch.updated_at, "updated_at")?;
+    for field in &patch.fields {
+        validate_update_field(field)?;
+    }
+    if let Some(attendees) = &patch.attendees {
+        for attendee in attendees {
+            validate_attendee(attendee)?;
+        }
+    }
+    if let Some(alarms) = &patch.alarms {
+        for alarm in alarms {
+            validate_alarm(alarm)?;
+        }
+    }
+    if let Some(CalendarPomodoroConfigPatch::Set(config)) = &patch.pomodoro_config {
+        validate_pomodoro_config(config)?;
+    }
+    Ok(())
+}
+
+fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String> {
+    match field {
+        CalendarEventUpdateField::Title(value) => require_non_empty(value, "title"),
+        CalendarEventUpdateField::StartTime(value) => require_non_empty(value, "start_time"),
+        CalendarEventUpdateField::EndTime(value) => require_non_empty(value, "end_time"),
+        CalendarEventUpdateField::Timezone(value) => require_non_empty(value, "timezone"),
+        CalendarEventUpdateField::CalendarId(value) => require_non_empty(value, "calendar_id"),
+        CalendarEventUpdateField::Color(value) => validate_color(*value, "color"),
+        CalendarEventUpdateField::Description(_) => Ok(()),
+        CalendarEventUpdateField::Rrule(_) => Ok(()),
+        CalendarEventUpdateField::RepeatUntil(_) => Ok(()),
+        CalendarEventUpdateField::Notifications(value) => {
+            validate_json_option(value, "notifications")
+        }
+        CalendarEventUpdateField::Exceptions(value) => validate_json_option(value, "exceptions"),
+        CalendarEventUpdateField::AllDay(_) => Ok(()),
+        CalendarEventUpdateField::Location(_) => Ok(()),
+        CalendarEventUpdateField::Url(_) => Ok(()),
+        CalendarEventUpdateField::Transparency(value) => {
+            validate_enum(value, "transparency", &["opaque", "transparent"])
+        }
+        CalendarEventUpdateField::Status(value) => {
+            validate_enum(value, "status", &["confirmed", "tentative", "cancelled"])
+        }
+        CalendarEventUpdateField::SourceUid(_) => Ok(()),
+        CalendarEventUpdateField::Visibility(value) => {
+            validate_enum(value, "visibility", &["public", "private", "confidential"])
+        }
+        CalendarEventUpdateField::Priority(value) => validate_priority(*value),
+        CalendarEventUpdateField::Categories(value) => validate_json_option(value, "categories"),
+        CalendarEventUpdateField::Geo(value) => validate_json_option(value, "geo"),
+        CalendarEventUpdateField::Sequence(value) => validate_non_negative(*value, "sequence"),
+        CalendarEventUpdateField::Rdate(value) => validate_json_option(value, "rdate"),
+        CalendarEventUpdateField::ExtendedProperties(value) => {
+            validate_json_option(value, "extended_properties")
+        }
+        CalendarEventUpdateField::Organizer(value) => validate_json_option(value, "organizer"),
+        CalendarEventUpdateField::GuestPermissions(_) => Ok(()),
+    }
+}
+
 fn validate_pomodoro_config(config: &CalendarPomodoroConfig) -> Result<(), String> {
     validate_positive(config.focus_duration_minutes, "focus_duration_minutes")?;
     validate_positive(config.short_break_minutes, "short_break_minutes")?;
@@ -234,6 +658,21 @@ fn validate_pomodoro_config(config: &CalendarPomodoroConfig) -> Result<(), Strin
         validate_non_negative(idle, "idle_timeout_minutes")?;
     }
     Ok(())
+}
+
+fn validate_alarm(alarm: &CalendarEventAlarm) -> Result<(), String> {
+    require_non_empty(&alarm.id, "alarm.id")?;
+    require_non_empty(&alarm.trigger_value, "alarm.trigger_value")?;
+    validate_enum(
+        &alarm.action,
+        "alarm.action",
+        &["display", "audio", "email"],
+    )?;
+    validate_enum(
+        &alarm.trigger_type,
+        "alarm.trigger_type",
+        &["relative", "absolute"],
+    )
 }
 
 fn validate_attendee(attendee: &CalendarEventAttendee) -> Result<(), String> {
