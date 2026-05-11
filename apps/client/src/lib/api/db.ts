@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   HARNESS_VERSION,
-  SYNTH_VERSION,
+  DENSE_DATASET_VERSION,
   isBenchmarkPendingStage,
   isFreshBenchmarkPendingAge,
   isFreshBenchmarkTotalAge,
@@ -27,7 +27,7 @@ interface VaultModeProbe {
   vaultMode?: "user" | "benchmark";
   stage?: string;
   harnessVersion?: string;
-  synthVersion?: string;
+  datasetVersion?: string;
   startedAt?: string;
   updatedAt?: string;
 }
@@ -38,7 +38,7 @@ async function resolveUrl(): Promise<string> {
     if (json) {
       const parsed = JSON.parse(json) as VaultModeProbe;
       const validVersion = parsed?.harnessVersion === HARNESS_VERSION
-        && parsed?.synthVersion === SYNTH_VERSION;
+        && parsed?.datasetVersion === DENSE_DATASET_VERSION;
       const fresh = isFreshBenchmarkTotalAge(parsed) && isFreshBenchmarkPendingAge(parsed);
       const benchmarkPending = isBenchmarkPendingStage(parsed?.stage);
       if (parsed?.vaultMode === "benchmark" && benchmarkPending && validVersion && fresh) {

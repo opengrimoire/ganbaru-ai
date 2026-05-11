@@ -8,7 +8,7 @@ import { ensureConfigLoaded } from "./lib/vault/config";
 import { hydrateUserThemes } from "./lib/stores/theme.svelte";
 import {
   HARNESS_VERSION,
-  SYNTH_VERSION,
+  DENSE_DATASET_VERSION,
   isBenchmarkPendingStage,
   isFreshBenchmarkPendingAge,
   isFreshBenchmarkTotalAge,
@@ -18,7 +18,7 @@ interface BenchmarkBootProbe {
   vaultMode?: "user" | "benchmark";
   stage?: string;
   harnessVersion?: string;
-  synthVersion?: string;
+  datasetVersion?: string;
   startedAt?: string;
   updatedAt?: string;
 }
@@ -31,7 +31,7 @@ async function hasFreshBenchmarkResumeState(): Promise<boolean> {
     return parsed.vaultMode === "benchmark"
       && isBenchmarkPendingStage(parsed.stage)
       && parsed.harnessVersion === HARNESS_VERSION
-      && parsed.synthVersion === SYNTH_VERSION
+      && parsed.datasetVersion === DENSE_DATASET_VERSION
       && isFreshBenchmarkTotalAge(parsed)
       && isFreshBenchmarkPendingAge(parsed);
   } catch (err) {

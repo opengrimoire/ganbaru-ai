@@ -225,8 +225,8 @@ function startupSamples(phase: PhaseResult): StartupBootSample[] {
 function resultPhases(result: BenchmarkResult): PhaseResult[] {
   return [
     result.phaseA,
-    ...(result.syntheticPhases && result.syntheticPhases.length > 0
-      ? result.syntheticPhases
+    ...(result.datasetPhases && result.datasetPhases.length > 0
+      ? result.datasetPhases
       : [result.phaseB]),
   ];
 }
@@ -235,10 +235,11 @@ export function benchmarkDatasetLabel(result: BenchmarkResult, phase: PhaseResul
   if (phase.phase === "A") {
     return `base-${phase.eventCountAtStart}`;
   }
-  const synthVersion = result.synthVersion.startsWith("v")
-    ? result.synthVersion
-    : `v${result.synthVersion}`;
-  return `synth-${synthVersion}-${phase.eventCountAtStart}`;
+  if (phase.datasetId) return phase.datasetId;
+  const datasetVersion = result.datasetVersion.startsWith("v")
+    ? result.datasetVersion
+    : `v${result.datasetVersion}`;
+  return `dense-${datasetVersion}-${phase.eventCountAtStart}`;
 }
 
 function timepointLabel(label: SampleLabel): string {

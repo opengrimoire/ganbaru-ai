@@ -1400,6 +1400,7 @@ export function getCalendar() {
     async bulkImport(
       events: CalendarEvent[],
       targetCalendarId: string,
+      opts: { refreshWindow?: boolean } = {},
     ): Promise<IcsImportSummary> {
       const now = nowLocal();
       const fallbackZone = localTimezone();
@@ -1422,7 +1423,9 @@ export function getCalendar() {
       }
 
       totalEventCount += result.added;
-      await refreshCurrentWindow();
+      if (opts.refreshWindow ?? true) {
+        await refreshCurrentWindow();
+      }
 
       return {
         added: result.added,

@@ -1,5 +1,11 @@
-import { DEFAULT_SYNTHETIC_SEED_SIZE, type BenchmarkMetric, type BenchmarkScenario } from "../types";
-import { seedCalendarSynth } from "./calendar-utils";
+import {
+  DEFAULT_BENCHMARK_DATASET,
+  type BenchmarkDatasetProfile,
+  type BenchmarkMetric,
+  type BenchmarkScenario,
+  type BenchmarkSeedHandle,
+} from "../types";
+import { seedCalendarDataset } from "./calendar-utils";
 import {
   DEFAULT_OPERATION_RUNS,
   ensureBenchmarkDbReady,
@@ -263,7 +269,7 @@ export const calendarWriteOpsScenario: BenchmarkScenario = {
     durationMs: 0,
     memoryMode: "none",
   },
-  defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
+  defaultDataset: DEFAULT_BENCHMARK_DATASET,
 
   async setup(): Promise<void> {
     await ensureBenchmarkDbReady();
@@ -304,8 +310,8 @@ export const calendarWriteOpsScenario: BenchmarkScenario = {
     ];
   },
 
-  async seed(version: string, seedSize: number): Promise<{ calendarId: string; eventCount: number }> {
-    return seedCalendarSynth(version, seedSize);
+  async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
+    return seedCalendarDataset(dataset);
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {

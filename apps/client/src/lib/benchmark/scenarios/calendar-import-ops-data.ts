@@ -1,8 +1,8 @@
 import type { CalendarEvent } from "$lib/components/calendar/types";
 
 /**
- * Namespace synthetic child row ids so operation-benchmark imports can run
- * beside the normal seeded synthetic calendar without colliding on global
+ * Namespace dense child row ids so operation-benchmark imports can run
+ * beside the normal seeded dense calendar without colliding on global
  * child primary keys.
  */
 export function namespaceImportChildIds(
@@ -25,4 +25,3 @@ export function namespaceImportChildIds(
     })),
   }));
 }
-

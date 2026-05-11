@@ -2,7 +2,7 @@
  * Type contracts for the in-app performance benchmark harness.
  *
  * The harness drives deterministic workloads against a baseline dataset and
- * one or more synthetic dataset sizes, then emits compact markdown ready for
+ * one or more dense calendar datasets, then emits compact markdown ready for
  * `docs/PERFORMANCE.md`. Each scenario declares whether it measures startup,
  * memory, or feature latency so the runner avoids unrelated waits. Both
  * passes run after a cold restart against an isolated
@@ -43,12 +43,14 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
 
 /**
  * Bumped manually when measurement methodology, sampling cadence, scenario
- * workload, or synth generator changes in a way that would invalidate
+ * workload, or dataset generator changes in a way that would invalidate
  * numeric cross-build comparison. Cosmetic markdown, rendered-preview,
  * wording, and docs changes do not bump this value.
  * Stored on the persisted state file so stale baseline data captured by an
- * old build cannot accidentally feed the synthetic pass on a new build.
+ * old build cannot accidentally feed the dense pass on a new build.
  *
+ * v8 (2026-05-10): replaces count-based synthetic scales with dense-span
+ * calendar datasets named by year radius, stack count, and detail profile.
  * v7 (2026-05-10): core scenarios add a 10,000-event synthetic pass in the
  * same result as the existing 1,000-event pass.
  * v6 (2026-05-05): startup benchmark uses a closed-process cooldown before
@@ -59,20 +61,60 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * sampling modes and primary-metric output.
  * v1/v2/v3 state files are silently discarded on read.
  */
-export const HARNESS_VERSION = "7";
+export const HARNESS_VERSION = "8";
 
-/** Synth dataset shape version. Bumping this requires renaming the calendar grouping. */
-export const SYNTH_VERSION = "v1";
+/** Dense dataset shape version. Bumping this requires renaming the calendar grouping. */
+export const DENSE_DATASET_VERSION = "v1";
 
-/** Default synthetic scale used by all benchmark scenarios. */
-export const DEFAULT_SYNTHETIC_SEED_SIZE = 1_000;
-/** Large synthetic scale used by core benchmarks to expose growth costs. */
-export const LARGE_SYNTHETIC_SEED_SIZE = 10_000;
-/** Synthetic scales that core benchmarks must capture for the optimization gate. */
-export const CORE_SYNTHETIC_SEED_SIZES = [
-  DEFAULT_SYNTHETIC_SEED_SIZE,
-  LARGE_SYNTHETIC_SEED_SIZE,
+export type DenseCalendarDetailProfile = "d1";
+
+export interface DenseCalendarDatasetProfile {
+  kind: "dense-calendar";
+  version: typeof DENSE_DATASET_VERSION;
+  /** Years before and after the fixed benchmark anchor. */
+  yearRadius: number;
+  /** Number of overlapping events created at the start of every hour. */
+  stackCount: number;
+  /** Detail payload shape for titles, descriptions, locations, alarms, and guests. */
+  detailProfile: DenseCalendarDetailProfile;
+}
+
+export type BenchmarkDatasetProfile = DenseCalendarDatasetProfile;
+
+export interface BenchmarkSeedHandle {
+  calendarId: string;
+  eventCount: number;
+  datasetId: string;
+  dataset: BenchmarkDatasetProfile;
+}
+
+/** Default dense-span dataset used by all benchmark scenarios. */
+export const DEFAULT_BENCHMARK_DATASET = {
+  kind: "dense-calendar",
+  version: DENSE_DATASET_VERSION,
+  yearRadius: 1,
+  stackCount: 3,
+  detailProfile: "d1",
+} as const satisfies BenchmarkDatasetProfile;
+
+/** Large dense-span dataset used by core benchmarks to expose history-range costs. */
+export const LARGE_BENCHMARK_DATASET = {
+  kind: "dense-calendar",
+  version: DENSE_DATASET_VERSION,
+  yearRadius: 10,
+  stackCount: 3,
+  detailProfile: "d1",
+} as const satisfies BenchmarkDatasetProfile;
+
+/** Dense datasets that core benchmarks must capture for the optimization gate. */
+export const CORE_BENCHMARK_DATASETS = [
+  DEFAULT_BENCHMARK_DATASET,
+  LARGE_BENCHMARK_DATASET,
 ] as const;
+
+export function benchmarkDatasetId(dataset: BenchmarkDatasetProfile): string {
+  return `dense-${dataset.version}-r${dataset.yearRadius}y-s${dataset.stackCount}-${dataset.detailProfile}`;
+}
 
 export type SampleLabel = string;
 
@@ -175,7 +217,7 @@ export interface StartupBootSample {
 
 /** One pass's complete result: boot, optional memory samples, metrics, plus context. */
 export interface PhaseResult {
-  /** "A" for the baseline run, "B" for the synth-seeded run. */
+  /** "A" for the baseline run, "B" for the dense-seeded run. */
   phase: "A" | "B";
   /** Wall-clock ISO 8601 string captured at the start of the phase. */
   startedAt: string;
@@ -199,6 +241,8 @@ export interface PhaseResult {
   startupSamples?: StartupBootSample[];
   /** Total benchmark DB event count at the moment the phase started. */
   eventCountAtStart: number;
+  /** Dataset profile id for seeded phases, e.g. `dense-v1-r1y-s3-d1`. */
+  datasetId?: string;
 }
 
 /**
@@ -221,8 +265,8 @@ export interface BenchmarkState {
   updatedAt?: string;
   /** Pinned `HARNESS_VERSION` at write time. Mismatch on read clears state. */
   harnessVersion: string;
-  /** Synth dataset version pinned at seed time. Currently `v1`. */
-  synthVersion: string;
+  /** Dense dataset version pinned at seed time. Currently `v1`. */
+  datasetVersion: string;
   /** Platform string at write time, just for the markdown header. */
   platform: string;
   /** App version plus git ref at write time, e.g. `0.1.0+a7451de-dirty`. */
@@ -239,14 +283,14 @@ export interface BenchmarkState {
   stage: "phase-a-pending" | "phase-a-running" | "phase-b-pending" | "phase-b-running";
   /** Baseline result, present once that pass has run (i.e., from `phase-b-pending` onward). */
   phaseA?: PhaseResult;
-  /** Calendar id holding the seeded synth events; absent during `phase-a-pending`. */
-  seedHandle?: { calendarId: string; eventCount: number };
-  /** Synthetic seed sizes to run after the baseline pass. Defaults to the scenario's default size. */
-  syntheticSeedSizes?: number[];
-  /** Index into `syntheticSeedSizes` for the pending or running synthetic pass. */
-  syntheticIndex?: number;
-  /** Completed synthetic passes before the pending or running one. */
-  syntheticPhases?: PhaseResult[];
+  /** Calendar id holding the seeded dense events; absent during `phase-a-pending`. */
+  seedHandle?: BenchmarkSeedHandle;
+  /** Dense datasets to run after the baseline pass. Defaults to the scenario's default dataset. */
+  benchmarkDatasets?: BenchmarkDatasetProfile[];
+  /** Index into `benchmarkDatasets` for the pending or running dense pass. */
+  datasetIndex?: number;
+  /** Completed dense passes before the pending or running one. */
+  datasetPhases?: PhaseResult[];
   /** Present when the user chose Run all instead of one scenario. */
   suite?: BenchmarkSuiteState;
   /** Accumulated repeated launch samples for the startup benchmark. */
@@ -312,10 +356,10 @@ export interface BenchmarkScenarioMetadata {
   description: string;
   /** Workload shape used by the runner and markdown formatter. */
   workload: BenchmarkWorkload;
-  /** Default seed size used by `seed()` for the synthetic dataset. */
-  defaultSeedSize: number;
-  /** Optional ordered synthetic sizes. Defaults to `[defaultSeedSize]`. */
-  syntheticSeedSizes?: number[];
+  /** Default dataset used by `seed()` for the dense calendar pass. */
+  defaultDataset: BenchmarkDatasetProfile;
+  /** Optional ordered dense datasets. Defaults to `[defaultDataset]`. */
+  benchmarkDatasets?: BenchmarkDatasetProfile[];
 }
 
 /**
@@ -336,10 +380,10 @@ export interface BenchmarkScenario extends BenchmarkScenarioMetadata {
    */
   runWorkload(signal: AbortSignal): Promise<void | BenchmarkMetric[]>;
   /**
-   * Seed the synthetic dataset. Called once between the baseline pass and
+   * Seed the dense dataset. Called once between the baseline pass and
    * the restart. Returns a handle that `cleanup()` can use to undo.
    */
-  seed(version: string, seedSize: number): Promise<{ calendarId: string; eventCount: number }>;
+  seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle>;
   /**
    * Undo whatever `seed()` created. Runs on summary close, on cancel, and
    * on stale-state cleanup at boot.
@@ -352,26 +396,40 @@ export interface BenchmarkResult {
   scenarioId: string;
   scenarioLabel: string;
   workload: BenchmarkWorkload;
-  synthVersion: string;
+  datasetVersion: string;
   harnessVersion: string;
   platform: string;
   buildRef?: string;
   phaseA: PhaseResult;
   phaseB: PhaseResult;
-  /** All synthetic passes. When absent, `phaseB` is the only synthetic pass. */
-  syntheticPhases?: PhaseResult[];
+  /** All dense dataset passes. When absent, `phaseB` is the only dense pass. */
+  datasetPhases?: PhaseResult[];
   /** Peak total memory (MB) observed in either phase, present only for memory benchmarks. */
   peakTotalMb?: number;
 }
 
-/** Synthetic event shape produced by the v1 generator. */
-export interface SynthEventDraft {
+/** Dense benchmark event shape produced by the v1 generator. */
+export interface BenchmarkEventDraft {
   title: string;
   start: string;
   end: string;
+  sourceUid: string;
   allDay?: boolean;
   description?: string;
   recurrence?: CalendarEvent["recurrence"];
+  notifications?: CalendarEvent["notifications"];
+  color?: CalendarEvent["color"];
+  location?: CalendarEvent["location"];
+  url?: CalendarEvent["url"];
+  transparency?: CalendarEvent["transparency"];
+  status?: CalendarEvent["status"];
+  visibility?: CalendarEvent["visibility"];
+  priority?: CalendarEvent["priority"];
+  categories?: CalendarEvent["categories"];
+  geo?: CalendarEvent["geo"];
+  extendedProperties?: CalendarEvent["extendedProperties"];
+  organizer?: CalendarEvent["organizer"];
   alarms?: CalendarEvent["alarms"];
   attendees?: CalendarEvent["attendees"];
+  guestPermissions?: CalendarEvent["guestPermissions"];
 }

@@ -16,12 +16,14 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   STRESS_DURATION_MS,
   HARNESS_VERSION,
-  SYNTH_VERSION,
+  DENSE_DATASET_VERSION,
   SAMPLE_OFFSETS_MS,
   isBenchmarkPendingStage,
   isFreshBenchmarkPendingAge,
   isFreshBenchmarkTotalAge,
+  type BenchmarkDatasetProfile,
   type BenchmarkScenario,
+  type BenchmarkSeedHandle,
   type BenchmarkSuiteState,
   type BenchmarkState,
   type PhaseResult,
@@ -45,6 +47,7 @@ async function runPhase(opts: {
   scenario: BenchmarkScenario;
   signal: AbortSignal;
   getEventCount: () => number;
+  datasetId?: string;
   onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
 }): Promise<PhaseResult> {
   await opts.scenario.setup();
@@ -90,6 +93,7 @@ async function runPhase(opts: {
     startupMs: boot.launchTotalMs,
     startupSamples,
     eventCountAtStart,
+    datasetId: opts.datasetId,
   };
 }
 
@@ -112,6 +116,7 @@ export function createRunner(getEventCount: () => number) {
     async runPhaseB(opts: {
       scenario: BenchmarkScenario;
       signal: AbortSignal;
+      datasetId?: string;
       onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
     }): Promise<PhaseResult> {
       return runPhase({
@@ -119,6 +124,7 @@ export function createRunner(getEventCount: () => number) {
         scenario: opts.scenario,
         signal: opts.signal,
         getEventCount,
+        datasetId: opts.datasetId,
         onCurveProgress: opts.onCurveProgress,
       });
     },
@@ -138,7 +144,7 @@ export async function persistPhaseAPending(opts: {
   buildRef?: string;
   startedAt?: string;
   suite?: BenchmarkSuiteState;
-  syntheticSeedSizes?: number[];
+  benchmarkDatasets?: BenchmarkDatasetProfile[];
   startupRuns?: StartupRunState;
 }): Promise<void> {
   const now = new Date().toISOString();
@@ -147,13 +153,13 @@ export async function persistPhaseAPending(opts: {
     startedAt: opts.startedAt ?? now,
     updatedAt: now,
     harnessVersion: HARNESS_VERSION,
-    synthVersion: SYNTH_VERSION,
+    datasetVersion: DENSE_DATASET_VERSION,
     platform: opts.platform,
     buildRef: opts.buildRef,
     vaultMode: "benchmark",
     stage: "phase-a-pending",
     suite: opts.suite,
-    syntheticSeedSizes: opts.syntheticSeedSizes,
+    benchmarkDatasets: opts.benchmarkDatasets,
     startupRuns: opts.startupRuns,
   };
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });
@@ -162,7 +168,7 @@ export async function persistPhaseAPending(opts: {
 /**
  * Persist `phase-b-pending` state, written after the baseline pass and
  * before the second restart. Carries the captured baseline result and the
- * seed handle so the synthetic pass can reference both after the next cold
+ * seed handle so the dense pass can reference both after the next cold
  * boot.
  */
 export async function persistPhaseBPending(opts: {
@@ -171,11 +177,11 @@ export async function persistPhaseBPending(opts: {
   buildRef?: string;
   startedAt: string;
   phaseA: PhaseResult;
-  seedHandle: { calendarId: string; eventCount: number };
+  seedHandle: BenchmarkSeedHandle;
   suite?: BenchmarkSuiteState;
-  syntheticSeedSizes?: number[];
-  syntheticIndex?: number;
-  syntheticPhases?: PhaseResult[];
+  benchmarkDatasets?: BenchmarkDatasetProfile[];
+  datasetIndex?: number;
+  datasetPhases?: PhaseResult[];
   startupRuns?: StartupRunState;
 }): Promise<void> {
   const now = new Date().toISOString();
@@ -184,7 +190,7 @@ export async function persistPhaseBPending(opts: {
     startedAt: opts.startedAt,
     updatedAt: now,
     harnessVersion: HARNESS_VERSION,
-    synthVersion: SYNTH_VERSION,
+    datasetVersion: DENSE_DATASET_VERSION,
     platform: opts.platform,
     buildRef: opts.buildRef,
     vaultMode: "benchmark",
@@ -192,9 +198,9 @@ export async function persistPhaseBPending(opts: {
     phaseA: opts.phaseA,
     seedHandle: opts.seedHandle,
     suite: opts.suite,
-    syntheticSeedSizes: opts.syntheticSeedSizes,
-    syntheticIndex: opts.syntheticIndex,
-    syntheticPhases: opts.syntheticPhases,
+    benchmarkDatasets: opts.benchmarkDatasets,
+    datasetIndex: opts.datasetIndex,
+    datasetPhases: opts.datasetPhases,
     startupRuns: opts.startupRuns,
   };
   await invoke("write_benchmark_state", { json: JSON.stringify(state) });
@@ -225,7 +231,7 @@ export function restartAppAfterDelay(delayMs: number): void {
 
 /**
  * Read the persisted state file from `app_config_dir/benchmark-state.json`.
- * Validates harness version, synth version, and TTL; if any check fails,
+ * Validates harness version, dataset version, and TTL; if any check fails,
  * deletes the benchmark DB and clears the file silently before returning
  * `null`. The DB teardown matters because a stale state file usually
  * implies a stale benchmark DB sitting next to the user's real DB; we
@@ -245,7 +251,7 @@ export async function loadPersistedState(): Promise<BenchmarkState | null> {
     await discardStaleArtifacts();
     return null;
   }
-  if (parsed.synthVersion !== SYNTH_VERSION) {
+  if (parsed.datasetVersion !== DENSE_DATASET_VERSION) {
     await discardStaleArtifacts();
     return null;
   }

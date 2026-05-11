@@ -3,15 +3,23 @@ import { getCalendars } from "$lib/stores/calendars.svelte";
 import type { CalendarEvent } from "$lib/components/calendar/types";
 import type { CalendarViewMode } from "$lib/components/calendar/types";
 import { computeViewWindow } from "$lib/components/calendar/utils";
-import { generateSynthEvents, DEFAULT_SEED } from "../synth";
-import type { BenchmarkMetric, SynthEventDraft } from "../types";
+import { countDenseCalendarEvents, generateDenseCalendarEvents } from "../dense";
+import {
+  benchmarkDatasetId,
+  type BenchmarkDatasetProfile,
+  type BenchmarkEventDraft,
+  type BenchmarkMetric,
+  type BenchmarkSeedHandle,
+} from "../types";
 
 /** Anchor used by calendar benchmarks so both passes hit the same window. */
 export const CALENDAR_BENCHMARK_ANCHOR_ISO = "2026-04-30";
 
-/** Calendar grouping name template. Renaming requires bumping `SYNTH_VERSION`. */
-export function synthCalendarFilename(version: string): string {
-  return `benchmark-synth-${version}.ics`;
+const DENSE_SEED_CHUNK_SIZE = 1_000;
+
+/** Calendar grouping name template. Renaming requires bumping `DENSE_DATASET_VERSION`. */
+export function denseCalendarFilename(dataset: BenchmarkDatasetProfile): string {
+  return `benchmark-dense-${dataset.version}-s${dataset.stackCount}-${dataset.detailProfile}.ics`;
 }
 
 export function parseCalendarBenchmarkAnchor(): Date {
@@ -29,15 +37,14 @@ export function localTimezone(): string {
 }
 
 /**
- * Convert a deterministic synth draft into a full event ready for
+ * Convert a deterministic benchmark draft into a full event ready for
  * `bulkImport`. The source UID lets re-seeds land as updates instead of
  * warning and skipping.
  */
 export function draftToEvent(
-  draft: SynthEventDraft,
-  index: number,
+  draft: BenchmarkEventDraft,
+  _index: number,
   calendarId: string,
-  version: string,
 ): CalendarEvent {
   const id = crypto.randomUUID();
   const event: CalendarEvent = {
@@ -47,34 +54,56 @@ export function draftToEvent(
     end: draft.end,
     timezone: localTimezone(),
     calendarId,
-    sourceUid: `synth-${version}-${index}`,
+    sourceUid: draft.sourceUid,
     sequence: 1,
   };
   if (draft.allDay) event.allDay = true;
   if (draft.description) event.description = draft.description;
   if (draft.recurrence) event.recurrence = draft.recurrence;
+  if (draft.notifications) event.notifications = draft.notifications;
+  if (draft.color !== undefined) event.color = draft.color;
+  if (draft.location) event.location = draft.location;
+  if (draft.url) event.url = draft.url;
+  if (draft.transparency) event.transparency = draft.transparency;
+  if (draft.status) event.status = draft.status;
+  if (draft.visibility) event.visibility = draft.visibility;
+  if (draft.priority !== undefined) event.priority = draft.priority;
+  if (draft.categories) event.categories = draft.categories;
+  if (draft.geo) event.geo = draft.geo;
+  if (draft.extendedProperties) event.extendedProperties = draft.extendedProperties;
+  if (draft.organizer) event.organizer = draft.organizer;
   if (draft.alarms) event.alarms = draft.alarms;
   if (draft.attendees) event.attendees = draft.attendees;
+  if (draft.guestPermissions) event.guestPermissions = draft.guestPermissions;
   return event;
 }
 
-export async function seedCalendarSynth(
-  version: string,
-  seedSize: number,
-): Promise<{ calendarId: string; eventCount: number }> {
+export async function seedCalendarDataset(
+  dataset: BenchmarkDatasetProfile,
+): Promise<BenchmarkSeedHandle> {
   const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
-  const cal = await calendarsStore.findOrCreateImported(synthCalendarFilename(version));
+  const cal = await calendarsStore.findOrCreateImported(denseCalendarFilename(dataset));
+  const anchor = parseCalendarBenchmarkAnchor();
+  const totalEvents = countDenseCalendarEvents(dataset, anchor);
 
-  const drafts = generateSynthEvents({
-    count: seedSize,
-    anchor: parseCalendarBenchmarkAnchor(),
-    seed: DEFAULT_SEED,
-  });
-  const events = drafts.map((d, i) => draftToEvent(d, i, cal.id, version));
+  for (let offset = 0; offset < totalEvents; offset += DENSE_SEED_CHUNK_SIZE) {
+    const drafts = generateDenseCalendarEvents({
+      dataset,
+      anchor,
+      offset,
+      count: DENSE_SEED_CHUNK_SIZE,
+    });
+    const events = drafts.map((d, i) => draftToEvent(d, offset + i, cal.id));
+    await calendarStore.bulkImport(events, cal.id, { refreshWindow: false });
+  }
 
-  await calendarStore.bulkImport(events, cal.id);
-  return { calendarId: cal.id, eventCount: events.length };
+  return {
+    calendarId: cal.id,
+    eventCount: totalEvents,
+    datasetId: benchmarkDatasetId(dataset),
+    dataset,
+  };
 }
 
 export async function waitForFrames(count: number): Promise<void> {

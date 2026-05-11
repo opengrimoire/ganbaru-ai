@@ -1,14 +1,16 @@
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
 import {
-  CORE_SYNTHETIC_SEED_SIZES,
-  DEFAULT_SYNTHETIC_SEED_SIZE,
+  CORE_BENCHMARK_DATASETS,
+  DEFAULT_BENCHMARK_DATASET,
   STRESS_DURATION_MS,
+  type BenchmarkDatasetProfile,
   type BenchmarkScenario,
+  type BenchmarkSeedHandle,
 } from "../types";
 import {
   parseCalendarBenchmarkAnchor,
   loadCalendarBenchmarkWindow,
-  seedCalendarSynth,
+  seedCalendarDataset,
   waitForFrames,
   waitForMs,
 } from "./calendar-utils";
@@ -25,8 +27,8 @@ export const idleMemoryScenario: BenchmarkScenario = {
     durationMs: STRESS_DURATION_MS,
     memoryMode: "post-workload",
   },
-  defaultSeedSize: DEFAULT_SYNTHETIC_SEED_SIZE,
-  syntheticSeedSizes: [...CORE_SYNTHETIC_SEED_SIZES],
+  defaultDataset: DEFAULT_BENCHMARK_DATASET,
+  benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
 
   async setup(): Promise<void> {
     const handle = getCalendarNavHandle();
@@ -43,8 +45,8 @@ export const idleMemoryScenario: BenchmarkScenario = {
     await waitForMs(STRESS_DURATION_MS, signal);
   },
 
-  async seed(version: string, seedSize: number): Promise<{ calendarId: string; eventCount: number }> {
-    return seedCalendarSynth(version, seedSize);
+  async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
+    return seedCalendarDataset(dataset);
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {

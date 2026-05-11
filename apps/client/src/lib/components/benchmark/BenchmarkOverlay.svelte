@@ -4,7 +4,6 @@
   import Check from "@lucide/svelte/icons/check";
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { buildBenchmarkSuitePreview, formatBenchmarkSuiteMarkdown } from "$lib/benchmark/output";
-  import { SYNTH_VERSION } from "$lib/benchmark/types";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const runner = getBenchmarkRunner();
@@ -53,8 +52,8 @@
     }, 2000);
   }
 
-  function runningDatasetLabel(phase: "A" | "B"): string {
-    return phase === "A" ? "base" : `synth-${SYNTH_VERSION}`;
+  function runningDatasetLabel(phase: "A" | "B", datasetLabel: string | undefined): string {
+    return phase === "A" ? "base" : datasetLabel ?? "dense dataset";
   }
 </script>
 
@@ -88,7 +87,7 @@
         {#if runner.running.suite}
           Benchmark {runner.running.suite.index + 1}/{runner.running.suite.total}.
         {/if}
-        Dataset: {runningDatasetLabel(runner.running.phase)}. {runner.running.step}
+        Dataset: {runningDatasetLabel(runner.running.phase, runner.running.datasetLabel)}. {runner.running.step}
         {#if runner.running.curve}
           <span class="text-muted-foreground"
             >({runner.running.curve.done}/{runner.running.curve.total}: {runner.running.curve.label})</span
