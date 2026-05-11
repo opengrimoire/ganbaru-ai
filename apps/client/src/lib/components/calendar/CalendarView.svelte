@@ -26,6 +26,11 @@
   import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
   import { getCalendarNavHandle } from "./nav-handle.svelte";
   import {
+    HeldNavigationController,
+    type HeldNavigationEvent,
+    type HeldNavigationKey,
+  } from "./held-navigation";
+  import {
     closedDisplay,
     buildCreateDisplay,
     computeEditDisplay,
@@ -682,56 +687,40 @@
   // few milliseconds before keyup cancelled the loop.
   const NAV_HOLD_DELAY_MS = 280;
   const NAV_REPEAT_MS = 120;
-  let navHeldKey: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | null = null;
-  let navHeldDirection: "forward" | "back" | null = null;
-  let navHoldTimer: ReturnType<typeof setTimeout> | null = null;
-  let navRepeatTimer: ReturnType<typeof setTimeout> | null = null;
   let navReleaseSeq = 0;
 
-  function clearNavTimers() {
-    if (navHoldTimer !== null) {
-      clearTimeout(navHoldTimer);
-      navHoldTimer = null;
-    }
-    if (navRepeatTimer !== null) {
-      clearTimeout(navRepeatTimer);
-      navRepeatTimer = null;
+  function markHeldNav(event: HeldNavigationEvent) {
+    if (event.type === "hold-start") {
+      perfMark("nav.hold-start", { key: event.key, dir: event.direction });
+    } else if (event.type === "hold-stop") {
+      perfMark("nav.hold-stop", { key: event.key, repeats: event.repeats });
+    } else if (event.type === "repeat-wait") {
+      perfMark("nav.repeat-wait", { key: event.key, repeats: event.repeats });
+    } else if (event.type === "repeat") {
+      perfMark("nav.repeat", { key: event.key, dir: event.direction, repeats: event.repeats });
+    } else {
+      perfMark("nav.repeat-cancelled", { key: event.key, stage: event.stage });
     }
   }
 
-  function scheduleNavRepeat() {
-    navRepeatTimer = setTimeout(() => {
-      navRepeatTimer = null;
-      if (navHeldDirection === null) return;
-      navigate(navHeldDirection);
-      scheduleNavRepeat();
-    }, NAV_REPEAT_MS);
-  }
+  const heldNavigation = new HeldNavigationController({
+    holdDelayMs: NAV_HOLD_DELAY_MS,
+    repeatMs: NAV_REPEAT_MS,
+    navigate: (direction, source) => navigate(direction, source),
+    waitUntilSettled: waitForNavigationSettled,
+    mark: markHeldNav,
+  });
 
   function startNavHold(
-    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+    key: HeldNavigationKey,
     direction: "forward" | "back",
   ) {
-    if (navHeldKey === key) return;
-    clearNavTimers();
-    navHeldKey = key;
-    navHeldDirection = direction;
-    perfMark("nav.hold-start", { key });
-    navigate(direction);
-    navHoldTimer = setTimeout(() => {
-      navHoldTimer = null;
-      scheduleNavRepeat();
-    }, NAV_HOLD_DELAY_MS);
+    heldNavigation.start(key, direction);
   }
 
-  function stopNavHold(key?: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown") {
-    if (key && navHeldKey !== key) return;
-    const stoppedKey = navHeldKey;
-    navHeldKey = null;
-    navHeldDirection = null;
-    clearNavTimers();
+  function stopNavHold(key?: HeldNavigationKey) {
+    const stoppedKey = heldNavigation.stop(key);
     if (stoppedKey) {
-      perfMark("nav.hold-stop", { key: stoppedKey });
       markNavReleaseTail(stoppedKey);
     }
   }
@@ -739,11 +728,7 @@
   function markNavReleaseTail(key: string) {
     const seq = ++navReleaseSeq;
     const releasedAt = performance.now();
-    void calendarStore.whenWindowIdle()
-      .then(() => tick())
-      .then(() => new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve());
-      }))
+    void waitForNavigationSettled()
       .then(() => {
         if (seq !== navReleaseSeq) return;
         perfMark("nav.release-tail", {
@@ -752,6 +737,20 @@
           count: visibleEvents.length,
         });
       });
+  }
+
+  async function waitForNavigationSettled(): Promise<void> {
+    if (anchorRaf !== 0) {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    }
+    await tick();
+    await calendarStore.whenForegroundWindowIdle();
+    await tick();
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
   }
 
   function arrowScrollStep(ts: number) {
@@ -876,13 +875,10 @@
     };
   });
 
-  // Held-arrow keyrepeat fires at ~30Hz on Linux; without coalescing each
-  // tick re-derives `displayResult`, mutates the DOM, and the queue keeps
-  // draining for several frames after the user releases the key. The
-  // coalescer collapses N anchor mutations per frame down to one paint
-  // while preserving the final landing position. Reads of the latest
-  // pending value (via `currentAnchor()`) keep the per-tick math in step
-  // with the user's intent rather than the last committed value.
+  // Scripted and wheel navigation can arrive faster than paint. Coalesce
+  // anchor mutations to one commit per frame and always base the next step on
+  // the latest pending target. Held keyboard navigation is separately
+  // backpressured before it reaches this point.
   let pendingAnchor: Date | null = null;
   let anchorRaf = 0;
   function currentAnchor(): Date {
@@ -903,8 +899,11 @@
     });
   }
 
-  function navigate(direction: "today" | "back" | "forward") {
-    perfMark("nav.start", { dir: direction });
+  function navigate(
+    direction: "today" | "back" | "forward",
+    source: "programmatic" | "wheel" | "key" | "hold-repeat" = "programmatic",
+  ) {
+    perfMark("nav.start", { dir: direction, source });
     if (direction === "today") {
       commitAnchor(new Date());
       return;
@@ -927,7 +926,7 @@
   }
 
   function handleWheelNavigate(direction: "back" | "forward") {
-    navigate(direction);
+    navigate(direction, "wheel");
   }
 
   function changeView(mode: CalendarViewMode) {

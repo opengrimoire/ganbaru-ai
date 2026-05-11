@@ -161,6 +161,9 @@ interface CalendarWindowLoadRequest {
 
 const windowCache = new BoundedWindowCache<CalendarWindowSnapshot>(WINDOW_CACHE_LIMIT);
 let prefetchGeneration = 0;
+let foregroundWindowBusy = false;
+let foregroundWindowRequestId = 0;
+let foregroundWindowIdleWaiters: Array<() => void> = [];
 
 type DbFullEvent = DbCalendarEvent & {
   description: string | null;
@@ -367,6 +370,31 @@ function rememberWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
   });
 }
 
+function beginForegroundWindowLoad(): number {
+  foregroundWindowBusy = true;
+  return ++foregroundWindowRequestId;
+}
+
+function finishForegroundWindowLoad(requestId: number): void {
+  if (requestId !== foregroundWindowRequestId) return;
+  foregroundWindowBusy = false;
+  resolveForegroundWindowIdle();
+}
+
+function resolveForegroundWindowIdle(): void {
+  if (foregroundWindowBusy) return;
+  const waiters = foregroundWindowIdleWaiters;
+  foregroundWindowIdleWaiters = [];
+  for (const resolve of waiters) resolve();
+}
+
+async function waitForForegroundWindowIdle(): Promise<void> {
+  if (!foregroundWindowBusy) return;
+  await new Promise<void>((resolve) => {
+    foregroundWindowIdleWaiters.push(resolve);
+  });
+}
+
 function adjacentWindowRequests(snapshot: CalendarWindowSnapshot): Array<{
   start: Temporal.PlainDate;
   end: Temporal.PlainDate;
@@ -498,6 +526,9 @@ async function loadWindowIntoState(
   if (!force && !markBoot) {
     const cached = windowCache.get(key);
     if (cached) {
+      const foregroundId = ++foregroundWindowRequestId;
+      foregroundWindowBusy = false;
+      resolveForegroundWindowIdle();
       prefetchGeneration++;
       windowLoadCoordinator.supersedePending();
       perfMark("window.cache-hit", {
@@ -507,20 +538,26 @@ async function loadWindowIntoState(
       });
       applyWindowSnapshot(cached);
       scheduleAdjacentPrefetch(cached);
+      finishForegroundWindowLoad(foregroundId);
       return;
     }
   }
 
   prefetchGeneration++;
-  await windowLoadCoordinator.enqueue(windowQueueKey("apply", key), {
-    key,
-    renderZone,
-    windowStart,
-    windowEnd,
-    markBoot,
-    force,
-    mode: "apply",
-  });
+  const foregroundId = beginForegroundWindowLoad();
+  try {
+    await windowLoadCoordinator.enqueue(windowQueueKey("apply", key), {
+      key,
+      renderZone,
+      windowStart,
+      windowEnd,
+      markBoot,
+      force,
+      mode: "apply",
+    });
+  } finally {
+    finishForegroundWindowLoad(foregroundId);
+  }
 }
 
 async function prefetchWindow(
@@ -650,8 +687,16 @@ export function getCalendar() {
       return windowLoadCoordinator.busy;
     },
 
+    get foregroundWindowLoadBusy(): boolean {
+      return foregroundWindowBusy;
+    },
+
     async whenWindowIdle(): Promise<void> {
       await waitForWindowIdle();
+    },
+
+    async whenForegroundWindowIdle(): Promise<void> {
+      await waitForForegroundWindowIdle();
     },
 
     /** Suppress invalidate() during multi-step mutations. */

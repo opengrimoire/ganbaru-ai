@@ -96,7 +96,7 @@ Rapid navigation is latest-wins. If the user holds an arrow key or a scripted dr
 
 The store keeps only a small bounded cache of render windows. Day and week views prefetch adjacent windows after a successful foreground load so normal previous/next navigation can swap from cache without blanking. Mutations clear the cache so saved edits, imports, deletes, detach, and split operations cannot reuse stale render state.
 
-Held keyboard navigation stops its timers on keyup and records a release-tail speed-log mark after calendar window loading is idle and the next paint has landed. This mark is diagnostic: it measures work still draining after the app receives keyup, not the physical delay before the browser can process keyup if the main thread is already blocked.
+Held keyboard navigation is backpressured. It fires one immediate navigation for a normal key press, then waits for the foreground window load and a paint before each repeated held-key step. Background prefetch must not block held-key motion. Keyup and blur cancel pending held-repeat intent, so releasing the key should leave at most the currently settling foreground navigation. The release-tail speed-log mark measures that final settle after the app receives keyup, not the physical delay before the browser can process keyup if the main thread is already blocked.
 
 ## All-day events
 
