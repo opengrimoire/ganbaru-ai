@@ -93,7 +93,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-10-03` with harness v7.
+Latest recorded canonical baseline: `2026-05-10-ID` with harness v7.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
@@ -108,6 +108,7 @@ Harness v7 keeps v6 methodology comparable for existing 1,000-event rows and add
 | 2026-05-10-01 | v6 | 0.1.0+5589e3f | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-10-02 | v6 | 0.1.0+f3bd22b | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-10-03 | v7 | 0.1.0+bf7b282 | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-10-ID | v7 | 0.1.0+5a5f19c | Linux Ubuntu 24.04.4 LTS |  |
 
 ### Core benchmarks
 
@@ -130,6 +131,9 @@ Harness v6 and later report repeated process launches. Before each startup sampl
 | 2026-05-10-03 | base-0 | 5 | 149 | 247 | 725 | 827 | 827 | 728 |
 | 2026-05-10-03 | synth-v1-1000 | 5 | 146 | 501 | 978 | 1007 | 1007 | 995 |
 | 2026-05-10-03 | synth-v1-10000 | 5 | 143 | 1969 | 2452 | 2883 | 2883 | 2470 |
+| 2026-05-10-ID | base-0 | 5 | 147 | 254 | 729 | 819 | 819 | 749 |
+| 2026-05-10-ID | synth-v1-1000 | 5 | 147 | 497 | 999 | 1395 | 1395 | 1001 |
+| 2026-05-10-ID | synth-v1-10000 | 5 | 147 | 2180 | 2598 | 2702 | 2702 | 2647 |
 
 #### Idle memory
 
@@ -170,6 +174,15 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-03 | synth-v1-10000 | workload peak | 112.8 | 406.0 | 17.3 | 536 |
 | 2026-05-10-03 | synth-v1-10000 | workload end | 112.9 | 397.0 | 17.4 | 527 |
 | 2026-05-10-03 | synth-v1-10000 | +30s | 112.3 | 366.0 | 17.4 | 496 |
+| 2026-05-10-ID | base-0 | workload peak | 107.3 | 198.6 | 18.0 | 324 |
+| 2026-05-10-ID | base-0 | workload end | 107.0 | 193.6 | 17.9 | 319 |
+| 2026-05-10-ID | base-0 | +30s | 106.4 | 191.9 | 18.0 | 316 |
+| 2026-05-10-ID | synth-v1-1000 | workload peak | 107.1 | 272.4 | 17.7 | 397 |
+| 2026-05-10-ID | synth-v1-1000 | workload end | 107.0 | 235.8 | 17.7 | 360 |
+| 2026-05-10-ID | synth-v1-1000 | +30s | 106.4 | 236.5 | 17.8 | 361 |
+| 2026-05-10-ID | synth-v1-10000 | workload peak | 116.3 | 452.2 | 17.9 | 586 |
+| 2026-05-10-ID | synth-v1-10000 | workload end | 116.3 | 420.9 | 18.0 | 555 |
+| 2026-05-10-ID | synth-v1-10000 | +30s | 115.7 | 416.9 | 18.1 | 551 |
 
 #### Calendar navigation stress memory
 
@@ -208,6 +221,15 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-03 | synth-v1-10000 | workload peak | 113.9 | 414.0 | 17.1 | 545 |
 | 2026-05-10-03 | synth-v1-10000 | workload end | 116.2 | 613.8 | 17.2 | 747 |
 | 2026-05-10-03 | synth-v1-10000 | +30s | 115.3 | 815.2 | 17.2 | 948 |
+| 2026-05-10-ID | base-0 | workload peak | 107.0 | 231.1 | 18.0 | 356 |
+| 2026-05-10-ID | base-0 | workload end | 106.9 | 235.1 | 18.0 | 360 |
+| 2026-05-10-ID | base-0 | +30s | 106.3 | 225.8 | 18.1 | 350 |
+| 2026-05-10-ID | synth-v1-1000 | workload peak | 106.9 | 338.8 | 17.7 | 463 |
+| 2026-05-10-ID | synth-v1-1000 | workload end | 107.0 | 319.3 | 17.7 | 444 |
+| 2026-05-10-ID | synth-v1-1000 | +30s | 106.2 | 311.5 | 17.8 | 436 |
+| 2026-05-10-ID | synth-v1-10000 | workload peak | 115.5 | 454.1 | 17.9 | 588 |
+| 2026-05-10-ID | synth-v1-10000 | workload end | 115.7 | 930.8 | 18.0 | 1065 |
+| 2026-05-10-ID | synth-v1-10000 | +30s | 115.1 | 1089.1 | 18.0 | 1222 |
 
 #### Event panel latency
 
@@ -237,6 +259,12 @@ Rows report user-visible elapsed time. Internal module, detail-load, state, and 
 | 2026-05-10-03 | base-2 | edit switch while open avg | 16 | ms | 10 | 15 | 16 | 17 | 17 |
 | 2026-05-10-03 | synth-v1-1002 | edit switch while open avg | 24 | ms | 10 | 16 | 20 | 34 | 34 |
 | 2026-05-10-03 | synth-v1-10002 | edit switch while open avg | 94 | ms | 10 | 84 | 94 | 101 | 101 |
+| 2026-05-10-ID | base-2 | edit open from closed avg | 24 | ms | 10 | 18 | 19 | 69 | 69 |
+| 2026-05-10-ID | synth-v1-1002 | edit open from closed avg | 72 | ms | 10 | 63 | 65 | 141 | 141 |
+| 2026-05-10-ID | synth-v1-10002 | edit open from closed avg | 408 | ms | 10 | 362 | 365 | 709 | 709 |
+| 2026-05-10-ID | base-2 | edit switch while open avg | 18 | ms | 10 | 17 | 18 | 19 | 19 |
+| 2026-05-10-ID | synth-v1-1002 | edit switch while open avg | 24 | ms | 10 | 16 | 20 | 33 | 33 |
+| 2026-05-10-ID | synth-v1-10002 | edit switch while open avg | 99 | ms | 10 | 87 | 98 | 113 | 113 |
 
 #### Create panel latency
 
@@ -266,6 +294,12 @@ The cancel timing includes the fixed 500 ms guard used by the scenario before cl
 | 2026-05-10-03 | base-0 | create cancel after guard avg | 61 | ms | 6 | 58 | 60 | 66 | 66 |
 | 2026-05-10-03 | synth-v1-1000 | create cancel after guard avg | 62 | ms | 6 | 59 | 59 | 74 | 74 |
 | 2026-05-10-03 | synth-v1-10000 | create cancel after guard avg | 427 | ms | 6 | 417 | 420 | 456 | 456 |
+| 2026-05-10-ID | base-0 | create panel open avg | 37 | ms | 6 | 18 | 32 | 77 | 77 |
+| 2026-05-10-ID | synth-v1-1000 | create panel open avg | 50 | ms | 6 | 30 | 33 | 137 | 137 |
+| 2026-05-10-ID | synth-v1-10000 | create panel open avg | 448 | ms | 6 | 385 | 400 | 691 | 691 |
+| 2026-05-10-ID | base-0 | create cancel after guard avg | 59 | ms | 6 | 58 | 59 | 61 | 61 |
+| 2026-05-10-ID | synth-v1-1000 | create cancel after guard avg | 62 | ms | 6 | 59 | 59 | 75 | 75 |
+| 2026-05-10-ID | synth-v1-10000 | create cancel after guard avg | 443 | ms | 6 | 430 | 442 | 451 | 451 |
 
 ### Backend benchmarks
 
@@ -443,7 +477,7 @@ These notes explain the broad shape of current performance work. They should sta
 
 - Calendar render state is loaded through a Rust window query. Non-recurring rows are bounded by the visible date window, and recurring templates are expanded through a Rust render command after row mapping. TypeScript recurrence remains for unsaved edit previews.
 - Calendar window loading is latest-wins. Rapid navigation can leave an already-started native query in flight, but stale requests should not continue through mapping, recurrence expansion, state application, and paint once a newer target exists. A small bounded cache keeps recent day/week render windows available for adjacent navigation.
-- Held keyboard navigation is backpressured by foreground window settling. Repeats pause while the visible window is loading or painting, keyup cancels pending repeat intent, and background prefetch does not count as foreground work.
+- Held keyboard navigation fires once immediately, then repeats through gated timer ticks and native repeated keydown events. Repeat cadence is gated by pending anchor commits, not foreground window loads. Keyup cancels future repeat intent, and missed repeat ticks are not replayed later.
 - Calendar render state uses slim event rows. Heavy fields such as description, attendees, alarms, extended properties, and organizer stay in SQLite until a workflow needs them.
 - EventPanel is dynamically imported and can be parked offscreen after first paint to trade a small measured RAM cost for faster first interaction.
 - Event detail loading uses a lighter `loadPanelEvent` path for panel opens and `loadFullEvent` only where full fidelity is required, such as ICS export and undo snapshots.
