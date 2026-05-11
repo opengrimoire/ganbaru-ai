@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v7 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both the 1,000-event and 10,000-event synthetic scales.
+Harness v8 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s3-d1` and `dense-v1-r10y-s3-d1`.
 
 ## User flow
 
@@ -32,7 +32,7 @@ Safety mechanisms:
 - `vaultMode: "benchmark"` in `benchmark-state.json` tells the boot path to open the benchmark DB.
 - `teardown_benchmark_db` deletes the benchmark DB when the summary closes, when the run is cancelled, or when stale state is detected.
 - The app restarts after teardown so the Rust database layer returns to the real user DB.
-- Stale state is discarded when `HARNESS_VERSION`, `SYNTH_VERSION`, the total run TTL, or the short pending-restart TTL check fails.
+- Stale state is discarded when `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, the total run TTL, or the short pending-restart TTL check fails.
 
 ## Dataset ids
 
@@ -40,10 +40,10 @@ Benchmark result tables use compact dataset ids:
 
 | Pattern | Meaning |
 |---|---|
-| `base-N` | The isolated benchmark DB after scenario setup and before synthetic seeding. `N` is the number of calendar events present at measurement start. |
-| `synth-vX-N` | The isolated benchmark DB seeded with synthetic dataset version `vX`. `N` is the number of calendar events present at measurement start. |
+| `base-N` | The isolated benchmark DB after scenario setup and before dense dataset seeding. `N` is the number of calendar events present at measurement start. |
+| `dense-vX-rYy-sZ-dP` | The isolated benchmark DB seeded with dense dataset version `vX`, `Y` years before and after the benchmark anchor, `Z` overlapping events at each hourly start, and detail profile `dP`. |
 
-The formatter emits these ids directly. Do not render prose dataset labels such as "empty", "setup events", or "synthetic calendar" in copied markdown.
+The formatter emits these ids directly. Do not render prose dataset labels such as "empty", "setup events", or "dense calendar" in copied markdown.
 
 Each scenario declares a primary measurement mode:
 
@@ -74,18 +74,18 @@ phase-a-pending
   write phase-a-running
   run baseline pass
   for startup only, repeat phase-a-pending until enough launch samples exist
-  seed benchmark-synth-v1
+  seed dense-v1-r1y-s3-d1
   write phase-b-pending
   restart app
 
 phase-b-pending
   open isolated seeded DB
   write phase-b-running
-  run synthetic pass for the current seed size
+  run dense pass for the current dataset
   for startup only, repeat phase-b-pending until enough launch samples exist
-  if the scenario has more synthetic seed sizes:
-    seed the next synthetic size
-    write phase-b-pending with completed synthetic results
+  if the scenario has more dense datasets:
+    seed the next dense dataset
+    write phase-b-pending with completed dense results
     restart app
   if suite has more scenarios:
     prepare benchmark DB
@@ -107,7 +107,7 @@ phase-a-running or phase-b-running on boot
   continue on the user's real DB
 ```
 
-Non-startup scenarios currently cost one baseline pass plus one pass per synthetic seed size. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each synthetic seed size. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
+Non-startup scenarios currently cost one baseline pass plus one pass per dense dataset. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each dense dataset. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
 
 If the process is killed during a benchmark pass, the partial result is not comparable. The next boot discards the isolated benchmark DB instead of trying to resume from data that may contain half-finished setup or workload state. Explicit Cancel still aborts the active run and restarts on the user's real DB.
 
@@ -118,7 +118,7 @@ Pending state is different: it is valid only during the small gap between an int
 Normal app startup must not import benchmark scenario implementation code. The
 title bar may load only `benchmarkStatus` and the normal UI shell. The
 performance popover may load lightweight scenario metadata for button labels,
-but it must not import the runner store, synthetic data generator, scenario
+but it must not import the runner store, dense data generator, scenario
 modules, or operation benchmark helpers until a user starts a benchmark.
 
 Benchmark resume is the other allowed load path. On boot, `App.svelte` reads
@@ -153,22 +153,22 @@ export interface BenchmarkScenarioMetadata {
     durationMs: number;
     memoryMode: "none" | "post-workload";
   };
-  defaultSeedSize: number;
-  syntheticSeedSizes?: number[];
+  defaultDataset: BenchmarkDatasetProfile;
+  benchmarkDatasets?: BenchmarkDatasetProfile[];
 }
 
 export interface BenchmarkScenario extends BenchmarkScenarioMetadata {
   setup(): Promise<void>;
   runWorkload(signal: AbortSignal): Promise<void | BenchmarkMetric[]>;
-  seed(version: string, seedSize: number): Promise<{ calendarId: string; eventCount: number }>;
-  cleanup(seedHandle: { calendarId: string }): Promise<void>;
+  seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle>;
+  cleanup(seedHandle: BenchmarkSeedHandle): Promise<void>;
 }
 ```
 
 Implementation rules:
 
 - Metadata must stay dependency-light. Do not import scenario modules, stores,
-  synthetic generators, or operation helpers from the metadata path.
+  dense generators, or operation helpers from the metadata path.
 - `setup()` places the app in the deterministic starting state for both passes.
 - `runWorkload()` performs the measured action and must honor the abort signal.
 - Scenarios that need a fixed measurement window should keep the workload alive for `workload.durationMs`.
@@ -201,21 +201,20 @@ Registered scenarios:
 | `theme-persistence-ops` | `lib/benchmark/scenarios/theme-persistence-ops.ts` | Rust-backed theme persistence latency |
 | `pomodoro-persistence-ops` | `lib/benchmark/scenarios/pomodoro-persistence-ops.ts` | Rust-backed Pomodoro persistence latency |
 
-## Synthetic event generator
+## Dense calendar dataset generator
 
-`benchmark-synth-v1` is deterministic. It uses a `mulberry32` PRNG seeded with `0x1234` and produces 1,000 events by default. Core scenarios also run the same generator at 10,000 events so growth costs show up in the user-facing benchmark rows.
+`benchmark-dense-v1-s3-d1` is deterministic. Dataset ids add the year radius: `dense-v1-r1y-s3-d1` covers one year before and one year after the fixed benchmark anchor, while `dense-v1-r10y-s3-d1` covers ten years before and ten years after it.
 
-Distribution:
+The fixed benchmark anchor is `2026-04-30`. Dataset v1 uses a half-open date range from `anchor - yearRadius` through, but not including, `anchor + yearRadius`. With stack count 3, that produces:
 
-| Share | Shape |
+| Dataset | Date range | Events |
 |---|---|
-| 70% | Timed plain events |
-| 10% | Timed events with description |
-| 10% | Recurring events split among daily, weekly, and monthly |
-| 5% | All-day events |
-| 5% | Events with one alarm or one to three attendees |
+| `dense-v1-r1y-s3-d1` | `2025-04-30` to `2027-04-30` exclusive | 52,560 |
+| `dense-v1-r10y-s3-d1` | `2016-04-30` to `2036-04-30` exclusive | 525,960 |
 
-Bumping the generator requires a new synth version and a fresh row series in `docs/PERFORMANCE.md`.
+Every day has three overlapping timed events at `HH:00` for every hour from `00:00` through `23:00`; each event ends at `HH:50`. Detail profile `d1` gives every event a title, description, notification, rich alarm, location, URL, categories, organizer, guest permissions, and extended benchmark metadata. The first two stacked events also include one attendee each. The generator intentionally avoids recurrence so the benchmark isolates dense visible windows and old or future non-recurring history.
+
+Source UIDs do not include the year radius. Seeding the 10-year dataset after the 1-year dataset updates the overlapping events and adds only the extra outer years instead of duplicating the shared range. Bumping the generator requires a new dense dataset version and a fresh row series in `docs/PERFORMANCE.md`.
 
 ## Output format
 
@@ -248,6 +247,7 @@ The copied markdown intentionally avoids slash-packed memory cells, repeated glo
 ## Critical files
 
 - `lib/benchmark/types.ts`: scenario contract, pass result types, suite state, versions, sampling constants.
+- `lib/benchmark/dense.ts`: deterministic dense calendar dataset generation.
 - `lib/benchmark/registry.ts`: lightweight scenario metadata and dynamic scenario loaders.
 - `lib/benchmark/runner.ts`: pass orchestration, persisted state, restart wiring.
 - `lib/benchmark/sampler.ts`: memory sampling and boot timing capture.

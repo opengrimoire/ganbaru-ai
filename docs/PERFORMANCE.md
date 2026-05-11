@@ -51,7 +51,7 @@ Do not paste ad hoc `Live RAM`, `Startup RAM snapshot`, or `Speed log` panel cop
 
 ## Benchmark questions
 
-Harness v7 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample. Core scenarios record both the 1,000-event and 10,000-event synthetic scales in one result.
+Harness v8 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample. Core scenarios record both dense calendar datasets in one result: `dense-v1-r1y-s3-d1` and `dense-v1-r10y-s3-d1`.
 
 | Suite | Includes | Use when |
 |---|---|---|
@@ -77,8 +77,9 @@ Benchmark rows use compact dataset ids. Do not write prose dataset labels in mea
 
 | Pattern | Meaning |
 |---|---|
-| `base-N` | The isolated benchmark DB after scenario setup and before synthetic seeding. `N` is the number of calendar events present at measurement start. Use `base-0` for a truly empty benchmark DB. |
-| `synth-vX-N` | The isolated benchmark DB seeded with synthetic dataset version `vX`. `N` is the number of calendar events present at measurement start. |
+| `base-N` | The isolated benchmark DB after scenario setup and before dense dataset seeding. `N` is the number of calendar events present at measurement start. Use `base-0` for a truly empty benchmark DB. |
+| `dense-vX-rYy-sZ-dP` | The isolated benchmark DB seeded with dense dataset version `vX`, `Y` years before and after the benchmark anchor, `Z` overlapping events at each hourly start, and detail profile `dP`. |
+| `synth-vX-N` | Historical harness v7 and earlier rows only. Synthetic dataset version `vX` with `N` events present at measurement start. Do not use this pattern for new v8 rows. |
 
 Examples:
 
@@ -86,18 +87,21 @@ Examples:
 |---|---|
 | `base-0` | Empty isolated benchmark DB. |
 | `base-2` | Baseline DB with two scenario setup events. |
-| `synth-v1-1000` | Synthetic dataset version 1 with 1,000 events. |
-| `synth-v1-10000` | Synthetic dataset version 1 with 10,000 events. |
+| `dense-v1-r1y-s3-d1` | Dense dataset version 1 with one year before and after the fixed anchor, three stacked events per hour, and detail profile 1. |
+| `dense-v1-r10y-s3-d1` | Dense dataset version 1 with ten years before and after the fixed anchor, three stacked events per hour, and detail profile 1. |
+| `synth-v1-1000` | Historical synthetic dataset version 1 with 1,000 events. |
 
 Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar setup data, record that context in run metadata or the scenario section instead of expanding the dataset id into prose.
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-10-ID` with harness v7.
+Latest recorded canonical baseline: `2026-05-10-ID` with harness v7. The current benchmark harness is v8, so the next comparable row series should use the dense dataset ids above.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
 Harness v7 keeps v6 methodology comparable for existing 1,000-event rows and adds a second 10,000-event synthetic pass to each core scenario. New v7 rows should include both synthetic scales when evaluating startup, idle memory, calendar navigation, event panel, and create panel behavior.
+
+Harness v8 replaces count-based synthetic scales with deterministic dense-span calendar datasets. Dataset v1 uses the fixed benchmark anchor `2026-04-30`, creates three overlapping timed events at every hourly start on every day, and adds realistic detail fields through profile `d1`. The 1-year dataset has 52,560 events, and the 10-year dataset has 525,960 events. v8 rows are not numerically comparable with v7 rows because the seeded data shape changed.
 
 ### Run metadata
 
@@ -423,7 +427,7 @@ Use the compact scalar table for one-off values and counts:
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
 
-Only bump `HARNESS_VERSION` when numeric comparability changes: measurement methodology, sampling cadence, scenario workload, or synth data generation. Do not bump it for markdown layout, rendered-preview layout, wording, docs-only changes, column order, or removing helper sections such as a generated index. When the measurement method changes, explain whether old rows remain comparable; if not, old rows become historical context instead of direct comparison data.
+Only bump `HARNESS_VERSION` when numeric comparability changes: measurement methodology, sampling cadence, scenario workload, or benchmark dataset generation. Do not bump it for markdown layout, rendered-preview layout, wording, docs-only changes, column order, or removing helper sections such as a generated index. When the measurement method changes, explain whether old rows remain comparable; if not, old rows become historical context instead of direct comparison data.
 
 ## Performance principles
 
