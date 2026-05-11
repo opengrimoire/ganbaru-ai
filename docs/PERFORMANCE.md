@@ -6,7 +6,7 @@ This file is the canonical performance record for GanbaruAI. It exists so future
 
 - [How to capture new results](#how-to-capture-new-results)
 - [Canonical tracking rules](#canonical-tracking-rules)
-- [Benchmark questions](#benchmark-questions)
+- [Benchmark identifiers](#benchmark-identifiers)
 - [Benchmark records](#benchmark-records)
 - [Historical context](#historical-context)
 - [Package size](#package-size)
@@ -29,6 +29,7 @@ To capture a comparable run:
 
 The app runs every benchmark against isolated benchmark databases. The user's real database is not opened during a benchmark pass.
 The markdown output is an interchange format for the agent. Do not paste it verbatim into this file; place its rows into the matching canonical tables below.
+Generated run ids ending in `-ID` are unresolved placeholders. Before recording rows here, replace `YYYY-MM-DD-ID` with the next zero-padded run id for that date, such as `YYYY-MM-DD-01` or `YYYY-MM-DD-02`. No canonical row should keep `-ID`.
 
 ## Canonical tracking rules
 
@@ -45,78 +46,42 @@ Measurement rows must identify:
 - Dataset id.
 - The primary measurement type: startup boot, idle memory, stress memory, interaction latency, or operation latency.
 
-Measurement tables must not include a generic `Notes` column. Put fixed scenario methodology in the section text. If a future detail becomes important enough to compare across runs, add a dedicated typed column instead of hiding it in prose.
+Measurement tables must not include a generic `Notes` column. Keep fixed scenario methodology in the harness spec. If a future detail becomes important enough to compare across runs, add a dedicated typed column instead of hiding it in prose.
 
 Do not paste ad hoc `Live RAM`, `Startup RAM snapshot`, or `Speed log` panel copies into the canonical tables. Use those while investigating, then run the benchmark suite when a change needs to be recorded.
 
-## Benchmark questions
+## Benchmark identifiers
 
-Harness v11 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample. Core scenarios record both dense calendar datasets in one result: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
-
-| Suite | Includes | Use when |
-|---|---|---|
-| Core benchmarks | Startup, idle memory, held calendar navigation, event panel latency, create panel latency | Measuring user-perceived startup, memory, and interaction speed |
-| Backend benchmarks | Calendar write, calendar import, theme persistence, Pomodoro persistence | Measuring Rust-backed persistence and storage command latency |
-| All benchmarks | Core plus backend | Recording a complete release baseline or validating a broad refactor |
-
-| Scenario | Primary question | Primary output | Post-workload RAM wait |
-|---|---|---|---|
-| `startup-boot` | How fast does the app launch into a usable calendar? | Repeated launch stats to usable calendar paint | No |
-| `idle-memory` | How much memory does the calendar hold while idle? | PSS memory by process plus stored-event and loaded-row counts | Yes |
-| `calendar-nav` | How much memory does held right-arrow week navigation use? | PSS memory by process plus held-move counts | Yes |
-| `event-panel-open` | How quickly does the event panel paint for existing events? | Average panel open and switch timings | No |
-| `calendar-create-cancel` | How quickly does the create panel open and cancel? | Average create open and cancel timings | No |
-| `calendar-write-ops` | How quickly do Rust-backed calendar write commands finish? | Average event create, patch, delete, detach, and split timings | No |
-| `calendar-import-ops` | How quickly does Rust apply typed calendar import payloads? | Average 100-event import timings plus 1000-event scalar timings | No |
-| `theme-persistence-ops` | How quickly do Rust-backed theme persistence commands finish? | Average theme insert, replace, load, cascade, and reset timings | No |
-| `pomodoro-persistence-ops` | How quickly do Rust-backed Pomodoro persistence commands finish? | Average segment insert, update, cleanup, orphan cleanup, and session-save timings | No |
+This section defines identifiers used by recorded rows. Harness behavior, suite membership, scenario definitions, dataset generation, and version-specific methodology live in [performance-benchmark.md](features/performance-benchmark.md).
 
 ### Dataset ids
 
-Benchmark rows use compact dataset ids. Do not write prose dataset labels in measurement tables.
+Benchmark rows use compact dataset ids. Do not write prose dataset labels in measurement tables. Dataset id semantics are defined in the harness spec.
 
 | Pattern | Meaning |
 |---|---|
 | `base-N` | The isolated benchmark DB after scenario setup and before dense dataset seeding. `N` is the number of calendar events present at measurement start. Use `base-0` for a truly empty benchmark DB. |
-| `dense-vX-rYy-sZ-dP` | The isolated benchmark DB seeded with dense dataset version `vX`, `Y` years before and after the benchmark anchor, `Z` overlapping events at each hourly start, and detail profile `dP`. |
-| `synth-vX-N` | Historical harness v7 and earlier rows only. Synthetic dataset version `vX` with `N` events present at measurement start. Do not use this pattern for new v11 rows. |
+| `dense-vX-rYy-sZ-dP` | Dense calendar benchmark dataset. |
+| `synth-vX-N` | Historical synthetic benchmark dataset. Do not use this pattern for new v3 rows. |
 
-Examples:
-
-| Dataset id | Meaning |
-|---|---|
-| `base-0` | Empty isolated benchmark DB. |
-| `base-2` | Baseline DB with two scenario setup events. |
-| `dense-v1-r1y-s1-d1` | Dense dataset version 1 with one year before and after the fixed anchor, one event per hour, and detail profile 1. |
-| `dense-v1-r10y-s1-d1` | Dense dataset version 1 with ten years before and after the fixed anchor, one event per hour, and detail profile 1. |
-| `synth-v1-1000` | Historical synthetic dataset version 1 with 1,000 events. |
-
-Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar setup data, record that context in run metadata or the scenario section instead of expanding the dataset id into prose.
+Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar setup data, record that context in run metadata or the harness spec instead of expanding the dataset id into prose.
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-10-ID` with harness v7. The current benchmark harness is v11, so the next comparable row series should use the dense dataset ids above.
+Latest recorded canonical baseline: `2026-05-10-04` with harness v2. The current benchmark harness is v3 and is not recorded yet. The run metadata table below is the source of truth for recorded harness versions.
 
-Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
-
-Harness v7 keeps v6 methodology comparable for existing 1,000-event rows and adds a second 10,000-event synthetic pass to each core scenario. New v7 rows should include both synthetic scales when evaluating startup, idle memory, calendar navigation, event panel, and create panel behavior.
-
-Harness v8 replaced count-based synthetic scales with deterministic dense-span calendar datasets, but the initial 3-event stack profile was too large for practical local benchmark runs. Harness v9 keeps the same fixed benchmark anchor, `2026-04-30`, but changes canonical core datasets to one detailed timed event at every hourly start on every day. The 1-year dataset has 17,520 events, and the 10-year dataset has 175,320 events. v9 rows are not numerically comparable with v7 rows because the seeded data shape changed.
-
-Harness v10 keeps the v9 dense datasets but changes memory methodology. Missing workload peak samples now fail the run instead of rendering `n/a`. `calendar-nav` now uses the real held right-arrow cadence, not forced frame-rate navigation. `calendar-window-scale` adds the fixed anchored week memory check with total stored event count and current-window row counts, so stored-history growth can be separated from visible-window density.
-
-Harness v11 removes the duplicate `calendar-window-scale` scenario. Idle memory now carries the stored-event and loaded-row sanity metrics that proved the fixed-window comparison, and held navigation repeat ticks wait for foreground calendar loading to finish before moving again. Week view loads the visible Monday to Sunday range plus one day before and one day after, so dense v1 with one event per hour has 168 visible-week events and 216 loaded week rows.
+Do not bump `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, or dense detail profiles for iteration alone. While tuning a benchmark before recording a run, edit the current version in place. Bump only when at least one run using the current version has been recorded in the run metadata and a later change would make new numbers incomparable with those recorded rows.
 
 ### Run metadata
 
 | Run | Harness | Build ref | Platform | Notes |
 |---|---|---|---|---|
-| 2026-05-05-01 | v6 | 0.1.0+889cc3c | Linux Ubuntu 24.04.4 LTS |  |
-| 2026-05-09-01 | v6 | 0.1.0+e3c35c7 | Linux Ubuntu 24.04.4 LTS |  |
-| 2026-05-10-01 | v6 | 0.1.0+5589e3f | Linux Ubuntu 24.04.4 LTS |  |
-| 2026-05-10-02 | v6 | 0.1.0+f3bd22b | Linux Ubuntu 24.04.4 LTS |  |
-| 2026-05-10-03 | v7 | 0.1.0+bf7b282 | Linux Ubuntu 24.04.4 LTS |  |
-| 2026-05-10-ID | v7 | 0.1.0+5a5f19c | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-05-01 | v1 | 0.1.0+889cc3c | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-09-01 | v1 | 0.1.0+e3c35c7 | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-10-01 | v1 | 0.1.0+5589e3f | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-10-02 | v1 | 0.1.0+f3bd22b | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-10-03 | v2 | 0.1.0+bf7b282 | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-10-04 | v2 | 0.1.0+5a5f19c | Linux Ubuntu 24.04.4 LTS |  |
 
 ### Core benchmarks
 
@@ -124,7 +89,7 @@ Core benchmark rows measure user-perceived startup, memory, and interaction late
 
 #### Startup boot
 
-Harness v6 and later report repeated process launches. Before each startup sample, the app exits and a helper waits 10 seconds before reopening it. Use `Launch median ms` as the user-facing app-open comparison value. It measures Rust process start through `boot.usable-paint`, when the calendar data has loaded and the calendar has rendered a frame. `First paint median ms` is diagnostic and can happen before event rows are visible.
+Use `Launch median ms` as the headline app-open comparison value. `First paint median ms` and `Usable paint median ms` are diagnostic timing marks from the harness.
 
 | Run | Dataset | Runs | First paint median ms | Usable paint median ms | Launch min ms | Launch P95 ms | Launch max ms | Launch median ms |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
@@ -139,13 +104,13 @@ Harness v6 and later report repeated process launches. Before each startup sampl
 | 2026-05-10-03 | base-0 | 5 | 149 | 247 | 725 | 827 | 827 | 728 |
 | 2026-05-10-03 | synth-v1-1000 | 5 | 146 | 501 | 978 | 1007 | 1007 | 995 |
 | 2026-05-10-03 | synth-v1-10000 | 5 | 143 | 1969 | 2452 | 2883 | 2883 | 2470 |
-| 2026-05-10-ID | base-0 | 5 | 147 | 254 | 729 | 819 | 819 | 749 |
-| 2026-05-10-ID | synth-v1-1000 | 5 | 147 | 497 | 999 | 1395 | 1395 | 1001 |
-| 2026-05-10-ID | synth-v1-10000 | 5 | 147 | 2180 | 2598 | 2702 | 2702 | 2647 |
+| 2026-05-10-04 | base-0 | 5 | 147 | 254 | 729 | 819 | 819 | 749 |
+| 2026-05-10-04 | synth-v1-1000 | 5 | 147 | 497 | 999 | 1395 | 1395 | 1001 |
+| 2026-05-10-04 | synth-v1-10000 | 5 | 147 | 2180 | 2598 | 2702 | 2702 | 2647 |
 
 #### Idle memory
 
-Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes. Harness v11 and later idle memory rows use the fixed benchmark anchor, then emit scalar sanity checks for total stored events and loaded week rows. With dense v1, stack count 1, and detail profile 1, loaded week rows should be 216 because the store loads the visible week plus one day on each side.
+Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes.
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
@@ -182,22 +147,22 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-03 | synth-v1-10000 | workload peak | 112.8 | 406.0 | 17.3 | 536 |
 | 2026-05-10-03 | synth-v1-10000 | workload end | 112.9 | 397.0 | 17.4 | 527 |
 | 2026-05-10-03 | synth-v1-10000 | +30s | 112.3 | 366.0 | 17.4 | 496 |
-| 2026-05-10-ID | base-0 | workload peak | 107.3 | 198.6 | 18.0 | 324 |
-| 2026-05-10-ID | base-0 | workload end | 107.0 | 193.6 | 17.9 | 319 |
-| 2026-05-10-ID | base-0 | +30s | 106.4 | 191.9 | 18.0 | 316 |
-| 2026-05-10-ID | synth-v1-1000 | workload peak | 107.1 | 272.4 | 17.7 | 397 |
-| 2026-05-10-ID | synth-v1-1000 | workload end | 107.0 | 235.8 | 17.7 | 360 |
-| 2026-05-10-ID | synth-v1-1000 | +30s | 106.4 | 236.5 | 17.8 | 361 |
-| 2026-05-10-ID | synth-v1-10000 | workload peak | 116.3 | 452.2 | 17.9 | 586 |
-| 2026-05-10-ID | synth-v1-10000 | workload end | 116.3 | 420.9 | 18.0 | 555 |
-| 2026-05-10-ID | synth-v1-10000 | +30s | 115.7 | 416.9 | 18.1 | 551 |
+| 2026-05-10-04 | base-0 | workload peak | 107.3 | 198.6 | 18.0 | 324 |
+| 2026-05-10-04 | base-0 | workload end | 107.0 | 193.6 | 17.9 | 319 |
+| 2026-05-10-04 | base-0 | +30s | 106.4 | 191.9 | 18.0 | 316 |
+| 2026-05-10-04 | synth-v1-1000 | workload peak | 107.1 | 272.4 | 17.7 | 397 |
+| 2026-05-10-04 | synth-v1-1000 | workload end | 107.0 | 235.8 | 17.7 | 360 |
+| 2026-05-10-04 | synth-v1-1000 | +30s | 106.4 | 236.5 | 17.8 | 361 |
+| 2026-05-10-04 | synth-v1-10000 | workload peak | 116.3 | 452.2 | 17.9 | 586 |
+| 2026-05-10-04 | synth-v1-10000 | workload end | 116.3 | 420.9 | 18.0 | 555 |
+| 2026-05-10-04 | synth-v1-10000 | +30s | 115.7 | 416.9 | 18.1 | 551 |
 
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
 
 #### Calendar held navigation memory
 
-Harness v10 and later holds the real right-arrow navigation path for 3 seconds: one immediate move, a 280 ms hold delay, then 120 ms repeat ticks gated by the same readiness check as the UI. The scalar metric rows record how many moves and skipped ticks actually happened during that run.
+Rows record memory plus scalar move counts emitted by the calendar navigation scenario. The exact key-event path and repeat cadence are defined in the harness spec.
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
@@ -207,7 +172,7 @@ Harness v10 and later holds the real right-arrow navigation path for 3 seconds: 
 
 #### Historical calendar navigation stress memory
 
-Rows below predate the held-key v10 methodology and are not directly comparable with new `calendar-nav` rows.
+Rows below predate the held-key v3 methodology and are not directly comparable with new `calendar-nav` rows.
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
@@ -244,15 +209,15 @@ Rows below predate the held-key v10 methodology and are not directly comparable 
 | 2026-05-10-03 | synth-v1-10000 | workload peak | 113.9 | 414.0 | 17.1 | 545 |
 | 2026-05-10-03 | synth-v1-10000 | workload end | 116.2 | 613.8 | 17.2 | 747 |
 | 2026-05-10-03 | synth-v1-10000 | +30s | 115.3 | 815.2 | 17.2 | 948 |
-| 2026-05-10-ID | base-0 | workload peak | 107.0 | 231.1 | 18.0 | 356 |
-| 2026-05-10-ID | base-0 | workload end | 106.9 | 235.1 | 18.0 | 360 |
-| 2026-05-10-ID | base-0 | +30s | 106.3 | 225.8 | 18.1 | 350 |
-| 2026-05-10-ID | synth-v1-1000 | workload peak | 106.9 | 338.8 | 17.7 | 463 |
-| 2026-05-10-ID | synth-v1-1000 | workload end | 107.0 | 319.3 | 17.7 | 444 |
-| 2026-05-10-ID | synth-v1-1000 | +30s | 106.2 | 311.5 | 17.8 | 436 |
-| 2026-05-10-ID | synth-v1-10000 | workload peak | 115.5 | 454.1 | 17.9 | 588 |
-| 2026-05-10-ID | synth-v1-10000 | workload end | 115.7 | 930.8 | 18.0 | 1065 |
-| 2026-05-10-ID | synth-v1-10000 | +30s | 115.1 | 1089.1 | 18.0 | 1222 |
+| 2026-05-10-04 | base-0 | workload peak | 107.0 | 231.1 | 18.0 | 356 |
+| 2026-05-10-04 | base-0 | workload end | 106.9 | 235.1 | 18.0 | 360 |
+| 2026-05-10-04 | base-0 | +30s | 106.3 | 225.8 | 18.1 | 350 |
+| 2026-05-10-04 | synth-v1-1000 | workload peak | 106.9 | 338.8 | 17.7 | 463 |
+| 2026-05-10-04 | synth-v1-1000 | workload end | 107.0 | 319.3 | 17.7 | 444 |
+| 2026-05-10-04 | synth-v1-1000 | +30s | 106.2 | 311.5 | 17.8 | 436 |
+| 2026-05-10-04 | synth-v1-10000 | workload peak | 115.5 | 454.1 | 17.9 | 588 |
+| 2026-05-10-04 | synth-v1-10000 | workload end | 115.7 | 930.8 | 18.0 | 1065 |
+| 2026-05-10-04 | synth-v1-10000 | +30s | 115.1 | 1089.1 | 18.0 | 1222 |
 
 #### Event panel latency
 
@@ -282,12 +247,12 @@ Rows report user-visible elapsed time. Internal module, detail-load, state, and 
 | 2026-05-10-03 | base-2 | edit switch while open avg | 16 | ms | 10 | 15 | 16 | 17 | 17 |
 | 2026-05-10-03 | synth-v1-1002 | edit switch while open avg | 24 | ms | 10 | 16 | 20 | 34 | 34 |
 | 2026-05-10-03 | synth-v1-10002 | edit switch while open avg | 94 | ms | 10 | 84 | 94 | 101 | 101 |
-| 2026-05-10-ID | base-2 | edit open from closed avg | 24 | ms | 10 | 18 | 19 | 69 | 69 |
-| 2026-05-10-ID | synth-v1-1002 | edit open from closed avg | 72 | ms | 10 | 63 | 65 | 141 | 141 |
-| 2026-05-10-ID | synth-v1-10002 | edit open from closed avg | 408 | ms | 10 | 362 | 365 | 709 | 709 |
-| 2026-05-10-ID | base-2 | edit switch while open avg | 18 | ms | 10 | 17 | 18 | 19 | 19 |
-| 2026-05-10-ID | synth-v1-1002 | edit switch while open avg | 24 | ms | 10 | 16 | 20 | 33 | 33 |
-| 2026-05-10-ID | synth-v1-10002 | edit switch while open avg | 99 | ms | 10 | 87 | 98 | 113 | 113 |
+| 2026-05-10-04 | base-2 | edit open from closed avg | 24 | ms | 10 | 18 | 19 | 69 | 69 |
+| 2026-05-10-04 | synth-v1-1002 | edit open from closed avg | 72 | ms | 10 | 63 | 65 | 141 | 141 |
+| 2026-05-10-04 | synth-v1-10002 | edit open from closed avg | 408 | ms | 10 | 362 | 365 | 709 | 709 |
+| 2026-05-10-04 | base-2 | edit switch while open avg | 18 | ms | 10 | 17 | 18 | 19 | 19 |
+| 2026-05-10-04 | synth-v1-1002 | edit switch while open avg | 24 | ms | 10 | 16 | 20 | 33 | 33 |
+| 2026-05-10-04 | synth-v1-10002 | edit switch while open avg | 99 | ms | 10 | 87 | 98 | 113 | 113 |
 
 #### Create panel latency
 
@@ -317,12 +282,12 @@ The cancel timing includes the fixed 500 ms guard used by the scenario before cl
 | 2026-05-10-03 | base-0 | create cancel after guard avg | 61 | ms | 6 | 58 | 60 | 66 | 66 |
 | 2026-05-10-03 | synth-v1-1000 | create cancel after guard avg | 62 | ms | 6 | 59 | 59 | 74 | 74 |
 | 2026-05-10-03 | synth-v1-10000 | create cancel after guard avg | 427 | ms | 6 | 417 | 420 | 456 | 456 |
-| 2026-05-10-ID | base-0 | create panel open avg | 37 | ms | 6 | 18 | 32 | 77 | 77 |
-| 2026-05-10-ID | synth-v1-1000 | create panel open avg | 50 | ms | 6 | 30 | 33 | 137 | 137 |
-| 2026-05-10-ID | synth-v1-10000 | create panel open avg | 448 | ms | 6 | 385 | 400 | 691 | 691 |
-| 2026-05-10-ID | base-0 | create cancel after guard avg | 59 | ms | 6 | 58 | 59 | 61 | 61 |
-| 2026-05-10-ID | synth-v1-1000 | create cancel after guard avg | 62 | ms | 6 | 59 | 59 | 75 | 75 |
-| 2026-05-10-ID | synth-v1-10000 | create cancel after guard avg | 443 | ms | 6 | 430 | 442 | 451 | 451 |
+| 2026-05-10-04 | base-0 | create panel open avg | 37 | ms | 6 | 18 | 32 | 77 | 77 |
+| 2026-05-10-04 | synth-v1-1000 | create panel open avg | 50 | ms | 6 | 30 | 33 | 137 | 137 |
+| 2026-05-10-04 | synth-v1-10000 | create panel open avg | 448 | ms | 6 | 385 | 400 | 691 | 691 |
+| 2026-05-10-04 | base-0 | create cancel after guard avg | 59 | ms | 6 | 58 | 59 | 61 | 61 |
+| 2026-05-10-04 | synth-v1-1000 | create cancel after guard avg | 62 | ms | 6 | 59 | 59 | 75 | 75 |
+| 2026-05-10-04 | synth-v1-10000 | create cancel after guard avg | 443 | ms | 6 | 430 | 442 | 451 | 451 |
 
 ### Backend benchmarks
 
@@ -401,11 +366,11 @@ Rows report Tauri IPC round-trip time for Rust-backed Pomodoro persistence comma
 
 These runs are useful context but are not mixed into the current tables because their output shape measured incidental boot and RAM for every scenario or used an obsolete startup target.
 
-| Run | Date | Harness | Scope | Status |
+| Run | Date | Legacy harness | Scope | Status |
 |---|---|---|---|---|
-| 2026-05-04-01 | 2026-05-04 | v2 | `calendar-nav` only | Superseded by v4 and later question-oriented records |
-| 2026-05-04-02 | 2026-05-04 | v3 | Full suite | Superseded by v4 and later question-oriented records |
-| 2026-05-04-03 | 2026-05-04 | v4 | Full suite | Superseded by v6 startup methodology and scenario set |
+| 2026-05-04-01 | 2026-05-04 | pre-canonical | `calendar-nav` only | Superseded by canonical question-oriented records |
+| 2026-05-04-02 | 2026-05-04 | pre-canonical | Full suite | Superseded by canonical question-oriented records |
+| 2026-05-04-03 | 2026-05-04 | pre-canonical | Full suite | Superseded by v1 startup methodology and scenario set |
 
 ## Package size
 
@@ -446,7 +411,7 @@ Use the compact scalar table for one-off values and counts:
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
 
-Only bump `HARNESS_VERSION` when numeric comparability changes: measurement methodology, sampling cadence, scenario workload, or benchmark dataset generation. Do not bump it for markdown layout, rendered-preview layout, wording, docs-only changes, column order, or removing helper sections such as a generated index. When the measurement method changes, explain whether old rows remain comparable; if not, old rows become historical context instead of direct comparison data.
+Only bump `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, or dense detail profile names after the current version has at least one run recorded in the run metadata. During unrecorded benchmark iteration, edit the current version in place. Once a version has recorded rows, bump only when numeric comparability changes: measurement methodology, sampling cadence, scenario workload, or benchmark dataset generation. Do not bump for markdown layout, rendered-preview layout, wording, docs-only changes, column order, or removing helper sections such as a generated index. When the measurement method changes after recorded rows exist, explain whether old rows remain comparable; if not, old rows become historical context instead of direct comparison data.
 
 ## Performance principles
 

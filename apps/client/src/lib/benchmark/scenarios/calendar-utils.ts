@@ -1,9 +1,19 @@
+import { invoke } from "@tauri-apps/api/core";
+import { dbUrl } from "$lib/api/db";
 import { getCalendar } from "$lib/stores/calendar.svelte";
 import { getCalendars } from "$lib/stores/calendars.svelte";
 import type { CalendarEvent } from "$lib/components/calendar/types";
 import type { CalendarViewMode } from "$lib/components/calendar/types";
 import { computeViewWindow } from "$lib/components/calendar/utils";
+import {
+  buildBulkImportPayload,
+  type CalendarBulkImportResult,
+} from "$lib/stores/calendar-bulk-import";
 import { countDenseCalendarEvents, generateDenseCalendarEvents } from "../dense";
+import {
+  buildDensePomodoroHistoryPayload,
+  type BenchmarkPomodoroHistoryPayload,
+} from "../pomodoro-history";
 import {
   benchmarkDatasetId,
   type BenchmarkDatasetProfile,
@@ -14,6 +24,7 @@ import {
 
 /** Anchor used by calendar benchmarks so both passes hit the same window. */
 export const CALENDAR_BENCHMARK_ANCHOR_ISO = "2026-04-30";
+const CALENDAR_BENCHMARK_ANCHOR_WALL_CLOCK = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 00:00`;
 
 const DENSE_SEED_CHUNK_SIZE = 1_000;
 
@@ -29,11 +40,24 @@ export function parseCalendarBenchmarkAnchor(): Date {
 
 export async function loadCalendarBenchmarkWindow(mode: CalendarViewMode = "week"): Promise<void> {
   const window = computeViewWindow(parseCalendarBenchmarkAnchor(), mode);
-  await getCalendar().loadWindow(window.start, window.end);
+  const calendarStore = getCalendar();
+  await calendarStore.loadWindow(window.start, window.end);
+  await calendarStore.whenWindowIdle();
 }
 
 export function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function nowLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${day} ${h}:${min}:${s}`;
 }
 
 /**
@@ -46,7 +70,7 @@ export function draftToEvent(
   _index: number,
   calendarId: string,
 ): CalendarEvent {
-  const id = crypto.randomUUID();
+  const id = draft.sourceUid;
   const event: CalendarEvent = {
     id,
     title: draft.title,
@@ -61,6 +85,7 @@ export function draftToEvent(
   if (draft.description) event.description = draft.description;
   if (draft.recurrence) event.recurrence = draft.recurrence;
   if (draft.notifications) event.notifications = draft.notifications;
+  if (draft.pomodoroConfig) event.pomodoroConfig = draft.pomodoroConfig;
   if (draft.color !== undefined) event.color = draft.color;
   if (draft.location) event.location = draft.location;
   if (draft.url) event.url = draft.url;
@@ -78,10 +103,48 @@ export function draftToEvent(
   return event;
 }
 
+async function bulkImportBenchmarkEvents(
+  events: CalendarEvent[],
+  targetCalendarId: string,
+): Promise<CalendarBulkImportResult> {
+  const eventIds = events.map((event) => event.id);
+  let index = 0;
+  const payload = buildBulkImportPayload(
+    events,
+    targetCalendarId,
+    nowLocal(),
+    localTimezone(),
+    () => eventIds[index++] ?? crypto.randomUUID(),
+  );
+  const result = await invoke<CalendarBulkImportResult>("calendar_bulk_import", {
+    dbUrl: dbUrl(),
+    payload,
+  });
+  if (result.applied.length !== events.length) {
+    throw new Error(
+      `Dense calendar seed imported ${result.applied.length} of ${events.length} events`,
+    );
+  }
+  return result;
+}
+
+async function seedPomodoroHistory(payload: BenchmarkPomodoroHistoryPayload): Promise<void> {
+  if (
+    payload.configs.length === 0
+    && payload.segments.length === 0
+    && payload.sessions.length === 0
+  ) {
+    return;
+  }
+  await invoke("benchmark_seed_pomodoro_history", {
+    dbUrl: dbUrl(),
+    payload,
+  });
+}
+
 export async function seedCalendarDataset(
   dataset: BenchmarkDatasetProfile,
 ): Promise<BenchmarkSeedHandle> {
-  const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
   const cal = await calendarsStore.findOrCreateImported(denseCalendarFilename(dataset));
   const anchor = parseCalendarBenchmarkAnchor();
@@ -95,7 +158,10 @@ export async function seedCalendarDataset(
       count: DENSE_SEED_CHUNK_SIZE,
     });
     const events = drafts.map((d, i) => draftToEvent(d, offset + i, cal.id));
-    await calendarStore.bulkImport(events, cal.id, { refreshWindow: false });
+    await bulkImportBenchmarkEvents(events, cal.id);
+    await seedPomodoroHistory(
+      buildDensePomodoroHistoryPayload(events, CALENDAR_BENCHMARK_ANCHOR_WALL_CLOCK),
+    );
   }
 
   return {

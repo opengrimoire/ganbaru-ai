@@ -689,6 +689,7 @@
   let navReleaseSeq = 0;
 
   function markHeldNav(event: HeldNavigationEvent) {
+    getCalendarNavHandle().reportHeldNavigation(event);
     if (event.type === "hold-start") {
       perfMark("nav.hold-start", { key: event.key, dir: event.direction });
     } else if (event.type === "hold-stop") {
@@ -710,10 +711,29 @@
     mark: markHeldNav,
   });
 
-  function canRepeatHeldNavigation(): boolean {
-    return pendingAnchor === null
-      && anchorRaf === 0
-      && !calendarStore.foregroundWindowLoadBusy;
+  function targetAnchorForNavigation(direction: "forward" | "back"): Date {
+    const delta = direction === "forward" ? 1 : -1;
+    const base = currentAnchor();
+    if (viewMode === "week") return addDays(base, 7 * delta);
+    if (viewMode === "day") return addDays(base, delta);
+    const d = new Date(base);
+    const targetMonth = d.getMonth() + delta;
+    d.setDate(1);
+    d.setMonth(targetMonth);
+    return d;
+  }
+
+  function canRepeatHeldNavigation(direction: "forward" | "back"): boolean {
+    if (
+      pendingAnchor !== null
+      || anchorRaf !== 0
+      || calendarStore.foregroundWindowLoadBusy
+      || !calendarStore.isWindowCurrent(viewWindow.start, viewWindow.end)
+    ) {
+      return false;
+    }
+    const targetWindow = computeViewWindow(targetAnchorForNavigation(direction), viewMode);
+    return calendarStore.hasWindow(targetWindow.start, targetWindow.end);
   }
 
   function startNavHold(
@@ -919,20 +939,7 @@
       return;
     }
 
-    const delta = direction === "forward" ? 1 : -1;
-    const base = currentAnchor();
-
-    if (viewMode === "week") {
-      commitAnchor(addDays(base, 7 * delta));
-    } else if (viewMode === "day") {
-      commitAnchor(addDays(base, delta));
-    } else {
-      const d = new Date(base);
-      const targetMonth = d.getMonth() + delta;
-      d.setDate(1);
-      d.setMonth(targetMonth);
-      commitAnchor(d);
-    }
+    commitAnchor(targetAnchorForNavigation(direction));
   }
 
   function handleWheelNavigate(direction: "back" | "forward") {

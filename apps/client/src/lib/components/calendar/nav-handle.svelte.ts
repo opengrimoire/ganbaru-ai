@@ -11,6 +11,7 @@
  * view is not the current navigation target.
  */
 import type { CalendarViewMode } from "./types";
+import type { HeldNavigationDirection, HeldNavigationEvent } from "./held-navigation";
 
 type NavigateDirection = "today" | "back" | "forward";
 type NavigateSource = "programmatic" | "wheel" | "key" | "hold-repeat";
@@ -20,7 +21,8 @@ type SetAnchorDateFn = (date: Date) => void;
 type OpenVisibleEventFn = (index: number) => Promise<boolean>;
 type OpenCreatePanelFn = (start: string, end: string, allDay?: boolean) => Promise<boolean>;
 type ClosePanelFn = () => Promise<void>;
-type CanRepeatHeldNavigationFn = () => boolean;
+type CanRepeatHeldNavigationFn = (direction: HeldNavigationDirection) => boolean;
+type HeldNavigationObserver = (event: HeldNavigationEvent) => void;
 
 class CalendarNavHandle {
   #navigate: NavigateFn | null = null;
@@ -31,6 +33,7 @@ class CalendarNavHandle {
   #closePanel: ClosePanelFn | null = null;
   #canRepeatHeldNavigation: CanRepeatHeldNavigationFn | null = null;
   #viewMode: CalendarViewMode = "week";
+  readonly #heldNavigationObservers = new Set<HeldNavigationObserver>();
 
   /**
    * Called by `CalendarView.svelte` on mount. Returns a disposer that the
@@ -103,8 +106,19 @@ class CalendarNavHandle {
     return this.#closePanel?.() ?? Promise.resolve();
   }
 
-  canRepeatHeldNavigation(): boolean {
-    return this.#canRepeatHeldNavigation?.() ?? false;
+  canRepeatHeldNavigation(direction: HeldNavigationDirection): boolean {
+    return this.#canRepeatHeldNavigation?.(direction) ?? false;
+  }
+
+  observeHeldNavigation(observer: HeldNavigationObserver): () => void {
+    this.#heldNavigationObservers.add(observer);
+    return () => {
+      this.#heldNavigationObservers.delete(observer);
+    };
+  }
+
+  reportHeldNavigation(event: HeldNavigationEvent): void {
+    for (const observer of this.#heldNavigationObservers) observer(event);
   }
 }
 

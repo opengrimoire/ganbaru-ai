@@ -94,7 +94,7 @@ const RESULT: BenchmarkResult = {
   platform: "Linux",
   buildRef: "0.1.0+9815ea5",
   phaseA: mockPhase("A", 348, 278, 0),
-  phaseB: mockPhase("B", 517, 318, 17_520, "dense-v1-r1y-s1-d1"),
+  phaseB: mockPhase("B", 517, 318, 19_710, "dense-v1-r1y-s1-d1"),
   peakTotalMb: 517,
 };
 
@@ -127,11 +127,11 @@ const REPEATED_STARTUP_RESULT: BenchmarkResult = {
   phaseB: {
     ...STARTUP_RESULT.phaseB,
     startupSamples: [
-      startupSample(17_520, 230, 520, 1100),
-      startupSample(17_520, 220, 500, 1050),
-      startupSample(17_520, 240, 550, 1200),
-      startupSample(17_520, 210, 490, 1000),
-      startupSample(17_520, 235, 530, 1150),
+      startupSample(19_710, 230, 520, 1100),
+      startupSample(19_710, 220, 500, 1050),
+      startupSample(19_710, 240, 550, 1200),
+      startupSample(19_710, 210, 490, 1000),
+      startupSample(19_710, 235, 530, 1150),
     ],
   },
 };
@@ -187,20 +187,6 @@ const IDLE_MEMORY_RESULT: BenchmarkResult = {
     label: "idle calendar baseline",
     durationMs: STRESS_DURATION_MS,
     memoryMode: "post-workload",
-  },
-  phaseA: {
-    ...RESULT.phaseA,
-    metrics: [
-      { label: "total stored events", unit: "count", value: 0 },
-      { label: "loaded week rows", unit: "count", value: 0 },
-    ],
-  },
-  phaseB: {
-    ...RESULT.phaseB,
-    metrics: [
-      { label: "total stored events", unit: "count", value: 17_520 },
-      { label: "loaded week rows", unit: "count", value: 216 },
-    ],
   },
 };
 
@@ -287,7 +273,7 @@ describe("formatBenchmarkMarkdown", () => {
       ...RESULT,
       datasetPhases: [
         RESULT.phaseB,
-        mockPhase("B", 620, 390, 175_320, "dense-v1-r10y-s1-d1"),
+        mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
       ],
     }, { date: "2026-05-01" });
     expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
@@ -364,13 +350,13 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("### Calendar held navigation memory")).toBe(false);
   });
 
-  it("renders scalar metrics after memory rows when a memory scenario returns checks", () => {
+  it("does not render dataset shape checks as idle memory metrics", () => {
     const md = formatBenchmarkMarkdown(IDLE_MEMORY_RESULT, { date: "2026-05-01" });
     expect(md.includes("### Idle memory")).toBe(true);
     expect(md.includes("| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |")).toBe(true);
-    expect(md.includes("| Run | Dataset | Metric | Value | Unit |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | total stored events | 17520 | count |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | loaded week rows | 216 | count |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Value | Unit |")).toBe(false);
+    expect(md.includes("total stored events")).toBe(false);
+    expect(md.includes("loaded week rows")).toBe(false);
   });
 
   it("splits scalar metrics from repeated latency rows", () => {

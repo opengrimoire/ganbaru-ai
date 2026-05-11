@@ -2,7 +2,9 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v11 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
+Harness v3 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
+
+Harness and dataset versions are tied to recorded rows, not local iteration. Do not bump `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, or dense detail profile names until the current version has at least one run recorded in `docs/PERFORMANCE.md`. While tuning an unrecorded benchmark shape, edit the current version in place.
 
 ## User flow
 
@@ -41,7 +43,7 @@ Benchmark result tables use compact dataset ids:
 | Pattern | Meaning |
 |---|---|
 | `base-N` | The isolated benchmark DB after scenario setup and before dense dataset seeding. `N` is the number of calendar events present at measurement start. |
-| `dense-vX-rYy-sZ-dP` | The isolated benchmark DB seeded with dense dataset version `vX`, `Y` years before and after the benchmark anchor, `Z` overlapping events at each hourly start, and detail profile `dP`. |
+| `dense-vX-rYy-sZ-dP` | The isolated benchmark DB seeded with dense dataset version `vX`, `Y` years before and after the benchmark anchor, `Z` overlapping timed events at each hourly start, and detail profile `dP`. Detail profiles may add all-day events or productivity history. |
 
 The formatter emits these ids directly. Do not render prose dataset labels such as "empty", "setup events", or "dense calendar" in copied markdown.
 
@@ -194,8 +196,8 @@ Registered scenarios:
 | Scenario | Module | Primary measurement |
 |---|---|---|
 | `startup-boot` | `lib/benchmark/scenarios/startup-boot.ts` | Repeated launch to usable calendar paint |
-| `idle-memory` | `lib/benchmark/scenarios/idle-memory.ts` | Fixed anchored week idle RAM plus stored-event and loaded-row counts |
-| `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Held right-arrow week-view RAM |
+| `idle-memory` | `lib/benchmark/scenarios/idle-memory.ts` | Fixed anchored week idle RAM |
+| `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Physical right-arrow hold week-view RAM |
 | `event-panel-open` | `lib/benchmark/scenarios/event-panel-open.ts` | Existing-event panel open and switch latency |
 | `calendar-create-cancel` | `lib/benchmark/scenarios/calendar-create-cancel.ts` | Create-panel open and cancel latency |
 | `calendar-write-ops` | `lib/benchmark/scenarios/calendar-write-ops.ts` | Rust-backed calendar create, patch, delete, detach, and split latency |
@@ -203,22 +205,26 @@ Registered scenarios:
 | `theme-persistence-ops` | `lib/benchmark/scenarios/theme-persistence-ops.ts` | Rust-backed theme persistence latency |
 | `pomodoro-persistence-ops` | `lib/benchmark/scenarios/pomodoro-persistence-ops.ts` | Rust-backed Pomodoro persistence latency |
 
+`calendar-nav` dispatches `ArrowRight` keydown and keyup events on `window` for a 3-second hold. That enters CalendarView's real keyboard listener and real held-navigation controller, so the benchmark follows the same path as a physical right-arrow hold. Setup waits for the anchored week and adjacent window prefetch to finish. Held repeats use the app's normal readiness gate: the current render window must be applied, and the next target window must already be current or cached. If not, the repeat tick is skipped. The scenario observes the real controller to count moves, repeats, and skipped ticks.
+
 ## Dense calendar dataset generator
 
 `benchmark-dense-v1-s1-d1` is deterministic. Dataset ids add the year radius: `dense-v1-r1y-s1-d1` covers one year before and one year after the fixed benchmark anchor, while `dense-v1-r10y-s1-d1` covers ten years before and ten years after it.
 
-Week-view memory scenarios load the visible Monday to Sunday week plus one day before and one day after. With dense v1, stack count 1, and detail profile 1, the visible week has 168 events, while the loaded benchmark week has 216 rows. This is intentional because it matches the calendar store's real render window.
+Week-view memory scenarios load the visible Monday to Sunday week plus one day before and one day after. With dense v1, stack count 1, and detail profile 1, the visible week has 168 timed events and 21 all-day events, while the loaded benchmark week has 216 timed rows and 27 all-day rows. This is intentional because it matches the calendar store's real render window.
 
 The fixed benchmark anchor is `2026-04-30`. Dataset v1 uses a half-open date range from `anchor - yearRadius` through, but not including, `anchor + yearRadius`. With stack count 1, that produces:
 
 | Dataset | Date range | Events |
-|---|---|
-| `dense-v1-r1y-s1-d1` | `2025-04-30` to `2027-04-30` exclusive | 17,520 |
-| `dense-v1-r10y-s1-d1` | `2016-04-30` to `2036-04-30` exclusive | 175,320 |
+|---|---|---:|
+| `dense-v1-r1y-s1-d1` | `2025-04-30` to `2027-04-30` exclusive | 19,710 |
+| `dense-v1-r10y-s1-d1` | `2016-04-30` to `2036-04-30` exclusive | 197,235 |
 
-Every day has one timed event at `HH:00` for every hour from `00:00` through `23:00`; each event ends at `HH:50`. Detail profile `d1` gives every event a title, description, notification, rich alarm, location, URL, categories, organizer, guest permissions, extended benchmark metadata, and one attendee. The generator intentionally avoids recurrence so the benchmark isolates dense visible windows and old or future non-recurring history.
+Every day has one timed event at `HH:00` for every hour from `00:00` through `23:00`; each timed event lasts one hour and has the default Pomodoro config. Every day also has three all-day events. Detail profile `d1` gives timed events a title, description, notification, rich alarm, location, URL, categories, organizer, guest permissions, extended benchmark metadata, and one attendee. All-day events carry title, description, color, status, visibility, priority, categories, organizer, guest permissions, and extended benchmark metadata. The generator intentionally avoids recurrence so the benchmark isolates dense visible windows and old or future non-recurring history.
 
-Source UIDs do not include the year radius. Seeding the 10-year dataset after the 1-year dataset updates the overlapping events and adds only the extra outer years instead of duplicating the shared range. Bumping the generator requires a new dense dataset version and a fresh row series in `docs/PERFORMANCE.md`.
+Timed events before `2026-04-30 00:00` get completed Pomodoro history. A one-hour event with the default 40/5/10 config produces three completed segments: 40 minutes of focus, 5 minutes of short break, and 15 minutes of focus. The two focus segments also create completed Pomodoro session rows with a focus score of 1.
+
+Source UIDs do not include the year radius. Seeding the 10-year dataset after the 1-year dataset updates the overlapping events and adds only the extra outer years instead of duplicating the shared range. After dense rows are recorded, changing the generator requires a new dense dataset version and a fresh row series in `docs/PERFORMANCE.md`.
 
 ## Output format
 
@@ -233,18 +239,20 @@ During memory scenarios, the running overlay labels the fixed workload period as
 
 The copied markdown is one suite-level block. It contains:
 
-- Header with the run placeholder, such as `YYYY-MM-DD-ID` or the current date plus `-ID`.
+- Header with the unresolved run placeholder, such as `YYYY-MM-DD-ID` or the current date plus `-ID`.
 - One `Run metadata` table with run id, harness, build ref, platform, and notes.
 - One section per scenario in the run.
 
+The placeholder exists because the app cannot know which sequence number the canonical record will use. When adding copied rows to `docs/PERFORMANCE.md`, replace `-ID` with the next zero-padded suffix for that date, such as `-01` or `-02`.
+
 Each scenario section contains exactly the table that matches the scenario's primary measurement:
 
-- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v6 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
-- `idle-memory` and `stress-memory` emit the memory table. If a memory scenario returns scalar metrics, such as loaded-row counts or held-navigation move counts, the copied markdown appends a compact metric table after the memory table.
+- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v1 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
+- `idle-memory` and `stress-memory` emit the memory table. If a memory scenario returns scalar metrics, such as held-navigation move counts, the copied markdown appends a compact metric table after the memory table.
 - `interaction-latency` and `operation-latency` emit repeated latency rows for metrics with run statistics.
 - Scalar metrics without run statistics, such as counts or one-off module load times, emit a compact `Run`, `Dataset`, `Metric`, `Value`, `Unit` table.
 
-The copied markdown intentionally avoids slash-packed memory cells, repeated global metadata, empty stat columns, and measurement-level notes. Run metadata is the only generated table with a `Notes` column. Fixed scenario details belong in `docs/PERFORMANCE.md` prose near the scenario section. A future comparable detail should become a dedicated typed column instead of a generic note.
+The copied markdown intentionally avoids slash-packed memory cells, repeated global metadata, empty stat columns, and measurement-level notes. Run metadata is the only generated table with a `Notes` column. Fixed scenario details belong in this harness spec, while `docs/PERFORMANCE.md` should record rows and minimal column interpretation. A future comparable detail should become a dedicated typed column instead of a generic note.
 
 `buildRef` is generated at frontend build time from the app version and short git commit, such as `0.1.0+a7451de`. A dirty worktree adds `-dirty`. The platform label comes from the native memory-report command and should include useful OS detail, such as `Linux Ubuntu 24.04.4 LTS` or `Windows 11 (10.0.22631)`.
 

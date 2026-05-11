@@ -170,6 +170,10 @@ export class BoundedWindowCache<TValue> {
     return this.#entries.has(key);
   }
 
+  peek(key: string): TValue | undefined {
+    return this.#entries.get(key);
+  }
+
   get(key: string): TValue | undefined {
     const value = this.#entries.get(key);
     if (value === undefined) return undefined;

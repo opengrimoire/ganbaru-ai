@@ -7,7 +7,7 @@ exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing change
 
 | Run | Harness | Build ref | Platform | Notes |
 |---|---|---|---|---|
-| 2026-05-01-ID | v11 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
+| 2026-05-01-ID | v3 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
 
 ### Calendar held navigation memory
 

@@ -23,6 +23,7 @@ import {
   buildBulkImportPayload,
   type CalendarBulkImportResult,
 } from "./calendar-bulk-import";
+import { adjacentCalendarWindowRequests } from "./calendar-window-prefetch";
 import {
   BoundedWindowCache,
   LatestWindowLoadCoordinator,
@@ -135,7 +136,6 @@ let batchDepth = 0;
 const PANEL_EVENT_CACHE_LIMIT = 64;
 const panelEventCache = new Map<string, Promise<CalendarEvent | undefined>>();
 const WINDOW_CACHE_LIMIT = 5;
-const PREFETCH_MAX_WINDOW_DAYS = 8;
 
 type CalendarWindowLoadMode = "apply" | "prefetch";
 
@@ -399,20 +399,7 @@ function adjacentWindowRequests(snapshot: CalendarWindowSnapshot): Array<{
   start: Temporal.PlainDate;
   end: Temporal.PlainDate;
 }> {
-  const spanDays = snapshot.windowStart.until(snapshot.windowEnd).days + 1;
-  if (!Number.isFinite(spanDays) || spanDays < 1 || spanDays > PREFETCH_MAX_WINDOW_DAYS) {
-    return [];
-  }
-  return [
-    {
-      start: snapshot.windowStart.add({ days: spanDays }),
-      end: snapshot.windowEnd.add({ days: spanDays }),
-    },
-    {
-      start: snapshot.windowStart.subtract({ days: spanDays }),
-      end: snapshot.windowEnd.subtract({ days: spanDays }),
-    },
-  ];
+  return adjacentCalendarWindowRequests(snapshot.windowStart, snapshot.windowEnd);
 }
 
 function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEvent[] {
@@ -656,9 +643,12 @@ export function getCalendar() {
       windowEnd: Temporal.PlainDate,
     ): CalendarEvent[] {
       void indexVersion;
-      if (currentWindowKey === calendarWindowKey(windowStart, windowEnd, localTimezone())) {
+      const key = calendarWindowKey(windowStart, windowEnd, localTimezone());
+      if (currentWindowKey === key) {
         return windowEvents;
       }
+      const cached = windowCache.peek(key);
+      if (cached) return cached.windowEvents;
       return eventsInWindowFromIndex(getIndex(), windowStart, windowEnd);
     },
 
@@ -689,6 +679,21 @@ export function getCalendar() {
 
     get foregroundWindowLoadBusy(): boolean {
       return foregroundWindowBusy;
+    },
+
+    isWindowCurrent(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): boolean {
+      return currentWindowKey === calendarWindowKey(windowStart, windowEnd, localTimezone());
+    },
+
+    hasWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): boolean {
+      const key = calendarWindowKey(windowStart, windowEnd, localTimezone());
+      return currentWindowKey === key || windowCache.has(key);
     },
 
     async whenWindowIdle(): Promise<void> {

@@ -1,8 +1,8 @@
 /**
- * Week-view forward-nav scenario. Drives the same held-arrow cadence used by
- * the calendar UI: one immediate forward move, a hold delay, then gated repeat
- * ticks. This keeps the memory stress representative of a real user holding
- * the right arrow instead of forcing internal frame-rate navigation.
+ * Week-view forward-nav scenario. Dispatches the same ArrowRight keydown and
+ * keyup events used by a physical held key, then observes CalendarView's real
+ * held-navigation controller. This keeps the memory stress representative of
+ * a user holding the right arrow instead of a benchmark-only controller.
  *
  * Seeding lays down a versioned dense calendar in the isolated
  * benchmark DB so the dense dataset compares across builds. `cleanup` is a no-op:
@@ -10,11 +10,6 @@
  * per-calendar deletion would be redundant.
  */
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
-import {
-  HeldNavigationController,
-  NAV_HOLD_DELAY_MS,
-  NAV_REPEAT_MS,
-} from "$lib/components/calendar/held-navigation";
 import {
   CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,
@@ -35,7 +30,7 @@ export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
   label: "Calendar week-view nav",
   description:
-    "Holds forward week-view navigation for 3 seconds with the same delay, repeat cadence, and readiness gate as the real right-arrow shortcut. It runs against an empty baseline plus 1-year and 10-year dense calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
+    "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against an empty baseline plus 1-year and 10-year dense calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
   workload: {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
@@ -64,25 +59,29 @@ export const calendarNavScenario: BenchmarkScenario = {
     let repeats = 0;
     let skippedTicks = 0;
 
-    const controller = new HeldNavigationController({
-      holdDelayMs: NAV_HOLD_DELAY_MS,
-      repeatMs: NAV_REPEAT_MS,
-      navigate: (direction, source) => {
+    const stopObserving = handle.observeHeldNavigation((event) => {
+      if (event.key !== "ArrowRight") return;
+      if (event.type === "hold-start") {
         moves++;
-        if (source === "hold-repeat") repeats++;
-        handle.navigate(direction, source);
-      },
-      canRepeat: () => handle.canRepeatHeldNavigation(),
-      mark: (event) => {
-        if (event.type === "repeat-skip") skippedTicks++;
-      },
+      } else if (event.type === "repeat") {
+        moves++;
+        repeats++;
+      } else if (event.type === "repeat-skip") {
+        skippedTicks++;
+      }
     });
 
-    controller.start("ArrowRight", "forward");
+    dispatchRightArrow("keydown");
+    if (moves === 0) {
+      stopObserving();
+      throw new Error("Calendar benchmark ArrowRight keydown did not start held navigation");
+    }
+
     try {
       await waitForMs(STRESS_DURATION_MS, signal);
     } finally {
-      controller.stop("ArrowRight");
+      dispatchRightArrow("keyup");
+      stopObserving();
     }
 
     return [
@@ -103,3 +102,12 @@ export const calendarNavScenario: BenchmarkScenario = {
     // scenarios that need finer-grained cleanup.
   },
 };
+
+function dispatchRightArrow(type: "keydown" | "keyup"): void {
+  window.dispatchEvent(new KeyboardEvent(type, {
+    key: "ArrowRight",
+    code: "ArrowRight",
+    bubbles: true,
+    cancelable: true,
+  }));
+}

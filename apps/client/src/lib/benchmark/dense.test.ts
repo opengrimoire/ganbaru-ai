@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  countDenseAllDayEvents,
   countDenseCalendarEvents,
+  countDenseTimedEvents,
   denseCalendarDateRange,
   generateDenseCalendarEvents,
 } from "./dense";
+import { DENSE_TIMED_POMODORO_CONFIG } from "./pomodoro-history";
 import {
   benchmarkDatasetId,
   DEFAULT_BENCHMARK_DATASET,
@@ -24,16 +27,20 @@ describe("benchmark dense calendar datasets", () => {
       endExclusive: "2027-04-30",
       days: 730,
     });
-    expect(countDenseCalendarEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(17_520);
+    expect(countDenseTimedEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(17_520);
+    expect(countDenseAllDayEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(2_190);
+    expect(countDenseCalendarEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(19_710);
     expect(denseCalendarDateRange(LARGE_BENCHMARK_DATASET, ANCHOR)).toEqual({
       start: "2016-04-30",
       endExclusive: "2036-04-30",
       days: 7305,
     });
-    expect(countDenseCalendarEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(175_320);
+    expect(countDenseTimedEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(175_320);
+    expect(countDenseAllDayEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(21_915);
+    expect(countDenseCalendarEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(197_235);
   });
 
-  it("places one detailed event at the start of every hour", () => {
+  it("places one detailed one-hour Pomodoro event at the start of every hour", () => {
     const events = generateDenseCalendarEvents({
       dataset: DEFAULT_BENCHMARK_DATASET,
       anchor: ANCHOR,
@@ -47,16 +54,54 @@ describe("benchmark dense calendar datasets", () => {
       "2025-04-30 03:00",
     ]);
     expect(events.map((event) => event.end)).toEqual([
-      "2025-04-30 00:50",
-      "2025-04-30 01:50",
-      "2025-04-30 02:50",
-      "2025-04-30 03:50",
+      "2025-04-30 01:00",
+      "2025-04-30 02:00",
+      "2025-04-30 03:00",
+      "2025-04-30 04:00",
     ]);
+    expect(events.every((event) => event.pomodoroConfig === DENSE_TIMED_POMODORO_CONFIG)).toBe(true);
+  });
+
+  it("adds three all-day events after each day's timed events", () => {
+    const events = generateDenseCalendarEvents({
+      dataset: DEFAULT_BENCHMARK_DATASET,
+      anchor: ANCHOR,
+      offset: 24,
+      count: 4,
+    });
+
+    expect(events.slice(0, 3).map((event) => ({
+      sourceUid: event.sourceUid,
+      allDay: event.allDay,
+      start: event.start,
+      end: event.end,
+    }))).toEqual([
+      {
+        sourceUid: "dense-v1-s1-d1-2025-04-30-allday1",
+        allDay: true,
+        start: "2025-04-30 00:00",
+        end: "2025-04-30 00:00",
+      },
+      {
+        sourceUid: "dense-v1-s1-d1-2025-04-30-allday2",
+        allDay: true,
+        start: "2025-04-30 00:00",
+        end: "2025-04-30 00:00",
+      },
+      {
+        sourceUid: "dense-v1-s1-d1-2025-04-30-allday3",
+        allDay: true,
+        start: "2025-04-30 00:00",
+        end: "2025-04-30 00:00",
+      },
+    ]);
+    expect(events[3]?.start).toBe("2025-05-01 00:00");
+    expect(events[3]?.allDay).toBeUndefined();
   });
 
   it("keeps overlapping source UIDs stable when the year radius changes", () => {
-    const defaultIndexForAnchor = 365 * 24 * DEFAULT_BENCHMARK_DATASET.stackCount;
-    const largeIndexForAnchor = 3652 * 24 * LARGE_BENCHMARK_DATASET.stackCount;
+    const defaultIndexForAnchor = 365 * (24 * DEFAULT_BENCHMARK_DATASET.stackCount + 3);
+    const largeIndexForAnchor = 3652 * (24 * LARGE_BENCHMARK_DATASET.stackCount + 3);
     const defaultEvent = generateDenseCalendarEvents({
       dataset: DEFAULT_BENCHMARK_DATASET,
       anchor: ANCHOR,
@@ -83,11 +128,12 @@ describe("benchmark dense calendar datasets", () => {
 
     expect(event).toMatchObject({
       start: "2025-04-30 00:00",
-      end: "2025-04-30 00:50",
+      end: "2025-04-30 01:00",
       sourceUid: "dense-v1-s1-d1-2025-04-30T00-stack1",
       notifications: [10],
       location: expect.stringContaining("Home office"),
       url: "https://benchmark.local/dense-v1-r1y-s1-d1/2025-04-30/00/1",
+      pomodoroConfig: DENSE_TIMED_POMODORO_CONFIG,
       organizer: {
         name: "Benchmark Calendar",
         email: "owner@benchmark.local",

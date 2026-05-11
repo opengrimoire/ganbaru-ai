@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use tauri::Manager;
 
+mod benchmark_seed;
 mod calendar_events;
 mod calendar_import;
 mod calendar_reads;
@@ -527,6 +528,7 @@ pub fn run() {
             clear_benchmark_state,
             prepare_benchmark_db,
             teardown_benchmark_db,
+            benchmark_seed::benchmark_seed_pomodoro_history,
             restart_app,
             restart_app_after_delay,
             get_memory_report,

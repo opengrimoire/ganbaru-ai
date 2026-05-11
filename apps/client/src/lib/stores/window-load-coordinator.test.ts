@@ -150,4 +150,16 @@ describe("BoundedWindowCache", () => {
     expect(cache.has("b")).toBe(false);
     expect(cache.has("c")).toBe(true);
   });
+
+  it("can read without changing recency", () => {
+    const cache = new BoundedWindowCache<number>(2);
+    cache.set("a", 1);
+    cache.set("b", 2);
+    expect(cache.peek("a")).toBe(1);
+    cache.set("c", 3);
+
+    expect(cache.has("a")).toBe(false);
+    expect(cache.has("b")).toBe(true);
+    expect(cache.has("c")).toBe(true);
+  });
 });

@@ -136,6 +136,12 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 
 After `pnpm -w run validate` passes, finish the task without extra dev-server, Tauri launch, status, or diff checks unless they are directly required for the request, a commit, or an unexpected issue.
 
+**Benchmark versioning:**
+- `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, and dense detail profile names are tied to recorded benchmark rows, not local iteration.
+- Do not bump them while tuning an unrecorded benchmark shape. Edit the current version in place until a run is recorded in `docs/PERFORMANCE.md`.
+- Once a version has recorded rows, bump only when a later methodology, workload, sampling, or dataset change makes new numbers incomparable with those rows.
+- Benchmark markdown copied from the app uses `YYYY-MM-DD-ID` as an unresolved run-id placeholder. When placing rows in `docs/PERFORMANCE.md`, replace it with the next zero-padded sequence for that date, such as `YYYY-MM-DD-01`; never leave `-ID` in recorded rows.
+
 ## Rules
 
 ### Documentation

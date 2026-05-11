@@ -25,7 +25,7 @@ export interface HeldNavigationControllerOptions {
   holdDelayMs: number;
   repeatMs: number;
   navigate: (direction: HeldNavigationDirection, source: "key" | "hold-repeat") => void;
-  canRepeat: () => boolean;
+  canRepeat: (direction: HeldNavigationDirection) => boolean;
   mark?: (event: HeldNavigationEvent) => void;
   setTimer?: (callback: () => void, delayMs: number) => TimerId;
   clearTimer?: (id: TimerId) => void;
@@ -36,7 +36,7 @@ export class HeldNavigationController {
   readonly #holdDelayMs: number;
   readonly #repeatMs: number;
   readonly #navigate: HeldNavigationControllerOptions["navigate"];
-  readonly #canRepeat: () => boolean;
+  readonly #canRepeat: HeldNavigationControllerOptions["canRepeat"];
   readonly #mark?: (event: HeldNavigationEvent) => void;
   readonly #setTimer: (callback: () => void, delayMs: number) => TimerId;
   readonly #clearTimer: (id: TimerId) => void;
@@ -148,7 +148,7 @@ export class HeldNavigationController {
 
     const direction = this.#direction;
     if (direction === null) return;
-    if (!this.#canRepeat()) {
+    if (!this.#canRepeat(direction)) {
       this.#mark?.({ type: "repeat-skip", key, repeats: this.#repeats, reason: "not-ready" });
       return;
     }

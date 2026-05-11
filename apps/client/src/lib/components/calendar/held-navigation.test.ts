@@ -180,6 +180,33 @@ describe("HeldNavigationController", () => {
     ]);
   });
 
+  it("passes the active direction to the readiness gate", () => {
+    vi.useFakeTimers();
+    const directions: HeldNavigationDirection[] = [];
+    const navigations: Navigation[] = [];
+    const controller = new HeldNavigationController({
+      holdDelayMs: 280,
+      repeatMs: 120,
+      navigate: (direction, source) => navigations.push({ direction, source }),
+      canRepeat: (direction) => {
+        directions.push(direction);
+        return direction === "back";
+      },
+    });
+
+    controller.start("ArrowRight", "forward");
+    vi.advanceTimersByTime(280);
+    controller.start("ArrowLeft", "back");
+    vi.advanceTimersByTime(280);
+
+    expect(directions).toEqual(["forward", "back"]);
+    expect(navigations).toEqual([
+      { direction: "forward", source: "key" },
+      { direction: "back", source: "key" },
+      { direction: "back", source: "hold-repeat" },
+    ]);
+  });
+
   it("does not navigate later when released during a busy period", () => {
     vi.useFakeTimers();
     let ready = false;

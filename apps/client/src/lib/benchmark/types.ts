@@ -42,35 +42,31 @@ export const STATE_TTL_MS = 60 * 60 * 1000;
 export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
 
 /**
- * Bumped manually when measurement methodology, sampling cadence, scenario
- * workload, or dataset generator changes in a way that would invalidate
- * numeric cross-build comparison. Cosmetic markdown, rendered-preview,
- * wording, and docs changes do not bump this value.
+ * Bumped manually when a recorded run uses a measurement methodology,
+ * sampling cadence, scenario workload, or dataset generator that invalidates
+ * numeric cross-build comparison with the previous recorded harness.
+ * Iterating locally before a run is recorded does not bump this value.
+ * Cosmetic markdown, rendered-preview, wording, and docs changes do not bump
+ * this value.
  * Stored on the persisted state file so stale baseline data captured by an
  * old build cannot accidentally feed the dense pass on a new build.
  *
- * v11 (2026-05-11): gates held-key navigation on foreground calendar readiness
- * and folds fixed-window row-count checks into idle memory.
- * v10 (2026-05-11): replaces forced frame-rate calendar navigation with
- * held-key cadence, fails missing peak memory samples, and adds a fixed-window
- * scale scenario with visible row-count metrics.
- * v9 (2026-05-10): switches dense-span core datasets from 3 stacked events
- * per hour to 1 event per hour so the 10-year profile remains practical.
- * v8 (2026-05-10): replaces count-based synthetic scales with dense-span
- * calendar datasets named by year radius, stack count, and detail profile.
- * v7 (2026-05-10): core scenarios add a 10,000-event synthetic pass in the
- * same result as the existing 1,000-event pass.
- * v6 (2026-05-05): startup benchmark uses a closed-process cooldown before
- * repeated relaunch samples.
- * v5 (2026-05-05): startup benchmark reports repeated end-to-end launch
- * stats to a usable calendar paint instead of single launch samples.
- * v4 (2026-05-04): question-oriented scenarios with explicit memory
- * sampling modes and primary-metric output.
- * v1/v2/v3 state files are silently discarded on read.
+ * v3 (2026-05-11): current unrecorded harness. Switches core datasets to
+ * dense calendar v1 with one-hour timed Pomodoro events, three all-day events
+ * per day, and completed Pomodoro history for timed events before the fixed
+ * anchor. Uses held-key navigation cadence for navigation memory.
+ * v2 (2026-05-10): recorded rows add a 10,000-event synthetic pass to the
+ * existing 1,000-event synthetic pass.
+ * v1 (2026-05-05): recorded rows use the current question-oriented output
+ * shape, scalar metric tables, and repeated startup launch samples with a
+ * closed-process cooldown.
  */
-export const HARNESS_VERSION = "11";
+export const HARNESS_VERSION = "3";
 
-/** Dense dataset shape version. Bumping this requires renaming the calendar grouping. */
+/**
+ * Dense dataset shape version. Bumping this requires renaming the calendar
+ * grouping and should only happen when a run with the new shape is recorded.
+ */
 export const DENSE_DATASET_VERSION = "v1";
 
 export type DenseCalendarDetailProfile = "d1";
@@ -82,7 +78,7 @@ export interface DenseCalendarDatasetProfile {
   yearRadius: number;
   /** Number of events created at the start of every hour. */
   stackCount: number;
-  /** Detail payload shape for titles, descriptions, locations, alarms, and guests. */
+  /** Detail payload shape for metadata, all-day events, and Pomodoro history. */
   detailProfile: DenseCalendarDetailProfile;
 }
 
@@ -425,6 +421,7 @@ export interface BenchmarkEventDraft {
   description?: string;
   recurrence?: CalendarEvent["recurrence"];
   notifications?: CalendarEvent["notifications"];
+  pomodoroConfig?: CalendarEvent["pomodoroConfig"];
   color?: CalendarEvent["color"];
   location?: CalendarEvent["location"];
   url?: CalendarEvent["url"];

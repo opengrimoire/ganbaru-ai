@@ -59,7 +59,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
     id: "idle-memory",
     label: "Idle memory",
     description:
-      "Loads the fixed anchored week, performs no interaction for the workload window, and reports memory with stored-event and loaded-row sanity checks.",
+      "Loads the fixed anchored week, performs no interaction for the workload window, and reports memory.",
     workload: {
       kind: "idle-memory",
       question: "How much memory does the calendar hold while idle?",
@@ -74,7 +74,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
     id: "calendar-nav",
     label: "Calendar week-view nav",
     description:
-      "Holds forward week-view navigation for 3 seconds with the same delay, repeat cadence, and readiness gate as the real right-arrow shortcut. It runs against an empty baseline plus 1-year and 10-year dense calendars.",
+      "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against an empty baseline plus 1-year and 10-year dense calendars.",
     workload: {
       kind: "stress-memory",
       question: "How much memory does repeated week navigation use?",

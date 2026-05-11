@@ -1,5 +1,4 @@
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
-import { getCalendar } from "$lib/stores/calendar.svelte";
 import {
   CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,
@@ -45,11 +44,7 @@ export const idleMemoryScenario: BenchmarkScenario = {
 
   async runWorkload(signal: AbortSignal): Promise<BenchmarkMetric[]> {
     await waitForMs(STRESS_DURATION_MS, signal);
-    const calendarStore = getCalendar();
-    return [
-      { label: "total stored events", unit: "count", value: calendarStore.eventCount },
-      { label: "loaded week rows", unit: "count", value: calendarStore.rawBlocks.length },
-    ];
+    return [];
   },
 
   async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
