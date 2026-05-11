@@ -49,6 +49,8 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * Stored on the persisted state file so stale baseline data captured by an
  * old build cannot accidentally feed the dense pass on a new build.
  *
+ * v11 (2026-05-11): gates held-key navigation on foreground calendar readiness
+ * and folds fixed-window row-count checks into idle memory.
  * v10 (2026-05-11): replaces forced frame-rate calendar navigation with
  * held-key cadence, fails missing peak memory samples, and adds a fixed-window
  * scale scenario with visible row-count metrics.
@@ -66,7 +68,7 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * sampling modes and primary-metric output.
  * v1/v2/v3 state files are silently discarded on read.
  */
-export const HARNESS_VERSION = "10";
+export const HARNESS_VERSION = "11";
 
 /** Dense dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const DENSE_DATASET_VERSION = "v1";

@@ -34,4 +34,15 @@ describe("benchmark registry", () => {
     expect(BENCHMARK_SUITES.find((suite) => suite.id === "all")?.scenarioIds)
       .toEqual(BENCHMARK_SCENARIOS.map((scenario) => scenario.id));
   });
+
+  it("keeps core benchmarks user-facing without duplicate idle memory scenarios", () => {
+    expect(BENCHMARK_SUITES.find((suite) => suite.id === "core")?.scenarioIds)
+      .toEqual([
+        "startup-boot",
+        "idle-memory",
+        "calendar-nav",
+        "event-panel-open",
+        "calendar-create-cancel",
+      ]);
+  });
 });

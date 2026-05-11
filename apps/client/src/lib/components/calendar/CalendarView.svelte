@@ -711,7 +711,9 @@
   });
 
   function canRepeatHeldNavigation(): boolean {
-    return pendingAnchor === null && anchorRaf === 0;
+    return pendingAnchor === null
+      && anchorRaf === 0
+      && !calendarStore.foregroundWindowLoadBusy;
   }
 
   function startNavHold(

@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v10 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
+Harness v11 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
 
 ## User flow
 
@@ -185,7 +185,7 @@ Registered suites:
 
 | Suite | Scenarios | Purpose |
 |---|---|---|
-| Core benchmarks | `startup-boot`, `idle-memory`, `calendar-window-scale`, `calendar-nav`, `event-panel-open`, `calendar-create-cancel` | User-perceived startup, memory, and interaction latency |
+| Core benchmarks | `startup-boot`, `idle-memory`, `calendar-nav`, `event-panel-open`, `calendar-create-cancel` | User-perceived startup, memory, and interaction latency |
 | Backend benchmarks | `calendar-write-ops`, `calendar-import-ops`, `theme-persistence-ops`, `pomodoro-persistence-ops` | Rust-backed persistence, import, and storage command latency |
 | All benchmarks | Core plus backend | Complete release baseline or broad refactor validation |
 
@@ -194,8 +194,7 @@ Registered scenarios:
 | Scenario | Module | Primary measurement |
 |---|---|---|
 | `startup-boot` | `lib/benchmark/scenarios/startup-boot.ts` | Repeated launch to usable calendar paint |
-| `idle-memory` | `lib/benchmark/scenarios/idle-memory.ts` | Idle calendar RAM |
-| `calendar-window-scale` | `lib/benchmark/scenarios/calendar-window-scale.ts` | Fixed anchored week RAM plus visible row counts |
+| `idle-memory` | `lib/benchmark/scenarios/idle-memory.ts` | Fixed anchored week idle RAM plus stored-event and loaded-row counts |
 | `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Held right-arrow week-view RAM |
 | `event-panel-open` | `lib/benchmark/scenarios/event-panel-open.ts` | Existing-event panel open and switch latency |
 | `calendar-create-cancel` | `lib/benchmark/scenarios/calendar-create-cancel.ts` | Create-panel open and cancel latency |
@@ -207,6 +206,8 @@ Registered scenarios:
 ## Dense calendar dataset generator
 
 `benchmark-dense-v1-s1-d1` is deterministic. Dataset ids add the year radius: `dense-v1-r1y-s1-d1` covers one year before and one year after the fixed benchmark anchor, while `dense-v1-r10y-s1-d1` covers ten years before and ten years after it.
+
+Week-view memory scenarios load the visible Monday to Sunday week plus one day before and one day after. With dense v1, stack count 1, and detail profile 1, the visible week has 168 events, while the loaded benchmark week has 216 rows. This is intentional because it matches the calendar store's real render window.
 
 The fixed benchmark anchor is `2026-04-30`. Dataset v1 uses a half-open date range from `anchor - yearRadius` through, but not including, `anchor + yearRadius`. With stack count 1, that produces:
 
@@ -239,7 +240,7 @@ The copied markdown is one suite-level block. It contains:
 Each scenario section contains exactly the table that matches the scenario's primary measurement:
 
 - `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v6 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
-- `idle-memory` and `stress-memory` emit the memory table. If a memory scenario returns scalar metrics, such as fixed-window row counts or held-navigation move counts, the copied markdown appends a compact metric table after the memory table.
+- `idle-memory` and `stress-memory` emit the memory table. If a memory scenario returns scalar metrics, such as loaded-row counts or held-navigation move counts, the copied markdown appends a compact metric table after the memory table.
 - `interaction-latency` and `operation-latency` emit repeated latency rows for metrics with run statistics.
 - Scalar metrics without run statistics, such as counts or one-off module load times, emit a compact `Run`, `Dataset`, `Metric`, `Value`, `Unit` table.
 

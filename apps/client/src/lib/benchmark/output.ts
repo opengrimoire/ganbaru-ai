@@ -446,7 +446,6 @@ function formatMetricDetail(metric: BenchmarkMetric | undefined, key: string): s
 function sectionTitle(result: BenchmarkResult): string {
   if (result.scenarioId === "startup-boot") return "Startup boot";
   if (result.scenarioId === "idle-memory") return "Idle memory";
-  if (result.scenarioId === "calendar-window-scale") return "Calendar fixed-window scale memory";
   if (result.scenarioId === "calendar-nav") return "Calendar held navigation memory";
   if (result.scenarioId === "event-panel-open") return "Event panel latency";
   if (result.scenarioId === "calendar-create-cancel") return "Create panel latency";

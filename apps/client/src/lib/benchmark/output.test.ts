@@ -177,14 +177,14 @@ const METRIC_RESULT: BenchmarkResult = {
   peakTotalMb: undefined,
 };
 
-const WINDOW_SCALE_RESULT: BenchmarkResult = {
+const IDLE_MEMORY_RESULT: BenchmarkResult = {
   ...RESULT,
-  scenarioId: "calendar-window-scale",
-  scenarioLabel: "Calendar fixed-window scale",
+  scenarioId: "idle-memory",
+  scenarioLabel: "Idle memory",
   workload: {
     kind: "idle-memory",
-    question: "How much memory does one fixed calendar window use as stored history grows?",
-    label: "fixed anchored week scale check",
+    question: "How much memory does the calendar hold while idle?",
+    label: "idle calendar baseline",
     durationMs: STRESS_DURATION_MS,
     memoryMode: "post-workload",
   },
@@ -192,16 +192,14 @@ const WINDOW_SCALE_RESULT: BenchmarkResult = {
     ...RESULT.phaseA,
     metrics: [
       { label: "total stored events", unit: "count", value: 0 },
-      { label: "current window rows", unit: "count", value: 0 },
-      { label: "current window events", unit: "count", value: 0 },
+      { label: "loaded week rows", unit: "count", value: 0 },
     ],
   },
   phaseB: {
     ...RESULT.phaseB,
     metrics: [
       { label: "total stored events", unit: "count", value: 17_520 },
-      { label: "current window rows", unit: "count", value: 216 },
-      { label: "current window events", unit: "count", value: 216 },
+      { label: "loaded week rows", unit: "count", value: 216 },
     ],
   },
 };
@@ -367,12 +365,12 @@ describe("formatBenchmarkMarkdown", () => {
   });
 
   it("renders scalar metrics after memory rows when a memory scenario returns checks", () => {
-    const md = formatBenchmarkMarkdown(WINDOW_SCALE_RESULT, { date: "2026-05-01" });
-    expect(md.includes("### Calendar fixed-window scale memory")).toBe(true);
+    const md = formatBenchmarkMarkdown(IDLE_MEMORY_RESULT, { date: "2026-05-01" });
+    expect(md.includes("### Idle memory")).toBe(true);
     expect(md.includes("| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |")).toBe(true);
     expect(md.includes("| Run | Dataset | Metric | Value | Unit |")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | total stored events | 17520 | count |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | current window rows | 216 | count |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | loaded week rows | 216 | count |")).toBe(true);
   });
 
   it("splits scalar metrics from repeated latency rows", () => {

@@ -51,19 +51,18 @@ Do not paste ad hoc `Live RAM`, `Startup RAM snapshot`, or `Speed log` panel cop
 
 ## Benchmark questions
 
-Harness v10 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample. Core scenarios record both dense calendar datasets in one result: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
+Harness v11 exposes grouped suite buttons plus expandable individual scenario buttons. Each scenario answers one primary question, and only memory scenarios wait for the post-workload `+30s` sample. Core scenarios record both dense calendar datasets in one result: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
 
 | Suite | Includes | Use when |
 |---|---|---|
-| Core benchmarks | Startup, idle memory, fixed-window calendar scale, held calendar navigation, event panel latency, create panel latency | Measuring user-perceived startup, memory, and interaction speed |
+| Core benchmarks | Startup, idle memory, held calendar navigation, event panel latency, create panel latency | Measuring user-perceived startup, memory, and interaction speed |
 | Backend benchmarks | Calendar write, calendar import, theme persistence, Pomodoro persistence | Measuring Rust-backed persistence and storage command latency |
 | All benchmarks | Core plus backend | Recording a complete release baseline or validating a broad refactor |
 
 | Scenario | Primary question | Primary output | Post-workload RAM wait |
 |---|---|---|---|
 | `startup-boot` | How fast does the app launch into a usable calendar? | Repeated launch stats to usable calendar paint | No |
-| `idle-memory` | How much memory does the calendar hold while idle? | PSS memory by process | Yes |
-| `calendar-window-scale` | How much memory does one fixed calendar window use as stored history grows? | PSS memory by process plus current-window row counts | Yes |
+| `idle-memory` | How much memory does the calendar hold while idle? | PSS memory by process plus stored-event and loaded-row counts | Yes |
 | `calendar-nav` | How much memory does held right-arrow week navigation use? | PSS memory by process plus held-move counts | Yes |
 | `event-panel-open` | How quickly does the event panel paint for existing events? | Average panel open and switch timings | No |
 | `calendar-create-cancel` | How quickly does the create panel open and cancel? | Average create open and cancel timings | No |
@@ -80,7 +79,7 @@ Benchmark rows use compact dataset ids. Do not write prose dataset labels in mea
 |---|---|
 | `base-N` | The isolated benchmark DB after scenario setup and before dense dataset seeding. `N` is the number of calendar events present at measurement start. Use `base-0` for a truly empty benchmark DB. |
 | `dense-vX-rYy-sZ-dP` | The isolated benchmark DB seeded with dense dataset version `vX`, `Y` years before and after the benchmark anchor, `Z` overlapping events at each hourly start, and detail profile `dP`. |
-| `synth-vX-N` | Historical harness v7 and earlier rows only. Synthetic dataset version `vX` with `N` events present at measurement start. Do not use this pattern for new v10 rows. |
+| `synth-vX-N` | Historical harness v7 and earlier rows only. Synthetic dataset version `vX` with `N` events present at measurement start. Do not use this pattern for new v11 rows. |
 
 Examples:
 
@@ -96,7 +95,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-10-ID` with harness v7. The current benchmark harness is v10, so the next comparable row series should use the dense dataset ids above.
+Latest recorded canonical baseline: `2026-05-10-ID` with harness v7. The current benchmark harness is v11, so the next comparable row series should use the dense dataset ids above.
 
 Harness v6 keeps the core benchmark questions, removes low-value ICS import and theme editor scenarios, keeps notes at run metadata level, splits scalar metrics from repeated latency rows, and changes startup from a single boot sample to repeated process launches measured to usable calendar paint after a fixed closed-process cooldown. The old startup rows are historical context, not public startup comparison data.
 
@@ -105,6 +104,8 @@ Harness v7 keeps v6 methodology comparable for existing 1,000-event rows and add
 Harness v8 replaced count-based synthetic scales with deterministic dense-span calendar datasets, but the initial 3-event stack profile was too large for practical local benchmark runs. Harness v9 keeps the same fixed benchmark anchor, `2026-04-30`, but changes canonical core datasets to one detailed timed event at every hourly start on every day. The 1-year dataset has 17,520 events, and the 10-year dataset has 175,320 events. v9 rows are not numerically comparable with v7 rows because the seeded data shape changed.
 
 Harness v10 keeps the v9 dense datasets but changes memory methodology. Missing workload peak samples now fail the run instead of rendering `n/a`. `calendar-nav` now uses the real held right-arrow cadence, not forced frame-rate navigation. `calendar-window-scale` adds the fixed anchored week memory check with total stored event count and current-window row counts, so stored-history growth can be separated from visible-window density.
+
+Harness v11 removes the duplicate `calendar-window-scale` scenario. Idle memory now carries the stored-event and loaded-row sanity metrics that proved the fixed-window comparison, and held navigation repeat ticks wait for foreground calendar loading to finish before moving again. Week view loads the visible Monday to Sunday range plus one day before and one day after, so dense v1 with one event per hour has 168 visible-week events and 216 loaded week rows.
 
 ### Run metadata
 
@@ -144,7 +145,7 @@ Harness v6 and later report repeated process launches. Before each startup sampl
 
 #### Idle memory
 
-Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes.
+Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes. Harness v11 and later idle memory rows use the fixed benchmark anchor, then emit scalar sanity checks for total stored events and loaded week rows. With dense v1, stack count 1, and detail profile 1, loaded week rows should be 216 because the store loads the visible week plus one day on each side.
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
@@ -190,13 +191,6 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-ID | synth-v1-10000 | workload peak | 116.3 | 452.2 | 17.9 | 586 |
 | 2026-05-10-ID | synth-v1-10000 | workload end | 116.3 | 420.9 | 18.0 | 555 |
 | 2026-05-10-ID | synth-v1-10000 | +30s | 115.7 | 416.9 | 18.1 | 551 |
-
-#### Calendar fixed-window scale memory
-
-Harness v10 and later load the same anchored week for every dataset, perform no navigation, then report memory plus the row-count checks below. Use this as the primary evidence for whether stored calendar history affects memory when visible density stays constant.
-
-| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
-|---|---|---|---:|---:|---:|---:|
 
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
