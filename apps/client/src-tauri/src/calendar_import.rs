@@ -329,7 +329,7 @@ async fn update_event(
           WHERE id = ? AND calendar_id = ?",
     )
     .bind(&event.title)
-    .bind(now)
+    .bind(&event.start_time)
     .bind(&event.end_time)
     .bind(&event.timezone)
     .bind(event.color)
@@ -362,7 +362,7 @@ async fn update_event(
     } else {
         0_i64
     })
-    .bind(&event.start_time)
+    .bind(now)
     .bind(event_id)
     .bind(target_calendar_id)
     .execute(&mut **tx)

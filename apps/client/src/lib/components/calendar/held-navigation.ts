@@ -13,6 +13,14 @@ export type HeldNavigationEvent =
 
 type TimerId = ReturnType<typeof setTimeout>;
 
+function defaultSetTimer(callback: () => void, delayMs: number): TimerId {
+  return globalThis.setTimeout(callback, delayMs);
+}
+
+function defaultClearTimer(id: TimerId): void {
+  globalThis.clearTimeout(id);
+}
+
 export interface HeldNavigationControllerOptions {
   holdDelayMs: number;
   repeatMs: number;
@@ -49,8 +57,8 @@ export class HeldNavigationController {
     this.#navigate = opts.navigate;
     this.#canRepeat = opts.canRepeat;
     this.#mark = opts.mark;
-    this.#setTimer = opts.setTimer ?? setTimeout;
-    this.#clearTimer = opts.clearTimer ?? clearTimeout;
+    this.#setTimer = opts.setTimer ?? defaultSetTimer;
+    this.#clearTimer = opts.clearTimer ?? defaultClearTimer;
     this.#now = opts.now ?? (() => globalThis.performance?.now() ?? Date.now());
   }
 

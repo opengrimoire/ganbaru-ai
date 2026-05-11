@@ -26,6 +26,25 @@ interface MemoryReport {
   platform: string;
 }
 
+type IntervalId = ReturnType<typeof setInterval>;
+type TimeoutId = ReturnType<typeof setTimeout>;
+
+function setSampleInterval(callback: () => void, delayMs: number): IntervalId {
+  return globalThis.setInterval(callback, delayMs);
+}
+
+function clearSampleInterval(id: IntervalId): void {
+  globalThis.clearInterval(id);
+}
+
+function setSampleTimeout(callback: () => void, delayMs: number): TimeoutId {
+  return globalThis.setTimeout(callback, delayMs);
+}
+
+function clearSampleTimeout(id: TimeoutId): void {
+  globalThis.clearTimeout(id);
+}
+
 /**
  * Read one memory snapshot from the backend. Maps the Rust report into the
  * `SamplePoint` shape (backend / frontend / network split). Process names
@@ -83,14 +102,14 @@ export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
     );
   }
 
-  const intervalId = setInterval(tick, STRESS_PEAK_INTERVAL_MS);
+  const intervalId = setSampleInterval(tick, STRESS_PEAK_INTERVAL_MS);
   // Fire one immediately so the burst is not biased by the interval phase.
   tick();
 
   return {
     async stop(): Promise<SamplePoint[]> {
       stopped = true;
-      clearInterval(intervalId);
+      clearSampleInterval(intervalId);
       await Promise.all(inFlight);
       if (samples.length === 0) {
         const detail = lastError instanceof Error ? `: ${lastError.message}` : "";
@@ -124,7 +143,7 @@ export function sampleIdleCurve(opts: {
       const targetMs = SAMPLE_OFFSETS_MS[i];
       const elapsed = performance.now() - startedAt;
       const wait = Math.max(0, targetMs - elapsed);
-      const timer = setTimeout(async () => {
+      const timer = setSampleTimeout(async () => {
         if (opts.signal.aborted) {
           resolve(samples);
           return;
@@ -143,7 +162,7 @@ export function sampleIdleCurve(opts: {
         scheduleNext();
       }, wait);
       opts.signal.addEventListener("abort", () => {
-        clearTimeout(timer);
+        clearSampleTimeout(timer);
         resolve(samples);
       }, { once: true });
     }

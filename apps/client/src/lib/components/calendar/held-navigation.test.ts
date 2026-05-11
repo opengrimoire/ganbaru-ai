@@ -15,6 +15,50 @@ describe("HeldNavigationController", () => {
     vi.useRealTimers();
   });
 
+  it("calls default window timers with the global receiver", () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    const guardedSetTimeout = function (
+      this: typeof globalThis,
+      callback: () => void,
+      delayMs?: number,
+    ): ReturnType<typeof setTimeout> {
+      if (this !== globalThis) throw new TypeError("wrong setTimeout receiver");
+      const timer = originalSetTimeout.call(globalThis, callback, delayMs);
+      timers.push(timer);
+      return timer;
+    };
+    const guardedClearTimeout = function (
+      this: typeof globalThis,
+      timer: ReturnType<typeof setTimeout>,
+    ): void {
+      if (this !== globalThis) throw new TypeError("wrong clearTimeout receiver");
+      originalClearTimeout.call(globalThis, timer);
+    };
+
+    globalThis.setTimeout = guardedSetTimeout as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = guardedClearTimeout as typeof globalThis.clearTimeout;
+    try {
+      const controller = new HeldNavigationController({
+        holdDelayMs: 280,
+        repeatMs: 120,
+        navigate: () => undefined,
+        canRepeat: () => true,
+      });
+
+      expect(() => {
+        controller.start("ArrowRight", "forward");
+        controller.stop("ArrowRight");
+      }).not.toThrow();
+    } finally {
+      for (const timer of timers) originalClearTimeout.call(globalThis, timer);
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+    }
+  });
+
   it("keeps a quick key tap to one navigation", () => {
     vi.useFakeTimers();
     const navigations: Navigation[] = [];
