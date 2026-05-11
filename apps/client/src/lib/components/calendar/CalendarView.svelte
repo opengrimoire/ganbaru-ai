@@ -25,13 +25,13 @@
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
   import { getCalendarNavHandle } from "./nav-handle.svelte";
-	  import {
-	    HeldNavigationController,
-	    NAV_HOLD_DELAY_MS,
-	    NAV_REPEAT_MS,
-	    type HeldNavigationEvent,
-	    type HeldNavigationKey,
-	  } from "./held-navigation";
+  import {
+    HeldNavigationController,
+    NAV_HOLD_DELAY_MS,
+    NAV_REPEAT_MS,
+    type HeldNavigationEvent,
+    type HeldNavigationKey,
+  } from "./held-navigation";
   import {
     closedDisplay,
     buildCreateDisplay,
