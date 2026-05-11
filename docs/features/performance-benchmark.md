@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v9 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
+Harness v10 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
 
 ## User flow
 
@@ -56,6 +56,8 @@ Each scenario declares a primary measurement mode:
 | `operation-latency` | Repeated or single operation timings and counters | No |
 
 The point is to keep each benchmark honest. Feature latency scenarios should not spend 30 seconds waiting for memory GC if the thing being measured is how quickly the feature paints or finishes.
+
+Memory scenarios must capture at least one peak sample during the workload. A missing peak is a harness failure, not a reportable `n/a` row.
 
 ## Suite state machine
 
@@ -183,7 +185,7 @@ Registered suites:
 
 | Suite | Scenarios | Purpose |
 |---|---|---|
-| Core benchmarks | `startup-boot`, `idle-memory`, `calendar-nav`, `event-panel-open`, `calendar-create-cancel` | User-perceived startup, memory, and interaction latency |
+| Core benchmarks | `startup-boot`, `idle-memory`, `calendar-window-scale`, `calendar-nav`, `event-panel-open`, `calendar-create-cancel` | User-perceived startup, memory, and interaction latency |
 | Backend benchmarks | `calendar-write-ops`, `calendar-import-ops`, `theme-persistence-ops`, `pomodoro-persistence-ops` | Rust-backed persistence, import, and storage command latency |
 | All benchmarks | Core plus backend | Complete release baseline or broad refactor validation |
 
@@ -193,7 +195,8 @@ Registered scenarios:
 |---|---|---|
 | `startup-boot` | `lib/benchmark/scenarios/startup-boot.ts` | Repeated launch to usable calendar paint |
 | `idle-memory` | `lib/benchmark/scenarios/idle-memory.ts` | Idle calendar RAM |
-| `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Week-view navigation stress RAM |
+| `calendar-window-scale` | `lib/benchmark/scenarios/calendar-window-scale.ts` | Fixed anchored week RAM plus visible row counts |
+| `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Held right-arrow week-view RAM |
 | `event-panel-open` | `lib/benchmark/scenarios/event-panel-open.ts` | Existing-event panel open and switch latency |
 | `calendar-create-cancel` | `lib/benchmark/scenarios/calendar-create-cancel.ts` | Create-panel open and cancel latency |
 | `calendar-write-ops` | `lib/benchmark/scenarios/calendar-write-ops.ts` | Rust-backed calendar create, patch, delete, detach, and split latency |
@@ -236,7 +239,7 @@ The copied markdown is one suite-level block. It contains:
 Each scenario section contains exactly the table that matches the scenario's primary measurement:
 
 - `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v6 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
-- `idle-memory` and `stress-memory` emit the memory table.
+- `idle-memory` and `stress-memory` emit the memory table. If a memory scenario returns scalar metrics, such as fixed-window row counts or held-navigation move counts, the copied markdown appends a compact metric table after the memory table.
 - `interaction-latency` and `operation-latency` emit repeated latency rows for metrics with run statistics.
 - Scalar metrics without run statistics, such as counts or one-off module load times, emit a compact `Run`, `Dataset`, `Metric`, `Value`, `Unit` table.
 
