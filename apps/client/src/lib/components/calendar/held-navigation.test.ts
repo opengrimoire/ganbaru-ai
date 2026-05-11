@@ -5,18 +5,10 @@ import {
   type HeldNavigationEvent,
 } from "./held-navigation";
 
-function deferred() {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
-async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-}
+type Navigation = {
+  direction: HeldNavigationDirection;
+  source: "key" | "hold-repeat";
+};
 
 describe("HeldNavigationController", () => {
   afterEach(() => {
@@ -25,12 +17,12 @@ describe("HeldNavigationController", () => {
 
   it("keeps a quick key tap to one navigation", () => {
     vi.useFakeTimers();
-    const navigations: HeldNavigationDirection[] = [];
+    const navigations: Navigation[] = [];
     const controller = new HeldNavigationController({
       holdDelayMs: 280,
       repeatMs: 120,
-      navigate: (direction) => navigations.push(direction),
-      waitUntilSettled: () => Promise.resolve(),
+      navigate: (direction, source) => navigations.push({ direction, source }),
+      canRepeat: () => true,
     });
 
     controller.start("ArrowRight", "forward");
@@ -38,94 +30,159 @@ describe("HeldNavigationController", () => {
     controller.stop("ArrowRight");
     vi.advanceTimersByTime(1_000);
 
-    expect(navigations).toEqual(["forward"]);
+    expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
   });
 
-  it("does not repeat while the previous navigation is still settling", async () => {
+  it("repeats a ready held key at the configured cadence", () => {
     vi.useFakeTimers();
-    const settled = deferred();
-    const navigations: Array<{ direction: HeldNavigationDirection; source: string }> = [];
+    const navigations: Navigation[] = [];
+    const controller = new HeldNavigationController({
+      holdDelayMs: 280,
+      repeatMs: 120,
+      navigate: (direction, source) => navigations.push({ direction, source }),
+      canRepeat: () => true,
+    });
+
+    controller.start("ArrowRight", "forward");
+    vi.advanceTimersByTime(279);
+    expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
+
+    vi.advanceTimersByTime(1);
+    expect(navigations).toEqual([
+      { direction: "forward", source: "key" },
+      { direction: "forward", source: "hold-repeat" },
+    ]);
+
+    vi.advanceTimersByTime(119);
+    expect(navigations).toHaveLength(2);
+
+    vi.advanceTimersByTime(1);
+    vi.advanceTimersByTime(120);
+    expect(navigations).toEqual([
+      { direction: "forward", source: "key" },
+      { direction: "forward", source: "hold-repeat" },
+      { direction: "forward", source: "hold-repeat" },
+      { direction: "forward", source: "hold-repeat" },
+    ]);
+  });
+
+  it("uses repeated keydown events as a repeat driver", () => {
+    let now = 0;
+    const timerId = 0 as unknown as ReturnType<typeof setTimeout>;
+    const navigations: Navigation[] = [];
+    const controller = new HeldNavigationController({
+      holdDelayMs: 280,
+      repeatMs: 120,
+      navigate: (direction, source) => navigations.push({ direction, source }),
+      canRepeat: () => true,
+      setTimer: () => timerId,
+      clearTimer: () => undefined,
+      now: () => now,
+    });
+
+    controller.start("ArrowRight", "forward");
+    now = 279;
+    controller.repeatFromKeydown("ArrowRight");
+    expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
+
+    now = 280;
+    controller.repeatFromKeydown("ArrowRight");
+    expect(navigations).toEqual([
+      { direction: "forward", source: "key" },
+      { direction: "forward", source: "hold-repeat" },
+    ]);
+
+    now = 399;
+    controller.repeatFromKeydown("ArrowRight");
+    expect(navigations).toHaveLength(2);
+
+    now = 400;
+    controller.repeatFromKeydown("ArrowRight");
+    expect(navigations).toEqual([
+      { direction: "forward", source: "key" },
+      { direction: "forward", source: "hold-repeat" },
+      { direction: "forward", source: "hold-repeat" },
+    ]);
+  });
+
+  it("skips busy calendar ticks instead of queuing repeats", () => {
+    vi.useFakeTimers();
+    let ready = false;
+    const navigations: Navigation[] = [];
     const events: HeldNavigationEvent[] = [];
     const controller = new HeldNavigationController({
       holdDelayMs: 280,
       repeatMs: 120,
       navigate: (direction, source) => navigations.push({ direction, source }),
-      waitUntilSettled: () => settled.promise,
+      canRepeat: () => ready,
       mark: (event) => events.push(event),
     });
 
     controller.start("ArrowRight", "forward");
     vi.advanceTimersByTime(280);
-    await flushPromises();
-    vi.advanceTimersByTime(1_000);
-    await flushPromises();
+    vi.advanceTimersByTime(120);
 
     expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
-    expect(events.some((event) => event.type === "repeat-wait")).toBe(true);
+    expect(events.filter((event) => event.type === "repeat-skip")).toHaveLength(2);
 
-    settled.resolve();
-    await flushPromises();
+    ready = true;
+    vi.advanceTimersByTime(119);
+    expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
 
+    vi.advanceTimersByTime(1);
     expect(navigations).toEqual([
       { direction: "forward", source: "key" },
       { direction: "forward", source: "hold-repeat" },
     ]);
   });
 
-  it("cancels a pending repeat when keyup happens during settle wait", async () => {
+  it("does not navigate later when released during a busy period", () => {
     vi.useFakeTimers();
-    const settled = deferred();
-    const navigations: Array<{ direction: HeldNavigationDirection; source: string }> = [];
-    const events: HeldNavigationEvent[] = [];
+    let ready = false;
+    const navigations: Navigation[] = [];
     const controller = new HeldNavigationController({
       holdDelayMs: 280,
       repeatMs: 120,
       navigate: (direction, source) => navigations.push({ direction, source }),
-      waitUntilSettled: () => settled.promise,
-      mark: (event) => events.push(event),
+      canRepeat: () => ready,
     });
 
     controller.start("ArrowRight", "forward");
     vi.advanceTimersByTime(280);
-    await flushPromises();
     controller.stop("ArrowRight");
-    settled.resolve();
-    await flushPromises();
+    ready = true;
     vi.advanceTimersByTime(1_000);
 
     expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
-    expect(events).toContainEqual({ type: "repeat-cancelled", key: "ArrowRight", stage: "settle" });
   });
 
-  it("waits for settle before every repeated navigation", async () => {
+  it("cancels the previous held sequence when direction changes", () => {
     vi.useFakeTimers();
-    const firstSettle = deferred();
-    const secondSettle = deferred();
-    const settleWaits = [firstSettle, secondSettle];
-    const navigations: Array<{ direction: HeldNavigationDirection; source: string }> = [];
+    const navigations: Navigation[] = [];
     const controller = new HeldNavigationController({
       holdDelayMs: 280,
       repeatMs: 120,
       navigate: (direction, source) => navigations.push({ direction, source }),
-      waitUntilSettled: () => settleWaits.shift()?.promise ?? Promise.resolve(),
+      canRepeat: () => true,
     });
 
     controller.start("ArrowRight", "forward");
-    vi.advanceTimersByTime(280);
-    await flushPromises();
-    firstSettle.resolve();
-    await flushPromises();
-    vi.advanceTimersByTime(120);
-    await flushPromises();
+    vi.advanceTimersByTime(279);
+    controller.start("ArrowLeft", "back");
 
+    expect(navigations).toEqual([
+      { direction: "forward", source: "key" },
+      { direction: "back", source: "key" },
+    ]);
+
+    vi.advanceTimersByTime(1);
     expect(navigations).toHaveLength(2);
 
-    vi.advanceTimersByTime(1_000);
-    await flushPromises();
-    expect(navigations).toHaveLength(2);
-
-    secondSettle.resolve();
-    await flushPromises();
-    expect(navigations).toHaveLength(3);
+    vi.advanceTimersByTime(279);
+    expect(navigations).toEqual([
+      { direction: "forward", source: "key" },
+      { direction: "back", source: "key" },
+      { direction: "back", source: "hold-repeat" },
+    ]);
   });
 });

@@ -681,10 +681,9 @@
   let arrowScrollRaf = 0;
   let arrowScrollPrev = 0;
 
-  // Held-arrow navigation fires once immediately, then repeats only after a
-  // hold delay. The old frame-rate polling made empty calendars jump multiple
-  // ranges from a normal quick key press because rendering could finish in a
-  // few milliseconds before keyup cancelled the loop.
+  // Held-arrow navigation fires once immediately, then runs gated repeat
+  // ticks after a hold delay. Busy calendar frames skip their tick instead
+  // of building delayed movement after keyup.
   const NAV_HOLD_DELAY_MS = 280;
   const NAV_REPEAT_MS = 120;
   let navReleaseSeq = 0;
@@ -694,8 +693,8 @@
       perfMark("nav.hold-start", { key: event.key, dir: event.direction });
     } else if (event.type === "hold-stop") {
       perfMark("nav.hold-stop", { key: event.key, repeats: event.repeats });
-    } else if (event.type === "repeat-wait") {
-      perfMark("nav.repeat-wait", { key: event.key, repeats: event.repeats });
+    } else if (event.type === "repeat-skip") {
+      perfMark("nav.repeat-skip", { key: event.key, repeats: event.repeats, reason: event.reason });
     } else if (event.type === "repeat") {
       perfMark("nav.repeat", { key: event.key, dir: event.direction, repeats: event.repeats });
     } else {
@@ -707,14 +706,22 @@
     holdDelayMs: NAV_HOLD_DELAY_MS,
     repeatMs: NAV_REPEAT_MS,
     navigate: (direction, source) => navigate(direction, source),
-    waitUntilSettled: waitForNavigationSettled,
+    canRepeat: canRepeatHeldNavigation,
     mark: markHeldNav,
   });
+
+  function canRepeatHeldNavigation(): boolean {
+    return pendingAnchor === null && anchorRaf === 0;
+  }
 
   function startNavHold(
     key: HeldNavigationKey,
     direction: "forward" | "back",
   ) {
+    if (heldNavigation.activeKey === key) {
+      heldNavigation.repeatFromKeydown(key);
+      return;
+    }
     heldNavigation.start(key, direction);
   }
 
@@ -877,8 +884,8 @@
 
   // Scripted and wheel navigation can arrive faster than paint. Coalesce
   // anchor mutations to one commit per frame and always base the next step on
-  // the latest pending target. Held keyboard navigation is separately
-  // backpressured before it reaches this point.
+  // the latest pending target. Held keyboard navigation is separately gated
+  // before it reaches this point.
   let pendingAnchor: Date | null = null;
   let anchorRaf = 0;
   function currentAnchor(): Date {
