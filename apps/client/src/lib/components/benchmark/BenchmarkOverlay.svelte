@@ -173,12 +173,12 @@
             </div>
           </section>
 
-          {#each summaryPreview.sections as section, sectionIndex (section.id + sectionIndex)}
-            <section class="space-y-2">
-              <h3 class="text-[13px] font-semibold text-foreground">{section.title}</h3>
-              <div class={section.kind === "metrics" ? "space-y-3" : tableWrapClass}>
-                {#if section.kind === "startup"}
-                  <table class={tableClass}>
+	          {#each summaryPreview.sections as section, sectionIndex (section.id + sectionIndex)}
+	            <section class="space-y-2">
+	              <h3 class="text-[13px] font-semibold text-foreground">{section.title}</h3>
+	              <div class={section.kind === "startup" ? tableWrapClass : "space-y-3"}>
+	                {#if section.kind === "startup"}
+	                  <table class={tableClass}>
                     <thead>
                       <tr>
                         <th class={thClass}>Run</th>
@@ -207,35 +207,63 @@
                         </tr>
                       {/each}
                     </tbody>
-                  </table>
-                {:else if section.kind === "memory"}
-                  <table class={tableClass}>
-                    <thead>
-                      <tr>
-                        <th class={thClass}>Run</th>
-                        <th class={thClass}>Dataset</th>
-                        <th class={thClass}>Timepoint</th>
-                        <th class={thClass}>Backend MB</th>
-                        <th class={thClass}>Frontend MB</th>
-                        <th class={thClass}>Network MB</th>
-                        <th class={thClass}>Total MB</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each section.rows as row}
-                        <tr>
-                          <td class={tdClass}>{row.run}</td>
-                          <td class={tdClass}>{row.dataset}</td>
-                          <td class={tdClass}>{row.timepoint}</td>
-                          <td class={tdClass}>{row.backendMb}</td>
-                          <td class={tdClass}>{row.frontendMb}</td>
-                          <td class={tdClass}>{row.networkMb}</td>
-                          <td class={tdClass}>{row.totalMb}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                {:else}
+	                  </table>
+	                {:else if section.kind === "memory"}
+	                  <div class={tableWrapClass}>
+	                    <table class={tableClass}>
+	                      <thead>
+	                        <tr>
+	                          <th class={thClass}>Run</th>
+	                          <th class={thClass}>Dataset</th>
+	                          <th class={thClass}>Timepoint</th>
+	                          <th class={thClass}>Backend MB</th>
+	                          <th class={thClass}>Frontend MB</th>
+	                          <th class={thClass}>Network MB</th>
+	                          <th class={thClass}>Total MB</th>
+	                        </tr>
+	                      </thead>
+	                      <tbody>
+	                        {#each section.rows as row}
+	                          <tr>
+	                            <td class={tdClass}>{row.run}</td>
+	                            <td class={tdClass}>{row.dataset}</td>
+	                            <td class={tdClass}>{row.timepoint}</td>
+	                            <td class={tdClass}>{row.backendMb}</td>
+	                            <td class={tdClass}>{row.frontendMb}</td>
+	                            <td class={tdClass}>{row.networkMb}</td>
+	                            <td class={tdClass}>{row.totalMb}</td>
+	                          </tr>
+	                        {/each}
+	                      </tbody>
+	                    </table>
+	                  </div>
+	                  {#if section.scalarRows.length > 0}
+	                    <div class={tableWrapClass}>
+	                      <table class={tableClass}>
+	                        <thead>
+	                          <tr>
+	                            <th class={thClass}>Run</th>
+	                            <th class={thClass}>Dataset</th>
+	                            <th class={thClass}>Metric</th>
+	                            <th class={thClass}>Value</th>
+	                            <th class={thClass}>Unit</th>
+	                          </tr>
+	                        </thead>
+	                        <tbody>
+	                          {#each section.scalarRows as row}
+	                            <tr>
+	                              <td class={tdClass}>{row.run}</td>
+	                              <td class={tdClass}>{row.dataset}</td>
+	                              <td class={tdClass}>{row.metric}</td>
+	                              <td class={tdClass}>{row.value}</td>
+	                              <td class={tdClass}>{row.unit}</td>
+	                            </tr>
+	                          {/each}
+	                        </tbody>
+	                      </table>
+	                    </div>
+	                  {/if}
+	                {:else}
                   {#if section.latencyRows.length > 0}
                     <div class={tableWrapClass}>
                       <table class={tableClass}>

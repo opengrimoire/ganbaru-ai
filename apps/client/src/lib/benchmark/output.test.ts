@@ -82,13 +82,13 @@ function startupSample(
 const RESULT: BenchmarkResult = {
   scenarioId: "calendar-nav",
   scenarioLabel: "Calendar week-view nav",
-  workload: {
-    kind: "stress-memory",
-    question: "How much memory does repeated week navigation use?",
-    label: "programmatic week-view navigation stress",
-    durationMs: STRESS_DURATION_MS,
-    memoryMode: "post-workload",
-  },
+	  workload: {
+	    kind: "stress-memory",
+	    question: "How much memory does repeated week navigation use?",
+	    label: "held right-arrow week-view navigation",
+	    durationMs: STRESS_DURATION_MS,
+	    memoryMode: "post-workload",
+	  },
   datasetVersion: "v1",
   harnessVersion: HARNESS_VERSION,
   platform: "Linux",
@@ -177,6 +177,35 @@ const METRIC_RESULT: BenchmarkResult = {
   peakTotalMb: undefined,
 };
 
+const WINDOW_SCALE_RESULT: BenchmarkResult = {
+  ...RESULT,
+  scenarioId: "calendar-window-scale",
+  scenarioLabel: "Calendar fixed-window scale",
+  workload: {
+    kind: "idle-memory",
+    question: "How much memory does one fixed calendar window use as stored history grows?",
+    label: "fixed anchored week scale check",
+    durationMs: STRESS_DURATION_MS,
+    memoryMode: "post-workload",
+  },
+  phaseA: {
+    ...RESULT.phaseA,
+    metrics: [
+      { label: "total stored events", unit: "count", value: 0 },
+      { label: "current window rows", unit: "count", value: 0 },
+      { label: "current window events", unit: "count", value: 0 },
+    ],
+  },
+  phaseB: {
+    ...RESULT.phaseB,
+    metrics: [
+      { label: "total stored events", unit: "count", value: 17_520 },
+      { label: "current window rows", unit: "count", value: 216 },
+      { label: "current window events", unit: "count", value: 216 },
+    ],
+  },
+};
+
 const MIXED_METRIC_RESULT: BenchmarkResult = {
   ...RESULT,
   scenarioId: "mixed-metrics",
@@ -245,9 +274,9 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("Scenario:")).toBe(false);
     expect(md.includes("Phase A")).toBe(false);
     expect(md.includes("Phase B")).toBe(false);
-    expect(md.includes(`${STRESS_DURATION_MS} ms programmatic week-view navigation stress`)).toBe(false);
-    expect(md.includes("### Startup boot")).toBe(false);
-    expect(md.includes("### Calendar navigation stress memory")).toBe(true);
+	    expect(md.includes(`${STRESS_DURATION_MS} ms held right-arrow week-view navigation`)).toBe(false);
+	    expect(md.includes("### Startup boot")).toBe(false);
+	    expect(md.includes("### Calendar held navigation memory")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
     expect(md.includes("Settled floor:")).toBe(false);
@@ -315,7 +344,7 @@ describe("formatBenchmarkMarkdown", () => {
     const header = md.split("\n").find((line) => line.startsWith("| Run | Dataset | Runs |"));
     expect(header?.endsWith("| Launch median ms |")).toBe(true);
     expect(md.includes("Launch total ms")).toBe(false);
-    expect(md.includes("### Calendar navigation stress memory")).toBe(false);
+	    expect(md.includes("### Calendar held navigation memory")).toBe(false);
     expect(md.includes("no post-workload memory wait")).toBe(false);
   });
 
@@ -334,8 +363,17 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("| 2026-05-01-ID | base-2 | edit open from closed avg | 121 | ms | 10 |  | 117 | 138 |  |")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | edit open from closed avg | 176 | ms | 10 |  | 171 | 202 |  |")).toBe(true);
     expect(md.includes("details 44 ms")).toBe(false);
-    expect(md.includes("### Calendar navigation stress memory")).toBe(false);
-  });
+	    expect(md.includes("### Calendar held navigation memory")).toBe(false);
+	  });
+
+	  it("renders scalar metrics after memory rows when a memory scenario returns checks", () => {
+	    const md = formatBenchmarkMarkdown(WINDOW_SCALE_RESULT, { date: "2026-05-01" });
+	    expect(md.includes("### Calendar fixed-window scale memory")).toBe(true);
+	    expect(md.includes("| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |")).toBe(true);
+	    expect(md.includes("| Run | Dataset | Metric | Value | Unit |")).toBe(true);
+	    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | total stored events | 17520 | count |")).toBe(true);
+	    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | current window rows | 216 | count |")).toBe(true);
+	  });
 
   it("splits scalar metrics from repeated latency rows", () => {
     const md = formatBenchmarkMarkdown(MIXED_METRIC_RESULT, { date: "2026-05-01" });
@@ -373,6 +411,6 @@ describe("formatBenchmarkMarkdown", () => {
     const md = formatBenchmarkSuiteMarkdown([RESULT, RESULT], { date: "2026-05-01" });
     expect(md.match(/^## Benchmark/gm)).toHaveLength(1);
     expect(md.match(/### Run metadata/g)).toHaveLength(1);
-    expect(md.match(/### Calendar navigation stress memory/g)).toHaveLength(2);
-  });
+	    expect(md.match(/### Calendar held navigation memory/g)).toHaveLength(2);
+	  });
 });

@@ -1,6 +1,9 @@
 export type HeldNavigationKey = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown";
 export type HeldNavigationDirection = "forward" | "back";
 
+export const NAV_HOLD_DELAY_MS = 280;
+export const NAV_REPEAT_MS = 120;
+
 export type HeldNavigationEvent =
   | { type: "hold-start"; key: HeldNavigationKey; direction: HeldNavigationDirection }
   | { type: "hold-stop"; key: HeldNavigationKey; repeats: number }

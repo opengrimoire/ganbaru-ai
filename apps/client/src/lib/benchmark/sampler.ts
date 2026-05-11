@@ -65,6 +65,8 @@ export async function readMemorySample(
 export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
   const samples: SamplePoint[] = [];
   let stopped = false;
+  let failedSamples = 0;
+  let lastError: unknown;
   const startedAt = performance.now();
   const inFlight: Promise<void>[] = [];
 
@@ -73,10 +75,10 @@ export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
     const tMs = performance.now() - startedAt;
     inFlight.push(
       readMemorySample("peak", tMs).then((s) => {
-        if (!stopped) samples.push(s);
-      }).catch(() => {
-        // A dropped sample is preferable to crashing the burst loop;
-        // the formatter tolerates a missing peak by reporting `n/a`.
+        samples.push(s);
+      }).catch((error: unknown) => {
+        failedSamples++;
+        lastError = error;
       }),
     );
   }
@@ -90,6 +92,10 @@ export function startPeakSampler(): { stop: () => Promise<SamplePoint[]> } {
       stopped = true;
       clearInterval(intervalId);
       await Promise.all(inFlight);
+      if (samples.length === 0) {
+        const detail = lastError instanceof Error ? `: ${lastError.message}` : "";
+        throw new Error(`Peak memory sampling failed after ${failedSamples} attempt(s)${detail}`);
+      }
       return samples;
     },
   };

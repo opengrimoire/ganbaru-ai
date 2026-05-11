@@ -1,8 +1,8 @@
 /**
- * Week-view forward-nav scenario. Drives `navigate("forward")` once per
- * animation frame for the full stress window, which is the closest
- * automation can get to the user's "hold right arrow" measurement loop
- * without depending on real keyboard input timing.
+ * Week-view forward-nav scenario. Drives the same held-arrow cadence used by
+ * the calendar UI: one immediate forward move, a hold delay, then gated repeat
+ * ticks. This keeps the memory stress representative of a real user holding
+ * the right arrow instead of forcing internal frame-rate navigation.
  *
  * Seeding lays down a versioned dense calendar in the isolated
  * benchmark DB so the dense dataset compares across builds. `cleanup` is a no-op:
@@ -11,9 +11,15 @@
  */
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
 import {
+  HeldNavigationController,
+  NAV_HOLD_DELAY_MS,
+  NAV_REPEAT_MS,
+} from "$lib/components/calendar/held-navigation";
+import {
   CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,
   STRESS_DURATION_MS,
+  type BenchmarkMetric,
   type BenchmarkDatasetProfile,
   type BenchmarkScenario,
   type BenchmarkSeedHandle,
@@ -22,17 +28,18 @@ import {
   loadCalendarBenchmarkWindow,
   parseCalendarBenchmarkAnchor,
   seedCalendarDataset,
+  waitForMs,
 } from "./calendar-utils";
 
 export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
   label: "Calendar week-view nav",
   description:
-    "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline plus 1-year and 10-year dense calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
+    "Holds forward week-view navigation for 3 seconds with the same delay, repeat cadence, and readiness gate as the real right-arrow shortcut. It runs against an empty baseline plus 1-year and 10-year dense calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
   workload: {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
-    label: "programmatic week-view navigation stress",
+    label: "held right-arrow week-view navigation",
     durationMs: STRESS_DURATION_MS,
     memoryMode: "post-workload",
   },
@@ -51,39 +58,38 @@ export const calendarNavScenario: BenchmarkScenario = {
     await new Promise((r) => requestAnimationFrame(() => r(undefined)));
   },
 
-  runWorkload(signal: AbortSignal): Promise<void> {
-    return new Promise((resolve) => {
-      const handle = getCalendarNavHandle();
-      const start = performance.now();
-      let rafId = 0;
+  async runWorkload(signal: AbortSignal): Promise<BenchmarkMetric[]> {
+    const handle = getCalendarNavHandle();
+    let moves = 0;
+    let repeats = 0;
+    let skippedTicks = 0;
 
-      const onAbort = () => {
-        cancelAnimationFrame(rafId);
-        resolve();
-      };
-      if (signal.aborted) {
-        resolve();
-        return;
-      }
-      signal.addEventListener("abort", onAbort, { once: true });
-
-      function step() {
-        if (signal.aborted) {
-          resolve();
-          return;
-        }
-        const elapsed = performance.now() - start;
-        if (elapsed >= STRESS_DURATION_MS) {
-          signal.removeEventListener("abort", onAbort);
-          resolve();
-          return;
-        }
-        handle.navigate("forward");
-        rafId = requestAnimationFrame(step);
-      }
-
-      rafId = requestAnimationFrame(step);
+    const controller = new HeldNavigationController({
+      holdDelayMs: NAV_HOLD_DELAY_MS,
+      repeatMs: NAV_REPEAT_MS,
+      navigate: (direction, source) => {
+        moves++;
+        if (source === "hold-repeat") repeats++;
+        handle.navigate(direction, source);
+      },
+      canRepeat: () => handle.canRepeatHeldNavigation(),
+      mark: (event) => {
+        if (event.type === "repeat-skip") skippedTicks++;
+      },
     });
+
+    controller.start("ArrowRight", "forward");
+    try {
+      await waitForMs(STRESS_DURATION_MS, signal);
+    } finally {
+      controller.stop("ArrowRight");
+    }
+
+    return [
+      { label: "held navigation moves", unit: "count", value: moves },
+      { label: "held navigation repeats", unit: "count", value: repeats },
+      { label: "held navigation skipped ticks", unit: "count", value: skippedTicks },
+    ];
   },
 
   async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {

@@ -13,12 +13,14 @@
 import type { CalendarViewMode } from "./types";
 
 type NavigateDirection = "today" | "back" | "forward";
-type NavigateFn = (direction: NavigateDirection) => void;
+type NavigateSource = "programmatic" | "wheel" | "key" | "hold-repeat";
+type NavigateFn = (direction: NavigateDirection, source?: NavigateSource) => void;
 type SetViewModeFn = (mode: CalendarViewMode) => void;
 type SetAnchorDateFn = (date: Date) => void;
 type OpenVisibleEventFn = (index: number) => Promise<boolean>;
 type OpenCreatePanelFn = (start: string, end: string, allDay?: boolean) => Promise<boolean>;
 type ClosePanelFn = () => Promise<void>;
+type CanRepeatHeldNavigationFn = () => boolean;
 
 class CalendarNavHandle {
   #navigate: NavigateFn | null = null;
@@ -27,6 +29,7 @@ class CalendarNavHandle {
   #openVisibleEvent: OpenVisibleEventFn | null = null;
   #openCreatePanel: OpenCreatePanelFn | null = null;
   #closePanel: ClosePanelFn | null = null;
+  #canRepeatHeldNavigation: CanRepeatHeldNavigationFn | null = null;
   #viewMode: CalendarViewMode = "week";
 
   /**
@@ -40,6 +43,7 @@ class CalendarNavHandle {
     openVisibleEvent: OpenVisibleEventFn;
     openCreatePanel: OpenCreatePanelFn;
     closePanel: ClosePanelFn;
+    canRepeatHeldNavigation: CanRepeatHeldNavigationFn;
     getViewMode: () => CalendarViewMode;
   }): () => void {
     this.#navigate = opts.navigate;
@@ -48,6 +52,7 @@ class CalendarNavHandle {
     this.#openVisibleEvent = opts.openVisibleEvent;
     this.#openCreatePanel = opts.openCreatePanel;
     this.#closePanel = opts.closePanel;
+    this.#canRepeatHeldNavigation = opts.canRepeatHeldNavigation;
     this.#viewMode = opts.getViewMode();
     return () => {
       this.#navigate = null;
@@ -56,6 +61,7 @@ class CalendarNavHandle {
       this.#openVisibleEvent = null;
       this.#openCreatePanel = null;
       this.#closePanel = null;
+      this.#canRepeatHeldNavigation = null;
     };
   }
 
@@ -73,8 +79,8 @@ class CalendarNavHandle {
     return this.#viewMode;
   }
 
-  navigate(direction: NavigateDirection) {
-    this.#navigate?.(direction);
+  navigate(direction: NavigateDirection, source?: NavigateSource) {
+    this.#navigate?.(direction, source);
   }
 
   setViewMode(mode: CalendarViewMode) {
@@ -95,6 +101,10 @@ class CalendarNavHandle {
 
   closePanel(): Promise<void> {
     return this.#closePanel?.() ?? Promise.resolve();
+  }
+
+  canRepeatHeldNavigation(): boolean {
+    return this.#canRepeatHeldNavigation?.() ?? false;
   }
 }
 

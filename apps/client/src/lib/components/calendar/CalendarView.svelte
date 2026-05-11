@@ -25,11 +25,13 @@
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
   import { getCalendarNavHandle } from "./nav-handle.svelte";
-  import {
-    HeldNavigationController,
-    type HeldNavigationEvent,
-    type HeldNavigationKey,
-  } from "./held-navigation";
+	  import {
+	    HeldNavigationController,
+	    NAV_HOLD_DELAY_MS,
+	    NAV_REPEAT_MS,
+	    type HeldNavigationEvent,
+	    type HeldNavigationKey,
+	  } from "./held-navigation";
   import {
     closedDisplay,
     buildCreateDisplay,
@@ -684,9 +686,7 @@
   // Held-arrow navigation fires once immediately, then runs gated repeat
   // ticks after a hold delay. Busy calendar frames skip their tick instead
   // of building delayed movement after keyup.
-  const NAV_HOLD_DELAY_MS = 280;
-  const NAV_REPEAT_MS = 120;
-  let navReleaseSeq = 0;
+	  let navReleaseSeq = 0;
 
   function markHeldNav(event: HeldNavigationEvent) {
     if (event.type === "hold-start") {
@@ -861,11 +861,12 @@
       navigate,
       setViewMode: (mode) => changeView(mode),
       setAnchorDate: (date) => { anchorDate = date; },
-      openVisibleEvent: openVisibleEventForBenchmark,
-      openCreatePanel: openCreatePanelForBenchmark,
-      closePanel: closePanelForBenchmark,
-      getViewMode: () => viewMode,
-    });
+	      openVisibleEvent: openVisibleEventForBenchmark,
+	      openCreatePanel: openCreatePanelForBenchmark,
+	      closePanel: closePanelForBenchmark,
+	      canRepeatHeldNavigation,
+	      getViewMode: () => viewMode,
+	    });
 
     return () => {
       unregisterNav();

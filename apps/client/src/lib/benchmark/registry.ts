@@ -27,6 +27,7 @@ export interface BenchmarkSuiteMetadata {
 const CORE_BENCHMARK_SCENARIO_IDS = [
   "startup-boot",
   "idle-memory",
+  "calendar-window-scale",
   "calendar-nav",
   "event-panel-open",
   "calendar-create-cancel",
@@ -71,14 +72,29 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
     benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
   },
   {
+    id: "calendar-window-scale",
+    label: "Calendar fixed-window scale",
+    description:
+      "Loads the same anchored week for 3 seconds, then reports memory and current-window row counts against empty, 1-year dense, and 10-year dense benchmark DBs.",
+    workload: {
+      kind: "idle-memory",
+      question: "How much memory does one fixed calendar window use as stored history grows?",
+      label: "fixed anchored week scale check",
+      durationMs: STRESS_DURATION_MS,
+      memoryMode: "post-workload",
+    },
+    defaultDataset: DEFAULT_BENCHMARK_DATASET,
+    benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
+  },
+  {
     id: "calendar-nav",
     label: "Calendar week-view nav",
     description:
-      "Drives forward week-view navigation for 3 seconds, then samples memory while the page settles. It runs against an empty baseline plus 1-year and 10-year dense calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
+      "Holds forward week-view navigation for 3 seconds with the same delay, repeat cadence, and readiness gate as the real right-arrow shortcut. It runs against an empty baseline plus 1-year and 10-year dense calendars.",
     workload: {
       kind: "stress-memory",
       question: "How much memory does repeated week navigation use?",
-      label: "programmatic week-view navigation stress",
+      label: "held right-arrow week-view navigation",
       durationMs: STRESS_DURATION_MS,
       memoryMode: "post-workload",
     },
@@ -197,6 +213,8 @@ export const BENCHMARK_SUITES: BenchmarkSuiteMetadata[] = [
 const SCENARIO_LOADERS: Record<string, BenchmarkScenarioLoader> = {
   "startup-boot": () => import("./scenarios/startup-boot").then((module) => module.startupBootScenario),
   "idle-memory": () => import("./scenarios/idle-memory").then((module) => module.idleMemoryScenario),
+  "calendar-window-scale": () => import("./scenarios/calendar-window-scale")
+    .then((module) => module.calendarWindowScaleScenario),
   "calendar-nav": () => import("./scenarios/calendar-nav").then((module) => module.calendarNavScenario),
   "event-panel-open": () => import("./scenarios/event-panel-open").then((module) => module.eventPanelOpenScenario),
   "calendar-create-cancel": () => import("./scenarios/calendar-create-cancel")

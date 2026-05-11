@@ -49,6 +49,9 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * Stored on the persisted state file so stale baseline data captured by an
  * old build cannot accidentally feed the dense pass on a new build.
  *
+ * v10 (2026-05-11): replaces forced frame-rate calendar navigation with
+ * held-key cadence, fails missing peak memory samples, and adds a fixed-window
+ * scale scenario with visible row-count metrics.
  * v9 (2026-05-10): switches dense-span core datasets from 3 stacked events
  * per hour to 1 event per hour so the 10-year profile remains practical.
  * v8 (2026-05-10): replaces count-based synthetic scales with dense-span
@@ -63,7 +66,7 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * sampling modes and primary-metric output.
  * v1/v2/v3 state files are silently discarded on read.
  */
-export const HARNESS_VERSION = "9";
+export const HARNESS_VERSION = "10";
 
 /** Dense dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const DENSE_DATASET_VERSION = "v1";

@@ -59,11 +59,25 @@ async function runPhase(opts: {
   const peakSampler = shouldSampleMemory ? startPeakSampler() : undefined;
 
   const workloadStarted = performance.now();
-  const maybeMetrics = await opts.scenario.runWorkload(opts.signal);
+  let maybeMetrics: PhaseResult["metrics"] | void;
+  let workloadError: unknown;
+  let peakError: unknown;
+  try {
+    maybeMetrics = await opts.scenario.runWorkload(opts.signal);
+  } catch (error: unknown) {
+    workloadError = error;
+  }
   const workloadDurationMs = performance.now() - workloadStarted;
 
-  const peakSamples = await peakSampler?.stop() ?? [];
+  let peakSamples: PhaseResult["peakSamples"] = [];
+  try {
+    peakSamples = await peakSampler?.stop() ?? [];
+  } catch (error: unknown) {
+    peakError = error;
+  }
+  if (workloadError) throw workloadError;
   if (opts.signal.aborted) throw new DOMException("aborted", "AbortError");
+  if (peakError) throw peakError;
 
   let curve = [] as PhaseResult["curve"];
   if (shouldSampleMemory) {
