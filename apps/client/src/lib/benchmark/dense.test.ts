@@ -14,8 +14,8 @@ const ANCHOR = new Date(2026, 3, 30);
 
 describe("benchmark dense calendar datasets", () => {
   it("formats dataset ids by version, year radius, stack count, and detail profile", () => {
-    expect(benchmarkDatasetId(DEFAULT_BENCHMARK_DATASET)).toBe("dense-v1-r1y-s3-d1");
-    expect(benchmarkDatasetId(LARGE_BENCHMARK_DATASET)).toBe("dense-v1-r10y-s3-d1");
+    expect(benchmarkDatasetId(DEFAULT_BENCHMARK_DATASET)).toBe("dense-v1-r1y-s1-d1");
+    expect(benchmarkDatasetId(LARGE_BENCHMARK_DATASET)).toBe("dense-v1-r10y-s1-d1");
   });
 
   it("counts the 1-year and 10-year dense spans around the fixed anchor", () => {
@@ -24,41 +24,33 @@ describe("benchmark dense calendar datasets", () => {
       endExclusive: "2027-04-30",
       days: 730,
     });
-    expect(countDenseCalendarEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(52_560);
+    expect(countDenseCalendarEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(17_520);
     expect(denseCalendarDateRange(LARGE_BENCHMARK_DATASET, ANCHOR)).toEqual({
       start: "2016-04-30",
       endExclusive: "2036-04-30",
       days: 7305,
     });
-    expect(countDenseCalendarEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(525_960);
+    expect(countDenseCalendarEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(175_320);
   });
 
-  it("places three stacked events at the same start of every hour", () => {
+  it("places one detailed event at the start of every hour", () => {
     const events = generateDenseCalendarEvents({
       dataset: DEFAULT_BENCHMARK_DATASET,
       anchor: ANCHOR,
-      count: 8,
+      count: 4,
     });
 
     expect(events.map((event) => event.start)).toEqual([
       "2025-04-30 00:00",
-      "2025-04-30 00:00",
-      "2025-04-30 00:00",
-      "2025-04-30 01:00",
-      "2025-04-30 01:00",
       "2025-04-30 01:00",
       "2025-04-30 02:00",
-      "2025-04-30 02:00",
+      "2025-04-30 03:00",
     ]);
     expect(events.map((event) => event.end)).toEqual([
       "2025-04-30 00:50",
-      "2025-04-30 00:50",
-      "2025-04-30 00:50",
-      "2025-04-30 01:50",
-      "2025-04-30 01:50",
       "2025-04-30 01:50",
       "2025-04-30 02:50",
-      "2025-04-30 02:50",
+      "2025-04-30 03:50",
     ]);
   });
 
@@ -92,10 +84,10 @@ describe("benchmark dense calendar datasets", () => {
     expect(event).toMatchObject({
       start: "2025-04-30 00:00",
       end: "2025-04-30 00:50",
-      sourceUid: "dense-v1-s3-d1-2025-04-30T00-stack1",
+      sourceUid: "dense-v1-s1-d1-2025-04-30T00-stack1",
       notifications: [10],
       location: expect.stringContaining("Home office"),
-      url: "https://benchmark.local/dense-v1-r1y-s3-d1/2025-04-30/00/1",
+      url: "https://benchmark.local/dense-v1-r1y-s1-d1/2025-04-30/00/1",
       organizer: {
         name: "Benchmark Calendar",
         email: "owner@benchmark.local",
@@ -110,7 +102,7 @@ describe("benchmark dense calendar datasets", () => {
     expect(event?.alarms).toHaveLength(1);
     expect(event?.attendees).toHaveLength(1);
     expect(event?.categories).toContain("benchmark");
-    expect(event?.extendedProperties?.["X-BENCHMARK-DATASET"]).toBe("dense-v1-r1y-s3-d1");
+    expect(event?.extendedProperties?.["X-BENCHMARK-DATASET"]).toBe("dense-v1-r1y-s1-d1");
   });
 
   it("supports deterministic chunked slices", () => {

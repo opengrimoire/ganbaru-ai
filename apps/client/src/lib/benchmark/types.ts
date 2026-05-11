@@ -49,6 +49,8 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * Stored on the persisted state file so stale baseline data captured by an
  * old build cannot accidentally feed the dense pass on a new build.
  *
+ * v9 (2026-05-10): switches dense-span core datasets from 3 stacked events
+ * per hour to 1 event per hour so the 10-year profile remains practical.
  * v8 (2026-05-10): replaces count-based synthetic scales with dense-span
  * calendar datasets named by year radius, stack count, and detail profile.
  * v7 (2026-05-10): core scenarios add a 10,000-event synthetic pass in the
@@ -61,7 +63,7 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * sampling modes and primary-metric output.
  * v1/v2/v3 state files are silently discarded on read.
  */
-export const HARNESS_VERSION = "8";
+export const HARNESS_VERSION = "9";
 
 /** Dense dataset shape version. Bumping this requires renaming the calendar grouping. */
 export const DENSE_DATASET_VERSION = "v1";
@@ -73,7 +75,7 @@ export interface DenseCalendarDatasetProfile {
   version: typeof DENSE_DATASET_VERSION;
   /** Years before and after the fixed benchmark anchor. */
   yearRadius: number;
-  /** Number of overlapping events created at the start of every hour. */
+  /** Number of events created at the start of every hour. */
   stackCount: number;
   /** Detail payload shape for titles, descriptions, locations, alarms, and guests. */
   detailProfile: DenseCalendarDetailProfile;
@@ -93,7 +95,7 @@ export const DEFAULT_BENCHMARK_DATASET = {
   kind: "dense-calendar",
   version: DENSE_DATASET_VERSION,
   yearRadius: 1,
-  stackCount: 3,
+  stackCount: 1,
   detailProfile: "d1",
 } as const satisfies BenchmarkDatasetProfile;
 
@@ -102,7 +104,7 @@ export const LARGE_BENCHMARK_DATASET = {
   kind: "dense-calendar",
   version: DENSE_DATASET_VERSION,
   yearRadius: 10,
-  stackCount: 3,
+  stackCount: 1,
   detailProfile: "d1",
 } as const satisfies BenchmarkDatasetProfile;
 
@@ -241,7 +243,7 @@ export interface PhaseResult {
   startupSamples?: StartupBootSample[];
   /** Total benchmark DB event count at the moment the phase started. */
   eventCountAtStart: number;
-  /** Dataset profile id for seeded phases, e.g. `dense-v1-r1y-s3-d1`. */
+  /** Dataset profile id for seeded phases, e.g. `dense-v1-r1y-s1-d1`. */
   datasetId?: string;
 }
 

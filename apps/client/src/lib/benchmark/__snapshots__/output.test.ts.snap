@@ -7,7 +7,7 @@ exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing change
 
 | Run | Harness | Build ref | Platform | Notes |
 |---|---|---|---|---|
-| 2026-05-01-ID | v8 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
+| 2026-05-01-ID | v9 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
 
 ### Calendar navigation stress memory
 
@@ -16,7 +16,7 @@ exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing change
 | 2026-05-01-ID | base-0 | workload peak | 87.0 | 261.0 | 16.0 | 348 |
 | 2026-05-01-ID | base-0 | workload end | 87.0 | 231.0 | 16.0 | 318 |
 | 2026-05-01-ID | base-0 | +30s | 87.0 | 191.0 | 16.0 | 278 |
-| 2026-05-01-ID | dense-v1-r1y-s3-d1 | workload peak | 87.0 | 430.0 | 16.0 | 517 |
-| 2026-05-01-ID | dense-v1-r1y-s3-d1 | workload end | 87.0 | 400.0 | 16.0 | 487 |
-| 2026-05-01-ID | dense-v1-r1y-s3-d1 | +30s | 87.0 | 231.0 | 16.0 | 318 |"
+| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak | 87.0 | 430.0 | 16.0 | 517 |
+| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload end | 87.0 | 400.0 | 16.0 | 487 |
+| 2026-05-01-ID | dense-v1-r1y-s1-d1 | +30s | 87.0 | 231.0 | 16.0 | 318 |"
 `;

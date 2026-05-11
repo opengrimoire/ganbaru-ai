@@ -94,7 +94,7 @@ const RESULT: BenchmarkResult = {
   platform: "Linux",
   buildRef: "0.1.0+9815ea5",
   phaseA: mockPhase("A", 348, 278, 0),
-  phaseB: mockPhase("B", 517, 318, 52_560, "dense-v1-r1y-s3-d1"),
+  phaseB: mockPhase("B", 517, 318, 17_520, "dense-v1-r1y-s1-d1"),
   peakTotalMb: 517,
 };
 
@@ -127,11 +127,11 @@ const REPEATED_STARTUP_RESULT: BenchmarkResult = {
   phaseB: {
     ...STARTUP_RESULT.phaseB,
     startupSamples: [
-      startupSample(52_560, 230, 520, 1100),
-      startupSample(52_560, 220, 500, 1050),
-      startupSample(52_560, 240, 550, 1200),
-      startupSample(52_560, 210, 490, 1000),
-      startupSample(52_560, 235, 530, 1150),
+      startupSample(17_520, 230, 520, 1100),
+      startupSample(17_520, 220, 500, 1050),
+      startupSample(17_520, 240, 550, 1200),
+      startupSample(17_520, 210, 490, 1000),
+      startupSample(17_520, 235, 530, 1150),
     ],
   },
 };
@@ -249,7 +249,7 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("### Startup boot")).toBe(false);
     expect(md.includes("### Calendar navigation stress memory")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s3-d1 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
     expect(md.includes("Settled floor:")).toBe(false);
     expect(md.includes("| Date |")).toBe(false);
     expect(md.includes("| Platform |")).toBe(true);
@@ -260,12 +260,12 @@ describe("formatBenchmarkMarkdown", () => {
       ...RESULT,
       datasetPhases: [
         RESULT.phaseB,
-        mockPhase("B", 620, 390, 525_960, "dense-v1-r10y-s3-d1"),
+        mockPhase("B", 620, 390, 175_320, "dense-v1-r10y-s1-d1"),
       ],
     }, { date: "2026-05-01" });
     expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s3-d1 | workload peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s3-d1 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | workload peak")).toBe(true);
   });
 
   it("matches the golden snapshot so spacing changes are intentional", () => {
@@ -322,7 +322,7 @@ describe("formatBenchmarkMarkdown", () => {
   it("summarizes repeated startup launches with median as the headline value", () => {
     const md = formatBenchmarkMarkdown(REPEATED_STARTUP_RESULT, { date: "2026-05-01" });
     expect(md.includes("| 2026-05-01-ID | base-0 | 5 | 98 | 172 | 700 | 900 | 900 | 830 |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s3-d1 | 5 | 230 | 520 | 1000 | 1200 | 1200 | 1100 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | 5 | 230 | 520 | 1000 | 1200 | 1200 | 1100 |")).toBe(true);
   });
 
   it("renders latency rows with stats split into canonical columns", () => {
@@ -332,7 +332,7 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max | Notes |")).toBe(false);
     expect(md.includes("edit open from closed avg")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | base-2 | edit open from closed avg | 121 | ms | 10 |  | 117 | 138 |  |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s3-d1 | edit open from closed avg | 176 | ms | 10 |  | 171 | 202 |  |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | edit open from closed avg | 176 | ms | 10 |  | 171 | 202 |  |")).toBe(true);
     expect(md.includes("details 44 ms")).toBe(false);
     expect(md.includes("### Calendar navigation stress memory")).toBe(false);
   });
@@ -344,7 +344,7 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("| 2026-05-01-ID | base-0 | parse fixtures avg | 21 | ms | 5 | 16 | 17 | 37 | 37 |")).toBe(true);
     expect(md.includes("| Run | Dataset | Metric | Value | Unit |\n|---|---|---|---:|---|")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | base-0 | write fixtures | 82 | ms |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s3-d1 | import warnings | 3 | count |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | import warnings | 3 | count |")).toBe(true);
     expect(md.includes("| write fixtures | 82 | ms |  |")).toBe(false);
   });
 

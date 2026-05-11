@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v8 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s3-d1` and `dense-v1-r10y-s3-d1`.
+Harness v9 runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
 
 ## User flow
 
@@ -74,7 +74,7 @@ phase-a-pending
   write phase-a-running
   run baseline pass
   for startup only, repeat phase-a-pending until enough launch samples exist
-  seed dense-v1-r1y-s3-d1
+  seed dense-v1-r1y-s1-d1
   write phase-b-pending
   restart app
 
@@ -203,16 +203,16 @@ Registered scenarios:
 
 ## Dense calendar dataset generator
 
-`benchmark-dense-v1-s3-d1` is deterministic. Dataset ids add the year radius: `dense-v1-r1y-s3-d1` covers one year before and one year after the fixed benchmark anchor, while `dense-v1-r10y-s3-d1` covers ten years before and ten years after it.
+`benchmark-dense-v1-s1-d1` is deterministic. Dataset ids add the year radius: `dense-v1-r1y-s1-d1` covers one year before and one year after the fixed benchmark anchor, while `dense-v1-r10y-s1-d1` covers ten years before and ten years after it.
 
-The fixed benchmark anchor is `2026-04-30`. Dataset v1 uses a half-open date range from `anchor - yearRadius` through, but not including, `anchor + yearRadius`. With stack count 3, that produces:
+The fixed benchmark anchor is `2026-04-30`. Dataset v1 uses a half-open date range from `anchor - yearRadius` through, but not including, `anchor + yearRadius`. With stack count 1, that produces:
 
 | Dataset | Date range | Events |
 |---|---|
-| `dense-v1-r1y-s3-d1` | `2025-04-30` to `2027-04-30` exclusive | 52,560 |
-| `dense-v1-r10y-s3-d1` | `2016-04-30` to `2036-04-30` exclusive | 525,960 |
+| `dense-v1-r1y-s1-d1` | `2025-04-30` to `2027-04-30` exclusive | 17,520 |
+| `dense-v1-r10y-s1-d1` | `2016-04-30` to `2036-04-30` exclusive | 175,320 |
 
-Every day has three overlapping timed events at `HH:00` for every hour from `00:00` through `23:00`; each event ends at `HH:50`. Detail profile `d1` gives every event a title, description, notification, rich alarm, location, URL, categories, organizer, guest permissions, and extended benchmark metadata. The first two stacked events also include one attendee each. The generator intentionally avoids recurrence so the benchmark isolates dense visible windows and old or future non-recurring history.
+Every day has one timed event at `HH:00` for every hour from `00:00` through `23:00`; each event ends at `HH:50`. Detail profile `d1` gives every event a title, description, notification, rich alarm, location, URL, categories, organizer, guest permissions, extended benchmark metadata, and one attendee. The generator intentionally avoids recurrence so the benchmark isolates dense visible windows and old or future non-recurring history.
 
 Source UIDs do not include the year radius. Seeding the 10-year dataset after the 1-year dataset updates the overlapping events and adds only the extra outer years instead of duplicating the shared range. Bumping the generator requires a new dense dataset version and a fresh row series in `docs/PERFORMANCE.md`.
 
