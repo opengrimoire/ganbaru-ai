@@ -686,7 +686,7 @@
   // Held-arrow navigation fires once immediately, then runs gated repeat
   // ticks after a hold delay. Busy calendar frames skip their tick instead
   // of building delayed movement after keyup.
-	  let navReleaseSeq = 0;
+  let navReleaseSeq = 0;
 
   function markHeldNav(event: HeldNavigationEvent) {
     if (event.type === "hold-start") {
@@ -861,12 +861,12 @@
       navigate,
       setViewMode: (mode) => changeView(mode),
       setAnchorDate: (date) => { anchorDate = date; },
-	      openVisibleEvent: openVisibleEventForBenchmark,
-	      openCreatePanel: openCreatePanelForBenchmark,
-	      closePanel: closePanelForBenchmark,
-	      canRepeatHeldNavigation,
-	      getViewMode: () => viewMode,
-	    });
+      openVisibleEvent: openVisibleEventForBenchmark,
+      openCreatePanel: openCreatePanelForBenchmark,
+      closePanel: closePanelForBenchmark,
+      canRepeatHeldNavigation,
+      getViewMode: () => viewMode,
+    });
 
     return () => {
       unregisterNav();

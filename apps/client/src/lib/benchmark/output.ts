@@ -84,14 +84,14 @@ export type BenchmarkPreviewSection =
     kind: "startup";
     rows: BenchmarkStartupRow[];
   }
-	  | {
-	    id: string;
-	    title: string;
-	    kind: "memory";
-	    rows: BenchmarkMemoryRow[];
-	    latencyRows: BenchmarkLatencyRow[];
-	    scalarRows: BenchmarkScalarMetricRow[];
-	  }
+  | {
+    id: string;
+    title: string;
+    kind: "memory";
+    rows: BenchmarkMemoryRow[];
+    latencyRows: BenchmarkLatencyRow[];
+    scalarRows: BenchmarkScalarMetricRow[];
+  }
   | {
     id: string;
     title: string;
@@ -343,16 +343,16 @@ function buildSection(result: BenchmarkResult, run: string): BenchmarkPreviewSec
       rows: buildStartupRows(result, run),
     };
   }
-	  if (result.workload.memoryMode === "post-workload") {
-	    const metricRows = buildMetricRows(result, run);
-	    return {
-	      id: result.scenarioId,
-	      title: sectionTitle(result),
-	      kind: "memory",
-	      rows: buildMemoryRows(result, run),
-	      ...metricRows,
-	    };
-	  }
+  if (result.workload.memoryMode === "post-workload") {
+    const metricRows = buildMetricRows(result, run);
+    return {
+      id: result.scenarioId,
+      title: sectionTitle(result),
+      kind: "memory",
+      rows: buildMemoryRows(result, run),
+      ...metricRows,
+    };
+  }
   return {
     id: result.scenarioId,
     title: sectionTitle(result),
@@ -444,11 +444,11 @@ function formatMetricDetail(metric: BenchmarkMetric | undefined, key: string): s
 }
 
 function sectionTitle(result: BenchmarkResult): string {
-	  if (result.scenarioId === "startup-boot") return "Startup boot";
-	  if (result.scenarioId === "idle-memory") return "Idle memory";
-	  if (result.scenarioId === "calendar-window-scale") return "Calendar fixed-window scale memory";
-	  if (result.scenarioId === "calendar-nav") return "Calendar held navigation memory";
-	  if (result.scenarioId === "event-panel-open") return "Event panel latency";
+  if (result.scenarioId === "startup-boot") return "Startup boot";
+  if (result.scenarioId === "idle-memory") return "Idle memory";
+  if (result.scenarioId === "calendar-window-scale") return "Calendar fixed-window scale memory";
+  if (result.scenarioId === "calendar-nav") return "Calendar held navigation memory";
+  if (result.scenarioId === "event-panel-open") return "Event panel latency";
   if (result.scenarioId === "calendar-create-cancel") return "Create panel latency";
   return result.scenarioLabel;
 }
@@ -466,15 +466,15 @@ export function formatBenchmarkSuiteMarkdown(
     lines.push("");
     lines.push(`### ${section.title}`);
     lines.push("");
-	    if (section.kind === "startup") {
-	      appendStartupTable(lines, section.rows);
-	    } else if (section.kind === "memory") {
-	      appendMemoryTable(lines, section.rows);
-	      if (section.latencyRows.length > 0 || section.scalarRows.length > 0) {
-	        lines.push("");
-	        appendMetricTables(lines, section.latencyRows, section.scalarRows);
-	      }
-	    } else {
+    if (section.kind === "startup") {
+      appendStartupTable(lines, section.rows);
+    } else if (section.kind === "memory") {
+      appendMemoryTable(lines, section.rows);
+      if (section.latencyRows.length > 0 || section.scalarRows.length > 0) {
+        lines.push("");
+        appendMetricTables(lines, section.latencyRows, section.scalarRows);
+      }
+    } else {
       appendMetricTables(lines, section.latencyRows, section.scalarRows);
     }
   }
