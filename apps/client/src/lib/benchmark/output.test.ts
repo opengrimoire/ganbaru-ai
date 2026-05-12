@@ -6,7 +6,13 @@ import {
   formatSampleCell,
 } from "./output";
 import { HARNESS_VERSION, STRESS_DURATION_MS } from "./types";
-import type { BenchmarkResult, PhaseResult, SamplePoint, StartupBootSample } from "./types";
+import type {
+  BenchmarkMetric,
+  BenchmarkResult,
+  PhaseResult,
+  SamplePoint,
+  StartupBootSample,
+} from "./types";
 
 function sample(label: SamplePoint["label"], total: number, frontend: number): SamplePoint {
   return {
@@ -76,6 +82,29 @@ function startupSample(
       },
       launchTotalMs,
     },
+  };
+}
+
+function timingMetric(
+  label: string,
+  value: number,
+  runs: number,
+  medianMs: number,
+  p95Ms: number,
+): BenchmarkMetric {
+  return {
+    label,
+    unit: "ms",
+    value,
+    details: { runs, medianMs, p95Ms },
+  };
+}
+
+function scalarMsMetric(label: string, value: number): BenchmarkMetric {
+  return {
+    label,
+    unit: "ms",
+    value,
   };
 }
 
@@ -153,12 +182,8 @@ const METRIC_RESULT: BenchmarkResult = {
     peakSamples: [],
     curve: [],
     metrics: [
-      {
-        label: "edit open from closed avg",
-        unit: "ms",
-        value: 121,
-        details: { runs: 10, medianMs: 117, p95Ms: 138, detailsMs: 44 },
-      },
+      timingMetric("edit open from closed avg", 121, 10, 117, 138),
+      timingMetric("edit switch while open avg", 44, 10, 41, 60),
     ],
   },
   phaseB: {
@@ -166,12 +191,8 @@ const METRIC_RESULT: BenchmarkResult = {
     peakSamples: [],
     curve: [],
     metrics: [
-      {
-        label: "edit open from closed avg",
-        unit: "ms",
-        value: 176,
-        details: { runs: 10, medianMs: 171, p95Ms: 202, detailsMs: 72 },
-      },
+      timingMetric("edit open from closed avg", 176, 10, 171, 202),
+      timingMetric("edit switch while open avg", 72, 10, 70, 95),
     ],
   },
   peakTotalMb: undefined,
@@ -234,6 +255,164 @@ const MIXED_METRIC_RESULT: BenchmarkResult = {
   peakTotalMb: undefined,
 };
 
+const CREATE_RESULT: BenchmarkResult = {
+  ...RESULT,
+  scenarioId: "calendar-create-cancel",
+  scenarioLabel: "Calendar create cancel",
+  workload: {
+    kind: "interaction-latency",
+    question: "How quickly does the create panel open and cancel?",
+    label: "scripted create-panel open and cancel",
+    durationMs: 0,
+    memoryMode: "none",
+  },
+  phaseA: {
+    ...RESULT.phaseA,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("create panel open avg", 39, 6, 34, 78),
+      timingMetric("create cancel after guard avg", 60, 6, 59, 62),
+    ],
+  },
+  phaseB: {
+    ...RESULT.phaseB,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("create panel open avg", 117, 6, 99, 206),
+      timingMetric("create cancel after guard avg", 130, 6, 127, 142),
+    ],
+  },
+  datasetPhases: [
+    {
+      ...RESULT.phaseB,
+      peakSamples: [],
+      curve: [],
+      metrics: [
+        timingMetric("create panel open avg", 117, 6, 99, 206),
+        timingMetric("create cancel after guard avg", 130, 6, 127, 142),
+      ],
+    },
+    {
+      ...RESULT.phaseB,
+      eventCountAtStart: 197_235,
+      datasetId: "dense-v1-r10y-s1-d1",
+      peakSamples: [],
+      curve: [],
+      metrics: [
+        timingMetric("create panel open avg", 127, 6, 98, 256),
+        timingMetric("create cancel after guard avg", 130, 6, 127, 142),
+      ],
+    },
+  ],
+  peakTotalMb: undefined,
+};
+
+const WRITE_RESULT: BenchmarkResult = {
+  ...RESULT,
+  scenarioId: "calendar-write-ops",
+  scenarioLabel: "Calendar write operations",
+  workload: {
+    kind: "operation-latency",
+    question: "How quickly do Rust-backed calendar write commands finish?",
+    label: "scripted calendar write commands",
+    durationMs: 0,
+    memoryMode: "none",
+  },
+  phaseA: {
+    ...RESULT.phaseA,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("event create save avg", 8, 8, 6, 26),
+      timingMetric("event patch save avg", 5, 8, 5, 6),
+      timingMetric("event delete avg", 6, 8, 5, 8),
+      timingMetric("recurring detach avg", 6, 5, 6, 7),
+      timingMetric("recurring split avg", 6, 5, 5, 7),
+    ],
+  },
+  phaseB: {
+    ...RESULT.phaseB,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("event create save avg", 53, 8, 7, 341),
+      timingMetric("event patch save avg", 6, 8, 6, 9),
+      timingMetric("event delete avg", 12, 8, 11, 15),
+      timingMetric("recurring detach avg", 5, 5, 5, 6),
+      timingMetric("recurring split avg", 6, 5, 5, 8),
+    ],
+  },
+  peakTotalMb: undefined,
+};
+
+const IMPORT_RESULT: BenchmarkResult = {
+  ...RESULT,
+  scenarioId: "calendar-import-ops",
+  scenarioLabel: "Calendar import operations",
+  workload: {
+    kind: "operation-latency",
+    question: "How quickly does Rust apply typed calendar import payloads?",
+    label: "scripted calendar bulk import commands",
+    durationMs: 0,
+    memoryMode: "none",
+  },
+  phaseA: {
+    ...RESULT.phaseA,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("bulk import 100 add avg", 43, 3, 39, 55),
+      timingMetric("bulk import 100 update avg", 40, 3, 40, 45),
+      scalarMsMetric("bulk import 1000 add", 295),
+      scalarMsMetric("bulk import 1000 update", 318),
+    ],
+  },
+  phaseB: {
+    ...RESULT.phaseB,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("bulk import 100 add avg", 60, 3, 58, 85),
+      timingMetric("bulk import 100 update avg", 42, 3, 40, 47),
+      scalarMsMetric("bulk import 1000 add", 315),
+      scalarMsMetric("bulk import 1000 update", 352),
+    ],
+  },
+  peakTotalMb: undefined,
+};
+
+const THEME_RESULT: BenchmarkResult = {
+  ...RESULT,
+  scenarioId: "theme-persistence-ops",
+  scenarioLabel: "Theme persistence operations",
+  workload: {
+    kind: "operation-latency",
+    question: "How quickly do Rust-backed theme persistence commands finish?",
+    label: "scripted theme persistence commands",
+    durationMs: 0,
+    memoryMode: "none",
+  },
+  phaseA: {
+    ...RESULT.phaseA,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("theme snapshot insert avg", 18, 8, 11, 68),
+    ],
+  },
+  phaseB: {
+    ...RESULT.phaseB,
+    peakSamples: [],
+    curve: [],
+    metrics: [
+      timingMetric("theme snapshot insert avg", 56, 8, 11, 340),
+    ],
+  },
+  peakTotalMb: undefined,
+};
+
 describe("formatSampleCell", () => {
   it("formats backend / frontend / network / total with one decimal except total", () => {
     expect(formatSampleCell(sample("peak", 348, 245))).toBe("87.0 / 245.0 / 16.0 / 348");
@@ -245,7 +424,7 @@ describe("formatSampleCell", () => {
 });
 
 describe("formatBenchmarkMarkdown", () => {
-  it("emits one metadata table and dataset-based memory rows", () => {
+  it("emits one metadata table and canonical held-navigation memory rows", () => {
     const md = formatBenchmarkMarkdown(RESULT, {
       date: "2026-05-01",
       build: "9815ea5",
@@ -261,18 +440,31 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes(`${STRESS_DURATION_MS} ms held right-arrow week-view navigation`)).toBe(false);
     expect(md.includes("### Startup boot")).toBe(false);
     expect(md.includes("### Calendar held navigation memory")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(false);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
     expect(md.includes("Settled floor:")).toBe(false);
     expect(md.includes("| Date |")).toBe(false);
     expect(md.includes("| Platform |")).toBe(true);
   });
 
-  it("includes every dense dataset recorded in a multi-pass result", () => {
+  it("filters held-navigation memory to the practical dense dataset", () => {
     const md = formatBenchmarkMarkdown({
       ...RESULT,
       datasetPhases: [
         RESULT.phaseB,
+        mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
+      ],
+    }, { date: "2026-05-01" });
+    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | workload peak")).toBe(false);
+  });
+
+  it("keeps every dataset for total-history idle memory", () => {
+    const md = formatBenchmarkMarkdown({
+      ...IDLE_MEMORY_RESULT,
+      datasetPhases: [
+        IDLE_MEMORY_RESULT.phaseB,
         mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
       ],
     }, { date: "2026-05-01" });
@@ -322,11 +514,14 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("n/a")).toBe(true);
   });
 
-  it("renders startup boot rows with launch median as the rightmost column", () => {
+  it("renders startup boot rows with launch P95 as the rightmost column", () => {
     const md = formatBenchmarkMarkdown(STARTUP_RESULT, { date: "2026-05-01" });
     expect(md.includes("### Startup boot")).toBe(true);
     const header = md.split("\n").find((line) => line.startsWith("| Run | Dataset | Runs |"));
-    expect(header?.endsWith("| Launch median ms |")).toBe(true);
+    expect(header?.endsWith("| Launch P95 ms |")).toBe(true);
+    expect(header?.includes("First paint median ms")).toBe(false);
+    expect(header?.includes("Launch min ms")).toBe(false);
+    expect(header?.includes("Launch max ms")).toBe(false);
     expect(md.includes("Launch total ms")).toBe(false);
     expect(md.includes("### Calendar held navigation memory")).toBe(false);
     expect(md.includes("no post-workload memory wait")).toBe(false);
@@ -334,18 +529,19 @@ describe("formatBenchmarkMarkdown", () => {
 
   it("summarizes repeated startup launches with median as the headline value", () => {
     const md = formatBenchmarkMarkdown(REPEATED_STARTUP_RESULT, { date: "2026-05-01" });
-    expect(md.includes("| 2026-05-01-ID | base-0 | 5 | 98 | 172 | 700 | 900 | 900 | 830 |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | 5 | 230 | 520 | 1000 | 1200 | 1200 | 1100 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | 5 | 172 | 830 | 900 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | 5 | 520 | 1100 | 1200 |")).toBe(true);
   });
 
-  it("renders latency rows with stats split into canonical columns", () => {
+  it("renders latency rows in the reduced canonical shape", () => {
     const md = formatBenchmarkMarkdown(METRIC_RESULT, { date: "2026-05-01" });
     expect(md.includes("### Event panel latency")).toBe(true);
-    expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |")).toBe(true);
-    expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max | Notes |")).toBe(false);
-    expect(md.includes("edit open from closed avg")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | base-2 | edit open from closed avg | 121 | ms | 10 |  | 117 | 138 |  |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | edit open from closed avg | 176 | ms | 10 |  | 171 | 202 |  |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Runs | Median ms | P95 ms |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |")).toBe(false);
+    expect(md.includes("edit open from closed avg")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | base-2 | edit open from closed")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | edit open from closed | 10 | 171 | 202 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | edit switch while open | 10 | 70 | 95 |")).toBe(true);
     expect(md.includes("details 44 ms")).toBe(false);
     expect(md.includes("### Calendar held navigation memory")).toBe(false);
   });
@@ -362,12 +558,50 @@ describe("formatBenchmarkMarkdown", () => {
   it("splits scalar metrics from repeated latency rows", () => {
     const md = formatBenchmarkMarkdown(MIXED_METRIC_RESULT, { date: "2026-05-01" });
     expect(md.includes("### Mixed metrics")).toBe(true);
-    expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | base-0 | parse fixtures avg | 21 | ms | 5 | 16 | 17 | 37 | 37 |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Runs | Median ms | P95 ms |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | parse fixtures | 5 | 17 | 37 |")).toBe(true);
     expect(md.includes("| Run | Dataset | Metric | Value | Unit |\n|---|---|---|---:|---|")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | base-0 | write fixtures | 82 | ms |")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | import warnings | 3 | count |")).toBe(true);
     expect(md.includes("| write fixtures | 82 | ms |  |")).toBe(false);
+  });
+
+  it("keeps only create-panel open latency for the practical dense dataset", () => {
+    const md = formatBenchmarkMarkdown(CREATE_RESULT, { date: "2026-05-01" });
+    expect(md.includes("### Create panel latency")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | create panel open | 6 | 99 | 206 |")).toBe(true);
+    expect(md.includes("create cancel after guard")).toBe(false);
+    expect(md.includes("base-0")).toBe(false);
+    expect(md.includes("dense-v1-r10y-s1-d1")).toBe(false);
+  });
+
+  it("keeps only canonical calendar write operations for the practical dense dataset", () => {
+    const md = formatBenchmarkMarkdown(WRITE_RESULT, { date: "2026-05-01" });
+    expect(md.includes("### Calendar write operations")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | event create save | 8 | 7 | 341 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | event patch save | 8 | 6 | 9 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | recurring split | 5 | 5 | 8 |")).toBe(true);
+    expect(md.includes("event delete")).toBe(false);
+    expect(md.includes("recurring detach")).toBe(false);
+    expect(md.includes("base-0")).toBe(false);
+  });
+
+  it("keeps only 1000-event import scalar rows in the canonical scalar shape", () => {
+    const md = formatBenchmarkMarkdown(IMPORT_RESULT, { date: "2026-05-01" });
+    expect(md.includes("### Calendar import operations")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Value ms |\n|---|---|---|---:|")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | bulk import 1000 add | 315 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | bulk import 1000 update | 352 |")).toBe(true);
+    expect(md.includes("bulk import 100 add")).toBe(false);
+    expect(md.includes("bulk import 100 update")).toBe(false);
+    expect(md.includes("base-0")).toBe(false);
+  });
+
+  it("omits diagnostic persistence sections from canonical suite markdown", () => {
+    const md = formatBenchmarkSuiteMarkdown([WRITE_RESULT, THEME_RESULT], { date: "2026-05-01" });
+    expect(md.includes("### Calendar write operations")).toBe(true);
+    expect(md.includes("### Theme persistence operations")).toBe(false);
+    expect(md.includes("theme snapshot insert")).toBe(false);
   });
 
   it("builds a structured preview for rendered summary tables", () => {

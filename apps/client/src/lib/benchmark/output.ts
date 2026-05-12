@@ -4,7 +4,8 @@
  * The shape is pinned so historical rows in `docs/PERFORMANCE.md` stay
  * comparable across builds. The vitest suite in `output.test.ts` locks the
  * format with golden assertions; do not change spacing or column order
- * without bumping `HARNESS_VERSION` in `types.ts`.
+ * without updating the tests and docs. Layout-only output changes do not bump
+ * `HARNESS_VERSION`.
  *
  * See the spec doc for the rationale and a worked example.
  */
@@ -16,16 +17,48 @@ import type {
   SampleLabel,
   StartupBootSample,
 } from "./types";
-import { SAMPLE_LABELS } from "./types";
+import {
+  benchmarkDatasetId,
+  DEFAULT_BENCHMARK_DATASET,
+  SAMPLE_LABELS,
+} from "./types";
 
 /**
  * Boot marks used for startup summary stats. The headline launch stat uses
  * process spawn through usable calendar paint.
  */
-const FIRST_PAINT_MARK = "boot.first-paint";
 const USABLE_PAINT_MARK = "boot.usable-paint";
 
 const STAT_DETAIL_KEYS = ["runs", "minMs", "medianMs", "p95Ms", "maxMs"] as const;
+const PRACTICAL_DENSE_DATASET_ID = benchmarkDatasetId(DEFAULT_BENCHMARK_DATASET);
+const PRACTICAL_DENSE_SCENARIO_IDS = new Set([
+  "calendar-nav",
+  "event-panel-open",
+  "calendar-create-cancel",
+  "calendar-write-ops",
+  "calendar-import-ops",
+]);
+const OMITTED_SCENARIO_IDS = new Set([
+  "theme-persistence-ops",
+  "pomodoro-persistence-ops",
+]);
+const CANONICAL_METRIC_LABELS_BY_SCENARIO = new Map<string, readonly string[]>([
+  ["calendar-nav", []],
+  ["event-panel-open", [
+    "edit open from closed avg",
+    "edit switch while open avg",
+  ]],
+  ["calendar-create-cancel", ["create panel open avg"]],
+  ["calendar-write-ops", [
+    "event create save avg",
+    "event patch save avg",
+    "recurring split avg",
+  ]],
+  ["calendar-import-ops", [
+    "bulk import 1000 add",
+    "bulk import 1000 update",
+  ]],
+]);
 export interface BenchmarkRunMetadataRow {
   run: string;
   harness: string;
@@ -38,12 +71,9 @@ export interface BenchmarkStartupRow {
   run: string;
   dataset: string;
   runs: string;
-  firstPaintMedianMs: string;
   usablePaintMedianMs: string;
-  launchMinMs: string;
-  launchP95Ms: string;
-  launchMaxMs: string;
   launchMedianMs: string;
+  launchP95Ms: string;
 }
 
 export interface BenchmarkMemoryRow {
@@ -60,13 +90,9 @@ export interface BenchmarkLatencyRow {
   run: string;
   dataset: string;
   metric: string;
-  value: string;
-  unit: string;
   runs: string;
-  min: string;
   median: string;
   p95: string;
-  max: string;
 }
 
 export interface BenchmarkScalarMetricRow {
@@ -249,28 +275,24 @@ function timepointLabel(label: SampleLabel): string {
 }
 
 function buildStartupRows(result: BenchmarkResult, run: string): BenchmarkStartupRow[] {
-  return resultPhases(result).map((phase) => {
+  return canonicalPhases(result).map((phase) => {
     const samples = startupSamples(phase);
-    const firstPaintStats = numberStats(samples.map((sample) => sample.boot.marks[FIRST_PAINT_MARK]));
     const usablePaintStats = numberStats(samples.map((sample) => sample.boot.marks[USABLE_PAINT_MARK]));
     const launchStats = numberStats(samples.map((sample) => sample.boot.launchTotalMs));
     return {
       run,
       dataset: benchmarkDatasetLabel(result, phase),
       runs: launchStats.runs.toString(),
-      firstPaintMedianMs: formatBootValue(firstPaintStats.median),
       usablePaintMedianMs: formatBootValue(usablePaintStats.median),
-      launchMinMs: formatBootValue(launchStats.min),
-      launchP95Ms: formatBootValue(launchStats.p95),
-      launchMaxMs: formatBootValue(launchStats.max),
       launchMedianMs: formatBootValue(launchStats.median),
+      launchP95Ms: formatBootValue(launchStats.p95),
     };
   });
 }
 
 function buildMemoryRows(result: BenchmarkResult, run: string): BenchmarkMemoryRow[] {
   const rows: BenchmarkMemoryRow[] = [];
-  for (const phase of resultPhases(result)) {
+  for (const phase of canonicalPhases(result)) {
     const samples = orderedSamples(phase);
     for (const label of SAMPLE_LABELS) {
       const sample = samples.get(label);
@@ -317,7 +339,9 @@ export function buildBenchmarkSuitePreview(
     platform: platform || "n/a",
     notes: opts.notes ?? "",
   };
-  const sections = results.map((result) => buildSection(result, run));
+  const sections = results
+    .map((result) => buildSection(result, run))
+    .filter(isDefined);
   return {
     metadata,
     sections,
@@ -334,7 +358,8 @@ export function formatBenchmarkMarkdown(
   return formatBenchmarkSuiteMarkdown([result], opts);
 }
 
-function buildSection(result: BenchmarkResult, run: string): BenchmarkPreviewSection {
+function buildSection(result: BenchmarkResult, run: string): BenchmarkPreviewSection | undefined {
+  if (OMITTED_SCENARIO_IDS.has(result.scenarioId)) return undefined;
   if (result.workload.kind === "startup") {
     return {
       id: result.scenarioId,
@@ -365,12 +390,12 @@ function buildMetricRows(
   result: BenchmarkResult,
   run: string,
 ): { latencyRows: BenchmarkLatencyRow[]; scalarRows: BenchmarkScalarMetricRow[] } {
+  const phases = canonicalPhases(result);
   const metricLabels = [
     ...new Set([
-      ...resultPhases(result).flatMap((phase) => (phase.metrics ?? []).map((metric) => metric.label)),
+      ...phases.flatMap((phase) => (phase.metrics ?? []).map((metric) => metric.label)),
     ]),
-  ];
-  const phases = resultPhases(result);
+  ].filter((label) => shouldIncludeMetric(result, label));
   const phaseMetrics = phases.map((phase) => metricsByLabel(phase));
   const latencyRows: BenchmarkLatencyRow[] = [];
   const scalarRows: BenchmarkScalarMetricRow[] = [];
@@ -379,7 +404,7 @@ function buildMetricRows(
     const unit = metrics.find((metric) => metric)?.unit ?? "";
     if (metrics.some(hasStatDetails)) {
       for (const [index, phase] of phases.entries()) {
-        latencyRows.push(buildLatencyRow(result, phase, run, label, unit, metrics[index]));
+        latencyRows.push(buildLatencyRow(result, phase, run, label, metrics[index]));
       }
     } else {
       for (const [index, phase] of phases.entries()) {
@@ -395,20 +420,15 @@ function buildLatencyRow(
   phase: PhaseResult,
   run: string,
   label: string,
-  unit: string,
   metric: BenchmarkMetric | undefined,
 ): BenchmarkLatencyRow {
   return {
     run,
     dataset: benchmarkDatasetLabel(result, phase),
-    metric: label,
-    value: formatMetricValue(metric),
-    unit,
+    metric: canonicalMetricLabel(label),
     runs: formatMetricDetail(metric, "runs"),
-    min: formatMetricDetail(metric, "minMs"),
     median: formatMetricDetail(metric, "medianMs"),
     p95: formatMetricDetail(metric, "p95Ms"),
-    max: formatMetricDetail(metric, "maxMs"),
   };
 }
 
@@ -423,7 +443,7 @@ function buildScalarMetricRow(
   return {
     run,
     dataset: benchmarkDatasetLabel(result, phase),
-    metric: label,
+    metric: canonicalMetricLabel(label),
     value: formatMetricValue(metric),
     unit,
   };
@@ -432,6 +452,23 @@ function buildScalarMetricRow(
 function hasStatDetails(metric: BenchmarkMetric | undefined): boolean {
   if (!metric?.details) return false;
   return STAT_DETAIL_KEYS.some((key) => metric.details?.[key] !== undefined);
+}
+
+function canonicalPhases(result: BenchmarkResult): PhaseResult[] {
+  const phases = resultPhases(result);
+  if (!PRACTICAL_DENSE_SCENARIO_IDS.has(result.scenarioId)) return phases;
+  return phases.filter((phase) =>
+    benchmarkDatasetLabel(result, phase) === PRACTICAL_DENSE_DATASET_ID,
+  );
+}
+
+function shouldIncludeMetric(result: BenchmarkResult, label: string): boolean {
+  const canonicalLabels = CANONICAL_METRIC_LABELS_BY_SCENARIO.get(result.scenarioId);
+  return canonicalLabels === undefined || canonicalLabels.includes(label);
+}
+
+function canonicalMetricLabel(label: string): string {
+  return label.endsWith(" avg") ? label.slice(0, -" avg".length) : label;
 }
 
 function formatMetricDetail(metric: BenchmarkMetric | undefined, key: string): string {
@@ -491,11 +528,11 @@ function appendRunMetadata(lines: string[], metadata: BenchmarkRunMetadataRow): 
 }
 
 function appendStartupTable(lines: string[], rows: BenchmarkStartupRow[]): void {
-  lines.push("| Run | Dataset | Runs | First paint median ms | Usable paint median ms | Launch min ms | Launch P95 ms | Launch max ms | Launch median ms |");
-  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|");
+  lines.push("| Run | Dataset | Runs | Usable paint median ms | Launch median ms | Launch P95 ms |");
+  lines.push("|---|---|---:|---:|---:|---:|");
   for (const row of rows) {
     lines.push(
-      `| ${row.run} | ${row.dataset} | ${row.runs} | ${row.firstPaintMedianMs} | ${row.usablePaintMedianMs} | ${row.launchMinMs} | ${row.launchP95Ms} | ${row.launchMaxMs} | ${row.launchMedianMs} |`,
+      `| ${row.run} | ${row.dataset} | ${row.runs} | ${row.usablePaintMedianMs} | ${row.launchMedianMs} | ${row.launchP95Ms} |`,
     );
   }
 }
@@ -529,16 +566,26 @@ function appendMetricTables(
 }
 
 function appendLatencyTable(lines: string[], rows: BenchmarkLatencyRow[]): void {
-  lines.push("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |");
-  lines.push("|---|---|---|---:|---|---:|---:|---:|---:|---:|");
+  lines.push("| Run | Dataset | Metric | Runs | Median ms | P95 ms |");
+  lines.push("|---|---|---|---:|---:|---:|");
   for (const row of rows) {
     lines.push(
-      `| ${row.run} | ${row.dataset} | ${row.metric} | ${row.value} | ${row.unit} | ${row.runs} | ${row.min} | ${row.median} | ${row.p95} | ${row.max} |`,
+      `| ${row.run} | ${row.dataset} | ${row.metric} | ${row.runs} | ${row.median} | ${row.p95} |`,
     );
   }
 }
 
 function appendScalarMetricTable(lines: string[], rows: BenchmarkScalarMetricRow[]): void {
+  if (usesUniformUnit(rows, "ms")) {
+    lines.push("| Run | Dataset | Metric | Value ms |");
+    lines.push("|---|---|---|---:|");
+    for (const row of rows) {
+      lines.push(
+        `| ${row.run} | ${row.dataset} | ${row.metric} | ${row.value} |`,
+      );
+    }
+    return;
+  }
   lines.push("| Run | Dataset | Metric | Value | Unit |");
   lines.push("|---|---|---|---:|---|");
   for (const row of rows) {
@@ -546,6 +593,10 @@ function appendScalarMetricTable(lines: string[], rows: BenchmarkScalarMetricRow
       `| ${row.run} | ${row.dataset} | ${row.metric} | ${row.value} | ${row.unit} |`,
     );
   }
+}
+
+function usesUniformUnit(rows: BenchmarkScalarMetricRow[], unit: string): boolean {
+  return rows.length > 0 && rows.every((row) => row.unit === unit);
 }
 
 function runId(opts: BenchmarkOutputOptions): string {

@@ -13,9 +13,6 @@ exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing change
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
-| 2026-05-01-ID | base-0 | workload peak | 87.0 | 261.0 | 16.0 | 348 |
-| 2026-05-01-ID | base-0 | workload end | 87.0 | 231.0 | 16.0 | 318 |
-| 2026-05-01-ID | base-0 | +30s | 87.0 | 191.0 | 16.0 | 278 |
 | 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak | 87.0 | 430.0 | 16.0 | 517 |
 | 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload end | 87.0 | 400.0 | 16.0 | 487 |
 | 2026-05-01-ID | dense-v1-r1y-s1-d1 | +30s | 87.0 | 231.0 | 16.0 | 318 |"

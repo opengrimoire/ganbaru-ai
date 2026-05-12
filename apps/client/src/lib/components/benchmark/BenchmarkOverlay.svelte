@@ -4,6 +4,7 @@
   import Check from "@lucide/svelte/icons/check";
   import { getBenchmarkRunner } from "$lib/stores/benchmarkRunner.svelte";
   import { buildBenchmarkSuitePreview, formatBenchmarkSuiteMarkdown } from "$lib/benchmark/output";
+  import type { BenchmarkScalarMetricRow } from "$lib/benchmark/output";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const runner = getBenchmarkRunner();
@@ -54,6 +55,14 @@
 
   function runningDatasetLabel(phase: "A" | "B", datasetLabel: string | undefined): string {
     return phase === "A" ? "base" : datasetLabel ?? "dense dataset";
+  }
+
+  function scalarRowsUseUnitColumn(rows: BenchmarkScalarMetricRow[]): boolean {
+    return rows.length === 0 || rows.some((row) => row.unit !== "ms");
+  }
+
+  function scalarValueHeading(rows: BenchmarkScalarMetricRow[]): string {
+    return scalarRowsUseUnitColumn(rows) ? "Value" : "Value ms";
   }
 </script>
 
@@ -184,12 +193,9 @@
                         <th class={thClass}>Run</th>
                         <th class={thClass}>Dataset</th>
                         <th class={thClass}>Runs</th>
-                        <th class={thClass}>First paint median ms</th>
                         <th class={thClass}>Usable paint median ms</th>
-                        <th class={thClass}>Launch min ms</th>
-                        <th class={thClass}>Launch P95 ms</th>
-                        <th class={thClass}>Launch max ms</th>
                         <th class={thClass}>Launch median ms</th>
+                        <th class={thClass}>Launch P95 ms</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -198,12 +204,9 @@
                           <td class={tdClass}>{row.run}</td>
                           <td class={tdClass}>{row.dataset}</td>
                           <td class={tdClass}>{row.runs}</td>
-                          <td class={tdClass}>{row.firstPaintMedianMs}</td>
                           <td class={tdClass}>{row.usablePaintMedianMs}</td>
-                          <td class={tdClass}>{row.launchMinMs}</td>
-                          <td class={tdClass}>{row.launchP95Ms}</td>
-                          <td class={tdClass}>{row.launchMaxMs}</td>
                           <td class={tdClass}>{row.launchMedianMs}</td>
+                          <td class={tdClass}>{row.launchP95Ms}</td>
                         </tr>
                       {/each}
                     </tbody>
@@ -245,8 +248,10 @@
                             <th class={thClass}>Run</th>
                             <th class={thClass}>Dataset</th>
                             <th class={thClass}>Metric</th>
-                            <th class={thClass}>Value</th>
-                            <th class={thClass}>Unit</th>
+                            <th class={thClass}>{scalarValueHeading(section.scalarRows)}</th>
+                            {#if scalarRowsUseUnitColumn(section.scalarRows)}
+                              <th class={thClass}>Unit</th>
+                            {/if}
                           </tr>
                         </thead>
                         <tbody>
@@ -256,7 +261,9 @@
                               <td class={tdClass}>{row.dataset}</td>
                               <td class={tdClass}>{row.metric}</td>
                               <td class={tdClass}>{row.value}</td>
-                              <td class={tdClass}>{row.unit}</td>
+                              {#if scalarRowsUseUnitColumn(section.scalarRows)}
+                                <td class={tdClass}>{row.unit}</td>
+                              {/if}
                             </tr>
                           {/each}
                         </tbody>
@@ -272,13 +279,9 @@
                             <th class={thClass}>Run</th>
                             <th class={thClass}>Dataset</th>
                             <th class={thClass}>Metric</th>
-                            <th class={thClass}>Value</th>
-                            <th class={thClass}>Unit</th>
                             <th class={thClass}>Runs</th>
-                            <th class={thClass}>Min</th>
-                            <th class={thClass}>Median</th>
-                            <th class={thClass}>P95</th>
-                            <th class={thClass}>Max</th>
+                            <th class={thClass}>Median ms</th>
+                            <th class={thClass}>P95 ms</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -287,13 +290,9 @@
                               <td class={tdClass}>{row.run}</td>
                               <td class={tdClass}>{row.dataset}</td>
                               <td class={tdClass}>{row.metric}</td>
-                              <td class={tdClass}>{row.value}</td>
-                              <td class={tdClass}>{row.unit}</td>
                               <td class={tdClass}>{row.runs}</td>
-                              <td class={tdClass}>{row.min}</td>
                               <td class={tdClass}>{row.median}</td>
                               <td class={tdClass}>{row.p95}</td>
-                              <td class={tdClass}>{row.max}</td>
                             </tr>
                           {/each}
                         </tbody>
@@ -308,8 +307,10 @@
                             <th class={thClass}>Run</th>
                             <th class={thClass}>Dataset</th>
                             <th class={thClass}>Metric</th>
-                            <th class={thClass}>Value</th>
-                            <th class={thClass}>Unit</th>
+                            <th class={thClass}>{scalarValueHeading(section.scalarRows)}</th>
+                            {#if scalarRowsUseUnitColumn(section.scalarRows)}
+                              <th class={thClass}>Unit</th>
+                            {/if}
                           </tr>
                         </thead>
                         <tbody>
@@ -319,7 +320,9 @@
                               <td class={tdClass}>{row.dataset}</td>
                               <td class={tdClass}>{row.metric}</td>
                               <td class={tdClass}>{row.value}</td>
-                              <td class={tdClass}>{row.unit}</td>
+                              {#if scalarRowsUseUnitColumn(section.scalarRows)}
+                                <td class={tdClass}>{row.unit}</td>
+                              {/if}
                             </tr>
                           {/each}
                         </tbody>

@@ -231,7 +231,7 @@ Source UIDs do not include the year radius. Seeding the 10-year dataset after th
 The summary overlay has two outputs:
 
 - A readable on-screen preview rendered from `BenchmarkResult` data as normal HTML tables.
-- A `Copy markdown` action that copies plain canonical markdown. This markdown is agent input for placing rows in `docs/PERFORMANCE.md`, not HTML and not a raw preview.
+- A `Copy markdown` action that copies plain canonical markdown. This markdown is agent input for placing rows in `docs/PERFORMANCE.md`, not HTML, not raw scenario diagnostics, and not a dump of every collected metric.
 
 While the benchmark overlay is active, in-app close affordances are blocked, including the title-bar close button, `Ctrl+Shift+W`, and Tauri close requests. A forced OS process kill cannot be blocked; the `*-running` state handles that case on the next boot.
 
@@ -241,18 +241,20 @@ The copied markdown is one suite-level block. It contains:
 
 - Header with the unresolved run placeholder, such as `YYYY-MM-DD-ID` or the current date plus `-ID`.
 - One `Run metadata` table with run id, harness, build ref, platform, and notes.
-- One section per scenario in the run.
+- One canonical section per recorded scenario in the run.
 
 The placeholder exists because the app cannot know which sequence number the canonical record will use. When adding copied rows to `docs/PERFORMANCE.md`, replace `-ID` with the next zero-padded suffix for that date, such as `-01` or `-02`.
 
-Each scenario section contains exactly the table that matches the scenario's primary measurement:
+Each scenario section contains the table that matches the scenario's primary long-run measurement:
 
-- `startup` emits repeated launch stats. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v1 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
-- `idle-memory` and `stress-memory` emit the memory table. If a memory scenario returns scalar metrics, such as held-navigation move counts, the copied markdown appends a compact metric table after the memory table.
-- `interaction-latency` and `operation-latency` emit repeated latency rows for metrics with run statistics.
-- Scalar metrics without run statistics, such as counts or one-off module load times, emit a compact `Run`, `Dataset`, `Metric`, `Value`, `Unit` table.
+- `startup` emits repeated launch stats for each benchmark dataset. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v1 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
+- `idle-memory` emits memory rows for the baseline and each dense dataset so total-history scale remains visible.
+- `stress-memory` emits memory rows only for the practical dense current-window dataset unless the scenario is explicitly about total-history scale. Held-navigation move counts, repeat counts, and skipped ticks are diagnostics and are not copied into the canonical markdown.
+- `interaction-latency` and `operation-latency` emit repeated latency rows only for their canonical primary metrics against the practical dense current-window dataset.
+- Scalar metrics without run statistics emit a compact scalar table only when the one-off value is itself canonical. Calendar import keeps 1000-event add and update timings; smaller repeated import rows are diagnostics.
+- Theme and Pomodoro persistence scenarios can be run for investigation, but their rows are not emitted in the canonical suite markdown unless `docs/PERFORMANCE.md` starts tracking those subsystems.
 
-The copied markdown intentionally avoids slash-packed memory cells, repeated global metadata, empty stat columns, and measurement-level notes. Run metadata is the only generated table with a `Notes` column. Fixed scenario details belong in this harness spec, while `docs/PERFORMANCE.md` should record rows and minimal column interpretation. A future comparable detail should become a dedicated typed column instead of a generic note.
+The copied markdown intentionally avoids slash-packed memory cells, repeated global metadata, empty stat columns, redundant dataset levels, diagnostic counters, and measurement-level notes. Run metadata is the only generated table with a `Notes` column. Fixed scenario details belong in this harness spec, while `docs/PERFORMANCE.md` should record rows and minimal column interpretation. A future comparable detail should become a dedicated typed column instead of a generic note.
 
 `buildRef` is generated at frontend build time from the app version and short git commit, such as `0.1.0+a7451de`. A dirty worktree adds `-dirty`. The platform label comes from the native memory-report command and should include useful OS detail, such as `Linux Ubuntu 24.04.4 LTS` or `Windows 11 (10.0.22631)`.
 

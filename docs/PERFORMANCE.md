@@ -244,7 +244,7 @@ Prefer normalized tables over compact cells. Good:
 
 Avoid cells like `104.8 / 339.2 / 17.3 / 461`, because they are hard to diff, sort, and scan.
 
-Use the latency table for repeated measurements. Keep median and P95 as the canonical statistics; raw averages, min, and max can stay in copied benchmark output but should not be recorded here unless a run is specifically analyzing tail behavior:
+Use the latency table for repeated measurements. Keep median and P95 as the canonical statistics; raw averages, min, and max are diagnostics and should not appear in the canonical copied output unless a run is specifically analyzing tail behavior:
 
 | Run | Dataset | Metric | Runs | Median ms | P95 ms |
 |---|---|---|---:|---:|---:|
@@ -256,7 +256,7 @@ Use the startup table only for repeated process launches with the harness-define
 | Run | Dataset | Runs | Usable paint median ms | Launch median ms | Launch P95 ms |
 |---|---|---:|---:|---:|---:|
 
-Use the compact scalar table for one-off values that are themselves the measurement. Do not record harness-internal counters such as held-navigation repeat counts, skipped ticks, or deterministic dataset math unless they are the subject of the benchmark:
+Use the compact scalar table for one-off values that are themselves the measurement. If every scalar value is milliseconds, put the unit in the value header, such as `Value ms`. Otherwise keep `Value` and `Unit` separate. Do not record harness-internal counters such as held-navigation repeat counts, skipped ticks, or deterministic dataset math unless they are the subject of the benchmark:
 
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
