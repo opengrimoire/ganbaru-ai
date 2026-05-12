@@ -10,7 +10,7 @@
 import {
   CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,
-  STRESS_DURATION_MS,
+  HELD_NAVIGATION_DURATION_MS,
   type BenchmarkScenario,
   type BenchmarkScenarioMetadata,
 } from "./types";
@@ -62,7 +62,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       kind: "idle-memory",
       question: "How much memory does the calendar hold while idle?",
       label: "idle calendar baseline",
-      durationMs: STRESS_DURATION_MS,
+      durationMs: 0,
       memoryMode: "post-workload",
     },
     defaultDataset: DEFAULT_BENCHMARK_DATASET,
@@ -77,7 +77,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       kind: "stress-memory",
       question: "How much memory does repeated week navigation use?",
       label: "held right-arrow week-view navigation",
-      durationMs: STRESS_DURATION_MS,
+      durationMs: HELD_NAVIGATION_DURATION_MS,
       memoryMode: "post-workload",
     },
     defaultDataset: DEFAULT_BENCHMARK_DATASET,

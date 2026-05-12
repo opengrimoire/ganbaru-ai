@@ -12,7 +12,7 @@
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
 import {
   DEFAULT_BENCHMARK_DATASET,
-  STRESS_DURATION_MS,
+  HELD_NAVIGATION_DURATION_MS,
   type BenchmarkMetric,
   type BenchmarkDatasetProfile,
   type BenchmarkScenario,
@@ -35,7 +35,7 @@ export const calendarNavScenario: BenchmarkScenario = {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
     label: "held right-arrow week-view navigation",
-    durationMs: STRESS_DURATION_MS,
+    durationMs: HELD_NAVIGATION_DURATION_MS,
     memoryMode: "post-workload",
   },
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
@@ -49,7 +49,7 @@ export const calendarNavScenario: BenchmarkScenario = {
     handle.setViewMode("week");
     handle.setAnchorDate(parseCalendarBenchmarkAnchor(context.anchorDate));
     await loadCalendarBenchmarkWindow(context.anchorDate, "week");
-    // One frame for the view to settle before peak sampling starts.
+    // One frame for the view to settle before the held navigation action starts.
     await new Promise((r) => requestAnimationFrame(() => r(undefined)));
   },
 
@@ -78,7 +78,7 @@ export const calendarNavScenario: BenchmarkScenario = {
     }
 
     try {
-      await waitForMs(STRESS_DURATION_MS, signal);
+      await waitForMs(HELD_NAVIGATION_DURATION_MS, signal);
     } finally {
       dispatchRightArrow("keyup");
       stopObserving();

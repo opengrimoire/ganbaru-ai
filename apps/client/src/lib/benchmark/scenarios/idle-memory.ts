@@ -2,7 +2,6 @@ import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte
 import {
   CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,
-  STRESS_DURATION_MS,
   type BenchmarkMetric,
   type BenchmarkDatasetProfile,
   type BenchmarkScenario,
@@ -14,19 +13,18 @@ import {
   loadCalendarBenchmarkWindow,
   seedCalendarDataset,
   waitForFrames,
-  waitForMs,
 } from "./calendar-utils";
 
 export const idleMemoryScenario: BenchmarkScenario = {
   id: "idle-memory",
   label: "Idle memory",
   description:
-    "Boots into the calendar and performs no interaction for the workload window. Use this as the canonical idle-RAM baseline instead of manual panel snapshots.",
+    "Boots into the calendar, loads the anchored week, and observes idle memory after the view is ready.",
   workload: {
     kind: "idle-memory",
     question: "How much memory does the calendar hold while idle?",
     label: "idle calendar baseline",
-    durationMs: STRESS_DURATION_MS,
+    durationMs: 0,
     memoryMode: "post-workload",
   },
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
@@ -43,8 +41,7 @@ export const idleMemoryScenario: BenchmarkScenario = {
     await waitForFrames(1);
   },
 
-  async runWorkload(signal: AbortSignal): Promise<BenchmarkMetric[]> {
-    await waitForMs(STRESS_DURATION_MS, signal);
+  async runWorkload(_signal: AbortSignal): Promise<BenchmarkMetric[]> {
     return [];
   },
 

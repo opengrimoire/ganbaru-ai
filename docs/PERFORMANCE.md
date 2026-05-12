@@ -73,7 +73,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 Latest canonical baseline: none yet after the 2026-05-12 harness reset. The next recorded run should use harness `v1` and include an anchor date in run metadata.
 
-Canonical rows keep medians, P95 values, and memory buckets that can support long-run comparisons. Raw harness diagnostics such as per-action counters, fixed guard timings, min/max outliers, and redundant averages are not preserved here unless they answer a specific performance question. Interaction rows use the realistic dense current-window dataset unless the benchmark is explicitly asking about empty-state or total-history behavior.
+Canonical rows keep the statistics and memory buckets that can support long-run comparisons. Raw harness diagnostics such as per-action counters, fixed guard timings, and redundant averages are not preserved here unless they answer a specific performance question. Interaction rows use the realistic dense current-window dataset unless the benchmark is explicitly asking about empty-state or total-history behavior.
 
 ### Run metadata
 
@@ -89,16 +89,16 @@ Use `Launch median ms` as the headline app-open comparison value. `Usable paint 
 
 ### Idle memory
 
-Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes. `Idle peak` is the highest reading during the fixed idle observation window. `Idle end` is sampled immediately after that window finishes. `+30s` is sampled after the post-window settle wait.
+Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes. The harness samples idle memory once per second for 30 seconds after the anchored calendar window is ready. `Min` and `Max` are the lowest and highest values observed during that window. `End` is the final sample.
 
-| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
+| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
 
 ### Calendar held navigation memory
 
-This records memory while reproducing real held right-arrow navigation in week view against a practical full visible window. Harness counters for moves, repeats, and skipped ticks are useful while debugging the benchmark, but they are not kept in the long-run record because the benchmark scenario is already fixed by harness version and duration. `Navigation peak` is the highest reading during the fixed held-navigation window. `Navigation end` is sampled immediately after key release. `+30s` is sampled after the post-navigation settle wait.
+This records post-action memory after reproducing real held right-arrow navigation in week view against a practical full visible window. The harness holds right arrow for the fixed duration, releases it, then samples memory once per second for 30 seconds. `Min` and `Max` are the lowest and highest values observed during that window. `End` is the final sample.
 
-| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
+| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
 
 ### Event panel latency
@@ -158,7 +158,7 @@ stat -c "%n %s" target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm 
 
 Prefer normalized tables over compact cells. Good:
 
-| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
+| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
 
 Avoid cells like `104.8 / 339.2 / 17.3 / 461`, because they are hard to diff, sort, and scan.

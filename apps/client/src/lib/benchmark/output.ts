@@ -14,10 +14,8 @@ import type {
   BenchmarkResult,
   PhaseResult,
   SamplePoint,
-  SampleLabel,
   StartupBootSample,
 } from "./types";
-import { SAMPLE_LABELS } from "./types";
 
 /**
  * Boot marks used for startup summary stats. The headline launch stat uses
@@ -64,7 +62,7 @@ export interface BenchmarkStartupRow {
 export interface BenchmarkMemoryRow {
   run: string;
   dataset: string;
-  timepoint: string;
+  statistic: string;
   backendMb: string;
   frontendMb: string;
   networkMb: string;
@@ -155,31 +153,6 @@ export function formatSampleCell(s: SamplePoint | undefined): string {
   return `${formatMb(s.backendMb)} / ${formatMb(s.frontendMb)} / ${formatMb(s.networkMb)} / ${formatTotalMb(s.totalMb)}`;
 }
 
-function findSample(samples: SamplePoint[], label: SampleLabel): SamplePoint | undefined {
-  return samples.find((p) => p.label === label);
-}
-
-/**
- * Order the curve as the markdown expects (`peak`, `t0`, `+30s`). `peak`
- * is the maximum across the workload samples; the other rows come from the
- * post-workload idle curve.
- */
-function orderedSamples(phase: PhaseResult): Map<SampleLabel, SamplePoint | undefined> {
-  const map = new Map<SampleLabel, SamplePoint | undefined>();
-  let peak: SamplePoint | undefined;
-  for (const s of phase.peakSamples) {
-    if (!peak || s.totalMb > peak.totalMb) peak = s;
-  }
-  if (peak) {
-    map.set("peak", { ...peak, label: "peak" });
-  }
-  for (const label of SAMPLE_LABELS) {
-    if (label === "peak") continue;
-    map.set(label, findSample(phase.curve, label));
-  }
-  return map;
-}
-
 function metricsByLabel(phase: PhaseResult): Map<string, BenchmarkMetric> {
   const map = new Map<string, BenchmarkMetric>();
   for (const metric of phase.metrics ?? []) {
@@ -257,14 +230,6 @@ export function benchmarkDatasetLabel(result: BenchmarkResult, phase: PhaseResul
   return `dense-${datasetVersion}-${phase.eventCountAtStart}`;
 }
 
-function timepointLabel(result: BenchmarkResult, label: SampleLabel): string {
-  if (label !== "peak" && label !== "t0") return label;
-  const suffix = label === "peak" ? "peak" : "end";
-  if (result.workload.kind === "idle-memory") return `idle ${suffix}`;
-  if (result.scenarioId === "calendar-nav") return `navigation ${suffix}`;
-  return `measurement ${suffix}`;
-}
-
 function buildStartupRows(result: BenchmarkResult, run: string): BenchmarkStartupRow[] {
   return canonicalPhases(result).map((phase) => {
     const samples = startupSamples(phase);
@@ -284,31 +249,55 @@ function buildStartupRows(result: BenchmarkResult, run: string): BenchmarkStartu
 function buildMemoryRows(result: BenchmarkResult, run: string): BenchmarkMemoryRow[] {
   const rows: BenchmarkMemoryRow[] = [];
   for (const phase of canonicalPhases(result)) {
-    const samples = orderedSamples(phase);
-    for (const label of SAMPLE_LABELS) {
-      const sample = samples.get(label);
-      rows.push(formatMemoryRow(result, phase, run, label, sample));
+    for (const statistic of ["Min", "Max", "End"] as const) {
+      rows.push(formatMemoryRow(result, phase, run, statistic));
     }
   }
   return rows;
 }
 
+type MemoryStatistic = "Min" | "Max" | "End";
+type MemoryBucket = "backendMb" | "frontendMb" | "networkMb" | "totalMb";
+
 function formatMemoryRow(
   result: BenchmarkResult,
   phase: PhaseResult,
   run: string,
-  label: SampleLabel,
-  sample: SamplePoint | undefined,
+  statistic: MemoryStatistic,
 ): BenchmarkMemoryRow {
   return {
     run,
     dataset: benchmarkDatasetLabel(result, phase),
-    timepoint: timepointLabel(result, label),
-    backendMb: sample ? formatMb(sample.backendMb) : "n/a",
-    frontendMb: sample ? formatMb(sample.frontendMb) : "n/a",
-    networkMb: sample ? formatMb(sample.networkMb) : "n/a",
-    totalMb: sample ? formatTotalMb(sample.totalMb) : "n/a",
+    statistic,
+    backendMb: formatMemoryStatistic(phase.curve, statistic, "backendMb"),
+    frontendMb: formatMemoryStatistic(phase.curve, statistic, "frontendMb"),
+    networkMb: formatMemoryStatistic(phase.curve, statistic, "networkMb"),
+    totalMb: formatMemoryStatistic(phase.curve, statistic, "totalMb"),
   };
+}
+
+function formatMemoryStatistic(
+  samples: SamplePoint[],
+  statistic: MemoryStatistic,
+  bucket: MemoryBucket,
+): string {
+  const value = memoryStatisticValue(samples, statistic, bucket);
+  if (value === undefined) return "n/a";
+  return bucket === "totalMb" ? formatTotalMb(value) : formatMb(value);
+}
+
+function memoryStatisticValue(
+  samples: SamplePoint[],
+  statistic: MemoryStatistic,
+  bucket: MemoryBucket,
+): number | undefined {
+  if (samples.length === 0) return undefined;
+  if (statistic === "End") return samples[samples.length - 1]?.[bucket];
+  const values = samples
+    .map((sample) => sample[bucket])
+    .filter((value) => Number.isFinite(value));
+  if (values.length === 0) return undefined;
+  return statistic === "Min" ? Math.min(...values) : Math.max(...values);
 }
 
 /**
@@ -526,11 +515,11 @@ function appendStartupTable(lines: string[], rows: BenchmarkStartupRow[]): void 
 }
 
 function appendMemoryTable(lines: string[], rows: BenchmarkMemoryRow[]): void {
-  lines.push("| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |");
+  lines.push("| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |");
   lines.push("|---|---|---|---:|---:|---:|---:|");
   for (const row of rows) {
     lines.push(
-      `| ${row.run} | ${row.dataset} | ${row.timepoint} | ${row.backendMb} | ${row.frontendMb} | ${row.networkMb} | ${row.totalMb} |`,
+      `| ${row.run} | ${row.dataset} | ${row.statistic} | ${row.backendMb} | ${row.frontendMb} | ${row.networkMb} | ${row.totalMb} |`,
     );
   }
 }

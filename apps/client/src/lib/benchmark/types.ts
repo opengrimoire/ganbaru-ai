@@ -11,27 +11,18 @@
  */
 import type { CalendarEvent } from "$lib/components/calendar/types";
 
-/**
- * Cadence pinned in code so historical rows in PERFORMANCE.md stay
- * comparable. Do not let UI parameterize these. See the spec doc for the
- * rationale behind each offset.
- */
-export const STRESS_DURATION_MS = 3000;
-export const STRESS_PEAK_INTERVAL_MS = 200;
+/** Fixed duration for the real held-arrow navigation benchmark action. */
+export const HELD_NAVIGATION_DURATION_MS = 3000;
+/** One memory reading per second over the post-state observation window. */
+export const MEMORY_OBSERVATION_INTERVAL_MS = 1000;
+/** Total duration of memory observation windows. */
+export const MEMORY_OBSERVATION_DURATION_MS = 30_000;
+export const MEMORY_OBSERVATION_SAMPLE_COUNT =
+  MEMORY_OBSERVATION_DURATION_MS / MEMORY_OBSERVATION_INTERVAL_MS;
 /** Number of process launches captured per dataset by the startup benchmark. */
 export const STARTUP_SAMPLE_RUNS = 5;
 /** Closed-process wait before each startup benchmark relaunch sample. */
 export const STARTUP_RELAUNCH_COOLDOWN_MS = 10_000;
-/**
- * Offsets in milliseconds, measured from the moment `runWorkload` resolves.
- *
- * The active harness keeps a single +30s reading. Earlier measurements
- * showed that the GC sweep that drops 60-100 MB lands between t0 and +30s;
- * everything after +30s sits in a flat ~10 MB jitter band. The +30s point
- * preserves the cross-build comparable signal at a fraction of the wall time.
- * See the spec doc for the data and the "bounded-window asymptote" caveat.
- */
-export const SAMPLE_OFFSETS_MS = [30_000];
 /** Stale state older than this on boot is discarded silently. */
 export const STATE_TTL_MS = 60 * 60 * 1000;
 /**
@@ -115,29 +106,9 @@ export function benchmarkDatasetId(dataset: BenchmarkDatasetProfile): string {
 
 export type SampleLabel = string;
 
-/**
- * Compact form like `+30s` used as a `SampleLabel` and as a column header
- * in the markdown output. Derived from a `SAMPLE_OFFSETS_MS` entry so the
- * label cannot drift away from the offset that produced it.
- */
 export function formatOffsetLabel(ms: number): string {
   return `+${Math.round(ms / 1000)}s`;
 }
-
-/**
- * Human-readable form like `+30 s` used in the prose methodology line of
- * the markdown output. Same source of truth as `formatOffsetLabel`, with a
- * space so the rendered sentence reads naturally.
- */
-export function formatOffsetProse(ms: number): string {
-  return `+${Math.round(ms / 1000)} s`;
-}
-
-export const SAMPLE_LABELS: SampleLabel[] = [
-  "peak",
-  "t0",
-  ...SAMPLE_OFFSETS_MS.map(formatOffsetLabel),
-];
 
 export function resolveBenchmarkAnchorDate(now: Date = new Date()): string {
   const year = now.getFullYear();
@@ -149,7 +120,7 @@ export function resolveBenchmarkAnchorDate(now: Date = new Date()): string {
 /** Single memory reading at one sample point. MB units, PSS on Linux, RSS on Windows. */
 export interface SamplePoint {
   label: SampleLabel;
-  /** Milliseconds since the stress phase resolved. `peak` carries the peak's offset. */
+  /** Milliseconds since the current sampling window started. */
   tMs: number;
   totalMb: number;
   backendMb: number;
@@ -179,7 +150,7 @@ export interface BenchmarkWorkload {
    * benchmarks can use `0` when they finish after their measured actions.
    */
   durationMs: number;
-  /** Whether the runner should sample workload peak, t0, and post-workload RAM. */
+  /** Whether the runner should sample the post-action memory observation window. */
   memoryMode: BenchmarkMemoryMode;
 }
 
@@ -233,9 +204,9 @@ export interface PhaseResult {
   startedAt: string;
   /** Total ms the scenario workload ran. */
   workloadDurationMs: number;
-  /** All readings during workloads that opt into memory sampling. */
+  /** Legacy workload memory samples. Current memory scenarios keep this empty. */
   peakSamples: SamplePoint[];
-  /** Post-workload samples for memory benchmarks. Empty for latency-only scenarios. */
+  /** Memory observation samples for memory benchmarks. Empty for latency-only scenarios. */
   curve: SamplePoint[];
   /** Optional scenario-specific timings or counters captured during the workload. */
   metrics?: BenchmarkMetric[];
@@ -428,7 +399,7 @@ export interface BenchmarkResult {
   phaseB: PhaseResult;
   /** All dense dataset passes. When absent, `phaseB` is the only dense pass. */
   datasetPhases?: PhaseResult[];
-  /** Peak total memory (MB) observed in either phase, present only for memory benchmarks. */
+  /** Maximum total memory (MB) observed in any memory observation sample. */
   peakTotalMb?: number;
   /** Local YYYY-MM-DD anchor date used by calendar benchmark scenarios. */
   anchorDate: string;

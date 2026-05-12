@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { sampleIdleCurve, startPeakSampler } from "./sampler";
+import { sampleMemoryObservation } from "./sampler";
+import {
+  MEMORY_OBSERVATION_INTERVAL_MS,
+  MEMORY_OBSERVATION_SAMPLE_COUNT,
+} from "./types";
 
 const invokeMock = vi.fn();
 
@@ -24,128 +28,83 @@ function memoryReport(totalMb: number) {
   };
 }
 
-describe("startPeakSampler", () => {
+describe("sampleMemoryObservation", () => {
   beforeEach(() => {
     invokeMock.mockReset();
   });
 
-  it("calls peak timers with the global receiver", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    const intervalId = 1 as ReturnType<typeof setInterval>;
-    let scheduled = false;
-    let cleared = false;
-
-    const guardedSetInterval = function (
-      this: typeof globalThis,
-      _callback: () => void,
-      _delayMs?: number,
-    ): ReturnType<typeof setInterval> {
-      if (this !== globalThis) throw new TypeError("wrong setInterval receiver");
-      scheduled = true;
-      return intervalId;
-    };
-    const guardedClearInterval = function (
-      this: typeof globalThis,
-      timer: ReturnType<typeof setInterval>,
-    ): void {
-      if (this !== globalThis) throw new TypeError("wrong clearInterval receiver");
-      expect(timer).toBe(intervalId);
-      cleared = true;
-    };
-
-    invokeMock.mockResolvedValueOnce(memoryReport(64));
-    globalThis.setInterval = guardedSetInterval as typeof globalThis.setInterval;
-    globalThis.clearInterval = guardedClearInterval as typeof globalThis.clearInterval;
-    try {
-      const sampler = startPeakSampler();
-      await expect(sampler.stop()).resolves.toMatchObject([
-        {
-          label: "peak",
-          totalMb: 64,
-        },
-      ]);
-      expect(scheduled).toBe(true);
-      expect(cleared).toBe(true);
-    } finally {
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
-    }
-  });
-
-  it("keeps an in-flight peak sample that resolves after stop", async () => {
-    let resolveReport: (value: ReturnType<typeof memoryReport>) => void = () => undefined;
-    const reportPromise = new Promise<ReturnType<typeof memoryReport>>((resolve) => {
-      resolveReport = resolve;
-    });
-    invokeMock.mockReturnValueOnce(reportPromise);
-
-    const sampler = startPeakSampler();
-    const stopPromise = sampler.stop();
-    resolveReport(memoryReport(42));
-
-    await expect(stopPromise).resolves.toMatchObject([
-      {
-        label: "peak",
-        totalMb: 42,
-        backendMb: 10,
-        frontendMb: 27,
-        networkMb: 5,
-      },
-    ]);
-  });
-
-  it("fails instead of returning an empty peak set", async () => {
-    invokeMock.mockRejectedValueOnce(new Error("memory unavailable"));
-
-    const sampler = startPeakSampler();
-
-    await expect(sampler.stop()).rejects.toThrow(
-      "Peak memory sampling failed after 1 attempt(s): memory unavailable",
-    );
-  });
-});
-
-describe("sampleIdleCurve", () => {
-  beforeEach(() => {
-    invokeMock.mockReset();
-  });
-
-  it("calls idle timers with the global receiver", async () => {
+  it("samples once per second across the full observation window", async () => {
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
-    const timeoutId = 1 as ReturnType<typeof setTimeout>;
-    let scheduled = false;
+    let nextTimerId = 1;
+    const delays: number[] = [];
 
     const guardedSetTimeout = function (
       this: typeof globalThis,
       callback: () => void,
-      _delayMs?: number,
+      delayMs?: number,
     ): ReturnType<typeof setTimeout> {
       if (this !== globalThis) throw new TypeError("wrong setTimeout receiver");
-      scheduled = true;
+      delays.push(delayMs ?? 0);
+      const timerId = nextTimerId++ as ReturnType<typeof setTimeout>;
       void Promise.resolve().then(callback);
-      return timeoutId;
+      return timerId;
     };
 
-    invokeMock.mockResolvedValueOnce(memoryReport(80));
+    const guardedClearTimeout = function (
+      this: typeof globalThis,
+      _timer: ReturnType<typeof setTimeout>,
+    ): void {
+      if (this !== globalThis) throw new TypeError("wrong clearTimeout receiver");
+    };
+
+    invokeMock.mockImplementation(() => Promise.resolve(memoryReport(80 + invokeMock.mock.calls.length)));
     globalThis.setTimeout = guardedSetTimeout as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = originalClearTimeout;
+    globalThis.clearTimeout = guardedClearTimeout as typeof globalThis.clearTimeout;
     try {
-      await expect(sampleIdleCurve({ signal: new AbortController().signal })).resolves.toMatchObject([
-        {
-          label: "+30s",
-          totalMb: 80,
-        },
-      ]);
-      expect(scheduled).toBe(true);
+      const samples = await sampleMemoryObservation({ signal: new AbortController().signal });
+      expect(samples).toHaveLength(MEMORY_OBSERVATION_SAMPLE_COUNT);
+      expect(samples[0]).toMatchObject({ label: "+1s", totalMb: 81 });
+      expect(samples[samples.length - 1]).toMatchObject({ label: "+30s", totalMb: 110 });
+      expect(delays[0]).toBeGreaterThan(MEMORY_OBSERVATION_INTERVAL_MS - 5);
     } finally {
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
     }
   });
 
-  it("clears idle timers with the global receiver on abort", async () => {
+  it("reports progress after every captured sample", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const progress: string[] = [];
+
+    const immediateSetTimeout = function (
+      this: typeof globalThis,
+      callback: () => void,
+      _delayMs?: number,
+    ): ReturnType<typeof setTimeout> {
+      if (this !== globalThis) throw new TypeError("wrong setTimeout receiver");
+      void Promise.resolve().then(callback);
+      return 1 as ReturnType<typeof setTimeout>;
+    };
+
+    invokeMock.mockResolvedValue(memoryReport(64));
+    globalThis.setTimeout = immediateSetTimeout as typeof globalThis.setTimeout;
+    try {
+      await sampleMemoryObservation({
+        signal: new AbortController().signal,
+        onProgress: (label, total, samples) => {
+          progress.push(`${samples.length}/${total}:${label}`);
+        },
+      });
+      expect(progress).toHaveLength(MEMORY_OBSERVATION_SAMPLE_COUNT);
+      expect(progress[0]).toBe(`1/${MEMORY_OBSERVATION_SAMPLE_COUNT}:+1s`);
+      expect(progress[progress.length - 1]).toBe(`${MEMORY_OBSERVATION_SAMPLE_COUNT}/${MEMORY_OBSERVATION_SAMPLE_COUNT}:+30s`);
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
+  });
+
+  it("clears observation timers with the global receiver on abort", async () => {
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
     const timeoutId = 1 as ReturnType<typeof setTimeout>;
@@ -172,13 +131,36 @@ describe("sampleIdleCurve", () => {
     globalThis.setTimeout = guardedSetTimeout as typeof globalThis.setTimeout;
     globalThis.clearTimeout = guardedClearTimeout as typeof globalThis.clearTimeout;
     try {
-      const curvePromise = sampleIdleCurve({ signal: controller.signal });
+      const samplesPromise = sampleMemoryObservation({ signal: controller.signal });
       controller.abort();
-      await expect(curvePromise).resolves.toEqual([]);
+      await expect(samplesPromise).resolves.toEqual([]);
       expect(cleared).toBe(true);
     } finally {
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
+    }
+  });
+
+  it("fails when a memory sample fails", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+
+    const immediateSetTimeout = function (
+      this: typeof globalThis,
+      callback: () => void,
+      _delayMs?: number,
+    ): ReturnType<typeof setTimeout> {
+      if (this !== globalThis) throw new TypeError("wrong setTimeout receiver");
+      void Promise.resolve().then(callback);
+      return 1 as ReturnType<typeof setTimeout>;
+    };
+
+    invokeMock.mockRejectedValueOnce(new Error("memory unavailable"));
+    globalThis.setTimeout = immediateSetTimeout as typeof globalThis.setTimeout;
+    try {
+      await expect(sampleMemoryObservation({ signal: new AbortController().signal }))
+        .rejects.toThrow("Memory observation sampling failed at +1s: memory unavailable");
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
     }
   });
 });

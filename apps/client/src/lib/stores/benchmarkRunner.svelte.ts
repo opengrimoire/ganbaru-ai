@@ -87,11 +87,11 @@ export interface RunningInfo {
   scenarioId: string;
   scenarioLabel: string;
   suite?: { index: number; total: number };
-  /** Short user-facing label for the current step, e.g. `Stress window: 3 s`. */
+  /** Short user-facing label for the current step. */
   step: string;
   /** Current dataset id when phase B is running. */
   datasetLabel?: string;
-  /** Set during the idle-curve schedule so the overlay can show progress. */
+  /** Set during memory observation so the overlay can show progress. */
   curve?: { done: number; total: number; label: SampleLabel };
 }
 
@@ -580,13 +580,13 @@ class BenchmarkRunnerStore {
       return;
     }
 
-    const peakTotals = [
+    const observedTotals = [
       ...(finalPhaseA ? [finalPhaseA] : []),
       ...datasetPhases,
     ]
-      .flatMap((phase) => phase.peakSamples)
+      .flatMap((phase) => phase.curve)
       .map((s) => s.totalMb);
-    const peakTotalMb = peakTotals.length > 0 ? Math.max(...peakTotals) : undefined;
+    const peakTotalMb = observedTotals.length > 0 ? Math.max(...observedTotals) : undefined;
 
     const result: BenchmarkResult = {
       scenarioId: scenario.id,
@@ -687,7 +687,7 @@ class BenchmarkRunnerStore {
 
   #updateCurve(curve: { done: number; total: number; label: SampleLabel }) {
     if (!this.running) return;
-    this.running = { ...this.running, step: "Idle curve", curve };
+    this.running = { ...this.running, step: "Memory observation", curve };
   }
 
   #workloadStep(
@@ -700,12 +700,13 @@ class BenchmarkRunnerStore {
       const done = phase === "A" ? runs.phaseA.length : runs.phaseB.length;
       return `Launch sample ${done + 1}/${runs.targetRuns}`;
     }
-    if (scenario.workload.memoryMode === "post-workload") {
+    if (scenario.workload.memoryMode === "post-workload" && scenario.workload.durationMs > 0) {
       const seconds = Math.round(scenario.workload.durationMs / 1000);
-      const windowLabel = scenario.workload.kind === "idle-memory" ? "Idle window" : "Stress window";
-      return `${windowLabel}: ${seconds} s`;
+      return `${scenario.workload.label}: ${seconds} s`;
     }
-    return scenario.workload.label;
+    return scenario.workload.memoryMode === "post-workload"
+      ? "Preparing memory observation"
+      : scenario.workload.label;
   }
 
   #completionMessage(scenario: BenchmarkScenario, result: BenchmarkResult): string {
@@ -717,7 +718,7 @@ class BenchmarkRunnerStore {
       return `${scenario.label}: launch medians base ${baseMs}, largest dense ${denseMs}. Open the app to review the benchmark output.`;
     }
     if (result.peakTotalMb !== undefined) {
-      return `${scenario.label}: peak ${Math.round(result.peakTotalMb)} MB. Open the app to review the benchmark output.`;
+      return `${scenario.label}: max observed ${Math.round(result.peakTotalMb)} MB. Open the app to review the benchmark output.`;
     }
     const metricCount = [
       ...(result.phaseA?.metrics ?? []),

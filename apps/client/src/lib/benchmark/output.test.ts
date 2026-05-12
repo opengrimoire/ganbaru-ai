@@ -5,7 +5,7 @@ import {
   formatBenchmarkSuiteMarkdown,
   formatSampleCell,
 } from "./output";
-import { HARNESS_VERSION, STRESS_DURATION_MS } from "./types";
+import { HARNESS_VERSION, HELD_NAVIGATION_DURATION_MS } from "./types";
 import type {
   BenchmarkMetric,
   BenchmarkResult,
@@ -32,24 +32,17 @@ function mockPhase(
   eventCount: number,
   datasetId?: string,
 ): PhaseResult {
-  // peakSamples carries the during-stress readings; the formatter picks the max.
-  const peakSamples: SamplePoint[] = [
-    sample("peak", peak - 5, peak - 92),
-    sample("peak", peak, peak - 87),
-    sample("peak", peak - 2, peak - 89),
-  ];
-  // The current idle curve has just t0 and +30s; +30s is the bounded-window
-  // floor we report. Pin it at `floor` so the formatter's footer is
-  // deterministic.
+  // Memory rows are derived from the observation samples.
   const curve: SamplePoint[] = [
-    sample("t0", peak - 30, peak - 117),
+    sample("+1s", peak - 30, peak - 117),
+    sample("+2s", peak, peak - 87),
     sample("+30s", floor, floor - 87),
   ];
   return {
     phase,
     startedAt: "2026-05-01T10:00:00.000Z",
     workloadDurationMs: 3000,
-    peakSamples,
+    peakSamples: [],
     curve,
     boot: {
       marks: {
@@ -118,7 +111,7 @@ const RESULT: BenchmarkResult = {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
     label: "held right-arrow week-view navigation",
-    durationMs: STRESS_DURATION_MS,
+    durationMs: HELD_NAVIGATION_DURATION_MS,
     memoryMode: "post-workload",
   },
   datasetVersion: "v1",
@@ -200,7 +193,7 @@ const IDLE_MEMORY_RESULT: BenchmarkResult = {
     kind: "idle-memory",
     question: "How much memory does the calendar hold while idle?",
     label: "idle calendar baseline",
-    durationMs: STRESS_DURATION_MS,
+    durationMs: 0,
     memoryMode: "post-workload",
   },
   phaseA: BASE_PHASE,
@@ -348,11 +341,13 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("Scenario:")).toBe(false);
     expect(md.includes("Phase A")).toBe(false);
     expect(md.includes("Phase B")).toBe(false);
-    expect(md.includes(`${STRESS_DURATION_MS} ms held right-arrow week-view navigation`)).toBe(false);
+    expect(md.includes(`${HELD_NAVIGATION_DURATION_MS} ms held right-arrow week-view navigation`)).toBe(false);
     expect(md.includes("### Startup boot")).toBe(false);
     expect(md.includes("### Calendar held navigation memory")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | base-0 | navigation peak")).toBe(false);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | navigation peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | Max")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | Min | 87.0 | 231.0 | 16.0 | 318 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | Max | 87.0 | 430.0 | 16.0 | 517 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | End | 87.0 | 231.0 | 16.0 | 318 |")).toBe(true);
     expect(md.includes("Settled floor:")).toBe(false);
     expect(md.includes("| Date |")).toBe(false);
     expect(md.includes("| Platform |")).toBe(true);
@@ -366,9 +361,9 @@ describe("formatBenchmarkMarkdown", () => {
         mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
       ],
     }, { date: "2026-05-01" });
-    expect(md.includes("| 2026-05-01-ID | base-0 | idle peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | idle peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | idle peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | Max")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | Max")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | Max")).toBe(true);
   });
 
   it("matches the golden snapshot so spacing changes are intentional", () => {
@@ -447,7 +442,7 @@ describe("formatBenchmarkMarkdown", () => {
   it("does not render dataset shape checks as idle memory metrics", () => {
     const md = formatBenchmarkMarkdown(IDLE_MEMORY_RESULT, { date: "2026-05-01" });
     expect(md.includes("### Idle memory")).toBe(true);
-    expect(md.includes("| Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |")).toBe(true);
     expect(md.includes("| Run | Dataset | Metric | Value | Unit |")).toBe(false);
     expect(md.includes("total stored events")).toBe(false);
     expect(md.includes("loaded week rows")).toBe(false);

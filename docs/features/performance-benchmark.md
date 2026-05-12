@@ -47,17 +47,17 @@ The formatter emits these ids directly. Do not render prose dataset labels such 
 
 Each scenario declares a primary measurement mode:
 
-| Kind | Captures | Post-workload memory wait |
+| Kind | Captures | Memory observation |
 |---|---|---|
 | `startup` | Repeated process launches to usable calendar paint after a closed-process cooldown | No |
-| `idle-memory` | Idle peak, idle end, and +30s memory | Yes |
-| `stress-memory` | Navigation peak, navigation end, and +30s memory for the fixed stress action | Yes |
+| `idle-memory` | Min, max, and end memory during the idle observation window | Yes |
+| `stress-memory` | Min, max, and end memory after the fixed user action | Yes |
 | `interaction-latency` | Repeated UI action timings and averages | No |
 | `operation-latency` | Repeated or single operation timings and counters | No |
 
 The point is to keep each benchmark honest. Feature latency scenarios should not spend 30 seconds waiting for memory GC if the thing being measured is how quickly the feature paints or finishes.
 
-Memory scenarios must capture at least one peak sample during the workload. A missing peak is a harness failure, not a reportable `n/a` row.
+Memory scenarios must capture every one-second sample in the observation window. A failed sample is a harness failure, not a reportable `n/a` row.
 
 ## Benchmark boot path
 
@@ -249,7 +249,7 @@ The summary overlay has two outputs:
 
 While the benchmark overlay is active, in-app close affordances are blocked, including the title-bar close button, `Ctrl+Shift+W`, and Tauri close requests. A forced OS process kill cannot be blocked; the `*-running` state handles that case on the next boot.
 
-During memory scenarios, the running overlay labels the fixed workload period as `Idle window: 3 s` or `Stress window: 3 s`. That label describes only the measured workload window. The later curve step waits for the post-workload memory sample.
+During memory scenarios, the running overlay labels the scenario action first, then `Memory observation` while the 30 second sample window runs. Idle memory has no fake action window; observation starts after the anchored calendar window is ready. Held navigation still performs the fixed real right-arrow hold first, then observes post-navigation memory after key release.
 
 The copied markdown is one suite-level block. It contains:
 
@@ -262,8 +262,8 @@ The placeholder exists because the app cannot know which sequence number the can
 Each scenario section contains the table that matches the scenario's primary long-run measurement:
 
 - `startup` emits repeated launch stats for each benchmark dataset. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v1 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
-- `idle-memory` emits memory rows for the baseline and each dense dataset so total-history scale remains visible. Timepoints are `idle peak`, `idle end`, and `+30s`.
-- `stress-memory` emits memory rows for the datasets the scenario actually runs. Calendar held navigation is dense-only and records the practical dense current-window dataset. Its timepoints are `navigation peak`, `navigation end`, and `+30s`. Held-navigation move counts, repeat counts, and skipped ticks are diagnostics and are not copied into the canonical markdown.
+- `idle-memory` emits `Min`, `Max`, and `End` memory rows for the baseline and each dense dataset so total-history scale remains visible.
+- `stress-memory` emits `Min`, `Max`, and `End` memory rows for the datasets the scenario actually runs. Calendar held navigation is dense-only and records the practical dense current-window dataset. Held-navigation move counts, repeat counts, and skipped ticks are diagnostics and are not copied into the canonical markdown.
 - `interaction-latency` and `operation-latency` emit repeated latency rows only for their canonical primary metrics. Current practical scenarios are dense-only and run against the practical dense current-window dataset.
 - Scalar metrics without run statistics emit a compact scalar table only when the one-off value is itself canonical. Calendar import keeps 1000-event add and update timings; smaller repeated import rows are diagnostics.
 

@@ -14,10 +14,9 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import {
-  STRESS_DURATION_MS,
+  HELD_NAVIGATION_DURATION_MS,
   HARNESS_VERSION,
   DENSE_DATASET_VERSION,
-  SAMPLE_OFFSETS_MS,
   resolveBenchmarkAnchorDate,
   isBenchmarkPendingStage,
   isFreshBenchmarkPendingAge,
@@ -33,16 +32,14 @@ import {
   type StartupRunState,
 } from "./types";
 import {
-  startPeakSampler,
-  sampleIdleCurve,
+  sampleMemoryObservation,
   captureBootTimings,
-  readMemorySample,
 } from "./sampler";
 
 /**
  * Run one pass. The scenario provides `setup()` and `runWorkload()`;
- * the runner adds boot timing and, only for memory scenarios, peak sampling
- * plus the post-workload idle curve.
+ * the runner adds boot timing and, only for memory scenarios, a post-action
+ * memory observation window.
  */
 async function runPhase(opts: {
   phase: "A" | "B";
@@ -59,12 +56,10 @@ async function runPhase(opts: {
   const startedAt = new Date().toISOString();
   const eventCountAtStart = opts.getEventCount();
   const shouldSampleMemory = opts.scenario.workload.memoryMode === "post-workload";
-  const peakSampler = shouldSampleMemory ? startPeakSampler() : undefined;
 
   const workloadStarted = performance.now();
   let maybeMetrics: PhaseResult["metrics"] | void;
   let workloadError: unknown;
-  let peakError: unknown;
   try {
     maybeMetrics = await opts.scenario.runWorkload(opts.signal, opts.context);
   } catch (error: unknown) {
@@ -72,26 +67,17 @@ async function runPhase(opts: {
   }
   const workloadDurationMs = performance.now() - workloadStarted;
 
-  let peakSamples: PhaseResult["peakSamples"] = [];
-  try {
-    peakSamples = await peakSampler?.stop() ?? [];
-  } catch (error: unknown) {
-    peakError = error;
-  }
   if (workloadError) throw workloadError;
   if (opts.signal.aborted) throw new DOMException("aborted", "AbortError");
-  if (peakError) throw peakError;
 
   let curve = [] as PhaseResult["curve"];
   if (shouldSampleMemory) {
-    const t0 = await readMemorySample("t0", 0);
-    const restCurve = await sampleIdleCurve({
+    curve = await sampleMemoryObservation({
       signal: opts.signal,
-      onProgress: (label, samples) => {
-        opts.onCurveProgress?.(label, SAMPLE_OFFSETS_MS.length, samples.length);
+      onProgress: (label, total, samples) => {
+        opts.onCurveProgress?.(label, total, samples.length);
       },
     });
-    curve = [t0, ...restCurve];
   }
 
   const boot = captureBootTimings();
@@ -103,7 +89,7 @@ async function runPhase(opts: {
     phase: opts.phase,
     startedAt,
     workloadDurationMs,
-    peakSamples,
+    peakSamples: [],
     curve,
     metrics: maybeMetrics ?? undefined,
     boot,
@@ -311,5 +297,5 @@ export async function clearPersistedState(): Promise<void> {
 /** Confirm that a stress duration was within the expected window. */
 export function withinStressBudget(actual: number): boolean {
   // Allow 10% slack either way for jitter.
-  return Math.abs(actual - STRESS_DURATION_MS) <= STRESS_DURATION_MS * 0.1;
+  return Math.abs(actual - HELD_NAVIGATION_DURATION_MS) <= HELD_NAVIGATION_DURATION_MS * 0.1;
 }

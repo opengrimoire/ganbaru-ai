@@ -220,7 +220,7 @@
                         <tr>
                           <th class={thClass}>Run</th>
                           <th class={thClass}>Dataset</th>
-                          <th class={thClass}>Timepoint</th>
+                          <th class={thClass}>Statistic</th>
                           <th class={thClass}>Backend MB</th>
                           <th class={thClass}>Frontend MB</th>
                           <th class={thClass}>Network MB</th>
@@ -232,7 +232,7 @@
                           <tr>
                             <td class={tdClass}>{row.run}</td>
                             <td class={tdClass}>{row.dataset}</td>
-                            <td class={tdClass}>{row.timepoint}</td>
+                            <td class={tdClass}>{row.statistic}</td>
                             <td class={tdClass}>{row.backendMb}</td>
                             <td class={tdClass}>{row.frontendMb}</td>
                             <td class={tdClass}>{row.networkMb}</td>
