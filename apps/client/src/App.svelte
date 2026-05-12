@@ -6,6 +6,7 @@
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
+  import { ensureDbUrl } from "$lib/api/db";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { Temporal } from "@js-temporal/polyfill";
@@ -90,6 +91,11 @@
     try {
       const stateJson = await invoke<string | null>("read_benchmark_state");
       if (stateJson) {
+        // Resolve the DB URL while the benchmark state is still pending.
+        // The runner flips the state to running before scenario setup, and
+        // running states intentionally fall back to the user DB on a fresh
+        // boot so interrupted benchmarks cannot keep touching benchmark data.
+        await ensureDbUrl();
         await ensureBenchmarkOverlay();
         await afterAnimationFrames(2);
         const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
