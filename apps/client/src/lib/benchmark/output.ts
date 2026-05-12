@@ -17,11 +17,7 @@ import type {
   SampleLabel,
   StartupBootSample,
 } from "./types";
-import {
-  benchmarkDatasetId,
-  DEFAULT_BENCHMARK_DATASET,
-  SAMPLE_LABELS,
-} from "./types";
+import { SAMPLE_LABELS } from "./types";
 
 /**
  * Boot marks used for startup summary stats. The headline launch stat uses
@@ -30,18 +26,6 @@ import {
 const USABLE_PAINT_MARK = "boot.usable-paint";
 
 const STAT_DETAIL_KEYS = ["runs", "minMs", "medianMs", "p95Ms", "maxMs"] as const;
-const PRACTICAL_DENSE_DATASET_ID = benchmarkDatasetId(DEFAULT_BENCHMARK_DATASET);
-const PRACTICAL_DENSE_SCENARIO_IDS = new Set([
-  "calendar-nav",
-  "event-panel-open",
-  "calendar-create-cancel",
-  "calendar-write-ops",
-  "calendar-import-ops",
-]);
-const OMITTED_SCENARIO_IDS = new Set([
-  "theme-persistence-ops",
-  "pomodoro-persistence-ops",
-]);
 const CANONICAL_METRIC_LABELS_BY_SCENARIO = new Map<string, readonly string[]>([
   ["calendar-nav", []],
   ["event-panel-open", [
@@ -255,7 +239,7 @@ function startupSamples(phase: PhaseResult): StartupBootSample[] {
 
 function resultPhases(result: BenchmarkResult): PhaseResult[] {
   return [
-    result.phaseA,
+    ...(result.phaseA ? [result.phaseA] : []),
     ...(result.datasetPhases && result.datasetPhases.length > 0
       ? result.datasetPhases
       : [result.phaseB]),
@@ -368,7 +352,6 @@ export function formatBenchmarkMarkdown(
 }
 
 function buildSection(result: BenchmarkResult, run: string): BenchmarkPreviewSection | undefined {
-  if (OMITTED_SCENARIO_IDS.has(result.scenarioId)) return undefined;
   if (result.workload.kind === "startup") {
     return {
       id: result.scenarioId,
@@ -464,11 +447,7 @@ function hasStatDetails(metric: BenchmarkMetric | undefined): boolean {
 }
 
 function canonicalPhases(result: BenchmarkResult): PhaseResult[] {
-  const phases = resultPhases(result);
-  if (!PRACTICAL_DENSE_SCENARIO_IDS.has(result.scenarioId)) return phases;
-  return phases.filter((phase) =>
-    benchmarkDatasetLabel(result, phase) === PRACTICAL_DENSE_DATASET_ID,
-  );
+  return resultPhases(result);
 }
 
 function shouldIncludeMetric(result: BenchmarkResult, label: string): boolean {

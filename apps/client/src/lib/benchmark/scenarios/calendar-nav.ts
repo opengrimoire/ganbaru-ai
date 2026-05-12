@@ -11,7 +11,6 @@
  */
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
 import {
-  CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,
   STRESS_DURATION_MS,
   type BenchmarkMetric,
@@ -31,7 +30,7 @@ export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
   label: "Calendar week-view nav",
   description:
-    "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against an empty baseline plus 1-year and 10-year dense calendars. All datasets use an isolated benchmark DB; your real calendar is never touched.",
+    "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against the 1-year practical dense calendar. The isolated benchmark DB keeps your real calendar untouched.",
   workload: {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
@@ -40,7 +39,7 @@ export const calendarNavScenario: BenchmarkScenario = {
     memoryMode: "post-workload",
   },
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
-  benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
+  runMode: "dense-only",
 
   async setup(context: BenchmarkScenarioContext): Promise<void> {
     const handle = getCalendarNavHandle();

@@ -8,7 +8,6 @@ import {
   type PerfLogEntry,
 } from "$lib/stores/perflog.svelte";
 import {
-  CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,
   type BenchmarkDatasetProfile,
   type BenchmarkMetric,
@@ -148,7 +147,7 @@ export const eventPanelOpenScenario: BenchmarkScenario = {
     memoryMode: "none",
   },
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
-  benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
+  runMode: "dense-only",
 
   async setup(context: BenchmarkScenarioContext): Promise<void> {
     const handle = getCalendarNavHandle();

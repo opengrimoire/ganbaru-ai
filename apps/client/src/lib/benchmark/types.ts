@@ -165,6 +165,7 @@ export type BenchmarkQuestionKind =
   | "operation-latency";
 
 export type BenchmarkMemoryMode = "none" | "post-workload";
+export type BenchmarkRunMode = "baseline-and-dense" | "dense-only";
 
 export interface BenchmarkWorkload {
   /** Primary question this scenario answers. Controls markdown output shape. */
@@ -371,6 +372,12 @@ export interface BenchmarkScenarioMetadata {
   defaultDataset: BenchmarkDatasetProfile;
   /** Optional ordered dense datasets. Defaults to `[defaultDataset]`. */
   benchmarkDatasets?: BenchmarkDatasetProfile[];
+  /**
+   * Whether the runner should measure an empty baseline before seeding.
+   * Practical user-window benchmarks use `dense-only` so hidden control
+   * passes do not add runtime or misleading output.
+   */
+  runMode?: BenchmarkRunMode;
 }
 
 /**
@@ -417,7 +424,7 @@ export interface BenchmarkResult {
   harnessVersion: string;
   platform: string;
   buildRef?: string;
-  phaseA: PhaseResult;
+  phaseA?: PhaseResult;
   phaseB: PhaseResult;
   /** All dense dataset passes. When absent, `phaseB` is the only dense pass. */
   datasetPhases?: PhaseResult[];

@@ -2,7 +2,7 @@
 
 The benchmark harness is a dev-visible mechanism inside the app for taking deterministic, comparable performance measurements. It exists because manual timing and one-off RAM snapshots are too noisy for cross-build decisions.
 
-Harness v1 is the current active baseline after the 2026-05-12 reset. It runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Core scenarios include both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`.
+Harness v1 is the current active baseline after the 2026-05-12 reset. It runs scenarios against isolated benchmark databases, records only the measurement type each scenario needs, then shows readable summary tables and copies normalized markdown for `docs/PERFORMANCE.md`. Startup and idle memory run both dense calendar datasets: `dense-v1-r1y-s1-d1` and `dense-v1-r10y-s1-d1`. Practical user-window scenarios run only `dense-v1-r1y-s1-d1`.
 
 Harness and dataset versions are tied to recorded rows, not local iteration. Do not bump `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, or dense detail profile names until the current version has at least one run recorded in `docs/PERFORMANCE.md`. While tuning an unrecorded benchmark shape, edit the current version in place.
 
@@ -88,7 +88,7 @@ phase-a-pending
   open isolated empty DB
   skip normal current-week preload
   write phase-a-running
-  run baseline pass at the persisted anchor
+  run baseline pass at the persisted anchor, unless the scenario is dense-only
   for startup only, repeat phase-a-pending until enough launch samples exist
   seed dense-v1-r1y-s1-d1 around the persisted anchor
   write phase-b-pending
@@ -124,7 +124,7 @@ phase-a-running or phase-b-running on boot
   continue on the user's real DB
 ```
 
-Non-startup scenarios currently cost one baseline pass plus one pass per dense dataset. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each dense dataset. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
+Baseline-and-dense scenarios cost one baseline pass plus one pass per dense dataset. Dense-only scenarios skip the measured baseline pass and run only the practical dense dataset. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each dense dataset. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
 
 If the process is killed during a benchmark pass, the partial result is not comparable. The next boot discards the isolated benchmark DB instead of trying to resume from data that may contain half-finished setup or workload state. Explicit Cancel still aborts the active run and restarts on the user's real DB.
 
@@ -173,6 +173,7 @@ export interface BenchmarkScenarioMetadata {
   };
   defaultDataset: BenchmarkDatasetProfile;
   benchmarkDatasets?: BenchmarkDatasetProfile[];
+  runMode?: "baseline-and-dense" | "dense-only";
 }
 
 export interface BenchmarkScenario extends BenchmarkScenarioMetadata {
@@ -208,7 +209,7 @@ Registered suites:
 | Suite | Scenarios | Purpose |
 |---|---|---|
 | Core benchmarks | `startup-boot`, `idle-memory`, `calendar-nav`, `event-panel-open`, `calendar-create-cancel` | User-perceived startup, memory, and interaction latency |
-| Backend benchmarks | `calendar-write-ops`, `calendar-import-ops`, `theme-persistence-ops`, `pomodoro-persistence-ops` | Rust-backed persistence, import, and storage command latency |
+| Backend benchmarks | `calendar-write-ops`, `calendar-import-ops` | Rust-backed calendar write and import latency |
 | All benchmarks | Core plus backend | Complete release baseline or broad refactor validation |
 
 Registered scenarios:
@@ -222,8 +223,6 @@ Registered scenarios:
 | `calendar-create-cancel` | `lib/benchmark/scenarios/calendar-create-cancel.ts` | Create-panel open and cancel latency |
 | `calendar-write-ops` | `lib/benchmark/scenarios/calendar-write-ops.ts` | Rust-backed calendar create, patch, delete, detach, and split latency |
 | `calendar-import-ops` | `lib/benchmark/scenarios/calendar-import-ops.ts` | Rust-backed calendar bulk import latency |
-| `theme-persistence-ops` | `lib/benchmark/scenarios/theme-persistence-ops.ts` | Rust-backed theme persistence latency |
-| `pomodoro-persistence-ops` | `lib/benchmark/scenarios/pomodoro-persistence-ops.ts` | Rust-backed Pomodoro persistence latency |
 
 `calendar-nav` dispatches `ArrowRight` keydown and keyup events on `window` for a 3-second hold. That enters CalendarView's real keyboard listener and real held-navigation controller, so the benchmark follows the same path as a physical right-arrow hold. Setup waits for the anchored week and adjacent window prefetch to finish. Held repeats use the app's normal readiness gate: the current render window must be applied, and the next target window must already be current or cached. If not, the repeat tick is skipped. The scenario observes the real controller to count moves, repeats, and skipped ticks.
 
@@ -264,10 +263,9 @@ Each scenario section contains the table that matches the scenario's primary lon
 
 - `startup` emits repeated launch stats for each benchmark dataset. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v1 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
 - `idle-memory` emits memory rows for the baseline and each dense dataset so total-history scale remains visible. Timepoints are `idle peak`, `idle end`, and `+30s`.
-- `stress-memory` emits memory rows only for the practical dense current-window dataset unless the scenario is explicitly about total-history scale. Calendar held navigation timepoints are `navigation peak`, `navigation end`, and `+30s`. Held-navigation move counts, repeat counts, and skipped ticks are diagnostics and are not copied into the canonical markdown.
-- `interaction-latency` and `operation-latency` emit repeated latency rows only for their canonical primary metrics against the practical dense current-window dataset.
+- `stress-memory` emits memory rows for the datasets the scenario actually runs. Calendar held navigation is dense-only and records the practical dense current-window dataset. Its timepoints are `navigation peak`, `navigation end`, and `+30s`. Held-navigation move counts, repeat counts, and skipped ticks are diagnostics and are not copied into the canonical markdown.
+- `interaction-latency` and `operation-latency` emit repeated latency rows only for their canonical primary metrics. Current practical scenarios are dense-only and run against the practical dense current-window dataset.
 - Scalar metrics without run statistics emit a compact scalar table only when the one-off value is itself canonical. Calendar import keeps 1000-event add and update timings; smaller repeated import rows are diagnostics.
-- Theme and Pomodoro persistence scenarios can be run for investigation, but their rows are not emitted in the canonical suite markdown unless `docs/PERFORMANCE.md` starts tracking those subsystems.
 
 The copied markdown intentionally avoids slash-packed memory cells, repeated global metadata, empty stat columns, redundant dataset levels, diagnostic counters, and measurement-level notes. Run metadata is the only generated table with a `Notes` column. Fixed scenario details belong in this harness spec, while `docs/PERFORMANCE.md` should record rows and minimal column interpretation. A future comparable detail should become a dedicated typed column instead of a generic note.
 

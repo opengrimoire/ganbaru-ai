@@ -151,6 +151,7 @@ export const calendarImportOpsScenario: BenchmarkScenario = {
     memoryMode: "none",
   },
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
+  runMode: "dense-only",
 
   async setup(): Promise<void> {
     await ensureBenchmarkDbReady();

@@ -117,7 +117,7 @@ This table keeps panel-open latency only, measured with a practical full visible
 
 ### Calendar write operations
 
-These backend timings track representative user-facing calendar mutations against the practical dense dataset. Lower-level command variants, empty-DB controls, theme operations, and Pomodoro operations are diagnostic output and are not recorded here unless a run is explicitly focused on those subsystems.
+These backend timings track representative user-facing calendar mutations against the practical dense dataset. Lower-level command variants and empty-DB controls are diagnostic output and are not recorded here unless a run is explicitly focused on those paths.
 
 | Run | Dataset | Metric | Runs | Median ms | P95 ms |
 |---|---|---|---:|---:|---:|

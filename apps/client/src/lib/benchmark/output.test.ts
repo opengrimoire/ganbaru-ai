@@ -108,6 +108,9 @@ function scalarMsMetric(label: string, value: number): BenchmarkMetric {
   };
 }
 
+const BASE_PHASE = mockPhase("A", 348, 278, 0);
+const DENSE_PHASE = mockPhase("B", 517, 318, 19_710, "dense-v1-r1y-s1-d1");
+
 const RESULT: BenchmarkResult = {
   scenarioId: "calendar-nav",
   scenarioLabel: "Calendar week-view nav",
@@ -123,8 +126,7 @@ const RESULT: BenchmarkResult = {
   platform: "Linux",
   buildRef: "0.1.0+9815ea5",
   anchorDate: "2026-05-01",
-  phaseA: mockPhase("A", 348, 278, 0),
-  phaseB: mockPhase("B", 517, 318, 19_710, "dense-v1-r1y-s1-d1"),
+  phaseB: DENSE_PHASE,
   peakTotalMb: 517,
 };
 
@@ -140,12 +142,13 @@ const STARTUP_RESULT: BenchmarkResult = {
     memoryMode: "none",
   },
   peakTotalMb: undefined,
+  phaseA: BASE_PHASE,
 };
 
 const REPEATED_STARTUP_RESULT: BenchmarkResult = {
   ...STARTUP_RESULT,
   phaseA: {
-    ...STARTUP_RESULT.phaseA,
+    ...BASE_PHASE,
     startupSamples: [
       startupSample(0, 95, 170, 800),
       startupSample(0, 105, 180, 900),
@@ -177,18 +180,8 @@ const METRIC_RESULT: BenchmarkResult = {
     durationMs: 0,
     memoryMode: "none",
   },
-  phaseA: {
-    ...RESULT.phaseA,
-    eventCountAtStart: 2,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("edit open from closed avg", 121, 10, 117, 138),
-      timingMetric("edit switch while open avg", 44, 10, 41, 60),
-    ],
-  },
   phaseB: {
-    ...RESULT.phaseB,
+    ...DENSE_PHASE,
     peakSamples: [],
     curve: [],
     metrics: [
@@ -210,6 +203,7 @@ const IDLE_MEMORY_RESULT: BenchmarkResult = {
     durationMs: STRESS_DURATION_MS,
     memoryMode: "post-workload",
   },
+  phaseA: BASE_PHASE,
 };
 
 const MIXED_METRIC_RESULT: BenchmarkResult = {
@@ -224,7 +218,7 @@ const MIXED_METRIC_RESULT: BenchmarkResult = {
     memoryMode: "none",
   },
   phaseA: {
-    ...RESULT.phaseA,
+    ...BASE_PHASE,
     peakSamples: [],
     curve: [],
     metrics: [
@@ -239,7 +233,7 @@ const MIXED_METRIC_RESULT: BenchmarkResult = {
     ],
   },
   phaseB: {
-    ...RESULT.phaseB,
+    ...DENSE_PHASE,
     peakSamples: [],
     curve: [],
     metrics: [
@@ -267,17 +261,8 @@ const CREATE_RESULT: BenchmarkResult = {
     durationMs: 0,
     memoryMode: "none",
   },
-  phaseA: {
-    ...RESULT.phaseA,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("create panel open avg", 39, 6, 34, 78),
-      timingMetric("create cancel after guard avg", 60, 6, 59, 62),
-    ],
-  },
   phaseB: {
-    ...RESULT.phaseB,
+    ...DENSE_PHASE,
     peakSamples: [],
     curve: [],
     metrics: [
@@ -285,28 +270,6 @@ const CREATE_RESULT: BenchmarkResult = {
       timingMetric("create cancel after guard avg", 130, 6, 127, 142),
     ],
   },
-  datasetPhases: [
-    {
-      ...RESULT.phaseB,
-      peakSamples: [],
-      curve: [],
-      metrics: [
-        timingMetric("create panel open avg", 117, 6, 99, 206),
-        timingMetric("create cancel after guard avg", 130, 6, 127, 142),
-      ],
-    },
-    {
-      ...RESULT.phaseB,
-      eventCountAtStart: 197_235,
-      datasetId: "dense-v1-r10y-s1-d1",
-      peakSamples: [],
-      curve: [],
-      metrics: [
-        timingMetric("create panel open avg", 127, 6, 98, 256),
-        timingMetric("create cancel after guard avg", 130, 6, 127, 142),
-      ],
-    },
-  ],
   peakTotalMb: undefined,
 };
 
@@ -321,20 +284,8 @@ const WRITE_RESULT: BenchmarkResult = {
     durationMs: 0,
     memoryMode: "none",
   },
-  phaseA: {
-    ...RESULT.phaseA,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("event create save avg", 8, 8, 6, 26),
-      timingMetric("event patch save avg", 5, 8, 5, 6),
-      timingMetric("event delete avg", 6, 8, 5, 8),
-      timingMetric("recurring detach avg", 6, 5, 6, 7),
-      timingMetric("recurring split avg", 6, 5, 5, 7),
-    ],
-  },
   phaseB: {
-    ...RESULT.phaseB,
+    ...DENSE_PHASE,
     peakSamples: [],
     curve: [],
     metrics: [
@@ -359,19 +310,8 @@ const IMPORT_RESULT: BenchmarkResult = {
     durationMs: 0,
     memoryMode: "none",
   },
-  phaseA: {
-    ...RESULT.phaseA,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("bulk import 100 add avg", 43, 3, 39, 55),
-      timingMetric("bulk import 100 update avg", 40, 3, 40, 45),
-      scalarMsMetric("bulk import 1000 add", 295),
-      scalarMsMetric("bulk import 1000 update", 318),
-    ],
-  },
   phaseB: {
-    ...RESULT.phaseB,
+    ...DENSE_PHASE,
     peakSamples: [],
     curve: [],
     metrics: [
@@ -379,36 +319,6 @@ const IMPORT_RESULT: BenchmarkResult = {
       timingMetric("bulk import 100 update avg", 42, 3, 40, 47),
       scalarMsMetric("bulk import 1000 add", 315),
       scalarMsMetric("bulk import 1000 update", 352),
-    ],
-  },
-  peakTotalMb: undefined,
-};
-
-const THEME_RESULT: BenchmarkResult = {
-  ...RESULT,
-  scenarioId: "theme-persistence-ops",
-  scenarioLabel: "Theme persistence operations",
-  workload: {
-    kind: "operation-latency",
-    question: "How quickly do Rust-backed theme persistence commands finish?",
-    label: "scripted theme persistence commands",
-    durationMs: 0,
-    memoryMode: "none",
-  },
-  phaseA: {
-    ...RESULT.phaseA,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("theme snapshot insert avg", 18, 8, 11, 68),
-    ],
-  },
-  phaseB: {
-    ...RESULT.phaseB,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("theme snapshot insert avg", 56, 8, 11, 340),
     ],
   },
   peakTotalMb: undefined,
@@ -448,19 +358,6 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("| Platform |")).toBe(true);
   });
 
-  it("filters held-navigation memory to the practical dense dataset", () => {
-    const md = formatBenchmarkMarkdown({
-      ...RESULT,
-      datasetPhases: [
-        RESULT.phaseB,
-        mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
-      ],
-    }, { date: "2026-05-01" });
-    expect(md.includes("| 2026-05-01-ID | base-0 | navigation peak")).toBe(false);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | navigation peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | navigation peak")).toBe(false);
-  });
-
   it("keeps every dataset for total-history idle memory", () => {
     const md = formatBenchmarkMarkdown({
       ...IDLE_MEMORY_RESULT,
@@ -487,7 +384,7 @@ describe("formatBenchmarkMarkdown", () => {
     const partial: BenchmarkResult = {
       ...STARTUP_RESULT,
       phaseA: {
-        ...STARTUP_RESULT.phaseA,
+        ...BASE_PHASE,
         boot: {
           marks: {
             "boot.sql-main-done": 412,
@@ -505,8 +402,8 @@ describe("formatBenchmarkMarkdown", () => {
     const partial: BenchmarkResult = {
       ...STARTUP_RESULT,
       phaseA: {
-        ...STARTUP_RESULT.phaseA,
-        boot: { marks: STARTUP_RESULT.phaseA.boot.marks },
+        ...BASE_PHASE,
+        boot: { marks: BASE_PHASE.boot.marks },
         startupMs: undefined,
       },
     };
@@ -596,13 +493,6 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("bulk import 100 add")).toBe(false);
     expect(md.includes("bulk import 100 update")).toBe(false);
     expect(md.includes("base-0")).toBe(false);
-  });
-
-  it("omits diagnostic persistence sections from canonical suite markdown", () => {
-    const md = formatBenchmarkSuiteMarkdown([WRITE_RESULT, THEME_RESULT], { date: "2026-05-01" });
-    expect(md.includes("### Calendar write operations")).toBe(true);
-    expect(md.includes("### Theme persistence operations")).toBe(false);
-    expect(md.includes("theme snapshot insert")).toBe(false);
   });
 
   it("builds a structured preview for rendered summary tables", () => {

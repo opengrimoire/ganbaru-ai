@@ -35,8 +35,6 @@ const CORE_BENCHMARK_SCENARIO_IDS = [
 const BACKEND_BENCHMARK_SCENARIO_IDS = [
   "calendar-write-ops",
   "calendar-import-ops",
-  "theme-persistence-ops",
-  "pomodoro-persistence-ops",
 ];
 
 export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
@@ -74,7 +72,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
     id: "calendar-nav",
     label: "Calendar week-view nav",
     description:
-      "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against an empty baseline plus 1-year and 10-year dense calendars.",
+      "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against the 1-year practical dense calendar.",
     workload: {
       kind: "stress-memory",
       question: "How much memory does repeated week navigation use?",
@@ -83,7 +81,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       memoryMode: "post-workload",
     },
     defaultDataset: DEFAULT_BENCHMARK_DATASET,
-    benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
+    runMode: "dense-only",
   },
   {
     id: "event-panel-open",
@@ -98,7 +96,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       memoryMode: "none",
     },
     defaultDataset: DEFAULT_BENCHMARK_DATASET,
-    benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
+    runMode: "dense-only",
   },
   {
     id: "calendar-create-cancel",
@@ -113,7 +111,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       memoryMode: "none",
     },
     defaultDataset: DEFAULT_BENCHMARK_DATASET,
-    benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
+    runMode: "dense-only",
   },
   {
     id: "calendar-write-ops",
@@ -128,6 +126,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       memoryMode: "none",
     },
     defaultDataset: DEFAULT_BENCHMARK_DATASET,
+    runMode: "dense-only",
   },
   {
     id: "calendar-import-ops",
@@ -142,34 +141,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
       memoryMode: "none",
     },
     defaultDataset: DEFAULT_BENCHMARK_DATASET,
-  },
-  {
-    id: "theme-persistence-ops",
-    label: "Theme persistence operations",
-    description:
-      "Measures Rust-backed theme snapshot insert, replace, load, source cascade, and reset commands against normalized theme tables.",
-    workload: {
-      kind: "operation-latency",
-      question: "How quickly do Rust-backed theme persistence commands finish?",
-      label: "scripted theme persistence commands",
-      durationMs: 0,
-      memoryMode: "none",
-    },
-    defaultDataset: DEFAULT_BENCHMARK_DATASET,
-  },
-  {
-    id: "pomodoro-persistence-ops",
-    label: "Pomodoro persistence operations",
-    description:
-      "Measures Rust-backed Pomodoro segment insert, update, cleanup, orphan cleanup, and completed-session persistence commands.",
-    workload: {
-      kind: "operation-latency",
-      question: "How quickly do Rust-backed Pomodoro persistence commands finish?",
-      label: "scripted Pomodoro persistence commands",
-      durationMs: 0,
-      memoryMode: "none",
-    },
-    defaultDataset: DEFAULT_BENCHMARK_DATASET,
+    runMode: "dense-only",
   },
 ];
 
@@ -205,10 +177,6 @@ const SCENARIO_LOADERS: Record<string, BenchmarkScenarioLoader> = {
     .then((module) => module.calendarWriteOpsScenario),
   "calendar-import-ops": () => import("./scenarios/calendar-import-ops")
     .then((module) => module.calendarImportOpsScenario),
-  "theme-persistence-ops": () => import("./scenarios/theme-persistence-ops")
-    .then((module) => module.themePersistenceOpsScenario),
-  "pomodoro-persistence-ops": () => import("./scenarios/pomodoro-persistence-ops")
-    .then((module) => module.pomodoroPersistenceOpsScenario),
 };
 
 export function getScenarioMetadataById(id: string): BenchmarkScenarioMetadata | undefined {

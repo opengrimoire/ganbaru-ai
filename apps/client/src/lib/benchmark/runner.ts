@@ -200,7 +200,7 @@ export async function persistPhaseBPending(opts: {
   buildRef?: string;
   startedAt: string;
   anchorDate: string;
-  phaseA: PhaseResult;
+  phaseA?: PhaseResult;
   seedHandle: BenchmarkSeedHandle;
   suite?: BenchmarkSuiteState;
   benchmarkDatasets?: BenchmarkDatasetProfile[];

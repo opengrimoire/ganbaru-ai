@@ -6,6 +6,10 @@ import {
   hasScenarioLoader,
   loadScenarioById,
 } from "./registry";
+import {
+  CORE_BENCHMARK_DATASETS,
+  DEFAULT_BENCHMARK_DATASET,
+} from "./types";
 
 describe("benchmark registry", () => {
   it("keeps lightweight metadata covered by lazy loaders", () => {
@@ -44,5 +48,39 @@ describe("benchmark registry", () => {
         "event-panel-open",
         "calendar-create-cancel",
       ]);
+  });
+
+  it("keeps backend benchmarks focused on canonical calendar operations", () => {
+    expect(BENCHMARK_SUITES.find((suite) => suite.id === "backend")?.scenarioIds)
+      .toEqual([
+        "calendar-write-ops",
+        "calendar-import-ops",
+      ]);
+    expect(getScenarioMetadataById("theme-persistence-ops")).toBeUndefined();
+    expect(getScenarioMetadataById("pomodoro-persistence-ops")).toBeUndefined();
+    expect(hasScenarioLoader("theme-persistence-ops")).toBe(false);
+    expect(hasScenarioLoader("pomodoro-persistence-ops")).toBe(false);
+  });
+
+  it("runs only startup and idle across total-history dense datasets", () => {
+    for (const id of ["startup-boot", "idle-memory"]) {
+      const metadata = getScenarioMetadataById(id);
+      expect(metadata?.runMode).toBeUndefined();
+      expect(metadata?.benchmarkDatasets).toEqual([...CORE_BENCHMARK_DATASETS]);
+    }
+    for (const id of [
+      "calendar-nav",
+      "event-panel-open",
+      "calendar-create-cancel",
+      "calendar-write-ops",
+      "calendar-import-ops",
+    ]) {
+      const metadata = getScenarioMetadataById(id);
+      expect(metadata).toBeDefined();
+      if (!metadata) continue;
+      expect(metadata.runMode).toBe("dense-only");
+      expect(metadata.benchmarkDatasets ?? [metadata.defaultDataset])
+        .toEqual([DEFAULT_BENCHMARK_DATASET]);
+    }
   });
 });

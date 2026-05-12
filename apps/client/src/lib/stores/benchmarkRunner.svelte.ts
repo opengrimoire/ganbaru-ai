@@ -17,7 +17,7 @@
  *   [boot, vaultMode=benchmark, stage=phase-a-pending]
  *     -> Rust database layer opens ganbaruai-benchmark.db (empty)
  *     -> stage becomes phase-a-running
- *     -> checkAndResume runs the baseline pass
+ *     -> checkAndResume runs the baseline pass, or skips it for dense-only scenarios
  *     -> scenario.seed(dense dataset)
  *     -> persistPhaseBPending(...)
  *     -> restart app, delayed for startup samples            # restart 2
@@ -186,7 +186,9 @@ class BenchmarkRunnerStore {
       suite: pending.mode === "suite" ? { index: 0, total: pending.scenarioIds.length } : undefined,
       step: isStartupScenario(scenario)
         ? `Closing for ${startupCooldownSeconds()} s startup cooldown`
-        : "Restarting for baseline dataset",
+        : isDenseOnlyScenario(scenario)
+          ? "Restarting to seed dense dataset"
+          : "Restarting for baseline dataset",
     };
 
     try {
@@ -301,7 +303,7 @@ class BenchmarkRunnerStore {
       await this.#runPhaseAThenSeed(scenario, state);
       return true;
     } else if (state.stage === "phase-b-pending") {
-      if (!state.phaseA || !state.seedHandle) {
+      if (!state.seedHandle || (!state.phaseA && !isDenseOnlyScenario(scenario))) {
         await this.#abandonStale();
         return false;
       }
@@ -339,8 +341,6 @@ class BenchmarkRunnerStore {
       step: "Setting up",
     };
     this.#abort = new AbortController();
-    const calendarStore = getCalendar();
-    const runner = createRunner(() => calendarStore.eventCount);
     try {
       await persistBenchmarkState({ ...state, stage: "phase-a-running" });
     } catch (e) {
@@ -348,52 +348,56 @@ class BenchmarkRunnerStore {
       return;
     }
 
-    let phaseA: PhaseResult;
-    try {
-      this.#updateStep(this.#workloadStep(scenario, state, "A"));
-      phaseA = await runner.runPhaseA({
-        scenario,
-        signal: this.#abort.signal,
-        anchorDate: state.anchorDate,
-        onCurveProgress: (label, total, done) => {
-          this.#updateCurve({ label, total, done });
-        },
-      });
-    } catch (e) {
-      if (this.#isAbort(e)) return;
-      this.#failWith(`Baseline dataset failed: ${this.#errMsg(e)}`);
-      return;
-    }
-    if (this.#abort?.signal.aborted) return;
-
+    let phaseA: PhaseResult | undefined;
     let startupRuns = state.startupRuns;
-    if (isStartupScenario(scenario)) {
-      startupRuns = appendStartupPhaseRun(startupRuns, "phaseA", phaseA);
-      if (startupRuns.phaseA.length < startupRuns.targetRuns) {
-        const nextSample = startupRuns.phaseA.length + 1;
-        this.#updateStep(
-          `Closing for ${startupCooldownSeconds()} s cooldown before baseline launch ${nextSample}/${startupRuns.targetRuns}`,
-          true,
-        );
-        try {
-          await persistPhaseAPending({
-            scenarioId: scenario.id,
-            platform: state.platform,
-            buildRef: state.buildRef ?? BUILD_REF,
-            startedAt: state.startedAt,
-            anchorDate: state.anchorDate,
-            suite: state.suite,
-            benchmarkDatasets: state.benchmarkDatasets,
-            startupRuns,
-          });
-        } catch (e) {
-          this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
-          return;
-        }
-        restartForScenario(scenario);
+    if (!isDenseOnlyScenario(scenario)) {
+      const calendarStore = getCalendar();
+      const runner = createRunner(() => calendarStore.eventCount);
+      try {
+        this.#updateStep(this.#workloadStep(scenario, state, "A"));
+        phaseA = await runner.runPhaseA({
+          scenario,
+          signal: this.#abort.signal,
+          anchorDate: state.anchorDate,
+          onCurveProgress: (label, total, done) => {
+            this.#updateCurve({ label, total, done });
+          },
+        });
+      } catch (e) {
+        if (this.#isAbort(e)) return;
+        this.#failWith(`Baseline dataset failed: ${this.#errMsg(e)}`);
         return;
       }
-      phaseA = aggregateStartupPhase("A", startupRuns.phaseA);
+      if (this.#abort?.signal.aborted) return;
+
+      if (isStartupScenario(scenario)) {
+        startupRuns = appendStartupPhaseRun(startupRuns, "phaseA", phaseA);
+        if (startupRuns.phaseA.length < startupRuns.targetRuns) {
+          const nextSample = startupRuns.phaseA.length + 1;
+          this.#updateStep(
+            `Closing for ${startupCooldownSeconds()} s cooldown before baseline launch ${nextSample}/${startupRuns.targetRuns}`,
+            true,
+          );
+          try {
+            await persistPhaseAPending({
+              scenarioId: scenario.id,
+              platform: state.platform,
+              buildRef: state.buildRef ?? BUILD_REF,
+              startedAt: state.startedAt,
+              anchorDate: state.anchorDate,
+              suite: state.suite,
+              benchmarkDatasets: state.benchmarkDatasets,
+              startupRuns,
+            });
+          } catch (e) {
+            this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+            return;
+          }
+          restartForScenario(scenario);
+          return;
+        }
+        phaseA = aggregateStartupPhase("A", startupRuns.phaseA);
+      }
     }
 
     const benchmarkDatasets = state.benchmarkDatasets ?? benchmarkDatasetsForScenario(scenario);
@@ -439,7 +443,7 @@ class BenchmarkRunnerStore {
   async #runPhaseB(
     scenario: BenchmarkScenario,
     state: BenchmarkState,
-    phaseA: PhaseResult,
+    phaseA: PhaseResult | undefined,
     seedHandle: BenchmarkSeedHandle,
   ) {
     this.status = "running";
@@ -488,6 +492,10 @@ class BenchmarkRunnerStore {
     let finalPhaseA = phaseA;
     let startupRuns = state.startupRuns;
     if (isStartupScenario(scenario)) {
+      if (!phaseA) {
+        this.#failWith("Startup benchmark is missing the baseline phase");
+        return;
+      }
       startupRuns = appendStartupPhaseRun(startupRuns, "phaseB", phaseB);
       if (startupRuns.phaseB.length < startupRuns.targetRuns) {
         const nextSample = startupRuns.phaseB.length + 1;
@@ -572,7 +580,10 @@ class BenchmarkRunnerStore {
       return;
     }
 
-    const peakTotals = [finalPhaseA, ...datasetPhases]
+    const peakTotals = [
+      ...(finalPhaseA ? [finalPhaseA] : []),
+      ...datasetPhases,
+    ]
       .flatMap((phase) => phase.peakSamples)
       .map((s) => s.totalMb);
     const peakTotalMb = peakTotals.length > 0 ? Math.max(...peakTotals) : undefined;
@@ -646,7 +657,9 @@ class BenchmarkRunnerStore {
       suite: { index: nextIndex, total: suite.scenarioIds.length },
       step: isStartupScenario(nextScenario)
         ? `Closing for ${startupCooldownSeconds()} s startup cooldown`
-        : "Restarting for next benchmark",
+        : isDenseOnlyScenario(nextScenario)
+          ? "Restarting to seed dense dataset"
+          : "Restarting for next benchmark",
     };
     try {
       await invoke("prepare_benchmark_db");
@@ -699,7 +712,7 @@ class BenchmarkRunnerStore {
     const datasetPhases = resultDatasetPhases(result);
     const largestDataset = datasetPhases[datasetPhases.length - 1] ?? result.phaseB;
     if (result.workload.kind === "startup") {
-      const baseMs = formatOptionalMs(result.phaseA.startupMs);
+      const baseMs = formatOptionalMs(result.phaseA?.startupMs);
       const denseMs = formatOptionalMs(largestDataset.startupMs);
       return `${scenario.label}: launch medians base ${baseMs}, largest dense ${denseMs}. Open the app to review the benchmark output.`;
     }
@@ -707,7 +720,7 @@ class BenchmarkRunnerStore {
       return `${scenario.label}: peak ${Math.round(result.peakTotalMb)} MB. Open the app to review the benchmark output.`;
     }
     const metricCount = [
-      ...(result.phaseA.metrics ?? []),
+      ...(result.phaseA?.metrics ?? []),
       ...datasetPhases.flatMap((phase) => phase.metrics ?? []),
     ].length;
     return `${scenario.label}: ${metricCount} metric rows. Open the app to review the benchmark output.`;
@@ -783,6 +796,10 @@ function notifyBenchmarkDone(title: string, body: string): void {
 
 function isStartupScenario(scenario: BenchmarkScenarioMetadata): boolean {
   return scenario.workload.kind === "startup";
+}
+
+function isDenseOnlyScenario(scenario: BenchmarkScenarioMetadata): boolean {
+  return scenario.runMode === "dense-only";
 }
 
 function restartForScenario(scenario: BenchmarkScenarioMetadata): void {
