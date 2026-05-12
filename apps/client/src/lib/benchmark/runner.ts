@@ -18,10 +18,12 @@ import {
   HARNESS_VERSION,
   DENSE_DATASET_VERSION,
   SAMPLE_OFFSETS_MS,
+  resolveBenchmarkAnchorDate,
   isBenchmarkPendingStage,
   isFreshBenchmarkPendingAge,
   isFreshBenchmarkTotalAge,
   type BenchmarkDatasetProfile,
+  type BenchmarkScenarioContext,
   type BenchmarkScenario,
   type BenchmarkSeedHandle,
   type BenchmarkSuiteState,
@@ -47,10 +49,11 @@ async function runPhase(opts: {
   scenario: BenchmarkScenario;
   signal: AbortSignal;
   getEventCount: () => number;
+  context: BenchmarkScenarioContext;
   datasetId?: string;
   onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
 }): Promise<PhaseResult> {
-  await opts.scenario.setup();
+  await opts.scenario.setup(opts.context);
   if (opts.signal.aborted) throw new DOMException("aborted", "AbortError");
 
   const startedAt = new Date().toISOString();
@@ -63,7 +66,7 @@ async function runPhase(opts: {
   let workloadError: unknown;
   let peakError: unknown;
   try {
-    maybeMetrics = await opts.scenario.runWorkload(opts.signal);
+    maybeMetrics = await opts.scenario.runWorkload(opts.signal, opts.context);
   } catch (error: unknown) {
     workloadError = error;
   }
@@ -116,6 +119,7 @@ export function createRunner(getEventCount: () => number) {
     async runPhaseA(opts: {
       scenario: BenchmarkScenario;
       signal: AbortSignal;
+      anchorDate: string;
       onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
     }): Promise<PhaseResult> {
       return runPhase({
@@ -123,6 +127,7 @@ export function createRunner(getEventCount: () => number) {
         scenario: opts.scenario,
         signal: opts.signal,
         getEventCount,
+        context: { anchorDate: opts.anchorDate },
         onCurveProgress: opts.onCurveProgress,
       });
     },
@@ -130,6 +135,7 @@ export function createRunner(getEventCount: () => number) {
     async runPhaseB(opts: {
       scenario: BenchmarkScenario;
       signal: AbortSignal;
+      anchorDate: string;
       datasetId?: string;
       onCurveProgress?: (label: SampleLabel, total: number, completed: number) => void;
     }): Promise<PhaseResult> {
@@ -138,6 +144,7 @@ export function createRunner(getEventCount: () => number) {
         scenario: opts.scenario,
         signal: opts.signal,
         getEventCount,
+        context: { anchorDate: opts.anchorDate },
         datasetId: opts.datasetId,
         onCurveProgress: opts.onCurveProgress,
       });
@@ -157,6 +164,7 @@ export async function persistPhaseAPending(opts: {
   platform: string;
   buildRef?: string;
   startedAt?: string;
+  anchorDate?: string;
   suite?: BenchmarkSuiteState;
   benchmarkDatasets?: BenchmarkDatasetProfile[];
   startupRuns?: StartupRunState;
@@ -170,6 +178,7 @@ export async function persistPhaseAPending(opts: {
     datasetVersion: DENSE_DATASET_VERSION,
     platform: opts.platform,
     buildRef: opts.buildRef,
+    anchorDate: opts.anchorDate ?? resolveBenchmarkAnchorDate(),
     vaultMode: "benchmark",
     stage: "phase-a-pending",
     suite: opts.suite,
@@ -190,6 +199,7 @@ export async function persistPhaseBPending(opts: {
   platform: string;
   buildRef?: string;
   startedAt: string;
+  anchorDate: string;
   phaseA: PhaseResult;
   seedHandle: BenchmarkSeedHandle;
   suite?: BenchmarkSuiteState;
@@ -207,6 +217,7 @@ export async function persistPhaseBPending(opts: {
     datasetVersion: DENSE_DATASET_VERSION,
     platform: opts.platform,
     buildRef: opts.buildRef,
+    anchorDate: opts.anchorDate,
     vaultMode: "benchmark",
     stage: "phase-b-pending",
     phaseA: opts.phaseA,

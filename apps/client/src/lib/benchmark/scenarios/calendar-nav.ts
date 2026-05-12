@@ -17,6 +17,7 @@ import {
   type BenchmarkMetric,
   type BenchmarkDatasetProfile,
   type BenchmarkScenario,
+  type BenchmarkScenarioContext,
   type BenchmarkSeedHandle,
 } from "../types";
 import {
@@ -41,14 +42,14 @@ export const calendarNavScenario: BenchmarkScenario = {
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
   benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
 
-  async setup(): Promise<void> {
+  async setup(context: BenchmarkScenarioContext): Promise<void> {
     const handle = getCalendarNavHandle();
     if (!handle.available) {
       throw new Error("Calendar view is not mounted; cannot run calendar benchmark");
     }
     handle.setViewMode("week");
-    handle.setAnchorDate(parseCalendarBenchmarkAnchor());
-    await loadCalendarBenchmarkWindow("week");
+    handle.setAnchorDate(parseCalendarBenchmarkAnchor(context.anchorDate));
+    await loadCalendarBenchmarkWindow(context.anchorDate, "week");
     // One frame for the view to settle before peak sampling starts.
     await new Promise((r) => requestAnimationFrame(() => r(undefined)));
   },
@@ -91,8 +92,11 @@ export const calendarNavScenario: BenchmarkScenario = {
     ];
   },
 
-  async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
-    return seedCalendarDataset(dataset);
+  async seed(
+    dataset: BenchmarkDatasetProfile,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkSeedHandle> {
+    return seedCalendarDataset(dataset, context);
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {

@@ -5,15 +5,15 @@ exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing change
 
 ### Run metadata
 
-| Run | Harness | Build ref | Platform | Notes |
-|---|---|---|---|---|
-| 2026-05-01-ID | v3 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
+| Run | Harness | Anchor date | Build ref | Platform | Notes |
+|---|---|---|---|---|---|
+| 2026-05-01-ID | v1 | 2026-05-01 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |  |
 
 ### Calendar held navigation memory
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
-| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak | 87.0 | 430.0 | 16.0 | 517 |
-| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload end | 87.0 | 400.0 | 16.0 | 487 |
+| 2026-05-01-ID | dense-v1-r1y-s1-d1 | navigation peak | 87.0 | 430.0 | 16.0 | 517 |
+| 2026-05-01-ID | dense-v1-r1y-s1-d1 | navigation end | 87.0 | 400.0 | 16.0 | 487 |
 | 2026-05-01-ID | dense-v1-r1y-s1-d1 | +30s | 87.0 | 231.0 | 16.0 | 318 |"
 `;

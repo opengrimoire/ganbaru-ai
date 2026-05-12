@@ -58,28 +58,51 @@
     return loadingBenchmarkOverlay;
   }
 
-  async function resumeBenchmarkIfNeeded(): Promise<void> {
-    const stateJson = await invoke<string | null>("read_benchmark_state");
-    if (!stateJson) return;
-    await ensureBenchmarkOverlay();
-    const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
-    await getBenchmarkRunner().checkAndResume();
-  }
-
-  let benchmarkResumeScheduled = false;
-
-  function scheduleBenchmarkResume(): void {
-    if (benchmarkResumeScheduled) return;
-    benchmarkResumeScheduled = true;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        resumeBenchmarkIfNeeded().catch((e) =>
-          console.error("benchmark resume failed:", e),
-        );
+  async function afterAnimationFrames(count: number): Promise<void> {
+    for (let i = 0; i < count; i++) {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
       });
-    });
+    }
   }
 
+  function startNormalCalendarBoot(): void {
+    calendars.load().catch((e) => console.error("Failed to load calendars:", e));
+    // The legacy wall-clock to UTC ISO migration runs here instead of in
+    // main.ts so first paint is not blocked by a per-event UPDATE pass on
+    // first boot after the migration shipped. The hydrator is idempotent:
+    // it short-circuits via a config marker once the migration succeeds,
+    // so on every subsequent boot this is a single config read. Calendar
+    // load is gated on it so the renderer never reads half-migrated rows.
+    hydrateCalendarEventTimezones()
+      .then(() => {
+        perfMark("boot.tz-hydrated");
+        return calendar.load();
+      })
+      .then(() => {
+        // Calendar startup marks are still produced for normal boots.
+      })
+      .catch((e) => console.error("Failed to migrate or load calendar:", e));
+  }
+
+  async function startBenchmarkOrNormalCalendarBoot(): Promise<void> {
+    let benchmarkClaimedBoot = false;
+    try {
+      const stateJson = await invoke<string | null>("read_benchmark_state");
+      if (stateJson) {
+        await ensureBenchmarkOverlay();
+        await afterAnimationFrames(2);
+        const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
+        benchmarkClaimedBoot = await getBenchmarkRunner().checkAndResume();
+      }
+    } catch (e) {
+      console.error("benchmark resume failed:", e);
+    } finally {
+      if (!benchmarkClaimedBoot) {
+        startNormalCalendarBoot();
+      }
+    }
+  }
   function loadKanbanView(): Promise<void> {
     if (KanbanView) return Promise.resolve();
     loadingKanbanView ??= import("$lib/components/kanban/KanbanView.svelte")
@@ -115,26 +138,11 @@
 
   onMount(() => {
     perfMark("boot.app-mount");
-    // Benchmark resume must not depend on normal boot hydration. The
-    // scenario setup loads the deterministic benchmark window itself.
-    scheduleBenchmarkResume();
-    calendars.load().catch((e) => console.error("Failed to load calendars:", e));
-    // The legacy wall-clock to UTC ISO migration runs here instead of in
-    // main.ts so first paint is not blocked by a per-event UPDATE pass on
-    // first boot after the migration shipped. The hydrator is idempotent:
-    // it short-circuits via a config marker once the migration succeeds,
-    // so on every subsequent boot this is a single config read. Calendar
-    // load is gated on it so the renderer never reads half-migrated rows.
-    hydrateCalendarEventTimezones()
-      .then(() => {
-        perfMark("boot.tz-hydrated");
-        return calendar.load();
-      })
-      .then(() => {
-        // Calendar startup marks are still produced for normal boots and
-        // for benchmark windows where the regular load wins the race.
-      })
-      .catch((e) => console.error("Failed to migrate or load calendar:", e));
+    // Valid benchmark boots are claimed before normal calendar hydration so
+    // the measured window is the scenario anchor, not today's normal window.
+    startBenchmarkOrNormalCalendarBoot().catch((e) =>
+      console.error("calendar boot failed:", e),
+    );
     pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     appWindow.isMaximized().then((v) => (isMaximized = v));
     invoke<number>("get_startup_elapsed_ms").then((ms) => {

@@ -25,11 +25,11 @@ export const STARTUP_RELAUNCH_COOLDOWN_MS = 10_000;
 /**
  * Offsets in milliseconds, measured from the moment `runWorkload` resolves.
  *
- * v2 cuts the curve to a single +30s reading. Empirically (2026-05-01) the
- * GC sweep that drops 60-100 MB lands between t0 and +30s; everything
- * after +30s sits in a flat ~10 MB jitter band. The +30s point preserves
- * the cross-build comparable signal at a fraction of the wall time. See
- * the spec doc for the data and the "bounded-window asymptote" caveat.
+ * The active harness keeps a single +30s reading. Earlier measurements
+ * showed that the GC sweep that drops 60-100 MB lands between t0 and +30s;
+ * everything after +30s sits in a flat ~10 MB jitter band. The +30s point
+ * preserves the cross-build comparable signal at a fraction of the wall time.
+ * See the spec doc for the data and the "bounded-window asymptote" caveat.
  */
 export const SAMPLE_OFFSETS_MS = [30_000];
 /** Stale state older than this on boot is discarded silently. */
@@ -51,17 +51,11 @@ export const PENDING_STATE_TTL_MS = 2 * 60 * 1000;
  * Stored on the persisted state file so stale baseline data captured by an
  * old build cannot accidentally feed the dense pass on a new build.
  *
- * v3 (2026-05-11): current unrecorded harness. Switches core datasets to
- * dense calendar v1 with one-hour timed Pomodoro events, three all-day events
- * per day, and completed Pomodoro history for timed events before the fixed
- * anchor. Uses held-key navigation cadence for navigation memory.
- * v2 (2026-05-10): recorded rows add a 10,000-event synthetic pass to the
- * existing 1,000-event synthetic pass.
- * v1 (2026-05-05): recorded rows use the current question-oriented output
- * shape, scalar metric tables, and repeated startup launch samples with a
- * closed-process cooldown.
+ * v1 (2026-05-12): active baseline reset. Calendar benchmarks use a
+ * run-persisted today anchor, skip normal current-week preload on benchmark
+ * boots, and copy reduced canonical tables.
  */
-export const HARNESS_VERSION = "3";
+export const HARNESS_VERSION = "1";
 
 /**
  * Dense dataset shape version. Bumping this requires renaming the calendar
@@ -74,7 +68,7 @@ export type DenseCalendarDetailProfile = "d1";
 export interface DenseCalendarDatasetProfile {
   kind: "dense-calendar";
   version: typeof DENSE_DATASET_VERSION;
-  /** Years before and after the fixed benchmark anchor. */
+  /** Years before and after the run's persisted benchmark anchor. */
   yearRadius: number;
   /** Number of events created at the start of every hour. */
   stackCount: number;
@@ -145,6 +139,13 @@ export const SAMPLE_LABELS: SampleLabel[] = [
   ...SAMPLE_OFFSETS_MS.map(formatOffsetLabel),
 ];
 
+export function resolveBenchmarkAnchorDate(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /** Single memory reading at one sample point. MB units, PSS on Linux, RSS on Windows. */
 export interface SamplePoint {
   label: SampleLabel;
@@ -190,6 +191,11 @@ export interface BenchmarkMetric {
   value: number;
   /** Optional scalar breakdown, such as `moduleMs`, `detailsMs`, or row counts. */
   details?: Record<string, string | number>;
+}
+
+export interface BenchmarkScenarioContext {
+  /** Local YYYY-MM-DD date fixed when the benchmark run starts. */
+  anchorDate: string;
 }
 
 /**
@@ -274,6 +280,8 @@ export interface BenchmarkState {
   platform: string;
   /** App version plus git ref at write time, e.g. `0.1.0+a7451de-dirty`. */
   buildRef?: string;
+  /** Local YYYY-MM-DD anchor date used for calendar dataset generation and UI windows. */
+  anchorDate: string;
   /**
    * Which DB the next boot should open. `"benchmark"` routes
    * `db.ts:resolveUrl()` to the isolated `ganbaruai-benchmark.db`; the
@@ -375,18 +383,24 @@ export interface BenchmarkScenario extends BenchmarkScenarioMetadata {
    * Configure the app into the precondition required by the stress phase.
    * Runs at the start of every phase (A and B).
    */
-  setup(): Promise<void>;
+  setup(context: BenchmarkScenarioContext): Promise<void>;
   /**
    * Drive the deterministic workload. The scenario keeps the work loop
    * going for `workload.durationMs` only when it needs a fixed window. It
    * may return scenario-specific metrics for the markdown summary.
    */
-  runWorkload(signal: AbortSignal): Promise<void | BenchmarkMetric[]>;
+  runWorkload(
+    signal: AbortSignal,
+    context: BenchmarkScenarioContext,
+  ): Promise<void | BenchmarkMetric[]>;
   /**
    * Seed the dense dataset. Called once between the baseline pass and
    * the restart. Returns a handle that `cleanup()` can use to undo.
    */
-  seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle>;
+  seed(
+    dataset: BenchmarkDatasetProfile,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkSeedHandle>;
   /**
    * Undo whatever `seed()` created. Runs on summary close, on cancel, and
    * on stale-state cleanup at boot.
@@ -409,6 +423,8 @@ export interface BenchmarkResult {
   datasetPhases?: PhaseResult[];
   /** Peak total memory (MB) observed in either phase, present only for memory benchmarks. */
   peakTotalMb?: number;
+  /** Local YYYY-MM-DD anchor date used by calendar benchmark scenarios. */
+  anchorDate: string;
 }
 
 /** Dense benchmark event shape produced by the v1 generator. */

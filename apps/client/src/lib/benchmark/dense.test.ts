@@ -21,7 +21,7 @@ describe("benchmark dense calendar datasets", () => {
     expect(benchmarkDatasetId(LARGE_BENCHMARK_DATASET)).toBe("dense-v1-r10y-s1-d1");
   });
 
-  it("counts the 1-year and 10-year dense spans around the fixed anchor", () => {
+  it("counts the 1-year and 10-year dense spans around the provided anchor", () => {
     expect(denseCalendarDateRange(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toEqual({
       start: "2025-04-30",
       endExclusive: "2027-04-30",

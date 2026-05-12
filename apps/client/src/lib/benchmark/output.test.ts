@@ -122,6 +122,7 @@ const RESULT: BenchmarkResult = {
   harnessVersion: HARNESS_VERSION,
   platform: "Linux",
   buildRef: "0.1.0+9815ea5",
+  anchorDate: "2026-05-01",
   phaseA: mockPhase("A", 348, 278, 0),
   phaseB: mockPhase("B", 517, 318, 19_710, "dense-v1-r1y-s1-d1"),
   peakTotalMb: 517,
@@ -433,15 +434,15 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.startsWith("## Benchmark 2026-05-01-ID")).toBe(true);
     expect(md.includes("### Index")).toBe(false);
     expect(md.match(/### Run metadata/g)).toHaveLength(1);
-    expect(md.includes(`| 2026-05-01-ID | v${HARNESS_VERSION} | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |`)).toBe(true);
+    expect(md.includes(`| 2026-05-01-ID | v${HARNESS_VERSION} | 2026-05-01 | 9815ea5 | Linux Ubuntu 25.10, WebKitGTK 2.46 |`)).toBe(true);
     expect(md.includes("Scenario:")).toBe(false);
     expect(md.includes("Phase A")).toBe(false);
     expect(md.includes("Phase B")).toBe(false);
     expect(md.includes(`${STRESS_DURATION_MS} ms held right-arrow week-view navigation`)).toBe(false);
     expect(md.includes("### Startup boot")).toBe(false);
     expect(md.includes("### Calendar held navigation memory")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(false);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | navigation peak")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | navigation peak")).toBe(true);
     expect(md.includes("Settled floor:")).toBe(false);
     expect(md.includes("| Date |")).toBe(false);
     expect(md.includes("| Platform |")).toBe(true);
@@ -455,9 +456,9 @@ describe("formatBenchmarkMarkdown", () => {
         mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
       ],
     }, { date: "2026-05-01" });
-    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(false);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | workload peak")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | base-0 | navigation peak")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | navigation peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | navigation peak")).toBe(false);
   });
 
   it("keeps every dataset for total-history idle memory", () => {
@@ -468,9 +469,9 @@ describe("formatBenchmarkMarkdown", () => {
         mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
       ],
     }, { date: "2026-05-01" });
-    expect(md.includes("| 2026-05-01-ID | base-0 | workload peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | workload peak")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | workload peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | base-0 | idle peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | idle peak")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | idle peak")).toBe(true);
   });
 
   it("matches the golden snapshot so spacing changes are intentional", () => {
@@ -613,6 +614,7 @@ describe("formatBenchmarkMarkdown", () => {
     expect(preview.metadata).toMatchObject({
       run: "2026-05-01-ID",
       harness: `v${HARNESS_VERSION}`,
+      anchorDate: "2026-05-01",
       buildRef: "9815ea5",
       platform: "Linux Ubuntu 25.10, WebKitGTK 2.46",
     });

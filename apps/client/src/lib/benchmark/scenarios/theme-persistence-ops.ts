@@ -14,6 +14,7 @@ import {
   type BenchmarkDatasetProfile,
   type BenchmarkMetric,
   type BenchmarkScenario,
+  type BenchmarkScenarioContext,
   type BenchmarkSeedHandle,
 } from "../types";
 import { seedCalendarDataset } from "./calendar-utils";
@@ -269,8 +270,11 @@ export const themePersistenceOpsScenario: BenchmarkScenario = {
     ];
   },
 
-  async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
-    return seedCalendarDataset(dataset);
+  async seed(
+    dataset: BenchmarkDatasetProfile,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkSeedHandle> {
+    return seedCalendarDataset(dataset, context);
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {

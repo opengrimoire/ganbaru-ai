@@ -7,6 +7,7 @@ import {
   isBenchmarkPendingStage,
   isFreshBenchmarkPendingAge,
   isFreshBenchmarkTotalAge,
+  resolveBenchmarkAnchorDate,
 } from "./types";
 
 const NOW_MS = Date.parse("2026-05-10T12:00:00.000Z");
@@ -20,6 +21,11 @@ function isoAhead(ms: number): string {
 }
 
 describe("benchmark state freshness", () => {
+  it("resolves the benchmark anchor from the local calendar day", () => {
+    expect(resolveBenchmarkAnchorDate(new Date(2026, 4, 9, 23, 59, 59))).toBe("2026-05-09");
+    expect(resolveBenchmarkAnchorDate(new Date(2026, 10, 3, 0, 0, 0))).toBe("2026-11-03");
+  });
+
   it("recognizes the pending stages that can route to the benchmark database", () => {
     expect(isBenchmarkPendingStage("phase-a-pending")).toBe(true);
     expect(isBenchmarkPendingStage("phase-b-pending")).toBe(true);

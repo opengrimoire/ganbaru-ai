@@ -20,11 +20,8 @@ import {
   type BenchmarkEventDraft,
   type BenchmarkMetric,
   type BenchmarkSeedHandle,
+  type BenchmarkScenarioContext,
 } from "../types";
-
-/** Anchor used by calendar benchmarks so both passes hit the same window. */
-export const CALENDAR_BENCHMARK_ANCHOR_ISO = "2026-04-30";
-const CALENDAR_BENCHMARK_ANCHOR_WALL_CLOCK = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 00:00`;
 
 const DENSE_SEED_CHUNK_SIZE = 1_000;
 
@@ -33,13 +30,33 @@ export function denseCalendarFilename(dataset: BenchmarkDatasetProfile): string 
   return `benchmark-dense-${dataset.version}-s${dataset.stackCount}-${dataset.detailProfile}.ics`;
 }
 
-export function parseCalendarBenchmarkAnchor(): Date {
-  const [y, m, d] = CALENDAR_BENCHMARK_ANCHOR_ISO.split("-").map(Number);
+export function parseCalendarBenchmarkAnchor(anchorDate: string): Date {
+  const [y, m, d] = anchorDate.split("-").map(Number);
+  if (
+    !Number.isInteger(y)
+    || !Number.isInteger(m)
+    || !Number.isInteger(d)
+    || y < 1
+    || m < 1
+    || m > 12
+    || d < 1
+    || d > 31
+  ) {
+    throw new Error(`Invalid benchmark anchor date: ${anchorDate}`);
+  }
   return new Date(y, m - 1, d);
 }
 
-export async function loadCalendarBenchmarkWindow(mode: CalendarViewMode = "week"): Promise<void> {
-  const window = computeViewWindow(parseCalendarBenchmarkAnchor(), mode);
+export function calendarBenchmarkAnchorWallClock(anchorDate: string): string {
+  return `${anchorDate} 00:00`;
+}
+
+export async function loadCalendarBenchmarkWindow(
+  anchorDate: string,
+  mode: CalendarViewMode = "week",
+): Promise<void> {
+  const window = computeViewWindow(parseCalendarBenchmarkAnchor(anchorDate), mode);
+  await getCalendars().load();
   const calendarStore = getCalendar();
   await calendarStore.loadWindow(window.start, window.end);
   await calendarStore.whenWindowIdle();
@@ -144,10 +161,11 @@ async function seedPomodoroHistory(payload: BenchmarkPomodoroHistoryPayload): Pr
 
 export async function seedCalendarDataset(
   dataset: BenchmarkDatasetProfile,
+  context: BenchmarkScenarioContext,
 ): Promise<BenchmarkSeedHandle> {
   const calendarsStore = getCalendars();
   const cal = await calendarsStore.findOrCreateImported(denseCalendarFilename(dataset));
-  const anchor = parseCalendarBenchmarkAnchor();
+  const anchor = parseCalendarBenchmarkAnchor(context.anchorDate);
   const totalEvents = countDenseCalendarEvents(dataset, anchor);
 
   for (let offset = 0; offset < totalEvents; offset += DENSE_SEED_CHUNK_SIZE) {
@@ -160,7 +178,10 @@ export async function seedCalendarDataset(
     const events = drafts.map((d, i) => draftToEvent(d, offset + i, cal.id));
     await bulkImportBenchmarkEvents(events, cal.id);
     await seedPomodoroHistory(
-      buildDensePomodoroHistoryPayload(events, CALENDAR_BENCHMARK_ANCHOR_WALL_CLOCK),
+      buildDensePomodoroHistoryPayload(
+        events,
+        calendarBenchmarkAnchorWallClock(context.anchorDate),
+      ),
     );
   }
 

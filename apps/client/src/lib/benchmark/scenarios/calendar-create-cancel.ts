@@ -12,10 +12,10 @@ import {
   type BenchmarkDatasetProfile,
   type BenchmarkMetric,
   type BenchmarkScenario,
+  type BenchmarkScenarioContext,
   type BenchmarkSeedHandle,
 } from "../types";
 import {
-  CALENDAR_BENCHMARK_ANCHOR_ISO,
   loadCalendarBenchmarkWindow,
   parseCalendarBenchmarkAnchor,
   seedCalendarDataset,
@@ -24,8 +24,6 @@ import {
   waitForMs,
 } from "./calendar-utils";
 
-const CREATE_START = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 13:00`;
-const CREATE_END = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 13:30`;
 const CREATE_CLOSE_GUARD_MS = 500;
 const CREATE_CANCEL_RUNS = 6;
 
@@ -50,13 +48,21 @@ function latestCreateOpenMs(): number {
   return done ? Math.max(0, done.t - start.t) : Number.NaN;
 }
 
-async function measureCreateOpen(): Promise<number> {
+function createPanelTimes(anchorDate: string) {
+  return {
+    start: `${anchorDate} 13:00`,
+    end: `${anchorDate} 14:00`,
+  };
+}
+
+async function measureCreateOpen(anchorDate: string): Promise<number> {
   const handle = getCalendarNavHandle();
+  const times = createPanelTimes(anchorDate);
   const wasTracking = perfLog.tracking;
   clearPerfLog();
   setTracking(true);
   try {
-    await handle.openCreatePanel(CREATE_START, CREATE_END, false);
+    await handle.openCreatePanel(times.start, times.end, false);
     await waitForFrames(2);
     return latestCreateOpenMs();
   } finally {
@@ -89,25 +95,28 @@ export const calendarCreateCancelScenario: BenchmarkScenario = {
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
   benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
 
-  async setup(): Promise<void> {
+  async setup(context: BenchmarkScenarioContext): Promise<void> {
     const handle = getCalendarNavHandle();
     if (!handle.available) {
       throw new Error("Calendar view is not mounted; cannot run create-cancel benchmark");
     }
     handle.setViewMode("week");
-    handle.setAnchorDate(parseCalendarBenchmarkAnchor());
-    await loadCalendarBenchmarkWindow("week");
+    handle.setAnchorDate(parseCalendarBenchmarkAnchor(context.anchorDate));
+    await loadCalendarBenchmarkWindow(context.anchorDate, "week");
     await waitForFrames(2);
     await handle.closePanel();
   },
 
-  async runWorkload(signal: AbortSignal): Promise<BenchmarkMetric[]> {
+  async runWorkload(
+    signal: AbortSignal,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkMetric[]> {
     const openMs: number[] = [];
     const cancelMs: number[] = [];
 
     for (let i = 0; i < CREATE_CANCEL_RUNS; i++) {
       if (signal.aborted) throw new DOMException("aborted", "AbortError");
-      openMs.push(await measureCreateOpen());
+      openMs.push(await measureCreateOpen(context.anchorDate));
       cancelMs.push(await measureCreateCancel(signal));
     }
 
@@ -117,8 +126,11 @@ export const calendarCreateCancelScenario: BenchmarkScenario = {
     ];
   },
 
-  async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
-    return seedCalendarDataset(dataset);
+  async seed(
+    dataset: BenchmarkDatasetProfile,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkSeedHandle> {
+    return seedCalendarDataset(dataset, context);
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {

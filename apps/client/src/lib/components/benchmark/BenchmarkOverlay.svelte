@@ -164,6 +164,7 @@
                   <tr>
                     <th class={thClass}>Run</th>
                     <th class={thClass}>Harness</th>
+                    <th class={thClass}>Anchor date</th>
                     <th class={thClass}>Build ref</th>
                     <th class={thClass}>Platform</th>
                     <th class={thClass}>Notes</th>
@@ -173,6 +174,7 @@
                   <tr>
                     <td class={tdClass}>{summaryPreview.metadata.run}</td>
                     <td class={tdClass}>{summaryPreview.metadata.harness}</td>
+                    <td class={tdClass}>{summaryPreview.metadata.anchorDate}</td>
                     <td class={tdClass}>{summaryPreview.metadata.buildRef}</td>
                     <td class={tdClass}>{summaryPreview.metadata.platform}</td>
                     <td class={tdClass}>{summaryPreview.metadata.notes}</td>

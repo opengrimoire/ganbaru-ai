@@ -9,6 +9,7 @@ import {
   type BenchmarkDatasetProfile,
   type BenchmarkMetric,
   type BenchmarkScenario,
+  type BenchmarkScenarioContext,
   type BenchmarkSeedHandle,
 } from "../types";
 import {
@@ -57,11 +58,16 @@ async function removeImportCalendar(calendarId: string): Promise<void> {
   await invokeDb<void>("calendar_remove_calendar", { id: calendarId });
 }
 
-function buildPayload(calendarId: string, count: number, label: string) {
+function buildPayload(
+  calendarId: string,
+  count: number,
+  label: string,
+  context: BenchmarkScenarioContext,
+) {
   const drafts = generateDenseCalendarEvents({
     dataset: DEFAULT_BENCHMARK_DATASET,
     count,
-    anchor: parseCalendarBenchmarkAnchor(),
+    anchor: parseCalendarBenchmarkAnchor(context.anchorDate),
     offset: label.length,
   });
   const events = drafts.map((draft, index) =>
@@ -76,40 +82,56 @@ function buildPayload(calendarId: string, count: number, label: string) {
   );
 }
 
-async function applyImport(calendarId: string, count: number, label: string) {
+async function applyImport(
+  calendarId: string,
+  count: number,
+  label: string,
+  context: BenchmarkScenarioContext,
+) {
   return invokeDb<CalendarBulkImportResult>("calendar_bulk_import", {
-    payload: buildPayload(calendarId, count, label),
+    payload: buildPayload(calendarId, count, label, context),
   });
 }
 
-async function importAddSample(count: number, label: string): Promise<number> {
+async function importAddSample(
+  count: number,
+  label: string,
+  context: BenchmarkScenarioContext,
+): Promise<number> {
   const calendarId = await createImportCalendar(label);
   try {
     return await measureMs(async () => {
-      await applyImport(calendarId, count, label);
+      await applyImport(calendarId, count, label, context);
     });
   } finally {
     await removeImportCalendar(calendarId).catch(() => {});
   }
 }
 
-async function importUpdateSample(count: number, label: string): Promise<number> {
+async function importUpdateSample(
+  count: number,
+  label: string,
+  context: BenchmarkScenarioContext,
+): Promise<number> {
   const calendarId = await createImportCalendar(label);
   try {
-    await applyImport(calendarId, count, label);
+    await applyImport(calendarId, count, label, context);
     return await measureMs(async () => {
-      await applyImport(calendarId, count, label);
+      await applyImport(calendarId, count, label, context);
     });
   } finally {
     await removeImportCalendar(calendarId).catch(() => {});
   }
 }
 
-async function largeImportMetrics(signal: AbortSignal): Promise<BenchmarkMetric[]> {
+async function largeImportMetrics(
+  signal: AbortSignal,
+  context: BenchmarkScenarioContext,
+): Promise<BenchmarkMetric[]> {
   if (signal.aborted) throw new DOMException("aborted", "AbortError");
-  const addMs = await importAddSample(LARGE_IMPORT_EVENTS, "large-add");
+  const addMs = await importAddSample(LARGE_IMPORT_EVENTS, "large-add", context);
   if (signal.aborted) throw new DOMException("aborted", "AbortError");
-  const updateMs = await importUpdateSample(LARGE_IMPORT_EVENTS, "large-update");
+  const updateMs = await importUpdateSample(LARGE_IMPORT_EVENTS, "large-update", context);
   return [
     scalarMsMetric("bulk import 1000 add", addMs),
     scalarMsMetric("bulk import 1000 update", updateMs),
@@ -135,13 +157,16 @@ export const calendarImportOpsScenario: BenchmarkScenario = {
     await getCalendars().load();
   },
 
-  async runWorkload(signal: AbortSignal): Promise<BenchmarkMetric[]> {
+  async runWorkload(
+    signal: AbortSignal,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkMetric[]> {
     const smallAddMetric = await repeatedMeasuredTimingMetric(
       "bulk import 100 add avg",
       SMALL_IMPORT_RUNS,
       signal,
       async (index) => {
-        return importAddSample(SMALL_IMPORT_EVENTS, `small-add-${index}`);
+        return importAddSample(SMALL_IMPORT_EVENTS, `small-add-${index}`, context);
       },
       { events: SMALL_IMPORT_EVENTS },
     );
@@ -150,11 +175,11 @@ export const calendarImportOpsScenario: BenchmarkScenario = {
       SMALL_IMPORT_RUNS,
       signal,
       async (index) => {
-        return importUpdateSample(SMALL_IMPORT_EVENTS, `small-update-${index}`);
+        return importUpdateSample(SMALL_IMPORT_EVENTS, `small-update-${index}`, context);
       },
       { events: SMALL_IMPORT_EVENTS },
     );
-    const largeMetrics = await largeImportMetrics(signal);
+    const largeMetrics = await largeImportMetrics(signal, context);
     return [
       smallAddMetric,
       smallUpdateMetric,
@@ -162,8 +187,11 @@ export const calendarImportOpsScenario: BenchmarkScenario = {
     ];
   },
 
-  async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
-    return seedCalendarDataset(dataset);
+  async seed(
+    dataset: BenchmarkDatasetProfile,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkSeedHandle> {
+    return seedCalendarDataset(dataset, context);
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {

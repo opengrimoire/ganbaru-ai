@@ -13,10 +13,10 @@ import {
   type BenchmarkDatasetProfile,
   type BenchmarkMetric,
   type BenchmarkScenario,
+  type BenchmarkScenarioContext,
   type BenchmarkSeedHandle,
 } from "../types";
 import {
-  CALENDAR_BENCHMARK_ANCHOR_ISO,
   loadCalendarBenchmarkWindow,
   parseCalendarBenchmarkAnchor,
   seedCalendarDataset,
@@ -24,10 +24,6 @@ import {
   waitForFrames,
 } from "./calendar-utils";
 
-const FIRST_START = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 09:00`;
-const FIRST_END = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 10:00`;
-const SECOND_START = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 11:00`;
-const SECOND_END = `${CALENDAR_BENCHMARK_ANCHOR_ISO} 12:00`;
 const PANEL_OPEN_RUNS = 10;
 
 type PanelStep = "module" | "details" | "state" | "flush";
@@ -108,23 +104,33 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw new DOMException("aborted", "AbortError");
 }
 
-async function ensureTargetEvents(): Promise<void> {
+function targetEventTimes(anchorDate: string) {
+  return {
+    firstStart: `${anchorDate} 09:00`,
+    firstEnd: `${anchorDate} 10:00`,
+    secondStart: `${anchorDate} 11:00`,
+    secondEnd: `${anchorDate} 12:00`,
+  };
+}
+
+async function ensureTargetEvents(anchorDate: string): Promise<void> {
   const calendarStore = getCalendar();
   const existing = calendarStore.rawBlocks.filter((event) =>
-    event.start >= `${CALENDAR_BENCHMARK_ANCHOR_ISO} 00:00`
-    && event.start <= `${CALENDAR_BENCHMARK_ANCHOR_ISO} 23:59`,
+    event.start >= `${anchorDate} 00:00`
+    && event.start <= `${anchorDate} 23:59`,
   );
   if (existing.length >= 2) return;
+  const times = targetEventTimes(anchorDate);
   await calendarStore.addBlock({
     title: "Benchmark panel target 1",
-    start: FIRST_START,
-    end: FIRST_END,
+    start: times.firstStart,
+    end: times.firstEnd,
     description: "Deterministic event used by the event-panel-open benchmark.",
   });
   await calendarStore.addBlock({
     title: "Benchmark panel target 2",
-    start: SECOND_START,
-    end: SECOND_END,
+    start: times.secondStart,
+    end: times.secondEnd,
     description: "Second deterministic event used by the switch benchmark.",
   });
 }
@@ -144,15 +150,15 @@ export const eventPanelOpenScenario: BenchmarkScenario = {
   defaultDataset: DEFAULT_BENCHMARK_DATASET,
   benchmarkDatasets: [...CORE_BENCHMARK_DATASETS],
 
-  async setup(): Promise<void> {
+  async setup(context: BenchmarkScenarioContext): Promise<void> {
     const handle = getCalendarNavHandle();
     if (!handle.available) {
       throw new Error("Calendar view is not mounted; cannot run event-panel benchmark");
     }
     handle.setViewMode("week");
-    handle.setAnchorDate(parseCalendarBenchmarkAnchor());
-    await loadCalendarBenchmarkWindow("week");
-    await ensureTargetEvents();
+    handle.setAnchorDate(parseCalendarBenchmarkAnchor(context.anchorDate));
+    await loadCalendarBenchmarkWindow(context.anchorDate, "week");
+    await ensureTargetEvents(context.anchorDate);
     await waitForFrames(2);
     await handle.closePanel();
   },
@@ -184,8 +190,11 @@ export const eventPanelOpenScenario: BenchmarkScenario = {
     ];
   },
 
-  async seed(dataset: BenchmarkDatasetProfile): Promise<BenchmarkSeedHandle> {
-    return seedCalendarDataset(dataset);
+  async seed(
+    dataset: BenchmarkDatasetProfile,
+    context: BenchmarkScenarioContext,
+  ): Promise<BenchmarkSeedHandle> {
+    return seedCalendarDataset(dataset, context);
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {

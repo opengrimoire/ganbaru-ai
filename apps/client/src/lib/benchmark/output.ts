@@ -62,6 +62,7 @@ const CANONICAL_METRIC_LABELS_BY_SCENARIO = new Map<string, readonly string[]>([
 export interface BenchmarkRunMetadataRow {
   run: string;
   harness: string;
+  anchorDate: string;
   buildRef: string;
   platform: string;
   notes: string;
@@ -138,6 +139,8 @@ interface BenchmarkOutputOptions {
   env?: string;
   /** Optional build identifier shown in run metadata. */
   build?: string;
+  /** Optional run anchor. Defaults to the result anchor dates. */
+  anchorDate?: string;
   /** Optional complete run id. Defaults to `${date}-ID`. */
   run?: string;
   /** Optional run notes. */
@@ -270,8 +273,12 @@ export function benchmarkDatasetLabel(result: BenchmarkResult, phase: PhaseResul
   return `dense-${datasetVersion}-${phase.eventCountAtStart}`;
 }
 
-function timepointLabel(label: SampleLabel): string {
-  return label === "peak" ? "workload peak" : label === "t0" ? "workload end" : label;
+function timepointLabel(result: BenchmarkResult, label: SampleLabel): string {
+  if (label !== "peak" && label !== "t0") return label;
+  const suffix = label === "peak" ? "peak" : "end";
+  if (result.workload.kind === "idle-memory") return `idle ${suffix}`;
+  if (result.scenarioId === "calendar-nav") return `navigation ${suffix}`;
+  return `measurement ${suffix}`;
 }
 
 function buildStartupRows(result: BenchmarkResult, run: string): BenchmarkStartupRow[] {
@@ -312,7 +319,7 @@ function formatMemoryRow(
   return {
     run,
     dataset: benchmarkDatasetLabel(result, phase),
-    timepoint: timepointLabel(label),
+    timepoint: timepointLabel(result, label),
     backendMb: sample ? formatMb(sample.backendMb) : "n/a",
     frontendMb: sample ? formatMb(sample.frontendMb) : "n/a",
     networkMb: sample ? formatMb(sample.networkMb) : "n/a",
@@ -332,9 +339,11 @@ export function buildBenchmarkSuitePreview(
   const buildRef = opts.build ?? unique(results.map((result) => result.buildRef).filter(isDefined)).join(", ");
   const platform = opts.env ?? unique(results.map((result) => result.platform)).join(", ");
   const harness = unique(results.map((result) => result.harnessVersion)).map(formatHarness).join(", ");
+  const anchorDate = opts.anchorDate ?? unique(results.map((result) => result.anchorDate)).join(", ");
   const metadata: BenchmarkRunMetadataRow = {
     run,
     harness: harness || "n/a",
+    anchorDate: anchorDate || "n/a",
     buildRef: buildRef || "n/a",
     platform: platform || "n/a",
     notes: opts.notes ?? "",
@@ -520,10 +529,10 @@ export function formatBenchmarkSuiteMarkdown(
 function appendRunMetadata(lines: string[], metadata: BenchmarkRunMetadataRow): void {
   lines.push("### Run metadata");
   lines.push("");
-  lines.push("| Run | Harness | Build ref | Platform | Notes |");
-  lines.push("|---|---|---|---|---|");
+  lines.push("| Run | Harness | Anchor date | Build ref | Platform | Notes |");
+  lines.push("|---|---|---|---|---|---|");
   lines.push(
-    `| ${metadata.run} | ${metadata.harness} | ${metadata.buildRef} | ${metadata.platform} | ${metadata.notes} |`,
+    `| ${metadata.run} | ${metadata.harness} | ${metadata.anchorDate} | ${metadata.buildRef} | ${metadata.platform} | ${metadata.notes} |`,
   );
 }
 

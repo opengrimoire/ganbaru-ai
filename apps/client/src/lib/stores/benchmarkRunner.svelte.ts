@@ -263,16 +263,16 @@ class BenchmarkRunnerStore {
    * on `state.stage`. Stale or invalid state is silently cleaned up; if
    * no state exists, this is a no-op and the app behaves as a normal boot.
    */
-  async checkAndResume() {
-    if (this.status !== "idle") return;
+  async checkAndResume(): Promise<boolean> {
+    if (this.status !== "idle") return false;
     let state: BenchmarkState | null;
     try {
       state = await loadPersistedState();
     } catch (e) {
       console.error("benchmark loadPersistedState failed", e);
-      return;
+      return false;
     }
-    if (!state) return;
+    if (!state) return false;
 
     // `loadPersistedState` already wipes the benchmark DB and clears state
     // on TTL, version mismatch, or an interrupted `*-running` stage.
@@ -283,30 +283,33 @@ class BenchmarkRunnerStore {
     const scenarioMetadata = getScenarioMetadataById(state.scenarioId);
     if (!scenarioMetadata) {
       await this.#abandonStale();
-      return;
+      return false;
     }
     let scenario: BenchmarkScenario | undefined;
     try {
       scenario = await loadScenarioById(state.scenarioId);
     } catch (e) {
       this.#failWith(`Loading scenario failed: ${this.#errMsg(e)}`);
-      return;
+      return true;
     }
     if (!scenario) {
       await this.#abandonStale();
-      return;
+      return false;
     }
 
     if (state.stage === "phase-a-pending") {
       await this.#runPhaseAThenSeed(scenario, state);
+      return true;
     } else if (state.stage === "phase-b-pending") {
       if (!state.phaseA || !state.seedHandle) {
         await this.#abandonStale();
-        return;
+        return false;
       }
       await this.#runPhaseB(scenario, state, state.phaseA, state.seedHandle);
+      return true;
     } else {
       await this.#abandonStale();
+      return false;
     }
   }
 
@@ -351,6 +354,7 @@ class BenchmarkRunnerStore {
       phaseA = await runner.runPhaseA({
         scenario,
         signal: this.#abort.signal,
+        anchorDate: state.anchorDate,
         onCurveProgress: (label, total, done) => {
           this.#updateCurve({ label, total, done });
         },
@@ -377,6 +381,7 @@ class BenchmarkRunnerStore {
             platform: state.platform,
             buildRef: state.buildRef ?? BUILD_REF,
             startedAt: state.startedAt,
+            anchorDate: state.anchorDate,
             suite: state.suite,
             benchmarkDatasets: state.benchmarkDatasets,
             startupRuns,
@@ -396,7 +401,7 @@ class BenchmarkRunnerStore {
     this.#updateStep(`Seeding ${benchmarkDatasetId(dataset)}`, /* clearCurve */ true);
     let seedHandle: BenchmarkSeedHandle;
     try {
-      seedHandle = await scenario.seed(dataset);
+      seedHandle = await scenario.seed(dataset, { anchorDate: state.anchorDate });
     } catch (e) {
       this.#failWith(`Seeding failed: ${this.#errMsg(e)}`);
       return;
@@ -414,6 +419,7 @@ class BenchmarkRunnerStore {
         platform: state.platform,
         buildRef: state.buildRef ?? BUILD_REF,
         startedAt: state.startedAt,
+        anchorDate: state.anchorDate,
         phaseA,
         seedHandle,
         suite: state.suite,
@@ -464,6 +470,7 @@ class BenchmarkRunnerStore {
       phaseB = await runner.runPhaseB({
         scenario,
         signal: this.#abort.signal,
+        anchorDate: state.anchorDate,
         datasetId: seedHandle.datasetId,
         onCurveProgress: (label, total, done) => {
           this.#updateCurve({ label, total, done });
@@ -494,6 +501,7 @@ class BenchmarkRunnerStore {
             platform: state.platform,
             buildRef: state.buildRef ?? BUILD_REF,
             startedAt: state.startedAt,
+            anchorDate: state.anchorDate,
             phaseA,
             seedHandle,
             suite: state.suite,
@@ -527,7 +535,7 @@ class BenchmarkRunnerStore {
       this.#updateStep(`Seeding ${benchmarkDatasetId(nextDataset)}`, /* clearCurve */ true);
       let nextSeedHandle: BenchmarkSeedHandle;
       try {
-        nextSeedHandle = await scenario.seed(nextDataset);
+        nextSeedHandle = await scenario.seed(nextDataset, { anchorDate: state.anchorDate });
       } catch (e) {
         this.#failWith(`Seeding failed: ${this.#errMsg(e)}`);
         return;
@@ -545,6 +553,7 @@ class BenchmarkRunnerStore {
           platform: state.platform,
           buildRef: state.buildRef ?? BUILD_REF,
           startedAt: state.startedAt,
+          anchorDate: state.anchorDate,
           phaseA: finalPhaseA,
           seedHandle: nextSeedHandle,
           suite: state.suite,
@@ -580,11 +589,18 @@ class BenchmarkRunnerStore {
       phaseB: datasetPhases[0] ?? phaseB,
       datasetPhases,
       peakTotalMb,
+      anchorDate: state.anchorDate,
     };
 
     const suite = state.suite;
     if (suite && suite.index < suite.scenarioIds.length - 1) {
-      await this.#continueSuite(suite, result, state.platform, state.buildRef ?? BUILD_REF);
+      await this.#continueSuite(
+        suite,
+        result,
+        state.platform,
+        state.buildRef ?? BUILD_REF,
+        state.anchorDate,
+      );
       return;
     }
 
@@ -607,6 +623,7 @@ class BenchmarkRunnerStore {
     result: BenchmarkResult,
     platform: string,
     buildRef: string,
+    anchorDate: string,
   ): Promise<void> {
     const nextIndex = suite.index + 1;
     const nextScenarioId = suite.scenarioIds[nextIndex];
@@ -637,6 +654,7 @@ class BenchmarkRunnerStore {
         scenarioId: nextScenario.id,
         platform,
         buildRef,
+        anchorDate,
         benchmarkDatasets: benchmarkDatasetsForScenario(nextScenario),
         suite: nextSuite,
       });
