@@ -68,7 +68,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest recorded canonical baseline: `2026-05-10-04` with harness v2. The current benchmark harness is v3 and is not recorded yet. The run metadata table below is the source of truth for recorded harness versions.
+Latest recorded canonical baseline: `2026-05-11-01` with harness v3. The run metadata table below is the source of truth for recorded harness versions.
 
 Do not bump `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, or dense detail profiles for iteration alone. While tuning a benchmark before recording a run, edit the current version in place. Bump only when at least one run using the current version has been recorded in the run metadata and a later change would make new numbers incomparable with those recorded rows.
 
@@ -82,6 +82,7 @@ Do not bump `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, or dense detail profiles
 | 2026-05-10-02 | v1 | 0.1.0+f3bd22b | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-10-03 | v2 | 0.1.0+bf7b282 | Linux Ubuntu 24.04.4 LTS |  |
 | 2026-05-10-04 | v2 | 0.1.0+5a5f19c | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-11-01 | v3 | 0.1.0+2c94f8a | Linux Ubuntu 24.04.4 LTS |  |
 
 ### Core benchmarks
 
@@ -107,6 +108,9 @@ Use `Launch median ms` as the headline app-open comparison value. `First paint m
 | 2026-05-10-04 | base-0 | 5 | 147 | 254 | 729 | 819 | 819 | 749 |
 | 2026-05-10-04 | synth-v1-1000 | 5 | 147 | 497 | 999 | 1395 | 1395 | 1001 |
 | 2026-05-10-04 | synth-v1-10000 | 5 | 147 | 2180 | 2598 | 2702 | 2702 | 2647 |
+| 2026-05-11-01 | base-0 | 5 | 147 | 254 | 714 | 830 | 830 | 736 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | 5 | 144 | 518 | 882 | 1302 | 1302 | 1075 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | 5 | 148 | 515 | 984 | 1407 | 1407 | 994 |
 
 #### Idle memory
 
@@ -156,9 +160,15 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 | 2026-05-10-04 | synth-v1-10000 | workload peak | 116.3 | 452.2 | 17.9 | 586 |
 | 2026-05-10-04 | synth-v1-10000 | workload end | 116.3 | 420.9 | 18.0 | 555 |
 | 2026-05-10-04 | synth-v1-10000 | +30s | 115.7 | 416.9 | 18.1 | 551 |
-
-| Run | Dataset | Metric | Value | Unit |
-|---|---|---|---:|---|
+| 2026-05-11-01 | base-0 | workload peak | 108.1 | 199.9 | 17.9 | 326 |
+| 2026-05-11-01 | base-0 | workload end | 107.8 | 195.3 | 17.9 | 321 |
+| 2026-05-11-01 | base-0 | +30s | 107.1 | 193.9 | 18.0 | 319 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | workload peak | 111.3 | 261.3 | 17.7 | 390 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | workload end | 111.0 | 241.6 | 17.7 | 370 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | +30s | 110.3 | 243.2 | 17.8 | 371 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | workload peak | 112.4 | 260.3 | 17.9 | 391 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | workload end | 112.2 | 243.6 | 17.9 | 374 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | +30s | 111.6 | 241.9 | 18.0 | 371 |
 
 #### Calendar held navigation memory
 
@@ -166,9 +176,27 @@ Rows record memory plus scalar move counts emitted by the calendar navigation sc
 
 | Run | Dataset | Timepoint | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
+| 2026-05-11-01 | base-0 | workload peak | 107.8 | 207.9 | 17.8 | 334 |
+| 2026-05-11-01 | base-0 | workload end | 107.8 | 210.6 | 17.8 | 336 |
+| 2026-05-11-01 | base-0 | +30s | 107.1 | 207.4 | 18.0 | 333 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | workload peak | 111.9 | 319.5 | 17.7 | 449 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | workload end | 111.9 | 319.9 | 17.7 | 449 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | +30s | 110.8 | 311.1 | 17.8 | 440 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | workload peak | 112.5 | 352.4 | 17.9 | 483 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | workload end | 112.6 | 352.4 | 18.0 | 483 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | +30s | 111.8 | 301.6 | 18.0 | 431 |
 
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
+| 2026-05-11-01 | base-0 | held navigation moves | 24 | count |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | held navigation moves | 8 | count |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | held navigation moves | 9 | count |
+| 2026-05-11-01 | base-0 | held navigation repeats | 23 | count |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | held navigation repeats | 7 | count |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | held navigation repeats | 8 | count |
+| 2026-05-11-01 | base-0 | held navigation skipped ticks | 0 | count |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | held navigation skipped ticks | 7 | count |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | held navigation skipped ticks | 7 | count |
 
 #### Historical calendar navigation stress memory
 
@@ -253,6 +281,12 @@ Rows report user-visible elapsed time. Internal module, detail-load, state, and 
 | 2026-05-10-04 | base-2 | edit switch while open avg | 18 | ms | 10 | 17 | 18 | 19 | 19 |
 | 2026-05-10-04 | synth-v1-1002 | edit switch while open avg | 24 | ms | 10 | 16 | 20 | 33 | 33 |
 | 2026-05-10-04 | synth-v1-10002 | edit switch while open avg | 99 | ms | 10 | 87 | 98 | 113 | 113 |
+| 2026-05-11-01 | base-2 | edit open from closed avg | 25 | ms | 10 | 16 | 17 | 69 | 69 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | edit open from closed avg | 97 | ms | 10 | 82 | 83 | 188 | 188 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | edit open from closed avg | 104 | ms | 10 | 82 | 86 | 233 | 233 |
+| 2026-05-11-01 | base-2 | edit switch while open avg | 16 | ms | 10 | 15 | 16 | 17 | 17 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | edit switch while open avg | 24 | ms | 10 | 15 | 27 | 32 | 32 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | edit switch while open avg | 26 | ms | 10 | 16 | 29 | 36 | 36 |
 
 #### Create panel latency
 
@@ -288,6 +322,12 @@ The cancel timing includes the fixed 500 ms guard used by the scenario before cl
 | 2026-05-10-04 | base-0 | create cancel after guard avg | 59 | ms | 6 | 58 | 59 | 61 | 61 |
 | 2026-05-10-04 | synth-v1-1000 | create cancel after guard avg | 62 | ms | 6 | 59 | 59 | 75 | 75 |
 | 2026-05-10-04 | synth-v1-10000 | create cancel after guard avg | 443 | ms | 6 | 430 | 442 | 451 | 451 |
+| 2026-05-11-01 | base-0 | create panel open avg | 39 | ms | 6 | 17 | 34 | 78 | 78 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | create panel open avg | 117 | ms | 6 | 98 | 99 | 206 | 206 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | create panel open avg | 127 | ms | 6 | 96 | 98 | 256 | 256 |
+| 2026-05-11-01 | base-0 | create cancel after guard avg | 60 | ms | 6 | 58 | 59 | 62 | 62 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | create cancel after guard avg | 130 | ms | 6 | 126 | 127 | 142 | 142 |
+| 2026-05-11-01 | dense-v1-r10y-s1-d1 | create cancel after guard avg | 130 | ms | 6 | 125 | 127 | 142 | 142 |
 
 ### Backend benchmarks
 
@@ -309,6 +349,16 @@ Rows report Tauri IPC round-trip time for Rust-backed calendar write commands ag
 | 2026-05-10-02 | synth-v1-1000 | recurring detach avg | 4 | ms | 5 | 3 | 4 | 4 | 4 |
 | 2026-05-10-02 | base-0 | recurring split avg | 4 | ms | 5 | 3 | 4 | 4 | 4 |
 | 2026-05-10-02 | synth-v1-1000 | recurring split avg | 4 | ms | 5 | 3 | 4 | 4 | 4 |
+| 2026-05-11-01 | base-0 | event create save avg | 8 | ms | 8 | 5 | 6 | 26 | 26 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | event create save avg | 53 | ms | 8 | 5 | 7 | 341 | 341 |
+| 2026-05-11-01 | base-0 | event patch save avg | 5 | ms | 8 | 5 | 5 | 6 | 6 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | event patch save avg | 6 | ms | 8 | 5 | 6 | 9 | 9 |
+| 2026-05-11-01 | base-0 | event delete avg | 6 | ms | 8 | 4 | 5 | 8 | 8 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | event delete avg | 12 | ms | 8 | 10 | 11 | 15 | 15 |
+| 2026-05-11-01 | base-0 | recurring detach avg | 6 | ms | 5 | 5 | 6 | 7 | 7 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | recurring detach avg | 5 | ms | 5 | 5 | 5 | 6 | 6 |
+| 2026-05-11-01 | base-0 | recurring split avg | 6 | ms | 5 | 5 | 5 | 7 | 7 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | recurring split avg | 6 | ms | 5 | 5 | 5 | 8 | 8 |
 
 #### Calendar import operations
 
@@ -320,6 +370,10 @@ Repeated rows report 100-event import command timing. Scalar rows report one 100
 | 2026-05-10-02 | synth-v1-1000 | bulk import 100 add avg | 56 | ms | 3 | 29 | 31 | 107 | 107 |
 | 2026-05-10-02 | base-0 | bulk import 100 update avg | 33 | ms | 3 | 32 | 33 | 35 | 35 |
 | 2026-05-10-02 | synth-v1-1000 | bulk import 100 update avg | 33 | ms | 3 | 31 | 32 | 36 | 36 |
+| 2026-05-11-01 | base-0 | bulk import 100 add avg | 43 | ms | 3 | 36 | 39 | 55 | 55 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | bulk import 100 add avg | 60 | ms | 3 | 38 | 58 | 85 | 85 |
+| 2026-05-11-01 | base-0 | bulk import 100 update avg | 40 | ms | 3 | 35 | 40 | 45 | 45 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | bulk import 100 update avg | 42 | ms | 3 | 39 | 40 | 47 | 47 |
 
 | Run | Dataset | Metric | Value | Unit |
 |---|---|---|---:|---|
@@ -327,6 +381,10 @@ Repeated rows report 100-event import command timing. Scalar rows report one 100
 | 2026-05-10-02 | synth-v1-1000 | bulk import 1000 add | 234 | ms |
 | 2026-05-10-02 | base-0 | bulk import 1000 update | 277 | ms |
 | 2026-05-10-02 | synth-v1-1000 | bulk import 1000 update | 289 | ms |
+| 2026-05-11-01 | base-0 | bulk import 1000 add | 295 | ms |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | bulk import 1000 add | 315 | ms |
+| 2026-05-11-01 | base-0 | bulk import 1000 update | 318 | ms |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | bulk import 1000 update | 352 | ms |
 
 #### Theme persistence operations
 
@@ -344,6 +402,16 @@ Rows report Tauri IPC round-trip time for Rust-backed theme persistence commands
 | 2026-05-10-02 | synth-v1-1000 | theme source cascade avg | 4 | ms | 8 | 4 | 4 | 5 | 5 |
 | 2026-05-10-02 | base-0 | theme reset to seed avg | 4 | ms | 8 | 3 | 4 | 5 | 5 |
 | 2026-05-10-02 | synth-v1-1000 | theme reset to seed avg | 3 | ms | 8 | 3 | 3 | 4 | 4 |
+| 2026-05-11-01 | base-0 | theme snapshot insert avg | 18 | ms | 8 | 9 | 11 | 68 | 68 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | theme snapshot insert avg | 56 | ms | 8 | 9 | 11 | 340 | 340 |
+| 2026-05-11-01 | base-0 | theme snapshot replace avg | 9 | ms | 8 | 8 | 9 | 11 | 11 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | theme snapshot replace avg | 10 | ms | 8 | 9 | 9 | 13 | 13 |
+| 2026-05-11-01 | base-0 | theme load all avg | 5 | ms | 8 | 3 | 4 | 7 | 7 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | theme load all avg | 6 | ms | 8 | 3 | 6 | 10 | 10 |
+| 2026-05-11-01 | base-0 | theme source cascade avg | 7 | ms | 8 | 6 | 6 | 8 | 8 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | theme source cascade avg | 7 | ms | 8 | 5 | 6 | 9 | 9 |
+| 2026-05-11-01 | base-0 | theme reset to seed avg | 5 | ms | 8 | 4 | 5 | 6 | 6 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | theme reset to seed avg | 6 | ms | 8 | 4 | 5 | 9 | 9 |
 
 #### Pomodoro persistence operations
 
@@ -361,6 +429,16 @@ Rows report Tauri IPC round-trip time for Rust-backed Pomodoro persistence comma
 | 2026-05-10-02 | synth-v1-1000 | pomodoro cleanup orphans avg | 3 | ms | 8 | 3 | 3 | 5 | 5 |
 | 2026-05-10-02 | base-0 | pomodoro save session avg | 5 | ms | 8 | 3 | 3 | 7 | 7 |
 | 2026-05-10-02 | synth-v1-1000 | pomodoro save session avg | 3 | ms | 8 | 3 | 3 | 6 | 6 |
+| 2026-05-11-01 | base-0 | pomodoro insert segments avg | 6 | ms | 8 | 5 | 6 | 8 | 8 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | pomodoro insert segments avg | 17 | ms | 8 | 5 | 6 | 59 | 59 |
+| 2026-05-11-01 | base-0 | pomodoro update segments avg | 6 | ms | 8 | 5 | 6 | 6 | 6 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | pomodoro update segments avg | 6 | ms | 8 | 5 | 6 | 9 | 9 |
+| 2026-05-11-01 | base-0 | pomodoro cleanup event segments avg | 6 | ms | 8 | 5 | 6 | 7 | 7 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | pomodoro cleanup event segments avg | 6 | ms | 8 | 5 | 5 | 7 | 7 |
+| 2026-05-11-01 | base-0 | pomodoro cleanup orphans avg | 5 | ms | 8 | 4 | 5 | 6 | 6 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | pomodoro cleanup orphans avg | 16 | ms | 8 | 14 | 14 | 25 | 25 |
+| 2026-05-11-01 | base-0 | pomodoro save session avg | 6 | ms | 8 | 5 | 5 | 10 | 10 |
+| 2026-05-11-01 | dense-v1-r1y-s1-d1 | pomodoro save session avg | 6 | ms | 8 | 5 | 5 | 8 | 8 |
 
 ## Historical context
 
