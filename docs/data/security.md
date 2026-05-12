@@ -24,6 +24,8 @@ These rules are enforced globally on the developer environment and reiterated in
 
 **pnpm: ignore-scripts.** Lifecycle scripts (`postinstall`, etc.) are disabled by default. A package that needs a postinstall script (e.g. native bindings) must be explicitly allow-listed. This blocks the most common npm supply chain attack vector.
 
+**pnpm: release-age gate.** npm packages published less than 3 days ago are rejected through `minimumReleaseAge: 4320` in `pnpm-workspace.yaml`. This gives compromised or suspicious releases time to be detected before they can enter the lockfile.
+
 **pip: only-binary.** Source-distributed packages cannot run their `setup.py` at install time; only pre-built wheels are accepted. This blocks the analogous Python attack vector.
 
 **cargo-audit.** Run on every dependency change. Known vulnerable crate versions are flagged.
