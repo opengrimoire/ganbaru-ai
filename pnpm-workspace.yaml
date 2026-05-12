@@ -4,4 +4,6 @@ packages:
   - packages/*
   - extensions/*
 
-onlyBuiltDependencies: '[''esbuild'']'
+managePackageManagerVersions: true
+allowBuilds:
+  esbuild: true

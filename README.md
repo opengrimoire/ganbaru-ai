@@ -44,7 +44,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phased development plan.
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 24 LTS recommended. Node 22.12.0 or newer is also supported while Node 22 remains maintained.
-- [pnpm](https://pnpm.io/) >= 10
+- [Corepack](https://nodejs.org/api/corepack.html) enabled for the pinned [pnpm](https://pnpm.io/) 11 version in `package.json`
 - [Rust](https://rustup.rs/) (stable)
 - Tauri v2 system dependencies for your platform: [v2.tauri.app/start/prerequisites](https://v2.tauri.app/start/prerequisites/)
 
@@ -53,6 +53,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phased development plan.
 ```bash
 git clone https://github.com/VictorBenitoGR/GanbaruAI.git
 cd GanbaruAI
+corepack enable
 pnpm install
 ```
 
@@ -75,9 +76,10 @@ pnpm tauri build            # produces platform-specific installer
 ### Tests
 
 ```bash
-cd apps/client
-pnpm test         # run all unit tests
-pnpm test:watch   # watch mode
+pnpm -w run check      # types, Svelte diagnostics, Rust formatting, and clippy
+pnpm -w run test       # Vitest and cargo tests
+pnpm -w run validate   # full local validation gate
+pnpm --dir apps/client test:watch
 ```
 
 ## Contributing
