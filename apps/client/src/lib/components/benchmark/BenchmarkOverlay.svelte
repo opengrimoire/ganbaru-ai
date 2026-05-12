@@ -99,7 +99,7 @@
         Dataset: {runningDatasetLabel(runner.running.phase, runner.running.datasetLabel)}. {runner.running.step}
         {#if runner.running.curve}
           <span class="text-muted-foreground"
-            >({runner.running.curve.done}/{runner.running.curve.total}: {runner.running.curve.label})</span
+            >({runner.running.curve.done}/{runner.running.curve.total})</span
           >
         {/if}
       </div>
@@ -280,8 +280,10 @@
                           <tr>
                             <th class={thClass}>Run</th>
                             <th class={thClass}>Dataset</th>
-                            <th class={thClass}>Metric</th>
-                            <th class={thClass}>Runs</th>
+                            <th class={thClass}>{section.id === "calendar-panel-latency" ? "Action" : "Metric"}</th>
+                            {#if section.id !== "calendar-panel-latency"}
+                              <th class={thClass}>Runs</th>
+                            {/if}
                             <th class={thClass}>Median ms</th>
                             <th class={thClass}>P95 ms</th>
                           </tr>
@@ -292,7 +294,9 @@
                               <td class={tdClass}>{row.run}</td>
                               <td class={tdClass}>{row.dataset}</td>
                               <td class={tdClass}>{row.metric}</td>
-                              <td class={tdClass}>{row.runs}</td>
+                              {#if section.id !== "calendar-panel-latency"}
+                                <td class={tdClass}>{row.runs}</td>
+                              {/if}
                               <td class={tdClass}>{row.median}</td>
                               <td class={tdClass}>{row.p95}</td>
                             </tr>

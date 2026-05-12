@@ -45,19 +45,17 @@ describe("benchmark registry", () => {
         "startup-boot",
         "idle-memory",
         "calendar-nav",
-        "event-panel-open",
-        "calendar-create-cancel",
+        "calendar-panel-latency",
       ]);
   });
 
   it("keeps backend benchmarks focused on canonical calendar operations", () => {
     expect(BENCHMARK_SUITES.find((suite) => suite.id === "backend")?.scenarioIds)
-      .toEqual([
-        "calendar-write-ops",
-        "calendar-import-ops",
-      ]);
+      .toEqual(["calendar-import-ops"]);
+    expect(getScenarioMetadataById("calendar-write-ops")).toBeUndefined();
     expect(getScenarioMetadataById("theme-persistence-ops")).toBeUndefined();
     expect(getScenarioMetadataById("pomodoro-persistence-ops")).toBeUndefined();
+    expect(hasScenarioLoader("calendar-write-ops")).toBe(false);
     expect(hasScenarioLoader("theme-persistence-ops")).toBe(false);
     expect(hasScenarioLoader("pomodoro-persistence-ops")).toBe(false);
   });
@@ -70,9 +68,7 @@ describe("benchmark registry", () => {
     }
     for (const id of [
       "calendar-nav",
-      "event-panel-open",
-      "calendar-create-cancel",
-      "calendar-write-ops",
+      "calendar-panel-latency",
       "calendar-import-ops",
     ]) {
       const metadata = getScenarioMetadataById(id);

@@ -21,6 +21,8 @@ export const MEMORY_OBSERVATION_SAMPLE_COUNT =
   MEMORY_OBSERVATION_DURATION_MS / MEMORY_OBSERVATION_INTERVAL_MS;
 /** Number of process launches captured per dataset by the startup benchmark. */
 export const STARTUP_SAMPLE_RUNS = 5;
+/** Number of repeated opens captured per calendar panel benchmark action. */
+export const PANEL_ACTION_RUNS = 50;
 /** Closed-process wait before each startup benchmark relaunch sample. */
 export const STARTUP_RELAUNCH_COOLDOWN_MS = 10_000;
 /** Stale state older than this on boot is discarded silently. */
@@ -157,7 +159,7 @@ export interface BenchmarkWorkload {
 export type BenchmarkMetricUnit = "ms" | "count";
 
 export interface BenchmarkMetric {
-  /** Stable row label within a scenario, e.g. `edit open from closed`. */
+  /** Stable row label within a scenario, e.g. `click existing event`. */
   label: string;
   unit: BenchmarkMetricUnit;
   value: number;

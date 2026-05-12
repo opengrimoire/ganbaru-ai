@@ -884,6 +884,7 @@
       setViewMode: (mode) => changeView(mode),
       setAnchorDate: (date) => { anchorDate = date; },
       openVisibleEvent: openVisibleEventForBenchmark,
+      getVisibleEventCount: getVisibleEventCountForBenchmark,
       openCreatePanel: openCreatePanelForBenchmark,
       closePanel: closePanelForBenchmark,
       canRepeatHeldNavigation,
@@ -1066,6 +1067,10 @@
     await tick();
     await waitForFrames(2);
     return true;
+  }
+
+  function getVisibleEventCountForBenchmark(): number {
+    return visibleEvents.filter((item) => !item.id.startsWith(PENDING_CREATE_ID)).length;
   }
 
   async function openCreatePanelForBenchmark(

@@ -28,14 +28,10 @@ const CORE_BENCHMARK_SCENARIO_IDS = [
   "startup-boot",
   "idle-memory",
   "calendar-nav",
-  "event-panel-open",
-  "calendar-create-cancel",
+  "calendar-panel-latency",
 ];
 
-const BACKEND_BENCHMARK_SCENARIO_IDS = [
-  "calendar-write-ops",
-  "calendar-import-ops",
-];
+const BACKEND_BENCHMARK_SCENARIO_IDS = ["calendar-import-ops"];
 
 export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
   {
@@ -84,44 +80,14 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
     runMode: "dense-only",
   },
   {
-    id: "event-panel-open",
-    label: "Event panel open",
+    id: "calendar-panel-latency",
+    label: "Calendar panel latency",
     description:
-      "Measures edit-panel open from a closed calendar and switch while the panel is already mounted. It reports the same module, details, state, flush, and paint timing pieces shown in the Speed log.",
+      "Measures the two calendar panel open actions with 50 runs each: clicking varied existing events and clicking deterministic time slots for create.",
     workload: {
       kind: "interaction-latency",
-      question: "How quickly does the event panel paint for existing events?",
-      label: "scripted event-panel open interactions",
-      durationMs: 0,
-      memoryMode: "none",
-    },
-    defaultDataset: DEFAULT_BENCHMARK_DATASET,
-    runMode: "dense-only",
-  },
-  {
-    id: "calendar-create-cancel",
-    label: "Calendar create cancel",
-    description:
-      "Opens a create panel on a deterministic empty slot, waits past the close guard, then cancels it. This protects the create-preview teardown path that is separate from editing an existing event.",
-    workload: {
-      kind: "interaction-latency",
-      question: "How quickly does the create panel open and cancel?",
-      label: "scripted create-panel open and cancel",
-      durationMs: 0,
-      memoryMode: "none",
-    },
-    defaultDataset: DEFAULT_BENCHMARK_DATASET,
-    runMode: "dense-only",
-  },
-  {
-    id: "calendar-write-ops",
-    label: "Calendar write operations",
-    description:
-      "Measures Rust-backed calendar event create, patch, delete, detach, and split commands through Tauri IPC against the isolated benchmark DB.",
-    workload: {
-      kind: "operation-latency",
-      question: "How quickly do Rust-backed calendar write commands finish?",
-      label: "scripted calendar write commands",
+      question: "How quickly does the calendar panel open from user actions?",
+      label: "scripted calendar panel open actions",
       durationMs: 0,
       memoryMode: "none",
     },
@@ -155,7 +121,7 @@ export const BENCHMARK_SUITES: BenchmarkSuiteMetadata[] = [
   {
     id: "backend",
     label: "Backend benchmarks",
-    description: "Rust-backed persistence, import, and storage command latency.",
+    description: "Rust-backed calendar import latency.",
     scenarioIds: BACKEND_BENCHMARK_SCENARIO_IDS,
   },
   {
@@ -170,11 +136,8 @@ const SCENARIO_LOADERS: Record<string, BenchmarkScenarioLoader> = {
   "startup-boot": () => import("./scenarios/startup-boot").then((module) => module.startupBootScenario),
   "idle-memory": () => import("./scenarios/idle-memory").then((module) => module.idleMemoryScenario),
   "calendar-nav": () => import("./scenarios/calendar-nav").then((module) => module.calendarNavScenario),
-  "event-panel-open": () => import("./scenarios/event-panel-open").then((module) => module.eventPanelOpenScenario),
-  "calendar-create-cancel": () => import("./scenarios/calendar-create-cancel")
-    .then((module) => module.calendarCreateCancelScenario),
-  "calendar-write-ops": () => import("./scenarios/calendar-write-ops")
-    .then((module) => module.calendarWriteOpsScenario),
+  "calendar-panel-latency": () => import("./scenarios/calendar-panel-latency")
+    .then((module) => module.calendarPanelLatencyScenario),
   "calendar-import-ops": () => import("./scenarios/calendar-import-ops")
     .then((module) => module.calendarImportOpsScenario),
 };

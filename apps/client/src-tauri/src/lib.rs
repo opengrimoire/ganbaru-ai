@@ -516,6 +516,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
             notification::show_event_notification,
+            notification::show_benchmark_notification,
             notification::show_break_overlay,
             notification::get_idle_status,
             notification::play_alert_sound,

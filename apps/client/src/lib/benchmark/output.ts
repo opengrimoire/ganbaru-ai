@@ -26,15 +26,9 @@ const USABLE_PAINT_MARK = "boot.usable-paint";
 const STAT_DETAIL_KEYS = ["runs", "minMs", "medianMs", "p95Ms", "maxMs"] as const;
 const CANONICAL_METRIC_LABELS_BY_SCENARIO = new Map<string, readonly string[]>([
   ["calendar-nav", []],
-  ["event-panel-open", [
-    "edit open from closed avg",
-    "edit switch while open avg",
-  ]],
-  ["calendar-create-cancel", ["create panel open avg"]],
-  ["calendar-write-ops", [
-    "event create save avg",
-    "event patch save avg",
-    "recurring split avg",
+  ["calendar-panel-latency", [
+    "click existing event avg",
+    "click empty time slot avg",
   ]],
   ["calendar-import-ops", [
     "bulk import 1000 add",
@@ -461,8 +455,7 @@ function sectionTitle(result: BenchmarkResult): string {
   if (result.scenarioId === "startup-boot") return "Startup boot";
   if (result.scenarioId === "idle-memory") return "Idle memory";
   if (result.scenarioId === "calendar-nav") return "Calendar held navigation memory";
-  if (result.scenarioId === "event-panel-open") return "Event panel latency";
-  if (result.scenarioId === "calendar-create-cancel") return "Create panel latency";
+  if (result.scenarioId === "calendar-panel-latency") return "Calendar panel latency";
   return result.scenarioLabel;
 }
 
@@ -485,10 +478,10 @@ export function formatBenchmarkSuiteMarkdown(
       appendMemoryTable(lines, section.rows);
       if (section.latencyRows.length > 0 || section.scalarRows.length > 0) {
         lines.push("");
-        appendMetricTables(lines, section.latencyRows, section.scalarRows);
+        appendMetricTables(lines, section.id, section.latencyRows, section.scalarRows);
       }
     } else {
-      appendMetricTables(lines, section.latencyRows, section.scalarRows);
+      appendMetricTables(lines, section.id, section.latencyRows, section.scalarRows);
     }
   }
   return lines.join("\n");
@@ -526,6 +519,7 @@ function appendMemoryTable(lines: string[], rows: BenchmarkMemoryRow[]): void {
 
 function appendMetricTables(
   lines: string[],
+  sectionId: string,
   latencyRows: BenchmarkLatencyRow[],
   scalarRows: BenchmarkScalarMetricRow[],
 ): void {
@@ -534,11 +528,25 @@ function appendMetricTables(
     return;
   }
   if (latencyRows.length > 0) {
-    appendLatencyTable(lines, latencyRows);
+    if (sectionId === "calendar-panel-latency") {
+      appendPanelLatencyTable(lines, latencyRows);
+    } else {
+      appendLatencyTable(lines, latencyRows);
+    }
   }
   if (scalarRows.length > 0) {
     if (latencyRows.length > 0) lines.push("");
     appendScalarMetricTable(lines, scalarRows);
+  }
+}
+
+function appendPanelLatencyTable(lines: string[], rows: BenchmarkLatencyRow[]): void {
+  lines.push("| Run | Dataset | Action | Median ms | P95 ms |");
+  lines.push("|---|---|---|---:|---:|");
+  for (const row of rows) {
+    lines.push(
+      `| ${row.run} | ${row.dataset} | ${row.metric} | ${row.median} | ${row.p95} |`,
+    );
   }
 }
 

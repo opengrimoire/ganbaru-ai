@@ -101,26 +101,12 @@ This records post-action memory after reproducing real held right-arrow navigati
 | Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
 
-### Event panel latency
+### Calendar panel latency
 
-Rows report user-visible elapsed time with a practical full visible window. Internal module, detail-load, state, and flush breakdowns are diagnostic and are not canonical.
+Rows report user-visible panel-open elapsed time for the two calendar panel actions with a practical full visible window. The fixed repetition count is defined by the harness spec and is not repeated in this canonical table.
 
-| Run | Dataset | Metric | Runs | Median ms | P95 ms |
-|---|---|---|---:|---:|---:|
-
-### Create panel latency
-
-This table keeps panel-open latency only, measured with a practical full visible window. Cancel-after-guard timing is a harness control path, so it is not part of the long-run performance record.
-
-| Run | Dataset | Metric | Runs | Median ms | P95 ms |
-|---|---|---|---:|---:|---:|
-
-### Calendar write operations
-
-These backend timings track representative user-facing calendar mutations against the practical dense dataset. Lower-level command variants and empty-DB controls are diagnostic output and are not recorded here unless a run is explicitly focused on those paths.
-
-| Run | Dataset | Metric | Runs | Median ms | P95 ms |
-|---|---|---|---:|---:|---:|
+| Run | Dataset | Action | Median ms | P95 ms |
+|---|---|---|---:|---:|
 
 ### Calendar import operations
 
@@ -167,6 +153,11 @@ Use the latency table for repeated measurements. Keep median and P95 as the cano
 
 | Run | Dataset | Metric | Runs | Median ms | P95 ms |
 |---|---|---|---:|---:|---:|
+
+Calendar panel latency uses a narrower action table because both actions share one fixed harness run count:
+
+| Run | Dataset | Action | Median ms | P95 ms |
+|---|---|---|---:|---:|
 
 For visible-window interaction benchmarks, record the practical dense current-window dataset (`dense-v1-r1y-s1-d1`) unless the benchmark question is specifically about empty-state behavior or total stored-history scale.
 

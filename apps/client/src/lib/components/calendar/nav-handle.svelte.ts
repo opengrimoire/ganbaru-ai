@@ -19,6 +19,7 @@ type NavigateFn = (direction: NavigateDirection, source?: NavigateSource) => voi
 type SetViewModeFn = (mode: CalendarViewMode) => void;
 type SetAnchorDateFn = (date: Date) => void;
 type OpenVisibleEventFn = (index: number) => Promise<boolean>;
+type GetVisibleEventCountFn = () => number;
 type OpenCreatePanelFn = (start: string, end: string, allDay?: boolean) => Promise<boolean>;
 type ClosePanelFn = () => Promise<void>;
 type CanRepeatHeldNavigationFn = (direction: HeldNavigationDirection) => boolean;
@@ -29,6 +30,7 @@ class CalendarNavHandle {
   #setViewMode: SetViewModeFn | null = null;
   #setAnchorDate: SetAnchorDateFn | null = null;
   #openVisibleEvent: OpenVisibleEventFn | null = null;
+  #getVisibleEventCount: GetVisibleEventCountFn | null = null;
   #openCreatePanel: OpenCreatePanelFn | null = null;
   #closePanel: ClosePanelFn | null = null;
   #canRepeatHeldNavigation: CanRepeatHeldNavigationFn | null = null;
@@ -44,6 +46,7 @@ class CalendarNavHandle {
     setViewMode: SetViewModeFn;
     setAnchorDate: SetAnchorDateFn;
     openVisibleEvent: OpenVisibleEventFn;
+    getVisibleEventCount: GetVisibleEventCountFn;
     openCreatePanel: OpenCreatePanelFn;
     closePanel: ClosePanelFn;
     canRepeatHeldNavigation: CanRepeatHeldNavigationFn;
@@ -53,6 +56,7 @@ class CalendarNavHandle {
     this.#setViewMode = opts.setViewMode;
     this.#setAnchorDate = opts.setAnchorDate;
     this.#openVisibleEvent = opts.openVisibleEvent;
+    this.#getVisibleEventCount = opts.getVisibleEventCount;
     this.#openCreatePanel = opts.openCreatePanel;
     this.#closePanel = opts.closePanel;
     this.#canRepeatHeldNavigation = opts.canRepeatHeldNavigation;
@@ -62,6 +66,7 @@ class CalendarNavHandle {
       this.#setViewMode = null;
       this.#setAnchorDate = null;
       this.#openVisibleEvent = null;
+      this.#getVisibleEventCount = null;
       this.#openCreatePanel = null;
       this.#closePanel = null;
       this.#canRepeatHeldNavigation = null;
@@ -96,6 +101,10 @@ class CalendarNavHandle {
 
   openVisibleEvent(index: number): Promise<boolean> {
     return this.#openVisibleEvent?.(index) ?? Promise.resolve(false);
+  }
+
+  getVisibleEventCount(): number {
+    return this.#getVisibleEventCount?.() ?? 0;
   }
 
   openCreatePanel(start: string, end: string, allDay?: boolean): Promise<boolean> {

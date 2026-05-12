@@ -1,6 +1,6 @@
 use notify_rust::{Hint, Notification};
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 #[derive(Clone, Serialize)]
 struct AddTimePayload {
@@ -1097,6 +1097,48 @@ pub fn show_event_notification(title: String, body: String) {
             .hint(Hint::Transient(true))
             .hint(Hint::SoundName("message-new-instant".into()))
             .show();
+    });
+}
+
+#[tauri::command]
+pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: String) {
+    std::thread::spawn(move || {
+        let result = Notification::new()
+            .summary(&title)
+            .body(&body)
+            .action("show_summary", "Show summary")
+            .timeout(10_000)
+            .id(9002)
+            .hint(Hint::Transient(true))
+            .hint(Hint::SoundName("message-new-instant".into()))
+            .show();
+
+        match result {
+            Ok(handle) => {
+                handle.wait_for_action(|action| {
+                    if action == "show_summary" || action == "default" {
+                        focus_main_window(app.clone());
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("Failed to show benchmark notification: {e}");
+            }
+        }
+    });
+}
+
+fn focus_main_window(app: tauri::AppHandle) {
+    let app_for_lookup = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(window) = app_for_lookup.get_webview_window("main") {
+            if let Err(e) = window.unminimize() {
+                eprintln!("Failed to unminimize main window from notification: {e}");
+            }
+            if let Err(e) = window.set_focus() {
+                eprintln!("Failed to focus main window from notification: {e}");
+            }
+        }
     });
 }
 

@@ -164,12 +164,12 @@ const REPEATED_STARTUP_RESULT: BenchmarkResult = {
 
 const METRIC_RESULT: BenchmarkResult = {
   ...RESULT,
-  scenarioId: "event-panel-open",
-  scenarioLabel: "Event panel open",
+  scenarioId: "calendar-panel-latency",
+  scenarioLabel: "Calendar panel latency",
   workload: {
     kind: "interaction-latency",
-    question: "How quickly does the event panel paint for existing events?",
-    label: "scripted event-panel open interactions",
+    question: "How quickly does the calendar panel open from user actions?",
+    label: "scripted calendar panel open actions",
     durationMs: 0,
     memoryMode: "none",
   },
@@ -178,8 +178,8 @@ const METRIC_RESULT: BenchmarkResult = {
     peakSamples: [],
     curve: [],
     metrics: [
-      timingMetric("edit open from closed avg", 176, 10, 171, 202),
-      timingMetric("edit switch while open avg", 72, 10, 70, 95),
+      timingMetric("click existing event avg", 176, 50, 171, 202),
+      timingMetric("click empty time slot avg", 117, 50, 99, 206),
     ],
   },
   peakTotalMb: undefined,
@@ -238,55 +238,6 @@ const MIXED_METRIC_RESULT: BenchmarkResult = {
       },
       { label: "write fixtures", unit: "ms", value: 353 },
       { label: "import warnings", unit: "count", value: 3 },
-    ],
-  },
-  peakTotalMb: undefined,
-};
-
-const CREATE_RESULT: BenchmarkResult = {
-  ...RESULT,
-  scenarioId: "calendar-create-cancel",
-  scenarioLabel: "Calendar create cancel",
-  workload: {
-    kind: "interaction-latency",
-    question: "How quickly does the create panel open and cancel?",
-    label: "scripted create-panel open and cancel",
-    durationMs: 0,
-    memoryMode: "none",
-  },
-  phaseB: {
-    ...DENSE_PHASE,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("create panel open avg", 117, 6, 99, 206),
-      timingMetric("create cancel after guard avg", 130, 6, 127, 142),
-    ],
-  },
-  peakTotalMb: undefined,
-};
-
-const WRITE_RESULT: BenchmarkResult = {
-  ...RESULT,
-  scenarioId: "calendar-write-ops",
-  scenarioLabel: "Calendar write operations",
-  workload: {
-    kind: "operation-latency",
-    question: "How quickly do Rust-backed calendar write commands finish?",
-    label: "scripted calendar write commands",
-    durationMs: 0,
-    memoryMode: "none",
-  },
-  phaseB: {
-    ...DENSE_PHASE,
-    peakSamples: [],
-    curve: [],
-    metrics: [
-      timingMetric("event create save avg", 53, 8, 7, 341),
-      timingMetric("event patch save avg", 6, 8, 6, 9),
-      timingMetric("event delete avg", 12, 8, 11, 15),
-      timingMetric("recurring detach avg", 5, 5, 5, 6),
-      timingMetric("recurring split avg", 6, 5, 5, 8),
     ],
   },
   peakTotalMb: undefined,
@@ -428,13 +379,17 @@ describe("formatBenchmarkMarkdown", () => {
 
   it("renders latency rows in the reduced canonical shape", () => {
     const md = formatBenchmarkMarkdown(METRIC_RESULT, { date: "2026-05-01" });
-    expect(md.includes("### Event panel latency")).toBe(true);
-    expect(md.includes("| Run | Dataset | Metric | Runs | Median ms | P95 ms |")).toBe(true);
+    expect(md.includes("### Calendar panel latency")).toBe(true);
+    expect(md.includes("50 runs per action")).toBe(false);
+    expect(md.includes("| Run | Dataset | Action | Median ms | P95 ms |")).toBe(true);
+    expect(md.includes("| Run | Dataset | Metric | Runs | Median ms | P95 ms |")).toBe(false);
     expect(md.includes("| Run | Dataset | Metric | Value | Unit | Runs | Min | Median | P95 | Max |")).toBe(false);
-    expect(md.includes("edit open from closed avg")).toBe(false);
-    expect(md.includes("| 2026-05-01-ID | base-2 | edit open from closed")).toBe(false);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | edit open from closed | 10 | 171 | 202 |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | edit switch while open | 10 | 70 | 95 |")).toBe(true);
+    expect(md.includes("click existing event avg")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | base-2 | click existing event")).toBe(false);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | click existing event | 171 | 202 |")).toBe(true);
+    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | click empty time slot | 99 | 206 |")).toBe(true);
+    expect(md.includes("edit switch while open")).toBe(false);
+    expect(md.includes("create cancel after guard")).toBe(false);
     expect(md.includes("details 44 ms")).toBe(false);
     expect(md.includes("### Calendar held navigation memory")).toBe(false);
   });
@@ -457,26 +412,6 @@ describe("formatBenchmarkMarkdown", () => {
     expect(md.includes("| 2026-05-01-ID | base-0 | write fixtures | 82 | ms |")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | import warnings | 3 | count |")).toBe(true);
     expect(md.includes("| write fixtures | 82 | ms |  |")).toBe(false);
-  });
-
-  it("keeps only create-panel open latency for the practical dense dataset", () => {
-    const md = formatBenchmarkMarkdown(CREATE_RESULT, { date: "2026-05-01" });
-    expect(md.includes("### Create panel latency")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | create panel open | 6 | 99 | 206 |")).toBe(true);
-    expect(md.includes("create cancel after guard")).toBe(false);
-    expect(md.includes("base-0")).toBe(false);
-    expect(md.includes("dense-v1-r10y-s1-d1")).toBe(false);
-  });
-
-  it("keeps only canonical calendar write operations for the practical dense dataset", () => {
-    const md = formatBenchmarkMarkdown(WRITE_RESULT, { date: "2026-05-01" });
-    expect(md.includes("### Calendar write operations")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | event create save | 8 | 7 | 341 |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | event patch save | 8 | 6 | 9 |")).toBe(true);
-    expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | recurring split | 5 | 5 | 8 |")).toBe(true);
-    expect(md.includes("event delete")).toBe(false);
-    expect(md.includes("recurring detach")).toBe(false);
-    expect(md.includes("base-0")).toBe(false);
   });
 
   it("keeps only 1000-event import scalar rows in the canonical scalar shape", () => {

@@ -782,15 +782,9 @@ export function getBenchmarkRunner(): BenchmarkRunnerStore {
   return store;
 }
 
-/**
- * Fires the OS desktop notification used by the harness on terminal-state
- * transitions (`summary`, `error`). Reuses the same Tauri command the
- * calendar event reminders use; on Linux that path goes through
- * `notify-rust` with a `message-new-instant` sound hint, so the user hears
- * a chime even if they walked away from the app.
- */
+/** Fires the OS desktop notification used by terminal benchmark states. */
 function notifyBenchmarkDone(title: string, body: string): void {
-  invoke("show_event_notification", { title, body }).catch((e) => {
+  invoke("show_benchmark_notification", { title, body }).catch((e) => {
     console.warn("Benchmark notification failed:", e);
   });
 }

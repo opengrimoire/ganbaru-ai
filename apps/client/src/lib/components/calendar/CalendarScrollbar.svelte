@@ -95,7 +95,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={trackEl}
-  class="pointer-events-auto absolute right-0 z-[100]"
+  class="pointer-events-auto absolute right-0 z-[48]"
   style="top: {stickyTop}px; bottom: 0; width: 8px;"
   onpointerdown={handleTrackPointerDown}
   onpointermove={handlePointerMove}

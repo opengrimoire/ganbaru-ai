@@ -208,8 +208,8 @@ Registered suites:
 
 | Suite | Scenarios | Purpose |
 |---|---|---|
-| Core benchmarks | `startup-boot`, `idle-memory`, `calendar-nav`, `event-panel-open`, `calendar-create-cancel` | User-perceived startup, memory, and interaction latency |
-| Backend benchmarks | `calendar-write-ops`, `calendar-import-ops` | Rust-backed calendar write and import latency |
+| Core benchmarks | `startup-boot`, `idle-memory`, `calendar-nav`, `calendar-panel-latency` | User-perceived startup, memory, and interaction latency |
+| Backend benchmarks | `calendar-import-ops` | Rust-backed calendar import latency |
 | All benchmarks | Core plus backend | Complete release baseline or broad refactor validation |
 
 Registered scenarios:
@@ -219,12 +219,12 @@ Registered scenarios:
 | `startup-boot` | `lib/benchmark/scenarios/startup-boot.ts` | Repeated launch to usable calendar paint |
 | `idle-memory` | `lib/benchmark/scenarios/idle-memory.ts` | Anchored week idle RAM |
 | `calendar-nav` | `lib/benchmark/scenarios/calendar-nav.ts` | Physical right-arrow hold week-view RAM |
-| `event-panel-open` | `lib/benchmark/scenarios/event-panel-open.ts` | Existing-event panel open and switch latency |
-| `calendar-create-cancel` | `lib/benchmark/scenarios/calendar-create-cancel.ts` | Create-panel open and cancel latency |
-| `calendar-write-ops` | `lib/benchmark/scenarios/calendar-write-ops.ts` | Rust-backed calendar create, patch, delete, detach, and split latency |
+| `calendar-panel-latency` | `lib/benchmark/scenarios/calendar-panel-latency.ts` | Calendar panel open latency from existing-event and create actions |
 | `calendar-import-ops` | `lib/benchmark/scenarios/calendar-import-ops.ts` | Rust-backed calendar bulk import latency |
 
 `calendar-nav` dispatches `ArrowRight` keydown and keyup events on `window` for a 3-second hold. That enters CalendarView's real keyboard listener and real held-navigation controller, so the benchmark follows the same path as a physical right-arrow hold. Setup waits for the anchored week and adjacent window prefetch to finish. Held repeats use the app's normal readiness gate: the current render window must be applied, and the next target window must already be current or cached. If not, the repeat tick is skipped. The scenario observes the real controller to count moves, repeats, and skipped ticks.
+
+`calendar-panel-latency` runs 50 samples for each panel action. `click existing event` opens many different visible events from the dense anchored week instead of alternating between one or two events, which avoids measuring a warmed detail cache as the normal case. `click empty time slot` opens the create panel from deterministic time slots. The scenario does not measure switching between already-open events and does not measure create-panel cancellation.
 
 ## Dense calendar dataset generator
 
@@ -264,7 +264,7 @@ Each scenario section contains the table that matches the scenario's primary lon
 - `startup` emits repeated launch stats for each benchmark dataset. `Launch median ms` is the headline value for app-open comparisons. It measures Rust process start through `boot.usable-paint`, when calendar data has loaded and the calendar has rendered a frame. Harness v1 and later wait 10 seconds while the app is closed before each startup sample, reducing instant-relaunch cache bias without pretending to be a first launch after OS reboot.
 - `idle-memory` emits `Min`, `Max`, and `End` memory rows for the baseline and each dense dataset so total-history scale remains visible.
 - `stress-memory` emits `Min`, `Max`, and `End` memory rows for the datasets the scenario actually runs. Calendar held navigation is dense-only and records the practical dense current-window dataset. Held-navigation move counts, repeat counts, and skipped ticks are diagnostics and are not copied into the canonical markdown.
-- `interaction-latency` and `operation-latency` emit repeated latency rows only for their canonical primary metrics. Current practical scenarios are dense-only and run against the practical dense current-window dataset.
+- `interaction-latency` and `operation-latency` emit repeated latency rows only for their canonical primary metrics. Current practical scenarios are dense-only and run against the practical dense current-window dataset. Calendar panel latency emits an action table without a `Runs` column because both panel actions use the fixed run count described above.
 - Scalar metrics without run statistics emit a compact scalar table only when the one-off value is itself canonical. Calendar import keeps 1000-event add and update timings; smaller repeated import rows are diagnostics.
 
 The copied markdown intentionally avoids slash-packed memory cells, repeated global metadata, empty stat columns, redundant dataset levels, diagnostic counters, and measurement-level notes. Run metadata is the only generated table with a `Notes` column. Fixed scenario details belong in this harness spec, while `docs/PERFORMANCE.md` should record rows and minimal column interpretation. A future comparable detail should become a dedicated typed column instead of a generic note.
