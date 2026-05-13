@@ -454,19 +454,17 @@
                 {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}
               </span>
             </div>
-            {#if allDayMaxRow === 0}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <div
-                class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
-                style="height: 6px;"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  const dateStr = formatDatePart(day);
-                  onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
-                }}
-              ></div>
-            {/if}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div
+              class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
+              style="height: 6px;"
+              onclick={(e) => {
+                e.stopPropagation();
+                const dateStr = formatDatePart(day);
+                onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+              }}
+            ></div>
           </div>
         {/each}
       </div>
@@ -493,12 +491,12 @@
         style="
           grid-column: span 7;
           grid-template-columns: subgrid;
-          grid-template-rows: repeat({allDayEffectiveRows}, {ALL_DAY_ROW_H}px) 6px;
+          grid-template-rows: repeat({allDayEffectiveRows}, {ALL_DAY_ROW_H}px);
           padding: {ALL_DAY_PAD}px 0;
           gap: {ALL_DAY_GAP}px 0;
         "
       >
-        <!-- Thin click-to-create strip + column measurement targets -->
+        <!-- Column measurement targets -->
         {#each weekDays as day, i}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->

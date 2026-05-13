@@ -361,18 +361,16 @@
             {dayLabel}
           </span>
         </div>
-        {#if allDayEvents.length === 0}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <div
-            class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
-            style="height: 6px;"
-            onclick={(e) => {
-              e.stopPropagation();
-              onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
-            }}
-          ></div>
-        {/if}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+          class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
+          style="height: 6px;"
+          onclick={(e) => {
+            e.stopPropagation();
+            onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+          }}
+        ></div>
       </div>
     </div>
 
@@ -410,17 +408,6 @@
             +{allDayEvents.length - ALL_DAY_MAX_VISIBLE} more
           </button>
         {/if}
-        <!-- Thin click-to-create strip -->
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="cursor-pointer transition-colors hover:bg-accent/50"
-          style="height: 6px;"
-          onclick={(e) => {
-            e.stopPropagation();
-            onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
-          }}
-        ></div>
       </div>
     </div>
     {/if}
