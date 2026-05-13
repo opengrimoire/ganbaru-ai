@@ -932,19 +932,23 @@ pub fn get_idle_status() -> IdleStatus {
 
 #[cfg(target_os = "windows")]
 fn get_idle_time_ms_windows() -> u64 {
-    use winapi::um::sysinfoapi::GetTickCount;
-    use winapi::um::winuser::{GetLastInputInfo, LASTINPUTINFO};
-    unsafe {
-        let mut lii = LASTINPUTINFO {
-            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
-            dwTime: 0,
-        };
-        if GetLastInputInfo(&mut lii) != 0 {
-            let now = GetTickCount();
-            (now.wrapping_sub(lii.dwTime)) as u64
-        } else {
-            0
-        }
+    use windows::Win32::System::SystemInformation::GetTickCount;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+
+    let mut lii = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+
+    // SAFETY: `lii` is a valid LASTINPUTINFO output buffer with cbSize set to
+    // the struct size required by GetLastInputInfo.
+    if unsafe { GetLastInputInfo(&mut lii) }.as_bool() {
+        // SAFETY: GetTickCount reads the current Windows uptime tick and does
+        // not require any pointer or handle ownership from this process.
+        let now = unsafe { GetTickCount() };
+        (now.wrapping_sub(lii.dwTime)) as u64
+    } else {
+        0
     }
 }
 

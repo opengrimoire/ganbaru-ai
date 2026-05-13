@@ -395,100 +395,126 @@ fn get_memory_report() -> MemoryReport {
     }
     #[cfg(target_os = "windows")]
     {
-        use std::mem;
-        use winapi::um::handleapi::CloseHandle;
-        use winapi::um::processthreadsapi::OpenProcess;
-        use winapi::um::psapi::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
-        use winapi::um::tlhelp32::{
+        use std::mem::size_of;
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::System::Diagnostics::ToolHelp::{
             CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
             TH32CS_SNAPPROCESS,
         };
-        use winapi::um::winnt::{PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
+        use windows::Win32::System::ProcessStatus::{
+            GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+        };
+        use windows::Win32::System::Threading::{
+            OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+        };
 
-        unsafe {
-            let my_pid = std::process::id();
+        let my_pid = std::process::id();
 
-            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if snapshot.is_null() {
-                return MemoryReport {
-                    processes: vec![],
-                    total_mb: 0.0,
-                    platform: platform_label(),
+        let snapshot = {
+            // SAFETY: This call only asks Windows for a read-only process snapshot.
+            match unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) } {
+                Ok(snapshot) => snapshot,
+                Err(_) => {
+                    return MemoryReport {
+                        processes: vec![],
+                        total_mb: 0.0,
+                        platform: platform_label(),
+                    };
+                }
+            }
+        };
+
+        let mut proc_list: Vec<(u32, u32, String)> = Vec::new();
+        let mut entry = PROCESSENTRY32W {
+            dwSize: size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+
+        // SAFETY: `entry` is a valid PROCESSENTRY32W with dwSize initialized as
+        // required by Process32FirstW and Process32NextW.
+        if unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok() {
+            loop {
+                let end = entry
+                    .szExeFile
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(entry.szExeFile.len());
+                let exe = String::from_utf16_lossy(&entry.szExeFile[..end]);
+                proc_list.push((entry.th32ProcessID, entry.th32ParentProcessID, exe));
+
+                // SAFETY: The snapshot handle is still open and `entry` remains a
+                // valid output buffer for the next process entry.
+                if unsafe { Process32NextW(snapshot, &mut entry) }.is_err() {
+                    break;
+                }
+            }
+        }
+
+        // SAFETY: `snapshot` is an open handle returned by CreateToolhelp32Snapshot.
+        let _ = unsafe { CloseHandle(snapshot) };
+
+        // Recursively collect all descendant PIDs (handles WebView2 grandchildren)
+        let mut pids = vec![my_pid];
+        let mut i = 0;
+        while i < pids.len() {
+            let parent = pids[i];
+            for &(pid, ppid, _) in &proc_list {
+                if ppid == parent && !pids.contains(&pid) {
+                    pids.push(pid);
+                }
+            }
+            i += 1;
+        }
+
+        let mut processes = Vec::new();
+        let mut webview_idx = 0u32;
+        for &pid in &pids {
+            // SAFETY: The process ID comes from the current process or the Windows
+            // process snapshot. The returned handle is closed before continuing.
+            if let Ok(handle) =
+                unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid) }
+            {
+                let mut pmc = PROCESS_MEMORY_COUNTERS {
+                    cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+                    ..Default::default()
                 };
-            }
-
-            let mut proc_list: Vec<(u32, u32, String)> = Vec::new();
-            let mut entry: PROCESSENTRY32W = mem::zeroed();
-            entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
-
-            if Process32FirstW(snapshot, &mut entry) != 0 {
-                loop {
-                    let end = entry
-                        .szExeFile
-                        .iter()
-                        .position(|&c| c == 0)
-                        .unwrap_or(entry.szExeFile.len());
-                    let exe = String::from_utf16_lossy(&entry.szExeFile[..end]);
-                    proc_list.push((entry.th32ProcessID, entry.th32ParentProcessID, exe));
-                    if Process32NextW(snapshot, &mut entry) == 0 {
-                        break;
-                    }
-                }
-            }
-            CloseHandle(snapshot);
-
-            // Recursively collect all descendant PIDs (handles WebView2 grandchildren)
-            let mut pids = vec![my_pid];
-            let mut i = 0;
-            while i < pids.len() {
-                let parent = pids[i];
-                for &(pid, ppid, _) in &proc_list {
-                    if ppid == parent && !pids.contains(&pid) {
-                        pids.push(pid);
-                    }
-                }
-                i += 1;
-            }
-
-            let mut processes = Vec::new();
-            let mut webview_idx = 0u32;
-            for &pid in &pids {
-                let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
-                if !handle.is_null() {
-                    let mut pmc: PROCESS_MEMORY_COUNTERS = mem::zeroed();
-                    pmc.cb = mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
-                    if GetProcessMemoryInfo(handle, &mut pmc, pmc.cb) != 0 {
-                        let mb = pmc.WorkingSetSize as f64 / (1024.0 * 1024.0);
-                        let name = if pid == my_pid {
-                            "Backend".to_string()
+                // SAFETY: `handle` is an open process handle and `pmc` is a valid
+                // output buffer whose cb field matches its struct size.
+                if unsafe { GetProcessMemoryInfo(handle, &mut pmc, pmc.cb) }.is_ok() {
+                    let mb = pmc.WorkingSetSize as f64 / (1024.0 * 1024.0);
+                    let name = if pid == my_pid {
+                        "Backend".to_string()
+                    } else {
+                        let exe = proc_list
+                            .iter()
+                            .find(|(p, _, _)| *p == pid)
+                            .map(|(_, _, e)| e.as_str())
+                            .unwrap_or("unknown");
+                        if exe.contains("msedgewebview2") || exe.contains("WebView") {
+                            webview_idx += 1;
+                            format!("WebView2 #{webview_idx}")
                         } else {
-                            let exe = proc_list
-                                .iter()
-                                .find(|(p, _, _)| *p == pid)
-                                .map(|(_, _, e)| e.as_str())
-                                .unwrap_or("unknown");
-                            if exe.contains("msedgewebview2") || exe.contains("WebView") {
-                                webview_idx += 1;
-                                format!("WebView2 #{webview_idx}")
-                            } else {
-                                exe.to_string()
-                            }
-                        };
-                        processes.push(ProcessMemory { name, mb });
-                    }
-                    CloseHandle(handle);
+                            exe.to_string()
+                        }
+                    };
+                    processes.push(ProcessMemory { name, mb });
                 }
+                // SAFETY: `handle` was returned by OpenProcess above and is not
+                // used after this point.
+                let _ = unsafe { CloseHandle(handle) };
             }
+        }
 
-            let total_mb = processes.iter().map(|p| p.mb).sum();
+        let total_mb = processes.iter().map(|p| p.mb).sum();
+        if processes.len() > 1 {
             processes[1..]
                 .sort_by(|a, b| b.mb.partial_cmp(&a.mb).unwrap_or(std::cmp::Ordering::Equal));
+        }
 
-            MemoryReport {
-                processes,
-                total_mb,
-                platform: platform_label(),
-            }
+        MemoryReport {
+            processes,
+            total_mb,
+            platform: platform_label(),
         }
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
