@@ -63,7 +63,7 @@ pub struct DismissalRow {
     dismissed_at: i64,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct ThemeRowRead {
     id: String,
     display_name: String,
@@ -79,8 +79,23 @@ pub struct ThemeRowRead {
     created_at: i64,
     updated_at: i64,
 }
+impl_sqlite_from_row!(ThemeRowRead {
+    id,
+    display_name,
+    blend_canvas,
+    seed_blend_canvas,
+    derivation_engine_version,
+    calendar_default_mode,
+    calendar_default_custom,
+    seed_calendar_default_mode,
+    seed_calendar_default_custom,
+    icon_label,
+    seed_icon_label,
+    created_at,
+    updated_at,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct TokenRowRead {
     theme_id: String,
     kind: String,
@@ -88,13 +103,25 @@ pub struct TokenRowRead {
     value: String,
     isolated: i64,
 }
+impl_sqlite_from_row!(TokenRowRead {
+    theme_id,
+    kind,
+    key,
+    value,
+    isolated,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct PaletteRowRead {
     theme_id: String,
     slot: i64,
     value: String,
 }
+impl_sqlite_from_row!(PaletteRowRead {
+    theme_id,
+    slot,
+    value,
+});
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

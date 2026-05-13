@@ -17,7 +17,7 @@ pub struct CalendarWrite {
     updated_at: String,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct CalendarRead {
     id: String,
     name: String,
@@ -28,11 +28,22 @@ pub struct CalendarRead {
     source_url: Option<String>,
     last_synced: Option<String>,
 }
+impl_sqlite_from_row!(CalendarRead {
+    id,
+    name,
+    color,
+    source,
+    visible,
+    read_only,
+    source_url,
+    last_synced,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 struct CountRow {
     cnt: i64,
 }
+impl_sqlite_from_row!(CountRow { cnt });
 
 #[tauri::command]
 pub async fn calendar_list_calendars<R: Runtime>(

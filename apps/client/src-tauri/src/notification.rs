@@ -1,5 +1,6 @@
 use notify_rust::{Hint, Notification};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use tauri::{Emitter, Manager};
 
 #[derive(Clone, Serialize)]
@@ -35,12 +36,16 @@ fn gsettings_set(schema: &str, key: &str, value: &str) {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Clone, Serialize, Deserialize)]
 struct SavedShortcuts {
     overlay_key: String,
     dock_hotkeys: String,
     /// (schema, key, original_value) for every keybinding that was disabled
     disabled: Vec<(String, String, String)>,
 }
+
+#[cfg(target_os = "linux")]
+const SHORTCUT_RESTORE_FILE: &str = "gnome-shortcuts-restore.json";
 
 #[cfg(target_os = "linux")]
 fn gsettings_list_recursively(schema: &str) -> Vec<(String, String)> {
@@ -72,7 +77,7 @@ fn gsettings_list_recursively(schema: &str) -> Vec<(String, String)> {
 
 #[cfg(target_os = "linux")]
 impl SavedShortcuts {
-    fn save_and_disable() -> Self {
+    fn capture() -> Self {
         let mut disabled = Vec::new();
 
         // Scan all keybinding schemas for any binding using Super or Alt
@@ -86,7 +91,6 @@ impl SavedShortcuts {
             for (key, value) in gsettings_list_recursively(schema) {
                 if value.contains("Super") || value.contains("<Alt>") {
                     disabled.push((schema.to_string(), key.clone(), value));
-                    gsettings_set(schema, &key, "['']");
                 }
             }
         }
@@ -94,16 +98,10 @@ impl SavedShortcuts {
         // Mutter overlay-key (Super alone)
         let overlay_key =
             gsettings_get("org.gnome.mutter", "overlay-key").unwrap_or_else(|| "'Super_L'".into());
-        gsettings_set("org.gnome.mutter", "overlay-key", "");
 
         // Ubuntu Dock / Dash to Dock Super+N
         let dock_hotkeys = gsettings_get("org.gnome.shell.extensions.dash-to-dock", "hot-keys")
             .unwrap_or_else(|| "true".into());
-        gsettings_set(
-            "org.gnome.shell.extensions.dash-to-dock",
-            "hot-keys",
-            "false",
-        );
 
         Self {
             overlay_key,
@@ -111,6 +109,98 @@ impl SavedShortcuts {
             disabled,
         }
     }
+
+    fn disable(&self) {
+        for (schema, key, _) in &self.disabled {
+            gsettings_set(schema, key, "['']");
+        }
+        gsettings_set("org.gnome.mutter", "overlay-key", "");
+        gsettings_set(
+            "org.gnome.shell.extensions.dash-to-dock",
+            "hot-keys",
+            "false",
+        );
+    }
+
+    fn save_and_disable(app: &tauri::AppHandle) -> Result<Self, String> {
+        let saved = Self::capture();
+        let path = shortcut_restore_path(app)?;
+        persist_shortcut_restore(&path, &saved)?;
+        saved.disable();
+        Ok(saved)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn shortcut_restore_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    path.push(SHORTCUT_RESTORE_FILE);
+    Ok(path)
+}
+
+#[cfg(target_os = "linux")]
+fn persist_shortcut_restore(path: &Path, saved: &SavedShortcuts) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let tmp_path = path.with_extension("json.tmp");
+    let json = serde_json::to_string(saved).map_err(|e| e.to_string())?;
+    std::fs::write(&tmp_path, json).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn restore_shortcuts(saved: &SavedShortcuts) {
+    gsettings_set("org.gnome.mutter", "overlay-key", &saved.overlay_key);
+    gsettings_set(
+        "org.gnome.shell.extensions.dash-to-dock",
+        "hot-keys",
+        &saved.dock_hotkeys,
+    );
+    for (schema, key, val) in &saved.disabled {
+        gsettings_set(schema, key, val);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn clear_shortcut_restore(path: &Path) {
+    if path.exists() {
+        if let Err(err) = std::fs::remove_file(path) {
+            eprintln!("failed to clear GNOME shortcut restore file: {err}");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn restore_stale_shortcuts(app: &tauri::AppHandle) -> Result<(), String> {
+    let path = shortcut_restore_path(app)?;
+    if !path.exists() {
+        return Ok(());
+    }
+    let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let saved: SavedShortcuts = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    restore_shortcuts(&saved);
+    clear_shortcut_restore(&path);
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn restore_stale_shortcuts(_app: &tauri::AppHandle) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn run_main_thread_setup<F>(app: &tauri::AppHandle, setup: F) -> Result<(), String>
+where
+    F: FnOnce() -> Result<(), String> + Send + 'static,
+{
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    app.run_on_main_thread(move || {
+        let _ = tx.send(setup());
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv().map_err(|e| e.to_string())?
 }
 
 /// Inhibit screensaver/idle via D-Bus, returns cookie for uninhibit
@@ -167,15 +257,19 @@ fn format_remaining(secs: u64) -> String {
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(), String> {
-    app.clone().run_on_main_thread(move || {
+    let app_for_setup = app.clone();
+    run_main_thread_setup(&app, move || {
         use gtk::prelude::*;
         use std::time::{Duration, SystemTime};
 
-        let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable());
+        let app = app_for_setup;
         let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
         let end_time = SystemTime::now() + Duration::from_secs(break_seconds as u64);
         let end_time = std::rc::Rc::new(std::cell::Cell::new(end_time));
-        let display = gdk::Display::default().unwrap();
+        let display = gdk::Display::default()
+            .ok_or_else(|| "no GDK display is available for the break overlay".to_string())?;
+        let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable(&app)?);
+        let restore_path = std::rc::Rc::new(shortcut_restore_path(&app)?);
         let screen = display.default_screen();
         let n_monitors = display.n_monitors();
         let primary_idx = match display.primary_monitor() {
@@ -185,7 +279,8 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             None => 0,
         };
         let ui_margin = {
-            let geom = display.monitor(primary_idx)
+            let geom = display
+                .monitor(primary_idx)
                 .map(|m| m.geometry())
                 .unwrap_or(gdk::Rectangle::new(0, 0, 1920, 1080));
             ((geom.height().min(geom.width()) as f64 * 0.03).max(16.0)) as i32
@@ -197,9 +292,9 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         window.set_app_paintable(true);
 
         window.connect_draw(move |_, cr| {
-                cr.set_source_rgb(0.0, 0.0, 0.0);
-                cr.paint().unwrap();
-                gtk::glib::Propagation::Proceed
+            cr.set_source_rgb(0.0, 0.0, 0.0);
+            cr.paint().unwrap();
+            gtk::glib::Propagation::Proceed
         });
 
         // Timer (centered)
@@ -236,12 +331,11 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         finished_container.set_halign(gtk::Align::Center);
         finished_container.set_valign(gtk::Align::Center);
         let finished_title = gtk::Label::new(None);
-        finished_title.set_markup(
-            "<span font='Sans Light 48' foreground='#FFFFFF'>Break complete</span>"
-        );
+        finished_title
+            .set_markup("<span font='Sans Light 48' foreground='#FFFFFF'>Break complete</span>");
         let finished_subtitle = gtk::Label::new(None);
         finished_subtitle.set_markup(
-            "<span font='Sans 14' foreground='#9CA3AF'>press any key or click to continue</span>"
+            "<span font='Sans 14' foreground='#9CA3AF'>press any key or click to continue</span>",
         );
         finished_container.add(&finished_title);
         finished_container.add(&finished_subtitle);
@@ -267,7 +361,9 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         let secondary_windows: std::rc::Rc<Vec<(i32, gtk::Window)>> = {
             let mut wins = Vec::new();
             for i in 0..n_monitors {
-                if i == primary_idx { continue; }
+                if i == primary_idx {
+                    continue;
+                }
                 let sw = gtk::Window::new(gtk::WindowType::Toplevel);
                 sw.set_decorated(false);
                 sw.set_keep_above(true);
@@ -287,6 +383,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         // gsettings restore runs in a background thread to avoid blocking the UI
         {
             let saved = saved.clone();
+            let restore_path = restore_path.clone();
             let cookie = inhibit_cookie.clone();
             let sec = secondary_windows.clone();
             window.connect_destroy(move |_| {
@@ -294,23 +391,15 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                     sw.hide();
                     sw.close();
                 }
-                let overlay_key = saved.overlay_key.clone();
-                let dock_hotkeys = saved.dock_hotkeys.clone();
-                let disabled = saved.disabled.clone();
+                let saved = (*saved).clone();
+                let restore_path = (*restore_path).clone();
                 let cookie_val = cookie.get();
                 std::thread::spawn(move || {
-                    gsettings_set("org.gnome.mutter", "overlay-key", &overlay_key);
-                    gsettings_set(
-                        "org.gnome.shell.extensions.dash-to-dock",
-                        "hot-keys",
-                        &dock_hotkeys,
-                    );
-                    for (schema, key, val) in &disabled {
-                        gsettings_set(schema, key, val);
-                    }
+                    restore_shortcuts(&saved);
                     if let Some(c) = cookie_val {
                         screensaver_uninhibit(c);
                     }
+                    clear_shortcut_restore(&restore_path);
                 });
             });
         }
@@ -397,7 +486,10 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             window.connect_button_press_event(move |_, _| {
                 if break_finished.get() {
                     let _ = app.emit("pomodoro-break-acknowledged", ());
-                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
+                    for (_, sw) in sec.iter() {
+                        sw.hide();
+                        sw.close();
+                    }
                     w.hide();
                     w.close();
                 }
@@ -455,7 +547,10 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                 sw.connect_button_press_event(move |_, _| {
                     if break_finished.get() {
                         let _ = app.emit("pomodoro-break-acknowledged", ());
-                        for (_, s) in sec.iter() { s.hide(); s.close(); }
+                        for (_, s) in sec.iter() {
+                            s.hide();
+                            s.close();
+                        }
                         main.hide();
                         main.close();
                     }
@@ -500,7 +595,6 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                     // If hidden (space x3), re-show the overlay
                     if is_hidden.get() {
                         is_hidden.set(false);
-                        let _ = SavedShortcuts::save_and_disable();
                         for (idx, sw) in sec.iter() {
                             sw.show_all();
                             sw.fullscreen_on_monitor(&screen_ref, *idx);
@@ -543,7 +637,6 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                 let idle_ms = get_idle_time_ms().unwrap_or(0);
                 if idle_ms >= 30_000 {
                     is_hidden.set(false);
-                    let _ = SavedShortcuts::save_and_disable();
                     inhibit_cookie.set(screensaver_inhibit());
 
                     let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
@@ -568,10 +661,8 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
             sw.show_all();
         }
         window.show_all();
+        Ok(())
     })
-    .map_err(|e| e.to_string())?;
-
-    Ok(())
 }
 
 // ── Idle overlay (Linux) ──────────────────────────────────────────
@@ -579,13 +670,17 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<bool, String> {
-    app.clone().run_on_main_thread(move || {
+    let app_for_setup = app.clone();
+    run_main_thread_setup(&app, move || {
         use gtk::prelude::*;
 
-        let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable());
+        let app = app_for_setup;
         let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
         let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
-        let display = gdk::Display::default().unwrap();
+        let display = gdk::Display::default()
+            .ok_or_else(|| "no GDK display is available for the idle overlay".to_string())?;
+        let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable(&app)?);
+        let restore_path = std::rc::Rc::new(shortcut_restore_path(&app)?);
         let screen = display.default_screen();
         let n_monitors = display.n_monitors();
         let primary_idx = match display.primary_monitor() {
@@ -595,7 +690,8 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
             None => 0,
         };
         let ui_margin = {
-            let geom = display.monitor(primary_idx)
+            let geom = display
+                .monitor(primary_idx)
                 .map(|m| m.geometry())
                 .unwrap_or(gdk::Rectangle::new(0, 0, 1920, 1080));
             ((geom.height().min(geom.width()) as f64 * 0.03).max(16.0)) as i32
@@ -613,9 +709,8 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
 
         // Title
         let title_label = gtk::Label::new(None);
-        title_label.set_markup(
-            "<span font='Sans 13' foreground='#9CA3AF'>FOCUS SESSION PAUSED</span>"
-        );
+        title_label
+            .set_markup("<span font='Sans 13' foreground='#9CA3AF'>FOCUS SESSION PAUSED</span>");
 
         // Timer (counts up from idle_seconds)
         let timer_label = gtk::Label::new(None);
@@ -626,9 +721,7 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
         ));
 
         let idle_label = gtk::Label::new(None);
-        idle_label.set_markup(
-            "<span font='Sans 14' foreground='#9CA3AF'>idle</span>"
-        );
+        idle_label.set_markup("<span font='Sans 14' foreground='#9CA3AF'>idle</span>");
 
         let timer_container = gtk::Box::new(gtk::Orientation::Vertical, 16);
         timer_container.set_halign(gtk::Align::Center);
@@ -667,7 +760,9 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
         let secondary_windows: std::rc::Rc<Vec<(i32, gtk::Window)>> = {
             let mut wins = Vec::new();
             for i in 0..n_monitors {
-                if i == primary_idx { continue; }
+                if i == primary_idx {
+                    continue;
+                }
                 let sw = gtk::Window::new(gtk::WindowType::Toplevel);
                 sw.set_decorated(false);
                 sw.set_keep_above(true);
@@ -686,23 +781,23 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
         // Cleanup on destroy
         {
             let saved = saved.clone();
+            let restore_path = restore_path.clone();
             let cookie = inhibit_cookie.clone();
             let sec = secondary_windows.clone();
             window.connect_destroy(move |_| {
-                for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
-                let overlay_key = saved.overlay_key.clone();
-                let dock_hotkeys = saved.dock_hotkeys.clone();
-                let disabled = saved.disabled.clone();
+                for (_, sw) in sec.iter() {
+                    sw.hide();
+                    sw.close();
+                }
+                let saved = (*saved).clone();
+                let restore_path = (*restore_path).clone();
                 let cookie_val = cookie.get();
                 std::thread::spawn(move || {
-                    gsettings_set("org.gnome.mutter", "overlay-key", &overlay_key);
-                    gsettings_set("org.gnome.shell.extensions.dash-to-dock", "hot-keys", &dock_hotkeys);
-                    for (schema, key, val) in &disabled {
-                        gsettings_set(schema, key, val);
-                    }
+                    restore_shortcuts(&saved);
                     if let Some(c) = cookie_val {
                         screensaver_uninhibit(c);
                     }
+                    clear_shortcut_restore(&restore_path);
                 });
             });
         }
@@ -718,13 +813,19 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
                 if key == gdk::keys::constants::space {
                     dismissed.set(true);
                     let _ = app.emit("idle-overlay-resume", ());
-                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
+                    for (_, sw) in sec.iter() {
+                        sw.hide();
+                        sw.close();
+                    }
                     w.hide();
                     w.close();
                 } else if key == gdk::keys::constants::Escape {
                     dismissed.set(true);
                     let _ = app.emit("idle-overlay-stop", ());
-                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
+                    for (_, sw) in sec.iter() {
+                        sw.hide();
+                        sw.close();
+                    }
                     w.hide();
                     w.close();
                 }
@@ -743,13 +844,19 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
                 if key == gdk::keys::constants::space {
                     dismissed.set(true);
                     let _ = app.emit("idle-overlay-resume", ());
-                    for (_, s) in sec.iter() { s.hide(); s.close(); }
+                    for (_, s) in sec.iter() {
+                        s.hide();
+                        s.close();
+                    }
                     w.hide();
                     w.close();
                 } else if key == gdk::keys::constants::Escape {
                     dismissed.set(true);
                     let _ = app.emit("idle-overlay-stop", ());
-                    for (_, s) in sec.iter() { s.hide(); s.close(); }
+                    for (_, s) in sec.iter() {
+                        s.hide();
+                        s.close();
+                    }
                     w.hide();
                     w.close();
                 }
@@ -818,8 +925,8 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
             sw.show_all();
         }
         window.show_all();
-    })
-    .map_err(|e| e.to_string())?;
+        Ok(())
+    })?;
 
     Ok(true)
 }

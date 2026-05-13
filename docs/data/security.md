@@ -42,11 +42,13 @@ These rules are enforced globally on the developer environment and reiterated in
 
 ## Sandbox boundaries
 
-Tauri capabilities define which APIs the frontend (Svelte) can call into the backend (Rust). The default capability set is minimal: file system access scoped to the vault directory, no shell access, no arbitrary process spawn.
+Tauri capabilities define which APIs the frontend (Svelte) can call into the backend (Rust). The default capability set is narrow: no generic filesystem plugin permission, no shell access, no arbitrary process spawn, no opener permission, and only the window, event-listen, webview zoom, and global shortcut permissions needed by current UI code.
+
+File import and export flows are backend-owned commands. Rust opens the native dialog, applies extension filters, validates the selected local path and size limit, then reads or writes the file. The frontend receives parsed text or a success flag, not an arbitrary path it can reuse later.
 
 When a feature needs broader access (e.g. work environment management needs to launch other apps), the capability is added narrowly to the specific window or command, not granted globally.
 
-The Tauri webview itself is hardened: CSP set to disallow inline scripts and untrusted origins, devtools disabled in release builds, IPC channels validated by command name and parameter shape.
+The Tauri webview itself is hardened: production CSP allows bundled local assets and Tauri IPC only, blocks object and frame sources, and keeps inline style allowance for current Svelte style attributes. The dev CSP additionally permits the local Vite server and HMR websocket. IPC channels are validated by command name and parameter shape.
 
 ## No phone home
 

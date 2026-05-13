@@ -11,6 +11,7 @@ import type {
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { wallClockToUtcIso } from "$lib/components/calendar/utils";
+import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
 import { toDbTime } from "./map-row";
 
 export type CalendarBulkImportAction = "added" | "updated";
@@ -132,7 +133,7 @@ function buildBulkImportEvent(
     endTime: toDbTime(event.end, homeZone, event.allDay),
     timezone: homeZone,
     color: event.color ?? null,
-    description: event.description ?? "",
+    description: sanitizeCalendarDescriptionHtml(event.description ?? ""),
     rrule: event.recurrence ? recurrenceToRrule(event.recurrence) : null,
     notifications: jsonOrNull(event.notifications),
     exceptions: jsonOrNull(event.exceptions),
@@ -199,7 +200,9 @@ function buildOverrides(
     endTime: overrideRow.end
       ? wallClockToUtcIso(overrideRow.end, zone)
       : null,
-    description: overrideRow.description ?? null,
+    description: overrideRow.description === undefined || overrideRow.description === null
+      ? null
+      : sanitizeCalendarDescriptionHtml(overrideRow.description),
     location: overrideRow.location ?? null,
     url: overrideRow.url ?? null,
     color: overrideRow.color ?? null,

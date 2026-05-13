@@ -14,8 +14,9 @@
 
 use std::fs;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::Manager;
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 const CONFIG_FILE: &str = "config.json";
 
@@ -70,28 +71,83 @@ pub fn vault_write_config(app: tauri::AppHandle, json: String) -> Result<(), Str
     Ok(())
 }
 
-/// Read a UTF-8 text file from an absolute path returned by the dialog
-/// plugin. The user has already authorized that location by picking it.
-/// Pulls in only `std::fs::read_to_string` so we don't depend on
-/// tauri-plugin-fs just for one read.
-#[tauri::command]
-pub fn vault_read_text(path: String) -> Result<String, String> {
-    let p = PathBuf::from(&path);
-    if !p.is_absolute() {
-        return Err("path must be absolute".to_string());
+fn require_absolute_path(path: &Path) -> Result<(), String> {
+    if path.is_absolute() {
+        Ok(())
+    } else {
+        Err("path must be absolute".to_string())
     }
-    fs::read_to_string(&p).map_err(|e| e.to_string())
 }
 
-/// Write a UTF-8 text file to an absolute path returned by the dialog
-/// plugin (typically through a Save dialog). Atomic via .tmp + rename so
-/// an interrupted write cannot leave the target file truncated.
-#[tauri::command]
-pub fn vault_write_text(path: String, contents: String) -> Result<(), String> {
-    let target = PathBuf::from(&path);
-    if !target.is_absolute() {
-        return Err("path must be absolute".to_string());
+fn require_extension(path: &Path, allowed: &[&str], label: &str) -> Result<(), String> {
+    require_absolute_path(path)?;
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if allowed
+        .iter()
+        .any(|allowed_ext| ext.eq_ignore_ascii_case(allowed_ext))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "{label} file must use one of: {}",
+            allowed.join(", ")
+        ))
     }
+}
+
+fn dialog_path(path: FilePath) -> Result<PathBuf, String> {
+    path.into_path()
+        .map_err(|e| format!("selected path is not a local file: {e}"))
+}
+
+fn default_file_name(input: &str, fallback_stem: &str, extension: &str) -> String {
+    let trimmed = input.trim();
+    let from_input = Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(fallback_stem);
+    if Path::new(from_input)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
+    {
+        from_input.to_string()
+    } else {
+        format!("{from_input}.{extension}")
+    }
+}
+
+fn read_text_file_capped(path: &Path, max_bytes: u64, label: &str) -> Result<String, String> {
+    require_absolute_path(path)?;
+    let metadata = fs::metadata(path).map_err(|e| format!("failed to inspect {label}: {e}"))?;
+    if metadata.len() > max_bytes {
+        return Err(format!(
+            "{label} is {} bytes, exceeding the limit of {max_bytes} bytes",
+            metadata.len()
+        ));
+    }
+
+    let mut file = fs::File::open(path).map_err(|e| format!("failed to open {label}: {e}"))?;
+    let mut contents = String::new();
+    let mut limited = std::io::Read::by_ref(&mut file).take(max_bytes + 1);
+    limited
+        .read_to_string(&mut contents)
+        .map_err(|e| format!("failed to read {label} as UTF-8: {e}"))?;
+    if contents.len() as u64 > max_bytes {
+        return Err(format!("{label} exceeds the limit of {max_bytes} bytes"));
+    }
+    Ok(contents)
+}
+
+/// Write a UTF-8 text file atomically via `.tmp` plus rename so an
+/// interrupted write cannot leave the target file truncated.
+fn write_text_file_atomically(path: &Path, contents: &str) -> Result<(), String> {
+    require_absolute_path(path)?;
+    let target = path;
     let parent = target
         .parent()
         .ok_or_else(|| "target has no parent directory".to_string())?
@@ -108,8 +164,40 @@ pub fn vault_write_text(path: String, contents: String) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
     }
-    fs::rename(&tmp_path, &target).map_err(|e| e.to_string())?;
+    fs::rename(&tmp_path, target).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn pick_open_path(
+    app: &tauri::AppHandle,
+    title: &str,
+    filter_name: &str,
+    extensions: &[&str],
+) -> Result<Option<PathBuf>, String> {
+    app.dialog()
+        .file()
+        .set_title(title)
+        .add_filter(filter_name, extensions)
+        .blocking_pick_file()
+        .map(dialog_path)
+        .transpose()
+}
+
+fn pick_save_path(
+    app: &tauri::AppHandle,
+    title: &str,
+    default_name: &str,
+    filter_name: &str,
+    extensions: &[&str],
+) -> Result<Option<PathBuf>, String> {
+    app.dialog()
+        .file()
+        .set_title(title)
+        .set_file_name(default_name)
+        .add_filter(filter_name, extensions)
+        .blocking_save_file()
+        .map(dialog_path)
+        .transpose()
 }
 
 /// Hard cap on the number of entries we will inspect inside a single zip.
@@ -128,6 +216,14 @@ const ICS_ZIP_MAX_ENTRY_BYTES: u64 = 25 * 1024 * 1024;
 /// Hard cap on the aggregate uncompressed size across every entry. Keeps a
 /// zip with many oversized entries from defeating the per-entry guard.
 const ICS_ZIP_MAX_TOTAL_BYTES: u64 = 250 * 1024 * 1024;
+
+/// Plain `.ics` imports share the zip per-entry cap so the import flow has
+/// one clear maximum payload size regardless of container.
+const ICS_PLAIN_MAX_BYTES: u64 = ICS_ZIP_MAX_ENTRY_BYTES;
+
+/// Theme JSON is small configuration data. One MiB leaves room for custom
+/// comments and future tokens while rejecting accidental large-file picks.
+const THEME_JSON_MAX_BYTES: u64 = 1024 * 1024;
 
 #[derive(Debug, serde::Serialize)]
 pub struct IcsZipEntry {
@@ -156,14 +252,10 @@ pub struct IcsZipEntry {
 /// - Only entries whose extension matches `.ics` are returned. Anything
 ///   else (`__MACOSX/`, `.DS_Store`, signature files, archived metadata)
 ///   is silently skipped so the importer never sees them.
-#[tauri::command]
-pub fn vault_read_ics_zip_entries(path: String) -> Result<Vec<IcsZipEntry>, String> {
-    let p = PathBuf::from(&path);
-    if !p.is_absolute() {
-        return Err("path must be absolute".to_string());
-    }
+fn read_ics_zip_entries_from_path(path: &Path) -> Result<Vec<IcsZipEntry>, String> {
+    require_extension(path, &["zip"], "ICS zip import")?;
 
-    let file = fs::File::open(&p).map_err(|e| format!("failed to open zip: {e}"))?;
+    let file = fs::File::open(path).map_err(|e| format!("failed to open zip: {e}"))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|e| format!("not a valid zip archive: {e}"))?;
 
@@ -257,6 +349,98 @@ pub fn vault_read_ics_zip_entries(path: String) -> Result<Vec<IcsZipEntry>, Stri
     Ok(entries)
 }
 
+fn read_plain_ics_entry_from_path(path: &Path) -> Result<IcsZipEntry, String> {
+    require_extension(path, &["ics"], "ICS import")?;
+    let contents = read_text_file_capped(path, ICS_PLAIN_MAX_BYTES, "ICS import")?;
+    let name = path
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "calendar.ics".to_string());
+    Ok(IcsZipEntry { name, contents })
+}
+
+/// Open a native file picker and read one `.ics` file or every `.ics` entry
+/// inside one `.zip` bundle. The selected path never crosses the IPC
+/// boundary, and Rust re-validates the extension before reading.
+#[tauri::command]
+pub async fn vault_pick_and_read_ics_import(
+    app: tauri::AppHandle,
+) -> Result<Option<Vec<IcsZipEntry>>, String> {
+    let Some(path) = pick_open_path(
+        &app,
+        "Import calendar",
+        "iCalendar (.ics or .zip)",
+        &["ics", "zip"],
+    )?
+    else {
+        return Ok(None);
+    };
+
+    require_extension(&path, &["ics", "zip"], "ICS import")?;
+    let is_zip = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"));
+    if is_zip {
+        read_ics_zip_entries_from_path(&path).map(Some)
+    } else {
+        read_plain_ics_entry_from_path(&path).map(|entry| Some(vec![entry]))
+    }
+}
+
+/// Open a native save dialog and write a calendar `.ics` export. The
+/// selected path stays in Rust and must still have a `.ics` extension.
+#[tauri::command]
+pub async fn vault_pick_and_write_ics_export(
+    app: tauri::AppHandle,
+    default_name: String,
+    contents: String,
+) -> Result<bool, String> {
+    let default_name = default_file_name(&default_name, "calendar", "ics");
+    let Some(path) = pick_save_path(
+        &app,
+        "Export calendar",
+        &default_name,
+        "iCalendar",
+        &["ics"],
+    )?
+    else {
+        return Ok(false);
+    };
+    require_extension(&path, &["ics"], "ICS export")?;
+    write_text_file_atomically(&path, &contents)?;
+    Ok(true)
+}
+
+/// Open a native file picker and read a theme `.json` file with a small cap.
+#[tauri::command]
+pub async fn vault_pick_and_read_theme_json(
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    let Some(path) = pick_open_path(&app, "Import theme", "Theme JSON", &["json"])? else {
+        return Ok(None);
+    };
+    require_extension(&path, &["json"], "theme import")?;
+    read_text_file_capped(&path, THEME_JSON_MAX_BYTES, "theme import").map(Some)
+}
+
+/// Open a native save dialog and write a theme `.json` export.
+#[tauri::command]
+pub async fn vault_pick_and_write_theme_json(
+    app: tauri::AppHandle,
+    default_name: String,
+    contents: String,
+) -> Result<bool, String> {
+    let default_name = default_file_name(&default_name, "theme", "json");
+    let Some(path) = pick_save_path(&app, "Export theme", &default_name, "Theme JSON", &["json"])?
+    else {
+        return Ok(false);
+    };
+    require_extension(&path, &["json"], "theme export")?;
+    write_text_file_atomically(&path, &contents)?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,35 +465,34 @@ mod tests {
     }
 
     #[test]
-    fn vault_read_text_rejects_relative_paths() {
-        let err = vault_read_text("relative/path.txt".to_string()).unwrap_err();
+    fn read_text_file_capped_rejects_relative_paths() {
+        let err = read_text_file_capped(Path::new("relative/path.txt"), 1024, "test").unwrap_err();
         assert_eq!(err, "path must be absolute");
     }
 
     #[test]
-    fn vault_write_text_rejects_relative_paths() {
-        let err = vault_write_text("relative/path.txt".to_string(), "data".into()).unwrap_err();
+    fn write_text_file_atomically_rejects_relative_paths() {
+        let err = write_text_file_atomically(Path::new("relative/path.txt"), "data").unwrap_err();
         assert_eq!(err, "path must be absolute");
     }
 
     #[test]
-    fn vault_read_text_returns_file_contents_for_absolute_path() {
+    fn read_text_file_capped_returns_file_contents_for_absolute_path() {
         let path = unique_path("read.txt");
         fs::write(&path, "hello vault").expect("seed file");
-        let result = vault_read_text(path.to_string_lossy().into_owned());
+        let result = read_text_file_capped(&path, 1024, "test");
         let _ = fs::remove_file(&path);
         assert_eq!(result.unwrap(), "hello vault");
     }
 
     #[test]
-    fn vault_write_text_writes_atomically_to_absolute_path() {
+    fn write_text_file_atomically_writes_atomically_to_absolute_path() {
         let path = unique_path("write.txt");
         let parent = path.parent().unwrap().to_path_buf();
         let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
         let tmp_sibling = parent.join(format!("{file_name}.tmp"));
 
-        vault_write_text(path.to_string_lossy().into_owned(), "payload".into())
-            .expect("write should succeed");
+        write_text_file_atomically(&path, "payload").expect("write should succeed");
 
         let on_disk = fs::read_to_string(&path).expect("file should exist");
         assert_eq!(on_disk, "payload");
@@ -320,6 +503,49 @@ mod tests {
         );
 
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn read_plain_ics_entry_rejects_wrong_extensions() {
+        let path = unique_path("calendar.txt");
+        fs::write(&path, "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n").expect("seed file");
+        let result = read_plain_ics_entry_from_path(&path);
+        let _ = fs::remove_file(&path);
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("ICS import file must use one of: ics"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn read_plain_ics_entry_rejects_oversized_files() {
+        let path = unique_path("oversized.ics");
+        let file = fs::File::create(&path).expect("create file");
+        file.set_len(ICS_PLAIN_MAX_BYTES + 1)
+            .expect("set oversized length");
+        let result = read_plain_ics_entry_from_path(&path);
+        let _ = fs::remove_file(&path);
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("exceeding the limit"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn read_theme_json_rejects_oversized_files() {
+        let path = unique_path("oversized.json");
+        let file = fs::File::create(&path).expect("create file");
+        file.set_len(THEME_JSON_MAX_BYTES + 1)
+            .expect("set oversized length");
+        let result = read_text_file_capped(&path, THEME_JSON_MAX_BYTES, "theme import");
+        let _ = fs::remove_file(&path);
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("exceeding the limit"),
+            "unexpected error: {err}"
+        );
     }
 
     /// Build a zip file at `path` containing the given `(name, contents)`
@@ -341,16 +567,29 @@ mod tests {
     }
 
     #[test]
-    fn vault_read_ics_zip_entries_rejects_relative_paths() {
-        let err = vault_read_ics_zip_entries("relative/path.zip".to_string()).unwrap_err();
+    fn read_ics_zip_entries_rejects_relative_paths() {
+        let err = read_ics_zip_entries_from_path(Path::new("relative/path.zip")).unwrap_err();
         assert_eq!(err, "path must be absolute");
     }
 
     #[test]
-    fn vault_read_ics_zip_entries_rejects_non_zip_files() {
+    fn read_ics_zip_entries_rejects_wrong_extensions() {
+        let path = unique_path("archive.txt");
+        fs::write(&path, b"this is not a zip archive").expect("seed file");
+        let result = read_ics_zip_entries_from_path(&path);
+        let _ = fs::remove_file(&path);
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("ICS zip import file must use one of: zip"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn read_ics_zip_entries_rejects_non_zip_files() {
         let path = unique_path("not-a-zip.zip");
         fs::write(&path, b"this is not a zip archive").expect("seed file");
-        let result = vault_read_ics_zip_entries(path.to_string_lossy().into_owned());
+        let result = read_ics_zip_entries_from_path(&path);
         let _ = fs::remove_file(&path);
         let err = result.unwrap_err();
         assert!(
@@ -360,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn vault_read_ics_zip_entries_returns_only_ics_entries() {
+    fn read_ics_zip_entries_returns_only_ics_entries() {
         let path = unique_path("mixed.zip");
         let ics_a = b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n";
         let ics_b = b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
@@ -374,7 +613,7 @@ mod tests {
             ],
         );
 
-        let result = vault_read_ics_zip_entries(path.to_string_lossy().into_owned());
+        let result = read_ics_zip_entries_from_path(&path);
         let _ = fs::remove_file(&path);
         let entries = result.expect("should succeed");
         assert_eq!(entries.len(), 2, "should keep only the .ics entries");
@@ -389,10 +628,10 @@ mod tests {
     }
 
     #[test]
-    fn vault_read_ics_zip_entries_returns_empty_when_no_ics_present() {
+    fn read_ics_zip_entries_returns_empty_when_no_ics_present() {
         let path = unique_path("no-ics.zip");
         write_zip(&path, &[("readme.txt", b"hello"), ("notes.md", b"# title")]);
-        let result = vault_read_ics_zip_entries(path.to_string_lossy().into_owned());
+        let result = read_ics_zip_entries_from_path(&path);
         let _ = fs::remove_file(&path);
         assert!(result.unwrap().is_empty());
     }

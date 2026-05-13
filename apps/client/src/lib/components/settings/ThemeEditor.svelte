@@ -10,7 +10,6 @@
   import Sun from "@lucide/svelte/icons/sun";
   import Wand2 from "@lucide/svelte/icons/wand-2";
   import { invoke } from "@tauri-apps/api/core";
-  import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { cn, isEditableKeyboardTarget } from "$lib/utils";
   import {
     contrastRatio,
@@ -52,7 +51,6 @@
   let { theme }: { theme: Theme } = $props();
 
   const themeStore = getTheme();
-  const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
   const PANEL_SCROLL_KEYS = new Set([
     "ArrowUp",
     "ArrowDown",
@@ -655,13 +653,11 @@
 
   async function saveJsonToFile() {
     try {
-      const target = await saveDialog({
-        defaultPath: `${theme.id}.json`,
-        filters: THEME_FILE_FILTER,
+      const saved = await invoke<boolean>("vault_pick_and_write_theme_json", {
+        defaultName: `${theme.id}.json`,
+        contents: jsonDraft,
       });
-      if (!target) return;
-      await invoke("vault_write_text", { path: target, contents: jsonDraft });
-      flashJsonNotice("Saved to file");
+      if (saved) flashJsonNotice("Saved to file");
     } catch (err) {
       console.error("save dialog failed", err);
       flashJsonNotice("Could not save file");

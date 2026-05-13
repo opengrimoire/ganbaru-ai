@@ -2,6 +2,30 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use tauri::Manager;
 
+extern crate self as sqlx;
+
+pub use sqlx_core::acquire::Acquire;
+pub use sqlx_core::connection::{ConnectOptions, Connection};
+pub use sqlx_core::database::Database;
+pub use sqlx_core::error::{Error, Result};
+pub use sqlx_core::executor::{Execute, Executor};
+pub use sqlx_core::from_row::FromRow;
+pub use sqlx_core::pool::Pool;
+pub use sqlx_core::query::query;
+pub use sqlx_core::query_as::query_as;
+pub use sqlx_core::query_scalar::query_scalar;
+pub use sqlx_core::raw_sql::raw_sql;
+pub use sqlx_core::row::Row;
+pub use sqlx_core::transaction::{Transaction, TransactionManager};
+pub use sqlx_core::Either;
+pub use sqlx_sqlite::{Sqlite, SqliteConnection, SqliteExecutor, SqlitePool, SqliteTransaction};
+
+pub mod sqlite {
+    pub use sqlx_sqlite::*;
+}
+
+#[macro_use]
+mod sqlite_row;
 mod benchmark_seed;
 mod calendar_events;
 mod calendar_import;
@@ -536,7 +560,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(db_path::DatabaseState::default())
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -562,9 +585,10 @@ pub fn run() {
             get_startup_elapsed_ms,
             vault::vault_read_config,
             vault::vault_write_config,
-            vault::vault_read_text,
-            vault::vault_write_text,
-            vault::vault_read_ics_zip_entries,
+            vault::vault_pick_and_read_ics_import,
+            vault::vault_pick_and_write_ics_export,
+            vault::vault_pick_and_read_theme_json,
+            vault::vault_pick_and_write_theme_json,
             kanban::kanban_add_task,
             kanban::kanban_load_tasks,
             kanban::kanban_update_task_status,
@@ -618,6 +642,9 @@ pub fn run() {
             themes::theme_reset_to_seed,
         ])
         .setup(|app| {
+            if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {
+                eprintln!("failed to restore stale Linux shortcuts: {err}");
+            }
             tray::setup_tray(app.handle())?;
             Ok(())
         })

@@ -15,7 +15,7 @@ pub struct KanbanTaskCreate {
     updated_at: String,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct KanbanTaskRead {
     id: String,
     title: String,
@@ -29,6 +29,19 @@ pub struct KanbanTaskRead {
     created_at: String,
     updated_at: String,
 }
+impl_sqlite_from_row!(KanbanTaskRead {
+    id,
+    title,
+    description,
+    status,
+    priority,
+    estimated_pomodoros,
+    actual_pomodoros,
+    session_block_id,
+    sort_order,
+    created_at,
+    updated_at,
+});
 
 #[tauri::command]
 pub async fn kanban_load_tasks<R: Runtime>(

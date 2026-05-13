@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "$lib/components/calendar/types";
 import { buildBulkImportPayload } from "./calendar-bulk-import";
@@ -195,5 +197,32 @@ describe("buildBulkImportPayload", () => {
     expect(event.notifications).toBeNull();
     expect(event.categories).toBeNull();
     expect(event.extendedProperties).toBeNull();
+  });
+
+  it("sanitizes imported event and override descriptions before persistence", () => {
+    const payload = buildBulkImportPayload(
+      [
+        makeEvent({
+          description:
+            '<p onclick="alert(1)">Safe <strong>text</strong><script>alert(1)</script></p>',
+          overrides: [
+            {
+              id: "override-1",
+              parentEventId: "ignored",
+              recurrenceId: "2026-05-01T10:00:00Z",
+              description: '<img src=x onerror="alert(1)"><u>Override</u>',
+            },
+          ],
+        }),
+      ],
+      CAL,
+      NOW,
+      ZONE,
+      deterministicIds(),
+    );
+
+    const event = payload.events[0];
+    expect(event.description).toBe("<p>Safe <strong>text</strong></p>");
+    expect(event.overrides[0].description).toBe("<u>Override</u>");
   });
 });

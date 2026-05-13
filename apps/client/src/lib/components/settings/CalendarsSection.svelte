@@ -4,7 +4,6 @@
   import Download from "@lucide/svelte/icons/download";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getCalendar } from "$lib/stores/calendar.svelte";
@@ -13,13 +12,11 @@
 
   const calendarsStore = getCalendars();
   const calendarStore = getCalendar();
-  const ICS_IMPORT_FILTER = [{ name: "iCalendar (.ics or .zip)", extensions: ["ics", "zip"] }];
-  const ICS_EXPORT_FILTER = [{ name: "iCalendar", extensions: ["ics"] }];
 
   /**
-   * One `.ics` entry as returned by the Rust `vault_read_ics_zip_entries`
-   * command. `name` is always a basename (no directory components) and
-   * `contents` is the UTF-8 decoded entry body.
+   * One `.ics` entry as returned by the Rust import command. `name` is
+   * always a basename (no directory components) and `contents` is the
+   * UTF-8 decoded entry body.
    */
   type IcsZipEntry = { name: string; contents: string };
 
@@ -80,11 +77,6 @@
     void refreshCounts();
   });
 
-  function basenameFromPath(path: string): string {
-    const parts = path.split(/[\\/]/);
-    return parts[parts.length - 1] || path;
-  }
-
   /**
    * Parse a single `.ics` payload, upsert into a calendar grouping keyed by
    * `groupingFilename`, and fold the result into `totals`. Same code path
@@ -125,17 +117,11 @@
 
   async function handleImport() {
     if (isImporting) return;
-    const picked = await openDialog({
-      multiple: false,
-      directory: false,
-      filters: ICS_IMPORT_FILTER,
-    });
-    if (!picked || typeof picked !== "string") return;
 
     isImporting = true;
     try {
-      const filename = basenameFromPath(picked);
-      const isZip = /\.zip$/i.test(filename);
+      const entries = await invoke<IcsZipEntry[] | null>("vault_pick_and_read_ics_import");
+      if (!entries) return;
 
       const totals: ImportTotals = {
         added: 0,
@@ -145,28 +131,18 @@
         warnings: [],
       };
 
-      if (isZip) {
-        const entries = await invoke<IcsZipEntry[]>("vault_read_ics_zip_entries", {
-          path: picked,
-        });
-        if (entries.length === 0) {
-          flashToast("Zip contained no .ics files.");
-          return;
-        }
-        importProgress = { current: 0, total: entries.length, label: entries[0].name };
-        for (let i = 0; i < entries.length; i++) {
-          importProgress = {
-            current: i + 1,
-            total: entries.length,
-            label: entries[i].name,
-          };
-          await importIcsText(entries[i].contents, entries[i].name, totals);
-        }
-      } else {
-        importProgress = { current: 0, total: 1, label: filename };
-        const text = await invoke<string>("vault_read_text", { path: picked });
-        importProgress = { current: 1, total: 1, label: filename };
-        await importIcsText(text, filename, totals);
+      if (entries.length === 0) {
+        flashToast("No .ics files found.");
+        return;
+      }
+      importProgress = { current: 0, total: entries.length, label: entries[0].name };
+      for (let i = 0; i < entries.length; i++) {
+        importProgress = {
+          current: i + 1,
+          total: entries.length,
+          label: entries[i].name,
+        };
+        await importIcsText(entries[i].contents, entries[i].name, totals);
       }
 
       if (totals.calendars === 0) {
@@ -195,14 +171,12 @@
 
   async function handleExport(calendar: Calendar) {
     try {
-      const target = await saveDialog({
-        defaultPath: `${calendar.name.replace(/[^\w.-]+/g, "_")}.ics`,
-        filters: ICS_EXPORT_FILTER,
-      });
-      if (!target) return;
       const ics = await calendarStore.exportCalendarAsIcs(calendar);
-      await invoke("vault_write_text", { path: target, contents: ics });
-      flashToast("Exported to file.");
+      const saved = await invoke<boolean>("vault_pick_and_write_ics_export", {
+        defaultName: `${calendar.name.replace(/[^\w.-]+/g, "_")}.ics`,
+        contents: ics,
+      });
+      if (saved) flashToast("Exported to file.");
     } catch (err) {
       console.error("ics export failed", err);
       flashToast(err instanceof Error ? err.message : "Export failed.");

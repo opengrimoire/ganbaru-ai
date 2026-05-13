@@ -28,7 +28,7 @@ pub struct OverrideTimezoneHydration {
     end_time: Option<String>,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct LegacyEventRow {
     id: String,
     start_time: String,
@@ -36,8 +36,15 @@ pub struct LegacyEventRow {
     timezone: String,
     all_day: i64,
 }
+impl_sqlite_from_row!(LegacyEventRow {
+    id,
+    start_time,
+    end_time,
+    timezone,
+    all_day,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct LegacyOverrideRow {
     id: String,
     recurrence_id: String,
@@ -45,13 +52,25 @@ pub struct LegacyOverrideRow {
     end_time: Option<String>,
     parent_event_id: String,
 }
+impl_sqlite_from_row!(LegacyOverrideRow {
+    id,
+    recurrence_id,
+    start_time,
+    end_time,
+    parent_event_id,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct ParentZoneRow {
     id: String,
     timezone: String,
     all_day: i64,
 }
+impl_sqlite_from_row!(ParentZoneRow {
+    id,
+    timezone,
+    all_day,
+});
 
 #[derive(Serialize)]
 pub struct CalendarTimezoneHydrationRows {

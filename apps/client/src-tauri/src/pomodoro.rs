@@ -49,7 +49,7 @@ pub struct PomodoroSessionWrite {
     pauses: Vec<PomodoroPauseMs>,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct PomodoroSegmentRead {
     id: String,
     event_id: String,
@@ -64,6 +64,20 @@ pub struct PomodoroSegmentRead {
     pause_log: Option<String>,
     status: String,
 }
+impl_sqlite_from_row!(PomodoroSegmentRead {
+    id,
+    event_id,
+    event_date,
+    run_id,
+    cycle_number,
+    phase,
+    planned_start,
+    planned_end,
+    actual_start,
+    actual_end,
+    pause_log,
+    status,
+});
 
 #[tauri::command]
 pub async fn pomodoro_load_segments_for_events<R: Runtime>(

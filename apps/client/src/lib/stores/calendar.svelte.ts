@@ -23,6 +23,7 @@ import {
   buildBulkImportPayload,
   type CalendarBulkImportResult,
 } from "./calendar-bulk-import";
+import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
 import { adjacentCalendarWindowRequests } from "./calendar-window-prefetch";
 import {
   BoundedWindowCache,
@@ -253,7 +254,7 @@ function rememberPanelEvent(id: string, promise: Promise<CalendarEvent | undefin
 }
 
 function applyFullEventFields(row: DbFullEvent, event: CalendarEvent) {
-  if (row.description) event.description = row.description;
+  if (row.description) event.description = sanitizeCalendarDescriptionHtml(row.description);
   if (row.url) event.url = row.url;
   if (row.source_uid) event.sourceUid = row.source_uid;
   if (row.visibility && row.visibility !== "public") {
@@ -789,7 +790,9 @@ export function getCalendar() {
       if (rows.overrides.length > 0) {
         event.overrides = rows.overrides.map((r) => {
           const slim = mapOverride(r, renderZone);
-          if (r.description) slim.description = r.description;
+          if (r.description) {
+            slim.description = sanitizeCalendarDescriptionHtml(r.description);
+          }
           if (r.location) slim.location = r.location;
           if (r.url) slim.url = r.url;
           if (r.visibility) slim.visibility = r.visibility as EventVisibility;
@@ -840,6 +843,7 @@ export function getCalendar() {
       const now = nowLocal();
       const timezone = localTimezone();
       const calendarId = opts.calendarId ?? "local";
+      const description = sanitizeCalendarDescriptionHtml(opts.description ?? "");
       const rrule = opts.recurrence ? recurrenceToRrule(opts.recurrence) : null;
       const repeatUntil = opts.recurrence?.end.type === "until"
         ? opts.recurrence.end.date : null;
@@ -855,7 +859,7 @@ export function getCalendar() {
           timezone,
           calendarId,
           color: opts.color ?? null,
-          description: opts.description ?? "",
+          description,
           rrule,
           notifications: notifJson,
           repeatUntil,
@@ -954,6 +958,9 @@ export function getCalendar() {
           throw new Error(`Invalid calendar time format: end="${toUpdate.end}"`);
         }
         toUpdate.end = sanitized;
+      }
+      if ("description" in toUpdate) {
+        toUpdate.description = sanitizeCalendarDescriptionHtml(toUpdate.description ?? "");
       }
 
       const existing = rawBlocks.find((b) => b.id === parentId);
@@ -1335,7 +1342,7 @@ export function getCalendar() {
       // guest_can_*) preserve current behavior: parent's row, never
       // overridden by `changes`.
       const descriptionPatch = "description" in changes
-        ? (changes.description ?? "") : null;
+        ? sanitizeCalendarDescriptionHtml(changes.description ?? "") : null;
       const urlPatch = "url" in changes ? (changes.url ?? "") : null;
       const pomConfig = merged.pomodoroConfig ?? parent.pomodoroConfig;
       await invoke("calendar_split_series", {

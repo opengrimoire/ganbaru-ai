@@ -2,7 +2,7 @@ use crate::db_path::connect_sqlite;
 use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct DbCalendarEventRow {
     id: String,
     title: String,
@@ -26,8 +26,31 @@ pub struct DbCalendarEventRow {
     pomodoro_count: Option<i64>,
     idle_timeout_minutes: Option<i64>,
 }
+impl_sqlite_from_row!(DbCalendarEventRow {
+    id,
+    title,
+    start_time,
+    end_time,
+    timezone,
+    calendar_id,
+    color,
+    rrule,
+    notifications,
+    exceptions,
+    repeat_until,
+    all_day,
+    location,
+    transparency,
+    status,
+    rdate,
+    focus_duration_minutes,
+    short_break_minutes,
+    long_break_minutes,
+    pomodoro_count,
+    idle_timeout_minutes,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct DbOverrideRow {
     id: String,
     parent_event_id: String,
@@ -39,8 +62,19 @@ pub struct DbOverrideRow {
     status: Option<String>,
     transparency: Option<String>,
 }
+impl_sqlite_from_row!(DbOverrideRow {
+    id,
+    parent_event_id,
+    recurrence_id,
+    title,
+    start_time,
+    end_time,
+    color,
+    status,
+    transparency,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct DbAttendeeRow {
     id: String,
     event_id: String,
@@ -51,8 +85,18 @@ pub struct DbAttendeeRow {
     rsvp: i64,
     sort_order: i64,
 }
+impl_sqlite_from_row!(DbAttendeeRow {
+    id,
+    event_id,
+    name,
+    email,
+    role,
+    status,
+    rsvp,
+    sort_order,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct DbAlarmRow {
     id: String,
     event_id: String,
@@ -62,8 +106,17 @@ pub struct DbAlarmRow {
     description: Option<String>,
     sort_order: i64,
 }
+impl_sqlite_from_row!(DbAlarmRow {
+    id,
+    event_id,
+    action,
+    trigger_type,
+    trigger_value,
+    description,
+    sort_order,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct DbFullEventRow {
     id: String,
     title: String,
@@ -100,8 +153,44 @@ pub struct DbFullEventRow {
     pomodoro_count: Option<i64>,
     idle_timeout_minutes: Option<i64>,
 }
+impl_sqlite_from_row!(DbFullEventRow {
+    id,
+    title,
+    start_time,
+    end_time,
+    timezone,
+    calendar_id,
+    color,
+    description,
+    rrule,
+    notifications,
+    exceptions,
+    repeat_until,
+    all_day,
+    location,
+    url,
+    transparency,
+    status,
+    source_uid,
+    visibility,
+    priority,
+    categories,
+    geo,
+    sequence,
+    rdate,
+    extended_properties,
+    organizer,
+    guest_can_modify,
+    guest_can_invite_others,
+    guest_can_see_other_guests,
+    focus_duration_minutes,
+    short_break_minutes,
+    long_break_minutes,
+    pomodoro_count,
+    idle_timeout_minutes,
+});
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct DbFullOverrideRow {
     id: String,
     parent_event_id: String,
@@ -118,6 +207,22 @@ pub struct DbFullOverrideRow {
     visibility: Option<String>,
     extended_properties: Option<String>,
 }
+impl_sqlite_from_row!(DbFullOverrideRow {
+    id,
+    parent_event_id,
+    recurrence_id,
+    title,
+    start_time,
+    end_time,
+    description,
+    location,
+    url,
+    color,
+    status,
+    transparency,
+    visibility,
+    extended_properties,
+});
 
 #[derive(Serialize)]
 pub struct CalendarBootstrapRows {

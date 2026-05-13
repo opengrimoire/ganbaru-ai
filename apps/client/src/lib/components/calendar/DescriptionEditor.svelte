@@ -10,6 +10,11 @@
   import RemoveFormatting from "@lucide/svelte/icons/remove-formatting";
   import Check from "@lucide/svelte/icons/check";
   import AlignLeft from "@lucide/svelte/icons/align-left";
+  import {
+    calendarDescriptionPreviewText,
+    isSafeCalendarDescriptionUrl,
+    sanitizeCalendarDescriptionHtml,
+  } from "$lib/calendar/description-sanitizer";
 
   let {
     description,
@@ -25,13 +30,14 @@
   let descClosing = $state(false);
   let editorEl: HTMLDivElement | undefined = $state();
   let descAreaEl: HTMLDivElement | undefined = $state();
+  const sanitizedDescription = $derived(sanitizeCalendarDescriptionHtml(description));
 
   function openDescEditor() {
     if (readOnly) return;
     descOpen = true;
     requestAnimationFrame(() => {
       if (editorEl) {
-        editorEl.innerHTML = description;
+        editorEl.innerHTML = sanitizedDescription;
         editorEl.focus();
         const sel = window.getSelection();
         if (sel) {
@@ -52,14 +58,33 @@
 
   function handleEditorInput() {
     if (editorEl) {
-      onchange(editorEl.innerHTML);
+      onchange(sanitizeCalendarDescriptionHtml(editorEl.innerHTML));
     }
+  }
+
+  function sanitizeEditorDom() {
+    if (!editorEl) return;
+    const safeHtml = sanitizeCalendarDescriptionHtml(editorEl.innerHTML);
+    if (safeHtml !== editorEl.innerHTML) {
+      editorEl.innerHTML = safeHtml;
+    }
+    onchange(safeHtml);
   }
 
   function execFormat(command: string, value?: string) {
     document.execCommand(command, false, value);
     editorEl?.focus();
     handleEditorInput();
+  }
+
+  function plainTextToHtml(value: string): string {
+    const wrapper = document.createElement("div");
+    const lines = value.replaceAll("\r\n", "\n").split("\n");
+    for (const [index, line] of lines.entries()) {
+      if (index > 0) wrapper.append(document.createElement("br"));
+      wrapper.append(document.createTextNode(line));
+    }
+    return wrapper.innerHTML;
   }
 
   let linkPopoverOpen = $state(false);
@@ -74,7 +99,7 @@
       savedSelection = sel.getRangeAt(0).cloneRange();
     }
     const selectedText = sel?.toString() ?? "";
-    linkUrl = selectedText.startsWith("http") ? selectedText : "https://";
+    linkUrl = isSafeCalendarDescriptionUrl(selectedText) ? selectedText : "https://";
     linkPopoverOpen = true;
     requestAnimationFrame(() => {
       linkInputEl?.focus();
@@ -84,16 +109,30 @@
 
   function handleEditorPaste(e: ClipboardEvent) {
     const text = e.clipboardData?.getData("text/plain") ?? "";
-    if (!text.startsWith("http")) return; // let normal paste happen
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return; // no selection, normal paste
+    const shouldLinkSelection = isSafeCalendarDescriptionUrl(text)
+      && sel
+      && !sel.isCollapsed
+      && sel.rangeCount > 0;
     e.preventDefault();
-    document.execCommand("createLink", false, text);
-    handleEditorInput();
+    if (shouldLinkSelection) {
+      document.execCommand("createLink", false, text);
+      sanitizeEditorDom();
+      return;
+    }
+    const html = e.clipboardData?.getData("text/html") ?? "";
+    const safeHtml = sanitizeCalendarDescriptionHtml(html || plainTextToHtml(text));
+    document.execCommand("insertHTML", false, safeHtml);
+    sanitizeEditorDom();
   }
 
   function applyLink() {
     if (!linkUrl || linkUrl === "https://") { linkPopoverOpen = false; return; }
+    if (!isSafeCalendarDescriptionUrl(linkUrl)) {
+      linkPopoverOpen = false;
+      savedSelection = null;
+      return;
+    }
     if (savedSelection) {
       const sel = window.getSelection();
       sel?.removeAllRanges();
@@ -101,9 +140,21 @@
     }
     document.execCommand("createLink", false, linkUrl);
     editorEl?.focus();
-    handleEditorInput();
+    sanitizeEditorDom();
     linkPopoverOpen = false;
     savedSelection = null;
+  }
+
+  function handleDescriptionRowClick(event: MouseEvent) {
+    const target = event.target instanceof Element
+      ? event.target.closest("a")
+      : null;
+    if (target) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (!descOpen && !descClosing) openDescEditor();
   }
 
   function positionLinkPopover(node: HTMLElement) {
@@ -118,23 +169,21 @@
   }
 
   const descPreview = $derived.by(() => {
-    if (!description) return "";
-    const tmp = document.createElement("div");
-    tmp.innerHTML = description;
-    return tmp.textContent?.trim() ?? "";
+    if (!sanitizedDescription) return "";
+    return calendarDescriptionPreviewText(sanitizedDescription);
   });
 
   // Sync description HTML into the persistent editor element when not actively editing
   $effect(() => {
     if (!descOpen && !descClosing && editorEl) {
-      editorEl.innerHTML = description;
+      editorEl.innerHTML = sanitizedDescription;
     }
   });
 
   // Sync editor content when it first appears (e.g. editing existing event with description)
   $effect(() => {
-    if (descOpen && editorEl && editorEl.innerHTML !== description) {
-      editorEl.innerHTML = description;
+    if (descOpen && editorEl && editorEl.innerHTML !== sanitizedDescription) {
+      editorEl.innerHTML = sanitizedDescription;
     }
   });
 
@@ -222,7 +271,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="flex items-center gap-2.5 leading-none {!descOpen && !descClosing && !readOnly ? 'cursor-text' : ''}"
-    onclick={() => { if (!descOpen && !descClosing) openDescEditor(); }}
+    onclick={handleDescriptionRowClick}
   >
     <AlignLeft size={13} class="shrink-0 text-foreground" />
     <div class="min-w-0 flex-1">
@@ -282,6 +331,7 @@
   }
   .desc-editor :global(a) {
     color: var(--primary);
+    cursor: pointer;
     text-decoration: underline;
   }
   .desc-editor :global(b),

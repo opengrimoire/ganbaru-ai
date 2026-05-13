@@ -3,7 +3,6 @@
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import X from "@lucide/svelte/icons/x";
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
@@ -15,7 +14,6 @@
 
   const themeStore = getTheme();
   const themeEditor = getThemeEditor();
-  const THEME_FILE_FILTER = [{ name: "Theme JSON", extensions: ["json"] }];
 
   let pendingDelete = $state<ThemeId | undefined>(undefined);
   let importOpen = $state(false);
@@ -114,13 +112,8 @@
 
   async function handleImportFromFile() {
     try {
-      const picked = await openDialog({
-        multiple: false,
-        directory: false,
-        filters: THEME_FILE_FILTER,
-      });
-      if (!picked || typeof picked !== "string") return;
-      const text = await invoke<string>("vault_read_text", { path: picked });
+      const text = await invoke<string | null>("vault_pick_and_read_theme_json");
+      if (text === null) return;
       const result = await themeStore.importTheme(text);
       if (!result.ok) {
         importErrors = result.errors;
