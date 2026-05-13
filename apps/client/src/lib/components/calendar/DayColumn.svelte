@@ -88,6 +88,8 @@
   );
 
   const TIMED_RENDER_BUFFER_MINUTES = 90;
+  const HOVER_GUIDE_FOLLOW_TIME_CONSTANT_MS = 110;
+  const HOVER_GUIDE_SETTLE_MINUTES = 0.05;
   const panelOpen = $derived(!!editingId);
 
   const dateStr = $derived(formatDatePart(date));
@@ -335,10 +337,14 @@
   let lastClientX: number | null = null;
   let lastClientY: number | null = null;
   let scrollProximityRaf = 0;
+  let hoverGuideFollowRaf = 0;
+  let hoverGuideFollowPrev = 0;
   let guideTransitionResumeRaf = 0;
   let guideScrollSettleTimer = 0;
   let isScrolling = false;
   let lastPointerMoveAt = 0;
+  let hoverTargetMinute: number | null = null;
+  let hoverTargetPositionMinute: number | null = $state(null);
   const guideOwnerId = Symbol("calendar-hover-guide-owner");
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
@@ -359,8 +365,7 @@
 
   $effect(() => {
     if (dragPreview || createPreview || dragGuideMinute !== null || createGuideMinute !== null) {
-      hoverMinute = null;
-      hoverPositionMinute = null;
+      clearHoverAffordances();
     }
   });
 
@@ -405,15 +410,65 @@
       sp?.removeEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
       window.removeEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
+      if (hoverGuideFollowRaf) cancelAnimationFrame(hoverGuideFollowRaf);
       if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
       if (guideScrollSettleTimer) clearTimeout(guideScrollSettleTimer);
     };
   });
 
+  function stopHoverGuideFollow() {
+    if (hoverGuideFollowRaf) cancelAnimationFrame(hoverGuideFollowRaf);
+    hoverGuideFollowRaf = 0;
+    hoverGuideFollowPrev = 0;
+  }
+
+  function minuteForGuidePosition(positionMinute: number): number {
+    return clampMinute(snapToGrid(positionMinute, calZoom.gridMinutes));
+  }
+
+  function startHoverGuideFollow() {
+    if (hoverGuideFollowRaf) return;
+    hoverGuideFollowPrev = 0;
+    hoverGuideFollowRaf = requestAnimationFrame(stepHoverGuideFollow);
+  }
+
+  function stepHoverGuideFollow(ts: number) {
+    hoverGuideFollowRaf = 0;
+    if (hoverPositionMinute === null || hoverTargetPositionMinute === null) {
+      hoverGuideFollowPrev = 0;
+      return;
+    }
+    if (!hoverGuideFollowPrev) {
+      hoverGuideFollowPrev = ts;
+      hoverGuideFollowRaf = requestAnimationFrame(stepHoverGuideFollow);
+      return;
+    }
+
+    const dt = ts - hoverGuideFollowPrev;
+    hoverGuideFollowPrev = ts;
+    const factor = 1 - Math.exp(-dt / HOVER_GUIDE_FOLLOW_TIME_CONSTANT_MS);
+    const nextPositionMinute = hoverPositionMinute
+      + (hoverTargetPositionMinute - hoverPositionMinute) * factor;
+
+    if (Math.abs(hoverTargetPositionMinute - nextPositionMinute) <= HOVER_GUIDE_SETTLE_MINUTES) {
+      hoverPositionMinute = hoverTargetPositionMinute;
+      hoverMinute = hoverTargetMinute ?? minuteForGuidePosition(hoverTargetPositionMinute);
+      hoverGuideFollowPrev = 0;
+      return;
+    }
+
+    hoverPositionMinute = nextPositionMinute;
+    hoverMinute = minuteForGuidePosition(nextPositionMinute);
+    hoverGuideFollowRaf = requestAnimationFrame(stepHoverGuideFollow);
+  }
+
   function clearHoverAffordances() {
     hoverResizeBlockId = null;
     hoverMinute = null;
     hoverPositionMinute = null;
+    hoverTargetMinute = null;
+    hoverTargetPositionMinute = null;
+    stopHoverGuideFollow();
     if (guideMotionInstant) guideMotionInstant = false;
   }
 
@@ -423,6 +478,7 @@
       || hoverResizeBlockId !== null
       || hoverMinute !== null
       || hoverPositionMinute !== null
+      || hoverGuideFollowRaf !== 0
       || guideMotionInstant
       || isScrolling
       || scrollProximityRaf !== 0
@@ -437,6 +493,7 @@
       cancelAnimationFrame(scrollProximityRaf);
       scrollProximityRaf = 0;
     }
+    stopHoverGuideFollow();
     if (guideScrollSettleTimer) {
       clearTimeout(guideScrollSettleTimer);
       guideScrollSettleTimer = 0;
@@ -547,19 +604,35 @@
     return { minute, positionMinute, y };
   }
 
-  function setHoverGuide(next: { minute: number; positionMinute: number; y: number } | null) {
+  function setHoverGuide(
+    next: { minute: number; positionMinute: number; y: number } | null,
+    instant = false,
+  ) {
     if (!next) {
       hoverMinute = null;
       hoverPositionMinute = null;
+      hoverTargetMinute = null;
+      hoverTargetPositionMinute = null;
+      stopHoverGuideFollow();
       return;
     }
 
-    if (visibleGuideMinute === null) {
+    const wasHidden = visibleGuideMinute === null || hoverPositionMinute === null;
+    hoverTargetMinute = next.minute;
+    hoverTargetPositionMinute = next.positionMinute;
+
+    if (wasHidden) {
       pauseGuideTransitionForShow();
     }
 
-    hoverMinute = next.minute;
-    hoverPositionMinute = next.positionMinute;
+    if (wasHidden || instant) {
+      stopHoverGuideFollow();
+      hoverMinute = next.minute;
+      hoverPositionMinute = next.positionMinute;
+      return;
+    }
+
+    startHoverGuideFollow();
   }
 
   function pauseGuideTransitionForShow() {
@@ -577,6 +650,7 @@
     offsetX: number,
     offsetY: number,
     preserveCurrentGuide = false,
+    instantGuide = false,
   ) {
     const hh = getRenderedHourHeight();
     const dayHeight = 24 * hh;
@@ -594,7 +668,7 @@
       return;
     }
 
-    setHoverGuide(getCreateGuideFromOffset(offsetY));
+    setHoverGuide(getCreateGuideFromOffset(offsetY), instantGuide);
   }
 
   function updateHoverStateFromClientPoint(
@@ -602,6 +676,7 @@
     clientY: number,
     updateGuide: boolean,
     preserveCurrentGuide = false,
+    instantGuide = false,
   ) {
     if (!columnEl) return;
 
@@ -617,7 +692,7 @@
     }
 
     if (updateGuide) {
-      updateCreateHoverGuide(colOffsetX, colOffsetY, preserveCurrentGuide);
+      updateCreateHoverGuide(colOffsetX, colOffsetY, preserveCurrentGuide, instantGuide);
     }
   }
 
@@ -678,7 +753,7 @@
           if (guideMotionInstant && performance.now() - lastPointerMoveAt >= 80) {
             guideMotionInstant = false;
           }
-          updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
+          updateHoverStateFromClientPoint(lastClientX, lastClientY, true, false, false);
         }
       });
     }
@@ -688,7 +763,7 @@
     if (currentGuideOwner !== guideOwnerId) return;
     if (lastClientX === null || lastClientY === null || !columnEl) return;
     if (!guideMotionInstant) guideMotionInstant = true;
-    updateHoverStateFromClientPoint(lastClientX, lastClientY, true, true);
+    updateHoverStateFromClientPoint(lastClientX, lastClientY, true, true, true);
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
@@ -705,7 +780,7 @@
     } else if (isScrolling && guideMotionInstant && performance.now() - lastPointerMoveAt >= 80) {
       guideMotionInstant = false;
     }
-    updateHoverStateFromClientPoint(e.clientX, e.clientY, true);
+    updateHoverStateFromClientPoint(e.clientX, e.clientY, true, false, false);
   }
 
   function handleColumnMouseLeave(e: MouseEvent) {
@@ -906,7 +981,7 @@
   </div>
 
   <div
-    class="hover-time-guide pointer-events-none absolute left-0 right-0 {renderedGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {guideTransitionPaused || guideMotionInstant || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
+    class="hover-time-guide pointer-events-none absolute left-0 right-0 {renderedGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {hoverTargetPositionMinute !== null || guideTransitionPaused || guideMotionInstant || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
     style="
       top: 0;
       transform: translate3d(0, calc({visibleGuidePositionMinute} / 60 * var(--hour-h) * 1px), 0);
