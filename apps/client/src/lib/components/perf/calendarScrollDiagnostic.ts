@@ -1,7 +1,7 @@
 import {
   CALENDAR_FORWARDED_WHEEL_EVENT,
   type CalendarForwardedWheelDetail,
-} from "$lib/components/calendar/utils";
+} from "$lib/components/calendar/timeline-scroll";
 
 export const CALENDAR_SCROLL_CONTAINER_SELECTOR = "[data-calendar-scroll-container]";
 export const CALENDAR_SCROLL_SAMPLE_MIN_MS = 5_000;

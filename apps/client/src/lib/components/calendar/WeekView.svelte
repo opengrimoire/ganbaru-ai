@@ -8,10 +8,10 @@
     layoutAllDayEventsForWeek,
     getEventColor,
     parseCalendarDate,
-    createTimelineWheelScroll,
     GUTTER_WIDTH_PER_TZ,
     visibleMinuteRangeForScroll,
   } from "./utils";
+  import { createTimelineWheelScroll } from "./timeline-scroll";
   import TimeGutter from "./TimeGutter.svelte";
   import DayColumn from "./DayColumn.svelte";
   import HourGridlines from "./HourGridlines.svelte";

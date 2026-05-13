@@ -4,7 +4,7 @@
     CALENDAR_FORWARDED_WHEEL_EVENT,
     getSmoothScrollDelta,
     type CalendarForwardedWheelDetail,
-  } from "./utils";
+  } from "./timeline-scroll";
 
   let {
     scrollContainer,
