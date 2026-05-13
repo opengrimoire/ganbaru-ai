@@ -71,7 +71,7 @@ Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar
 
 ## Benchmark records
 
-Latest canonical baseline: none yet after the 2026-05-12 harness reset. The next recorded run should use harness `v1` and include an anchor date in run metadata.
+Latest canonical baseline: `2026-05-12-01`.
 
 Canonical rows keep the statistics and memory buckets that can support long-run comparisons. Raw harness diagnostics such as per-action counters, fixed guard timings, and redundant averages are not preserved here unless they answer a specific performance question. Interaction rows use the realistic dense current-window dataset unless the benchmark is explicitly asking about empty-state or total-history behavior.
 
@@ -79,6 +79,7 @@ Canonical rows keep the statistics and memory buckets that can support long-run 
 
 | Run | Harness | Anchor date | Build ref | Platform | Notes |
 |---|---|---|---|---|---|
+| 2026-05-12-01 | v1 | 2026-05-12 | 0.1.0+b75c37a | Linux Ubuntu 24.04.4 LTS |  |
 
 ### Startup boot
 
@@ -86,6 +87,9 @@ Use `Launch median ms` as the headline app-open comparison value. `Usable paint 
 
 | Run | Dataset | Runs | Usable paint median ms | Launch median ms | Launch P95 ms |
 |---|---|---:|---:|---:|---:|
+| 2026-05-12-01 | base-0 | 5 | 293 | 887 | 931 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | 5 | 667 | 1253 | 1664 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | 5 | 797 | 1337 | 1753 |
 
 ### Idle memory
 
@@ -93,6 +97,15 @@ Memory is PSS on Linux. On platforms that cannot report PSS, record the metric u
 
 | Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
+| 2026-05-12-01 | base-0 | Min | 111.9 | 193.6 | 19.3 | 325 |
+| 2026-05-12-01 | base-0 | Max | 112.5 | 196.0 | 19.4 | 328 |
+| 2026-05-12-01 | base-0 | End | 111.9 | 194.6 | 19.4 | 326 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Min | 115.3 | 242.7 | 19.0 | 378 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Max | 115.9 | 254.9 | 19.1 | 390 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | End | 115.3 | 247.5 | 19.1 | 382 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | Min | 114.7 | 247.8 | 19.3 | 382 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | Max | 115.3 | 262.0 | 19.4 | 397 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | End | 114.7 | 250.4 | 19.4 | 384 |
 
 ### Calendar held navigation memory
 
@@ -100,6 +113,9 @@ This records post-action memory after reproducing real held right-arrow navigati
 
 | Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Min | 116.0 | 269.5 | 19.3 | 405 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Max | 116.7 | 313.8 | 19.3 | 450 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | End | 116.0 | 273.2 | 19.3 | 408 |
 
 ### Calendar panel latency
 
@@ -107,6 +123,8 @@ Rows report user-visible panel-open elapsed time for the two calendar panel acti
 
 | Run | Dataset | Action | Median ms | P95 ms |
 |---|---|---|---:|---:|
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | click existing event | 88 | 101 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | click empty time slot | 100 | 105 |
 
 ### Calendar import operations
 
@@ -114,6 +132,8 @@ Rows report one 1000-event add or update pass against the practical dense datase
 
 | Run | Dataset | Metric | Value ms |
 |---|---|---|---:|
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | bulk import 1000 add | 305 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | bulk import 1000 update | 330 |
 
 ## Historical context
 
@@ -139,6 +159,9 @@ stat -c "%n %s" target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm 
 | 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .deb | 7.4 | Linux |
 | 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .rpm | 7.4 | Linux |
 | 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .AppImage | 80.9 | Linux |
+| 2026-05-12 | Phase 1 | Harness v1 benchmark baseline | .deb | 8.1 | Linux |
+| 2026-05-12 | Phase 1 | Harness v1 benchmark baseline | .rpm | 8.1 | Linux |
+| 2026-05-12 | Phase 1 | Harness v1 benchmark baseline | .AppImage | 83.2 | Linux |
 
 ## Output rules
 
