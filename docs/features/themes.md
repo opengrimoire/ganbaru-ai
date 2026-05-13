@@ -298,7 +298,7 @@ The editor exposes semantic colors when they represent a useful user choice. Imp
 
 The theme editor should stay powerful, but curated. Expose colors broadly when they represent stable, user-facing decisions that a theme author can understand and intentionally tune. Do not expose every paint hook just because it exists in CSS.
 
-Prefer derivation when a color is an implementation detail or a predictable variation of another color. Borders, shadows, dividers, placeholder text, selected-state outlines, editor tints, drag-preview borders, hover guides, and temporary affordances should usually follow an existing surface, foreground, event color, or semantic signal. They belong in `DERIVED_APP_TOKEN_KEYS`, component-local `color-mix()`, or code-level constants unless a clear user-facing customization need appears.
+Prefer derivation when a color is an implementation detail or a predictable variation of another color. Borders, shadows, dividers, placeholder text, selected-state outlines, editor tints, drag-preview borders, and temporary affordances should usually follow an existing surface, foreground, event color, or semantic signal. They belong in `DERIVED_APP_TOKEN_KEYS`, component-local `color-mix()`, or code-level constants unless a clear user-facing customization need appears.
 
 Before adding an editable token, ask:
 

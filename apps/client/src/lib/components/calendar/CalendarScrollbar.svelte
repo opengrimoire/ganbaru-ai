@@ -1,12 +1,19 @@
 <script lang="ts">
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import {
+    CALENDAR_FORWARDED_WHEEL_EVENT,
+    getSmoothScrollDelta,
+    type CalendarForwardedWheelDetail,
+  } from "./utils";
 
   let {
     scrollContainer,
     stickyTop = 0,
+    onTimelineWheel,
   }: {
     scrollContainer: HTMLElement | undefined;
     stickyTop?: number;
+    onTimelineWheel?: (e: WheelEvent) => void;
   } = $props();
 
   const calZoom = getCalendarZoom();
@@ -89,6 +96,26 @@
   function handlePointerUp() {
     dragging = false;
   }
+
+  function handleWheel(e: WheelEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (scrollContainer) {
+      scrollContainer.dispatchEvent(new CustomEvent<CalendarForwardedWheelDetail>(
+        CALENDAR_FORWARDED_WHEEL_EVENT,
+        {
+          detail: {
+            deltaY: getSmoothScrollDelta(e),
+            deltaMode: e.deltaMode,
+            scrollTop: scrollContainer.scrollTop,
+            scrollHeight: scrollContainer.scrollHeight,
+            clientHeight: scrollContainer.clientHeight,
+          },
+        },
+      ));
+      onTimelineWheel?.(e);
+    }
+  }
 </script>
 
 <!-- Absolute overlay: positioned outside scroll container so it never scrolls -->
@@ -102,6 +129,7 @@
   onpointerup={handlePointerUp}
   onpointerenter={() => (hovering = true)}
   onpointerleave={() => { if (!dragging) hovering = false; }}
+  onwheel={handleWheel}
 >
   {#if thumbHeight > 0}
     <div

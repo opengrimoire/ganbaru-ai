@@ -1,3 +1,8 @@
+import {
+  CALENDAR_FORWARDED_WHEEL_EVENT,
+  type CalendarForwardedWheelDetail,
+} from "$lib/components/calendar/utils";
+
 export const CALENDAR_SCROLL_CONTAINER_SELECTOR = "[data-calendar-scroll-container]";
 export const CALENDAR_SCROLL_SAMPLE_MIN_MS = 5_000;
 export const CALENDAR_SCROLL_SAMPLE_MAX_MS = 10_000;
@@ -26,6 +31,8 @@ export interface CalendarScrollRawSample {
   wheelDeltaY: number[];
   wheelDeltaModes: CalendarWheelDeltaModeCounts;
   wheelEventCount: number;
+  wheelAtEdgeCount: number;
+  wheelIntoEdgeCount: number;
   scrollDeltasPx: number[];
   scrollEventCount: number;
 }
@@ -50,12 +57,18 @@ export interface CalendarScrollSummary {
   frames: CalendarScrollTimingSummary;
   estimatedFps: number | null;
   wheelEventCount: number;
+  wheelSignedDeltaY: number;
   wheelTotalAbsDeltaY: number;
   wheelMaxAbsDeltaY: number;
+  wheelDirectionChanges: number;
+  wheelAtEdgeCount: number;
+  wheelIntoEdgeCount: number;
   wheelDeltaModes: CalendarWheelDeltaModeCounts;
   scrollEventCount: number;
   scrollDistancePx: number;
   netScrollPx: number;
+  scrollDirectionChanges: number;
+  scrollDistanceToRangeRatio: number | null;
   maxScrollStepPx: number;
   touchedScrollRangePx: number;
   startScrollTopPx: number;
@@ -83,8 +96,30 @@ function sumAbs(values: number[]): number {
   return values.reduce((sum, value) => sum + Math.abs(value), 0);
 }
 
+function sumSigned(values: number[]): number {
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
 function maxAbs(values: number[]): number {
   return values.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
+}
+
+function signOf(value: number): -1 | 0 | 1 {
+  if (value < 0) return -1;
+  if (value > 0) return 1;
+  return 0;
+}
+
+function directionChangeCount(values: number[]): number {
+  let previousSign: -1 | 0 | 1 = 0;
+  let changes = 0;
+  for (const value of values) {
+    const nextSign = signOf(value);
+    if (nextSign === 0) continue;
+    if (previousSign !== 0 && nextSign !== previousSign) changes++;
+    previousSign = nextSign;
+  }
+  return changes;
 }
 
 function rounded(value: number): number {
@@ -120,6 +155,8 @@ export function summarizeCalendarScrollSample(sample: CalendarScrollRawSample): 
   const scrollLimitPx = Math.max(0, sample.scrollHeightPx - sample.viewportHeightPx);
   const endDistanceFromBottom = Math.abs(scrollLimitPx - sample.endScrollTopPx);
   const endPosition = sample.endScrollTopPx <= 1 ? "top" : endDistanceFromBottom <= 1 ? "bottom" : "inside";
+  const scrollDistancePx = rounded(sumAbs(sample.scrollDeltasPx));
+  const touchedScrollRangePx = rounded(sample.maxScrollTopPx - sample.minScrollTopPx);
   return {
     capturedAtIso: sample.capturedAtIso,
     durationMs: rounded(sample.durationMs),
@@ -128,14 +165,20 @@ export function summarizeCalendarScrollSample(sample: CalendarScrollRawSample): 
     frames,
     estimatedFps: frames.averageMs === null || frames.averageMs <= 0 ? null : rounded(1000 / frames.averageMs),
     wheelEventCount: sample.wheelEventCount,
+    wheelSignedDeltaY: rounded(sumSigned(sample.wheelDeltaY)),
     wheelTotalAbsDeltaY: rounded(sumAbs(sample.wheelDeltaY)),
     wheelMaxAbsDeltaY: rounded(maxAbs(sample.wheelDeltaY)),
+    wheelDirectionChanges: directionChangeCount(sample.wheelDeltaY),
+    wheelAtEdgeCount: sample.wheelAtEdgeCount,
+    wheelIntoEdgeCount: sample.wheelIntoEdgeCount,
     wheelDeltaModes: { ...sample.wheelDeltaModes },
     scrollEventCount: sample.scrollEventCount,
-    scrollDistancePx: rounded(sumAbs(sample.scrollDeltasPx)),
+    scrollDistancePx,
     netScrollPx: rounded(sample.endScrollTopPx - sample.startScrollTopPx),
+    scrollDirectionChanges: directionChangeCount(sample.scrollDeltasPx),
+    scrollDistanceToRangeRatio: touchedScrollRangePx <= 0 ? null : rounded(scrollDistancePx / touchedScrollRangePx),
     maxScrollStepPx: rounded(maxAbs(sample.scrollDeltasPx)),
-    touchedScrollRangePx: rounded(sample.maxScrollTopPx - sample.minScrollTopPx),
+    touchedScrollRangePx,
     startScrollTopPx: rounded(sample.startScrollTopPx),
     endScrollTopPx: rounded(sample.endScrollTopPx),
     scrollLimitPx: rounded(scrollLimitPx),
@@ -180,12 +223,18 @@ export function formatCalendarScrollDiagnosticMarkdown(summary: CalendarScrollSu
     ["Frames over 33.4 ms", summary.frames.over33Ms.toLocaleString("en")],
     ["Frames over 50 ms", summary.frames.over50Ms.toLocaleString("en")],
     ["Wheel events", summary.wheelEventCount.toLocaleString("en")],
+    ["Wheel signed deltaY", formatNumber(summary.wheelSignedDeltaY)],
     ["Wheel total abs deltaY", formatNumber(summary.wheelTotalAbsDeltaY)],
     ["Wheel max abs deltaY", formatNumber(summary.wheelMaxAbsDeltaY)],
+    ["Wheel direction changes", summary.wheelDirectionChanges.toLocaleString("en")],
+    ["Wheel events at edge", summary.wheelAtEdgeCount.toLocaleString("en")],
+    ["Wheel events into edge", summary.wheelIntoEdgeCount.toLocaleString("en")],
     ["Wheel delta modes", formatDeltaModes(summary.wheelDeltaModes)],
     ["Scroll events", summary.scrollEventCount.toLocaleString("en")],
     ["Scroll distance", `${formatNumber(summary.scrollDistancePx)} px`],
     ["Net scroll", `${formatNumber(summary.netScrollPx)} px`],
+    ["Scroll direction changes", summary.scrollDirectionChanges.toLocaleString("en")],
+    ["Scroll distance / touched range", formatOptionalNumber(summary.scrollDistanceToRangeRatio)],
     ["Max scroll step", `${formatNumber(summary.maxScrollStepPx)} px`],
     ["Touched scroll range", `${formatNumber(summary.touchedScrollRangePx)} px`],
     ["Start scrollTop", `${formatNumber(summary.startScrollTopPx)} px`],
@@ -219,6 +268,8 @@ export function startCalendarScrollCapture(
   const scrollDeltasPx: number[] = [];
   let wheelEventCount = 0;
   let scrollEventCount = 0;
+  let wheelAtEdgeCount = 0;
+  let wheelIntoEdgeCount = 0;
   let lastFrameAt: number | null = null;
   let lastScrollTopPx = target.scrollTop;
   let minScrollTopPx = target.scrollTop;
@@ -231,6 +282,18 @@ export function startCalendarScrollCapture(
   const wheelOptions: AddEventListenerOptions = { capture: true, passive: true };
   const scrollOptions: AddEventListenerOptions = { passive: true };
 
+  function trackWheelDelta(deltaY: number, deltaMode: number, scrollTop: number, maxScrollTop: number) {
+    const atTop = scrollTop <= 1;
+    const atBottom = scrollTop >= maxScrollTop - 1;
+    wheelEventCount++;
+    wheelDeltaY.push(deltaY);
+    wheelDeltaModes[wheelDeltaMode(deltaMode)]++;
+    if (atTop || atBottom) wheelAtEdgeCount++;
+    if ((deltaY < 0 && atTop) || (deltaY > 0 && atBottom)) {
+      wheelIntoEdgeCount++;
+    }
+  }
+
   function trackFrame(now: number) {
     if (lastFrameAt !== null) {
       frameIntervalsMs.push(now - lastFrameAt);
@@ -240,9 +303,14 @@ export function startCalendarScrollCapture(
   }
 
   function trackWheel(event: WheelEvent) {
-    wheelEventCount++;
-    wheelDeltaY.push(event.deltaY);
-    wheelDeltaModes[wheelDeltaMode(event.deltaMode)]++;
+    const maxScrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    trackWheelDelta(event.deltaY, event.deltaMode, target.scrollTop, maxScrollTop);
+  }
+
+  function trackForwardedWheel(event: Event) {
+    const detail = (event as CustomEvent<CalendarForwardedWheelDetail>).detail;
+    const maxScrollTop = Math.max(0, detail.scrollHeight - detail.clientHeight);
+    trackWheelDelta(detail.deltaY, detail.deltaMode, detail.scrollTop, maxScrollTop);
   }
 
   function trackScroll() {
@@ -255,6 +323,7 @@ export function startCalendarScrollCapture(
   }
 
   target.addEventListener("wheel", trackWheel, wheelOptions);
+  target.addEventListener(CALENDAR_FORWARDED_WHEEL_EVENT, trackForwardedWheel);
   target.addEventListener("scroll", trackScroll, scrollOptions);
   animationFrameId = window.requestAnimationFrame(trackFrame);
   timeoutId = window.setTimeout(onComplete, CALENDAR_SCROLL_SAMPLE_MAX_MS);
@@ -264,6 +333,7 @@ export function startCalendarScrollCapture(
     if (timeoutId !== null) window.clearTimeout(timeoutId);
     window.cancelAnimationFrame(animationFrameId);
     target.removeEventListener("wheel", trackWheel, wheelOptions);
+    target.removeEventListener(CALENDAR_FORWARDED_WHEEL_EVENT, trackForwardedWheel);
     target.removeEventListener("scroll", trackScroll, scrollOptions);
     const endScrollTopPx = target.scrollTop;
     minScrollTopPx = Math.min(minScrollTopPx, endScrollTopPx);
@@ -283,6 +353,8 @@ export function startCalendarScrollCapture(
       wheelDeltaY: [...wheelDeltaY],
       wheelDeltaModes: { ...wheelDeltaModes },
       wheelEventCount,
+      wheelAtEdgeCount,
+      wheelIntoEdgeCount,
       scrollDeltasPx: [...scrollDeltasPx],
       scrollEventCount,
     };

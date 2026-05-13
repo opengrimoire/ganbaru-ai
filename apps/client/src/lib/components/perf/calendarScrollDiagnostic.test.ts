@@ -21,6 +21,8 @@ function sample(overrides: Partial<CalendarScrollRawSample> = {}): CalendarScrol
     wheelDeltaY: [120, 60, -30],
     wheelDeltaModes: { pixel: 3, line: 0, page: 0, unknown: 0 },
     wheelEventCount: 3,
+    wheelAtEdgeCount: 1,
+    wheelIntoEdgeCount: 1,
     scrollDeltasPx: [110, 120, 100, -20],
     scrollEventCount: 4,
     ...overrides,
@@ -42,11 +44,17 @@ describe("summarizeCalendarScrollSample", () => {
     expect(summary.frames.over33Ms).toBe(2);
     expect(summary.frames.over50Ms).toBe(1);
     expect(summary.wheelEventCount).toBe(3);
+    expect(summary.wheelSignedDeltaY).toBe(150);
     expect(summary.wheelTotalAbsDeltaY).toBe(210);
     expect(summary.wheelMaxAbsDeltaY).toBe(120);
+    expect(summary.wheelDirectionChanges).toBe(1);
+    expect(summary.wheelAtEdgeCount).toBe(1);
+    expect(summary.wheelIntoEdgeCount).toBe(1);
     expect(summary.scrollEventCount).toBe(4);
     expect(summary.scrollDistancePx).toBe(350);
     expect(summary.netScrollPx).toBe(310);
+    expect(summary.scrollDirectionChanges).toBe(1);
+    expect(summary.scrollDistanceToRangeRatio).toBe(1.1);
     expect(summary.maxScrollStepPx).toBe(120);
     expect(summary.touchedScrollRangePx).toBe(330);
     expect(summary.endPosition).toBe("inside");
@@ -83,7 +91,10 @@ describe("formatCalendarScrollDiagnosticMarkdown", () => {
     expect(markdown).toContain("| Frame P95 | 52.0 ms |");
     expect(markdown).toContain("| Frames over 33.4 ms | 2 |");
     expect(markdown).toContain("| Wheel events | 3 |");
+    expect(markdown).toContain("| Wheel direction changes | 1 |");
+    expect(markdown).toContain("| Wheel events into edge | 1 |");
     expect(markdown).toContain("| Scroll distance | 350.0 px |");
+    expect(markdown).toContain("| Scroll direction changes | 1 |");
     expect(markdown).toContain("| End position | inside |");
   });
 

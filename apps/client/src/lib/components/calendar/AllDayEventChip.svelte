@@ -63,7 +63,6 @@
   }
 
   function handlePointerDown(e: PointerEvent) {
-    chipEl?.closest(".hide-scrollbar")?.dispatchEvent(new CustomEvent("cancel-smooth-scroll"));
     onprefetch?.();
     e.stopPropagation();
     onpointerdown?.(e);

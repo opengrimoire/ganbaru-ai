@@ -53,10 +53,6 @@ The day and week views support direct manipulation:
 - **Esc, click outside, or pressing Save** closes the edit panel.
 - **Right-click** opens a context menu (delete, archive, duplicate). Past events show archive instead of delete.
 
-**Time guide.** In day and week timed columns, hovering shows a horizontal time guide with a label on the left. The label previews the minute a new event would start from that pointer position, using the current calendar zoom granularity rather than arbitrary pixel precision. The passive hover guide stays visually anchored to the pointer while scrolling, so inertial scroll settling does not cause late grid-step jumps. It stays visible over event blocks and while the event panel is open, but it is non-interactive: it must not intercept clicks, drags, panel controls, or confirmation dialogs. It renders above calendar blocks and drag/create previews, below the event panel and modals.
-
-The guide uses the calendar current-time token (`--cal-current-time`) so it shares the red semantic color of the now line. The label must choose readable text against that color, including custom themes. On column entry, the guide appears directly at the current pointer minute rather than animating from midnight. Passive pointer movement updates instantly; scroll-driven movement can smooth to match inertial scrolling. Passive hover, create, and resize use the same full-width day-column guide so the visual form does not change between idle hovering and selecting a time range. Active create and resize gestures update instantly. During resize crossover, the guide follows the edge currently controlled by the pointer: bottom-edge resizing follows the end until it crosses the original start, then follows the new start; top-edge resizing does the symmetric case.
-
 In month view, click on a day cell to switch to day view focused on that date. Click on an event row to open the edit panel.
 
 ## Edit panel
@@ -84,7 +80,7 @@ Unsaved changes are tracked. Closing the panel with unsaved edits prompts to sav
 
 ## Smooth scrolling and zoom
 
-The day and week views use a momentum-based scroll: dragging or wheeling builds velocity, lifting the input lets the velocity decay smoothly. This makes long-range navigation (jumping from morning to evening) feel direct without forcing the user to overshoot and correct. Modified wheel input scrolls the timeline rather than changing zoom, including Shift-wheel on platforms that report it as horizontal wheel movement.
+The day and week timed grid uses one shared wheel path for the timeline, the custom scrollbar, the all-day band, and modified wheel input on the separated day-name header. Wheel deltas are normalized by delta mode and multiplied so normal wheel ticks cover more distance, with a stronger multiplier for lighter deltas so gentle wheel movement starts more easily. The final movement uses a continuous-speed target animation: wheel input accumulates a target scroll position, and one animation loop moves toward it without easing, deceleration, or a momentum tail. Single-tick movement uses the base speed. Longer accumulated target distances can raise the active speed during the same scroll burst, but the speed is not reduced while finishing the burst, which avoids an end-settle feeling. The day-name and all-day header band sits outside the timeline scroll container so it stays visually stable while the timed grid scrolls beneath it.
 
 Vertical zoom maps minutes to pixels. The discrete zoom levels in pixels per hour are `[30, 45, 67, 100, 150, 200]`. The default is 45, where the 15min grid reads as 100% in settings. The header `-` and `+` controls and the Shift + - and Shift + + shortcuts snap to the nearest level. Shift + 0 resets the calendar timeline zoom while preserving the visible time position where possible.
 

@@ -69,7 +69,6 @@
   const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
 
   function handlePointerDown(e: PointerEvent) {
-    blockEl?.closest(".hide-scrollbar")?.dispatchEvent(new CustomEvent("cancel-smooth-scroll"));
     onprefetch?.();
     e.stopPropagation();
     onpointerdown?.(e);

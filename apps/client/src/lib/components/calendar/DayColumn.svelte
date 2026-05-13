@@ -1,8 +1,3 @@
-<script module lang="ts">
-  const GUIDE_OWNER_EVENT = "ganbaruai-calendar-hover-guide-owner";
-  let currentGuideOwner: symbol | null = null;
-</script>
-
 <script lang="ts">
   import type { CalendarEvent, PositionedEvent, PersistedSegment } from "./types";
   import {
@@ -27,11 +22,8 @@
   import Bell from "@lucide/svelte/icons/bell";
   import {
     isThemeCalendarDark,
-    resolveAppTokens,
-    resolveCalendarTokens,
     type Theme,
   } from "$lib/stores/themes";
-  import { pickBrightForeground } from "$lib/components/ui/colorMath";
 
   let {
     date,
@@ -42,8 +34,6 @@
     currentTimeMinute = -1,
     dragPreview = null,
     createPreview = null,
-    dragGuideMinute = null,
-    createGuideMinute = null,
     onEventClick,
     onEventPrefetch,
     onDragStart,
@@ -66,8 +56,6 @@
     previewedIds?: Set<string>;
     dragPreview?: PositionedEvent | null;
     createPreview?: PositionedEvent | null;
-    dragGuideMinute?: number | null;
-    createGuideMinute?: number | null;
     draggingEventId?: string;
     grabbingId?: string;
     didDrag?: boolean;
@@ -80,16 +68,8 @@
   } = $props();
 
   const isDark = $derived(isThemeCalendarDark(theme));
-  const resolvedAppTokens = $derived(resolveAppTokens(theme));
-  const resolvedCalendarTokens = $derived(resolveCalendarTokens(theme));
-  const hoverGuideColor = $derived(resolvedCalendarTokens["--cal-current-time"]);
-  const hoverGuideTextColor = $derived(
-    pickBrightForeground(hoverGuideColor, resolvedAppTokens["--foreground"]),
-  );
 
-  const TIMED_RENDER_BUFFER_MINUTES = 90;
-  const HOVER_GUIDE_FOLLOW_TIME_CONSTANT_MS = 110;
-  const HOVER_GUIDE_SETTLE_MINUTES = 0.05;
+  const TIMED_RENDER_BUFFER_MINUTES = 1440;
   const panelOpen = $derived(!!editingId);
 
   const dateStr = $derived(formatDatePart(date));
@@ -337,35 +317,12 @@
   let lastClientX: number | null = null;
   let lastClientY: number | null = null;
   let scrollProximityRaf = 0;
-  let hoverGuideFollowRaf = 0;
-  let hoverGuideFollowPrev = 0;
-  let guideTransitionResumeRaf = 0;
-  let guideScrollSettleTimer = 0;
-  let isScrolling = false;
-  let lastPointerMoveAt = 0;
-  let hoverTargetMinute: number | null = null;
-  let hoverTargetPositionMinute: number | null = $state(null);
-  const guideOwnerId = Symbol("calendar-hover-guide-owner");
   // Track when mouse is near a block's resize edge (top or bottom)
   let hoverResizeBlockId: string | null = $state(null);
-  let hoverMinute: number | null = $state(null);
-  let hoverPositionMinute: number | null = $state(null);
-  let guideTransitionPaused = $state(false);
-  let guideMotionInstant = $state(false);
-  const visibleGuideMinute = $derived(createGuideMinute ?? dragGuideMinute ?? hoverMinute);
-  const visibleGuidePositionMinute = $derived(
-    createGuideMinute ?? dragGuideMinute ?? hoverPositionMinute ?? hoverMinute ?? 0,
-  );
-  const visibleGuideActive = $derived(createGuideMinute !== null || dragGuideMinute !== null);
-  const visibleGuideShown = $derived(visibleGuideMinute !== null);
-  const renderedGuideShown = $derived(visibleGuideShown);
-  const visibleGuideLabel = $derived(
-    visibleGuideMinute === null ? "" : formatMinuteLabel(visibleGuideMinute),
-  );
 
   $effect(() => {
-    if (dragPreview || createPreview || dragGuideMinute !== null || createGuideMinute !== null) {
-      clearHoverAffordances();
+    if (dragPreview || createPreview) {
+      hoverResizeBlockId = null;
     }
   });
 
@@ -378,7 +335,7 @@
 
   function recheckProximity() {
     if (!columnEl || lastClientX === null || lastClientY === null) return;
-    updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
+    updateHoverStateFromClientPoint(lastClientX, lastClientY);
   }
 
   onMount(() => {
@@ -397,114 +354,31 @@
       sp.addEventListener("scroll", handleParentScroll);
       sp.addEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
     }
-    function handleGuideOwner(e: Event) {
-      const owner = (e as CustomEvent<symbol>).detail;
-      if (owner !== guideOwnerId) clearHoverTracking();
-    }
-    window.addEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
 
     return () => {
       window.removeEventListener("blur", clearMouseState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       sp?.removeEventListener("scroll", handleParentScroll);
       sp?.removeEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
-      window.removeEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
-      if (hoverGuideFollowRaf) cancelAnimationFrame(hoverGuideFollowRaf);
-      if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
-      if (guideScrollSettleTimer) clearTimeout(guideScrollSettleTimer);
     };
   });
-
-  function stopHoverGuideFollow() {
-    if (hoverGuideFollowRaf) cancelAnimationFrame(hoverGuideFollowRaf);
-    hoverGuideFollowRaf = 0;
-    hoverGuideFollowPrev = 0;
-  }
-
-  function minuteForGuidePosition(positionMinute: number): number {
-    return clampMinute(snapToGrid(positionMinute, calZoom.gridMinutes));
-  }
-
-  function startHoverGuideFollow() {
-    if (hoverGuideFollowRaf) return;
-    hoverGuideFollowPrev = 0;
-    hoverGuideFollowRaf = requestAnimationFrame(stepHoverGuideFollow);
-  }
-
-  function stepHoverGuideFollow(ts: number) {
-    hoverGuideFollowRaf = 0;
-    if (hoverPositionMinute === null || hoverTargetPositionMinute === null) {
-      hoverGuideFollowPrev = 0;
-      return;
-    }
-    if (!hoverGuideFollowPrev) {
-      hoverGuideFollowPrev = ts;
-      hoverGuideFollowRaf = requestAnimationFrame(stepHoverGuideFollow);
-      return;
-    }
-
-    const dt = ts - hoverGuideFollowPrev;
-    hoverGuideFollowPrev = ts;
-    const factor = 1 - Math.exp(-dt / HOVER_GUIDE_FOLLOW_TIME_CONSTANT_MS);
-    const nextPositionMinute = hoverPositionMinute
-      + (hoverTargetPositionMinute - hoverPositionMinute) * factor;
-
-    if (Math.abs(hoverTargetPositionMinute - nextPositionMinute) <= HOVER_GUIDE_SETTLE_MINUTES) {
-      hoverPositionMinute = hoverTargetPositionMinute;
-      hoverMinute = hoverTargetMinute ?? minuteForGuidePosition(hoverTargetPositionMinute);
-      hoverGuideFollowPrev = 0;
-      return;
-    }
-
-    hoverPositionMinute = nextPositionMinute;
-    hoverMinute = minuteForGuidePosition(nextPositionMinute);
-    hoverGuideFollowRaf = requestAnimationFrame(stepHoverGuideFollow);
-  }
-
-  function clearHoverAffordances() {
-    hoverResizeBlockId = null;
-    hoverMinute = null;
-    hoverPositionMinute = null;
-    hoverTargetMinute = null;
-    hoverTargetPositionMinute = null;
-    stopHoverGuideFollow();
-    if (guideMotionInstant) guideMotionInstant = false;
-  }
 
   function clearHoverTracking() {
     const hasTracking = lastClientX !== null
       || lastClientY !== null
       || hoverResizeBlockId !== null
-      || hoverMinute !== null
-      || hoverPositionMinute !== null
-      || hoverGuideFollowRaf !== 0
-      || guideMotionInstant
-      || isScrolling
-      || scrollProximityRaf !== 0
-      || guideScrollSettleTimer !== 0;
+      || scrollProximityRaf !== 0;
 
     if (!hasTracking) return;
 
     lastClientX = null;
     lastClientY = null;
-    isScrolling = false;
     if (scrollProximityRaf) {
       cancelAnimationFrame(scrollProximityRaf);
       scrollProximityRaf = 0;
     }
-    stopHoverGuideFollow();
-    if (guideScrollSettleTimer) {
-      clearTimeout(guideScrollSettleTimer);
-      guideScrollSettleTimer = 0;
-    }
-    clearHoverAffordances();
-  }
-
-  function claimGuideOwnership() {
-    if (currentGuideOwner === guideOwnerId) return;
-    currentGuideOwner = guideOwnerId;
-    window.dispatchEvent(new CustomEvent(GUIDE_OWNER_EVENT, { detail: guideOwnerId }));
+    hoverResizeBlockId = null;
   }
 
   function isTimedColumnSurface(target: EventTarget | null): boolean {
@@ -574,109 +448,24 @@
     return hit?.kind === "edge" ? { eventId: hit.eventId, edge: hit.edge } : null;
   }
 
-  function formatMinuteLabel(minute: number): string {
-    const clamped = Math.max(0, Math.min(1440, Math.round(minute)));
-    const h = Math.floor(clamped / 60);
-    const m = clamped % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  }
-
   function getCreateMinuteFromOffset(offsetY: number): number {
-    return getCreateGuideFromOffset(offsetY).minute;
-  }
-
-  function getCreateGuideFromOffset(offsetY: number): { minute: number; positionMinute: number; y: number } {
     const hh = getRenderedHourHeight();
-    const dayHeight = 24 * hh;
     const rawMinute = (offsetY / hh) * 60;
-    const positionMinute = Math.max(0, Math.min(1440, rawMinute));
-    const y = Math.max(0, Math.min(dayHeight, offsetY));
     let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
     if (isToday && currentTimeMinute >= 0) {
       const currentTimeY = (currentTimeMinute / 60) * hh;
       if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
         minute = Math.floor(currentTimeMinute);
-        return { minute, positionMinute: currentTimeMinute, y: currentTimeY };
       }
     }
 
-    return { minute, positionMinute, y };
-  }
-
-  function setHoverGuide(
-    next: { minute: number; positionMinute: number; y: number } | null,
-    instant = false,
-  ) {
-    if (!next) {
-      hoverMinute = null;
-      hoverPositionMinute = null;
-      hoverTargetMinute = null;
-      hoverTargetPositionMinute = null;
-      stopHoverGuideFollow();
-      return;
-    }
-
-    const wasHidden = visibleGuideMinute === null || hoverPositionMinute === null;
-    hoverTargetMinute = next.minute;
-    hoverTargetPositionMinute = next.positionMinute;
-
-    if (wasHidden) {
-      pauseGuideTransitionForShow();
-    }
-
-    if (wasHidden || instant) {
-      stopHoverGuideFollow();
-      hoverMinute = next.minute;
-      hoverPositionMinute = next.positionMinute;
-      return;
-    }
-
-    startHoverGuideFollow();
-  }
-
-  function pauseGuideTransitionForShow() {
-    guideTransitionPaused = true;
-    if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
-    guideTransitionResumeRaf = requestAnimationFrame(() => {
-      guideTransitionResumeRaf = requestAnimationFrame(() => {
-        guideTransitionResumeRaf = 0;
-        guideTransitionPaused = false;
-      });
-    });
-  }
-
-  function updateCreateHoverGuide(
-    offsetX: number,
-    offsetY: number,
-    preserveCurrentGuide = false,
-    instantGuide = false,
-  ) {
-    const hh = getRenderedHourHeight();
-    const dayHeight = 24 * hh;
-    const rawMinute = (offsetY / hh) * 60;
-    const outsideDay = offsetY < 0 || offsetY > dayHeight;
-    const overBlockedRail = offsetX < 0
-      && visibleRailSegments.some((seg) => seg.start <= rawMinute && seg.end >= rawMinute);
-    const unavailable = !!draggingEventId || !!dragPreview || !!createPreview
-      || overBlockedRail
-      || outsideDay;
-
-    if (unavailable) {
-      if (preserveCurrentGuide && outsideDay) return;
-      setHoverGuide(null);
-      return;
-    }
-
-    setHoverGuide(getCreateGuideFromOffset(offsetY), instantGuide);
+    return minute;
   }
 
   function updateHoverStateFromClientPoint(
     clientX: number,
     clientY: number,
-    updateGuide: boolean,
-    preserveCurrentGuide = false,
-    instantGuide = false,
   ) {
     if (!columnEl) return;
 
@@ -689,10 +478,6 @@
       hoverResizeBlockId = (panelOpen && hit.eventId !== editingId) ? null : hit.eventId;
     } else {
       hoverResizeBlockId = null;
-    }
-
-    if (updateGuide) {
-      updateCreateHoverGuide(colOffsetX, colOffsetY, preserveCurrentGuide, instantGuide);
     }
   }
 
@@ -736,60 +521,35 @@
 
   function handleParentScroll() {
     if (lastClientY === null || !columnEl) return;
-    if (currentGuideOwner !== guideOwnerId) return;
     if (calZoom.isAnimating) return;
-
-    isScrolling = true;
-    if (guideScrollSettleTimer) clearTimeout(guideScrollSettleTimer);
-    guideScrollSettleTimer = window.setTimeout(() => {
-      guideScrollSettleTimer = 0;
-      isScrolling = false;
-    }, 120);
 
     if (!scrollProximityRaf) {
       scrollProximityRaf = requestAnimationFrame(() => {
         scrollProximityRaf = 0;
         if (lastClientX !== null && lastClientY !== null) {
-          if (guideMotionInstant && performance.now() - lastPointerMoveAt >= 80) {
-            guideMotionInstant = false;
-          }
-          updateHoverStateFromClientPoint(lastClientX, lastClientY, true, false, false);
+          updateHoverStateFromClientPoint(lastClientX, lastClientY);
         }
       });
     }
   }
 
   function handleZoomFrame() {
-    if (currentGuideOwner !== guideOwnerId) return;
     if (lastClientX === null || lastClientY === null || !columnEl) return;
-    if (!guideMotionInstant) guideMotionInstant = true;
-    updateHoverStateFromClientPoint(lastClientX, lastClientY, true, true, true);
+    updateHoverStateFromClientPoint(lastClientX, lastClientY);
   }
 
   function handleColumnMouseMove(e: MouseEvent) {
     if (!columnEl) return;
 
-    claimGuideOwnership();
-
-    const pointerMoved = lastClientX !== e.clientX || lastClientY !== e.clientY;
     lastClientX = e.clientX;
     lastClientY = e.clientY;
-    if (pointerMoved) {
-      lastPointerMoveAt = performance.now();
-      if (!guideMotionInstant) guideMotionInstant = true;
-    } else if (isScrolling && guideMotionInstant && performance.now() - lastPointerMoveAt >= 80) {
-      guideMotionInstant = false;
-    }
-    updateHoverStateFromClientPoint(e.clientX, e.clientY, true, false, false);
+    updateHoverStateFromClientPoint(e.clientX, e.clientY);
   }
 
   function handleColumnMouseLeave(e: MouseEvent) {
     if (calZoom.isAnimating) return;
     const enteringTimedSurface = isTimedColumnSurface(e.relatedTarget);
-    if (!enteringTimedSurface && currentGuideOwner === guideOwnerId) {
-      currentGuideOwner = null;
-    }
-    clearHoverTracking();
+    if (!enteringTimedSurface) clearHoverTracking();
   }
 
   function handleRailAreaPointerDown(e: PointerEvent) {
@@ -980,33 +740,6 @@
 
   </div>
 
-  <div
-    class="hover-time-guide pointer-events-none absolute left-0 right-0 {renderedGuideShown ? 'hover-time-guide-shown' : ''} {visibleGuideActive ? 'hover-time-guide-active' : ''} {hoverTargetPositionMinute !== null || guideTransitionPaused || guideMotionInstant || calZoom.isAnimating ? 'hover-time-guide-transition-paused' : ''}"
-    style="
-      top: 0;
-      transform: translate3d(0, calc({visibleGuidePositionMinute} / 60 * var(--hour-h) * 1px), 0);
-      z-index: 49;
-      --hover-time-guide-color: {hoverGuideColor};
-      --hover-time-guide-text: {hoverGuideTextColor};
-    "
-    aria-hidden="true"
-  >
-    <div
-      class="hover-time-label absolute"
-      style="
-        top: 0;
-        left: 0;
-        transform: translateY({visibleGuidePositionMinute <= 0 ? '0' : visibleGuidePositionMinute >= 1440 ? '-100%' : '-50%'});
-      "
-    >
-      {visibleGuideLabel}
-    </div>
-    <div
-      class="hover-time-line absolute right-0"
-      style="left: 38px; top: -1.15px;"
-    ></div>
-  </div>
-
   </div>
 
 <style>
@@ -1015,44 +748,6 @@
     outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
     outline-offset: 0;
     transition: left 120ms ease-out, width 120ms ease-out;
-  }
-
-  .hover-time-label {
-    border-radius: 3px;
-    border: 1px solid color-mix(in srgb, var(--hover-time-guide-text) 22%, transparent);
-    background-color: var(--hover-time-guide-color);
-    color: var(--hover-time-guide-text);
-    font-size: 10px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum";
-    line-height: 1;
-    box-sizing: border-box;
-    width: 38px;
-    padding: 2px 3px 1px;
-    text-align: center;
-  }
-
-  .hover-time-line {
-    height: 2.3px;
-    background-color: var(--hover-time-guide-color);
-    opacity: 1;
-  }
-
-  .hover-time-guide {
-    opacity: 0;
-    transition: transform 70ms linear;
-    visibility: hidden;
-  }
-
-  .hover-time-guide-shown {
-    opacity: 1;
-    visibility: visible;
-  }
-
-  .hover-time-guide-active,
-  .hover-time-guide-transition-paused {
-    transition: none;
   }
 
   .break-band-active {

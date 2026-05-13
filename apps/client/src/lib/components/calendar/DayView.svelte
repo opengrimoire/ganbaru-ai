@@ -6,8 +6,8 @@
     formatDayName,
     allDayEventsForDay,
     parseCalendarDate,
+    createTimelineWheelScroll,
     GUTTER_WIDTH_PER_TZ,
-    createSmoothScroll,
     visibleMinuteRangeForScroll,
   } from "./utils";
   import TimeGutter from "./TimeGutter.svelte";
@@ -77,7 +77,7 @@
   let visibleStartMinute = $state(0);
   let visibleEndMinute = $state(1440);
   const calZoom = getCalendarZoom();
-  const smoothScroll = createSmoothScroll(() => scrollContainer);
+  const timelineWheelScroll = createTimelineWheelScroll(() => scrollContainer);
 
   function renderedHourHeight(): number {
     const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
@@ -90,30 +90,25 @@
     const range = visibleMinuteRangeForScroll({
       scrollTop: scrollContainer.scrollTop,
       viewportHeight: scrollContainer.clientHeight,
-      stickyTop: gutterTopHeight,
+      stickyTop: 0,
       hourHeight: renderedHourHeight(),
     });
     visibleStartMinute = range.startMinute;
     visibleEndMinute = range.endMinute;
   }
 
-  function onWheel(e: WheelEvent) {
-    smoothScroll(e);
-  }
-
-  function blockWheel(node: HTMLElement) {
-    const handler = (e: WheelEvent) => { e.preventDefault(); e.stopPropagation(); };
-    node.addEventListener("wheel", handler, { passive: false });
-    return { destroy() { node.removeEventListener("wheel", handler); } };
+  function scrollTimelineByWheel(e: WheelEvent) {
+    if (!scrollContainer) return;
+    e.preventDefault();
+    e.stopPropagation();
+    timelineWheelScroll(e);
   }
 
   function handleHeaderWheel(e: WheelEvent) {
     if (e.ctrlKey || e.shiftKey) {
-      smoothScroll(e);
-      e.stopPropagation();
+      scrollTimelineByWheel(e);
       return;
     }
-    smoothScroll.cancel();
     e.preventDefault();
     e.stopPropagation();
     if (!onWheelNavigate || wheelCooldown) return;
@@ -203,7 +198,7 @@
       scrollContainer.style.setProperty("--hour-h", String(calZoom.hourHeight));
 
       // Register scroll container so buttons/keyboard can animate
-      calZoom.registerScrollContainer(scrollContainer, gutterTopHeight);
+      calZoom.registerScrollContainer(scrollContainer, 0);
 
       const hh = calZoom.hourHeight;
       if (initialScrollMinute >= 0) {
@@ -215,7 +210,6 @@
       }
 
       scrollContainer.addEventListener("scroll", handleScroll);
-      scrollContainer.addEventListener("cancel-smooth-scroll", () => smoothScroll.cancel());
       updateVisibleMinuteRange();
       ready = true;
     }
@@ -256,6 +250,7 @@
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("keydown", handleKeyDown);
       scrollContainer?.removeEventListener("scroll", handleScroll);
+      timelineWheelScroll.cancel();
     };
   });
 
@@ -273,7 +268,7 @@
     if (oldH !== newH && oldH > 0) {
       // Compute center time at old zoom level
       const viewportH = scrollContainer.clientHeight;
-      const centerOffset = (viewportH - gutterTopHeight) / 2;
+      const centerOffset = viewportH / 2;
       const centerMinute = (scrollContainer.scrollTop + centerOffset) / oldH * 60;
 
       // Apply new zoom
@@ -325,116 +320,120 @@
 <div class="flex h-full flex-col" style="visibility: {ready ? 'visible' : 'hidden'};">
 <div class="relative min-h-0 flex-1" style="background-color: var(--cal-header-bg);">
   <div
-    bind:this={scrollContainer}
-    data-calendar-scroll-container
-    onwheel={onWheel}
-    class="hide-scrollbar absolute inset-0 overflow-y-auto overflow-x-hidden"
-    style="--hour-h: {calZoom.hourHeight}; background-color: var(--cal-bg);"
+    class="absolute left-0 right-0 top-0 z-[40] grid"
+    style="grid-template-columns: {gridCols}; background-color: var(--cal-header-bg);"
   >
-    <div class="grid" style="grid-template-columns: {gridCols};">
-      <!-- Sticky header row -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- Header row -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      bind:offsetHeight={stickyHeaderHeight}
+      class="grid {allDayEvents.length === 0 ? 'border-b border-[var(--sidebar)]' : ''}"
+      onwheel={handleHeaderWheel}
+      style="
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        height: var(--cal-header-row-h);
+        background-color: var(--cal-header-bg);
+      "
+    >
+      <TimezoneSelector
+        {timezones}
+        {tzCount}
+        abbrMode={tzAbbrMode}
+        onAdd={(tz) => onAddTimezone?.(tz)}
+        onRemove={(i) => onRemoveTimezone?.(i)}
+        onReorder={(from, to) => onReorderTimezone?.(from, to)}
+        onAbbrModeChange={(m) => onTzAbbrModeChange?.(m)}
+      />
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
-        bind:offsetHeight={stickyHeaderHeight}
-        class="sticky top-0 z-[48] grid {allDayEvents.length === 0 ? 'border-b border-[var(--sidebar)]' : ''}"
-        onwheel={handleHeaderWheel}
-        style="
-          grid-column: 1 / -1;
-          grid-template-columns: subgrid;
-          height: var(--cal-header-row-h);
-          background-color: var(--cal-header-bg);
-        "
+        bind:this={headerCell}
+        class="relative flex flex-col"
       >
-        <TimezoneSelector
-          {timezones}
-          {tzCount}
-          abbrMode={tzAbbrMode}
-          onAdd={(tz) => onAddTimezone?.(tz)}
-          onRemove={(i) => onRemoveTimezone?.(i)}
-          onReorder={(from, to) => onReorderTimezone?.(from, to)}
-          onAbbrModeChange={(m) => onTzAbbrModeChange?.(m)}
-        />
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-          bind:this={headerCell}
-          class="relative flex flex-col"
+          class="flex flex-1 cursor-pointer items-center px-4 hover:bg-accent/50"
+          onclick={() => onDayHeaderClick?.()}
+          role="button"
+          tabindex="-1"
         >
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <div
-            class="flex flex-1 cursor-pointer items-center px-4 hover:bg-accent/50"
-            onclick={() => onDayHeaderClick?.()}
-            role="button"
-            tabindex="-1"
-          >
-            <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
-              {dayLabel}
-            </span>
-          </div>
-          {#if allDayEvents.length === 0}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <div
-              class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
-              style="height: 6px;"
-              onclick={(e) => {
-                e.stopPropagation();
-                onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
-              }}
-            ></div>
-          {/if}
+          <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+            {dayLabel}
+          </span>
         </div>
-      </div>
-
-      {#if allDayEvents.length > 0}
-      <!-- All-day banner -->
-      <div
-        bind:offsetHeight={stickyAllDayBannerHeight}
-        class="sticky z-[49] grid border-b border-[var(--sidebar)]"
-        use:blockWheel
-        style="
-          top: var(--cal-header-row-h);
-          grid-column: 1 / -1;
-          grid-template-columns: subgrid;
-          background-color: var(--cal-header-bg);
-        "
-      >
-        <div style="grid-column: span {tzCount};"></div>
-        <div class="flex min-w-0 flex-col px-1" style="padding-top: 2px; padding-bottom: 2px; gap: {ALL_DAY_GAP}px;">
-          {#each allDayEvents.slice(0, allDayVisibleCount) as evt (evt.id)}
-            <AllDayEventChip
-              event={evt}
-              {theme}
-              editing={editingId === evt.id}
-              preview={previewedIds?.has(evt.id) ?? false}
-              isPast={past}
-              onclick={(rect) => onEventClick(evt, rect)}
-              onprefetch={() => onEventPrefetch?.(evt)}
-            />
-          {/each}
-          {#if allDayCollapsible && !allDayExpanded}
-            <button
-              class="flex items-center px-0.5 text-[10px] text-muted-foreground hover:text-foreground"
-              style="height: {ALL_DAY_ROW_H}px;"
-              onclick={(e) => { e.stopPropagation(); allDayExpanded = true; }}
-            >
-              +{allDayEvents.length - ALL_DAY_MAX_VISIBLE} more
-            </button>
-          {/if}
-          <!-- Thin click-to-create strip -->
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
+        {#if allDayEvents.length === 0}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
-            class="cursor-pointer transition-colors hover:bg-accent/50"
+            class="absolute inset-x-0 bottom-0 cursor-pointer transition-colors hover:bg-foreground/10"
             style="height: 6px;"
             onclick={(e) => {
               e.stopPropagation();
               onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
             }}
           ></div>
-        </div>
+        {/if}
       </div>
-      {/if}
+    </div>
 
+    {#if allDayEvents.length > 0}
+    <!-- All-day banner -->
+    <div
+      bind:offsetHeight={stickyAllDayBannerHeight}
+      class="grid border-b border-[var(--sidebar)]"
+      onwheel={scrollTimelineByWheel}
+      style="
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        background-color: var(--cal-header-bg);
+      "
+    >
+      <div style="grid-column: span {tzCount};"></div>
+      <div class="flex min-w-0 flex-col px-1" style="padding-top: 2px; padding-bottom: 2px; gap: {ALL_DAY_GAP}px;">
+        {#each allDayEvents.slice(0, allDayVisibleCount) as evt (evt.id)}
+          <AllDayEventChip
+            event={evt}
+            {theme}
+            editing={editingId === evt.id}
+            preview={previewedIds?.has(evt.id) ?? false}
+            isPast={past}
+            onclick={(rect) => onEventClick(evt, rect)}
+            onprefetch={() => onEventPrefetch?.(evt)}
+          />
+        {/each}
+        {#if allDayCollapsible && !allDayExpanded}
+          <button
+            class="flex items-center px-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+            style="height: {ALL_DAY_ROW_H}px;"
+            onclick={(e) => { e.stopPropagation(); allDayExpanded = true; }}
+          >
+            +{allDayEvents.length - ALL_DAY_MAX_VISIBLE} more
+          </button>
+        {/if}
+        <!-- Thin click-to-create strip -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="cursor-pointer transition-colors hover:bg-accent/50"
+          style="height: 6px;"
+          onclick={(e) => {
+            e.stopPropagation();
+            onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+          }}
+        ></div>
+      </div>
+    </div>
+    {/if}
+  </div>
+
+  <div
+    bind:this={scrollContainer}
+    data-calendar-scroll-container
+    onwheel={scrollTimelineByWheel}
+    class="hide-scrollbar absolute inset-x-0 bottom-0 overflow-y-auto overflow-x-hidden"
+    style="top: {gutterTopHeight}px; --hour-h: {calZoom.hourHeight}; background-color: var(--cal-bg);"
+  >
+    <div class="grid" style="grid-template-columns: {gridCols};">
       <!-- Body row -->
       <div
         data-zoom-body
@@ -462,8 +461,6 @@
           didDrag={drag.didDrag}
           dragPreview={drag.getDragPreviewForDate(dateStr)}
           createPreview={drag.getCreatePreviewForDate(dateStr)}
-          dragGuideMinute={drag.getDragGuideMinuteForDate(dateStr)}
-          createGuideMinute={drag.getCreateGuideMinuteForDate(dateStr)}
           {visibleStartMinute}
           {visibleEndMinute}
           onEventClick={onEventClick}
@@ -475,6 +472,6 @@
       </div>
     </div>
   </div>
-  <CalendarScrollbar {scrollContainer} stickyTop={gutterTopHeight} />
+  <CalendarScrollbar {scrollContainer} stickyTop={gutterTopHeight} onTimelineWheel={scrollTimelineByWheel} />
 </div>
 </div>

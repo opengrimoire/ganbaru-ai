@@ -796,8 +796,6 @@
     if (arrowScrollDir === dir) return;
     arrowScrollDir = dir;
     arrowScrollPrev = 0;
-    const el = viewWrapperEl?.querySelector(".hide-scrollbar");
-    el?.dispatchEvent(new CustomEvent("cancel-smooth-scroll"));
     if (!arrowScrollRaf) arrowScrollRaf = requestAnimationFrame(arrowScrollStep);
   }
 
