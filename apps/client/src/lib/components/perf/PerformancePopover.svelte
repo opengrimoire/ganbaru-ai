@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import Pin from "@lucide/svelte/icons/pin";
   import PinOff from "@lucide/svelte/icons/pin-off";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import Play from "@lucide/svelte/icons/play";
+  import Square from "@lucide/svelte/icons/square";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { cn } from "$lib/utils";
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
@@ -25,6 +26,16 @@
     type MemoryReport,
     type StartupMemorySnapshot,
   } from "$lib/components/perf/memoryReport";
+  import {
+    CALENDAR_SCROLL_CONTAINER_SELECTOR,
+    CALENDAR_SCROLL_SAMPLE_MAX_MS,
+    CALENDAR_SCROLL_SAMPLE_MIN_MS,
+    formatCalendarScrollDiagnosticMarkdown,
+    startCalendarScrollCapture,
+    summarizeCalendarScrollSample,
+    type CalendarScrollCapture,
+    type CalendarScrollSummary,
+  } from "$lib/components/perf/calendarScrollDiagnostic";
 
   let {
     shellStartupMs = null,
@@ -105,6 +116,12 @@
   });
 
   let launchExpanded = $state(false);
+  let calendarScrollCapture = $state<CalendarScrollCapture | null>(null);
+  let calendarScrollSample = $state<CalendarScrollSummary | null>(null);
+  let calendarScrollError = $state<string | null>(null);
+  const calendarScrollMarkdown = $derived(
+    calendarScrollSample ? formatCalendarScrollDiagnosticMarkdown(calendarScrollSample) : "",
+  );
 
   /**
    * Boot timeline rows. Each entry shows the time spent reaching that
@@ -329,6 +346,50 @@
     if (lines.length === 0) return;
     copyToClipboard("launch", lines.join("\n"));
   }
+
+  function findCalendarScrollContainer(): HTMLElement | null {
+    return document.querySelector<HTMLElement>(CALENDAR_SCROLL_CONTAINER_SELECTOR);
+  }
+
+  function stopCalendarScrollSample() {
+    if (!calendarScrollCapture) return;
+    const rawSample = calendarScrollCapture.stop();
+    calendarScrollCapture = null;
+    calendarScrollError = null;
+    calendarScrollSample = summarizeCalendarScrollSample(rawSample);
+  }
+
+  function startCalendarScrollSample() {
+    if (calendarScrollCapture) {
+      stopCalendarScrollSample();
+      return;
+    }
+    const target = findCalendarScrollContainer();
+    if (!target) {
+      calendarScrollError = "Open the day or week calendar view.";
+      calendarScrollSample = null;
+      return;
+    }
+    calendarScrollError = null;
+    calendarScrollSample = null;
+    calendarScrollCapture = startCalendarScrollCapture(target, stopCalendarScrollSample);
+  }
+
+  function copyCalendarScrollSample() {
+    copyToClipboard("calendar-scroll", calendarScrollMarkdown);
+  }
+
+  function formatMs(value: number | null): string {
+    return value === null ? "n/a" : `${value.toLocaleString("en", { maximumFractionDigits: 1 })} ms`;
+  }
+
+  function formatPx(value: number): string {
+    return `${value.toLocaleString("en", { maximumFractionDigits: 0 })} px`;
+  }
+
+  onDestroy(() => {
+    calendarScrollCapture?.stop();
+  });
 
   async function requestBenchmark(scenarioId: string): Promise<void> {
     try {
@@ -580,6 +641,71 @@
       Copy speed log
     {/if}
   </button>
+
+  <div class={sectionDividerClass}></div>
+  <div class="flex items-center justify-between gap-2">
+    <span class="min-w-0 text-[10px] uppercase tracking-wider text-foreground">
+      Calendar scroll
+    </span>
+    <button
+      onclick={startCalendarScrollSample}
+      class={cn(
+        "flex h-6 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-[10px] font-medium uppercase tracking-wider transition-colors",
+        calendarScrollCapture
+          ? "border border-border bg-card text-foreground hover:bg-accent dark:bg-transparent"
+          : "bg-primary text-primary-foreground hover:bg-primary/90",
+      )}
+      title={calendarScrollCapture ? "Stop scroll sample" : "Start scroll sample"}
+    >
+      {#if calendarScrollCapture}
+        <Square size={10} />
+        Stop
+      {:else}
+        <Play size={11} />
+        Start
+      {/if}
+    </button>
+  </div>
+  {#if calendarScrollError}
+    <div class="mt-1.5 text-[10px] text-destructive">{calendarScrollError}</div>
+  {:else if calendarScrollCapture}
+    <div class="mt-1.5 text-[10px] text-muted-foreground/70">
+      Recording, {CALENDAR_SCROLL_SAMPLE_MIN_MS / 1000}-{CALENDAR_SCROLL_SAMPLE_MAX_MS / 1000} s target.
+    </div>
+  {:else if calendarScrollSample}
+    <div class="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] leading-tight">
+      <div class="text-muted-foreground">Duration</div>
+      <div class="text-right tabular-nums text-foreground">{formatMs(calendarScrollSample.durationMs)}</div>
+      <div class="text-muted-foreground">Frame P95</div>
+      <div class="text-right tabular-nums text-foreground">{formatMs(calendarScrollSample.frames.p95Ms)}</div>
+      <div class="text-muted-foreground">Frame max</div>
+      <div class="text-right tabular-nums text-foreground">{formatMs(calendarScrollSample.frames.maxMs)}</div>
+      <div class="text-muted-foreground">Frames &gt;33.4 ms</div>
+      <div class="text-right tabular-nums text-foreground">{calendarScrollSample.frames.over33Ms.toLocaleString("en")}</div>
+      <div class="text-muted-foreground">Wheel events</div>
+      <div class="text-right tabular-nums text-foreground">{calendarScrollSample.wheelEventCount.toLocaleString("en")}</div>
+      <div class="text-muted-foreground">Scroll events</div>
+      <div class="text-right tabular-nums text-foreground">{calendarScrollSample.scrollEventCount.toLocaleString("en")}</div>
+      <div class="text-muted-foreground">Scroll distance</div>
+      <div class="text-right tabular-nums text-foreground">{formatPx(calendarScrollSample.scrollDistancePx)}</div>
+      <div class="text-muted-foreground">End position</div>
+      <div class="text-right text-foreground">{calendarScrollSample.endPosition}</div>
+    </div>
+    <button
+      onclick={copyCalendarScrollSample}
+      class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+    >
+      {#if copiedId === "calendar-scroll"}
+        <Check size={11} />
+        Copied
+      {:else}
+        <Copy size={11} />
+        Copy scroll report
+      {/if}
+    </button>
+  {:else}
+    <div class="mt-1.5 text-[10px] text-muted-foreground/60">No scroll sample captured.</div>
+  {/if}
 
   {#if BENCHMARK_SUITES.length > 0}
     <div class={sectionDividerClass}></div>

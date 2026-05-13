@@ -326,6 +326,7 @@
 <div class="relative min-h-0 flex-1" style="background-color: var(--cal-header-bg);">
   <div
     bind:this={scrollContainer}
+    data-calendar-scroll-container
     onwheel={onWheel}
     class="hide-scrollbar absolute inset-0 overflow-y-auto overflow-x-hidden"
     style="--hour-h: {calZoom.hourHeight}; background-color: var(--cal-bg);"
