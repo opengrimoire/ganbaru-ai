@@ -8,7 +8,6 @@ This file is the canonical performance record for GanbaruAI. It exists so future
 - [Canonical tracking rules](#canonical-tracking-rules)
 - [Benchmark identifiers](#benchmark-identifiers)
 - [Benchmark records](#benchmark-records)
-- [Historical context](#historical-context)
 - [Package size](#package-size)
 - [Output rules](#output-rules)
 - [Performance principles](#performance-principles)
@@ -134,16 +133,6 @@ Rows report one 1000-event add or update pass against the practical dense datase
 |---|---|---|---:|
 | 2026-05-12-01 | dense-v1-r1y-s1-d1 | bulk import 1000 add | 305 |
 | 2026-05-12-01 | dense-v1-r1y-s1-d1 | bulk import 1000 update | 330 |
-
-## Historical context
-
-These rows summarize superseded benchmark records. They are useful context but are not mixed into the current canonical tables because their harnesses used obsolete anchors, obsolete synthetic datasets, or benchmark boot behavior that could preload a different calendar window before the measured window.
-
-| Run range | Dates | Legacy harness | Scope | Status |
-|---|---|---|---|---|
-| 2026-05-04-01 to 2026-05-04-03 | 2026-05-04 | pre-canonical | Early calendar-nav and full-suite experiments | Superseded by question-oriented records |
-| 2026-05-05-01 to 2026-05-10-04 | 2026-05-05 to 2026-05-10 | v1 to v2 | Startup, idle memory, synthetic datasets, and early stress memory | Historical only because the synthetic dataset shape and startup target are obsolete |
-| 2026-05-11-01 | 2026-05-11 | v3 | First reduced dense-dataset output | Historical only because the calendar anchor was fixed to a past date and benchmark boots could preload a separate current-week window |
 
 ## Package size
 
