@@ -336,6 +336,7 @@
   let lastClientY: number | null = null;
   let scrollProximityRaf = 0;
   let guideTransitionResumeRaf = 0;
+  let guideScrollSettleTimer = 0;
   let isScrolling = false;
   let lastPointerMoveAt = 0;
   const guideOwnerId = Symbol("calendar-hover-guide-owner");
@@ -405,6 +406,7 @@
       window.removeEventListener(GUIDE_OWNER_EVENT, handleGuideOwner);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
       if (guideTransitionResumeRaf) cancelAnimationFrame(guideTransitionResumeRaf);
+      if (guideScrollSettleTimer) clearTimeout(guideScrollSettleTimer);
     };
   });
 
@@ -423,7 +425,8 @@
       || hoverPositionMinute !== null
       || guideMotionInstant
       || isScrolling
-      || scrollProximityRaf !== 0;
+      || scrollProximityRaf !== 0
+      || guideScrollSettleTimer !== 0;
 
     if (!hasTracking) return;
 
@@ -433,6 +436,10 @@
     if (scrollProximityRaf) {
       cancelAnimationFrame(scrollProximityRaf);
       scrollProximityRaf = 0;
+    }
+    if (guideScrollSettleTimer) {
+      clearTimeout(guideScrollSettleTimer);
+      guideScrollSettleTimer = 0;
     }
     clearHoverAffordances();
   }
@@ -658,15 +665,18 @@
     if (calZoom.isAnimating) return;
 
     isScrolling = true;
+    if (guideScrollSettleTimer) clearTimeout(guideScrollSettleTimer);
+    guideScrollSettleTimer = window.setTimeout(() => {
+      guideScrollSettleTimer = 0;
+      isScrolling = false;
+    }, 120);
 
-    // Defer proximity check to next frame to avoid blocking scroll
     if (!scrollProximityRaf) {
       scrollProximityRaf = requestAnimationFrame(() => {
         scrollProximityRaf = 0;
         if (lastClientX !== null && lastClientY !== null) {
-          const shouldMoveInstantly = performance.now() - lastPointerMoveAt < 80;
-          if (guideMotionInstant !== shouldMoveInstantly) {
-            guideMotionInstant = shouldMoveInstantly;
+          if (guideMotionInstant && performance.now() - lastPointerMoveAt >= 80) {
+            guideMotionInstant = false;
           }
           updateHoverStateFromClientPoint(lastClientX, lastClientY, true);
         }
@@ -686,11 +696,15 @@
 
     claimGuideOwnership();
 
-    // Track mouse position for resize detection
+    const pointerMoved = lastClientX !== e.clientX || lastClientY !== e.clientY;
     lastClientX = e.clientX;
     lastClientY = e.clientY;
-    lastPointerMoveAt = performance.now();
-    if (!guideMotionInstant) guideMotionInstant = true;
+    if (pointerMoved) {
+      lastPointerMoveAt = performance.now();
+      if (!guideMotionInstant) guideMotionInstant = true;
+    } else if (isScrolling && guideMotionInstant && performance.now() - lastPointerMoveAt >= 80) {
+      guideMotionInstant = false;
+    }
     updateHoverStateFromClientPoint(e.clientX, e.clientY, true);
   }
 
