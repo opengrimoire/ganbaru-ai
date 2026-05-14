@@ -616,6 +616,16 @@ mod tests {
         assert!(metadata.mixed_methods);
     }
 
+    #[test]
+    fn window_queries_do_not_load_icalendar_preservation_json() {
+        for sql in [super::WINDOW_EVENTS_SQL, super::WINDOW_OVERRIDES_SQL] {
+            let lower = sql.to_ascii_lowercase();
+            assert!(!lower.contains("icalendar_components"));
+            assert!(!lower.contains("raw_jcal"));
+            assert!(!lower.contains("projection_warnings"));
+        }
+    }
+
     fn full_event_row(description: &str) -> DbFullEventRow {
         DbFullEventRow {
             id: "event-1".to_string(),

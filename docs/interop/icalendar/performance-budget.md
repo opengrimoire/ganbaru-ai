@@ -43,6 +43,14 @@ Import can be heavier than startup, but it must stay bounded:
 - cap attachment size when inline binary values are accepted
 - cap recurrence expansion during validation
 
+Current implemented limits:
+
+- plain `.ics` entries are capped by the Rust vault reader before parsing.
+- zip imports reject unsafe paths, encrypted entries, wrong extensions, oversized entries, oversized aggregate input, and excessive entry count.
+- parser safety checks reject unfolded content lines above 2 MiB, more than 50,000 components, more than 500,000 properties, component nesting deeper than 32, and inline binary `ATTACH` values above 1 MiB.
+- visible-window recurrence expansion is bounded by the requested window plus a 10,000 cursor-iteration guard per template.
+- full-event reads load preserved component JSON lazily; visible-window reads do not join preservation tables.
+
 Large imports should stream or batch where practical. The UI should report progress for slow imports once this becomes user-visible.
 
 ## Export budget

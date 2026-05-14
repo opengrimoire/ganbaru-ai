@@ -25,6 +25,12 @@ import type {
 type JcalProperty = [string, Record<string, unknown>, string, ...unknown[]];
 type JcalComponent = [string, unknown[], unknown[]];
 
+const MAX_UNFOLDED_LINE_CHARS = 2 * 1024 * 1024;
+const MAX_COMPONENT_COUNT = 50_000;
+const MAX_PROPERTY_COUNT = 500_000;
+const MAX_NESTING_DEPTH = 32;
+const MAX_INLINE_BINARY_CHARS = 1024 * 1024;
+
 /**
  * Microsoft Windows to IANA timezone identifier map. Outlook emits
  * Windows zone names (e.g. "Pacific Standard Time") in TZID; Google emits
@@ -243,6 +249,82 @@ function sourceFingerprint(text: string): string {
 		hash = Math.imul(hash, 0x01000193) >>> 0;
 	}
 	return hash.toString(16).padStart(8, "0");
+}
+
+function unfoldContentLines(text: string): { lines: string[] } | { error: string } {
+	const physicalLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+	const lines: string[] = [];
+	let current = "";
+	let hasCurrent = false;
+
+	for (const physicalLine of physicalLines) {
+		if (physicalLine.startsWith(" ") || physicalLine.startsWith("\t")) {
+			if (!hasCurrent) {
+				return { error: "iCalendar import has a folded continuation before any content line." };
+			}
+			current += physicalLine.slice(1);
+		} else {
+			if (hasCurrent) lines.push(current);
+			current = physicalLine;
+			hasCurrent = true;
+		}
+		if (current.length > MAX_UNFOLDED_LINE_CHARS) {
+			return {
+				error: `iCalendar import exceeds the unfolded line limit of ${MAX_UNFOLDED_LINE_CHARS} characters.`,
+			};
+		}
+	}
+	if (hasCurrent && current.length > 0) lines.push(current);
+	return { lines };
+}
+
+function inlineBinaryValueLength(line: string): number | null {
+	const separatorIndex = line.indexOf(":");
+	if (separatorIndex === -1) return null;
+	const header = line.slice(0, separatorIndex).toUpperCase();
+	if (!header.startsWith("ATTACH")) return null;
+	if (!header.includes("VALUE=BINARY") && !header.includes("ENCODING=BASE64")) return null;
+	return line.length - separatorIndex - 1;
+}
+
+function validateIcsTextBudget(text: string): string | null {
+	const unfolded = unfoldContentLines(text);
+	if ("error" in unfolded) return unfolded.error;
+
+	let componentCount = 0;
+	let propertyCount = 0;
+	let depth = 0;
+
+	for (const line of unfolded.lines) {
+		const upper = line.toUpperCase();
+		if (upper.startsWith("BEGIN:")) {
+			componentCount++;
+			depth++;
+			if (componentCount > MAX_COMPONENT_COUNT) {
+				return `iCalendar import exceeds the component limit of ${MAX_COMPONENT_COUNT}.`;
+			}
+			if (depth > MAX_NESTING_DEPTH) {
+				return `iCalendar import exceeds the component nesting limit of ${MAX_NESTING_DEPTH}.`;
+			}
+			continue;
+		}
+		if (upper.startsWith("END:")) {
+			depth = Math.max(0, depth - 1);
+			continue;
+		}
+		if (line.trim().length === 0) continue;
+
+		propertyCount++;
+		if (propertyCount > MAX_PROPERTY_COUNT) {
+			return `iCalendar import exceeds the property limit of ${MAX_PROPERTY_COUNT}.`;
+		}
+		const binaryLength = inlineBinaryValueLength(line);
+		if (binaryLength !== null && binaryLength > MAX_INLINE_BINARY_CHARS) {
+			return `iCalendar import exceeds the inline binary attachment limit of ${MAX_INLINE_BINARY_CHARS} characters.`;
+		}
+	}
+
+	return null;
 }
 
 function preservationStatusFor(componentType: string): IcsPreservationStatus {
@@ -791,6 +873,8 @@ function buildOverride(parentEvent: CalendarEvent, child: CalendarEvent, recurre
 export function parseIcs(text: string, calendarId = "local"): IcsParseResult {
 	const warnings: string[] = [];
 	const deviceZone = getDeviceZone();
+	const budgetError = validateIcsTextBudget(text);
+	if (budgetError) return { events: [], warnings: [budgetError] };
 
 	let jcal: unknown;
 	try {

@@ -456,7 +456,7 @@ Current automated fixture coverage:
 - `VJOURNAL`: `partial`, preserve and export passthrough path is shared with VTODO.
 - `VFREEBUSY`: `partial`, preserve and export passthrough tested.
 - mixed-component calendar: `partial`, parser and export passthrough cover mixed components.
-- invalid or malicious file: `partial`, malformed parser input and import sanitization tested.
+- invalid or malicious file: `partial`, malformed parser input, parser safety limits, zip safety, and import sanitization tested.
 
 Each future fixture should assert parse diagnostics, preservation data, projection result when applicable, and export equivalence.
 

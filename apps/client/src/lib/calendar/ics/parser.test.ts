@@ -59,6 +59,51 @@ describe("parseIcs", () => {
 		});
 	});
 
+	describe("safety limits", () => {
+		it("rejects overlong unfolded content lines before parsing", () => {
+			const oversizedDescription = "A".repeat(2 * 1024 * 1024 + 1);
+			const result = parseIcs(wrap(
+				vevent(
+					"UID:oversized-line@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					`DESCRIPTION:${oversizedDescription}`,
+					"SUMMARY:Oversized",
+				),
+			));
+
+			expect(result.events).toHaveLength(0);
+			expect(result.warnings[0]).toContain("unfolded line limit");
+		});
+
+		it("rejects excessive component nesting before parsing", () => {
+			const nested = Array.from({ length: 33 }, (_, index) => `BEGIN:X-NEST-${index}`);
+			const closing = Array.from({ length: 33 }, (_, index) => `END:X-NEST-${32 - index}`);
+			const result = parseIcs([HEADER, ...nested, ...closing, FOOTER].join("\r\n"));
+
+			expect(result.events).toHaveLength(0);
+			expect(result.warnings[0]).toContain("component nesting limit");
+		});
+
+		it("rejects oversized inline binary attachments before parsing", () => {
+			const oversizedBinary = "A".repeat(1024 * 1024 + 1);
+			const result = parseIcs(wrap(
+				vevent(
+					"UID:oversized-attach@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					"SUMMARY:Oversized attachment",
+					`ATTACH;ENCODING=BASE64;VALUE=BINARY:${oversizedBinary}`,
+				),
+			));
+
+			expect(result.events).toHaveLength(0);
+			expect(result.warnings[0]).toContain("inline binary attachment limit");
+		});
+	});
+
 	describe("DTSTART variants", () => {
 		it("parses DTSTART;VALUE=DATE as all-day", () => {
 			const ics = wrap(
