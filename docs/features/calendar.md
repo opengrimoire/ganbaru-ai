@@ -70,7 +70,7 @@ Inside the panel, sections are split per concern:
 - **PomodoroSection:** toggle pomodoro on or off, pick a preset, override individual config fields. Contains the per-event focus duration, short and long break, pomodoro count, and idle timeout.
 - **RecurrenceSection:** pick a preset (none, daily, weekdays, weekly, monthly, yearly) or open the advanced editor for custom RRULEs.
 - **NotificationsSection:** add and remove notification offsets.
-- **AttendeesSection:** add and remove attendees with role and RSVP status. Placeholder until sharing ships.
+- **AttendeesSection:** add and remove attendees with role and read-only RSVP status. Placeholder until sharing ships. The app must not let users change another attendee's RSVP response unless a future shared-calendar identity model can prove that attendee is the current user.
 - **DescriptionEditor:** rich text editor for the description, stored as sanitized HTML in the current implementation. The frontend and Rust backend both enforce the same subset: bold, italic, underline, ordered and unordered lists, list items, paragraphs or divs, line breaks, and HTTP(S) links. Both boundaries cap raw descriptions at 20,000 characters before sanitizing. The backend sanitizes descriptions before database writes and again before returning rows, so old stored values are cleaned on read. Outside active editing, the panel renders only a plain text preview in the main Svelte DOM. Markdown remains the long-term document format direction, but calendar descriptions are not markdown-backed yet.
 - **ColorPicker:** swatches for the 24 palette slots; hovering a swatch reveals its hex value.
 - **TimezoneSelector:** IANA timezone for the event. Defaults to the user's timezone.
@@ -99,6 +99,10 @@ Held keyboard navigation is gated. It fires one immediate navigation for a norma
 All-day events render in a band at the top of the day or week view. They span columns when the event covers multiple days. Within the band, events stack into rows so that overlapping all-day events all remain visible.
 
 Drag-to-create still works in the all-day band (drag across day columns to set the date range). Resizing changes the start or end date by a whole day at a time, since there is no time component.
+
+Internally, all-day ranges use an inclusive end date because the UI needs to know the last visible day. `.ics` import and export convert this to and from RFC 5545 `VALUE=DATE` semantics, where `DTEND` is the first non-included date.
+
+Event status and availability preserve the selected palette color. Past rendering is the only state that dims the fill color. Free/busy (`TRANSP` in `.ics`) is scheduling metadata shown in the event panel, not a grid pattern. Tentative uses vertical pinstripes, and cancelled uses a left-leaning diagonal hatch plus a line-through title. If several status markers exist at once, cancelled wins over tentative.
 
 Time-based view manipulations (zoom, scroll) do not affect the all-day band height. The band auto-sizes to fit its row count.
 

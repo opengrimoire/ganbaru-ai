@@ -44,7 +44,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `title` | text | Display title. |
 | `description` | text or null | Rich text stored as sanitized HTML in the current implementation. Raw descriptions are capped at 20,000 characters before sanitization. |
 | `start_time` | ISO datetime | Event start as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). |
-| `end_time` | ISO datetime | Event end as a UTC ISO 8601 instant. All-day events use `YYYY-MM-DD` floating dates without zone conversion (matching iCalendar `VALUE=DATE` semantics) so they stay anchored to the calendar day across zones. |
+| `end_time` | ISO datetime | Event end as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). For all-day events, the date portion is treated as a floating calendar date with no zone conversion. The internal all-day end date is inclusive for rendering, while `.ics` `DTEND;VALUE=DATE` remains exclusive on import and export. |
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |
 | `color` | integer or null | Slot index (0..23) into the active theme's 24-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |

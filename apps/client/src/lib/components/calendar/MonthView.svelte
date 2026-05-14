@@ -5,6 +5,7 @@
     getMonthGrid,
     isPastDay,
     getEventColor,
+    getEventStatusPatternStyle,
     getPastEventColor,
     getOutsideMonthEventColor,
     formatDayName,
@@ -181,16 +182,22 @@
                 : !inMonth
                   ? getOutsideMonthEventColor(evt.color, theme)
                   : getEventColor(evt.color, theme)}
+              {@const evtIsCancelled = evt.status === "cancelled"}
+              {@const evtStatusPatternStyle = getEventStatusPatternStyle(evt)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
                 class="relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
-                style="background-color: {evtColors.bg}; color: {evtColors.text};"
+                style="
+                  background-color: {evtColors.bg};
+                  color: {evtColors.text};
+                  {evtStatusPatternStyle}
+                "
                 onpointerenter={() => onEventPrefetch?.(evt)}
                 onpointerdown={() => onEventPrefetch?.(evt)}
                 onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
               >
-                <span class="truncate">{#if evt.title}{evt.title}{:else}(No title){/if}</span>
+                <span class="truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
               </div>
             {/each}
 

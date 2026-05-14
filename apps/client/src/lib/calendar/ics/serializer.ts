@@ -69,6 +69,14 @@ function formatUtcDate(utcIso: string): string {
 	return utcIso.substring(0, 10).replace(/-/g, "");
 }
 
+function formatDateOnly(calendarDate: string): string {
+	return calendarDate.substring(0, 10).replace(/-/g, "");
+}
+
+function addDaysToDateOnly(calendarDate: string, days: number): string {
+	return Temporal.PlainDate.from(calendarDate.substring(0, 10)).add({ days }).toString();
+}
+
 /**
  * Compute the UTC offset (in minutes) of `zone` at the given instant. Used
  * to fill VTIMEZONE STANDARD/DAYLIGHT stub blocks.
@@ -209,8 +217,8 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 	const lines: string[] = ["BEGIN:VEVENT", `UID:${uid}`, `DTSTAMP:${dtStamp}`];
 
 	if (isAllDay) {
-		lines.push(`DTSTART;VALUE=DATE:${formatUtcDate(startUtc)}`);
-		lines.push(`DTEND;VALUE=DATE:${formatUtcDate(endUtc)}`);
+		lines.push(`DTSTART;VALUE=DATE:${formatDateOnly(event.start)}`);
+		lines.push(`DTEND;VALUE=DATE:${formatDateOnly(addDaysToDateOnly(event.end, 1))}`);
 	} else if (useTzid && homeZone !== "UTC") {
 		lines.push(`DTSTART;TZID=${homeZone}:${formatZonedDateTime(startUtc, homeZone)}`);
 		lines.push(`DTEND;TZID=${homeZone}:${formatZonedDateTime(endUtc, homeZone)}`);
@@ -220,7 +228,11 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 	}
 
 	if (recurrenceIdUtc) {
-		lines.push(`RECURRENCE-ID:${formatUtcDateTime(recurrenceIdUtc)}`);
+		if (isAllDay) {
+			lines.push(`RECURRENCE-ID;VALUE=DATE:${formatUtcDate(recurrenceIdUtc)}`);
+		} else {
+			lines.push(`RECURRENCE-ID:${formatUtcDateTime(recurrenceIdUtc)}`);
+		}
 	}
 
 	lines.push(`SUMMARY:${escapeText(event.title)}`);
@@ -233,13 +245,23 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 	}
 
 	if (event.exceptions?.length) {
-		const exdates = event.exceptions.map((d) => d.replace(/-/g, "") + "T000000Z").join(",");
-		lines.push(`EXDATE:${exdates}`);
+		if (isAllDay) {
+			const exdates = event.exceptions.map((d) => d.replace(/-/g, "")).join(",");
+			lines.push(`EXDATE;VALUE=DATE:${exdates}`);
+		} else {
+			const exdates = event.exceptions.map((d) => d.replace(/-/g, "") + "T000000Z").join(",");
+			lines.push(`EXDATE:${exdates}`);
+		}
 	}
 
 	if (event.rdate?.length) {
-		const rdates = event.rdate.map((iso) => formatUtcDateTime(iso)).join(",");
-		lines.push(`RDATE:${rdates}`);
+		if (isAllDay) {
+			const rdates = event.rdate.map((iso) => formatUtcDate(iso)).join(",");
+			lines.push(`RDATE;VALUE=DATE:${rdates}`);
+		} else {
+			const rdates = event.rdate.map((iso) => formatUtcDateTime(iso)).join(",");
+			lines.push(`RDATE:${rdates}`);
+		}
 	}
 
 	if (event.status) lines.push(`STATUS:${STATUS_REVERSE[event.status]}`);

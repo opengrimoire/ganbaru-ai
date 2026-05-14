@@ -25,9 +25,8 @@ import {
   normalizeEventColor,
   EVENT_COLOR_OPTIONS,
   getEventColor,
+  getEventStatusPatternStyle,
   getPastEventColor,
-  getCancelledEventColor,
-  getFreeEventColor,
   getOutsideMonthEventColor,
   getTimezoneCity,
   getTimezoneRegion,
@@ -828,11 +827,9 @@ describe("getEventColor", () => {
 });
 
 describe("dimmed color variants", () => {
-  it("past, cancelled, free, outside-month all return valid hex entries", () => {
+  it("past and outside-month return valid hex entries", () => {
     for (const theme of [lightTheme, darkTheme]) {
       assertColorEntry(getPastEventColor(2, theme));
-      assertColorEntry(getCancelledEventColor(2, theme));
-      assertColorEntry(getFreeEventColor(2, theme));
       assertColorEntry(getOutsideMonthEventColor(2, theme));
     }
   });
@@ -864,14 +861,37 @@ describe("dimmed color variants", () => {
       eventPalette: customPalette,
     };
     expect(getPastEventColor(2, customTheme).bg).toBe("#ffb3b380");
-    expect(getCancelledEventColor(2, customTheme).bg.endsWith("80")).toBe(true);
-    expect(getFreeEventColor(2, customTheme).bg.endsWith("80")).toBe(true);
     expect(getOutsideMonthEventColor(2, customTheme).bg.endsWith("80")).toBe(true);
   });
 
   it("falls back to the dimmed fallback slot when color is undefined", () => {
     assertColorEntry(getPastEventColor(undefined, lightTheme));
-    assertColorEntry(getCancelledEventColor(undefined, darkTheme));
+    assertColorEntry(getOutsideMonthEventColor(undefined, darkTheme));
+  });
+});
+
+describe("getEventStatusPatternStyle", () => {
+  it("returns no pattern for ordinary confirmed events or free availability", () => {
+    expect(getEventStatusPatternStyle({ status: "confirmed", transparency: "opaque" })).toBe("");
+    expect(getEventStatusPatternStyle({ status: "confirmed", transparency: "transparent" })).toBe("");
+    expect(getEventStatusPatternStyle({})).toBe("");
+  });
+
+  it("uses vertical pinstripes for tentative events", () => {
+    const style = getEventStatusPatternStyle({
+      status: "tentative",
+      transparency: "transparent",
+    });
+    expect(style).toContain("repeating-linear-gradient(90deg");
+  });
+
+  it("uses the strongest cancelled pattern before availability", () => {
+    const style = getEventStatusPatternStyle({
+      status: "cancelled",
+      transparency: "transparent",
+    });
+    expect(style).toContain("repeating-linear-gradient(45deg");
+    expect(style).not.toContain("90deg");
   });
 });
 

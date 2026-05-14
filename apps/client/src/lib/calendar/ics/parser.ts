@@ -113,10 +113,7 @@ function isIanaZone(tzid: string): boolean {
  */
 function timeToUtcIso(time: ICAL.Time, deviceZone: string, tzidHint?: string | null): string {
 	if (time.isDate) {
-		const y = String(time.year).padStart(4, "0");
-		const m = String(time.month).padStart(2, "0");
-		const d = String(time.day).padStart(2, "0");
-		return `${y}-${m}-${d}T00:00:00Z`;
+		return `${dateOnlyFromTime(time)}T00:00:00Z`;
 	}
 	const zone = time.zone;
 	const zoneTzid = (zone as ICAL.Timezone | null)?.tzid;
@@ -135,6 +132,27 @@ function timeToUtcIso(time: ICAL.Time, deviceZone: string, tzidHint?: string | n
 		return wallClockToUtcIso(wall, deviceZone);
 	}
 	return Temporal.Instant.from(time.toJSDate().toISOString()).toString();
+}
+
+function dateOnlyFromTime(time: ICAL.Time): string {
+	const y = String(time.year).padStart(4, "0");
+	const m = String(time.month).padStart(2, "0");
+	const d = String(time.day).padStart(2, "0");
+	return `${y}-${m}-${d}`;
+}
+
+function inclusiveAllDayEndFromExclusive(startDate: string, exclusiveEndDate: string): string {
+	const start = Temporal.PlainDate.from(startDate);
+	const inclusiveEnd = Temporal.PlainDate.from(exclusiveEndDate).subtract({ days: 1 });
+	if (Temporal.PlainDate.compare(inclusiveEnd, start) < 0) return startDate;
+	return inclusiveEnd.toString();
+}
+
+function inclusiveAllDayEndFromDuration(startDate: string, duration: ICAL.Duration): string {
+	const seconds = duration.toSeconds();
+	if (seconds <= 0) return startDate;
+	const days = Math.max(1, Math.ceil(seconds / 86_400));
+	return Temporal.PlainDate.from(startDate).add({ days: days - 1 }).toString();
 }
 
 function formatWallClock(time: ICAL.Time): string {
@@ -347,7 +365,8 @@ function calendarEventBaseFromComponent(
 	const isAllDay = dtstartValue.isDate;
 	const dtstartTzid = dtstartProp.getFirstParameter("tzid");
 	const dtstartHint = dtstartTzid ? resolveTimezone(dtstartTzid, warnings) : undefined;
-	const startUtc = timeToUtcIso(dtstartValue, deviceZone, dtstartHint);
+	const startDate = dateOnlyFromTime(dtstartValue);
+	const startUtc = isAllDay ? `${startDate}T00:00:00Z` : timeToUtcIso(dtstartValue, deviceZone, dtstartHint);
 
 	const homeZone = isAllDay
 		? deviceZone
@@ -358,9 +377,26 @@ function calendarEventBaseFromComponent(
 				: deviceZone;
 
 	let endUtc: string;
+	let allDayEndDate = startDate;
 	const dtendProp = component.getFirstProperty("dtend");
 	const durationProp = component.getFirstProperty("duration");
-	if (dtendProp) {
+	if (isAllDay) {
+		if (dtendProp) {
+			const dtendValue = dtendProp.getFirstValue();
+			if (dtendValue instanceof ICAL.Time) {
+				const rawEndDate = dateOnlyFromTime(dtendValue);
+				allDayEndDate = dtendValue.isDate
+					? inclusiveAllDayEndFromExclusive(startDate, rawEndDate)
+					: rawEndDate;
+			}
+		} else if (durationProp) {
+			const durValue = durationProp.getFirstValue();
+			if (durValue instanceof ICAL.Duration) {
+				allDayEndDate = inclusiveAllDayEndFromDuration(startDate, durValue);
+			}
+		}
+		endUtc = `${allDayEndDate}T00:00:00Z`;
+	} else if (dtendProp) {
 		const dtendValue = dtendProp.getFirstValue();
 		if (dtendValue instanceof ICAL.Time) {
 			const dtendTzid = dtendProp.getFirstParameter("tzid");
@@ -392,8 +428,8 @@ function calendarEventBaseFromComponent(
 	// in the calendar store). The home zone is preserved in `event.timezone`
 	// for recurrence anchoring; the serializer reverses through `deviceZone`
 	// so the round trip is lossless.
-	const start = isAllDay ? startUtc.slice(0, 10) + " 00:00" : utcIsoToWallClock(startUtc, deviceZone);
-	const end = isAllDay ? endUtc.slice(0, 10) + " 00:00" : utcIsoToWallClock(endUtc, deviceZone);
+	const start = isAllDay ? `${startDate} 00:00` : utcIsoToWallClock(startUtc, deviceZone);
+	const end = isAllDay ? `${allDayEndDate} 00:00` : utcIsoToWallClock(endUtc, deviceZone);
 
 	const sourceUid = (component.getFirstPropertyValue("uid") as string | null) ?? undefined;
 	const summary = (component.getFirstPropertyValue("summary") as string | null) ?? "";

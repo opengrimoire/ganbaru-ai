@@ -1170,7 +1170,7 @@ export function getEventColor(
   return palette[FALLBACK_COLOR_INDEX];
 }
 
-// Cache for computed dimmed colors (past, cancelled, free, outside-month).
+// Cache for computed dimmed colors (past and outside-month).
 // Keyed on the Theme reference so edits (which mint a new Theme object)
 // naturally miss and recompute; old entries get GC'd with their themes.
 const dimmedColorCache = new WeakMap<Theme, Map<string, ColorEntry>>();
@@ -1218,28 +1218,6 @@ export function getPastEventColor(
 }
 
 /**
- * Cancelled variant: heavily faded (~35% main). The dimmed bg crosses the
- * flip threshold so text resolves to the alt token, keeping the event
- * clearly de-emphasized but still readable.
- */
-export function getCancelledEventColor(
-  color: EventColor | undefined,
-  theme: Theme,
-): ColorEntry {
-  return getDimmedEventColor(color, theme, 0.35);
-}
-
-/**
- * Free/transparent variant: moderately faded (~60% main).
- */
-export function getFreeEventColor(
-  color: EventColor | undefined,
-  theme: Theme,
-): ColorEntry {
-  return getDimmedEventColor(color, theme, 0.6);
-}
-
-/**
  * Outside-month variant: strongest fade (~25% main). Used for events shown
  * in neighboring-month cells of the month grid.
  */
@@ -1248,6 +1226,25 @@ export function getOutsideMonthEventColor(
   theme: Theme,
 ): ColorEntry {
   return getDimmedEventColor(color, theme, 0.25);
+}
+
+const TENTATIVE_PATTERN_STYLE =
+  "background-image: repeating-linear-gradient(90deg, transparent, transparent 5px, color-mix(in srgb, currentColor 10%, transparent) 5px, color-mix(in srgb, currentColor 10%, transparent) 6px);";
+
+const CANCELLED_PATTERN_STYLE =
+  "background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, color-mix(in srgb, currentColor 14%, transparent) 4px, color-mix(in srgb, currentColor 14%, transparent) 6px);";
+
+/**
+ * Return the non-color status pattern for event surfaces. Availability
+ * (`TRANSP`) stays metadata-only because it is used for scheduling
+ * free/busy checks, not as a visible event state.
+ */
+export function getEventStatusPatternStyle(
+  event: Pick<CalendarEvent, "status" | "transparency">,
+): string {
+  if (event.status === "cancelled") return CANCELLED_PATTERN_STYLE;
+  if (event.status === "tentative") return TENTATIVE_PATTERN_STYLE;
+  return "";
 }
 
 export const EVENT_COLOR_OPTIONS: readonly EventColor[] = Object.freeze(

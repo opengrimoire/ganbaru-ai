@@ -117,11 +117,6 @@
     onchange();
   }
 
-  function setAttendeeStatus(id: string, status: EventAttendee["status"]) {
-    attendees = attendees.map((a) => a.id === id ? { ...a, status } : a);
-    onchange();
-  }
-
   let scrollEl: HTMLDivElement | undefined = $state();
   let fadeTop = $state(false);
   let fadeBottom = $state(false);
@@ -228,21 +223,11 @@
               {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
               {@const statusLabel = att.status === "needs-action" ? "pending" : att.status}
               <div class="flex items-center gap-2 py-0.5 text-[11px]">
-                {#if !readOnly}
-                  <button
-                    onclick={() => {
-                      const cycle: EventAttendee["status"][] = ["needs-action", "accepted", "tentative", "declined"];
-                      const idx = cycle.indexOf(att.status);
-                      setAttendeeStatus(att.id, cycle[(idx + 1) % cycle.length]);
-                    }}
-                    class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg} active:scale-75 transition-transform">
-                    <StatusIcon size={10} strokeWidth={2.5} class="block {sqFg}" />
-                  </button>
-                {:else}
-                  <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}">
-                    <StatusIcon size={10} strokeWidth={2.5} class="block {sqFg}" />
-                  </span>
-                {/if}
+                <span
+                  class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}"
+                  title={statusLabel}>
+                  <StatusIcon size={10} strokeWidth={2.5} class="block {sqFg}" />
+                </span>
                 <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>
                 {#if att.role === "opt-participant"}
                   <span class="shrink-0 text-[10px] text-muted-foreground/60 italic">(optional)</span>

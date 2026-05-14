@@ -2,9 +2,8 @@
   import type { CalendarEvent } from "./types";
   import {
     getEventColor,
+    getEventStatusPatternStyle,
     getPastEventColor,
-    getCancelledEventColor,
-    getFreeEventColor,
   } from "./utils";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import Repeat from "@lucide/svelte/icons/repeat";
@@ -37,19 +36,14 @@
   const isDark = $derived(isThemeCalendarDark(theme));
   const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
   const hasNotification = $derived(event.notifications && event.notifications.length > 0);
-  const isFree = $derived(event.transparency === "transparent");
-  const isTentative = $derived(event.status === "tentative");
   const isCancelled = $derived(event.status === "cancelled");
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const statusPatternStyle = $derived(getEventStatusPatternStyle(event));
   const activeColors = $derived(
-    isCancelled
-      ? getCancelledEventColor(event.color, theme)
-      : isFree
-        ? getFreeEventColor(event.color, theme)
-        : usePastColors
-          ? getPastEventColor(event.color, theme)
-          : getEventColor(event.color, theme)
+    usePastColors
+      ? getPastEventColor(event.color, theme)
+      : getEventColor(event.color, theme)
   );
 
   const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
@@ -84,8 +78,7 @@
     cursor: {canDrag ? 'grab' : 'pointer'};
     z-index: 1;
     filter: none;
-    {isFree ? 'border-left: 2px dashed currentColor;' : ''}
-    {isTentative ? 'background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}
+    {statusPatternStyle}
   "
   onclick={handleClick}
   onpointerenter={onprefetch}

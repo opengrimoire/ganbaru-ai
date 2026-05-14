@@ -73,6 +73,45 @@ describe("parseIcs", () => {
 			const result = parseIcs(ics);
 			expect(result.events).toHaveLength(1);
 			expect(result.events[0].allDay).toBe(true);
+			expect(result.events[0].start).toBe("2026-06-01 00:00");
+			expect(result.events[0].end).toBe("2026-06-01 00:00");
+		});
+
+		it("normalizes Google yearly all-day events to the intended single date", () => {
+			const ics = wrap(
+				vevent(
+					"UID:yearly-allday@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART;VALUE=DATE:20260513",
+					"DTEND;VALUE=DATE:20260514",
+					"RRULE:FREQ=YEARLY",
+					"SUMMARY:Yearly all day",
+				),
+			);
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(1);
+			const event = result.events[0];
+			expect(event.allDay).toBe(true);
+			expect(event.start).toBe("2026-05-13 00:00");
+			expect(event.end).toBe("2026-05-13 00:00");
+			expect(event.recurrence?.frequency).toBe("yearly");
+		});
+
+		it("normalizes all-day DURATION to an inclusive internal end date", () => {
+			const ics = wrap(
+				vevent(
+					"UID:allday-duration@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART;VALUE=DATE:20260601",
+					"DURATION:P2D",
+					"SUMMARY:Two day all day",
+				),
+			);
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(1);
+			expect(result.events[0].allDay).toBe(true);
+			expect(result.events[0].start).toBe("2026-06-01 00:00");
+			expect(result.events[0].end).toBe("2026-06-02 00:00");
 		});
 
 		it("computes end from DURATION when DTEND is absent", () => {

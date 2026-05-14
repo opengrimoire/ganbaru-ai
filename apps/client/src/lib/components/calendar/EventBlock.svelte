@@ -2,9 +2,8 @@
   import type { PositionedEvent } from "./types";
   import {
     getEventColor,
+    getEventStatusPatternStyle,
     getPastEventColor,
-    getCancelledEventColor,
-    getFreeEventColor,
   } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
@@ -48,20 +47,15 @@
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
   const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
   const hasNotification = $derived(positioned.event.notifications && positioned.event.notifications.length > 0);
-  const isFree = $derived(positioned.event.transparency === "transparent");
-  const isTentative = $derived(positioned.event.status === "tentative");
   const isCancelled = $derived(positioned.event.status === "cancelled");
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const statusPatternStyle = $derived(isTemporaryEvent ? "" : getEventStatusPatternStyle(positioned.event));
   const activeColors = $derived(
-    isCancelled
-      ? getCancelledEventColor(positioned.event.color, theme)
-      : isFree
-        ? getFreeEventColor(positioned.event.color, theme)
-        : usePastColors
-          ? getPastEventColor(positioned.event.color, theme)
-          : getEventColor(positioned.event.color, theme)
+    usePastColors
+      ? getPastEventColor(positioned.event.color, theme)
+      : getEventColor(positioned.event.color, theme)
   );
 
   const timeColor = $derived(`color-mix(in srgb, ${activeColors.text} 80%, ${activeColors.bg})`);
@@ -124,7 +118,7 @@
   {/if}
 
   <!-- Content -->
-  <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
+  <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg}; {statusPatternStyle}">
     {#if hasRepeat || hasNotification}
       <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">
         {#if hasRepeat}

@@ -62,20 +62,36 @@ describe("serializeCalendarToIcs", () => {
 			expect(ics).toContain("DTEND:20260601T150000Z");
 		});
 
-		it("emits all-day events with VALUE=DATE", () => {
+		it("emits all-day events with an exclusive VALUE=DATE end", () => {
 			const ics = serializeCalendarToIcs(
 				baseCalendar,
 				[
 					makeEvent({
 						allDay: true,
 						start: "2026-06-01 00:00",
-						end: "2026-06-06 00:00",
+						end: "2026-06-05 00:00",
 					}),
 				],
 				"UTC",
 			);
 			expect(ics).toContain("DTSTART;VALUE=DATE:20260601");
 			expect(ics).toContain("DTEND;VALUE=DATE:20260606");
+		});
+
+		it("emits single-day all-day events with the next date as DTEND", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						allDay: true,
+						start: "2026-05-13 00:00",
+						end: "2026-05-13 00:00",
+					}),
+				],
+				"UTC",
+			);
+			expect(ics).toContain("DTSTART;VALUE=DATE:20260513");
+			expect(ics).toContain("DTEND;VALUE=DATE:20260514");
 		});
 
 		it("emits recurring zoned events with TZID and wall clock", () => {
