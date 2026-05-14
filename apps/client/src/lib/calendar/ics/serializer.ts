@@ -87,6 +87,12 @@ function formatDateTimeOnDate(date: string, timeSource: string): string {
 	return `${formatDateOnly(date)}T${time}`;
 }
 
+function formatFloatingDateTime(calendarDate: string): string {
+	const date = calendarDate.substring(0, 10);
+	const time = calendarDate.substring(11, 16);
+	return `${date}T${time}:00`;
+}
+
 /**
  * Compute the UTC offset (in minutes) of `zone` at the given instant. Used
  * to fill VTIMEZONE STANDARD/DAYLIGHT stub blocks.
@@ -356,6 +362,17 @@ function generatedVeventJcal(lines: string[]): JcalComponent | null {
 	}
 }
 
+function firstJcalValue(component: JcalComponent, name: string): string | undefined {
+	const prop = firstJcalProperty(component, name);
+	if (!prop) return undefined;
+	const value = prop[3];
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+		return String(value);
+	}
+	if (value == null) return undefined;
+	return JSON.stringify(value);
+}
+
 function jcalComponentToLines(component: JcalComponent): string[] {
 	const text = ICAL.stringify(component) as string;
 	return text.split(/\r\n|\n|\r/).filter((line) => line.length > 0);
@@ -525,6 +542,38 @@ function withPreservedDurationShape(
 	];
 }
 
+function isFloatingJcalDateTime(property: JcalProperty | undefined): boolean {
+	if (!property || property[2] !== "date-time") return false;
+	if ("tzid" in property[1]) return false;
+	const value = String(property[3]);
+	return !value.endsWith("Z");
+}
+
+function withPreservedFloatingDateTimeShape(
+	event: CalendarEvent,
+	preserved: JcalComponent,
+	generated: JcalComponent,
+): JcalComponent {
+	if (!isFloatingJcalDateTime(firstJcalProperty(preserved, "dtstart"))) {
+		return generated;
+	}
+	return [
+		generated[0],
+		generated[1].map((property) => {
+			if (!isJcalProperty(property)) return property;
+			const name = property[0].toLowerCase();
+			if (name === "dtstart") {
+				return ["dtstart", {}, "date-time", formatFloatingDateTime(event.start)] satisfies JcalProperty;
+			}
+			if (name === "dtend") {
+				return ["dtend", {}, "date-time", formatFloatingDateTime(event.end)] satisfies JcalProperty;
+			}
+			return property;
+		}),
+		generated[2],
+	];
+}
+
 function veventMergePropertyNames(event: CalendarEvent): Set<string> {
 	const names = new Set(BASE_VEVENT_MERGE_PROPERTIES);
 	for (const key of Object.keys(event.extendedProperties ?? {})) {
@@ -539,10 +588,20 @@ function mergePreservedVevent(event: CalendarEvent, generatedLines: string[]): s
 	if (!preserved || !generated || preserved[0].toLowerCase() !== "vevent") {
 		return generatedLines;
 	}
-	const generatedWithShape = withPreservedDurationShape(preserved, generated);
+	const generatedWithFloatingShape = withPreservedFloatingDateTimeShape(event, preserved, generated);
+	const generatedWithShape = withPreservedDurationShape(preserved, generatedWithFloatingShape);
 	return jcalComponentToLines(
 		mergeJcalComponent(preserved, generatedWithShape, veventMergePropertyNames(event)),
 	);
+}
+
+function preservedVTimezoneLines(rawJcal: unknown): { lines: string[]; tzid: string | null } | null {
+	const component = cloneJcalComponent(rawJcal);
+	if (!component || component[0].toLowerCase() !== "vtimezone") return null;
+	return {
+		lines: jcalComponentToLines(component),
+		tzid: firstJcalValue(component, "tzid") ?? null,
+	};
 }
 
 interface BuildVeventOptions {
@@ -692,6 +751,7 @@ export function serializeCalendarToIcs(
 	calendar: Calendar,
 	events: CalendarEvent[],
 	renderZone?: string,
+	preservedTimezones: unknown[] = [],
 ): string {
 	const zone = renderZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
 	const dtStamp = formatUtcDateTime(new Date().toISOString());
@@ -712,7 +772,16 @@ export function serializeCalendarToIcs(
 		`X-WR-CALNAME:${escapeText(calendar.name)}`,
 	];
 
+	const emittedTimezoneIds = new Set<string>();
+	for (const timezone of preservedTimezones) {
+		const preserved = preservedVTimezoneLines(timezone);
+		if (!preserved) continue;
+		lines.push(...preserved.lines);
+		if (preserved.tzid) emittedTimezoneIds.add(preserved.tzid);
+	}
+
 	for (const zoneId of recurringZones) {
+		if (emittedTimezoneIds.has(zoneId)) continue;
 		lines.push(...buildVTimezone(zoneId));
 	}
 

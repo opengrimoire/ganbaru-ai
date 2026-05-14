@@ -1496,8 +1496,18 @@ export function getCalendar() {
       });
       const full = await Promise.all(ids.map((id) => store.loadFullEvent(id)));
       const calendarEvents = full.filter((e): e is CalendarEvent => e !== undefined);
+      const preservedTimezoneRows = await invoke<string[]>(
+        "calendar_load_icalendar_timezones_for_calendar",
+        {
+          dbUrl: dbUrl(),
+          calendarId: calendar.id,
+        },
+      );
+      const preservedTimezones = preservedTimezoneRows
+        .map((row) => safeJsonParse<unknown>(row))
+        .filter((row): row is unknown => row !== undefined);
       const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
-      return serializeCalendarToIcs(calendar, calendarEvents);
+      return serializeCalendarToIcs(calendar, calendarEvents, undefined, preservedTimezones);
     },
 
     /**

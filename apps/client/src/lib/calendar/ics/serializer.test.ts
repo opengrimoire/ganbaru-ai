@@ -188,6 +188,45 @@ describe("serializeCalendarToIcs", () => {
 			expect(ics).toContain("TZOFFSETFROM:+0900");
 			expect(ics).toContain("TZOFFSETTO:+0900");
 		});
+
+		it("exports preserved VTIMEZONE definitions before generated stubs", () => {
+			const preservedTimezone = [
+				"vtimezone",
+				[
+					["tzid", {}, "text", "America/New_York"],
+					["last-modified", {}, "date-time", "2026-01-01T00:00:00Z"],
+				],
+				[
+					[
+						"standard",
+						[
+							["dtstart", {}, "date-time", "1970-01-01T00:00:00"],
+							["tzoffsetfrom", {}, "utc-offset", "-05:00"],
+							["tzoffsetto", {}, "utc-offset", "-05:00"],
+							["tzname", {}, "text", "Custom standard"],
+						],
+						[],
+					],
+				],
+			];
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						timezone: "America/New_York",
+						recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+					}),
+				],
+				"UTC",
+				[preservedTimezone],
+			);
+
+			expect(ics).toContain("BEGIN:VTIMEZONE");
+			expect(ics).toContain("TZID:America/New_York");
+			expect(ics).toContain("LAST-MODIFIED:20260101T000000Z");
+			expect(ics).toContain("TZNAME:Custom standard");
+			expect((ics.match(/TZID:America\/New_York/g) ?? []).length).toBe(1);
+		});
 	});
 
 	describe("text escaping", () => {
@@ -537,6 +576,34 @@ describe("serializeCalendarToIcs", () => {
 			expect(ics).toContain("DURATION:PT2H30M");
 			expect(ics).not.toContain("DTEND:");
 		});
+
+		it("preserves floating date-time shape for linked imports", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						start: "2026-06-01 14:00",
+						end: "2026-06-01 15:00",
+						icalendarRawJcal: [
+							"vevent",
+							[
+								["uid", {}, "text", "sample-uid@ganbaruai"],
+								["dtstamp", {}, "date-time", "20260101T000000Z"],
+								["dtstart", {}, "date-time", "2026-06-01T14:00:00"],
+								["dtend", {}, "date-time", "2026-06-01T15:00:00"],
+								["summary", {}, "text", "Sample"],
+							],
+							[],
+						],
+					}),
+				],
+				"UTC",
+			);
+
+			expect(ics).toContain("DTSTART:20260601T140000");
+			expect(ics).toContain("DTEND:20260601T150000");
+			expect(ics).not.toContain("DTSTART:20260601T140000Z");
+		});
 	});
 
 	describe("recurrence and overrides", () => {
@@ -632,6 +699,41 @@ describe("serializeCalendarToIcs", () => {
 				"America/New_York",
 			);
 			expect(ics).toContain("RECURRENCE-ID;TZID=America/New_York:20260417T090000");
+		});
+
+		it("preserves RANGE=THISANDFUTURE on linked override recurrence ids", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						sourceUid: "range@ex",
+						recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 5 } },
+						overrides: [
+							{
+								id: "ov1",
+								parentEventId: "ev-1",
+								recurrenceId: "2026-06-03T14:00:00.000Z",
+								title: "Adjusted",
+								icalendarRawJcal: [
+									"vevent",
+									[
+										["uid", {}, "text", "range@ex"],
+										["dtstamp", {}, "date-time", "2026-01-01T00:00:00Z"],
+										["dtstart", {}, "date-time", "2026-06-03T16:00:00Z"],
+										["dtend", {}, "date-time", "2026-06-03T17:00:00Z"],
+										["recurrence-id", { range: "THISANDFUTURE" }, "date-time", "2026-06-03T14:00:00Z"],
+										["summary", {}, "text", "Original"],
+									],
+									[],
+								],
+							},
+						],
+					}),
+				],
+				"UTC",
+			);
+
+			expect(ics).toContain("RECURRENCE-ID;RANGE=THISANDFUTURE:20260603T140000Z");
 		});
 	});
 

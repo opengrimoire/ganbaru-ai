@@ -380,6 +380,25 @@ pub async fn calendar_list_event_ids_for_calendar<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn calendar_load_icalendar_timezones_for_calendar<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    calendar_id: String,
+) -> Result<Vec<String>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    sqlx::query_scalar::<_, String>(
+        "SELECT raw_jcal
+         FROM icalendar_components
+         WHERE calendar_id = ? AND component_type = 'vtimezone'
+         ORDER BY object_id, sort_order",
+    )
+    .bind(&calendar_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("load iCalendar timezone components: {e}"))
+}
+
+#[tauri::command]
 pub async fn calendar_load_panel_event<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
