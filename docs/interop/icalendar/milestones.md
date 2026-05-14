@@ -2,6 +2,8 @@
 
 This tracker breaks full iCalendar compatibility into implementation phases. Each milestone should finish with docs updates, tests or fixtures, and a commit.
 
+Implementation status as of 2026-05-14: milestones 1 through 12 have code, documentation, tests, and commits in this repository. Manual client runs are still unrecorded because they require disposable accounts or apps outside this environment. Performance benchmark rows were not added because no new recorded benchmark methodology was run; the implemented performance work is documented in [Performance budget](./performance-budget.md).
+
 ## Milestone 1: compatibility audit baseline
 
 Goal: establish a complete map of current support against RFC 5545 and related standards.

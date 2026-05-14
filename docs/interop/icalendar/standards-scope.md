@@ -40,7 +40,7 @@ This requires a transport and identity. It is not required for offline `.ics` co
 
 ## Current supported subset
 
-GanbaruAI currently projects a `VEVENT`-focused subset into `calendar_events`. Recent fixes handle:
+GanbaruAI currently projects a `VEVENT`-focused subset into `calendar_events` and preserves broader iCalendar data in structured storage. Current support handles:
 
 - all-day exclusive `DTEND`
 - `STATUS`, `TRANSP`, and visual status rendering
@@ -49,6 +49,12 @@ GanbaruAI currently projects a `VEVENT`-focused subset into `calendar_events`. R
 - parameter escaping for attendee and organizer `CN`
 - UTF-8 octet-based line folding
 - all-day override date handling
+- structured preservation for imported `VCALENDAR` objects and components
+- linked export merging for `VEVENT` and nested `VALARM`
+- passthrough export for preserved top-level `VTODO`, `VJOURNAL`, `VFREEBUSY`, and custom components
+- preserved `VTIMEZONE` definitions emitted before generated timezone stubs
+- scheduling metadata preserved as inert data without transport actions
+- parser safety limits for unfolded lines, component count, property count, nesting depth, and inline binary attachments
 
 Partial support exists for:
 
@@ -57,21 +63,23 @@ Partial support exists for:
 - `ORGANIZER` and `ATTENDEE`
 - basic `VALARM`
 - `X-*` properties and Google guest-permission properties
+- inert URI and binary attachments through linked preservation
+- floating timed events through linked preservation
 
 ## Known gaps
 
-The current implementation is not yet a full RFC 5545 implementation. Major gaps include:
+The current implementation is highly compatible for offline file import/export within documented safety limits, but it is still not full semantic app support for every RFC 5545 feature. Major remaining gaps include:
 
-- non-`VEVENT` components: `VTODO`, `VJOURNAL`, `VFREEBUSY`
-- complete `VTIMEZONE` interpretation and preservation
+- app UI projection for non-`VEVENT` components: `VTODO`, `VJOURNAL`, `VFREEBUSY`
+- complete `VTIMEZONE` interpretation for recurrence math
 - full `VALARM` repeat and duration semantics
-- every legal property, parameter, and value type
-- complete attendee and organizer parameters, including delegation chains and sent-by metadata
-- full recurrence semantics for all legal `RRULE` and `BY*` combinations
-- floating timed event preservation as distinct from device-zone interpretation
+- first-class editing for every legal property, parameter, and value type
+- first-class editing for attendee and organizer parameters beyond the projected subset
+- full recurrence UI semantics for all legal `RRULE` and `BY*` combinations
+- first-class floating timed event projection distinct from device-zone interpretation
 - scheduling methods and workflow actions from RFC 5546
-- binary and URI attachments with exact parameter preservation
-- unknown future standard extensions from IANA registries
+- object-level export merge beyond a single safe `METHOD`
+- manual client compatibility observations for the major target clients
 
 ## Preservation rule
 
