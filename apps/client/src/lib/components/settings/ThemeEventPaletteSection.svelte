@@ -50,7 +50,7 @@
 {#snippet palettePreviewSwatch(value: string, title: string)}
   <span
     class={cn(
-      "relative block h-[22px] w-[22px] shrink-0 overflow-hidden rounded-md border",
+      "relative block h-5.5 w-5.5 shrink-0 overflow-hidden rounded-md border",
       swatchHasTransparency(value)
         ? "border-transparent bg-clip-padding shadow-none"
         : "border-border shadow-sm",

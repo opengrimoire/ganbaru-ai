@@ -74,7 +74,7 @@
 <div
   bind:this={chipEl}
   data-event-id={event.id}
-  class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]
+  class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-5
     {editing || preview || grabbing ? 'chip-editing' : ''}"
   style="
     background-color: {activeColors.bg};
@@ -92,7 +92,7 @@
   onpointerdown={handlePointerDown}
 >
   {#if hasRepeat || hasNotification}
-    <span class="absolute right-1 top-[3px] flex items-center gap-0.5" style="color: {iconColor};">
+    <span class="absolute right-1 top-0.75 flex items-center gap-0.5" style="color: {iconColor};">
       {#if hasRepeat}
         <Repeat size={8} class="shrink-0" />
       {/if}

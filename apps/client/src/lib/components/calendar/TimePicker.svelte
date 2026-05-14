@@ -56,7 +56,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={scrollEl} onwheel={onWheel} class="time-picker-scroll max-h-[200px] overflow-y-auto">
+<div bind:this={scrollEl} onwheel={onWheel} class="time-picker-scroll max-h-50 overflow-y-auto">
   {#each TIME_SLOTS as slot}
     {@const selected = currentTime === slot}
     {@const isNow = slot === nearestSlot}

@@ -449,8 +449,8 @@
       }
     }}
     class={cn(
-      "h-7 rounded-md border border-border bg-card px-2 text-[12px] leading-[26px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
-      fluid ? "min-w-0 flex-1" : "w-[76px]",
+      "h-7 rounded-md border border-border bg-card px-2 text-[12px] leading-6.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+      fluid ? "min-w-0 flex-1" : "w-19",
       readOnly && "cursor-not-allowed opacity-60",
     )}
   />
@@ -479,7 +479,7 @@
       role="dialog"
       aria-label={label ? `${label} color picker` : "Color picker"}
       class={cn(
-        "fixed z-[80] overflow-y-auto border border-border bg-popover p-3 shadow-xl",
+        "fixed z-80 overflow-y-auto border border-border bg-popover p-3 shadow-xl",
         pickerGeometry.layout === "popover" && "rounded-lg",
         pickerGeometry.layout === "sheet" && "rounded-lg",
         pickerGeometry.layout === "fullscreen" && "rounded-none border-x-0 border-b-0",
@@ -493,7 +493,7 @@
         aria-label="Saturation and value"
         aria-valuenow={Math.round(hsv.s)}
         tabindex="0"
-        class="relative h-[150px] w-full touch-none rounded-md"
+        class="relative h-37.5 w-full touch-none rounded-md"
         style="background:
           linear-gradient(to top, #000, transparent),
           linear-gradient(to right, #fff, transparent),
@@ -548,7 +548,7 @@
             aria-haspopup="listbox"
             aria-expanded={formatMenuOpen}
             onclick={() => (formatMenuOpen = !formatMenuOpen)}
-            class="flex h-7 w-[62px] items-center justify-between rounded-md border border-border bg-card px-2 font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+            class="flex h-7 w-15.5 items-center justify-between rounded-md border border-border bg-card px-2 font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <span>{activeFormatLabel}</span>
             <ChevronDown size={12} strokeWidth={2.25} />
@@ -557,7 +557,7 @@
             <div
               role="listbox"
               aria-label="Color value format"
-              class="absolute bottom-full left-0 z-10 mb-1 w-[72px] overflow-hidden rounded-md border border-border bg-popover p-1 shadow-lg"
+              class="absolute bottom-full left-0 z-10 mb-1 w-18 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-lg"
             >
               {#each COLOR_FORMAT_OPTIONS as option}
                 <button
@@ -595,7 +595,7 @@
               }
             }}
             aria-label="Hex color value"
-            class="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-[12px] leading-[26px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            class="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-[12px] leading-6.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         {:else if activeFormat === "rgb"}
           <div class="grid min-w-0 flex-1 grid-cols-3 gap-1.5">

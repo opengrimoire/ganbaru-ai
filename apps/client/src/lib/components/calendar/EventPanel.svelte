@@ -1023,7 +1023,7 @@
       data-stacked={stackedDateTime || undefined}
     >
       <!-- Start date -->
-      <div class="relative z-[1] min-w-0 justify-self-start">
+      <div class="relative z-1 min-w-0 justify-self-start">
         <button onclick={toggleDatepicker}
           class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
@@ -1036,7 +1036,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-[19]" onclick={() => { datepickerOpen = false; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => { datepickerOpen = false; }}></div>
           <div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
             <MiniDatePicker selectedDate={startDate} onselect={selectDpDay} />
           </div>
@@ -1044,13 +1044,13 @@
       </div>
 
       <!-- Time group, hidden when all-day -->
-      <div class="time-group relative z-[2] flex items-center justify-center gap-1 py-1" class:hidden={allDay}>
+      <div class="time-group relative z-2 flex items-center justify-center gap-1 py-1" class:hidden={allDay}>
         <input type="text" bind:value={startTime}
           oninput={emitChange}
           onclick={() => openTimePicker("start")}
           disabled={controlsDisabled}
           maxlength={5} placeholder="HH:MM"
-          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
+          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
         <span class="text-muted-foreground/60">-</span>
@@ -1059,7 +1059,7 @@
           onclick={() => openTimePicker("end")}
           disabled={controlsDisabled}
           maxlength={5} placeholder="HH:MM"
-          class="w-[42px] rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
+          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
 
@@ -1067,7 +1067,7 @@
         {#if timePickerTarget}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-[19]" onclick={() => { timePickerTarget = null; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => { timePickerTarget = null; }}></div>
           {@const isEnd = timePickerTarget === 'end'}
           {@const startMins = (() => { const [h, m] = (startTime || "0:0").split(":").map(Number); return h * 60 + m; })()}
           <div class="absolute top-full z-20 mt-1 rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
@@ -1082,7 +1082,7 @@
       </div>
 
       <!-- End date -->
-      <div class="relative z-[1] min-w-0 justify-self-end text-right">
+      <div class="relative z-1 min-w-0 justify-self-end text-right">
         <button onclick={toggleEndDatepicker}
           class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
@@ -1093,7 +1093,7 @@
         {#if endDatepickerOpen}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-[19]" onclick={() => { endDatepickerOpen = false; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => { endDatepickerOpen = false; }}></div>
           <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
             <MiniDatePicker selectedDate={endDate} minDate={startDate} onselect={selectEdpDay} />
           </div>
@@ -1171,7 +1171,7 @@
         {#if showAsPicker}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-[19]" onclick={() => { showAsPicker = false; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => { showAsPicker = false; }}></div>
           <div class="absolute left-0 top-full z-20 mt-1 w-24 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
             {#each (["opaque", "transparent"] as const) as t}
               <button
@@ -1198,7 +1198,7 @@
         {#if statusPicker}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-[19]" onclick={() => { statusPicker = false; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => { statusPicker = false; }}></div>
           <div class="absolute left-0 top-full z-20 mt-1 w-28 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
             {#each (["confirmed", "tentative", "cancelled"] as const) as s}
               <button
@@ -1229,7 +1229,7 @@
           {#if visibilityPicker}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0 z-[19]" onclick={() => { visibilityPicker = false; }}></div>
+            <div class="fixed inset-0 z-19" onclick={() => { visibilityPicker = false; }}></div>
             <div class="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
               {#each (["public", "private", "confidential"] as const) as v}
                 <button
@@ -1348,7 +1348,7 @@
           {#if mode === "edit" && onDelete && event}
             <button onclick={armOrConfirmDelete}
               disabled={controlsDisabled}
-              class="flex w-9 shrink-0 items-center justify-center bg-black/[0.06] dark:bg-black/[0.30] text-foreground hover:text-destructive"
+              class="flex w-9 shrink-0 items-center justify-center bg-black/6 dark:bg-black/30 text-foreground hover:text-destructive"
               title="Delete (Ctrl + D)">
               <Trash2 size={13} strokeWidth={1.8} />
             </button>

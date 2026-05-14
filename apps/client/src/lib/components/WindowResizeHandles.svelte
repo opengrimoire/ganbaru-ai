@@ -39,7 +39,7 @@
 </script>
 
 {#if !disabled}
-  <div aria-hidden="true" class="pointer-events-none fixed inset-0 z-[2147483647]">
+  <div aria-hidden="true" class="pointer-events-none fixed inset-0 z-2147483647">
     <div
       class="pointer-events-auto absolute cursor-n-resize"
       style="left: {CORNER_HANDLE_PX}px; right: {CORNER_HANDLE_PX}px; top: 0; height: {EDGE_HANDLE_PX}px;"

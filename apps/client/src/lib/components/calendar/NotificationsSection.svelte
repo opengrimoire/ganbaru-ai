@@ -111,7 +111,7 @@
   <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
       class="flex w-9 shrink-0 items-center justify-center
-        {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
+        {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Bell size={13} />
     </button>
     <button onclick={onexpand}
@@ -128,7 +128,7 @@
             onclick={() => toggleNotif(opt.value)}
             class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] text-foreground"
           >
-            <div class="size-[11px] shrink-0
+            <div class="size-2.75 shrink-0
               {selected.has(opt.value) ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>{opt.label}</span>
@@ -158,8 +158,8 @@
           {#if dropdownIdx === idx}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0 z-[60]" onclick={() => { dropdownIdx = null; }}></div>
-            <div class="fixed z-[61] rounded-lg bg-popover py-1 shadow-lg ring-1 ring-border/60"
+            <div class="fixed inset-0 z-60" onclick={() => { dropdownIdx = null; }}></div>
+            <div class="fixed z-61 rounded-lg bg-popover py-1 shadow-lg ring-1 ring-border/60"
               use:positionDropdown={idx}>
               {#each CUSTOM_UNITS as u}
                 <button onclick={() => { updateCustomNotif(idx, cn.amount, u.value); dropdownIdx = null; }}

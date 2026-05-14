@@ -80,7 +80,7 @@
 {#if runner.status === "running" && runner.running}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-[75] flex items-center justify-center">
+  <div class="fixed inset-0 z-75 flex items-center justify-center">
     <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
     <div
       class="relative z-10 flex w-[min(520px,90vw)] flex-col gap-4 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
@@ -127,7 +127,7 @@
 {#if runner.status === "summary" && runner.result}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-[75] flex items-center justify-center">
+  <div class="fixed inset-0 z-75 flex items-center justify-center">
     <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
     <div
       class="relative z-10 flex h-[80vh] w-[min(1040px,94vw)] flex-col rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
@@ -361,7 +361,7 @@
 {#if runner.status === "error"}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-[75] flex items-center justify-center">
+  <div class="fixed inset-0 z-75 flex items-center justify-center">
     <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
     <div
       class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"

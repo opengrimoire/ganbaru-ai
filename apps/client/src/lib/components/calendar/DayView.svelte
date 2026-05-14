@@ -320,14 +320,14 @@
 <div class="flex h-full flex-col" style="visibility: {ready ? 'visible' : 'hidden'};">
 <div class="relative min-h-0 flex-1" style="background-color: var(--cal-header-bg);">
   <div
-    class="absolute left-0 right-0 top-0 z-[40] grid"
+    class="absolute left-0 right-0 top-0 z-40 grid"
     style="grid-template-columns: {gridCols}; background-color: var(--cal-header-bg);"
   >
     <!-- Header row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       bind:offsetHeight={stickyHeaderHeight}
-      class="grid {allDayEvents.length === 0 ? 'border-b border-[var(--sidebar)]' : ''}"
+      class="grid {allDayEvents.length === 0 ? 'border-b border-sidebar' : ''}"
       onwheel={handleHeaderWheel}
       style="
         grid-column: 1 / -1;
@@ -378,7 +378,7 @@
     <!-- All-day banner -->
     <div
       bind:offsetHeight={stickyAllDayBannerHeight}
-      class="grid border-b border-[var(--sidebar)]"
+      class="grid border-b border-sidebar"
       onwheel={scrollTimelineByWheel}
       style="
         grid-column: 1 / -1;

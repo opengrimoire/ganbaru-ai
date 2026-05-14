@@ -787,7 +787,7 @@
       aria-label="Reset {label} to its original value"
       title={canReset ? "Restore original value" : "Already at original value"}
       class={cn(
-        "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-border bg-card transition-colors",
+        "flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-border bg-card transition-colors",
         canReset
           ? "text-foreground hover:border-foreground/30 hover:bg-accent"
           : "cursor-not-allowed text-muted-foreground",
@@ -844,7 +844,7 @@
           }}
           aria-label="Isolated edit {ariaLabel}"
           title="Edit this color independently of its source"
-          class="theme-token-action flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Pencil size={10} strokeWidth={2.25} />
           <span>Isolated edit</span>
@@ -858,7 +858,7 @@
           }}
           aria-label="Link back {ariaLabel} to its source"
           title="Re-link this color to its source"
-          class="theme-token-action flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Link2 size={10} strokeWidth={2.25} />
           <span>Link back</span>
@@ -882,7 +882,7 @@
         ariaLabel,
         canResetSource(key),
       )}
-      <div class="theme-token-action-spacer min-w-[108px] shrink-0" aria-hidden="true"></div>
+      <div class="theme-token-action-spacer min-w-27 shrink-0" aria-hidden="true"></div>
     </div>
   {/snippet}
 
@@ -936,7 +936,7 @@
           info.title,
           canResetRow,
         )}
-        <div class="theme-token-action-spacer min-w-[108px] shrink-0" aria-hidden="true"></div>
+        <div class="theme-token-action-spacer min-w-27 shrink-0" aria-hidden="true"></div>
       </div>
     </div>
   {/snippet}
@@ -971,7 +971,7 @@
       <div class="theme-pair-controls flex shrink-0 flex-col items-end gap-2">
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Bg
           </span>
@@ -979,7 +979,7 @@
         </div>
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Text
           </span>
@@ -1021,7 +1021,7 @@
       <div class="theme-pair-controls flex shrink-0 flex-col items-end gap-2">
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Bg
           </span>
@@ -1029,7 +1029,7 @@
         </div>
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-[34px] text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Text
           </span>
@@ -1083,7 +1083,7 @@
                 aria-label="{isCollapsed
                   ? 'Expand'
                   : 'Collapse'} {group.title} options"
-                class="theme-token-action theme-collapse-action flex min-w-[108px] shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+                class="theme-token-action theme-collapse-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
               >
                 {#if isCollapsed}
                   <ChevronDown class="theme-collapse-action-icon" size={11} strokeWidth={2.25} />
@@ -1096,7 +1096,7 @@
                 {/if}
               </button>
             {:else}
-              <div class="theme-token-action-spacer min-w-[108px] shrink-0" aria-hidden="true"></div>
+              <div class="theme-token-action-spacer min-w-27 shrink-0" aria-hidden="true"></div>
             {/if}
           </div>
         </header>

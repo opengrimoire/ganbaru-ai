@@ -88,7 +88,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class={cn(
-    "fixed inset-0 z-[70] flex",
+    "fixed inset-0 z-70 flex",
     useTopNav ? "items-stretch justify-center p-1" : "items-center justify-center p-2",
   )}
   onclick={(e) => {

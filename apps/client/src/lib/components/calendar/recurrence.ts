@@ -10,6 +10,7 @@
  * the stored wall clock in the home zone does not.
  */
 
+import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent, EventOverride, OrdinalWeekday, RecurrenceConfig, Weekday } from "./types";
 
 export function parseYMD(s: string): Date {

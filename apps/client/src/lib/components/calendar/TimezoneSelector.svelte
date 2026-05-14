@@ -359,7 +359,7 @@
   <div
     bind:this={popoverEl}
     use:portal
-    class="tz-popover fixed z-[80] flex flex-col rounded-lg border border-border bg-card text-card-foreground shadow-xl"
+    class="tz-popover fixed z-80 flex flex-col rounded-lg border border-border bg-card text-card-foreground shadow-xl"
     style="top: {popoverPos.top}px; left: {popoverPos.left}px; width: {POPOVER_WIDTH}px; max-height: {POPOVER_HEIGHT}px; --foreground: var(--card-foreground);"
     onwheel={(e) => e.stopPropagation()}
   >
@@ -418,7 +418,7 @@
             <GripVertical size={12} />
           </span>
           <div class="min-w-0 flex-1 truncate">
-            <span class="inline-block w-[72px] font-medium tabular-nums text-foreground">{info.offsetUtc}</span>
+            <span class="inline-block w-18 font-medium tabular-nums text-foreground">{info.offsetUtc}</span>
             <span class="ml-1 text-foreground">{info.longName}</span>
             {#if isDevice}
               <span class="ml-1 text-muted-foreground">(device)</span>
@@ -498,7 +498,7 @@
                 onclick={(e: MouseEvent) => { e.stopPropagation(); handleAdd(tz); }}
               >
                 <div class="truncate text-foreground">
-                  <span class="inline-block w-[72px] font-medium tabular-nums">{info.offsetUtc}</span>
+                  <span class="inline-block w-18 font-medium tabular-nums">{info.offsetUtc}</span>
                   <span class="ml-1">{info.longName}</span>
                 </div>
                 <div class="truncate text-[10.5px] text-muted-foreground">

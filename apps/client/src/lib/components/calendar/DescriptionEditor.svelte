@@ -237,8 +237,8 @@
       {#if linkPopoverOpen}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="fixed inset-0 z-[60]" onclick={() => { linkPopoverOpen = false; }}></div>
-        <div class="fixed z-[61] flex items-center gap-1.5 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
+        <div class="fixed inset-0 z-60" onclick={() => { linkPopoverOpen = false; }}></div>
+        <div class="fixed z-61 flex items-center gap-1.5 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
           use:positionLinkPopover>
           <input bind:this={linkInputEl}
             type="text" bind:value={linkUrl} placeholder="https://..."
@@ -277,7 +277,7 @@
         <div
           bind:this={editorEl}
           contenteditable={!readOnly}
-          class="desc-editor desc-content max-h-[80px] overflow-y-auto text-[11px] leading-[15px] text-foreground outline-none"
+          class="desc-editor desc-content max-h-20 overflow-y-auto text-[11px] leading-3.75 text-foreground outline-none"
           class:desc-editing={!readOnly}
           oninput={handleEditorInput}
           onpaste={handleEditorPaste}
@@ -287,7 +287,7 @@
         ></div>
       {:else if descPreview}
         <div
-          class="desc-preview max-h-[45px] overflow-hidden text-[11px] leading-[15px] text-foreground"
+          class="desc-preview max-h-11.25 overflow-hidden text-[11px] leading-3.75 text-foreground"
           title={descPreview}
         >{descPreview}</div>
       {:else}

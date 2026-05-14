@@ -54,7 +54,7 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div
-  class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 max-[520px]:p-2"
+  class="fixed inset-0 z-80 flex items-center justify-center bg-black/50 p-4 max-[520px]:p-2"
   role="dialog"
   aria-modal="true"
   aria-label="Pick a starting preset"
@@ -99,7 +99,7 @@
         >
           <!-- Miniature preview -->
           <div
-            class="flex h-[88px] w-full flex-col overflow-hidden rounded-md border"
+            class="flex h-22 w-full flex-col overflow-hidden rounded-md border"
             style="{styleVarsFor(preset.sources, preset.base)}; background-color: var(--background); border-color: var(--border);"
             aria-hidden="true"
           >

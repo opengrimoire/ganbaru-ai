@@ -569,7 +569,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative z-[2] min-w-0 {hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+  class="relative z-2 min-w-0 {hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
   style="
     height: calc(24 * var(--hour-h) * 1px);
     contain: layout style;
@@ -598,7 +598,7 @@
   <!-- Pomodoro timeline rails (one per contiguous group of pomodoro events) -->
   {#each visibleRailSegments as seg}
     <div
-      class="pointer-events-none absolute z-[3] overflow-hidden"
+      class="pointer-events-none absolute z-3 overflow-hidden"
       style="
         left: 2px;
         width: {railWidth}px;

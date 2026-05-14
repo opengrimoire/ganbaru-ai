@@ -48,6 +48,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5.0.0
         version: 5.1.1(svelte@5.53.8)(vite@6.4.2(@types/node@22.19.18)(jiti@2.6.1)(lightningcss@1.31.1))
+      '@tailwindcss/language-server':
+        specifier: ^0.14.29
+        version: 0.14.29
       '@tailwindcss/vite':
         specifier: ^4.2.1
         version: 4.2.1(vite@6.4.2(@types/node@22.19.18)(jiti@2.6.1)(lightningcss@1.31.1))
@@ -528,6 +531,11 @@ packages:
     peerDependencies:
       svelte: ^5.0.0
       vite: 6.4.2
+
+  '@tailwindcss/language-server@0.14.29':
+    resolution: {integrity: sha512-aZ3/XyTNmsoIyhs09Fghlw6D6y7o70aIxHmQEYPFiJPe/1k3HqtxXqhn7g7a5UpA1yeGOyKK9HRNJ8ghZqIclg==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
 
   '@tailwindcss/node@4.2.1':
     resolution: {integrity: sha512-jlx6sLk4EOwO6hHe1oCGm1Q4AN/s0rSrTTPBGPM0/RQ6Uylwq17FuU8IeJJKEjtc6K6O07zsvP+gDO6MMWo7pg==}
@@ -1613,6 +1621,8 @@ snapshots:
       vitefu: 1.1.2(vite@6.4.2(@types/node@22.19.18)(jiti@2.6.1)(lightningcss@1.31.1))
     transitivePeerDependencies:
       - supports-color
+
+  '@tailwindcss/language-server@0.14.29': {}
 
   '@tailwindcss/node@4.2.1':
     dependencies:

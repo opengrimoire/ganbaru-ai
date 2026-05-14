@@ -169,7 +169,7 @@
             onclick={() => onDayClick(day)}
           >
             <span
-              class="relative z-[2] mb-px flex h-6 w-6 items-center justify-center self-center text-xs"
+              class="relative z-2 mb-px flex h-6 w-6 items-center justify-center self-center text-xs"
               style="color: {dayNumberColor};"
             >
               {day.getDate()}
@@ -184,7 +184,7 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="relative z-[2] mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
+                class="relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
                 style="background-color: {evtColors.bg}; color: {evtColors.text};"
                 onpointerenter={() => onEventPrefetch?.(evt)}
                 onpointerdown={() => onEventPrefetch?.(evt)}
@@ -195,7 +195,7 @@
             {/each}
 
             {#if dayEvts.length > maxVisible}
-              <span class="relative z-[2] mt-px text-center text-[10px]" style="color: {moreColor};">
+              <span class="relative z-2 mt-px text-center text-[10px]" style="color: {moreColor};">
                 +{dayEvts.length - maxVisible} more
               </span>
             {/if}

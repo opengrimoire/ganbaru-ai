@@ -129,7 +129,7 @@
         onclick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        class="flex h-7 w-[168px] max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
+        class="flex h-7 w-42 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
       >
         <span class="truncate" style={current?.style}>{current?.label ?? value}</span>
         <ChevronDown
@@ -143,7 +143,7 @@
           bind:this={popoverEl}
           use:portal
           role="listbox"
-          class="fixed z-[80] max-h-[60vh] overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-lg"
+          class="fixed z-80 max-h-[60vh] overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-lg"
           style="top: {popoverPos.top}px; right: {popoverPos.right}px; min-width: {popoverPos.minWidth}px;"
         >
           {#each options as option}

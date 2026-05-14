@@ -3,7 +3,7 @@
 </script>
 
 <div
-  class="pointer-events-none absolute inset-x-0 top-0 z-[1]"
+  class="pointer-events-none absolute inset-x-0 top-0 z-1"
   style="height: calc(24 * var(--hour-h) * 1px);"
   aria-hidden="true"
 >

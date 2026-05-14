@@ -147,7 +147,7 @@
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
       disabled={readOnly}
       class="flex w-9 shrink-0 items-center justify-center
-        {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
+        {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Users size={13} />
     </button>
     <button onclick={onexpand}
@@ -212,7 +212,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div bind:this={scrollEl} onscroll={updateFade} onwheel={onWheel}
             use:observeResize
-            class="relative max-h-[72px] overflow-y-auto scrollbar-thin pr-3"
+            class="relative max-h-18 overflow-y-auto scrollbar-thin pr-3"
             style:mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}
             style:-webkit-mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}>
             {#if organizer}

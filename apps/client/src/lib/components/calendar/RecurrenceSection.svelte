@@ -191,7 +191,7 @@
   <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
       class="flex w-9 shrink-0 items-center justify-center
-        {recurrence ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
+        {recurrence ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Repeat size={13} />
     </button>
     <button onclick={onexpand}
@@ -232,7 +232,7 @@
                 class="flex h-7 items-center justify-center rounded-none text-[10px]
                   {recWeekdays.has(wd.value)
                     ? 'bg-black/5 dark:bg-black/15 text-foreground'
-                    : 'bg-black/[0.02] dark:bg-black/[0.06] text-muted-foreground'}"
+                    : 'bg-black/2 dark:bg-black/6 text-muted-foreground'}"
               >{wd.label}</button>
             {/each}
           </div>
@@ -249,7 +249,7 @@
                 {monthlyMode === 'day'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
-              <div class="size-[11px] shrink-0 rounded-full
+              <div class="size-2.75 shrink-0 rounded-full
                 {monthlyMode === 'day' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
               <span class="truncate">Day {getEventDayOfMonth()}</span>
@@ -259,7 +259,7 @@
                 {monthlyMode === 'ordinal'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
-              <div class="size-[11px] shrink-0 rounded-full
+              <div class="size-2.75 shrink-0 rounded-full
                 {monthlyMode === 'ordinal' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
               <span class="truncate">{getEventOrdinalWeekday().label}</span>
@@ -274,7 +274,7 @@
 
         <button onclick={() => updateEndType("never")}
           class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px] text-foreground">
-          <div class="size-[11px] shrink-0 rounded-full
+          <div class="size-2.75 shrink-0 rounded-full
             {recEndType === 'never' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
           </div>
           <span>Never</span>
@@ -283,7 +283,7 @@
         <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("until")}
             class="flex w-12 items-center gap-2 text-foreground">
-            <div class="size-[11px] shrink-0 rounded-full
+            <div class="size-2.75 shrink-0 rounded-full
               {recEndType === 'until' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>On</span>
@@ -295,15 +295,15 @@
               onclick={() => { if (recEndType !== "until") updateEndType("until"); pickerOpen = !pickerOpen; }}
               onblur={parseDateInput}
               onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); parseDateInput(); pickerOpen = false; } }}
-              class="w-[110px] rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] outline-none
+              class="w-27.5 rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px] outline-none
                 {recEndType === 'until' ? 'text-event-panel-input-text' : 'text-muted-foreground'}
                 {pickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}" />
 
             {#if pickerOpen}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="fixed inset-0 z-[60]" onclick={() => { pickerOpen = false; }}></div>
-              <div class="fixed z-[61] w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
+              <div class="fixed inset-0 z-60" onclick={() => { pickerOpen = false; }}></div>
+              <div class="fixed z-61 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
                 use:positionPicker>
                 <MiniDatePicker selectedDate={recEndDate || defaultUntilDate()} small onselect={selectCalDay} />
               </div>
@@ -314,7 +314,7 @@
         <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[11px]">
           <button onclick={() => updateEndType("count")}
             class="flex w-12 items-center gap-2 text-foreground">
-            <div class="size-[11px] shrink-0 rounded-full
+            <div class="size-2.75 shrink-0 rounded-full
               {recEndType === 'count' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>After</span>

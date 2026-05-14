@@ -19,7 +19,7 @@
   class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-[12px] dark:bg-amber-950/30"
 >
   <div class="flex min-w-0 flex-1 items-start gap-2 text-amber-800 dark:text-amber-300">
-    <AlertTriangle size={13} strokeWidth={2.25} class="mt-[2px] shrink-0" />
+    <AlertTriangle size={13} strokeWidth={2.25} class="mt-0.5 shrink-0" />
     <span class="leading-snug">
       This theme was saved against an older derivation engine
       (v{savedVersion}, current v{currentVersion}). Rebake to refresh

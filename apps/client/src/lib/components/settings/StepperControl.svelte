@@ -52,7 +52,7 @@
         <Minus size={13} strokeWidth={2.5} />
       </button>
       <div
-        class="flex h-7 w-[112px] max-w-[42vw] items-center justify-center border-x border-border bg-card px-2 text-[12px] font-medium tabular-nums text-foreground dark:bg-transparent"
+        class="flex h-7 w-28 max-w-[42vw] items-center justify-center border-x border-border bg-card px-2 text-[12px] font-medium tabular-nums text-foreground dark:bg-transparent"
       >
         {displayValue}
       </div>

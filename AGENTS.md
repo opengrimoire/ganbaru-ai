@@ -59,15 +59,16 @@ apps/
         utils/: shared helpers, formatters
         types/: frontend-specific TypeScript types
       windows/: (planned) entry points for each Tauri window
-      app.html, app.css, app.d.ts: HTML shell, global styles, type declarations
+      app.css, app.d.ts: global styles, type declarations
     static/: static assets (fonts, icons, sounds)
+    scripts/: repo-owned maintenance and diagnostics scripts
     src-tauri/: Rust backend
       src/: main.rs (entry), lib.rs (commands), mobile.rs (mobile logic)
       gen/: auto-generated mobile projects
       capabilities/: permission declarations (desktop/mobile)
       icons/: app icons
       tauri.conf.json, Cargo.toml
-    package.json, svelte.config.js, vite.config.ts, tsconfig.json
+    index.html, package.json, svelte.config.js, vite.config.ts, tsconfig.json
   server/: (planned) Hocuspocus sync server (self-hostable)
 plugins/: (planned)
   media-player/: LGPL 2.1 Tauri plugin (Rust crate + npm)
@@ -130,8 +131,9 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 
 **Commands (always use `-w` flag for root scripts):**
 - `pnpm -w run check`: fast feedback (types, format, lint). Use while coding.
+- `pnpm -w run editor-check`: editor-style diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: all tests (vitest + cargo test). Use after changes to tested code.
-- `pnpm -w run validate`: everything (check + test). Run before reporting a task as complete. All errors must be fixed; do not report a task as done if validate fails.
+- `pnpm -w run validate`: everything (check + test + editor-check). Run before reporting a task as complete. All errors must be fixed; do not report a task as done if validate fails.
 - `pnpm test:coverage` (from apps/client): coverage report to see what's tested.
 
 After `pnpm -w run validate` passes, finish the task without extra dev-server, Tauri launch, status, or diff checks unless they are directly required for the request, a commit, or an unexpected issue.
@@ -165,6 +167,7 @@ After `pnpm -w run validate` passes, finish the task without extra dev-server, T
 
 - Do not use em dash characters or two consecutive hyphens in markdown, code comments, or commit messages. Restructure sentences using periods, commas, colons, semicolons, or parentheses instead.
 - Avoid unnecessary capitalization. Use sentence case in markdown headings, code comments, documentation, branch names, and commit messages unless capitalization is required by grammar, proper nouns, acronyms, or official names. Correct nearby text that violates this when editing files.
+- Prefer Tailwind canonical utilities over arbitrary-value equivalents. Use arbitrary values only when the value is genuinely custom or not represented by Tailwind theme tokens or project tokens.
 
 ### Responsive UI
 

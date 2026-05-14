@@ -110,7 +110,7 @@
   });
 </script>
 
-<div class="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black select-none">
+<div class="fixed inset-0 z-60 flex flex-col items-center justify-center bg-black select-none">
   <div class="flex flex-col items-center gap-8">
     <p class="idle-copy text-sm tracking-wide uppercase">Focus session paused</p>
 

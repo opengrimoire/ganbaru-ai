@@ -272,7 +272,7 @@
 
   {#if toast}
     <div
-      class="pointer-events-none fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-1.5 text-[12px] text-foreground shadow-lg"
+      class="pointer-events-none fixed bottom-6 left-1/2 z-80 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-1.5 text-[12px] text-foreground shadow-lg"
     >
       {toast}
     </div>

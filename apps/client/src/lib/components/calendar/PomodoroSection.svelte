@@ -59,7 +59,7 @@
   <div class="section-header flex items-stretch">
     <button onclick={(e) => { bounceIcon(e); ontoggle(e); }}
       class="flex w-9 shrink-0 items-center justify-center
-        {enabled ? 'bg-black/[0.03] dark:bg-black/[0.30] text-foreground' : 'text-muted-foreground/50'}">
+        {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Timer size={13} />
     </button>
     <button onclick={onexpand}
@@ -114,7 +114,7 @@
           onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; onchange(); }}
           class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] w-full text-foreground"
         >
-          <div class="size-[11px] shrink-0
+          <div class="size-2.75 shrink-0
             {idleTimeoutEnabled ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
           </div>
           <span>Pause on inactivity</span>

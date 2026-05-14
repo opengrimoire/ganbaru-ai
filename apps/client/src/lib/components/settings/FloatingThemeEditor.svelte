@@ -171,7 +171,7 @@
 {#if editing}
   <div
     class={cn(
-      "fixed z-[75] flex flex-col overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
+      "fixed z-75 flex flex-col overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
       editorGeometry.layout === "fullscreen"
         ? "rounded-none border-x-0 border-b-0"
         : "rounded-lg",

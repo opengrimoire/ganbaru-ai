@@ -406,14 +406,14 @@
 <div class="flex h-full flex-col" style="visibility: {ready ? 'visible' : 'hidden'};">
 <div class="relative min-h-0 flex-1" style="background-color: var(--cal-header-bg);">
   <div
-    class="absolute left-0 right-0 top-0 z-[40] grid"
+    class="absolute left-0 right-0 top-0 z-40 grid"
     style="grid-template-columns: {gridCols}; background-color: var(--cal-header-bg);"
   >
     <!-- Header row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       bind:offsetHeight={stickyHeaderHeight}
-      class="grid {allDayMaxRow === 0 ? 'border-b border-[var(--sidebar)]' : ''}"
+      class="grid {allDayMaxRow === 0 ? 'border-b border-sidebar' : ''}"
       onwheel={handleHeaderWheel}
       style="
         grid-column: 1 / -1;
@@ -474,7 +474,7 @@
     <!-- All-day banner -->
     <div
       bind:offsetHeight={stickyAllDayBannerHeight}
-      class="grid border-b border-[var(--sidebar)]"
+      class="grid border-b border-sidebar"
       onwheel={scrollTimelineByWheel}
       style="
         grid-column: 1 / -1;
@@ -550,7 +550,7 @@
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div
-                class="absolute z-[3] flex cursor-pointer items-center px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                class="absolute z-3 flex cursor-pointer items-center px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                 style="
                   left: {(i / 7) * 100}%;
                   width: {(1 / 7) * 100}%;
@@ -584,7 +584,7 @@
             "
           >
           <div
-            class="allday-drag-preview min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]"
+            class="allday-drag-preview min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-5"
             style="
               background-color: {dpColor.bg};
               color: {dpColor.text};
@@ -593,7 +593,7 @@
             "
           >
             {#if dpHasRepeat || dpHasNotification}
-              <span class="absolute right-1 top-[3px] flex items-center gap-0.5" style="color: {dpIconColor};">
+              <span class="absolute right-1 top-0.75 flex items-center gap-0.5" style="color: {dpIconColor};">
                 {#if dpHasRepeat}
                   <Repeat size={8} class="shrink-0" />
                 {/if}
