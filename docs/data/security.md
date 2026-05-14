@@ -50,6 +50,8 @@ When a feature needs broader access (e.g. work environment management needs to l
 
 The Tauri webview itself is hardened: production CSP allows bundled local assets and Tauri IPC only, blocks object and frame sources, disallows inline scripts, and currently allows inline styles for Svelte layout, theme, and calendar geometry bindings. The dev CSP remains more permissive for Vite and HMR, including local dev origins and `unsafe-eval`. IPC channels are validated by command name and parameter shape.
 
+Calendar descriptions are the current app-owned rich HTML surface. The frontend and Rust backend both cap and sanitize descriptions before rendering or persistence, and closed event panels render only plain text previews in the main DOM.
+
 ## Current audit posture
 
 The dependency refresh on 2026-05-14 updated the Tauri family to the latest compatible 2.x releases available to this workspace (`tauri` 2.11.1, `tauri-build` 2.6.1, `tauri-runtime` 2.11.1, `tauri-runtime-wry` 2.11.1, `tauri-utils` 2.9.1, `tauri-plugin-dialog` 2.7.1, `tauri-plugin-fs` 2.5.1, and related windowing crates). `cargo audit` reports no vulnerability findings, but it still reports allowed upstream warnings that are not removed by safe updates inside the current Tauri, Wry, GTK3, and parser dependency families:

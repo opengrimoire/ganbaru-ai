@@ -6,6 +6,8 @@ const ALLOWED_TAGS: [&str; 12] = [
     "a", "b", "br", "div", "em", "i", "li", "ol", "p", "strong", "u", "ul",
 ];
 
+const MAX_CALENDAR_DESCRIPTION_CHARS: usize = 20_000;
+
 const CLEAN_CONTENT_TAGS: [&str; 10] = [
     "base", "embed", "iframe", "link", "math", "meta", "object", "script", "style", "svg",
 ];
@@ -16,7 +18,8 @@ pub fn sanitize_calendar_description_html(value: &str) -> String {
     if value.is_empty() {
         return String::new();
     }
-    calendar_description_builder().clean(value).to_string()
+    let capped = truncate_calendar_description(value);
+    calendar_description_builder().clean(&capped).to_string()
 }
 
 pub fn sanitize_optional_calendar_description(value: &Option<String>) -> Option<String> {
@@ -41,9 +44,22 @@ fn calendar_description_builder() -> Builder<'static> {
     builder
 }
 
+fn truncate_calendar_description(value: &str) -> String {
+    let mut chars = value.chars();
+    let capped: String = chars
+        .by_ref()
+        .take(MAX_CALENDAR_DESCRIPTION_CHARS)
+        .collect();
+    if chars.next().is_none() {
+        value.to_string()
+    } else {
+        capped
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::sanitize_calendar_description_html;
+    use super::{sanitize_calendar_description_html, MAX_CALENDAR_DESCRIPTION_CHARS};
 
     #[test]
     fn keeps_allowed_formatting_and_http_links() {
@@ -112,5 +128,31 @@ mod tests {
         );
 
         assert_eq!(sanitized, "<p>Safe</p>");
+    }
+
+    #[test]
+    fn caps_raw_input_before_sanitizing() {
+        let html = format!(
+            "{}<strong>after cap</strong>",
+            "a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS + 10),
+        );
+
+        assert_eq!(
+            sanitize_calendar_description_html(&html),
+            "a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS),
+        );
+    }
+
+    #[test]
+    fn handles_oversized_hostile_html() {
+        let html = format!(
+            "{}<script>alert('x')</script><p onclick=\"alert(1)\">bad</p>",
+            "a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS - 2),
+        );
+        let sanitized = sanitize_calendar_description_html(&html);
+
+        assert!(!sanitized.contains("script"));
+        assert!(!sanitized.contains("alert"));
+        assert!(sanitized.chars().count() <= MAX_CALENDAR_DESCRIPTION_CHARS);
     }
 }

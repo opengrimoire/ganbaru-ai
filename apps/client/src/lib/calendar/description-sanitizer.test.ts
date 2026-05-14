@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   calendarDescriptionPreviewText,
   isSafeCalendarDescriptionUrl,
+  MAX_CALENDAR_DESCRIPTION_CHARS,
   sanitizeCalendarDescriptionHtml,
 } from "./description-sanitizer";
 
@@ -61,12 +62,37 @@ describe("sanitizeCalendarDescriptionHtml", () => {
     );
   });
 
+  it("caps raw input before sanitizing", () => {
+    const html = `${"a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS + 10)}<strong>after cap</strong>`;
+
+    expect(sanitizeCalendarDescriptionHtml(html)).toBe(
+      "a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS),
+    );
+  });
+
+  it("handles a cap that cuts through malformed hostile HTML", () => {
+    const html = `${"a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS - 2)}<script>alert("x")</script>`;
+    const sanitized = sanitizeCalendarDescriptionHtml(html);
+
+    expect(sanitized).not.toContain("script");
+    expect(sanitized).not.toContain("alert");
+    expect(sanitized.length).toBeLessThanOrEqual(MAX_CALENDAR_DESCRIPTION_CHARS);
+  });
+
   it("builds preview text from sanitized content", () => {
     const preview = calendarDescriptionPreviewText(
       '<p>Hello <strong>there</strong><script>alert("x")</script></p>',
     );
 
     expect(preview).toBe("Hello there");
+  });
+
+  it("builds preview text from capped sanitized content", () => {
+    const preview = calendarDescriptionPreviewText(
+      `${"a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS + 1)}<strong>after cap</strong>`,
+    );
+
+    expect(preview).toBe("a".repeat(MAX_CALENDAR_DESCRIPTION_CHARS));
   });
 
   it("accepts only HTTP and HTTPS link URLs", () => {

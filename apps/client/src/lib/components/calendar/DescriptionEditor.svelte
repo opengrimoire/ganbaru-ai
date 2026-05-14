@@ -27,7 +27,6 @@
   } = $props();
 
   let descOpen = $state(false);
-  let descClosing = $state(false);
   let editorEl: HTMLDivElement | undefined = $state();
   let descAreaEl: HTMLDivElement | undefined = $state();
   const sanitizedDescription = $derived(sanitizeCalendarDescriptionHtml(description));
@@ -49,17 +48,13 @@
   }
 
   function closeDescEditor() {
-    if (!descOpen || descClosing) return;
-    descClosing = true;
+    if (!descOpen) return;
+    sanitizeEditorDom();
     descOpen = false;
-    // Keep element in DOM during toolbar slide-out, then release
-    setTimeout(() => { descClosing = false; }, 250);
   }
 
   function handleEditorInput() {
-    if (editorEl) {
-      onchange(sanitizeCalendarDescriptionHtml(editorEl.innerHTML));
-    }
+    sanitizeEditorDom();
   }
 
   function sanitizeEditorDom() {
@@ -126,6 +121,15 @@
     sanitizeEditorDom();
   }
 
+  function handleEditorDrop(e: DragEvent) {
+    e.preventDefault();
+    const text = e.dataTransfer?.getData("text/plain") ?? "";
+    if (text) {
+      document.execCommand("insertText", false, text);
+    }
+    sanitizeEditorDom();
+  }
+
   function applyLink() {
     if (!linkUrl || linkUrl === "https://") { linkPopoverOpen = false; return; }
     if (!isSafeCalendarDescriptionUrl(linkUrl)) {
@@ -154,7 +158,7 @@
       event.stopPropagation();
       return;
     }
-    if (!descOpen && !descClosing) openDescEditor();
+    if (!descOpen) openDescEditor();
   }
 
   function positionLinkPopover(node: HTMLElement) {
@@ -171,13 +175,6 @@
   const descPreview = $derived.by(() => {
     if (!sanitizedDescription) return "";
     return calendarDescriptionPreviewText(sanitizedDescription);
-  });
-
-  // Sync description HTML into the persistent editor element when not actively editing
-  $effect(() => {
-    if (!descOpen && !descClosing && editorEl) {
-      editorEl.innerHTML = sanitizedDescription;
-    }
   });
 
   // Sync editor content when it first appears (e.g. editing existing event with description)
@@ -270,22 +267,29 @@
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    class="flex items-center gap-2.5 leading-none {!descOpen && !descClosing && !readOnly ? 'cursor-text' : ''}"
+    class="flex items-center gap-2.5 leading-none {!descOpen && !readOnly ? 'cursor-text' : ''}"
     onclick={handleDescriptionRowClick}
   >
     <AlignLeft size={13} class="shrink-0 text-foreground" />
     <div class="min-w-0 flex-1">
-      {#if descOpen || descClosing || descPreview}
+      {#if descOpen}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           bind:this={editorEl}
-          contenteditable={descOpen && !descClosing && !readOnly}
+          contenteditable={!readOnly}
           class="desc-editor desc-content max-h-[80px] overflow-y-auto text-[11px] leading-[15px] text-foreground outline-none"
-          class:desc-editing={descOpen && !descClosing}
+          class:desc-editing={!readOnly}
           oninput={handleEditorInput}
           onpaste={handleEditorPaste}
+          ondrop={handleEditorDrop}
+          onblur={sanitizeEditorDom}
           onkeydown={(e) => { if (descOpen) e.stopPropagation(); }}
         ></div>
+      {:else if descPreview}
+        <div
+          class="desc-preview max-h-[45px] overflow-hidden text-[11px] leading-[15px] text-foreground"
+          title={descPreview}
+        >{descPreview}</div>
       {:else}
         <span class="text-[11px] text-muted-foreground/40">Add description</span>
       {/if}

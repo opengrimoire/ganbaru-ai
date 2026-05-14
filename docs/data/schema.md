@@ -42,7 +42,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `id` | UUID | Primary key. For recurring templates, also the base UUID for the first occurrence. |
 | `user_id` | UUID | Owner. Defaults to the local UUID in single-user mode. |
 | `title` | text | Display title. |
-| `description` | text or null | Rich text stored as sanitized HTML in the current implementation. |
+| `description` | text or null | Rich text stored as sanitized HTML in the current implementation. Raw descriptions are capped at 20,000 characters before sanitization. |
 | `start_time` | ISO datetime | Event start as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). |
 | `end_time` | ISO datetime | Event end as a UTC ISO 8601 instant. All-day events use `YYYY-MM-DD` floating dates without zone conversion (matching iCalendar `VALUE=DATE` semantics) so they stay anchored to the calendar day across zones. |
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |

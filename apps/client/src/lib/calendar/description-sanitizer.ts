@@ -1,5 +1,7 @@
 import DOMPurify, { type Config } from "dompurify";
 
+export const MAX_CALENDAR_DESCRIPTION_CHARS = 20_000;
+
 const ALLOWED_DESCRIPTION_TAGS = [
   "a",
   "b",
@@ -74,6 +76,12 @@ function escapeHtmlText(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+function truncateCalendarDescription(value: string): string {
+  const chars = Array.from(value);
+  if (chars.length <= MAX_CALENDAR_DESCRIPTION_CHARS) return value;
+  return chars.slice(0, MAX_CALENDAR_DESCRIPTION_CHARS).join("");
+}
+
 /**
  * Sanitize stored or edited calendar description HTML.
  *
@@ -84,8 +92,9 @@ function escapeHtmlText(value: string): string {
  */
 export function sanitizeCalendarDescriptionHtml(value: string): string {
   if (value.length === 0) return "";
-  if (typeof document === "undefined") return escapeHtmlText(value);
-  const sanitized = DOMPurify.sanitize(value, SANITIZER_CONFIG);
+  const capped = truncateCalendarDescription(value);
+  if (typeof document === "undefined") return escapeHtmlText(capped);
+  const sanitized = DOMPurify.sanitize(capped, SANITIZER_CONFIG);
   const template = document.createElement("template");
   template.innerHTML = sanitized;
   stripUnsafeLinkProtocols(template.content);
