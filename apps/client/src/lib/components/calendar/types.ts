@@ -146,6 +146,8 @@ export interface EventOverride {
   extendedProperties?: Record<string, string>;
   /** Preserved override VEVENT component that produced this row. */
   icalendarComponentId?: string;
+  /** Structured preserved VEVENT component JSON for export merging. */
+  icalendarRawJcal?: unknown;
 }
 
 // Guest permissions (Google Calendar X-properties)
@@ -224,6 +226,8 @@ export interface CalendarEvent {
   icalendarPreservationStatus?: IcalendarPreservationStatus;
   /** Lossy projection diagnostics for the linked VEVENT component. */
   icalendarProjectionWarnings?: string[];
+  /** Structured preserved VEVENT component JSON for export merging. */
+  icalendarRawJcal?: unknown;
 }
 
 export interface Calendar {

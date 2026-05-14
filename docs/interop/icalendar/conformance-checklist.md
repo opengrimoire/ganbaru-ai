@@ -47,7 +47,7 @@ Current implementation summary:
 - Projected events, attendees, alarms, and recurrence overrides link back to preserved components.
 - Import still only projects `VEVENT` components into visible calendar rows. Other legal components are preserved without an app surface.
 - Export always generates a new `VCALENDAR` object from projected rows.
-- Some common event fields round-trip through projection. Unsupported properties, parameters, value types, object metadata, and component ordering are preserved on new imports but are not merged back into export yet.
+- Some common event fields round-trip through projection. Unsupported `VEVENT` properties, unsupported parameters, and unsupported `VALARM` fields are preserved on new imports and merged back into export for linked events. Object metadata, non-event components, and full component ordering are preserved on import but are not merged back into export yet.
 - Existing tests cover the projected subset and new preservation/link storage, but they do not prove full RFC 5545 file compatibility.
 
 ## Components
@@ -69,8 +69,8 @@ Current implementation summary:
 - Exported: `partial`.
 - Editable: `partial`.
 - Tested: `yes` for the current projected subset.
-- Evidence: parser, serializer, round-trip, import, recurrence, and serializer tests cover core event projection. New imports also preserve VEVENT jCal and link projected event rows back to preserved components.
-- Gap: fields outside the normalized event model are preserved for new imports but not merged into export yet.
+- Evidence: parser, serializer, round-trip, import, recurrence, and serializer tests cover core event projection. New imports also preserve VEVENT jCal and link projected event rows back to preserved components. Serializer merge tests cover unsupported properties and parameters surviving supported edits.
+- Gap: complete component ordering and every possible value type still need broader fixture coverage.
 
 ### `VTODO`
 
@@ -119,8 +119,8 @@ Current implementation summary:
 - Exported: `partial`.
 - Editable: `partial`.
 - Tested: `partial`.
-- Evidence: parser maps `ACTION`, `TRIGGER`, and `DESCRIPTION` to `EventAlarm`. New imports preserve nested VALARM components and link projected alarm rows back to them. Serializer emits projected alarm fields. Tests cover basic alarms, warning on repeat fields, and preservation diagnostics.
-- Gap: `REPEAT`, `DURATION`, `SUMMARY`, `ATTENDEE`, `ATTACH`, `ACKNOWLEDGED`, `PROXIMITY`, parameters, and extensions are preserved for new imports but not editable or merged into export yet.
+- Evidence: parser maps `ACTION`, `TRIGGER`, and `DESCRIPTION` to `EventAlarm`. New imports preserve nested VALARM components and link projected alarm rows back to them. Serializer emits projected alarm fields and merges unsupported preserved alarm fields when exporting a linked VEVENT. Tests cover basic alarms, warning on repeat fields, preservation diagnostics, and preservation merge.
+- Gap: unsupported alarm fields are preserved through export but are not editable as first-class app fields.
 
 ### Nested and future components
 

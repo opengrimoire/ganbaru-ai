@@ -185,6 +185,7 @@ type DbFullEvent = DbCalendarEvent & {
   icalendar_component_id: string | null;
   icalendar_preservation_status: IcalendarPreservationStatus | null;
   icalendar_projection_warnings: string | null;
+  icalendar_raw_jcal: string | null;
 };
 
 type DbFullOverride = DbOverride & {
@@ -194,6 +195,7 @@ type DbFullOverride = DbOverride & {
   visibility: string | null;
   extended_properties: string | null;
   icalendar_component_id: string | null;
+  icalendar_raw_jcal: string | null;
 };
 
 interface CalendarWindowRows {
@@ -292,6 +294,8 @@ function applyFullEventFields(row: DbFullEvent, event: CalendarEvent) {
   }
   const projectionWarnings = safeJsonParse<string[]>(row.icalendar_projection_warnings);
   if (projectionWarnings) event.icalendarProjectionWarnings = projectionWarnings;
+  const rawJcal = safeJsonParse<unknown>(row.icalendar_raw_jcal);
+  if (rawJcal) event.icalendarRawJcal = rawJcal;
 }
 
 function getIndex(): ExpansionIndex {
@@ -816,6 +820,8 @@ export function getCalendar() {
           const ep = safeJsonParse<Record<string, string>>(r.extended_properties);
           if (ep) slim.extendedProperties = ep;
           if (r.icalendar_component_id) slim.icalendarComponentId = r.icalendar_component_id;
+          const rawJcal = safeJsonParse<unknown>(r.icalendar_raw_jcal);
+          if (rawJcal) slim.icalendarRawJcal = rawJcal;
           return slim;
         });
       }

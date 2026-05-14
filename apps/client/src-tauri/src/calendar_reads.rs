@@ -157,6 +157,7 @@ pub struct DbFullEventRow {
     icalendar_component_id: Option<String>,
     icalendar_preservation_status: Option<String>,
     icalendar_projection_warnings: Option<String>,
+    icalendar_raw_jcal: Option<String>,
     focus_duration_minutes: Option<i64>,
     short_break_minutes: Option<i64>,
     long_break_minutes: Option<i64>,
@@ -196,6 +197,7 @@ impl_sqlite_from_row!(DbFullEventRow {
     icalendar_component_id,
     icalendar_preservation_status,
     icalendar_projection_warnings,
+    icalendar_raw_jcal,
     focus_duration_minutes,
     short_break_minutes,
     long_break_minutes,
@@ -220,6 +222,7 @@ pub struct DbFullOverrideRow {
     visibility: Option<String>,
     extended_properties: Option<String>,
     icalendar_component_id: Option<String>,
+    icalendar_raw_jcal: Option<String>,
 }
 impl_sqlite_from_row!(DbFullOverrideRow {
     id,
@@ -237,6 +240,7 @@ impl_sqlite_from_row!(DbFullOverrideRow {
     visibility,
     extended_properties,
     icalendar_component_id,
+    icalendar_raw_jcal,
 });
 
 #[derive(Serialize)]
@@ -307,6 +311,7 @@ const FULL_EVENT_SQL: &str = r#"
     SELECT ce.*,
            ic.preservation_status AS icalendar_preservation_status,
            ic.projection_warnings AS icalendar_projection_warnings,
+           ic.raw_jcal AS icalendar_raw_jcal,
            pc.focus_duration_minutes, pc.short_break_minutes,
            pc.long_break_minutes, pc.pomodoro_count,
            pc.idle_timeout_minutes
@@ -425,7 +430,10 @@ pub async fn calendar_load_full_event<R: Runtime>(
     .await
     .map_err(|e| format!("load full calendar alarms: {e}"))?;
     let mut overrides = sqlx::query_as::<_, DbFullOverrideRow>(
-        "SELECT * FROM calendar_event_overrides WHERE parent_event_id = ?",
+        "SELECT o.*, ic.raw_jcal AS icalendar_raw_jcal
+         FROM calendar_event_overrides o
+         LEFT JOIN icalendar_components ic ON ic.id = o.icalendar_component_id
+         WHERE o.parent_event_id = ?",
     )
     .bind(&id)
     .fetch_all(&pool)
@@ -491,6 +499,7 @@ mod tests {
             visibility: None,
             extended_properties: None,
             icalendar_component_id: None,
+            icalendar_raw_jcal: None,
         }];
 
         sanitize_full_override_rows(&mut rows);
@@ -535,6 +544,7 @@ mod tests {
             icalendar_component_id: None,
             icalendar_preservation_status: None,
             icalendar_projection_warnings: None,
+            icalendar_raw_jcal: None,
             focus_duration_minutes: None,
             short_break_minutes: None,
             long_break_minutes: None,

@@ -1,3 +1,4 @@
+import ICAL from "ical.js";
 import { Temporal } from "@js-temporal/polyfill";
 import type {
 	Calendar,
@@ -13,6 +14,9 @@ import { wallClockToUtcIso } from "$lib/components/calendar/utils";
 const CRLF = "\r\n";
 const PRODID = "-//GanbaruAI//Calendar//EN";
 const textEncoder = new TextEncoder();
+
+type JcalProperty = [string, Record<string, unknown>, string, ...unknown[]];
+type JcalComponent = [string, unknown[], unknown[]];
 
 /**
  * Convert an in-memory wall-clock "YYYY-MM-DD HH:MM" pair to a UTC instant.
@@ -274,6 +278,199 @@ function buildAlarm(alarm: EventAlarm): string[] {
 	return lines;
 }
 
+const BASE_VEVENT_MERGE_PROPERTIES = new Set([
+	"uid", "dtstamp", "dtstart", "dtend", "duration", "recurrence-id",
+	"summary", "description", "location", "url", "rrule", "exdate", "rdate",
+	"status", "transp", "class", "priority", "sequence", "categories", "geo",
+	"organizer", "attendee", "x-google-guest-can-modify",
+	"x-google-guest-can-invite-others", "x-google-guest-can-see-other-guests",
+]);
+
+const VALARM_MERGE_PROPERTIES = new Set([
+	"action", "trigger", "description",
+]);
+
+const GENERATED_OWNED_PARAMS_BY_PROPERTY: Record<string, Set<string>> = {
+	attendee: new Set(["cn", "role", "partstat", "rsvp"]),
+	organizer: new Set(["cn"]),
+	dtstart: new Set(["tzid", "value"]),
+	dtend: new Set(["tzid", "value"]),
+	exdate: new Set(["tzid", "value"]),
+	rdate: new Set(["tzid", "value"]),
+	"recurrence-id": new Set(["tzid", "value"]),
+};
+
+function isJcalComponent(value: unknown): value is JcalComponent {
+	return (
+		Array.isArray(value) &&
+		typeof value[0] === "string" &&
+		Array.isArray(value[1]) &&
+		Array.isArray(value[2])
+	);
+}
+
+function isJcalProperty(value: unknown): value is JcalProperty {
+	return (
+		Array.isArray(value) &&
+		typeof value[0] === "string" &&
+		typeof value[1] === "object" &&
+		value[1] !== null &&
+		!Array.isArray(value[1]) &&
+		typeof value[2] === "string"
+	);
+}
+
+function jcalProperties(component: JcalComponent): JcalProperty[] {
+	return component[1].filter(isJcalProperty);
+}
+
+function jcalSubcomponents(component: JcalComponent): JcalComponent[] {
+	return component[2].filter(isJcalComponent);
+}
+
+function cloneJcalComponent(value: unknown): JcalComponent | null {
+	if (!isJcalComponent(value)) return null;
+	const cloned = JSON.parse(JSON.stringify(value)) as unknown;
+	return isJcalComponent(cloned) ? cloned : null;
+}
+
+function generatedVeventJcal(lines: string[]): JcalComponent | null {
+	const text = [
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		...lines,
+		"END:VCALENDAR",
+	].join(CRLF) + CRLF;
+	try {
+		const parsed = ICAL.parse(text) as unknown;
+		if (!isJcalComponent(parsed)) return null;
+		return jcalSubcomponents(parsed)
+			.find((component) => component[0].toLowerCase() === "vevent") ?? null;
+	} catch {
+		return null;
+	}
+}
+
+function jcalComponentToLines(component: JcalComponent): string[] {
+	const text = ICAL.stringify(component) as string;
+	return text.split(/\r\n|\n|\r/).filter((line) => line.length > 0);
+}
+
+function mergePropertyParams(
+	preserved: JcalProperty,
+	generated: JcalProperty,
+): JcalProperty {
+	const propertyName = generated[0].toLowerCase();
+	const params = { ...preserved[1] };
+	for (const ownedName of GENERATED_OWNED_PARAMS_BY_PROPERTY[propertyName] ?? []) {
+		if (!(ownedName in generated[1])) delete params[ownedName];
+	}
+	return [
+		generated[0],
+		{ ...params, ...generated[1] },
+		generated[2],
+		...generated.slice(3),
+	];
+}
+
+function mergeJcalProperties(
+	preserved: JcalComponent,
+	generated: JcalComponent,
+	replaceNames: Set<string>,
+): unknown[] {
+	const generatedByName = new Map<string, JcalProperty[]>();
+	for (const property of jcalProperties(generated)) {
+		const name = property[0].toLowerCase();
+		if (!replaceNames.has(name)) continue;
+		const list = generatedByName.get(name) ?? [];
+		list.push(property);
+		generatedByName.set(name, list);
+	}
+
+	const consumed = new Set<JcalProperty>();
+	const merged: unknown[] = [];
+	for (const property of preserved[1]) {
+		if (!isJcalProperty(property)) {
+			merged.push(property);
+			continue;
+		}
+		const name = property[0].toLowerCase();
+		if (!replaceNames.has(name)) {
+			merged.push(property);
+			continue;
+		}
+		const replacement = generatedByName.get(name)?.shift();
+		if (replacement) {
+			consumed.add(replacement);
+			merged.push(mergePropertyParams(property, replacement));
+		}
+	}
+
+	for (const property of jcalProperties(generated)) {
+		const name = property[0].toLowerCase();
+		if (replaceNames.has(name) && !consumed.has(property)) {
+			merged.push(property);
+		}
+	}
+	return merged;
+}
+
+function mergeJcalSubcomponents(preserved: JcalComponent, generated: JcalComponent): unknown[] {
+	const generatedAlarms = jcalSubcomponents(generated)
+		.filter((component) => component[0].toLowerCase() === "valarm");
+	let alarmIndex = 0;
+	const merged: unknown[] = [];
+	for (const component of preserved[2]) {
+		if (!isJcalComponent(component)) {
+			merged.push(component);
+			continue;
+		}
+		if (component[0].toLowerCase() !== "valarm") {
+			merged.push(component);
+			continue;
+		}
+		const generatedAlarm = generatedAlarms[alarmIndex++];
+		if (generatedAlarm) {
+			merged.push(mergeJcalComponent(component, generatedAlarm, VALARM_MERGE_PROPERTIES));
+		}
+	}
+	for (const alarm of generatedAlarms.slice(alarmIndex)) {
+		merged.push(alarm);
+	}
+	return merged;
+}
+
+function mergeJcalComponent(
+	preserved: JcalComponent,
+	generated: JcalComponent,
+	replaceNames: Set<string>,
+): JcalComponent {
+	return [
+		generated[0],
+		mergeJcalProperties(preserved, generated, replaceNames),
+		mergeJcalSubcomponents(preserved, generated),
+	];
+}
+
+function veventMergePropertyNames(event: CalendarEvent): Set<string> {
+	const names = new Set(BASE_VEVENT_MERGE_PROPERTIES);
+	for (const key of Object.keys(event.extendedProperties ?? {})) {
+		names.add(key.toLowerCase());
+	}
+	return names;
+}
+
+function mergePreservedVevent(event: CalendarEvent, generatedLines: string[]): string[] {
+	const preserved = cloneJcalComponent(event.icalendarRawJcal);
+	const generated = generatedVeventJcal(generatedLines);
+	if (!preserved || !generated || preserved[0].toLowerCase() !== "vevent") {
+		return generatedLines;
+	}
+	return jcalComponentToLines(
+		mergeJcalComponent(preserved, generated, veventMergePropertyNames(event)),
+	);
+}
+
 interface BuildVeventOptions {
 	event: CalendarEvent;
 	uid: string;
@@ -356,7 +553,7 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 	}
 
 	lines.push("END:VEVENT");
-	return lines;
+	return mergePreservedVevent(event, lines);
 }
 
 function buildOverrideVevent(
@@ -384,6 +581,7 @@ function buildOverrideVevent(
 		transparency: override.transparency,
 		visibility: override.visibility,
 		extendedProperties: override.extendedProperties,
+		icalendarRawJcal: override.icalendarRawJcal,
 		recurrence: undefined,
 		exceptions: undefined,
 		rdate: undefined,

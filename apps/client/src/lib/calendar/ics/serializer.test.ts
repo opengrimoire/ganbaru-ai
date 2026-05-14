@@ -352,6 +352,144 @@ describe("serializeCalendarToIcs", () => {
 		});
 	});
 
+	describe("preservation merge", () => {
+		it("keeps unsupported properties and parameters while exporting supported edits", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						title: "Edited title",
+						attendees: [
+							{
+								id: "a1",
+								name: "Bob",
+								email: "bob@example.com",
+								role: "opt-participant",
+								status: "accepted",
+								rsvp: false,
+							},
+						],
+						alarms: [
+							{
+								id: "al1",
+								action: "display",
+								triggerType: "relative",
+								triggerValue: "-PT15M",
+								description: "Reminder",
+							},
+						],
+						icalendarRawJcal: [
+							"vevent",
+							[
+								["uid", {}, "text", "sample-uid@ganbaruai"],
+								["dtstamp", {}, "date-time", "20260101T000000Z"],
+								["dtstart", {}, "date-time", "20260601T140000Z"],
+								["dtend", {}, "date-time", "20260601T150000Z"],
+								["summary", { language: "en" }, "text", "Original title"],
+								["x-unsupported", { "x-param": "kept" }, "text", "value"],
+								[
+									"attendee",
+									{ cn: "Old", role: "REQ-PARTICIPANT", partstat: "NEEDS-ACTION", rsvp: "TRUE", cutype: "INDIVIDUAL" },
+									"cal-address",
+									"mailto:old@example.com",
+								],
+							],
+							[
+								[
+									"valarm",
+									[
+										["action", {}, "text", "DISPLAY"],
+										["trigger", {}, "duration", "-PT10M"],
+										["repeat", {}, "integer", 3],
+										["duration", {}, "duration", "PT5M"],
+									],
+									[],
+								],
+							],
+						],
+					}),
+				],
+				"UTC",
+			);
+			const unfolded = unfold(ics);
+
+			expect(unfolded).toContain("SUMMARY;LANGUAGE=en:Edited title");
+			expect(unfolded).toContain("X-UNSUPPORTED;X-PARAM=kept;VALUE=TEXT:value");
+			expect(unfolded).toContain("ATTENDEE;CN=Bob");
+			expect(unfolded).toContain("CUTYPE=INDIVIDUAL");
+			expect(unfolded).toContain("ROLE=OPT-PARTICIPANT");
+			expect(unfolded).toContain("PARTSTAT=ACCEPTED");
+			expect(unfolded).toContain("RSVP=FALSE");
+			expect(unfolded).toContain("mailto:bob@example.com");
+			expect(unfolded).toContain("TRIGGER:-PT15M");
+			expect(unfolded).toContain("DESCRIPTION:Reminder");
+			expect(unfolded).toContain("REPEAT:3");
+			expect(unfolded).toContain("DURATION:PT5M");
+		});
+
+		it("does not re-export preserved alarms deleted from the projection", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						alarms: undefined,
+						icalendarRawJcal: [
+							"vevent",
+							[
+								["uid", {}, "text", "sample-uid@ganbaruai"],
+								["dtstamp", {}, "date-time", "20260101T000000Z"],
+								["dtstart", {}, "date-time", "20260601T140000Z"],
+								["dtend", {}, "date-time", "20260601T150000Z"],
+								["summary", {}, "text", "Sample"],
+							],
+							[
+								[
+									"valarm",
+									[
+										["action", {}, "text", "DISPLAY"],
+										["trigger", {}, "duration", "-PT10M"],
+										["repeat", {}, "integer", 3],
+									],
+									[],
+								],
+							],
+						],
+					}),
+				],
+				"UTC",
+			);
+
+			expect(ics).not.toContain("BEGIN:VALARM");
+			expect(ics).not.toContain("REPEAT:3");
+		});
+
+		it("does not keep stale generated-owned time parameters", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						timezone: "UTC",
+						icalendarRawJcal: [
+							"vevent",
+							[
+								["uid", {}, "text", "sample-uid@ganbaruai"],
+								["dtstamp", {}, "date-time", "20260101T000000Z"],
+								["dtstart", { tzid: "America/New_York" }, "date-time", "20260601T100000"],
+								["dtend", { tzid: "America/New_York" }, "date-time", "20260601T110000"],
+								["summary", {}, "text", "Sample"],
+							],
+							[],
+						],
+					}),
+				],
+				"UTC",
+			);
+
+			expect(ics).toContain("DTSTART:20260601T140000Z");
+			expect(ics).not.toContain("DTSTART;TZID=America/New_York");
+		});
+	});
+
 	describe("recurrence and overrides", () => {
 		it("emits EXDATE for exceptions", () => {
 			const ics = serializeCalendarToIcs(

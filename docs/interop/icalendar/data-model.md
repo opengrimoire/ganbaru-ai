@@ -1,6 +1,6 @@
 # Data model
 
-This document defines the storage responsibilities for lossless iCalendar compatibility. The first preservation tables and projection links are implemented, while export merging and complete component semantics remain future milestones.
+This document defines the storage responsibilities for lossless iCalendar compatibility. The first preservation tables, projection links, and `VEVENT` export merge are implemented, while complete component semantics remain future milestones.
 
 ## Principles
 
@@ -147,6 +147,8 @@ Projection creates or updates current app rows:
 Every projected row created from preserved data should be traceable back to its component. Migration v13 adds nullable `icalendar_component_id` columns to `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms`. Attendees also store `icalendar_property_index`, because `ATTENDEE` is a property on a `VEVENT` rather than its own component.
 
 The `icalendar_components.projected_kind` and `projected_id` reverse link is used where one component maps to one projected row: master events, override events, and alarms. Attendee rows keep their direct link on the projected row so multiple attendees can reference the same preserved `VEVENT` without overwriting the component's reverse link.
+
+Full-event loads expose linked `VEVENT` raw JSON to the serializer. Export merges the preserved `VEVENT` and nested `VALARM` components with regenerated supported fields, preserving unsupported event properties, unsupported parameters, and unsupported alarm fields. A projected row or projected alarm that was deleted is not re-created from preservation storage during export.
 
 ## Re-import dedupe
 
