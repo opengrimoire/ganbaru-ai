@@ -1,3 +1,4 @@
+use crate::calendar_description::sanitize_calendar_description_html;
 use crate::db_path::connect_sqlite;
 use serde::Serialize;
 use tauri::{AppHandle, Runtime};
@@ -411,11 +412,12 @@ pub async fn calendar_load_panel_event<R: Runtime>(
     id: String,
 ) -> Result<CalendarPanelEventRows, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let event = sqlx::query_as::<_, DbFullEventRow>(FULL_EVENT_SQL)
+    let mut event = sqlx::query_as::<_, DbFullEventRow>(FULL_EVENT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
         .await
         .map_err(|e| format!("load panel calendar event: {e}"))?;
+    sanitize_full_event_row(&mut event);
     let attendees = sqlx::query_as::<_, DbAttendeeRow>(
         "SELECT * FROM calendar_event_attendees WHERE event_id = ? ORDER BY sort_order ASC",
     )
@@ -434,7 +436,7 @@ pub async fn calendar_load_full_event<R: Runtime>(
     id: String,
 ) -> Result<CalendarFullEventRows, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let event = sqlx::query_as::<_, DbFullEventRow>(FULL_EVENT_SQL)
+    let mut event = sqlx::query_as::<_, DbFullEventRow>(FULL_EVENT_SQL)
         .bind(&id)
         .fetch_optional(&pool)
         .await
@@ -453,13 +455,15 @@ pub async fn calendar_load_full_event<R: Runtime>(
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("load full calendar alarms: {e}"))?;
-    let overrides = sqlx::query_as::<_, DbFullOverrideRow>(
+    let mut overrides = sqlx::query_as::<_, DbFullOverrideRow>(
         "SELECT * FROM calendar_event_overrides WHERE parent_event_id = ?",
     )
     .bind(&id)
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("load full calendar overrides: {e}"))?;
+    sanitize_full_event_row(&mut event);
+    sanitize_full_override_rows(&mut overrides);
 
     Ok(CalendarFullEventRows {
         event,
@@ -467,4 +471,102 @@ pub async fn calendar_load_full_event<R: Runtime>(
         alarms,
         overrides,
     })
+}
+
+fn sanitize_full_event_row(row: &mut Option<DbFullEventRow>) {
+    if let Some(event) = row {
+        event.description = sanitize_calendar_description_html(&event.description);
+    }
+}
+
+fn sanitize_full_override_rows(rows: &mut [DbFullOverrideRow]) {
+    for row in rows {
+        if let Some(description) = &row.description {
+            row.description = Some(sanitize_calendar_description_html(description));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        sanitize_full_event_row, sanitize_full_override_rows, DbFullEventRow, DbFullOverrideRow,
+    };
+
+    #[test]
+    fn sanitizes_full_event_description_before_returning_rows() {
+        let mut row = Some(full_event_row(
+            "<p onclick=\"alert(1)\">Safe <a href=\"javascript:alert(1)\">bad</a></p>",
+        ));
+
+        sanitize_full_event_row(&mut row);
+
+        assert_eq!(row.unwrap().description, "<p>Safe <a>bad</a></p>");
+    }
+
+    #[test]
+    fn sanitizes_full_override_description_before_returning_rows() {
+        let mut rows = vec![DbFullOverrideRow {
+            id: "override-1".to_string(),
+            parent_event_id: "event-1".to_string(),
+            recurrence_id: "2026-05-10".to_string(),
+            title: None,
+            start_time: None,
+            end_time: None,
+            description: Some("<div><img src=\"x\"><strong>Safe</strong></div>".to_string()),
+            location: None,
+            url: None,
+            color: None,
+            status: None,
+            transparency: None,
+            visibility: None,
+            extended_properties: None,
+        }];
+
+        sanitize_full_override_rows(&mut rows);
+
+        assert_eq!(
+            rows[0].description.as_deref(),
+            Some("<div><strong>Safe</strong></div>")
+        );
+    }
+
+    fn full_event_row(description: &str) -> DbFullEventRow {
+        DbFullEventRow {
+            id: "event-1".to_string(),
+            title: "Focus".to_string(),
+            start_time: "2026-05-09T10:00:00Z".to_string(),
+            end_time: "2026-05-09T11:00:00Z".to_string(),
+            timezone: "America/Monterrey".to_string(),
+            calendar_id: "local".to_string(),
+            color: None,
+            description: description.to_string(),
+            rrule: None,
+            notifications: None,
+            exceptions: None,
+            repeat_until: None,
+            all_day: 0,
+            location: String::new(),
+            url: String::new(),
+            transparency: "opaque".to_string(),
+            status: "confirmed".to_string(),
+            source_uid: None,
+            visibility: "public".to_string(),
+            priority: None,
+            categories: None,
+            geo: None,
+            sequence: 0,
+            rdate: None,
+            extended_properties: None,
+            organizer: None,
+            guest_can_modify: 0,
+            guest_can_invite_others: 1,
+            guest_can_see_other_guests: 1,
+            focus_duration_minutes: None,
+            short_break_minutes: None,
+            long_break_minutes: None,
+            pomodoro_count: None,
+            idle_timeout_minutes: None,
+        }
+    }
 }

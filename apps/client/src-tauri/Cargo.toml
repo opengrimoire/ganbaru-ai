@@ -14,6 +14,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+ammonia = "4.1.2"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 sqlx-core = { version = "0.8", default-features = false, features = ["_rt-tokio", "json", "migrate", "offline"] }
 sqlx-sqlite = { version = "0.8", default-features = false, features = ["bundled", "json"] }

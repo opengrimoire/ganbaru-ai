@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
+use crate::calendar_description::{
+    sanitize_calendar_description_html, sanitize_optional_calendar_description,
+};
 use crate::db_path::connect_sqlite;
 
 const PALETTE_SIZE: i64 = 24;
@@ -250,6 +253,7 @@ async fn insert_event(
     now: &str,
     event: &CalendarImportEvent,
 ) -> Result<(), String> {
+    let description = sanitize_calendar_description_html(&event.description);
     sqlx::query(
         "INSERT INTO calendar_events
             (id, title, start_time, end_time, timezone, calendar_id,
@@ -268,7 +272,7 @@ async fn insert_event(
     .bind(&event.timezone)
     .bind(target_calendar_id)
     .bind(event.color)
-    .bind(&event.description)
+    .bind(&description)
     .bind(&event.rrule)
     .bind(&event.notifications)
     .bind(&event.exceptions)
@@ -313,6 +317,7 @@ async fn update_event(
     event: &CalendarImportEvent,
     event_id: &str,
 ) -> Result<(), String> {
+    let description = sanitize_calendar_description_html(&event.description);
     let result = sqlx::query(
         "UPDATE calendar_events
             SET title = ?, start_time = ?, end_time = ?, timezone = ?,
@@ -333,7 +338,7 @@ async fn update_event(
     .bind(&event.end_time)
     .bind(&event.timezone)
     .bind(event.color)
-    .bind(&event.description)
+    .bind(&description)
     .bind(&event.rrule)
     .bind(&event.notifications)
     .bind(&event.exceptions)
@@ -436,6 +441,7 @@ async fn insert_child_rows(
     }
 
     for override_row in &event.overrides {
+        let description = sanitize_optional_calendar_description(&override_row.description);
         sqlx::query(
             "INSERT INTO calendar_event_overrides
                 (id, parent_event_id, recurrence_id, title, start_time, end_time,
@@ -449,7 +455,7 @@ async fn insert_child_rows(
         .bind(&override_row.title)
         .bind(&override_row.start_time)
         .bind(&override_row.end_time)
-        .bind(&override_row.description)
+        .bind(&description)
         .bind(&override_row.location)
         .bind(&override_row.url)
         .bind(override_row.color)
@@ -639,7 +645,10 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_color, validate_enum, validate_json_option, validate_priority};
+    use super::{
+        insert_child_rows, insert_event, update_event, validate_color, validate_enum,
+        validate_json_option, validate_priority, CalendarImportEvent, CalendarImportOverride,
+    };
 
     #[test]
     fn validates_calendar_import_enums() {
@@ -660,5 +669,141 @@ mod tests {
     fn validates_json_payload_fields() {
         assert!(validate_json_option(&Some(r#"["a"]"#.to_string()), "categories").is_ok());
         assert!(validate_json_option(&Some("not json".to_string()), "categories").is_err());
+    }
+
+    #[test]
+    fn imported_event_descriptions_are_sanitized_before_persistence() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let event = import_event(
+                "event-1",
+                "<p onclick=\"alert(1)\">Safe <strong>text</strong></p>",
+            );
+            let mut tx = pool.begin().await.unwrap();
+
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &event)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let description: String =
+                sqlx::query_scalar("SELECT description FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(description, "<p>Safe <strong>text</strong></p>");
+        });
+    }
+
+    #[test]
+    fn updated_imported_event_descriptions_are_sanitized_before_persistence() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let initial = import_event("event-1", "Initial");
+            let updated = import_event(
+                "event-1",
+                "<div><img src=\"x\" onerror=\"alert(1)\"><u>Override</u></div>",
+            );
+            let mut tx = pool.begin().await.unwrap();
+
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &initial)
+                .await
+                .unwrap();
+            update_event(&mut tx, "local", "2026-05-09 10:05:00", &updated, "event-1")
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let description: String =
+                sqlx::query_scalar("SELECT description FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(description, "<div><u>Override</u></div>");
+        });
+    }
+
+    #[test]
+    fn imported_override_descriptions_are_sanitized_before_persistence() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let mut event = import_event("event-1", "Parent");
+            event.overrides = vec![CalendarImportOverride {
+                id: "override-1".to_string(),
+                recurrence_id: "2026-05-10".to_string(),
+                title: None,
+                start_time: None,
+                end_time: None,
+                description: Some("<p><script>alert(1)</script><u>Safe</u></p>".to_string()),
+                location: None,
+                url: None,
+                color: None,
+                status: None,
+                transparency: None,
+                visibility: None,
+                extended_properties: None,
+            }];
+            let mut tx = pool.begin().await.unwrap();
+
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &event)
+                .await
+                .unwrap();
+            insert_child_rows(&mut tx, "event-1", &event).await.unwrap();
+            tx.commit().await.unwrap();
+
+            let description: String = sqlx::query_scalar(
+                "SELECT description FROM calendar_event_overrides WHERE id = 'override-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(description, "<p><u>Safe</u></p>");
+        });
+    }
+
+    async fn in_memory_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+        pool
+    }
+
+    fn import_event(id: &str, description: &str) -> CalendarImportEvent {
+        CalendarImportEvent {
+            candidate_id: id.to_string(),
+            title: "Focus".to_string(),
+            start_time: "2026-05-09T10:00:00Z".to_string(),
+            end_time: "2026-05-09T11:00:00Z".to_string(),
+            timezone: "America/Monterrey".to_string(),
+            color: None,
+            description: description.to_string(),
+            rrule: None,
+            notifications: None,
+            exceptions: None,
+            repeat_until: None,
+            all_day: false,
+            location: String::new(),
+            url: String::new(),
+            transparency: "opaque".to_string(),
+            status: "confirmed".to_string(),
+            source_uid: Some(id.to_string()),
+            visibility: "public".to_string(),
+            priority: None,
+            categories: None,
+            geo: None,
+            sequence: 0,
+            rdate: None,
+            extended_properties: None,
+            organizer: None,
+            guest_can_modify: false,
+            guest_can_invite_others: true,
+            guest_can_see_other_guests: true,
+            attendees: Vec::new(),
+            alarms: Vec::new(),
+            overrides: Vec::new(),
+        }
     }
 }

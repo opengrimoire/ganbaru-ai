@@ -27,6 +27,7 @@ pub mod sqlite {
 #[macro_use]
 mod sqlite_row;
 mod benchmark_seed;
+mod calendar_description;
 mod calendar_events;
 mod calendar_import;
 mod calendar_reads;
@@ -45,7 +46,7 @@ mod vault;
 static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 static PLATFORM_LABEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 const DELAYED_RELAUNCH_MS_ENV: &str = "GANBARUAI_DELAYED_RELAUNCH_MS";
-const DELAYED_RELAUNCH_TARGET_ENV: &str = "GANBARUAI_DELAYED_RELAUNCH_TARGET";
+const DELAYED_RELAUNCH_MAX_MS: u64 = 10 * 60 * 1000;
 
 #[tauri::command]
 fn get_startup_elapsed_ms() -> u64 {
@@ -190,10 +191,11 @@ fn restart_app_after_delay(app: tauri::AppHandle, delay_ms: u64) -> Result<(), S
 
 fn spawn_delayed_relaunch_helper(delay_ms: u64) -> Result<(), String> {
     let helper_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let target_exe = relaunch_target_path(&helper_exe);
     std::process::Command::new(helper_exe)
-        .env(DELAYED_RELAUNCH_MS_ENV, delay_ms.to_string())
-        .env(DELAYED_RELAUNCH_TARGET_ENV, target_exe)
+        .env(
+            DELAYED_RELAUNCH_MS_ENV,
+            delay_ms.min(DELAYED_RELAUNCH_MAX_MS).to_string(),
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -205,30 +207,41 @@ fn spawn_delayed_relaunch_helper(delay_ms: u64) -> Result<(), String> {
 fn relaunch_target_path(fallback: &std::path::Path) -> PathBuf {
     #[cfg(target_os = "linux")]
     if let Ok(appimage) = std::env::var("APPIMAGE") {
-        if !appimage.trim().is_empty() {
-            return PathBuf::from(appimage);
+        let candidate = PathBuf::from(appimage);
+        if is_valid_relaunch_target(&candidate) {
+            return candidate;
         }
     }
     fallback.to_path_buf()
+}
+
+fn is_valid_relaunch_target(path: &std::path::Path) -> bool {
+    path.is_absolute() && path.file_name().is_some() && path.exists()
+}
+
+fn parse_delayed_relaunch_ms(raw: &str) -> Option<u64> {
+    raw.parse::<u64>()
+        .ok()
+        .map(|delay_ms| delay_ms.min(DELAYED_RELAUNCH_MAX_MS))
 }
 
 fn run_delayed_relaunch_helper_if_needed() -> bool {
     let Ok(delay_raw) = std::env::var(DELAYED_RELAUNCH_MS_ENV) else {
         return false;
     };
-    let Ok(delay_ms) = delay_raw.parse::<u64>() else {
+    let Some(delay_ms) = parse_delayed_relaunch_ms(&delay_raw) else {
         return false;
     };
-    let target = std::env::var(DELAYED_RELAUNCH_TARGET_ENV)
-        .map(PathBuf::from)
-        .or_else(|_| std::env::current_exe());
-    let Ok(target) = target else {
+    let Ok(helper_exe) = std::env::current_exe() else {
         return true;
     };
+    let target = relaunch_target_path(&helper_exe);
+    if !is_valid_relaunch_target(&target) {
+        return true;
+    }
     std::thread::sleep(std::time::Duration::from_millis(delay_ms));
     let _ = std::process::Command::new(target)
         .env_remove(DELAYED_RELAUNCH_MS_ENV)
-        .env_remove(DELAYED_RELAUNCH_TARGET_ENV)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -548,6 +561,33 @@ fn get_memory_report() -> MemoryReport {
             total_mb: 0.0,
             platform: platform_label(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn delayed_relaunch_delay_is_bounded() {
+        assert_eq!(parse_delayed_relaunch_ms("250"), Some(250));
+        assert_eq!(
+            parse_delayed_relaunch_ms(&(DELAYED_RELAUNCH_MAX_MS + 1).to_string()),
+            Some(DELAYED_RELAUNCH_MAX_MS)
+        );
+        assert_eq!(parse_delayed_relaunch_ms("not-a-number"), None);
+    }
+
+    #[test]
+    fn relaunch_target_validation_requires_existing_absolute_path() {
+        assert!(!is_valid_relaunch_target(std::path::Path::new(
+            "relative-binary"
+        )));
+        assert!(!is_valid_relaunch_target(std::path::Path::new(
+            "/definitely/not/ganbaruai"
+        )));
+        let current_exe = std::env::current_exe().expect("test executable path should exist");
+        assert!(is_valid_relaunch_target(&current_exe));
     }
 }
 

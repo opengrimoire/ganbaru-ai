@@ -1,6 +1,9 @@
 use serde::Deserialize;
 use tauri::{AppHandle, Runtime};
 
+use crate::calendar_description::{
+    sanitize_calendar_description_html, sanitize_optional_calendar_description,
+};
 use crate::db_path::connect_sqlite;
 
 const PALETTE_SIZE: i64 = 24;
@@ -211,6 +214,7 @@ pub async fn calendar_add_event<R: Runtime>(
     event: CalendarEventCreate,
 ) -> Result<(), String> {
     validate_event_create(&event)?;
+    let description = sanitize_calendar_description_html(&event.description);
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
@@ -232,7 +236,7 @@ pub async fn calendar_add_event<R: Runtime>(
     .bind(&event.timezone)
     .bind(&event.calendar_id)
     .bind(event.color)
-    .bind(&event.description)
+    .bind(&description)
     .bind(&event.rrule)
     .bind(&event.notifications)
     .bind(&event.repeat_until)
@@ -504,6 +508,7 @@ pub async fn calendar_detach_instance<R: Runtime>(
     .execute(&mut *tx)
     .await
     .map_err(|e| format!("insert detached event: {e}"))?;
+    sanitize_stored_event_description(&mut tx, &input.new_id).await?;
 
     copy_pomodoro_config(&mut tx, &input.parent_id, &input.new_id).await?;
     copy_attendees(&mut tx, &input.parent_id, &input.new_id).await?;
@@ -532,6 +537,7 @@ pub async fn calendar_split_series<R: Runtime>(
     input: CalendarSplitSeries,
 ) -> Result<(), String> {
     validate_split_series(&input)?;
+    let description_patch = sanitize_optional_calendar_description(&input.description_patch);
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
@@ -585,7 +591,7 @@ pub async fn calendar_split_series<R: Runtime>(
     .bind(&input.location)
     .bind(&input.transparency)
     .bind(&input.status)
-    .bind(&input.description_patch)
+    .bind(&description_patch)
     .bind(&input.url_patch)
     .bind(&input.now)
     .bind(&input.now)
@@ -593,6 +599,7 @@ pub async fn calendar_split_series<R: Runtime>(
     .execute(&mut *tx)
     .await
     .map_err(|e| format!("insert split series event: {e}"))?;
+    sanitize_stored_event_description(&mut tx, &input.new_id).await?;
 
     if let Some(config) = &input.pomodoro_config {
         insert_pomodoro_config(&mut tx, &input.new_id, config).await?;
@@ -743,7 +750,8 @@ async fn apply_update_field(
             update_optional_i64(tx, id, "color", *value).await
         }
         CalendarEventUpdateField::Description(value) => {
-            update_text(tx, id, "description", value).await
+            let description = sanitize_calendar_description_html(value);
+            update_text(tx, id, "description", &description).await
         }
         CalendarEventUpdateField::Rrule(value) => {
             update_optional_text(tx, id, "rrule", value.as_deref()).await
@@ -880,6 +888,26 @@ async fn update_optional_i64(
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("update calendar column {column}: {e}"))?;
+    Ok(())
+}
+
+async fn sanitize_stored_event_description(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+) -> Result<(), String> {
+    let description =
+        sqlx::query_scalar::<_, String>("SELECT description FROM calendar_events WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|e| format!("load copied calendar description: {e}"))?;
+    let Some(description) = description else {
+        return Ok(());
+    };
+    let sanitized = sanitize_calendar_description_html(&description);
+    if sanitized != description {
+        update_text(tx, id, "description", &sanitized).await?;
+    }
     Ok(())
 }
 
@@ -1157,9 +1185,9 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        filter_excluded_dates, validate_color, validate_event_create, validate_non_negative,
-        validate_positive, validate_priority, validate_update_field, CalendarEventCreate,
-        CalendarEventUpdateField,
+        apply_update_field, filter_excluded_dates, sanitize_stored_event_description,
+        validate_color, validate_event_create, validate_non_negative, validate_positive,
+        validate_priority, validate_update_field, CalendarEventCreate, CalendarEventUpdateField,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -1235,5 +1263,92 @@ mod tests {
             filter_excluded_dates(dates, Some("2026-05-08")),
             vec!["2026-05-07".to_string(), "2026-05-09".to_string()]
         );
+    }
+
+    #[test]
+    fn update_description_field_sanitizes_before_persistence() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(&pool, "event-1", "").await;
+            let mut tx = pool.begin().await.unwrap();
+
+            apply_update_field(
+                &mut tx,
+                "event-1",
+                &CalendarEventUpdateField::Description(
+                    "<p onclick=\"alert(1)\">Safe <a href=\"javascript:alert(1)\">bad</a></p>"
+                        .to_string(),
+                ),
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let description: String =
+                sqlx::query_scalar("SELECT description FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(description, "<p>Safe <a>bad</a></p>");
+        });
+    }
+
+    #[test]
+    fn copied_event_description_is_sanitized_after_split_or_detach_insert() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(
+                &pool,
+                "event-1",
+                "<div><img src=\"x\"><strong>Safe</strong></div>",
+            )
+            .await;
+            let mut tx = pool.begin().await.unwrap();
+
+            sanitize_stored_event_description(&mut tx, "event-1")
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let description: String =
+                sqlx::query_scalar("SELECT description FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(description, "<div><strong>Safe</strong></div>");
+        });
+    }
+
+    async fn in_memory_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+        pool
+    }
+
+    async fn insert_test_event(pool: &sqlx::SqlitePool, id: &str, description: &str) {
+        sqlx::query(
+            "INSERT INTO calendar_events
+               (id, title, start_time, end_time, timezone, calendar_id,
+                color, description, rrule, notifications, repeat_until,
+                all_day, location, url, transparency, status,
+                source_uid, visibility, priority, categories, geo,
+                sequence, rdate, extended_properties, organizer,
+                guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+                created_at, updated_at)
+             VALUES (?, '', '2026-05-09T10:00:00Z', '2026-05-09T11:00:00Z',
+                'America/Monterrey', 'local', NULL, ?, NULL, NULL, NULL,
+                0, '', '', 'opaque', 'confirmed',
+                NULL, 'public', NULL, NULL, NULL, 0, NULL, NULL, NULL,
+                0, 1, 1, '2026-05-09 10:00:00', '2026-05-09 10:00:00')",
+        )
+        .bind(id)
+        .bind(description)
+        .execute(pool)
+        .await
+        .unwrap();
     }
 }

@@ -71,7 +71,7 @@ Inside the panel, sections are split per concern:
 - **RecurrenceSection:** pick a preset (none, daily, weekdays, weekly, monthly, yearly) or open the advanced editor for custom RRULEs.
 - **NotificationsSection:** add and remove notification offsets.
 - **AttendeesSection:** add and remove attendees with role and RSVP status. Placeholder until sharing ships.
-- **DescriptionEditor:** rich text editor for the description, stored as sanitized HTML in the current implementation. The allowed subset is bold, italic, underline, ordered and unordered lists, list items, paragraphs or divs, line breaks, and HTTP(S) links. Markdown remains the long-term document format direction, but calendar descriptions are not markdown-backed yet.
+- **DescriptionEditor:** rich text editor for the description, stored as sanitized HTML in the current implementation. The frontend and Rust backend both enforce the same subset: bold, italic, underline, ordered and unordered lists, list items, paragraphs or divs, line breaks, and HTTP(S) links. The backend sanitizes descriptions before database writes and again before returning rows, so old stored values are cleaned on read. Markdown remains the long-term document format direction, but calendar descriptions are not markdown-backed yet.
 - **ColorPicker:** swatches for the 24 palette slots; hovering a swatch reveals its hex value.
 - **TimezoneSelector:** IANA timezone for the event. Defaults to the user's timezone.
 - **TimePicker:** start and end time. Hidden when all-day is on.

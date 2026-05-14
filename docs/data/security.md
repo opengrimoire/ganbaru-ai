@@ -48,7 +48,21 @@ File import and export flows are backend-owned commands. Rust opens the native d
 
 When a feature needs broader access (e.g. work environment management needs to launch other apps), the capability is added narrowly to the specific window or command, not granted globally.
 
-The Tauri webview itself is hardened: production CSP allows bundled local assets and Tauri IPC only, blocks object and frame sources, and keeps inline style allowance for current Svelte style attributes. The dev CSP additionally permits the local Vite server and HMR websocket. IPC channels are validated by command name and parameter shape.
+The Tauri webview itself is hardened: production CSP allows bundled local assets and Tauri IPC only, blocks object and frame sources, disallows inline scripts, and currently allows inline styles for Svelte layout, theme, and calendar geometry bindings. The dev CSP remains more permissive for Vite and HMR, including local dev origins and `unsafe-eval`. IPC channels are validated by command name and parameter shape.
+
+## Current audit posture
+
+The dependency refresh on 2026-05-14 updated the Tauri family to the latest compatible 2.x releases available to this workspace (`tauri` 2.11.1, `tauri-build` 2.6.1, `tauri-runtime` 2.11.1, `tauri-runtime-wry` 2.11.1, `tauri-utils` 2.9.1, `tauri-plugin-dialog` 2.7.1, `tauri-plugin-fs` 2.5.1, and related windowing crates). `cargo audit` reports no vulnerability findings, but it still reports allowed upstream warnings that are not removed by safe updates inside the current Tauri, Wry, GTK3, and parser dependency families:
+
+- `RUSTSEC-2024-0411`, `RUSTSEC-2024-0412`, `RUSTSEC-2024-0413`, `RUSTSEC-2024-0414`, `RUSTSEC-2024-0415`, `RUSTSEC-2024-0416`, `RUSTSEC-2024-0417`, `RUSTSEC-2024-0418`, `RUSTSEC-2024-0419`, and `RUSTSEC-2024-0420`: gtk-rs GTK3 bindings are unmaintained. These remain through the Linux Tauri/Wry WebKit stack and the app's direct GTK overlay code (`gtk` and `gdk`). They should be removed when the upstream Tauri/Wry Linux stack and the local overlay implementation can move to maintained GTK4 bindings without replacing the runtime with a lower-trust alternative.
+- `RUSTSEC-2024-0429`: `glib` 0.18.5 has an unsound iterator implementation. This remains through GTK3/WebKit dependencies. The app does not directly use the affected `VariantStrIter` APIs. Remove this warning when the GTK/WebKit stack reaches a `glib` release with the fix.
+- `RUSTSEC-2024-0370`: `proc-macro-error` is unmaintained. This remains through `gtk3-macros` and `glib-macros`. Remove it when the GTK stack no longer pulls that macro crate.
+- `RUSTSEC-2025-0057`: `fxhash` is unmaintained. This remains through `tauri-utils` → `kuchikiki` → `selectors`. Remove it when Tauri's utility parser stack replaces that dependency.
+- `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098`, and `RUSTSEC-2025-0100`: `unic-*` crates are unmaintained. These remain through `tauri-utils` → `urlpattern`. Remove them when Tauri updates that URL pattern dependency path.
+- `RUSTSEC-2026-0097`: `rand` 0.7.3 is unsound when a custom logger reenters thread-local RNG calls during reseeding. The remaining path is `tauri-utils` → `kuchikiki` → `selectors` → `phf_codegen` → `rand` 0.7.3. GanbaruAI does not install a custom logger that uses `rand::thread_rng`; remove this warning when the upstream parser chain no longer depends on `rand` 0.7.
+- `uds_windows` 1.2.0 is yanked through `notify-rust` → `zbus`. It is a transitive Windows crate in the notification stack. Remove it when `notify-rust` or `zbus` releases a compatible path without the yanked package.
+
+The npm audit on 2026-05-14 reported no known vulnerabilities at the moderate level.
 
 ## No phone home
 

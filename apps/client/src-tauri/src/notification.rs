@@ -1,6 +1,10 @@
 use notify_rust::{Hint, Notification};
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
+use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager};
 
 #[derive(Clone, Serialize)]
@@ -8,30 +12,67 @@ struct AddTimePayload {
     seconds: u32,
 }
 
-#[cfg(target_os = "linux")]
-fn gsettings_get(schema: &str, key: &str) -> Option<String> {
-    std::process::Command::new("gsettings")
-        .args(["get", schema, key])
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+fn fixed_command_output(program: &str, args: &[&str], max_bytes: usize) -> Result<String, String> {
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| format!("{program} stdout pipe was unavailable"))?;
+    let mut bytes = Vec::with_capacity(max_bytes.min(4096) + 1);
+    let mut limited = (&mut stdout).take((max_bytes + 1) as u64);
+    std::io::Read::read_to_end(&mut limited, &mut bytes).map_err(|e| e.to_string())?;
+    if bytes.len() > max_bytes {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(format!("{program} output exceeded {max_bytes} bytes"));
+    }
+    let status = child.wait().map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err(format!("{program} exited with status {status}"));
+    }
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
+fn fixed_command_status(program: &str, args: &[&str]) -> bool {
+    Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 #[cfg(target_os = "linux")]
-fn gsettings_set(schema: &str, key: &str, value: &str) {
-    match std::process::Command::new("gsettings")
-        .args(["set", schema, key, value])
-        .output()
-    {
-        Ok(output) => {
-            if !output.status.success() {
-                eprintln!(
-                    "gsettings set {schema} {key} failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-        }
-        Err(e) => eprintln!("gsettings command failed: {e}"),
+fn gsettings_get(schema: &str, key: &str) -> Option<String> {
+    fixed_command_output("gsettings", &["get", schema, key], 4096)
+        .ok()
+        .map(|stdout| stdout.trim().to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn gsettings_set(schema: &str, key: &str, value: &str) -> Result<(), String> {
+    if !is_allowed_gsettings_restore_target(schema, key) {
+        return Err(format!(
+            "refusing to write unknown gsettings key {schema} {key}"
+        ));
+    }
+    if !valid_shortcut_restore_value(value) {
+        return Err(format!(
+            "refusing to write invalid gsettings value for {schema} {key}"
+        ));
+    }
+    if fixed_command_status("gsettings", &["set", schema, key, value]) {
+        Ok(())
+    } else {
+        Err(format!("gsettings set {schema} {key} failed"))
     }
 }
 
@@ -46,17 +87,31 @@ struct SavedShortcuts {
 
 #[cfg(target_os = "linux")]
 const SHORTCUT_RESTORE_FILE: &str = "gnome-shortcuts-restore.json";
+#[cfg(target_os = "linux")]
+const SHORTCUT_RESTORE_MAX_BYTES: u64 = 256 * 1024;
+#[cfg(target_os = "linux")]
+const SHORTCUT_RESTORE_VALUE_MAX_BYTES: usize = 2048;
+#[cfg(target_os = "linux")]
+const SHORTCUT_RESTORE_DISABLED_MAX_ITEMS: usize = 512;
+#[cfg(target_os = "linux")]
+const GNOME_KEYBINDING_SCHEMAS: [&str; 4] = [
+    "org.gnome.desktop.wm.keybindings",
+    "org.gnome.shell.keybindings",
+    "org.gnome.mutter.keybindings",
+    "org.gnome.settings-daemon.plugins.media-keys",
+];
+#[cfg(target_os = "linux")]
+const GNOME_SPECIAL_RESTORE_KEYS: [(&str, &str); 2] = [
+    ("org.gnome.mutter", "overlay-key"),
+    ("org.gnome.shell.extensions.dash-to-dock", "hot-keys"),
+];
 
 #[cfg(target_os = "linux")]
-fn gsettings_list_recursively(schema: &str) -> Vec<(String, String)> {
-    let output = match std::process::Command::new("gsettings")
-        .args(["list-recursively", schema])
-        .output()
-    {
-        Ok(o) => o,
-        Err(_) => return Vec::new(),
-    };
-    let stdout = String::from_utf8_lossy(&output.stdout);
+fn gsettings_list_recursively(schema: &str) -> Result<Vec<(String, String)>, String> {
+    if !is_known_keybinding_schema(schema) {
+        return Err(format!("unknown gsettings schema {schema}"));
+    }
+    let stdout = fixed_command_output("gsettings", &["list-recursively", schema], 64 * 1024)?;
     let mut result = Vec::new();
     for line in stdout.lines() {
         // Format: "schema key value..."
@@ -72,7 +127,138 @@ fn gsettings_list_recursively(schema: &str) -> Vec<(String, String)> {
         };
         result.push((key, value));
     }
-    result
+    Ok(result)
+}
+
+#[cfg(target_os = "linux")]
+fn is_known_keybinding_schema(schema: &str) -> bool {
+    GNOME_KEYBINDING_SCHEMAS.contains(&schema)
+}
+
+#[cfg(target_os = "linux")]
+fn is_allowed_gsettings_restore_target(schema: &str, key: &str) -> bool {
+    GNOME_SPECIAL_RESTORE_KEYS.contains(&(schema, key))
+        || (is_known_keybinding_schema(schema) && valid_gsettings_key_name(key))
+}
+
+#[cfg(target_os = "linux")]
+fn valid_gsettings_key_name(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 128
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+#[cfg(target_os = "linux")]
+fn valid_shortcut_restore_value(value: &str) -> bool {
+    !value.as_bytes().contains(&0) && value.len() <= SHORTCUT_RESTORE_VALUE_MAX_BYTES
+}
+
+#[cfg(target_os = "linux")]
+fn current_shortcut_schema_keys() -> Result<HashMap<String, HashSet<String>>, String> {
+    let mut keys = HashMap::new();
+    for schema in GNOME_KEYBINDING_SCHEMAS {
+        let schema_keys = gsettings_list_recursively(schema)?
+            .into_iter()
+            .map(|(key, _)| key)
+            .collect::<HashSet<_>>();
+        keys.insert(schema.to_string(), schema_keys);
+    }
+    Ok(keys)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_saved_shortcuts(
+    saved: &SavedShortcuts,
+    known_keys: &HashMap<String, HashSet<String>>,
+) -> Result<(), String> {
+    if !valid_shortcut_restore_value(&saved.overlay_key) {
+        return Err("invalid GNOME overlay key restore value".to_string());
+    }
+    if !valid_shortcut_restore_value(&saved.dock_hotkeys) {
+        return Err("invalid GNOME dock hotkeys restore value".to_string());
+    }
+    if saved.disabled.len() > SHORTCUT_RESTORE_DISABLED_MAX_ITEMS {
+        return Err("GNOME shortcut restore file has too many disabled keys".to_string());
+    }
+    for (schema, key, value) in &saved.disabled {
+        if !is_known_keybinding_schema(schema) {
+            return Err(format!("unknown GNOME shortcut schema {schema}"));
+        }
+        if !valid_gsettings_key_name(key) {
+            return Err(format!("invalid GNOME shortcut key name {key}"));
+        }
+        if !known_keys
+            .get(schema)
+            .is_some_and(|schema_keys| schema_keys.contains(key))
+        {
+            return Err(format!("unknown GNOME shortcut key {schema} {key}"));
+        }
+        if !valid_shortcut_restore_value(value) {
+            return Err(format!(
+                "invalid GNOME shortcut restore value for {schema} {key}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn write_owner_only_file(path: &Path, contents: &str) -> Result<(), String> {
+    #[cfg(unix)]
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+
+    let mut file = options.open(path).map_err(|e| e.to_string())?;
+    std::io::Write::write_all(&mut file, contents.as_bytes()).map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+
+    #[cfg(unix)]
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn read_saved_shortcuts_file(path: &Path) -> Result<SavedShortcuts, String> {
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if metadata.len() > SHORTCUT_RESTORE_MAX_BYTES {
+        return Err("GNOME shortcut restore file is too large".to_string());
+    }
+    let json = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn read_saved_shortcuts_file_or_clear(path: &Path) -> Result<SavedShortcuts, String> {
+    match read_saved_shortcuts_file(path) {
+        Ok(saved) => Ok(saved),
+        Err(err) => {
+            clear_shortcut_restore(path);
+            Err(err)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_saved_shortcuts_or_clear(
+    path: &Path,
+    saved: SavedShortcuts,
+    known_keys: &HashMap<String, HashSet<String>>,
+) -> Result<SavedShortcuts, String> {
+    match validate_saved_shortcuts(&saved, known_keys) {
+        Ok(()) => Ok(saved),
+        Err(err) => {
+            clear_shortcut_restore(path);
+            Err(err)
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -80,15 +266,12 @@ impl SavedShortcuts {
     fn capture() -> Self {
         let mut disabled = Vec::new();
 
-        // Scan all keybinding schemas for any binding using Super or Alt
-        let schemas = [
-            "org.gnome.desktop.wm.keybindings",
-            "org.gnome.shell.keybindings",
-            "org.gnome.mutter.keybindings",
-            "org.gnome.settings-daemon.plugins.media-keys",
-        ];
-        for schema in &schemas {
-            for (key, value) in gsettings_list_recursively(schema) {
+        // Scan keybinding schemas for bindings using Super or Alt.
+        for schema in GNOME_KEYBINDING_SCHEMAS {
+            let Ok(entries) = gsettings_list_recursively(schema) else {
+                continue;
+            };
+            for (key, value) in entries {
                 if value.contains("Super") || value.contains("<Alt>") {
                     disabled.push((schema.to_string(), key.clone(), value));
                 }
@@ -112,18 +295,26 @@ impl SavedShortcuts {
 
     fn disable(&self) {
         for (schema, key, _) in &self.disabled {
-            gsettings_set(schema, key, "['']");
+            if let Err(err) = gsettings_set(schema, key, "['']") {
+                eprintln!("failed to disable GNOME shortcut {schema} {key}: {err}");
+            }
         }
-        gsettings_set("org.gnome.mutter", "overlay-key", "");
-        gsettings_set(
+        if let Err(err) = gsettings_set("org.gnome.mutter", "overlay-key", "") {
+            eprintln!("failed to disable GNOME overlay key: {err}");
+        }
+        if let Err(err) = gsettings_set(
             "org.gnome.shell.extensions.dash-to-dock",
             "hot-keys",
             "false",
-        );
+        ) {
+            eprintln!("failed to disable GNOME dock hotkeys: {err}");
+        }
     }
 
     fn save_and_disable(app: &tauri::AppHandle) -> Result<Self, String> {
         let saved = Self::capture();
+        let known_keys = current_shortcut_schema_keys()?;
+        validate_saved_shortcuts(&saved, &known_keys)?;
         let path = shortcut_restore_path(app)?;
         persist_shortcut_restore(&path, &saved)?;
         saved.disable();
@@ -145,21 +336,33 @@ fn persist_shortcut_restore(path: &Path, saved: &SavedShortcuts) -> Result<(), S
     }
     let tmp_path = path.with_extension("json.tmp");
     let json = serde_json::to_string(saved).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp_path, json).map_err(|e| e.to_string())?;
+    write_owner_only_file(&tmp_path, &json)?;
     std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn restore_shortcuts(saved: &SavedShortcuts) {
-    gsettings_set("org.gnome.mutter", "overlay-key", &saved.overlay_key);
-    gsettings_set(
+    if let Err(err) = gsettings_set("org.gnome.mutter", "overlay-key", &saved.overlay_key) {
+        eprintln!("failed to restore GNOME overlay key: {err}");
+    }
+    if let Err(err) = gsettings_set(
         "org.gnome.shell.extensions.dash-to-dock",
         "hot-keys",
         &saved.dock_hotkeys,
-    );
+    ) {
+        eprintln!("failed to restore GNOME dock hotkeys: {err}");
+    }
     for (schema, key, val) in &saved.disabled {
-        gsettings_set(schema, key, val);
+        if let Err(err) = gsettings_set(schema, key, val) {
+            eprintln!("failed to restore GNOME shortcut {schema} {key}: {err}");
+        }
     }
 }
 
@@ -178,8 +381,9 @@ pub fn restore_stale_shortcuts(app: &tauri::AppHandle) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
-    let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let saved: SavedShortcuts = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    let saved = read_saved_shortcuts_file_or_clear(&path)?;
+    let known_keys = current_shortcut_schema_keys()?;
+    let saved = validate_saved_shortcuts_or_clear(&path, saved, &known_keys)?;
     restore_shortcuts(&saved);
     clear_shortcut_restore(&path);
     Ok(())
@@ -206,8 +410,9 @@ where
 /// Inhibit screensaver/idle via D-Bus, returns cookie for uninhibit
 #[cfg(target_os = "linux")]
 fn screensaver_inhibit() -> Option<u32> {
-    let output = std::process::Command::new("gdbus")
-        .args([
+    let stdout = fixed_command_output(
+        "gdbus",
+        &[
             "call",
             "--session",
             "--dest",
@@ -218,11 +423,11 @@ fn screensaver_inhibit() -> Option<u32> {
             "org.freedesktop.ScreenSaver.Inhibit",
             "GanbaruAI",
             "Break timer active",
-        ])
-        .output()
-        .ok()?;
+        ],
+        1024,
+    )
+    .ok()?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
     // Output format: "(uint32 1234,)"
     stdout
         .trim()
@@ -234,8 +439,10 @@ fn screensaver_inhibit() -> Option<u32> {
 
 #[cfg(target_os = "linux")]
 fn screensaver_uninhibit(cookie: u32) {
-    let _ = std::process::Command::new("gdbus")
-        .args([
+    let cookie = cookie.to_string();
+    let _ = fixed_command_status(
+        "gdbus",
+        &[
             "call",
             "--session",
             "--dest",
@@ -244,14 +451,24 @@ fn screensaver_uninhibit(cookie: u32) {
             "/org/freedesktop/ScreenSaver",
             "--method",
             "org.freedesktop.ScreenSaver.UnInhibit",
-            &cookie.to_string(),
-        ])
-        .output();
+            &cookie,
+        ],
+    );
 }
 
 #[cfg(target_os = "linux")]
 fn format_remaining(secs: u64) -> String {
     format!("{:02}:{:02}", secs / 60, secs % 60)
+}
+
+#[cfg(target_os = "linux")]
+fn set_markup_text(label: &gtk::Label, font: &str, color: &str, text: &str) {
+    use gtk::prelude::LabelExt;
+
+    let escaped = gtk::glib::markup_escape_text(text);
+    label.set_markup(&format!(
+        "<span font='{font}' foreground='{color}'>{escaped}</span>"
+    ));
 }
 
 #[cfg(target_os = "linux")]
@@ -300,9 +517,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
         // Timer (centered)
         let timer_label = gtk::Label::new(None);
         let display_str = format_remaining(break_seconds as u64);
-        timer_label.set_markup(&format!(
-            "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
-        ));
+        set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
 
         let timer_container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         timer_container.set_halign(gtk::Align::Center);
@@ -443,9 +658,14 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                         let total = added + 1;
                         let remain = 5 - total;
                         if remain > 0 {
-                            exh.set_markup(&format!(
-                                "<span font='Sans 11' foreground='#9CA3AF'>Break extended by {total} min \u{2014} Press Ctrl+Shift+Space to add more ({remain} left, not recommended)</span>"
-                            ));
+                            set_markup_text(
+                                &exh,
+                                "Sans 11",
+                                "#9CA3AF",
+                                &format!(
+                                    "Break extended by {total} min, press Ctrl+Shift+Space to add more ({remain} left, not recommended)"
+                                ),
+                            );
                         } else {
                             exh.set_markup(
                                 "<span font='Sans 11' foreground='#9CA3AF'>Break extended by 5 minutes (maximum reached)</span>"
@@ -456,9 +676,14 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                     let count = esc_press.get() + 1;
                     esc_press.set(count);
                     let remaining = 3 - count;
-                    eh.set_markup(&format!(
-                        "<span font='Sans 11' foreground='#9CA3AF'>Press {remaining}x Esc to skip the break entirely (not recommended)</span>"
-                    ));
+                    set_markup_text(
+                        &eh,
+                        "Sans 11",
+                        "#9CA3AF",
+                        &format!(
+                            "Press {remaining}x Esc to skip the break entirely (not recommended)"
+                        ),
+                    );
                     if count >= 3 {
                         esc_press.set(0);
                         let _ = app.emit("pomodoro-skip-break", ());
@@ -519,9 +744,14 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                         let count = esc_press.get() + 1;
                         esc_press.set(count);
                         let remaining = 3 - count;
-                        eh.set_markup(&format!(
-                            "<span font='Sans 11' foreground='#9CA3AF'>Press {remaining}x Esc to skip the break entirely (not recommended)</span>"
-                        ));
+                        set_markup_text(
+                            &eh,
+                            "Sans 11",
+                            "#9CA3AF",
+                            &format!(
+                                "Press {remaining}x Esc to skip the break entirely (not recommended)"
+                            ),
+                        );
                         if count >= 3 {
                             esc_press.set(0);
                             let _ = app.emit("pomodoro-skip-break", ());
@@ -607,9 +837,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                 }
                 if !is_hidden.get() {
                     let display_str = format_remaining(secs);
-                    timer_label.set_markup(&format!(
-                        "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
-                    ));
+                    set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
                 }
                 gtk::glib::ControlFlow::Continue
             });
@@ -641,9 +869,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
 
                     let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
                     let display_str = format_remaining(remaining.as_secs());
-                    timer_label.set_markup(&format!(
-                        "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
-                    ));
+                    set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
                     for (idx, sw) in sec.iter() {
                         sw.show_all();
                         sw.fullscreen_on_monitor(&screen_ref, *idx);
@@ -716,9 +942,7 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
         let timer_label = gtk::Label::new(None);
         let elapsed = std::rc::Rc::new(std::cell::Cell::new(idle_seconds as u64));
         let display_str = format_remaining(idle_seconds as u64);
-        timer_label.set_markup(&format!(
-            "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
-        ));
+        set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
 
         let idle_label = gtk::Label::new(None);
         idle_label.set_markup("<span font='Sans 14' foreground='#9CA3AF'>idle</span>");
@@ -876,21 +1100,16 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
                 let e = elapsed.get() + 1;
                 elapsed.set(e);
                 let display_str = format_remaining(e);
-                timer_label.set_markup(&format!(
-                    "<span font='Sans Light 72' foreground='#FFFFFF'>{display_str}</span>"
-                ));
+                set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
                 // Play alert every 15 seconds
                 if e.is_multiple_of(15) {
                     std::thread::spawn(|| {
-                        let ok = std::process::Command::new("canberra-gtk-play")
-                            .args(["--id", "bell"])
-                            .status()
-                            .map(|s| s.success())
-                            .unwrap_or(false);
+                        let ok = fixed_command_status("canberra-gtk-play", &["--id", "bell"]);
                         if !ok {
-                            let _ = std::process::Command::new("paplay")
-                                .arg("/usr/share/sounds/freedesktop/stereo/bell.oga")
-                                .status();
+                            let _ = fixed_command_status(
+                                "paplay",
+                                &["/usr/share/sounds/freedesktop/stereo/bell.oga"],
+                            );
                         }
                     });
                 }
@@ -900,15 +1119,12 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
 
         // Play alert sound immediately
         std::thread::spawn(|| {
-            let ok = std::process::Command::new("canberra-gtk-play")
-                .args(["--id", "bell"])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
+            let ok = fixed_command_status("canberra-gtk-play", &["--id", "bell"]);
             if !ok {
-                let _ = std::process::Command::new("paplay")
-                    .arg("/usr/share/sounds/freedesktop/stereo/bell.oga")
-                    .status();
+                let _ = fixed_command_status(
+                    "paplay",
+                    &["/usr/share/sounds/freedesktop/stereo/bell.oga"],
+                );
             }
         });
 
@@ -940,8 +1156,9 @@ pub fn show_idle_overlay(_app: tauri::AppHandle, _idle_seconds: u32) -> Result<b
 
 #[cfg(target_os = "linux")]
 fn get_idle_time_ms() -> Option<u64> {
-    let output = std::process::Command::new("gdbus")
-        .args([
+    let stdout = fixed_command_output(
+        "gdbus",
+        &[
             "call",
             "--session",
             "--dest",
@@ -950,11 +1167,11 @@ fn get_idle_time_ms() -> Option<u64> {
             "/org/gnome/Mutter/IdleMonitor/Core",
             "--method",
             "org.gnome.Mutter.IdleMonitor.GetIdletime",
-        ])
-        .output()
-        .ok()?;
+        ],
+        1024,
+    )
+    .ok()?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
     // Output format: "(uint64 12345,)"
     stdout
         .trim()
@@ -1015,12 +1232,9 @@ fn get_idle_time_with_fallback() -> u64 {
         return ms;
     }
     // Fallback: xprintidle (works on X11 with any desktop)
-    if let Ok(output) = std::process::Command::new("xprintidle").output() {
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Ok(ms) = stdout.trim().parse::<u64>() {
-                return ms;
-            }
+    if let Ok(stdout) = fixed_command_output("xprintidle", &[], 128) {
+        if let Ok(ms) = stdout.trim().parse::<u64>() {
+            return ms;
         }
     }
     0
@@ -1063,22 +1277,21 @@ fn get_idle_time_ms_windows() -> u64 {
 fn is_webcam_in_use_windows() -> bool {
     // Check via PowerShell whether any process is using the camera.
     // Windows 10+ tracks camera usage in the registry.
-    let output = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile", "-NonInteractive", "-Command",
+    let output = fixed_command_output(
+        "powershell",
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
             r#"Get-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam\*\*' -Name LastUsedTimeStop -ErrorAction SilentlyContinue | Where-Object { $_.LastUsedTimeStop -eq 0 } | Measure-Object | Select-Object -ExpandProperty Count"#,
-        ])
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let count = String::from_utf8_lossy(&out.stdout)
-                .trim()
-                .parse::<u32>()
-                .unwrap_or(0);
-            count > 0
-        }
-        _ => false,
-    }
+        ],
+        128,
+    );
+    output
+        .ok()
+        .and_then(|stdout| stdout.trim().parse::<u32>().ok())
+        .unwrap_or(0)
+        > 0
 }
 
 #[cfg(target_os = "windows")]
@@ -1095,14 +1308,11 @@ pub fn get_idle_status() -> IdleStatus {
 #[cfg(target_os = "macos")]
 fn get_idle_time_ms_macos() -> u64 {
     // Read HIDIdleTime from IOKit via ioreg. Returns nanoseconds of idle time.
-    let output = match std::process::Command::new("ioreg")
-        .args(["-c", "IOHIDSystem", "-d", "4", "-S"])
-        .output()
-    {
-        Ok(o) => o,
-        Err(_) => return 0,
-    };
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout =
+        match fixed_command_output("ioreg", &["-c", "IOHIDSystem", "-d", "4", "-S"], 256 * 1024) {
+            Ok(stdout) => stdout,
+            Err(_) => return 0,
+        };
     for line in stdout.lines() {
         if let Some(pos) = line.find("\"HIDIdleTime\"") {
             // Format: "HIDIdleTime" = 1234567890
@@ -1121,16 +1331,9 @@ fn get_idle_time_ms_macos() -> u64 {
 fn is_webcam_in_use_macos() -> bool {
     // On macOS, VDCAssistant or AppleCameraAssistant runs when the camera is active.
     // On Apple Silicon Macs, the process may be called "appleh13camerad".
-    let output = std::process::Command::new("bash")
-        .args([
-            "-c",
-            "pgrep -x 'VDCAssistant|AppleCameraAssistant|appleh13camerad'",
-        ])
-        .output();
-    match output {
-        Ok(out) => out.status.success(),
-        Err(_) => false,
-    }
+    ["VDCAssistant", "AppleCameraAssistant", "appleh13camerad"]
+        .iter()
+        .any(|process_name| fixed_command_status("pgrep", &["-x", process_name]))
 }
 
 #[cfg(target_os = "macos")]
@@ -1167,33 +1370,29 @@ pub fn play_alert_sound() {
         #[cfg(target_os = "linux")]
         {
             // Try canberra-gtk-play first (most desktop environments), then paplay
-            let ok = std::process::Command::new("canberra-gtk-play")
-                .args(["--id", "bell"])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
+            let ok = fixed_command_status("canberra-gtk-play", &["--id", "bell"]);
             if !ok {
-                let _ = std::process::Command::new("paplay")
-                    .arg("/usr/share/sounds/freedesktop/stereo/bell.oga")
-                    .status();
+                let _ = fixed_command_status(
+                    "paplay",
+                    &["/usr/share/sounds/freedesktop/stereo/bell.oga"],
+                );
             }
         }
         #[cfg(target_os = "windows")]
         {
-            let _ = std::process::Command::new("powershell")
-                .args([
+            let _ = fixed_command_status(
+                "powershell",
+                &[
                     "-NoProfile",
                     "-NonInteractive",
                     "-Command",
                     "[System.Media.SystemSounds]::Exclamation.Play()",
-                ])
-                .status();
+                ],
+            );
         }
         #[cfg(target_os = "macos")]
         {
-            let _ = std::process::Command::new("afplay")
-                .arg("/System/Library/Sounds/Glass.aiff")
-                .status();
+            let _ = fixed_command_status("afplay", &["/System/Library/Sounds/Glass.aiff"]);
         }
     });
 }
@@ -1237,6 +1436,112 @@ pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: S
             }
         }
     });
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use std::collections::{HashMap, HashSet};
+
+    fn known_keys() -> HashMap<String, HashSet<String>> {
+        HashMap::from([(
+            "org.gnome.desktop.wm.keybindings".to_string(),
+            HashSet::from(["close".to_string(), "switch-applications".to_string()]),
+        )])
+    }
+
+    fn valid_saved_shortcuts() -> SavedShortcuts {
+        SavedShortcuts {
+            overlay_key: "'Super_L'".to_string(),
+            dock_hotkeys: "true".to_string(),
+            disabled: vec![(
+                "org.gnome.desktop.wm.keybindings".to_string(),
+                "close".to_string(),
+                "['<Alt>F4']".to_string(),
+            )],
+        }
+    }
+
+    fn unique_restore_file(name: &str) -> PathBuf {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock is before Unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "ganbaruai-{name}-{}-{now}.json",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn restore_validation_accepts_known_schema_and_key() {
+        assert!(validate_saved_shortcuts(&valid_saved_shortcuts(), &known_keys()).is_ok());
+    }
+
+    #[test]
+    fn restore_validation_rejects_unknown_schema() {
+        let mut saved = valid_saved_shortcuts();
+        saved.disabled[0].0 = "org.gnome.unknown.keybindings".to_string();
+
+        assert!(validate_saved_shortcuts(&saved, &known_keys()).is_err());
+    }
+
+    #[test]
+    fn restore_validation_rejects_unknown_key() {
+        let mut saved = valid_saved_shortcuts();
+        saved.disabled[0].1 = "launch-terminal".to_string();
+
+        assert!(validate_saved_shortcuts(&saved, &known_keys()).is_err());
+    }
+
+    #[test]
+    fn restore_validation_rejects_oversized_values() {
+        let mut saved = valid_saved_shortcuts();
+        saved.disabled[0].2 = "x".repeat(SHORTCUT_RESTORE_VALUE_MAX_BYTES + 1);
+
+        assert!(validate_saved_shortcuts(&saved, &known_keys()).is_err());
+    }
+
+    #[test]
+    fn restore_validation_rejects_unsafe_command_targets() {
+        assert!(is_allowed_gsettings_restore_target(
+            "org.gnome.desktop.wm.keybindings",
+            "close"
+        ));
+        assert!(!is_allowed_gsettings_restore_target(
+            "org.gnome.desktop.wm.keybindings",
+            "Close"
+        ));
+        assert!(!is_allowed_gsettings_restore_target(
+            "org.gnome.unknown.keybindings",
+            "close"
+        ));
+    }
+
+    #[test]
+    fn malformed_restore_file_is_deleted_without_validation() {
+        let path = unique_restore_file("malformed-shortcuts");
+        std::fs::write(&path, "{not valid json").expect("restore fixture should be writable");
+
+        assert!(read_saved_shortcuts_file_or_clear(&path).is_err());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn invalid_restore_file_is_deleted_before_apply() {
+        let path = unique_restore_file("invalid-shortcuts");
+        let mut saved = valid_saved_shortcuts();
+        saved.disabled[0].1 = "unknown-key".to_string();
+        std::fs::write(
+            &path,
+            serde_json::to_string(&saved).expect("restore fixture should serialize"),
+        )
+        .expect("restore fixture should be writable");
+
+        let saved = read_saved_shortcuts_file_or_clear(&path).expect("fixture should parse");
+        assert!(validate_saved_shortcuts_or_clear(&path, saved, &known_keys()).is_err());
+        assert!(!path.exists());
+    }
 }
 
 fn focus_main_window(app: tauri::AppHandle) {
