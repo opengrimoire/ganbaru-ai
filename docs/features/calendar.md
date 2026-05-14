@@ -139,6 +139,8 @@ The Settings modal exposes a "Calendars" section (under the "Data" group) that l
 
 Re-import idempotence is driven by RFC 5545 `SEQUENCE`. On a re-import, an event with a lower sequence than the stored row is skipped, equal-or-higher overwrites in place (replacing all child rows in lockstep). Events without a `SEQUENCE` default to 0 on both sides, so the behavior degrades to "always overwrite on re-import", which is what the major calendars do anyway.
 
+The complete iCalendar compatibility plan lives in `docs/interop/icalendar/`. It defines the target standards scope, the preservation and normalized projection architecture, fixture strategy, client-specific test plans, migration path, and performance budget for moving from the current pragmatic `.ics` support to broad RFC-compatible import and export.
+
 Recurring timed exports keep recurrence identifiers in the same time model as the master event. If a Google-style recurring event uses `TZID`, `DTSTART`, `DTEND`, `EXDATE`, and override `RECURRENCE-ID` all use that zone and the original wall-clock start time. UTC recurring events use UTC `Z` values. All-day recurring events use date-only `VALUE=DATE` values.
 
 The serializer emits CRLF line endings, folds content lines by UTF-8 octets, escapes TEXT values, and quotes/caret-escapes parameter values such as attendee and organizer `CN`.

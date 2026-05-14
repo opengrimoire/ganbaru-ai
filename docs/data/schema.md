@@ -64,6 +64,8 @@ Why `recurrence_rule` is plain text (the RRULE string) instead of decomposed col
 
 Per-instance overrides live in `calendar_event_overrides` (one row per detached or modified instance). The `recurrence_id` column is a UTC ISO 8601 instant identifying the original DTSTART of the overridden occurrence (the iCalendar `RECURRENCE-ID` field). Matching is by instant, not by wall clock, so a timed override survives DST transitions and zone changes intact. All-day override start and end values use the same floating date convention as all-day event rows: the date portion is canonical and no zone conversion is applied on read.
 
+The full iCalendar compatibility data model is planned in `docs/interop/icalendar/data-model.md`. That plan keeps raw iCalendar components and properties available for lossless round trips while projecting the subset the app understands into these normalized calendar tables.
+
 Why `pomodoro_config` is JSON instead of FK to a `pomodoro_configs` table: the config is per-event, immutable after the event is created (changing it ends the active run, see `algorithms/pomodoro-state-machine.md`), and small. A separate table earns no normalization benefit and adds a join to every event read.
 
 ### `calendar_events_archive`
