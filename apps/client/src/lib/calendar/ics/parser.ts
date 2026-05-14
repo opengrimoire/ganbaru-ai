@@ -1,4 +1,5 @@
 import ICAL from "ical.js";
+import { Temporal } from "@js-temporal/polyfill";
 import type {
 	CalendarEvent,
 	EventAlarm,

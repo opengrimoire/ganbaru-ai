@@ -20,6 +20,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { Temporal } from "@js-temporal/polyfill";
 import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import { flushConfig, getConfigKey, setConfigKey } from "$lib/vault/config";
 

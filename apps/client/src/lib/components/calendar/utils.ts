@@ -4,6 +4,7 @@ import type {
   PositionedAllDayEvent,
   PositionedEvent,
 } from "./types";
+import { Temporal } from "@js-temporal/polyfill";
 import { FALLBACK_COLOR_INDEX, PALETTE_SIZE } from "./types";
 import {
   getSmoothScrollDelta,

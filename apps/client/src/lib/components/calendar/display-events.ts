@@ -3,6 +3,7 @@
  * No store mutation, no fake IDs. Events keep their real IDs throughout.
  */
 
+import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent, RecurrenceConfig, RecurringScope } from "./types";
 import type { CreatePreview } from "./edit-session.svelte";
 import { expandRecurring, parseYMD, fmtYMD } from "./recurrence";

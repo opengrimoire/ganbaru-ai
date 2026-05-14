@@ -13,6 +13,8 @@ const SERVER_START_TIMEOUT_MS = 20_000;
 const DIAGNOSTIC_IDLE_MS = 2_000;
 const EMPTY_DIAGNOSTIC_MIN_WAIT_MS = 7_000;
 const DIAGNOSTIC_TIMEOUT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 45_000;
+const LANGUAGE_SERVER_SHUTDOWN_TIMEOUT_MS = 2_000;
 const CANONICAL_CLASS_CODE = "suggestCanonicalClasses";
 
 const LANGUAGE_BY_EXTENSION = new Map([
@@ -105,27 +107,42 @@ function relativePathFromUri(uri) {
 /**
  * Creates a minimal Language Server Protocol client for request/notification exchange.
  *
- * @param {import("node:child_process").ChildProcessWithoutNullStreams} child Language server process.
+ * @param {import("node:child_process").ChildProcess} child Language server process.
  * @returns {{
  *   diagnostics: Map<string, unknown[]>,
- *   request(method: string, params?: unknown): Promise<unknown>,
+ *   request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown>,
  *   sendNotification(method: string, params?: unknown): void,
  * }}
  */
 function createLspClient(child) {
   let nextId = 1;
-  let buffer = Buffer.alloc(0);
   const pending = new Map();
   const diagnostics = new Map();
+  let closed = false;
 
   /**
-   * Sends a JSON-RPC payload with LSP framing.
+   * Rejects all pending language server requests.
+   *
+   * @param {Error} error Rejection reason.
+   */
+  function rejectPending(error) {
+    for (const [id, request] of pending) {
+      pending.delete(id);
+      request.reject(error);
+    }
+  }
+
+  /**
+   * Sends a JSON-RPC payload over the Node IPC transport.
    *
    * @param {unknown} payload JSON-RPC payload.
    */
   function send(payload) {
-    const json = JSON.stringify(payload);
-    child.stdin.write(`Content-Length: ${Buffer.byteLength(json, "utf8")}\r\n\r\n${json}`);
+    if (closed || !child.connected || !child.send) {
+      throw new Error("Tailwind language server IPC channel is closed.");
+    }
+
+    child.send(payload);
   }
 
   /**
@@ -182,13 +199,13 @@ function createLspClient(child) {
    */
   function handleMessage(message) {
     if (message.id !== undefined && pending.has(message.id)) {
-      const { resolve, reject } = pending.get(message.id);
+      const request = pending.get(message.id);
       pending.delete(message.id);
       if (message.error) {
-        reject(new Error(JSON.stringify(message.error)));
+        request.reject(new Error(JSON.stringify(message.error)));
         return;
       }
-      resolve(message.result);
+      request.resolve(message.result);
       return;
     }
 
@@ -203,41 +220,53 @@ function createLspClient(child) {
     handleServerRequest(message);
   }
 
-  child.stdout.on("data", (chunk) => {
-    buffer = Buffer.concat([buffer, chunk]);
+  child.on("message", (message) => {
+    const lspMessage = /** @type {{ id?: number | string, method?: string, params?: unknown, result?: unknown, error?: unknown }} */ (message);
+    handleMessage(lspMessage);
+  });
 
-    while (true) {
-      const headerEnd = buffer.indexOf("\r\n\r\n");
-      if (headerEnd === -1) {
-        break;
-      }
+  child.on("error", (error) => {
+    closed = true;
+    rejectPending(error);
+  });
 
-      const header = buffer.subarray(0, headerEnd).toString("utf8");
-      const match = /Content-Length: (\d+)/i.exec(header);
-      if (!match) {
-        throw new Error(`Invalid LSP header: ${header}`);
-      }
-
-      const contentLength = Number(match[1]);
-      const messageStart = headerEnd + 4;
-      const messageEnd = messageStart + contentLength;
-      if (buffer.length < messageEnd) {
-        break;
-      }
-
-      const message = JSON.parse(buffer.subarray(messageStart, messageEnd).toString("utf8"));
-      buffer = buffer.subarray(messageEnd);
-      handleMessage(message);
-    }
+  child.on("close", (code, signal) => {
+    closed = true;
+    rejectPending(new Error(`Tailwind language server closed before responding (code ${code ?? "none"}, signal ${signal ?? "none"}).`));
   });
 
   return {
     diagnostics,
-    request(method, params) {
+    request(method, params, timeoutMs = REQUEST_TIMEOUT_MS) {
+      if (closed) {
+        return Promise.reject(new Error("Tailwind language server is closed."));
+      }
+
       const id = nextId++;
-      send({ jsonrpc: "2.0", id, method, params });
       return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        const timeout = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`Timed out waiting for Tailwind language server response to ${method}.`));
+        }, timeoutMs);
+
+        pending.set(id, {
+          reject(error) {
+            clearTimeout(timeout);
+            reject(error);
+          },
+          resolve(result) {
+            clearTimeout(timeout);
+            resolve(result);
+          },
+        });
+
+        try {
+          send({ jsonrpc: "2.0", id, method, params });
+        } catch (error) {
+          const request = pending.get(id);
+          pending.delete(id);
+          request?.reject(error instanceof Error ? error : new Error(String(error)));
+        }
       });
     },
     sendNotification(method, params) {
@@ -328,9 +357,9 @@ async function main() {
   ];
   const uniqueFiles = [...new Set(files)];
 
-  const child = spawn(process.execPath, [serverBin, "--stdio"], {
+  const child = spawn(process.execPath, [serverBin, "--node-ipc"], {
     cwd: CLIENT_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
   });
 
   let stderr = "";
@@ -395,8 +424,18 @@ async function main() {
     await waitForDiagnostics(client.diagnostics, uniqueFiles.length);
     const findings = formatCanonicalClassDiagnostics(client.diagnostics);
 
-    await client.request("shutdown");
-    client.sendNotification("exit");
+    try {
+      await client.request("shutdown", undefined, LANGUAGE_SERVER_SHUTDOWN_TIMEOUT_MS);
+    } catch {
+      // Some language server versions exit without answering shutdown after diagnostics are published.
+    }
+
+    try {
+      client.sendNotification("exit");
+    } catch {
+      // The server may already be closed after shutdown.
+    }
+    child.kill();
 
     if (findings.length > 0) {
       console.error(`Tailwind canonical class diagnostics found ${findings.length} issue(s):`);
