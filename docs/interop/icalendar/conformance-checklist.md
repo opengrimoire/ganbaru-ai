@@ -47,7 +47,7 @@ Current implementation summary:
 - Projected events, attendees, alarms, and recurrence overrides link back to preserved components.
 - Import still only projects `VEVENT` components into visible calendar rows. Other legal components are preserved without an app surface.
 - Export always generates a new `VCALENDAR` object from projected rows.
-- Some common event fields round-trip through projection. Unsupported `VEVENT` properties, unsupported parameters, and unsupported `VALARM` fields are preserved on new imports and merged back into export for linked events. Object metadata, non-event components, and full component ordering are preserved on import but are not merged back into export yet.
+- Some common event fields round-trip through projection. Unsupported `VEVENT` properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, and unsupported `VALARM` fields are preserved on new imports and merged back into export for linked events. Object metadata, non-event components, and full component ordering are preserved on import but are not merged back into export yet.
 - Existing tests cover the projected subset and new preservation/link storage, but they do not prove full RFC 5545 file compatibility.
 
 ## Components
@@ -172,9 +172,9 @@ Gap: timestamp provenance is lost. Future preservation must retain original time
 
 - `DTSTART`: projected and exported for UTC, `TZID`, and all-day date values. Tested.
 - `DTEND`: projected and exported. All-day exclusive end handling is fixed and tested.
-- `DURATION`: projected into an end time on import, but original property shape is not preserved. Export writes `DTEND`, not original `DURATION`.
+- `DURATION`: projected into an end time on import. Linked preserved exports keep the original `DURATION` property shape and regenerate its value from the current start and end.
 
-Gap: original use of `DURATION` versus `DTEND` is lost.
+Gap: generated rows without preserved source still export `DTEND`.
 
 ### Text and location fields
 
@@ -182,10 +182,10 @@ Gap: original use of `DURATION` versus `DTEND` is lost.
 - `DESCRIPTION`: projected, sanitized before persistence, exported as TEXT, tested.
 - `LOCATION`: projected, exported, tested through fixtures.
 - `URL`: projected and exported, tested.
-- `COMMENT`: not modeled or preserved.
-- `RESOURCES`: not modeled or preserved.
+- `COMMENT`: not modeled, but preserved and merged for linked events.
+- `RESOURCES`: not modeled, but preserved and merged for linked events.
 
-Gap: non-modeled text properties are dropped.
+Gap: non-modeled text properties are not editable as first-class app fields.
 
 ### Recurrence
 
@@ -225,10 +225,10 @@ Known recurrence gaps:
 - `PRIORITY`: projected, exported, validated, and tested.
 - `CATEGORIES`: projected as string array, exported, and tested.
 - `GEO`: projected, exported, and tested.
-- `RELATED-TO`: not modeled or preserved.
-- `REQUEST-STATUS`: not modeled or preserved.
+- `RELATED-TO`: not modeled, but preserved and merged for linked events.
+- `REQUEST-STATUS`: not modeled, but preserved and merged for linked events.
 
-Gap: relation and request-state metadata are dropped.
+Gap: relation and request-state metadata are not editable as first-class app fields.
 
 ### People
 
@@ -238,22 +238,22 @@ Gap: relation and request-state metadata are dropped.
 
 Known people gaps:
 
-- `SENT-BY` is not preserved.
-- `DIR` is not preserved.
-- `DELEGATED-FROM` and `DELEGATED-TO` are not preserved.
-- `MEMBER` is not preserved.
-- `CUTYPE` is not preserved.
-- multiple values and unknown parameters are not preserved.
+- `SENT-BY` is preserved and merged for linked organizer and attendee properties.
+- `DIR` is preserved and merged for linked organizer and attendee properties.
+- `DELEGATED-FROM` and `DELEGATED-TO` are preserved and merged for linked attendee properties.
+- `MEMBER` is preserved and merged for linked attendee properties.
+- `CUTYPE` is preserved and merged for linked attendee properties.
+- multiple values and unknown parameters are preserved in structured jCal and merged for linked properties when the property remains projected.
 
 ### Attachments, URLs, and extensions
 
 - `URL`: projected and exported.
-- `ATTACH`: not modeled or preserved.
+- `ATTACH`: not modeled, but URI attachments are preserved as inert properties and merged for linked events.
 - Unknown event `X-*`: projected into `extendedProperties` as string values and exported.
 - Google guest permission `X-*`: projected into dedicated booleans and exported.
 - Unknown registered `IANA-*`: treated like an unrecognized property if `ical.js` exposes it, but only first string value is retained and parameters are lost.
 
-Gap: extension preservation is value-only and event-only. Parameters, groups, value types, multiplicity, and object-level extensions are not preserved.
+Gap: extension projection is value-only for app editing. Structured preservation keeps parameters, groups, value types, and multiplicity for linked event export, while object-level extension export merge is still future work.
 
 ## Task properties
 
@@ -341,14 +341,14 @@ Current alarm status:
 - `ACTION`: projected, exported, tested.
 - `TRIGGER`: projected, exported, tested.
 - `DESCRIPTION`: projected, exported, tested.
-- `SUMMARY`: not preserved.
-- `ATTENDEE`: not preserved.
-- `DURATION`: warned and dropped.
-- `REPEAT`: warned and dropped.
-- `ATTACH`: not preserved.
-- `ACKNOWLEDGED`: not preserved.
-- `PROXIMITY`: not preserved.
-- `X-*`: not preserved inside alarms.
+- `SUMMARY`: preserved and merged for linked alarm components.
+- `ATTENDEE`: preserved and merged for linked alarm components.
+- `DURATION`: preserved and merged for linked alarm components.
+- `REPEAT`: preserved and merged for linked alarm components.
+- `ATTACH`: preserved and merged for linked alarm components.
+- `ACKNOWLEDGED`: preserved and merged for linked alarm components.
+- `PROXIMITY`: preserved and merged for linked alarm components.
+- `X-*`: preserved and merged inside linked alarm components.
 
 Compatibility requirement:
 
@@ -358,27 +358,27 @@ Compatibility requirement:
 
 Current parameter status:
 
-- `VALUE`: partially honored for dates and date-times through `ical.js`, but not preserved.
-- `TZID`: projected for date-time properties, mapped when possible, not preserved exactly.
+- `VALUE`: partially honored for dates and date-times through `ical.js`; preserved exactly in linked raw jCal for export merge.
+- `TZID`: projected for date-time properties and mapped when possible; preserved exactly in linked raw jCal except for generated-owned time fields when the app changes the time model.
 - `CN`: projected for organizer and attendee, exported, tested.
 - `ROLE`: projected for attendee, exported, tested.
 - `PARTSTAT`: projected for attendee, exported, tested.
 - `RSVP`: projected for attendee, exported, tested.
-- `LANGUAGE`: not preserved.
-- `ALTREP`: not preserved.
-- `CUTYPE`: not preserved.
-- `DELEGATED-FROM`: not preserved.
-- `DELEGATED-TO`: not preserved.
-- `DIR`: not preserved.
-- `MEMBER`: not preserved.
-- `SENT-BY`: not preserved.
-- `RELTYPE`: not preserved.
+- `LANGUAGE`: preserved and merged for linked event properties.
+- `ALTREP`: preserved and merged for linked event properties.
+- `CUTYPE`: preserved and merged for linked attendee properties.
+- `DELEGATED-FROM`: preserved and merged for linked attendee properties.
+- `DELEGATED-TO`: preserved and merged for linked attendee properties.
+- `DIR`: preserved and merged for linked organizer and attendee properties.
+- `MEMBER`: preserved and merged for linked attendee properties.
+- `SENT-BY`: preserved and merged for linked organizer and attendee properties.
+- `RELTYPE`: preserved and merged for linked relationship properties.
 - `RANGE`: not preserved.
 - `FBTYPE`: not preserved.
-- `ENCODING`: not preserved.
-- `FMTTYPE`: not preserved.
+- `ENCODING`: preserved in linked raw jCal; binary attachment handling remains inert.
+- `FMTTYPE`: preserved and merged for linked attachment properties.
 - `RELATED`: not preserved.
-- unknown `X-*` and `IANA-*`: not preserved as parameters.
+- unknown `X-*` and `IANA-*`: preserved and merged as parameters for linked event properties.
 
 Compatibility requirement:
 
@@ -389,19 +389,19 @@ Compatibility requirement:
 
 Current value-type status:
 
-- `BINARY`: not preserved.
-- `BOOLEAN`: not generally preserved; some Google `X-*` booleans are projected as booleans.
-- `CAL-ADDRESS`: projected for organizer and attendee email addresses, but parameters are narrowed.
+- `BINARY`: preserved in linked raw jCal as inert data, but not opened or decoded by the app.
+- `BOOLEAN`: preserved in linked raw jCal; some Google `X-*` booleans are projected as booleans.
+- `CAL-ADDRESS`: projected for organizer and attendee email addresses; unsupported parameters are preserved and merged for linked properties.
 - `DATE`: projected for all-day dates and some recurrence values.
 - `DATE-TIME`: projected for event times and recurrence values.
-- `DURATION`: projected for event end calculation and alarm trigger duration, but original shape is not preserved.
+- `DURATION`: projected for event end calculation and alarm trigger duration. Linked event export preserves imported event `DURATION` shape and unsupported alarm duration fields.
 - `FLOAT`: projected for `GEO` only.
 - `INTEGER`: projected for `PRIORITY` and `SEQUENCE`.
 - `PERIOD`: not preserved.
 - `RECUR`: projected for supported `RRULE` parts.
 - `TEXT`: projected for common fields and escaped on export.
 - `TIME`: not preserved.
-- `URI`: projected for `URL`, not preserved generally.
+- `URI`: projected for `URL`; URI attachments and other linked URI properties are preserved as inert data.
 - `UTC-OFFSET`: not preserved in timezone definitions.
 
 Compatibility requirement:

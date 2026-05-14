@@ -148,7 +148,7 @@ Every projected row created from preserved data should be traceable back to its 
 
 The `icalendar_components.projected_kind` and `projected_id` reverse link is used where one component maps to one projected row: master events, override events, and alarms. Attendee rows keep their direct link on the projected row so multiple attendees can reference the same preserved `VEVENT` without overwriting the component's reverse link.
 
-Full-event loads expose linked `VEVENT` raw JSON to the serializer. Export merges the preserved `VEVENT` and nested `VALARM` components with regenerated supported fields, preserving unsupported event properties, unsupported parameters, and unsupported alarm fields. A projected row or projected alarm that was deleted is not re-created from preservation storage during export.
+Full-event loads expose linked `VEVENT` raw JSON to the serializer. Export merges the preserved `VEVENT` and nested `VALARM` components with regenerated supported fields, preserving unsupported event properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, and unsupported alarm fields. A projected row or projected alarm that was deleted is not re-created from preservation storage during export.
 
 ## Re-import dedupe
 

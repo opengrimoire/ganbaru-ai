@@ -328,6 +328,11 @@ function jcalSubcomponents(component: JcalComponent): JcalComponent[] {
 	return component[2].filter(isJcalComponent);
 }
 
+function firstJcalProperty(component: JcalComponent, name: string): JcalProperty | undefined {
+	const target = name.toLowerCase();
+	return jcalProperties(component).find((property) => property[0].toLowerCase() === target);
+}
+
 function cloneJcalComponent(value: unknown): JcalComponent | null {
 	if (!isJcalComponent(value)) return null;
 	const cloned = JSON.parse(JSON.stringify(value)) as unknown;
@@ -452,6 +457,74 @@ function mergeJcalComponent(
 	];
 }
 
+function formatDurationSeconds(seconds: number): string {
+	if (seconds <= 0) return "PT0S";
+	const days = Math.floor(seconds / 86_400);
+	const hours = Math.floor((seconds % 86_400) / 3_600);
+	const minutes = Math.floor((seconds % 3_600) / 60);
+	const secs = seconds % 60;
+	let value = "P";
+	if (days > 0) value += `${days}D`;
+	if (hours > 0 || minutes > 0 || secs > 0) {
+		value += "T";
+		if (hours > 0) value += `${hours}H`;
+		if (minutes > 0) value += `${minutes}M`;
+		if (secs > 0) value += `${secs}S`;
+	}
+	return value;
+}
+
+function jcalDateDuration(start: JcalProperty, end: JcalProperty): string | null {
+	if (start[2] !== "date" || end[2] !== "date") return null;
+	const startDate = Temporal.PlainDate.from(String(start[3]));
+	const endDate = Temporal.PlainDate.from(String(end[3]));
+	const days = startDate.until(endDate).days;
+	return days >= 0 ? `P${days}D` : null;
+}
+
+function jcalDateTimeDuration(start: JcalProperty, end: JcalProperty): string | null {
+	if (start[2] !== "date-time" || end[2] !== "date-time") return null;
+	const startValue = String(start[3]);
+	const endValue = String(end[3]);
+	let seconds: number;
+	if (startValue.endsWith("Z") || endValue.endsWith("Z")) {
+		seconds = Temporal.Instant.from(startValue)
+			.until(Temporal.Instant.from(endValue))
+			.total({ unit: "second" });
+	} else {
+		seconds = Temporal.PlainDateTime.from(startValue)
+			.until(Temporal.PlainDateTime.from(endValue))
+			.total({ unit: "second" });
+	}
+	return Number.isFinite(seconds) ? formatDurationSeconds(Math.trunc(seconds)) : null;
+}
+
+function durationFromGeneratedTimes(generated: JcalComponent): string | null {
+	const start = firstJcalProperty(generated, "dtstart");
+	const end = firstJcalProperty(generated, "dtend");
+	if (!start || !end) return null;
+	return jcalDateDuration(start, end) ?? jcalDateTimeDuration(start, end);
+}
+
+function withPreservedDurationShape(
+	preserved: JcalComponent,
+	generated: JcalComponent,
+): JcalComponent {
+	if (!firstJcalProperty(preserved, "duration") || firstJcalProperty(preserved, "dtend")) {
+		return generated;
+	}
+	const duration = durationFromGeneratedTimes(generated);
+	if (!duration) return generated;
+	return [
+		generated[0],
+		generated[1].map((property) => {
+			if (!isJcalProperty(property) || property[0].toLowerCase() !== "dtend") return property;
+			return ["duration", {}, "duration", duration] satisfies JcalProperty;
+		}),
+		generated[2],
+	];
+}
+
 function veventMergePropertyNames(event: CalendarEvent): Set<string> {
 	const names = new Set(BASE_VEVENT_MERGE_PROPERTIES);
 	for (const key of Object.keys(event.extendedProperties ?? {})) {
@@ -466,8 +539,9 @@ function mergePreservedVevent(event: CalendarEvent, generatedLines: string[]): s
 	if (!preserved || !generated || preserved[0].toLowerCase() !== "vevent") {
 		return generatedLines;
 	}
+	const generatedWithShape = withPreservedDurationShape(preserved, generated);
 	return jcalComponentToLines(
-		mergeJcalComponent(preserved, generated, veventMergePropertyNames(event)),
+		mergeJcalComponent(preserved, generatedWithShape, veventMergePropertyNames(event)),
 	);
 }
 

@@ -359,6 +359,7 @@ describe("serializeCalendarToIcs", () => {
 				[
 					makeEvent({
 						title: "Edited title",
+						organizer: { name: "Alice", email: "alice-new@example.com" },
 						attendees: [
 							{
 								id: "a1",
@@ -386,7 +387,18 @@ describe("serializeCalendarToIcs", () => {
 								["dtstart", {}, "date-time", "20260601T140000Z"],
 								["dtend", {}, "date-time", "20260601T150000Z"],
 								["summary", { language: "en" }, "text", "Original title"],
+								["comment", { language: "en" }, "text", "review note"],
+								["resources", {}, "text", "Room A"],
+								["related-to", { reltype: "PARENT" }, "text", "parent-uid"],
+								["request-status", {}, "text", "2.0;Success"],
+								["attach", { fmttype: "application/pdf" }, "uri", "https://example.com/a.pdf"],
 								["x-unsupported", { "x-param": "kept" }, "text", "value"],
+								[
+									"organizer",
+									{ cn: "Alice old", "sent-by": "mailto:assistant@example.com", dir: "https://example.com/alice" },
+									"cal-address",
+									"mailto:alice-old@example.com",
+								],
 								[
 									"attendee",
 									{ cn: "Old", role: "REQ-PARTICIPANT", partstat: "NEEDS-ACTION", rsvp: "TRUE", cutype: "INDIVIDUAL" },
@@ -414,7 +426,16 @@ describe("serializeCalendarToIcs", () => {
 			const unfolded = unfold(ics);
 
 			expect(unfolded).toContain("SUMMARY;LANGUAGE=en:Edited title");
+			expect(unfolded).toContain("COMMENT;LANGUAGE=en:review note");
+			expect(unfolded).toContain("RESOURCES:Room A");
+			expect(unfolded).toContain("RELATED-TO;RELTYPE=PARENT:parent-uid");
+			expect(unfolded).toContain("REQUEST-STATUS:2.0\\;Success");
+			expect(unfolded).toContain("ATTACH;FMTTYPE=application/pdf:https://example.com/a.pdf");
 			expect(unfolded).toContain("X-UNSUPPORTED;X-PARAM=kept;VALUE=TEXT:value");
+			expect(unfolded).toContain("ORGANIZER;CN=Alice");
+			expect(unfolded).toContain('SENT-BY="mailto:assistant@example.com"');
+			expect(unfolded).toContain('DIR="https://example.com/alice"');
+			expect(unfolded).toContain("mailto:alice-new@example.com");
 			expect(unfolded).toContain("ATTENDEE;CN=Bob");
 			expect(unfolded).toContain("CUTYPE=INDIVIDUAL");
 			expect(unfolded).toContain("ROLE=OPT-PARTICIPANT");
@@ -487,6 +508,34 @@ describe("serializeCalendarToIcs", () => {
 
 			expect(ics).toContain("DTSTART:20260601T140000Z");
 			expect(ics).not.toContain("DTSTART;TZID=America/New_York");
+		});
+
+		it("preserves imported DURATION shape when exporting edited event times", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						start: "2026-06-01 14:00",
+						end: "2026-06-01 16:30",
+						icalendarRawJcal: [
+							"vevent",
+							[
+								["uid", {}, "text", "sample-uid@ganbaruai"],
+								["dtstamp", {}, "date-time", "20260101T000000Z"],
+								["dtstart", {}, "date-time", "20260601T140000Z"],
+								["duration", {}, "duration", "PT1H"],
+								["summary", {}, "text", "Sample"],
+							],
+							[],
+						],
+					}),
+				],
+				"UTC",
+			);
+
+			expect(ics).toContain("DTSTART:20260601T140000Z");
+			expect(ics).toContain("DURATION:PT2H30M");
+			expect(ics).not.toContain("DTEND:");
 		});
 	});
 
