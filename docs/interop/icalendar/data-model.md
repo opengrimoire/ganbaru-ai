@@ -150,6 +150,8 @@ The `icalendar_components.projected_kind` and `projected_id` reverse link is use
 
 Full-event loads expose linked `VEVENT` raw JSON to the serializer. Export merges the preserved `VEVENT` and nested `VALARM` components with regenerated supported fields, preserving unsupported event properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported alarm fields. Preserved `VTIMEZONE` components are loaded separately for calendar export and emitted before generated timezone stubs. Preserved top-level non-event components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, and future components are passed through unchanged while they have no app projection. A projected row or projected alarm that was deleted is not re-created from preservation storage during export.
 
+Rows from older imports may have a `source_uid` but no `icalendar_component_id`. Full-event loads derive a `regenerated` iCalendar preservation state for those rows so diagnostics and export behavior make clear that the original component is not available.
+
 ## Re-import dedupe
 
 Re-import should compare:

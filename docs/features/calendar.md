@@ -145,6 +145,8 @@ New imports also store structured iCalendar object and component JSON in preserv
 
 Scheduling metadata remains offline data. RSVP status is displayed as imported or locally stored event data, not as a sendable response. Export reuses a preserved object-level `METHOD` only when the calendar has one distinct preserved method; mixed imported methods fall back to `PUBLISH` because a single calendar backup export cannot truthfully represent multiple scheduling message types.
 
+Rows imported before preservation storage existed cannot be made lossless automatically. When a full event has an imported `UID` but no linked preserved component, the app marks its iCalendar preservation state as `regenerated` and export uses generated fields from the normalized row.
+
 Recurring timed exports keep recurrence identifiers in the same time model as the master event. If a Google-style recurring event uses `TZID`, `DTSTART`, `DTEND`, `EXDATE`, and override `RECURRENCE-ID` all use that zone and the original wall-clock start time. UTC recurring events use UTC `Z` values. All-day recurring events use date-only `VALUE=DATE` values.
 
 The serializer emits CRLF line endings, folds content lines by UTF-8 octets, escapes TEXT values, and quotes/caret-escapes parameter values such as attendee and organizer `CN`.

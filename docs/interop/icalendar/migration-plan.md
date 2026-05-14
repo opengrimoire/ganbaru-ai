@@ -39,7 +39,7 @@ Events imported before preservation storage may already be lossy. The database m
 Migration action:
 
 - leave normalized rows unchanged.
-- mark them as generated or no preserved source if preservation tables require a link.
+- mark full-event loads as `regenerated` when a row has an imported `UID` but no linked preserved component.
 - do not attempt blind repair of ambiguous dates, recurrence, or unsupported fields.
 - let users re-import original files to gain preservation data.
 
@@ -63,7 +63,7 @@ Implementation order:
 3. Add projection links for imported `VEVENT`s, attendees, alarms, and overrides. Implemented in migration v13.
 4. Add export merger for linked components. Implemented for linked `VEVENT` and nested `VALARM` components, including unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, and `RECURRENCE-ID;RANGE=THISANDFUTURE`. Preserved `VTIMEZONE` definitions export before generated stubs.
 5. Pass through preserved non-event components while they have no app projection. Implemented for top-level non-`VEVENT` and non-`VTIMEZONE` components.
-6. Add diagnostics and repair surfaces. Projection warnings are stored now; a user-facing repair surface is still future work.
+6. Add diagnostics and repair surfaces. Projection warnings are stored now, and old imported rows without preserved components are surfaced as `regenerated` on full-event loads. A user-facing repair surface is still future work.
 7. Optional backfill generated preservation records for local events.
 
 Each step must be idempotent.
