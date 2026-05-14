@@ -617,6 +617,70 @@ describe("parseIcs", () => {
 		});
 	});
 
+	describe("preservation payload", () => {
+		it("preserves non-event components even when nothing is projected", () => {
+			const ics = wrap(
+				"BEGIN:VTODO",
+				"UID:task@example.com",
+				"DTSTAMP:20260101T000000Z",
+				"SUMMARY:Task",
+				"X-CUSTOM-TODO:kept",
+				"END:VTODO",
+				"BEGIN:VJOURNAL",
+				"UID:journal@example.com",
+				"DTSTAMP:20260101T000000Z",
+				"DTSTART;VALUE=DATE:20260601",
+				"SUMMARY:Journal",
+				"END:VJOURNAL",
+				"BEGIN:VFREEBUSY",
+				"UID:freebusy@example.com",
+				"DTSTAMP:20260101T000000Z",
+				"FREEBUSY:20260601T120000Z/20260601T130000Z",
+				"END:VFREEBUSY",
+			);
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(0);
+			const components = result.preservation?.objects[0].components;
+			expect(components?.map((component) => component.componentType)).toEqual([
+				"vtodo",
+				"vjournal",
+				"vfreebusy",
+			]);
+			expect(components?.[0].uid).toBe("task@example.com");
+			expect(JSON.stringify(components?.[0].rawJcal)).toContain("x-custom-todo");
+		});
+
+		it("preserves nested timezone and alarm components", () => {
+			const ics = wrap(
+				"BEGIN:VTIMEZONE",
+				"TZID:America/New_York",
+				"BEGIN:DAYLIGHT",
+				"DTSTART:19700308T020000",
+				"TZOFFSETFROM:-0500",
+				"TZOFFSETTO:-0400",
+				"END:DAYLIGHT",
+				"END:VTIMEZONE",
+				vevent(
+					"UID:nested@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART;TZID=America/New_York:20260601T090000",
+					"DTEND;TZID=America/New_York:20260601T100000",
+					"SUMMARY:Nested",
+					"BEGIN:VALARM",
+					"ACTION:DISPLAY",
+					"TRIGGER:-PT10M",
+					"END:VALARM",
+				),
+			);
+			const result = parseIcs(ics);
+			const components = result.preservation?.objects[0].components ?? [];
+			const timezone = components.find((component) => component.componentType === "vtimezone");
+			const event = components.find((component) => component.componentType === "vevent");
+			expect(timezone?.components[0].componentType).toBe("daylight");
+			expect(event?.components[0].componentType).toBe("valarm");
+		});
+	});
+
 	describe("calendarId argument", () => {
 		it("uses the provided calendarId on every event", () => {
 			const ics = wrap(

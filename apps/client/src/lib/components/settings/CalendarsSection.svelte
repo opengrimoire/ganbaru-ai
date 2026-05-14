@@ -86,15 +86,21 @@
     text: string,
     groupingFilename: string,
     totals: ImportTotals,
+    sourceKind: "import-file" | "import-zip-entry",
   ): Promise<void> {
     const { parseIcs } = await loadIcsParser();
     const parsed = parseIcs(text);
-    if (parsed.events.length === 0) {
+    const hasPreservation = (parsed.preservation?.objects.length ?? 0) > 0;
+    if (parsed.events.length === 0 && !hasPreservation) {
       if (parsed.warnings.length > 0) totals.warnings.push(...parsed.warnings);
       return;
     }
     const targetCalendar = await calendarsStore.findOrCreateImported(groupingFilename);
-    const summary = await calendarStore.bulkImport(parsed.events, targetCalendar.id);
+    const summary = await calendarStore.bulkImport(parsed.events, targetCalendar.id, {
+      preservation: parsed.preservation,
+      sourceName: groupingFilename,
+      sourceKind,
+    });
     totals.added += summary.added;
     totals.updated += summary.updated;
     totals.skippedOlder += summary.skippedOlder;
@@ -136,13 +142,14 @@
         return;
       }
       importProgress = { current: 0, total: entries.length, label: entries[0].name };
+      const sourceKind = entries.length > 1 ? "import-zip-entry" : "import-file";
       for (let i = 0; i < entries.length; i++) {
         importProgress = {
           current: i + 1,
           total: entries.length,
           label: entries[i].name,
         };
-        await importIcsText(entries[i].contents, entries[i].name, totals);
+        await importIcsText(entries[i].contents, entries[i].name, totals, sourceKind);
       }
 
       if (totals.calendars === 0) {

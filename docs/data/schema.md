@@ -33,6 +33,49 @@ Top-level grouping for events. Lets the user keep their local data in `local` wh
 
 The `local` row is seeded on first boot (`INSERT OR IGNORE`) and can never be deleted from the UI. Deleting an imported calendar runs at the application layer (`stores/calendars.svelte.ts.remove`): events are removed first (`DELETE FROM calendar_events WHERE calendar_id = $1`), which cascades through `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms` via their FK `ON DELETE CASCADE` on `calendar_events.id`; the `calendars` row is then deleted.
 
+### `icalendar_objects`
+
+Lossless import preservation table introduced by migration v12. One row stores one top-level imported iCalendar object for a calendar source. The normal calendar render path does not read this table.
+
+Fields:
+
+- `id`: primary key.
+- `calendar_id`: owning calendar. Cascades when the calendar is deleted.
+- `source_kind`: origin class, currently `import-file` or `import-zip-entry` for Settings imports. Future values can support generated export bases or subscriptions.
+- `source_name`: file basename or zip entry basename used to replace preservation rows on re-import of the same source.
+- `source_fingerprint`: deterministic fingerprint of the imported text for diagnostics and later dedupe work.
+- `prodid`, `version`, `method`, `calendar_scale`: object-level properties copied out for indexed diagnostics while the full object remains in `raw_jcal`.
+- `raw_jcal`: structured JSON representation of the full object.
+- `diagnostics`: JSON warning list captured during parse and projection.
+- `created_at`, `updated_at`: row timestamps.
+
+Indexes: `(calendar_id)`, `(calendar_id, source_kind, source_name)`, and `(source_fingerprint)`.
+
+### `icalendar_components`
+
+Lossless component preservation table introduced by migration v12. One row stores one component from an imported object, including unsupported components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, nested `VALARM`, and `STANDARD` or `DAYLIGHT` blocks. The normal calendar render path does not read this table.
+
+Fields:
+
+- `id`: primary key.
+- `object_id`: parent `icalendar_objects` row. Cascades when the object is replaced or deleted.
+- `parent_component_id`: parent component for nested components.
+- `calendar_id`: owning calendar for export and cleanup queries.
+- `component_type`: lowercase component name such as `vevent`, `vtodo`, `vjournal`, `vfreebusy`, `vtimezone`, or `valarm`.
+- `uid`: copied `UID` when present.
+- `recurrence_id`: copied `RECURRENCE-ID` when present.
+- `recurrence_id_value_type`: original value type for the recurrence identity.
+- `sequence`: copied `SEQUENCE` when present.
+- `dtstart_key`: copied `DTSTART` value for diagnostics and future lookup.
+- `raw_jcal`: structured JSON representation of the component and its properties.
+- `projected_kind`, `projected_id`: reserved link to normalized app rows. These are intentionally null until projection-link work lands.
+- `preservation_status`: diagnostic state such as `partial` or `unsupported`.
+- `projection_warnings`: JSON warning list for lossy projection notes.
+- `sort_order`: component order among siblings.
+- `created_at`, `updated_at`: row timestamps.
+
+Indexes: `(calendar_id, component_type)`, `(calendar_id, uid)`, `(calendar_id, uid, recurrence_id)`, `(projected_kind, projected_id)`, `(preservation_status)`, and `(object_id)`.
+
 ### `calendar_events`
 
 The active calendar. One row per event (or per recurring template, with instances expanded on read).

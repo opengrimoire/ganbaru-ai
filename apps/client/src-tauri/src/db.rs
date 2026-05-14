@@ -688,5 +688,67 @@ pub fn migrations() -> Vec<Migration> {
             DELETE FROM theme_seed_tokens
             WHERE kind = 'calendar' AND key = '--cal-header-bg';
         ",
+    },
+    Migration {
+        version: 12,
+        description: "add iCalendar preservation storage",
+        sql: "
+            CREATE TABLE IF NOT EXISTS icalendar_objects (
+                id TEXT PRIMARY KEY,
+                calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
+                source_kind TEXT NOT NULL
+                    CHECK (source_kind IN ('import-file', 'import-zip-entry', 'local-export-base', 'subscription')),
+                source_name TEXT NOT NULL DEFAULT '',
+                source_fingerprint TEXT NOT NULL,
+                prodid TEXT,
+                version TEXT,
+                method TEXT,
+                calendar_scale TEXT,
+                raw_jcal TEXT NOT NULL,
+                diagnostics TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_icalendar_objects_calendar
+                ON icalendar_objects(calendar_id);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_objects_source
+                ON icalendar_objects(calendar_id, source_kind, source_name);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_objects_fingerprint
+                ON icalendar_objects(source_fingerprint);
+
+            CREATE TABLE IF NOT EXISTS icalendar_components (
+                id TEXT PRIMARY KEY,
+                object_id TEXT NOT NULL REFERENCES icalendar_objects(id) ON DELETE CASCADE,
+                parent_component_id TEXT REFERENCES icalendar_components(id) ON DELETE CASCADE,
+                calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
+                component_type TEXT NOT NULL,
+                uid TEXT,
+                recurrence_id TEXT,
+                recurrence_id_value_type TEXT,
+                sequence INTEGER,
+                dtstart_key TEXT,
+                raw_jcal TEXT NOT NULL,
+                projected_kind TEXT,
+                projected_id TEXT,
+                preservation_status TEXT NOT NULL
+                    CHECK (preservation_status IN ('lossless', 'partial', 'unsupported', 'needs-review', 'regenerated', 'invalid')),
+                projection_warnings TEXT NOT NULL DEFAULT '[]',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_icalendar_components_calendar_type
+                ON icalendar_components(calendar_id, component_type);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_components_uid
+                ON icalendar_components(calendar_id, uid);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_components_uid_recurrence
+                ON icalendar_components(calendar_id, uid, recurrence_id);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_components_projection
+                ON icalendar_components(projected_kind, projected_id);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_components_status
+                ON icalendar_components(preservation_status);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_components_object
+                ON icalendar_components(object_id);
+        ",
     }]
 }

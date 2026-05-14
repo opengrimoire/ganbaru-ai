@@ -14,7 +14,16 @@ import type {
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule, rruleToRecurrence } from "$lib/components/calendar/rrule";
 import { utcIsoToWallClock, wallClockToUtcIso } from "$lib/components/calendar/utils";
-import type { IcsParseResult } from "./types";
+import type {
+	IcsParseResult,
+	IcsPreservedComponent,
+	IcsPreservedObject,
+	IcsPreservationPayload,
+	IcsPreservationStatus,
+} from "./types";
+
+type JcalProperty = [string, Record<string, unknown>, string, ...unknown[]];
+type JcalComponent = [string, unknown[], unknown[]];
 
 /**
  * Microsoft Windows to IANA timezone identifier map. Outlook emits
@@ -170,6 +179,126 @@ function getDeviceZone(): string {
 	} catch {
 		return "UTC";
 	}
+}
+
+function isJcalComponent(value: unknown): value is JcalComponent {
+	return (
+		Array.isArray(value) &&
+		typeof value[0] === "string" &&
+		Array.isArray(value[1]) &&
+		Array.isArray(value[2])
+	);
+}
+
+function isJcalProperty(value: unknown): value is JcalProperty {
+	return (
+		Array.isArray(value) &&
+		typeof value[0] === "string" &&
+		typeof value[1] === "object" &&
+		value[1] !== null &&
+		!Array.isArray(value[1]) &&
+		typeof value[2] === "string"
+	);
+}
+
+function jcalProperties(component: JcalComponent): JcalProperty[] {
+	return component[1].filter(isJcalProperty);
+}
+
+function jcalSubcomponents(component: JcalComponent): JcalComponent[] {
+	return component[2].filter(isJcalComponent);
+}
+
+function firstJcalProperty(component: JcalComponent, name: string): JcalProperty | undefined {
+	const target = name.toLowerCase();
+	return jcalProperties(component).find((prop) => prop[0].toLowerCase() === target);
+}
+
+function firstJcalValue(component: JcalComponent, name: string): string | undefined {
+	const prop = firstJcalProperty(component, name);
+	if (!prop) return undefined;
+	const value = prop[3];
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+		return String(value);
+	}
+	if (value === undefined || value === null) return undefined;
+	return JSON.stringify(value);
+}
+
+function firstJcalNumber(component: JcalComponent, name: string): number | undefined {
+	const value = firstJcalValue(component, name);
+	if (value === undefined) return undefined;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function firstJcalValueType(component: JcalComponent, name: string): string | undefined {
+	return firstJcalProperty(component, name)?.[2];
+}
+
+function sourceFingerprint(text: string): string {
+	let hash = 0x811c9dc5;
+	for (const char of text) {
+		hash ^= char.codePointAt(0) ?? 0;
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	}
+	return hash.toString(16).padStart(8, "0");
+}
+
+function preservationStatusFor(componentType: string): IcsPreservationStatus {
+	switch (componentType) {
+		case "vevent":
+		case "valarm":
+		case "vtimezone":
+			return "partial";
+		case "standard":
+		case "daylight":
+			return "unsupported";
+		default:
+			return "unsupported";
+	}
+}
+
+function preservedComponentFromJcal(component: JcalComponent): IcsPreservedComponent {
+	const componentType = component[0].toLowerCase();
+	const recurrenceIdProp = firstJcalProperty(component, "recurrence-id");
+	const recurrenceIdValueType = recurrenceIdProp?.[2];
+	return {
+		componentType,
+		uid: firstJcalValue(component, "uid"),
+		recurrenceId: firstJcalValue(component, "recurrence-id"),
+		recurrenceIdValueType,
+		sequence: firstJcalNumber(component, "sequence"),
+		dtstartKey: firstJcalValue(component, "dtstart"),
+		rawJcal: component,
+		preservationStatus: preservationStatusFor(componentType),
+		projectionWarnings: [],
+		components: jcalSubcomponents(component).map(preservedComponentFromJcal),
+	};
+}
+
+function preservedObjectFromJcal(component: JcalComponent, warnings: string[]): IcsPreservedObject {
+	return {
+		prodid: firstJcalValue(component, "prodid"),
+		version: firstJcalValue(component, "version"),
+		method: firstJcalValue(component, "method"),
+		calendarScale: firstJcalValue(component, "calscale"),
+		rawJcal: component,
+		diagnostics: warnings,
+		components: jcalSubcomponents(component).map(preservedComponentFromJcal),
+	};
+}
+
+function buildPreservationPayload(
+	text: string,
+	vcalendarJcals: JcalComponent[],
+	warnings: string[],
+): IcsPreservationPayload | undefined {
+	if (vcalendarJcals.length === 0) return undefined;
+	return {
+		sourceFingerprint: sourceFingerprint(text),
+		objects: vcalendarJcals.map((component) => preservedObjectFromJcal(component, warnings)),
+	};
 }
 
 const ATTENDEE_ROLE_MAP: Record<string, EventAttendee["role"]> = {
@@ -579,11 +708,17 @@ export function parseIcs(text: string, calendarId = "local"): IcsParseResult {
 		return { events: [], warnings: [`Failed to parse .ics file: ${msg}`] };
 	}
 
+	const rootJcal = isJcalComponent(jcal) ? jcal : undefined;
 	const root = new ICAL.Component(jcal as [string, unknown[], unknown[]]);
 	const vcalendars = root.name === "vcalendar" ? [root] : root.getAllSubcomponents("vcalendar");
 	if (vcalendars.length === 0) {
 		return { events: [], warnings: ["No VCALENDAR component found in .ics file."] };
 	}
+	const vcalendarJcals = rootJcal
+		? rootJcal[0].toLowerCase() === "vcalendar"
+			? [rootJcal]
+			: jcalSubcomponents(rootJcal).filter((component) => component[0].toLowerCase() === "vcalendar")
+		: [];
 
 	const masters = new Map<string, CalendarEvent>();
 	const overrides: { uid: string; child: CalendarEvent; recurrenceId: string }[] = [];
@@ -617,5 +752,9 @@ export function parseIcs(text: string, calendarId = "local"): IcsParseResult {
 		parent.overrides.push(buildOverride(parent, child, recurrenceId));
 	}
 
-	return { events: Array.from(masters.values()), warnings };
+	return {
+		events: Array.from(masters.values()),
+		warnings,
+		preservation: buildPreservationPayload(text, vcalendarJcals, warnings),
+	};
 }

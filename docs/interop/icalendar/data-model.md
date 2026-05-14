@@ -25,6 +25,8 @@ These tables are optimized for visible-window queries, recurrence expansion, edi
 
 ## Proposed preservation tables
 
+Migration v12 implements the first preservation step with `icalendar_objects` and `icalendar_components`. It stores structured object and recursive component JSON for new imports. Projection links are reserved but intentionally null until the projection-link milestone.
+
 ### `icalendar_objects`
 
 One row per imported or generated top-level iCalendar object.

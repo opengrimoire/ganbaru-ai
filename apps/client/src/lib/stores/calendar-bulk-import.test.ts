@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { IcsPreservationPayload } from "$lib/calendar/ics/types";
 import { buildBulkImportPayload } from "./calendar-bulk-import";
 
 const NOW = "2026-04-29 10:00:00";
@@ -254,5 +255,59 @@ describe("buildBulkImportPayload", () => {
     const event = payload.events[0];
     expect(event.description).toBe("<p>Safe <strong>text</strong></p>");
     expect(event.overrides[0].description).toBe("<u>Override</u>");
+  });
+
+  it("adds structured iCalendar preservation data to the import payload", () => {
+    const preservation: IcsPreservationPayload = {
+      sourceFingerprint: "abc123",
+      objects: [
+        {
+          prodid: "fixture",
+          version: "2.0",
+          method: "PUBLISH",
+          calendarScale: "GREGORIAN",
+          rawJcal: ["vcalendar", [], []],
+          diagnostics: ["kept unsupported component"],
+          components: [
+            {
+              componentType: "vtodo",
+              uid: "todo@example.com",
+              rawJcal: ["vtodo", [["uid", {}, "text", "todo@example.com"]], []],
+              preservationStatus: "unsupported",
+              projectionWarnings: [],
+              components: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const payload = buildBulkImportPayload(
+      [],
+      CAL,
+      NOW,
+      ZONE,
+      deterministicIds(),
+      preservation,
+      "tasks.ics",
+      "import-file",
+    );
+
+    expect(payload.preservation?.sourceName).toBe("tasks.ics");
+    expect(payload.preservation?.sourceFingerprint).toBe("abc123");
+    expect(payload.preservation?.objects[0]).toMatchObject({
+      id: "new-1",
+      prodid: "fixture",
+      version: "2.0",
+      method: "PUBLISH",
+      calendarScale: "GREGORIAN",
+    });
+    expect(payload.preservation?.objects[0].components[0]).toMatchObject({
+      id: "new-2",
+      componentType: "vtodo",
+      uid: "todo@example.com",
+      preservationStatus: "unsupported",
+    });
+    expect(payload.preservation?.objects[0].components[0].rawJcal).toContain("vtodo");
   });
 });

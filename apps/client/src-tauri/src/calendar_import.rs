@@ -16,7 +16,47 @@ const PALETTE_SIZE: i64 = 24;
 pub struct CalendarBulkImportPayload {
     target_calendar_id: String,
     now: String,
+    #[serde(default)]
+    preservation: Option<CalendarImportPreservation>,
     events: Vec<CalendarImportEvent>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CalendarImportPreservation {
+    source_kind: String,
+    source_name: String,
+    source_fingerprint: String,
+    objects: Vec<CalendarImportPreservedObject>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CalendarImportPreservedObject {
+    id: String,
+    prodid: Option<String>,
+    version: Option<String>,
+    method: Option<String>,
+    calendar_scale: Option<String>,
+    raw_jcal: String,
+    diagnostics: String,
+    components: Vec<CalendarImportPreservedComponent>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CalendarImportPreservedComponent {
+    id: String,
+    component_type: String,
+    uid: Option<String>,
+    recurrence_id: Option<String>,
+    recurrence_id_value_type: Option<String>,
+    sequence: Option<i64>,
+    dtstart_key: Option<String>,
+    raw_jcal: String,
+    preservation_status: String,
+    projection_warnings: String,
+    components: Vec<CalendarImportPreservedComponent>,
 }
 
 #[derive(Deserialize)]
@@ -139,6 +179,16 @@ pub async fn calendar_bulk_import<R: Runtime>(
     let mut warnings = Vec::new();
     let mut applied = Vec::new();
 
+    if let Some(preservation) = &payload.preservation {
+        replace_preservation(
+            &mut tx,
+            &payload.target_calendar_id,
+            &payload.now,
+            preservation,
+        )
+        .await?;
+    }
+
     for event in &payload.events {
         let Some(source_uid) = event
             .source_uid
@@ -245,6 +295,104 @@ async fn load_existing_events(
         }
     }
     Ok(existing)
+}
+
+async fn replace_preservation(
+    tx: &mut Transaction<'_, Sqlite>,
+    target_calendar_id: &str,
+    now: &str,
+    preservation: &CalendarImportPreservation,
+) -> Result<(), String> {
+    sqlx::query(
+        "DELETE FROM icalendar_objects
+         WHERE calendar_id = ? AND source_kind = ? AND source_name = ?",
+    )
+    .bind(target_calendar_id)
+    .bind(&preservation.source_kind)
+    .bind(&preservation.source_name)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("delete existing iCalendar preservation: {e}"))?;
+
+    for object in &preservation.objects {
+        sqlx::query(
+            "INSERT INTO icalendar_objects
+                (id, calendar_id, source_kind, source_name, source_fingerprint,
+                 prodid, version, method, calendar_scale, raw_jcal, diagnostics,
+                 created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&object.id)
+        .bind(target_calendar_id)
+        .bind(&preservation.source_kind)
+        .bind(&preservation.source_name)
+        .bind(&preservation.source_fingerprint)
+        .bind(&object.prodid)
+        .bind(&object.version)
+        .bind(&object.method)
+        .bind(&object.calendar_scale)
+        .bind(&object.raw_jcal)
+        .bind(&object.diagnostics)
+        .bind(now)
+        .bind(now)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("insert iCalendar object preservation: {e}"))?;
+
+        insert_preserved_components(tx, target_calendar_id, now, &object.id, &object.components)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn insert_preserved_components(
+    tx: &mut Transaction<'_, Sqlite>,
+    target_calendar_id: &str,
+    now: &str,
+    object_id: &str,
+    components: &[CalendarImportPreservedComponent],
+) -> Result<(), String> {
+    let mut stack: Vec<(Option<String>, i64, &CalendarImportPreservedComponent)> = components
+        .iter()
+        .enumerate()
+        .rev()
+        .map(|(index, component)| (None, index as i64, component))
+        .collect();
+
+    while let Some((parent_component_id, sort_order, component)) = stack.pop() {
+        sqlx::query(
+            "INSERT INTO icalendar_components
+                (id, object_id, parent_component_id, calendar_id, component_type,
+                 uid, recurrence_id, recurrence_id_value_type, sequence, dtstart_key,
+                 raw_jcal, projected_kind, projected_id, preservation_status,
+                 projection_warnings, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)",
+        )
+        .bind(&component.id)
+        .bind(object_id)
+        .bind(&parent_component_id)
+        .bind(target_calendar_id)
+        .bind(&component.component_type)
+        .bind(&component.uid)
+        .bind(&component.recurrence_id)
+        .bind(&component.recurrence_id_value_type)
+        .bind(component.sequence)
+        .bind(&component.dtstart_key)
+        .bind(&component.raw_jcal)
+        .bind(&component.preservation_status)
+        .bind(&component.projection_warnings)
+        .bind(sort_order)
+        .bind(now)
+        .bind(now)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("insert iCalendar component preservation: {e}"))?;
+
+        for (index, child) in component.components.iter().enumerate().rev() {
+            stack.push((Some(component.id.clone()), index as i64, child));
+        }
+    }
+    Ok(())
 }
 
 async fn insert_event(
@@ -473,8 +621,73 @@ async fn insert_child_rows(
 fn validate_payload(payload: &CalendarBulkImportPayload) -> Result<(), String> {
     require_non_empty(&payload.target_calendar_id, "target_calendar_id")?;
     require_non_empty(&payload.now, "now")?;
+    if let Some(preservation) = &payload.preservation {
+        validate_preservation(preservation)?;
+    }
     for event in &payload.events {
         validate_event(event)?;
+    }
+    Ok(())
+}
+
+fn validate_preservation(preservation: &CalendarImportPreservation) -> Result<(), String> {
+    validate_enum(
+        &preservation.source_kind,
+        "preservation.source_kind",
+        &[
+            "import-file",
+            "import-zip-entry",
+            "local-export-base",
+            "subscription",
+        ],
+    )?;
+    require_non_empty(
+        &preservation.source_fingerprint,
+        "preservation.source_fingerprint",
+    )?;
+    for object in &preservation.objects {
+        validate_preserved_object(object)?;
+    }
+    Ok(())
+}
+
+fn validate_preserved_object(object: &CalendarImportPreservedObject) -> Result<(), String> {
+    require_non_empty(&object.id, "preservation.object.id")?;
+    validate_json_string(&object.raw_jcal, "preservation.object.raw_jcal")?;
+    validate_json_string(&object.diagnostics, "preservation.object.diagnostics")?;
+    for component in &object.components {
+        validate_preserved_component(component)?;
+    }
+    Ok(())
+}
+
+fn validate_preserved_component(
+    component: &CalendarImportPreservedComponent,
+) -> Result<(), String> {
+    require_non_empty(&component.id, "preservation.component.id")?;
+    require_non_empty(
+        &component.component_type,
+        "preservation.component.component_type",
+    )?;
+    validate_enum(
+        &component.preservation_status,
+        "preservation.component.preservation_status",
+        &[
+            "lossless",
+            "partial",
+            "unsupported",
+            "needs-review",
+            "regenerated",
+            "invalid",
+        ],
+    )?;
+    validate_json_string(&component.raw_jcal, "preservation.component.raw_jcal")?;
+    validate_json_string(
+        &component.projection_warnings,
+        "preservation.component.projection_warnings",
+    )?;
+    for child in &component.components {
+        validate_preserved_component(child)?;
     }
     Ok(())
 }
@@ -629,9 +842,14 @@ fn validate_non_negative(value: i64, field: &str) -> Result<(), String> {
 
 fn validate_json_option(value: &Option<String>, field: &str) -> Result<(), String> {
     if let Some(json) = value {
-        serde_json::from_str::<serde_json::Value>(json)
-            .map_err(|e| format!("{field} is not valid JSON: {e}"))?;
+        validate_json_string(json, field)?;
     }
+    Ok(())
+}
+
+fn validate_json_string(value: &str, field: &str) -> Result<(), String> {
+    serde_json::from_str::<serde_json::Value>(value)
+        .map_err(|e| format!("{field} is not valid JSON: {e}"))?;
     Ok(())
 }
 
@@ -646,8 +864,10 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        insert_child_rows, insert_event, update_event, validate_color, validate_enum,
-        validate_json_option, validate_priority, CalendarImportEvent, CalendarImportOverride,
+        insert_child_rows, insert_event, replace_preservation, update_event, validate_color,
+        validate_enum, validate_json_option, validate_preservation, validate_priority,
+        CalendarImportEvent, CalendarImportOverride, CalendarImportPreservation,
+        CalendarImportPreservedComponent, CalendarImportPreservedObject,
     };
 
     #[test]
@@ -669,6 +889,95 @@ mod tests {
     fn validates_json_payload_fields() {
         assert!(validate_json_option(&Some(r#"["a"]"#.to_string()), "categories").is_ok());
         assert!(validate_json_option(&Some("not json".to_string()), "categories").is_err());
+    }
+
+    #[test]
+    fn validates_icalendar_preservation_payload() {
+        let preservation = preservation_payload("source.ics");
+        assert!(validate_preservation(&preservation).is_ok());
+
+        let invalid_json = CalendarImportPreservation {
+            objects: vec![CalendarImportPreservedObject {
+                raw_jcal: "not json".to_string(),
+                ..preserved_object("object-1")
+            }],
+            ..preservation_payload("source.ics")
+        };
+        assert!(validate_preservation(&invalid_json).is_err());
+
+        let invalid_status = CalendarImportPreservation {
+            objects: vec![CalendarImportPreservedObject {
+                components: vec![CalendarImportPreservedComponent {
+                    preservation_status: "mystery".to_string(),
+                    ..preserved_component("component-1", "vtodo")
+                }],
+                ..preserved_object("object-1")
+            }],
+            ..preservation_payload("source.ics")
+        };
+        assert!(validate_preservation(&invalid_status).is_err());
+    }
+
+    #[test]
+    fn stores_icalendar_preserved_objects_and_components() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let mut tx = pool.begin().await.unwrap();
+            let preservation = preservation_payload("source.ics");
+
+            replace_preservation(&mut tx, "local", "2026-05-09 10:00:00", &preservation)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let object_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM icalendar_objects")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            let component_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM icalendar_components")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let nested_parent_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM icalendar_components WHERE parent_component_id IS NOT NULL",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(object_count, 1);
+            assert_eq!(component_count, 2);
+            assert_eq!(nested_parent_count, 1);
+        });
+    }
+
+    #[test]
+    fn replacing_icalendar_preservation_removes_previous_source_rows() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let mut tx = pool.begin().await.unwrap();
+            let first = preservation_payload("source.ics");
+            let second = CalendarImportPreservation {
+                objects: vec![preserved_object("object-2")],
+                ..preservation_payload("source.ics")
+            };
+
+            replace_preservation(&mut tx, "local", "2026-05-09 10:00:00", &first)
+                .await
+                .unwrap();
+            replace_preservation(&mut tx, "local", "2026-05-09 10:05:00", &second)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let ids: Vec<String> =
+                sqlx::query_scalar("SELECT id FROM icalendar_objects ORDER BY id")
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(ids, vec!["object-2".to_string()]);
+        });
     }
 
     #[test]
@@ -804,6 +1113,50 @@ mod tests {
             attendees: Vec::new(),
             alarms: Vec::new(),
             overrides: Vec::new(),
+        }
+    }
+
+    fn preservation_payload(source_name: &str) -> CalendarImportPreservation {
+        CalendarImportPreservation {
+            source_kind: "import-file".to_string(),
+            source_name: source_name.to_string(),
+            source_fingerprint: "fingerprint".to_string(),
+            objects: vec![CalendarImportPreservedObject {
+                components: vec![CalendarImportPreservedComponent {
+                    components: vec![preserved_component("component-2", "valarm")],
+                    ..preserved_component("component-1", "vtodo")
+                }],
+                ..preserved_object("object-1")
+            }],
+        }
+    }
+
+    fn preserved_object(id: &str) -> CalendarImportPreservedObject {
+        CalendarImportPreservedObject {
+            id: id.to_string(),
+            prodid: Some("fixture".to_string()),
+            version: Some("2.0".to_string()),
+            method: Some("PUBLISH".to_string()),
+            calendar_scale: Some("GREGORIAN".to_string()),
+            raw_jcal: r#"["vcalendar",[],[]]"#.to_string(),
+            diagnostics: r#"[]"#.to_string(),
+            components: Vec::new(),
+        }
+    }
+
+    fn preserved_component(id: &str, component_type: &str) -> CalendarImportPreservedComponent {
+        CalendarImportPreservedComponent {
+            id: id.to_string(),
+            component_type: component_type.to_string(),
+            uid: Some(format!("{component_type}@example.com")),
+            recurrence_id: None,
+            recurrence_id_value_type: None,
+            sequence: Some(0),
+            dtstart_key: None,
+            raw_jcal: format!(r#"["{component_type}",[],[]]"#),
+            preservation_status: "unsupported".to_string(),
+            projection_warnings: r#"[]"#.to_string(),
+            components: Vec::new(),
         }
     }
 }

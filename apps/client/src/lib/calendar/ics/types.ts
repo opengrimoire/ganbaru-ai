@@ -7,6 +7,43 @@ import type { CalendarEvent } from "$lib/components/calendar/types";
 export interface IcsParseResult {
 	events: CalendarEvent[];
 	warnings: string[];
+	preservation?: IcsPreservationPayload;
+}
+
+export type IcsPreservationStatus =
+	| "lossless"
+	| "partial"
+	| "unsupported"
+	| "needs-review"
+	| "regenerated"
+	| "invalid";
+
+export interface IcsPreservationPayload {
+	sourceFingerprint: string;
+	objects: IcsPreservedObject[];
+}
+
+export interface IcsPreservedObject {
+	prodid?: string;
+	version?: string;
+	method?: string;
+	calendarScale?: string;
+	rawJcal: unknown;
+	diagnostics: string[];
+	components: IcsPreservedComponent[];
+}
+
+export interface IcsPreservedComponent {
+	componentType: string;
+	uid?: string;
+	recurrenceId?: string;
+	recurrenceIdValueType?: string;
+	sequence?: number;
+	dtstartKey?: string;
+	rawJcal: unknown;
+	preservationStatus: IcsPreservationStatus;
+	projectionWarnings: string[];
+	components: IcsPreservedComponent[];
 }
 
 /**

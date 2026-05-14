@@ -22,6 +22,7 @@ import {
 } from "./map-row";
 import {
   buildBulkImportPayload,
+  type CalendarImportSourceKind,
   type CalendarBulkImportResult,
 } from "./calendar-bulk-import";
 import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
@@ -32,7 +33,7 @@ import {
   type WindowLoadEvent,
   type WindowLoadOutcome,
 } from "./window-load-coordinator";
-import type { IcsImportSummary } from "$lib/calendar/ics/types";
+import type { IcsImportSummary, IcsPreservationPayload } from "$lib/calendar/ics/types";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
 
 export { expandRecurring, parseYMD, fmtYMD };
@@ -1418,13 +1419,25 @@ export function getCalendar() {
     async bulkImport(
       events: CalendarEvent[],
       targetCalendarId: string,
-      opts: { refreshWindow?: boolean } = {},
+      opts: {
+        refreshWindow?: boolean;
+        preservation?: IcsPreservationPayload | null;
+        sourceName?: string;
+        sourceKind?: CalendarImportSourceKind;
+      } = {},
     ): Promise<IcsImportSummary> {
       const now = nowLocal();
       const fallbackZone = localTimezone();
 
       const payload = buildBulkImportPayload(
-        events, targetCalendarId, now, fallbackZone, () => crypto.randomUUID(),
+        events,
+        targetCalendarId,
+        now,
+        fallbackZone,
+        () => crypto.randomUUID(),
+        opts.preservation ?? null,
+        opts.sourceName ?? "",
+        opts.sourceKind ?? "import-file",
       );
       const result = await invoke<CalendarBulkImportResult>("calendar_bulk_import", {
         dbUrl: dbUrl(),

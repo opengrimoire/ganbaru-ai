@@ -9,9 +9,21 @@ import type {
   EventAttendee,
   EventOverride,
 } from "$lib/components/calendar/types";
+import type {
+  IcsPreservedComponent,
+  IcsPreservedObject,
+  IcsPreservationPayload,
+  IcsPreservationStatus,
+} from "$lib/calendar/ics/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
 import { toDbTime } from "./map-row";
+
+export type CalendarImportSourceKind =
+  | "import-file"
+  | "import-zip-entry"
+  | "local-export-base"
+  | "subscription";
 
 export type CalendarBulkImportAction = "added" | "updated";
 
@@ -32,7 +44,40 @@ export interface CalendarBulkImportResult {
 export interface CalendarBulkImportPayload {
   targetCalendarId: string;
   now: string;
+  preservation: CalendarBulkImportPreservation | null;
   events: CalendarBulkImportEvent[];
+}
+
+export interface CalendarBulkImportPreservation {
+  sourceKind: CalendarImportSourceKind;
+  sourceName: string;
+  sourceFingerprint: string;
+  objects: CalendarBulkImportPreservedObject[];
+}
+
+export interface CalendarBulkImportPreservedObject {
+  id: string;
+  prodid: string | null;
+  version: string | null;
+  method: string | null;
+  calendarScale: string | null;
+  rawJcal: string;
+  diagnostics: string;
+  components: CalendarBulkImportPreservedComponent[];
+}
+
+export interface CalendarBulkImportPreservedComponent {
+  id: string;
+  componentType: string;
+  uid: string | null;
+  recurrenceId: string | null;
+  recurrenceIdValueType: string | null;
+  sequence: number | null;
+  dtstartKey: string | null;
+  rawJcal: string;
+  preservationStatus: IcsPreservationStatus;
+  projectionWarnings: string;
+  components: CalendarBulkImportPreservedComponent[];
 }
 
 export interface CalendarBulkImportEvent {
@@ -108,12 +153,72 @@ export function buildBulkImportPayload(
   now: string,
   fallbackZone: string,
   newId: () => string,
+  preservation: IcsPreservationPayload | null = null,
+  sourceName = "",
+  sourceKind: CalendarImportSourceKind = "import-file",
 ): CalendarBulkImportPayload {
   return {
     targetCalendarId,
     now,
+    preservation: buildPreservationPayload(preservation, sourceName, sourceKind, newId),
     events: events.map((event) =>
       buildBulkImportEvent(event, newId(), fallbackZone),
+    ),
+  };
+}
+
+function buildPreservationPayload(
+  preservation: IcsPreservationPayload | null,
+  sourceName: string,
+  sourceKind: CalendarImportSourceKind,
+  newId: () => string,
+): CalendarBulkImportPreservation | null {
+  if (!preservation || preservation.objects.length === 0) return null;
+  return {
+    sourceKind,
+    sourceName,
+    sourceFingerprint: preservation.sourceFingerprint,
+    objects: preservation.objects.map((object) =>
+      buildPreservedObject(object, newId),
+    ),
+  };
+}
+
+function buildPreservedObject(
+  object: IcsPreservedObject,
+  newId: () => string,
+): CalendarBulkImportPreservedObject {
+  return {
+    id: newId(),
+    prodid: object.prodid ?? null,
+    version: object.version ?? null,
+    method: object.method ?? null,
+    calendarScale: object.calendarScale ?? null,
+    rawJcal: JSON.stringify(object.rawJcal),
+    diagnostics: JSON.stringify(object.diagnostics),
+    components: object.components.map((component) =>
+      buildPreservedComponent(component, newId),
+    ),
+  };
+}
+
+function buildPreservedComponent(
+  component: IcsPreservedComponent,
+  newId: () => string,
+): CalendarBulkImportPreservedComponent {
+  return {
+    id: newId(),
+    componentType: component.componentType,
+    uid: component.uid ?? null,
+    recurrenceId: component.recurrenceId ?? null,
+    recurrenceIdValueType: component.recurrenceIdValueType ?? null,
+    sequence: component.sequence ?? null,
+    dtstartKey: component.dtstartKey ?? null,
+    rawJcal: JSON.stringify(component.rawJcal),
+    preservationStatus: component.preservationStatus,
+    projectionWarnings: JSON.stringify(component.projectionWarnings),
+    components: component.components.map((child) =>
+      buildPreservedComponent(child, newId),
     ),
   };
 }
