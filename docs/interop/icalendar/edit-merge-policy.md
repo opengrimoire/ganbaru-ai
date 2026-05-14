@@ -88,6 +88,7 @@ Offline edits do not notify anyone. If a component has scheduling metadata:
 
 - preserve `METHOD`, `ORGANIZER`, `ATTENDEE`, `REQUEST-STATUS`, and related fields.
 - show diagnostics if export may look like an invitation update.
+- emit a preserved `METHOD` only when the exported calendar has one distinct preserved method.
 - do not imply that attendees were notified.
 - require a future transport before sending scheduling messages.
 

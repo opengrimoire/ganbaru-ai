@@ -1,6 +1,7 @@
 use crate::calendar_description::sanitize_calendar_description_html;
 use crate::db_path::connect_sqlite;
 use serde::Serialize;
+use std::collections::BTreeSet;
 use tauri::{AppHandle, Runtime};
 
 #[derive(Serialize)]
@@ -264,6 +265,12 @@ pub struct CalendarFullEventRows {
     overrides: Vec<DbFullOverrideRow>,
 }
 
+#[derive(Serialize)]
+pub struct CalendarIcalendarExportMetadata {
+    method: Option<String>,
+    mixed_methods: bool,
+}
+
 const WINDOW_EVENTS_SQL: &str = r#"
     SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
            ce.calendar_id, ce.color, ce.rrule,
@@ -420,6 +427,28 @@ pub async fn calendar_load_icalendar_passthrough_components_for_calendar<R: Runt
 }
 
 #[tauri::command]
+pub async fn calendar_load_icalendar_export_metadata_for_calendar<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    calendar_id: String,
+) -> Result<CalendarIcalendarExportMetadata, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let methods = sqlx::query_scalar::<_, String>(
+        "SELECT method
+         FROM icalendar_objects
+         WHERE calendar_id = ?
+           AND method IS NOT NULL
+           AND trim(method) <> ''",
+    )
+    .bind(&calendar_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("load iCalendar export metadata: {e}"))?;
+
+    Ok(calendar_icalendar_export_metadata(methods))
+}
+
+#[tauri::command]
 pub async fn calendar_load_panel_event<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
@@ -504,10 +533,27 @@ fn sanitize_full_override_rows(rows: &mut [DbFullOverrideRow]) {
     }
 }
 
+fn calendar_icalendar_export_metadata(methods: Vec<String>) -> CalendarIcalendarExportMetadata {
+    let distinct_methods = methods
+        .into_iter()
+        .map(|method| method.trim().to_ascii_uppercase())
+        .filter(|method| !method.is_empty())
+        .collect::<BTreeSet<_>>();
+    CalendarIcalendarExportMetadata {
+        method: if distinct_methods.len() == 1 {
+            distinct_methods.iter().next().cloned()
+        } else {
+            None
+        },
+        mixed_methods: distinct_methods.len() > 1,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        sanitize_full_event_row, sanitize_full_override_rows, DbFullEventRow, DbFullOverrideRow,
+        calendar_icalendar_export_metadata, sanitize_full_event_row, sanitize_full_override_rows,
+        DbFullEventRow, DbFullOverrideRow,
     };
 
     #[test]
@@ -548,6 +594,26 @@ mod tests {
             rows[0].description.as_deref(),
             Some("<div><strong>Safe</strong></div>")
         );
+    }
+
+    #[test]
+    fn uses_single_preserved_method_for_export_metadata() {
+        let metadata = calendar_icalendar_export_metadata(vec![
+            " request ".to_string(),
+            "REQUEST".to_string(),
+        ]);
+
+        assert_eq!(metadata.method.as_deref(), Some("REQUEST"));
+        assert!(!metadata.mixed_methods);
+    }
+
+    #[test]
+    fn drops_mixed_preserved_methods_for_export_metadata() {
+        let metadata =
+            calendar_icalendar_export_metadata(vec!["REQUEST".to_string(), "CANCEL".to_string()]);
+
+        assert_eq!(metadata.method, None);
+        assert!(metadata.mixed_methods);
     }
 
     fn full_event_row(description: &str) -> DbFullEventRow {

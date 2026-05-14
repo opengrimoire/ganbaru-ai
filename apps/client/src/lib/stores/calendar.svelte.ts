@@ -216,6 +216,11 @@ interface CalendarFullEventRows {
   overrides: DbFullOverride[];
 }
 
+interface CalendarIcalendarExportMetadata {
+  method: string | null;
+  mixed_methods: boolean;
+}
+
 /**
  * Sorted lookup over the current render-window rows, rebuilt lazily after
  * each invalidate. The non-recurring events are sorted ascending by start so window queries can
@@ -1516,6 +1521,18 @@ export function getCalendar() {
       const preservedPassthroughComponents = preservedPassthroughRows
         .map((row) => safeJsonParse<unknown>(row))
         .filter((row): row is unknown => row !== undefined);
+      const preservedExportMetadata = await invoke<CalendarIcalendarExportMetadata>(
+        "calendar_load_icalendar_export_metadata_for_calendar",
+        {
+          dbUrl: dbUrl(),
+          calendarId: calendar.id,
+        },
+      );
+      if (preservedExportMetadata.mixed_methods) {
+        console.warn(
+          "iCalendar export used METHOD:PUBLISH because this calendar contains mixed preserved METHOD values.",
+        );
+      }
       const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
       return serializeCalendarToIcs(
         calendar,
@@ -1523,6 +1540,7 @@ export function getCalendar() {
         undefined,
         preservedTimezones,
         preservedPassthroughComponents,
+        preservedExportMetadata.method ?? undefined,
       );
     },
 

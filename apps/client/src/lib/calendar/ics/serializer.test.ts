@@ -40,8 +40,36 @@ describe("serializeCalendarToIcs", () => {
 			expect(ics).toContain("PRODID:-//GanbaruAI//Calendar//EN");
 			expect(ics).toContain("VERSION:2.0");
 			expect(ics).toContain("CALSCALE:GREGORIAN");
+			expect(ics).toContain("METHOD:PUBLISH");
 			expect(ics).toContain(`X-WR-CALNAME:${baseCalendar.name}`);
 			expect(ics.trimEnd()).toMatch(/END:VCALENDAR$/);
+		});
+
+		it("uses a preserved scheduling METHOD when it is valid", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[makeEvent()],
+				"UTC",
+				[],
+				[],
+				"request",
+			);
+
+			expect(ics).toContain("METHOD:REQUEST");
+		});
+
+		it("falls back to PUBLISH for invalid preserved scheduling methods", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[makeEvent()],
+				"UTC",
+				[],
+				[],
+				"REQUEST\r\nX-BAD:1",
+			);
+
+			expect(ics).toContain("METHOD:PUBLISH");
+			expect(ics).not.toContain("X-BAD:1");
 		});
 
 		it("uses CRLF line endings", () => {

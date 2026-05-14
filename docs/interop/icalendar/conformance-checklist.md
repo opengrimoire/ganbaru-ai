@@ -59,8 +59,8 @@ Current implementation summary:
 - Exported: `partial`.
 - Editable: `no`.
 - Tested: `partial`.
-- Evidence: `parseIcs` stores each parsed `VCALENDAR` object as structured JSON, plus copied `PRODID`, `VERSION`, `CALSCALE`, and `METHOD` metadata. `serializeCalendarToIcs` emits generated `PRODID`, `VERSION`, `CALSCALE`, `METHOD`, and `X-WR-CALNAME`.
-- Gap: imported object-level properties are preserved for new imports but not merged into export yet.
+- Evidence: `parseIcs` stores each parsed `VCALENDAR` object as structured JSON, plus copied `PRODID`, `VERSION`, `CALSCALE`, and `METHOD` metadata. Export emits generated `PRODID`, `VERSION`, `CALSCALE`, and `X-WR-CALNAME`, and reuses a preserved `METHOD` only when all preserved objects in the exported calendar agree on one method.
+- Gap: imported object-level properties beyond a single safe `METHOD` are preserved for new imports but not merged into export yet.
 
 ### `VEVENT`
 
@@ -76,30 +76,30 @@ Current implementation summary:
 
 - Projected: `no`.
 - Preserved: `yes`.
-- Exported: `no`.
+- Exported: `yes`.
 - Editable: `no`.
-- Tested: `no`.
-- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
+- Tested: `yes`.
+- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected. Export passes through top-level preserved `VTODO` components unchanged.
 - Gap: legal task components do not have a visible app projection yet.
 
 ### `VJOURNAL`
 
 - Projected: `no`.
 - Preserved: `yes`.
-- Exported: `no`.
+- Exported: `yes`.
 - Editable: `no`.
-- Tested: `no`.
-- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
+- Tested: `partial`.
+- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected. Export passes through top-level preserved non-event components unchanged.
 - Gap: legal journal components do not have a visible app projection yet.
 
 ### `VFREEBUSY`
 
 - Projected: `no`.
 - Preserved: `yes`.
-- Exported: `no`.
+- Exported: `yes`.
 - Editable: `no`.
-- Tested: `no`.
-- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
+- Tested: `yes`.
+- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected. Export passes through top-level preserved `VFREEBUSY` components unchanged.
 - Gap: legal availability components do not have a visible app projection yet.
 
 ### `VTIMEZONE`
@@ -126,10 +126,10 @@ Current implementation summary:
 
 - Projected: `no`.
 - Preserved: `yes`.
-- Exported: `no`.
+- Exported: `partial`.
 - Editable: `no`.
-- Tested: `no`.
-- Evidence: new import preservation stores recursive components as structured JSON.
+- Tested: `partial`.
+- Evidence: new import preservation stores recursive components as structured JSON. Top-level preserved components outside `VEVENT` and `VTIMEZONE` pass through export unchanged.
 - Gap: unknown or future legal components do not have a visible app projection or export merge yet.
 
 ## Object-level properties
@@ -139,7 +139,7 @@ Current object-level import status:
 - `PRODID`: imported value is ignored.
 - `VERSION`: parsed by `ical.js`, but not explicitly validated or preserved.
 - `CALSCALE`: imported value is ignored.
-- `METHOD`: imported value is ignored. Export always emits `PUBLISH`.
+- `METHOD`: stored in object metadata. Export reuses it only when all preserved objects in the exported calendar agree on one method; otherwise export emits `PUBLISH`.
 - `X-WR-CALNAME`: imported value is not preserved as object metadata.
 - `X-WR-TIMEZONE`: imported value is not preserved as object metadata.
 - `NAME`, `DESCRIPTION`, `COLOR`, `IMAGE`, `REFRESH-INTERVAL`, `SOURCE`: not modeled.
@@ -147,8 +147,9 @@ Current object-level import status:
 
 Current object-level export status:
 
-- Generated `PRODID`, `VERSION`, `CALSCALE`, `METHOD`, and `X-WR-CALNAME` are emitted.
-- Original object-level fields from imports are not merged into export.
+- Generated `PRODID`, `VERSION`, `CALSCALE`, and `X-WR-CALNAME` are emitted.
+- `METHOD` uses one distinct preserved method for the exported calendar, or generated `PUBLISH` for local rows, missing method metadata, mixed preserved methods, and invalid method tokens.
+- Original object-level fields beyond `METHOD` are not merged into export.
 
 Required future state:
 

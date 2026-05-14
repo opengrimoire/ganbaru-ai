@@ -117,6 +117,10 @@
     onchange();
   }
 
+  function attendeeStatusLabel(status: EventAttendee["status"]): string {
+    return status === "needs-action" ? "pending" : status;
+  }
+
   let scrollEl: HTMLDivElement | undefined = $state();
   let fadeTop = $state(false);
   let fadeBottom = $state(false);
@@ -221,31 +225,34 @@
               {@const sqBg = att.status === "accepted" ? "bg-status-accepted" : att.status === "tentative" ? "bg-status-tentative" : att.status === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
               {@const sqFg = att.status === "accepted" ? "text-status-accepted-foreground" : att.status === "tentative" ? "text-status-tentative-foreground" : att.status === "declined" ? "text-status-declined-foreground" : "text-foreground"}
               {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
-              {@const statusLabel = att.status === "needs-action" ? "pending" : att.status}
+              {@const statusLabel = attendeeStatusLabel(att.status)}
               <div class="flex items-center gap-2 py-0.5 text-[11px]">
                 <span
                   class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}"
-                  title={statusLabel}>
+                  title={`RSVP status: ${statusLabel}`}>
                   <StatusIcon size={10} strokeWidth={2.5} class="block {sqFg}" />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>
+                <span class="shrink-0 text-[10px] text-muted-foreground/60">{statusLabel}</span>
                 {#if att.role === "opt-participant"}
                   <span class="shrink-0 text-[10px] text-muted-foreground/60 italic">(optional)</span>
                 {/if}
                 {#if !readOnly}
                   <div class="flex shrink-0 items-center gap-0.5">
                     <button onclick={() => toggleAttendeeOptional(att.id)}
+                      title={att.role === "opt-participant" ? "Mark required" : "Mark optional"}
+                      aria-label={att.role === "opt-participant" ? "Mark required" : "Mark optional"}
                       class="rounded p-0.5 active:scale-75
                         {att.role === 'opt-participant' ? 'text-muted-foreground/40' : 'text-foreground'}">
                       <Flag size={11} />
                     </button>
                     <button onclick={() => removeAttendee(att.id)}
+                      title="Remove attendee"
+                      aria-label="Remove attendee"
                       class="rounded p-0.5 text-muted-foreground active:scale-75 hover:text-destructive">
                       <X size={11} />
                     </button>
                   </div>
-                {:else}
-                  <span class="shrink-0 text-[10px] text-muted-foreground/60">{statusLabel}</span>
                 {/if}
               </div>
             {/each}

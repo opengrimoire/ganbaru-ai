@@ -76,7 +76,8 @@ When exporting scheduling metadata:
 
 - preserve original scheduling fields when no unsafe edit occurred.
 - include diagnostics for edited offline invitations.
-- avoid generating `METHOD:REQUEST` for ordinary local calendar export unless the source component had scheduling context or the user explicitly exports an invitation.
+- avoid generating `METHOD:REQUEST` for ordinary local calendar export unless the source calendar has one distinct preserved scheduling method or the user explicitly exports an invitation.
+- fall back to `METHOD:PUBLISH` when an exported calendar contains mixed preserved methods, because one `VCALENDAR` cannot represent multiple scheduling message types truthfully.
 - do not fabricate attendee replies.
 
 ## Future scheduling modes

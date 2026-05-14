@@ -13,6 +13,8 @@ import { wallClockToUtcIso } from "$lib/components/calendar/utils";
 
 const CRLF = "\r\n";
 const PRODID = "-//GanbaruAI//Calendar//EN";
+const DEFAULT_METHOD = "PUBLISH";
+const METHOD_TOKEN_RE = /^[A-Za-z0-9-]+$/;
 const textEncoder = new TextEncoder();
 
 type JcalProperty = [string, Record<string, unknown>, string, ...unknown[]];
@@ -159,6 +161,12 @@ function escapeParamValue(value: string): string {
 
 function param(name: string, value: string): string {
 	return `${name}=${escapeParamValue(value)}`;
+}
+
+function normalizeMethod(method: string | undefined): string {
+	if (!method) return DEFAULT_METHOD;
+	const normalized = method.trim().toUpperCase();
+	return METHOD_TOKEN_RE.test(normalized) ? normalized : DEFAULT_METHOD;
 }
 
 function utf8ByteLength(value: string): number {
@@ -763,6 +771,7 @@ export function serializeCalendarToIcs(
 	renderZone?: string,
 	preservedTimezones: unknown[] = [],
 	preservedPassthroughComponents: unknown[] = [],
+	preservedMethod?: string,
 ): string {
 	const zone = renderZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
 	const dtStamp = formatUtcDateTime(new Date().toISOString());
@@ -779,7 +788,7 @@ export function serializeCalendarToIcs(
 		`PRODID:${PRODID}`,
 		"VERSION:2.0",
 		"CALSCALE:GREGORIAN",
-		"METHOD:PUBLISH",
+		`METHOD:${normalizeMethod(preservedMethod)}`,
 		`X-WR-CALNAME:${escapeText(calendar.name)}`,
 	];
 
