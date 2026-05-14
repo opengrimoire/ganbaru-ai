@@ -38,7 +38,7 @@ Expected handling:
 Manual checks:
 
 1. Create a disposable Proton calendar.
-2. Import GanbaruAI-generated fixtures through Proton's import/export screen.
+2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/` through Proton's import/export screen.
 3. Verify all-day and timed event dates.
 4. Verify recurrence, exceptions, and overrides.
 5. Export the Proton calendar as `.ics`.

@@ -523,7 +523,9 @@ function collectExtendedProperties(component: ICAL.Component): {
 				guests.canSeeOtherGuests = stringValue.toUpperCase() === "TRUE";
 				break;
 			default:
-				extended[name.toUpperCase()] = stringValue;
+				if (name.startsWith("x-")) {
+					extended[name.toUpperCase()] = stringValue;
+				}
 		}
 	}
 	return { extended, guests };

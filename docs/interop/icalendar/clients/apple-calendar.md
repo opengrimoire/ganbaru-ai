@@ -37,7 +37,7 @@ Expected handling:
 Manual checks:
 
 1. Create a local disposable calendar in Apple Calendar.
-2. Import GanbaruAI-generated fixtures.
+2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify all-day date spans.
 4. Verify recurrence and moved instances.
 5. Verify alarms.

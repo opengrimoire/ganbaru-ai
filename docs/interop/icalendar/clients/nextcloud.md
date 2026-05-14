@@ -41,7 +41,7 @@ Expected handling:
 Manual checks:
 
 1. Create a disposable Nextcloud calendar.
-2. Import GanbaruAI-generated fixtures.
+2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify all-day, timed, recurrence, alarms, and attendees.
 4. Export events or the calendar from Nextcloud.
 5. Import back into GanbaruAI.

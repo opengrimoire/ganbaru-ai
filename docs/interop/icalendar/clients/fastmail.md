@@ -39,7 +39,7 @@ Expected handling:
 Manual checks:
 
 1. Create a disposable Fastmail calendar.
-2. Import GanbaruAI-generated fixtures.
+2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify all-day and timed date behavior.
 4. Verify recurrence and exceptions.
 5. Verify whether alarms are dropped as documented.

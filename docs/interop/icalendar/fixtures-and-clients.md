@@ -14,6 +14,18 @@ This document defines automated fixture coverage and manual client testing. Stan
 
 ## Automated fixture classes
 
+The current standards fixture pack lives under `apps/client/test-fixtures/ics/rfc5545/` and is exercised by `apps/client/src/lib/calendar/ics/fixture-suite.test.ts`.
+
+Current files:
+
+- `core-events.ics`: minimal UTC event, all-day single and multi-day events, `DURATION`, floating time, escaped text, categories, and geo.
+- `recurrence-timezones.ics`: custom `VTIMEZONE`, DST-adjacent recurrence, `EXDATE`, `RDATE`, yearly all-day recurrence, and `RECURRENCE-ID;RANGE=THISANDFUTURE`.
+- `scheduling.ics`: `METHOD:REQUEST`, organizer parameters, attendee participation parameters, delegation, members, and `REQUEST-STATUS`.
+- `components.ics`: mixed `VEVENT`, `VTODO`, `VJOURNAL`, `VFREEBUSY`, `VTIMEZONE`, and nested `VALARM`.
+- `attachments-extensions.ics`: URI attachment, binary attachment, RFC 7986 properties, object-level `X-*`, and component-level `X-*`.
+
+The suite links preserved jCal back to projected events before export so it exercises the same merge path used by imported calendars with preservation rows.
+
 Core event fixtures:
 
 - minimal UTC `VEVENT`
@@ -102,7 +114,7 @@ Manual tests use disposable calendars. Never test with the user's primary calend
 For each client:
 
 1. Create a disposable calendar.
-2. Import GanbaruAI-generated fixtures.
+2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`, plus any client-specific raw fixtures.
 3. Inspect visual behavior.
 4. Export the same calendar back to `.ics`.
 5. Store the raw export as a dated fixture.

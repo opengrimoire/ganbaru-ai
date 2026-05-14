@@ -40,7 +40,7 @@ Expected handling:
 Manual checks:
 
 1. Create a disposable Outlook calendar.
-2. Import GanbaruAI-generated fixtures.
+2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify all-day date spans.
 4. Verify zoned recurrence across DST.
 5. Verify reminders and attachments.

@@ -44,7 +44,7 @@ Expected handling:
 Manual checks:
 
 1. Create a disposable Google calendar.
-2. Export a GanbaruAI calendar with the fixture set.
+2. Export a GanbaruAI calendar with the fixture set in `apps/client/test-fixtures/ics/rfc5545/`.
 3. Import the file into the disposable Google calendar.
 4. Confirm all-day events show on the intended days.
 5. Confirm timed recurring events keep their wall-clock time.

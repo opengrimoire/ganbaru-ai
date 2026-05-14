@@ -29,6 +29,7 @@ Evidence reviewed:
 - `apps/client/src/lib/calendar/ics/types.ts`
 - `apps/client/src/lib/calendar/ics/parser.test.ts`
 - `apps/client/src/lib/calendar/ics/serializer.test.ts`
+- `apps/client/src/lib/calendar/ics/fixture-suite.test.ts`
 - `apps/client/src/lib/calendar/ics/round-trip.test.ts`
 - `apps/client/src/lib/components/calendar/rrule.ts`
 - `apps/client/src/lib/components/calendar/rrule.test.ts`
@@ -39,6 +40,11 @@ Evidence reviewed:
 - `apps/client/test-fixtures/ics/google-calendar-sample.ics`
 - `apps/client/test-fixtures/ics/outlook-sample.ics`
 - `apps/client/test-fixtures/ics/edge-cases.ics`
+- `apps/client/test-fixtures/ics/rfc5545/core-events.ics`
+- `apps/client/test-fixtures/ics/rfc5545/recurrence-timezones.ics`
+- `apps/client/test-fixtures/ics/rfc5545/scheduling.ics`
+- `apps/client/test-fixtures/ics/rfc5545/components.ics`
+- `apps/client/test-fixtures/ics/rfc5545/attachments-extensions.ics`
 
 Current implementation summary:
 
@@ -46,8 +52,8 @@ Current implementation summary:
 - New imports store structured iCalendar object and component JSON in `icalendar_objects` and `icalendar_components`.
 - Projected events, attendees, alarms, and recurrence overrides link back to preserved components.
 - Import still only projects `VEVENT` components into visible calendar rows. Other legal components are preserved without an app surface.
-- Export always generates a new `VCALENDAR` object from projected rows.
-- Some common event fields round-trip through projection. Unsupported `VEVENT` properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported `VALARM` fields are preserved on new imports and merged back into export for linked events. Preserved `VTIMEZONE` definitions export before generated timezone stubs. Preserved top-level non-event components pass through export unchanged while they have no app projection. Object metadata and full component ordering are preserved on import but are not merged back into export yet.
+- Export generates a new `VCALENDAR` object from projected rows, preserved timezones, preserved top-level passthrough components, and one safe object-level `METHOD` when available.
+- Some common event fields round-trip through projection. Unsupported `VEVENT` properties, unsupported parameters, inert URI and binary attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported `VALARM` fields are preserved on new imports and merged back into export for linked events. Preserved `VTIMEZONE` definitions export before generated timezone stubs. Preserved top-level non-event components pass through export unchanged while they have no app projection. Object metadata beyond `METHOD` and full component ordering are preserved on import but are not merged back into export yet.
 - Existing tests cover the projected subset and new preservation/link storage, but they do not prove full RFC 5545 file compatibility.
 
 ## Components
@@ -136,14 +142,14 @@ Current implementation summary:
 
 Current object-level import status:
 
-- `PRODID`: imported value is ignored.
-- `VERSION`: parsed by `ical.js`, but not explicitly validated or preserved.
-- `CALSCALE`: imported value is ignored.
+- `PRODID`: stored in object metadata. Export uses GanbaruAI's generated `PRODID`.
+- `VERSION`: stored in object metadata. Export emits `VERSION:2.0`.
+- `CALSCALE`: stored in object metadata. Export emits `CALSCALE:GREGORIAN`.
 - `METHOD`: stored in object metadata. Export reuses it only when all preserved objects in the exported calendar agree on one method; otherwise export emits `PUBLISH`.
-- `X-WR-CALNAME`: imported value is not preserved as object metadata.
-- `X-WR-TIMEZONE`: imported value is not preserved as object metadata.
-- `NAME`, `DESCRIPTION`, `COLOR`, `IMAGE`, `REFRESH-INTERVAL`, `SOURCE`: not modeled.
-- unknown `X-*` and `IANA-*`: not preserved at object level.
+- `X-WR-CALNAME`: preserved inside raw object JSON but not exported.
+- `X-WR-TIMEZONE`: preserved inside raw object JSON but not exported.
+- `NAME`, `DESCRIPTION`, `COLOR`, `IMAGE`, `REFRESH-INTERVAL`, `SOURCE`: preserved inside raw object JSON but not exported.
+- unknown `X-*` and `IANA-*`: preserved inside raw object JSON but not exported.
 
 Current object-level export status:
 
@@ -163,11 +169,11 @@ Required future state:
 
 - `UID`: projected as `sourceUid`, exported, and tested.
 - `DTSTAMP`: required on export as a generated current value, but imported value is not stored.
-- `CREATED`: ignored on import and not exported from preserved data.
-- `LAST-MODIFIED`: ignored on import and not exported from preserved data.
+- `CREATED`: not projected, but preserved and exported for linked event components.
+- `LAST-MODIFIED`: not projected, but preserved and exported for linked event components.
 - `SEQUENCE`: projected, exported, used for re-import ordering, and tested.
 
-Gap: timestamp provenance is lost. Future preservation must retain original timestamp properties even if app rows keep `created_at` and `updated_at` separately.
+Gap: timestamp provenance is not available in normalized event rows. App rows keep `created_at` and `updated_at` separately, and export regenerates `DTSTAMP`.
 
 ### Time fields
 
@@ -213,9 +219,9 @@ Current supported `RRULE` parts:
 Known recurrence gaps:
 
 - `BYSECOND`, `BYMINUTE`, and `BYHOUR` are not represented.
-- Full preservation of unknown or unsupported recurrence parts does not exist.
+- Unsupported `RRULE` parts are preserved in linked raw jCal, but the recurrence UI cannot edit them without regenerating a narrower rule.
 - `RDATE` and `EXDATE` value types are narrowed.
-- Recurrence property parameters are not preserved.
+- Recurrence property parameters are preserved for linked export when the property remains, but they are not editable.
 - Override matching is by master UID only, with no preservation of orphan override components.
 
 ### Status, visibility, and categorization
@@ -252,9 +258,9 @@ Known people gaps:
 - `ATTACH`: not modeled, but URI attachments are preserved as inert properties and merged for linked events.
 - Unknown event `X-*`: projected into `extendedProperties` as string values and exported.
 - Google guest permission `X-*`: projected into dedicated booleans and exported.
-- Unknown registered `IANA-*`: treated like an unrecognized property if `ical.js` exposes it, but only first string value is retained and parameters are lost.
+- Unknown registered `IANA-*`: preservation-only for linked exports. They are not projected into editable event extensions, which avoids dropping their parameters, value types, and multiplicity.
 
-Gap: extension projection is value-only for app editing. Structured preservation keeps parameters, groups, value types, and multiplicity for linked event export, while object-level extension export merge is still future work.
+Gap: `X-*` extension projection is value-only for app editing. Structured preservation keeps parameters, groups, value types, and multiplicity for linked event export, while object-level extension export merge is still future work.
 
 ## Task properties
 
@@ -318,16 +324,16 @@ Current status for all listed free/busy fields:
 `VTIMEZONE`, `STANDARD`, and `DAYLIGHT` fields:
 
 - `TZID`: projected partially by mapping to an IANA zone when possible.
-- `LAST-MODIFIED`: not preserved.
-- `TZURL`: not preserved.
-- `DTSTART`: not preserved as part of the timezone definition.
-- `TZOFFSETFROM`: not preserved.
-- `TZOFFSETTO`: not preserved.
-- `TZNAME`: not preserved.
-- `RRULE`: not preserved as part of the timezone definition.
-- `RDATE`: not preserved as part of the timezone definition.
-- `COMMENT`: not preserved.
-- `X-*`: not preserved.
+- `LAST-MODIFIED`: preserved and exported for linked timezone definitions.
+- `TZURL`: preserved and exported for linked timezone definitions.
+- `DTSTART`: preserved and exported inside `STANDARD` and `DAYLIGHT`.
+- `TZOFFSETFROM`: preserved and exported inside `STANDARD` and `DAYLIGHT`.
+- `TZOFFSETTO`: preserved and exported inside `STANDARD` and `DAYLIGHT`.
+- `TZNAME`: preserved and exported inside `STANDARD` and `DAYLIGHT`.
+- `RRULE`: preserved and exported inside `STANDARD` and `DAYLIGHT`.
+- `RDATE`: preserved and exported inside `STANDARD` and `DAYLIGHT`.
+- `COMMENT`: preserved and exported for linked timezone definitions.
+- `X-*`: preserved and exported for linked timezone definitions.
 
 Compatibility requirement:
 
@@ -374,11 +380,11 @@ Current parameter status:
 - `MEMBER`: preserved and merged for linked attendee properties.
 - `SENT-BY`: preserved and merged for linked organizer and attendee properties.
 - `RELTYPE`: preserved and merged for linked relationship properties.
-- `RANGE`: not preserved.
-- `FBTYPE`: not preserved.
+- `RANGE`: preserved and merged for linked `RECURRENCE-ID` properties.
+- `FBTYPE`: preserved and exported for linked `VFREEBUSY` components.
 - `ENCODING`: preserved in linked raw jCal; binary attachment handling remains inert.
 - `FMTTYPE`: preserved and merged for linked attachment properties.
-- `RELATED`: not preserved.
+- `RELATED`: preserved and merged for linked alarm trigger properties.
 - unknown `X-*` and `IANA-*`: preserved and merged as parameters for linked event properties.
 
 Compatibility requirement:
@@ -398,12 +404,12 @@ Current value-type status:
 - `DURATION`: projected for event end calculation and alarm trigger duration. Linked event export preserves imported event `DURATION` shape and unsupported alarm duration fields.
 - `FLOAT`: projected for `GEO` only.
 - `INTEGER`: projected for `PRIORITY` and `SEQUENCE`.
-- `PERIOD`: not preserved.
+- `PERIOD`: preserved in linked raw jCal and top-level `VFREEBUSY` passthrough, but not projected.
 - `RECUR`: projected for supported `RRULE` parts.
 - `TEXT`: projected for common fields and escaped on export.
-- `TIME`: not preserved.
+- `TIME`: preserved in linked raw jCal when `ical.js` accepts the property, but not projected.
 - `URI`: projected for `URL`; URI attachments and other linked URI properties are preserved as inert data.
-- `UTC-OFFSET`: not preserved in timezone definitions.
+- `UTC-OFFSET`: preserved and exported in linked timezone definitions.
 
 Compatibility requirement:
 
@@ -435,14 +441,14 @@ Current automated fixture coverage:
 - yearly all-day recurring event: `yes`, parser test.
 - timed recurring event with `EXDATE`: `yes`, parser and serializer tests.
 - recurring override with `RECURRENCE-ID`: `yes`, parser and serializer tests.
-- `RANGE=THISANDFUTURE`: `partial`, linked export preservation tested.
-- `RDATE` with dates and date-times: `partial`, date-time tested.
-- floating timed event: `partial`, linked export preserves floating shape.
+- `RANGE=THISANDFUTURE`: `yes`, linked export preservation tested in serializer and fixture suite.
+- `RDATE` with dates and date-times: `partial`, date-time tested and fixture-covered, date-only value shape still needs more coverage.
+- floating timed event: `yes`, linked export preserves floating shape.
 - custom `VTIMEZONE`: `partial`, linked export emits preserved definitions, but app recurrence math still uses projected zones.
-- alarm with repeat and duration: `partial`, warning tested but preservation missing.
-- attendee delegation parameters: `no`.
-- organizer `SENT-BY`: `no`.
-- attachment by URI and binary value: `no`.
+- alarm with repeat and duration: `partial`, warning and linked export preservation tested.
+- attendee delegation parameters: `yes`, preserved and merged in fixture suite.
+- organizer `SENT-BY`: `yes`, preserved and merged in fixture suite.
+- attachment by URI and binary value: `yes`, preserved and merged in fixture suite.
 - non-ASCII text: `partial`, UTF-8 folding tested.
 - escaped parameters: `partial`, `CN` tested.
 - folded lines: `yes`.
@@ -458,13 +464,12 @@ Each future fixture should assert parse diagnostics, preservation data, projecti
 
 The gaps most likely to corrupt common real-world exports today:
 
-- No preservation layer: unsupported legal data disappears on import.
-- Non-event components are ignored.
-- Object-level metadata is not merged into export yet. Preserved `VTIMEZONE` definitions now export, but app recurrence math still uses projected zones.
-- Attendee and organizer parameters beyond the current small subset are dropped.
+- Object-level metadata beyond a single safe `METHOD` is not merged into export yet.
+- App recurrence math still uses projected zones rather than foreign `VTIMEZONE` transition rules.
+- Attendee and organizer parameters beyond the current small subset are preserve-only, not editable.
 - `CONTACT` is preserved and exported for linked events, but it is not editable as an app field.
 - Floating timed events are interpreted through the device zone for projection, but linked export preserves floating date-time shape.
 - Generated rows without preserved source still export `DTEND` rather than original `DURATION` shape.
 - `RANGE=THISANDFUTURE` is preserved on linked export but not applied as an edit operation.
-- Unsupported `RRULE` parts are not preserved losslessly.
-- Unknown properties are narrowed to first string values when they are event-level extensions, and otherwise dropped.
+- Unsupported `RRULE` parts are not editable through the current recurrence UI.
+- Unknown registered event properties are preserve-only for linked export. Unknown event `X-*` properties are projected as value-only editable extensions.

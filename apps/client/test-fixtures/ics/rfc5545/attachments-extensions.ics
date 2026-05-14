@@ -1,0 +1,21 @@
+BEGIN:VCALENDAR
+PRODID:-//GanbaruAI//RFC5545 Attachment Fixtures//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+NAME:Attachment fixture calendar
+X-WR-CALNAME:Attachment fixture calendar
+X-OBJECT-FIELD:object-value
+BEGIN:VEVENT
+UID:fixture-attachments@example.com
+DTSTAMP:20260101T000000Z
+DTSTART:20260612T130000Z
+DTEND:20260612T140000Z
+SUMMARY:Attachments and extensions
+ATTACH;FMTTYPE=application/pdf:https://example.com/brief.pdf
+ATTACH;ENCODING=BASE64;VALUE=BINARY;FMTTYPE=text/plain:SGVsbG8=
+IMAGE;VALUE=URI;FMTTYPE=image/png:https://example.com/image.png
+COLOR:#ff0000
+CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Call:https://meet.example.com/fixture
+X-COMPONENT-FIELD;X-PARAM=alpha:beta
+END:VEVENT
+END:VCALENDAR

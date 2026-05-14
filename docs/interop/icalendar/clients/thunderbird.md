@@ -39,7 +39,7 @@ Expected handling:
 Manual checks:
 
 1. Create a disposable Thunderbird calendar.
-2. Import GanbaruAI-generated event fixtures.
+2. Import GanbaruAI-generated event fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify event time, all-day, recurrence, alarms, and attendees.
 4. Add Thunderbird tasks and export a mixed calendar.
 5. Import the mixed calendar into GanbaruAI.
