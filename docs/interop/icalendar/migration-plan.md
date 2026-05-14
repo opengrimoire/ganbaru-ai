@@ -2,6 +2,25 @@
 
 This plan introduces lossless iCalendar preservation without corrupting existing user data.
 
+## Current lossy baseline
+
+As of the 2026-05-14 audit, existing imports only store the projected `VEVENT` subset. The app does not store original `VCALENDAR` metadata, full `VTIMEZONE` definitions, non-event components, unsupported event properties, complete parameters, or original value-type shapes.
+
+Data that may already be unrecoverable from older imported rows includes:
+
+- imported `PRODID`, `CALSCALE`, `METHOD`, and object-level `X-*` fields
+- custom `VTIMEZONE` `STANDARD` and `DAYLIGHT` rules
+- `VTODO`, `VJOURNAL`, and `VFREEBUSY` components
+- `VALARM` `REPEAT`, `DURATION`, `SUMMARY`, `ATTENDEE`, and `ATTACH`
+- attendee and organizer parameters outside the current `CN`, `ROLE`, `PARTSTAT`, and `RSVP` subset
+- `ATTACH`, `REQUEST-STATUS`, `RELATED-TO`, `CONTACT`, `COMMENT`, and `RESOURCES`
+- `RANGE=THISANDFUTURE`
+- floating timed-event semantics, because current projection interprets floating times through the device zone
+- original use of `DURATION` when projection converted it to an end time
+- unsupported `RRULE` parts and unsupported property parameters
+
+Migration must not invent these values. Re-importing the original source file after preservation storage lands is the only reliable way to recover them.
+
 ## Existing data classes
 
 ### Local normalized events
