@@ -7,9 +7,7 @@
     "build": "turbo build",
     "check": "turbo check && cargo fmt --check && cargo clippy --workspace -- -D warnings",
     "test": "turbo test && cargo test --workspace",
-    "validate": "pnpm check && pnpm test",
-    "lint": "turbo lint",
-    "clean": "turbo clean"
+    "validate": "pnpm check && pnpm test"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

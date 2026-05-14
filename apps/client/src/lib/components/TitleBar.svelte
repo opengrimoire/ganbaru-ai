@@ -612,7 +612,6 @@
       </button>
     {/if}
 
-    <!-- TODO: implement help panel -->
     {#if titleBarControlVisible("help")}
       <button
         onclick={openHelpShortcuts}

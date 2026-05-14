@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { CalendarEvent, RecurrenceConfig } from "./types";
+import type { CalendarEvent } from "./types";
 import { expandRecurring, findOrdinalWeekday, fmtYMD, parseYMD } from "./recurrence";
 
 // A window wide enough to keep most legacy assertions intact while still

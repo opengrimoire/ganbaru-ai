@@ -12,6 +12,7 @@
     "sourceMap": true,
     "strict": true,
     "isolatedModules": true,
+    "types": ["vite/client"],
     "verbatimModuleSyntax": true,
     "paths": {
       "$lib": ["./src/lib"],

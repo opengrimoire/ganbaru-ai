@@ -1964,24 +1964,6 @@ function sanitizeFullTokenSnapshot(
 }
 
 /**
- * Synthesize a default sources palette from base CSS for legacy imports
- * that don't carry a `sources` block.
- */
-function defaultSources(base: "light" | "dark"): ThemeSources {
-  return {
-    canvas: defaultSourceValue("canvas", base),
-    ink: defaultSourceValue("ink", base),
-    primary: defaultSourceValue("primary", base),
-    destructive: defaultSourceValue("destructive", base),
-    destructiveText: defaultSourceValue("destructiveText", base),
-    confirm: defaultSourceValue("confirm", base),
-    confirmText: defaultSourceValue("confirmText", base),
-    warning: defaultSourceValue("warning", base),
-    warningText: defaultSourceValue("warningText", base),
-  };
-}
-
-/**
  * Pull a legacy `calCanvas` field out of an unknown sources-shaped value.
  * Returns the hex when valid, otherwise undefined. Used to migrate themes
  * written before calCanvas moved from a source to an auto-derived token.

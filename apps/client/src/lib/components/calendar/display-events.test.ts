@@ -157,7 +157,7 @@ describe("applyThis", () => {
     const inst21 = makeInstance(template, "2026-03-21");
     const events = [template, inst20, inst21];
 
-    const result = applyThis(events, inst20, inst20, { title: "Changed" });
+    const result = applyThis(events, inst20, { title: "Changed" });
 
     expect(result.editingId).toBe(inst20.id);
     expect(result.previewedIds.size).toBe(1);
@@ -177,7 +177,7 @@ describe("applyThis", () => {
     const inst21 = makeInstance(template, "2026-03-21");
     const events = [template, inst20, inst21];
 
-    const result = applyThis(events, inst20, inst20, {
+    const result = applyThis(events, inst20, {
       title: inst20.title,
       start: inst20.start,
       end: inst20.end,

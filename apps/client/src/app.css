@@ -25,11 +25,6 @@
   --border: rgba(0, 0, 20, 0.10);
   --input: rgba(0, 0, 20, 0.08);
   --ring: #8C8C98;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.65 0.15 280);
-  --chart-4: oklch(0.65 0.15 145);
-  --chart-5: oklch(0.65 0.18 25);
 
   /* Frame / contour (titlebar) */
   --sidebar: #DCDCE2;
@@ -102,11 +97,6 @@
   --border: rgba(255, 255, 255, 0.10);
   --input: rgba(255, 255, 255, 0.08);
   --ring: #606070;
-  --chart-1: oklch(0.7 0.18 65);
-  --chart-2: oklch(0.65 0.15 180);
-  --chart-3: oklch(0.65 0.15 280);
-  --chart-4: oklch(0.65 0.15 145);
-  --chart-5: oklch(0.65 0.18 25);
 
   /* Frame / contour (titlebar) */
   --sidebar: #1E1E23;
@@ -176,11 +166,6 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-accent: var(--sidebar-accent);

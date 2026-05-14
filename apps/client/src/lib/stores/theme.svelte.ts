@@ -21,7 +21,6 @@ import {
   validateThemeJson,
   darkTheme,
   lightTheme,
-  resolveCalendarTokens,
   APP_TOKEN_KEYS,
   CALENDAR_TOKEN_KEYS,
   THEME_TOKEN_ROW_ORDER,
@@ -36,8 +35,6 @@ import {
   mergeThemePatch,
   nextUniqueDisplayName,
   normalizeDisplayName,
-  synthesizeSourcesFromResolved,
-  type UserThemePatch,
 } from "./themeOperations";
 import { flushConfig, getConfigKey, setConfigKey } from "../vault/config";
 import {

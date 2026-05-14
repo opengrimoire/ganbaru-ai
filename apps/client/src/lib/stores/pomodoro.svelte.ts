@@ -9,11 +9,8 @@ import {
   type TimerSnapshot,
   DEFAULT_CONFIG,
   TIME_MULTIPLIER,
-  SUSPEND_THRESHOLD_MS,
   NOTIFICATION_THRESHOLD,
   MAX_BREAK_OVERTIME_SECONDS,
-  configEquals,
-  phaseDurationSeconds,
   decideTick,
   decideAdvancePhase,
   decideTransition,
@@ -42,7 +39,6 @@ let dismissedBlockId: string | null = null;
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
 let currentSegmentIndex = -1;
-let activeRunId: string | null = null;
 
 // Bumped after DB writes to persisted segments complete, so DayColumn re-fetches.
 let segmentVersion = $state(0);
@@ -256,7 +252,6 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
   await cleanupEventSegments(eventId, eventDate);
 
   const runId = crypto.randomUUID();
-  activeRunId = runId;
 
   const now = new Date();
   const end = new Date(eventEnd.replace(" ", "T"));
@@ -299,7 +294,6 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
 function clearSegments() {
   segments = [];
   currentSegmentIndex = -1;
-  activeRunId = null;
 }
 
 /**
@@ -321,7 +315,6 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
 
   // Build new segment plan from now to event end
   const runId = crypto.randomUUID();
-  activeRunId = runId;
   const now = new Date();
   const nowStr = now.toISOString();
   const end = new Date(eventEnd.replace(" ", "T"));

@@ -94,7 +94,6 @@ function skipSvelteStyleVirtuals(plugins: Plugin[]): Plugin[] {
 export default defineConfig({
   plugins: [...skipSvelteStyleVirtuals(tailwindcss()), svelte()],
   define: {
-    __GANBARUAI_APP_VERSION__: JSON.stringify(appVersion),
     __GANBARUAI_BUILD_REF__: JSON.stringify(buildRef),
   },
   resolve: {

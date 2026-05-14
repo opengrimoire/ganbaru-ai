@@ -1,2 +1,1 @@
-export const APP_VERSION = __GANBARUAI_APP_VERSION__;
 export const BUILD_REF = __GANBARUAI_BUILD_REF__;

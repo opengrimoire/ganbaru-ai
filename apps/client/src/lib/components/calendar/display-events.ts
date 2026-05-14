@@ -168,7 +168,7 @@ export function computeEditDisplay(
 
   switch (scope) {
     case "this":
-      return applyThis(storeEvents, originalEvent, instanceEvent, changes);
+      return applyThis(storeEvents, originalEvent, changes);
     case "all":
       return applyAll(rawBlocks, storeEvents, templateId, instanceEvent, changes, window, activeDate);
     case "following":
@@ -209,7 +209,6 @@ export function applyNonRecurring(
 export function applyThis(
   events: CalendarEvent[],
   originalEvent: CalendarEvent,
-  instanceEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
 ): DisplayResult {
   const targetId = originalEvent.id;

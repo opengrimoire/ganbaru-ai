@@ -191,8 +191,6 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       return;
     }
 
-    const colsChanged = preview.startCol !== state.originStartCol || preview.spanCols !== state.originSpanCols;
-
     // Suppress the click that fires after pointerup
     if (wasDragging) {
       _didDrag = true;

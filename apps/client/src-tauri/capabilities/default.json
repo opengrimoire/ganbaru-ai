@@ -16,7 +16,6 @@
     "core:window:allow-set-focus",
     "core:window:allow-is-fullscreen",
     "core:window:allow-internal-toggle-maximize",
-    "core:webview:allow-set-webview-zoom",
-    "global-shortcut:default"
+    "core:webview:allow-set-webview-zoom"
   ]
 }

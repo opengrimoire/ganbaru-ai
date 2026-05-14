@@ -226,12 +226,6 @@ impl_sqlite_from_row!(DbFullOverrideRow {
 });
 
 #[derive(Serialize)]
-pub struct CalendarBootstrapRows {
-    events: Vec<DbCalendarEventRow>,
-    overrides: Vec<DbOverrideRow>,
-}
-
-#[derive(Serialize)]
 pub struct CalendarWindowRows {
     events: Vec<DbCalendarEventRow>,
     overrides: Vec<DbOverrideRow>,
@@ -251,26 +245,6 @@ pub struct CalendarFullEventRows {
     alarms: Vec<DbAlarmRow>,
     overrides: Vec<DbFullOverrideRow>,
 }
-
-const BOOTSTRAP_EVENTS_SQL: &str = r#"
-    SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
-           ce.calendar_id, ce.color, ce.rrule,
-           ce.notifications, ce.exceptions, ce.repeat_until,
-           ce.all_day, ce.location, ce.transparency, ce.status,
-           ce.rdate,
-           pc.focus_duration_minutes, pc.short_break_minutes,
-           pc.long_break_minutes, pc.pomodoro_count,
-           pc.idle_timeout_minutes
-    FROM calendar_events ce
-    LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-    ORDER BY ce.start_time ASC
-"#;
-
-const SLIM_OVERRIDES_SQL: &str = r#"
-    SELECT id, parent_event_id, recurrence_id, title, start_time, end_time,
-           color, status, transparency
-    FROM calendar_event_overrides
-"#;
 
 const WINDOW_EVENTS_SQL: &str = r#"
     SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
@@ -324,28 +298,6 @@ const FULL_EVENT_SQL: &str = r#"
     LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
     WHERE ce.id = ?
 "#;
-
-#[tauri::command]
-pub async fn calendar_load_bootstrap<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-) -> Result<CalendarBootstrapRows, String> {
-    let pool = connect_sqlite(app, db_url).await?;
-    let events = sqlx::query_as::<_, DbCalendarEventRow>(BOOTSTRAP_EVENTS_SQL)
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| format!("load calendar bootstrap events: {e}"))?;
-    let overrides = if events.is_empty() {
-        Vec::new()
-    } else {
-        sqlx::query_as::<_, DbOverrideRow>(SLIM_OVERRIDES_SQL)
-            .fetch_all(&pool)
-            .await
-            .map_err(|e| format!("load calendar bootstrap overrides: {e}"))?
-    };
-
-    Ok(CalendarBootstrapRows { events, overrides })
-}
 
 #[tauri::command]
 pub async fn calendar_load_window<R: Runtime>(

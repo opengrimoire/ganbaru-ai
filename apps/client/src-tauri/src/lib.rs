@@ -601,7 +601,6 @@ pub fn run() {
     tauri::Builder::default()
         .manage(db_path::DatabaseState::default())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
             notification::show_event_notification,
@@ -635,7 +634,6 @@ pub fn run() {
             kanban::kanban_delete_task,
             timezone_migration::calendar_load_timezone_hydration_rows,
             timezone_migration::calendar_apply_timezone_hydration,
-            calendar_reads::calendar_load_bootstrap,
             calendar_reads::calendar_load_window,
             calendar_reads::calendar_load_panel_event,
             calendar_reads::calendar_load_full_event,

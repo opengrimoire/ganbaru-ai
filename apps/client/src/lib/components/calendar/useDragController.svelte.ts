@@ -265,7 +265,6 @@ export function useDragController(config: DragControllerConfig) {
     let newStart: number;
     let newEnd: number;
     let targetDate = dragState.originDate;
-    let resizeGuideEdge: "start" | "end" | null = null;
 
     if (dragState.type === "move") {
       // Compute column delta to handle dragging from continuation blocks
@@ -307,13 +306,11 @@ export function useDragController(config: DragControllerConfig) {
         newStart = raw;
         newEnd = anchor;
         if (newEnd - newStart < minSize) newStart = newEnd - minSize;
-        resizeGuideEdge = "start";
       } else {
         // Flipped: top handle crossed below bottom
         newStart = anchor;
         newEnd = raw;
         if (newEnd - newStart < minSize) newEnd = newStart + minSize;
-        resizeGuideEdge = "end";
       }
     } else {
       // resize-bottom (supports crossover and crossing midnight)
@@ -324,14 +321,12 @@ export function useDragController(config: DragControllerConfig) {
         newStart = anchor;
         newEnd = raw;
         if (newEnd - newStart < minSize) newEnd = newStart + minSize;
-        resizeGuideEdge = "end";
       } else {
         // Flipped: bottom handle crossed above top
         raw = Math.max(0, raw);
         newStart = raw;
         newEnd = anchor;
         if (newEnd - newStart < minSize) newStart = newEnd - minSize;
-        resizeGuideEdge = "start";
       }
     }
 
@@ -339,7 +334,6 @@ export function useDragController(config: DragControllerConfig) {
     const activeResize = config.activeBlockId?.();
     if (activeResize && dragState.eventId === activeResize) {
       newStart = dragState.originStartMinute;
-      resizeGuideEdge = "end";
       const now = new Date();
       const nowMinute = now.getHours() * 60 + now.getMinutes();
       const snap = calZoom.gridMinutes;
