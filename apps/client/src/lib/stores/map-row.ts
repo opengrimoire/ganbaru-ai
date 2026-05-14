@@ -201,15 +201,15 @@ export function mapAlarm(r: DbAlarm): EventAlarm {
  * Build the slim in-memory `EventOverride`. Description, location, url,
  * extended_properties, and visibility live in the DB but are not loaded.
  */
-export function mapOverride(r: DbOverride, renderZone: string): EventOverride {
+export function mapOverride(r: DbOverride, renderZone: string, allDay = false): EventOverride {
   const slim: EventOverride = {
     id: r.id,
     parentEventId: r.parent_event_id,
     recurrenceId: r.recurrence_id,
   };
   if (r.title) slim.title = r.title;
-  if (r.start_time) slim.start = toCalendarDate(r.start_time, renderZone);
-  if (r.end_time) slim.end = toCalendarDate(r.end_time, renderZone);
+  if (r.start_time) slim.start = toCalendarDate(r.start_time, renderZone, allDay);
+  if (r.end_time) slim.end = toCalendarDate(r.end_time, renderZone, allDay);
   const color = normalizeEventColor(r.color);
   if (color !== undefined) slim.color = color;
   if (r.status) slim.status = r.status as EventStatus;

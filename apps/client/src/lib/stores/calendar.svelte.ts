@@ -304,11 +304,15 @@ function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
  * parent through the panel / full-event loaders when EventPanel, undo, or
  * ICS export needs them.
  */
-function mapOverrides(rows: DbOverride[], renderZone: string): Map<string, EventOverride[]> {
+function mapOverrides(
+  rows: DbOverride[],
+  renderZone: string,
+  parentAllDayById: Map<string, boolean>,
+): Map<string, EventOverride[]> {
   const map = new Map<string, EventOverride[]>();
   for (const r of rows) {
     const list = map.get(r.parent_event_id) ?? [];
-    list.push(mapOverride(r, renderZone));
+    list.push(mapOverride(r, renderZone, parentAllDayById.get(r.parent_event_id) === true));
     map.set(r.parent_event_id, list);
   }
   return map;
@@ -408,7 +412,8 @@ function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEv
   const mapped = rows.events.map((r) => mapRow(r, renderZone));
   if (mapped.length === 0) return mapped;
 
-  const overrideMap = mapOverrides(rows.overrides, renderZone);
+  const parentAllDayById = new Map(mapped.map((event) => [event.id, event.allDay === true]));
+  const overrideMap = mapOverrides(rows.overrides, renderZone, parentAllDayById);
   for (const evt of mapped) {
     const ovr = overrideMap.get(evt.id);
     if (ovr?.length) evt.overrides = ovr;
@@ -790,7 +795,7 @@ export function getCalendar() {
       }
       if (rows.overrides.length > 0) {
         event.overrides = rows.overrides.map((r) => {
-          const slim = mapOverride(r, renderZone);
+          const slim = mapOverride(r, renderZone, row.all_day === 1);
           if (r.description) {
             slim.description = sanitizeCalendarDescriptionHtml(r.description);
           }

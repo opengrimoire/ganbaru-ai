@@ -278,6 +278,33 @@ describe("serializeCalendarToIcs", () => {
 			);
 		});
 
+		it("quotes and caret-escapes CN parameter values", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						organizer: { name: 'Doe, Jane "JJ"', email: "jane@example.com" },
+						attendees: [
+							{
+								id: "a1",
+								name: "Team; lead\nremote",
+								email: "lead@example.com",
+								role: "req-participant",
+								status: "needs-action",
+								rsvp: true,
+							},
+						],
+					}),
+				],
+				"UTC",
+			);
+			const unfolded = unfold(ics);
+			expect(unfolded).toContain('ORGANIZER;CN="Doe, Jane ^\'JJ^\'":mailto:jane@example.com');
+			expect(unfolded).toContain(
+				'ATTENDEE;CN="Team; lead^nremote";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:lead@example.com',
+			);
+		});
+
 		it("emits VALARM blocks", () => {
 			const ics = serializeCalendarToIcs(
 				baseCalendar,
@@ -337,7 +364,24 @@ describe("serializeCalendarToIcs", () => {
 				],
 				"UTC",
 			);
-			expect(ics).toContain("EXDATE:20260602T000000Z,20260604T000000Z");
+			expect(ics).toContain("EXDATE:20260602T140000Z,20260604T140000Z");
+		});
+
+		it("emits zoned EXDATE values at the recurring event start time", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						timezone: "America/New_York",
+						start: "2026-04-15 09:00",
+						end: "2026-04-15 10:00",
+						recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 5 } },
+						exceptions: ["2026-04-17"],
+					}),
+				],
+				"America/New_York",
+			);
+			expect(ics).toContain("EXDATE;TZID=America/New_York:20260417T090000");
 		});
 
 		it("emits RDATE", () => {
@@ -377,6 +421,31 @@ describe("serializeCalendarToIcs", () => {
 			expect(ics).toContain("RECURRENCE-ID:20260603T140000Z");
 			expect(ics).toContain("SUMMARY:Adjusted");
 		});
+
+		it("emits zoned RECURRENCE-ID values for zoned recurring overrides", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						sourceUid: "rec-zoned@ex",
+						timezone: "America/New_York",
+						start: "2026-04-15 09:00",
+						end: "2026-04-15 10:00",
+						recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 5 } },
+						overrides: [
+							{
+								id: "ov1",
+								parentEventId: "ev-1",
+								recurrenceId: "2026-04-17T13:00:00Z",
+								title: "Adjusted",
+							},
+						],
+					}),
+				],
+				"America/New_York",
+			);
+			expect(ics).toContain("RECURRENCE-ID;TZID=America/New_York:20260417T090000");
+		});
 	});
 
 	describe("UID fallback", () => {
@@ -399,6 +468,16 @@ describe("serializeCalendarToIcs", () => {
 				if (line.startsWith(" ")) continue;
 				expect(line.length).toBeLessThanOrEqual(75);
 			}
+		});
+
+		it("folds UTF-8 lines without exceeding 75 bytes", () => {
+			const longTitle = "Cumpleaños ".repeat(20);
+			const ics = serializeCalendarToIcs(baseCalendar, [makeEvent({ title: longTitle })], "UTC");
+			const encoder = new TextEncoder();
+			for (const line of ics.split("\r\n")) {
+				expect(encoder.encode(line).length).toBeLessThanOrEqual(75);
+			}
+			expect(unfold(ics)).toContain(`SUMMARY:${longTitle}`);
 		});
 	});
 });

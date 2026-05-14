@@ -139,9 +139,13 @@ The Settings modal exposes a "Calendars" section (under the "Data" group) that l
 
 Re-import idempotence is driven by RFC 5545 `SEQUENCE`. On a re-import, an event with a lower sequence than the stored row is skipped, equal-or-higher overwrites in place (replacing all child rows in lockstep). Events without a `SEQUENCE` default to 0 on both sides, so the behavior degrades to "always overwrite on re-import", which is what the major calendars do anyway.
 
+Recurring timed exports keep recurrence identifiers in the same time model as the master event. If a Google-style recurring event uses `TZID`, `DTSTART`, `DTEND`, `EXDATE`, and override `RECURRENCE-ID` all use that zone and the original wall-clock start time. UTC recurring events use UTC `Z` values. All-day recurring events use date-only `VALUE=DATE` values.
+
+The serializer emits CRLF line endings, folds content lines by UTF-8 octets, escapes TEXT values, and quotes/caret-escapes parameter values such as attendee and organizer `CN`.
+
 What is preserved end-to-end through parse → serialize → parse: title, start, end, all-day flag, IANA home zone, RRULE, EXDATE (date-only), RDATE, RECURRENCE-ID overrides (with their own per-instance title / start / end / description / location / status / transparency / visibility / extended properties), STATUS, CLASS, TRANSP, PRIORITY, SEQUENCE, CATEGORIES, GEO, ORGANIZER, ATTENDEE rows, VALARM rows, X-* extended properties, and Google's guest-permissions X-properties.
 
-What is lossy or dropped: VALARM `REPEAT` and `DURATION` (no schema columns; one deduped warning); EXDATE time-of-day exclusions are coerced to date-only (matches our recurrence-engine's exception model); `METHOD` and meeting-invitation semantics are ignored (every import is treated as the user's own copy); `DTSTAMP` / `LAST-MODIFIED` / `CREATED` are not threaded into the database (we keep our own `created_at` / `updated_at`); unknown TZIDs fall back to UTC with one deduped warning; full DST rule blocks inside foreign VTIMEZONE definitions are ignored on import (we re-anchor to the IANA name).
+What is lossy or dropped: VALARM `REPEAT` and `DURATION` (no schema columns; one deduped warning); arbitrary EXDATE time-of-day values are coerced to recurrence dates, then exported at the event's original start time; `METHOD` and meeting-invitation semantics are ignored (every import is treated as the user's own copy); `DTSTAMP` / `LAST-MODIFIED` / `CREATED` are not threaded into the database (we keep our own `created_at` / `updated_at`); unknown TZIDs fall back to UTC with one deduped warning; full DST rule blocks inside foreign VTIMEZONE definitions are ignored on import (we re-anchor to the IANA name).
 
 The mental model: an `.ics` import is a separate calendar that the user can delete in one click. The title-bar reset-database button still wipes everything, including imported calendars. Re-importing the same file is always safe.
 

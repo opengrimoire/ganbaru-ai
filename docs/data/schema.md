@@ -48,7 +48,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |
 | `color` | integer or null | Slot index (0..23) into the active theme's 24-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
-| `recurrence_exceptions` | text or null | Comma-separated EXDATE values (`YYYY-MM-DD`). Null if none. |
+| `recurrence_exceptions` | text or null | Comma-separated EXDATE recurrence dates (`YYYY-MM-DD`). Null if none. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |
 | `recurrence_parent_id` | UUID or null | For detached instances, points to the original template. Used to trace history. |
 | `pomodoro_config` | JSON or null | Per-event pomodoro settings (see "Pomodoro config"). Null means pomodoro is disabled for this event. |
 | `notification_config` | JSON or null | Notification offsets and channels. Null means no notifications. |
@@ -62,7 +62,7 @@ Indexes: `(user_id, start_time)`, `(user_id, recurrence_parent_id)`, `(end_time)
 
 Why `recurrence_rule` is plain text (the RRULE string) instead of decomposed columns: the RRULE format is the lingua franca for calendar interop. Storing it intact means import/export from iCalendar, Google Calendar, or other RFC 5545 sources is trivial. Decomposed columns would force a translation layer at every boundary.
 
-Per-instance overrides live in `calendar_event_overrides` (one row per detached or modified instance). The `recurrence_id` column is a UTC ISO 8601 instant identifying the original DTSTART of the overridden occurrence (the iCalendar `RECURRENCE-ID` field). Matching is by instant, not by wall clock, so an override survives DST transitions and zone changes intact.
+Per-instance overrides live in `calendar_event_overrides` (one row per detached or modified instance). The `recurrence_id` column is a UTC ISO 8601 instant identifying the original DTSTART of the overridden occurrence (the iCalendar `RECURRENCE-ID` field). Matching is by instant, not by wall clock, so a timed override survives DST transitions and zone changes intact. All-day override start and end values use the same floating date convention as all-day event rows: the date portion is canonical and no zone conversion is applied on read.
 
 Why `pomodoro_config` is JSON instead of FK to a `pomodoro_configs` table: the config is per-event, immutable after the event is created (changing it ends the active run, see `algorithms/pomodoro-state-machine.md`), and small. A separate table earns no normalization benefit and adds a join to every event read.
 

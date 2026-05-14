@@ -12,6 +12,7 @@ import { wallClockToUtcIso } from "$lib/components/calendar/utils";
 
 const CRLF = "\r\n";
 const PRODID = "-//GanbaruAI//Calendar//EN";
+const textEncoder = new TextEncoder();
 
 /**
  * Convert an in-memory wall-clock "YYYY-MM-DD HH:MM" pair to a UTC instant.
@@ -77,6 +78,11 @@ function addDaysToDateOnly(calendarDate: string, days: number): string {
 	return Temporal.PlainDate.from(calendarDate.substring(0, 10)).add({ days }).toString();
 }
 
+function formatDateTimeOnDate(date: string, timeSource: string): string {
+	const time = timeSource.slice(9);
+	return `${formatDateOnly(date)}T${time}`;
+}
+
 /**
  * Compute the UTC offset (in minutes) of `zone` at the given instant. Used
  * to fill VTIMEZONE STANDARD/DAYLIGHT stub blocks.
@@ -129,18 +135,47 @@ function escapeText(value: string): string {
 }
 
 /**
- * Fold lines longer than 75 octets per RFC 5545. We use 73 to be safe with
- * the trailing CRLF and a leading space on the continuation.
+ * Escape a parameter value per RFC 5545 plus RFC 6868. Parameter escaping is
+ * separate from TEXT value escaping.
+ */
+function escapeParamValue(value: string): string {
+	const encoded = value
+		.replace(/\^/g, "^^")
+		.replace(/"/g, "^'")
+		.replace(/\r\n|\r|\n/g, "^n");
+	if (/[:;,]/.test(encoded)) return `"${encoded}"`;
+	return encoded;
+}
+
+function param(name: string, value: string): string {
+	return `${name}=${escapeParamValue(value)}`;
+}
+
+function utf8ByteLength(value: string): number {
+	return textEncoder.encode(value).length;
+}
+
+/**
+ * Fold lines longer than 75 octets per RFC 5545 without splitting UTF-8
+ * code points. Continuation lines include the leading space in the limit.
  */
 function foldLine(line: string): string {
-	if (line.length <= 75) return line;
+	if (utf8ByteLength(line) <= 75) return line;
 	const out: string[] = [];
-	let remaining = line;
-	while (remaining.length > 75) {
-		out.push(remaining.substring(0, 75));
-		remaining = " " + remaining.substring(75);
+	let current = "";
+	let currentBytes = 0;
+	for (const char of Array.from(line)) {
+		const charBytes = utf8ByteLength(char);
+		if (current && currentBytes + charBytes > 75) {
+			out.push(current);
+			current = ` ${char}`;
+			currentBytes = 1 + charBytes;
+		} else {
+			current += char;
+			currentBytes += charBytes;
+		}
 	}
-	out.push(remaining);
+	if (current) out.push(current);
 	return out.join(CRLF);
 }
 
@@ -178,7 +213,7 @@ const STATUS_ATTENDEE_REVERSE: Record<EventAttendee["status"], string> = {
 
 function buildAttendee(att: EventAttendee): string {
 	const params: string[] = [];
-	if (att.name) params.push(`CN=${att.name}`);
+	if (att.name) params.push(param("CN", att.name));
 	params.push(`ROLE=${ROLE_REVERSE[att.role]}`);
 	params.push(`PARTSTAT=${STATUS_ATTENDEE_REVERSE[att.status]}`);
 	params.push(`RSVP=${att.rsvp ? "TRUE" : "FALSE"}`);
@@ -186,8 +221,49 @@ function buildAttendee(att: EventAttendee): string {
 }
 
 function buildOrganizer(org: EventOrganizer): string {
-	if (org.name) return `ORGANIZER;CN=${org.name}:mailto:${org.email}`;
+	if (org.name) return `ORGANIZER;${param("CN", org.name)}:mailto:${org.email}`;
 	return `ORGANIZER:mailto:${org.email}`;
+}
+
+function buildRecurrenceId(
+	recurrenceIdUtc: string,
+	isAllDay: boolean,
+	useTzid: boolean,
+	homeZone: string,
+): string {
+	if (isAllDay) return `RECURRENCE-ID;VALUE=DATE:${formatUtcDate(recurrenceIdUtc)}`;
+	if (useTzid && homeZone !== "UTC") {
+		return `RECURRENCE-ID;TZID=${homeZone}:${formatZonedDateTime(recurrenceIdUtc, homeZone)}`;
+	}
+	return `RECURRENCE-ID:${formatUtcDateTime(recurrenceIdUtc)}`;
+}
+
+function buildExdate(
+	event: CalendarEvent,
+	isAllDay: boolean,
+	useTzid: boolean,
+	homeZone: string,
+	startUtc: string,
+): string | undefined {
+	if (!event.exceptions?.length) return undefined;
+	if (isAllDay) {
+		const exdates = event.exceptions.map((d) => formatDateOnly(d)).join(",");
+		return `EXDATE;VALUE=DATE:${exdates}`;
+	}
+
+	if (useTzid && homeZone !== "UTC") {
+		const localStart = formatZonedDateTime(startUtc, homeZone);
+		const exdates = event.exceptions
+			.map((d) => formatDateTimeOnDate(d, localStart))
+			.join(",");
+		return `EXDATE;TZID=${homeZone}:${exdates}`;
+	}
+
+	const utcStart = formatUtcDateTime(startUtc);
+	const exdates = event.exceptions
+		.map((d) => formatDateTimeOnDate(d, utcStart))
+		.join(",");
+	return `EXDATE:${exdates}`;
 }
 
 function buildAlarm(alarm: EventAlarm): string[] {
@@ -228,11 +304,7 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 	}
 
 	if (recurrenceIdUtc) {
-		if (isAllDay) {
-			lines.push(`RECURRENCE-ID;VALUE=DATE:${formatUtcDate(recurrenceIdUtc)}`);
-		} else {
-			lines.push(`RECURRENCE-ID:${formatUtcDateTime(recurrenceIdUtc)}`);
-		}
+		lines.push(buildRecurrenceId(recurrenceIdUtc, isAllDay, useTzid, homeZone));
 	}
 
 	lines.push(`SUMMARY:${escapeText(event.title)}`);
@@ -244,15 +316,8 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 		lines.push(`RRULE:${recurrenceToRrule(event.recurrence)}`);
 	}
 
-	if (event.exceptions?.length) {
-		if (isAllDay) {
-			const exdates = event.exceptions.map((d) => d.replace(/-/g, "")).join(",");
-			lines.push(`EXDATE;VALUE=DATE:${exdates}`);
-		} else {
-			const exdates = event.exceptions.map((d) => d.replace(/-/g, "") + "T000000Z").join(",");
-			lines.push(`EXDATE:${exdates}`);
-		}
-	}
+	const exdateLine = buildExdate(event, isAllDay, useTzid, homeZone, startUtc);
+	if (exdateLine) lines.push(exdateLine);
 
 	if (event.rdate?.length) {
 		if (isAllDay) {

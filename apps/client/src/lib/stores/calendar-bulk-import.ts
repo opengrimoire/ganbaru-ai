@@ -10,7 +10,6 @@ import type {
   EventOverride,
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
-import { wallClockToUtcIso } from "$lib/components/calendar/utils";
 import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
 import { toDbTime } from "./map-row";
 
@@ -159,7 +158,7 @@ function buildBulkImportEvent(
     guestCanSeeOtherGuests: gp?.canSeeOtherGuests ?? true,
     attendees: buildAttendees(event.attendees),
     alarms: buildAlarms(event.alarms),
-    overrides: buildOverrides(event.overrides, homeZone),
+    overrides: buildOverrides(event.overrides, homeZone, event.allDay === true),
   };
 }
 
@@ -189,16 +188,17 @@ function buildAlarms(alarms: CalendarEvent["alarms"]): CalendarBulkImportAlarm[]
 function buildOverrides(
   overrides: CalendarEvent["overrides"],
   zone: string,
+  allDay: boolean,
 ): CalendarBulkImportOverride[] {
   return (overrides ?? []).map((overrideRow: EventOverride) => ({
     id: overrideRow.id,
     recurrenceId: overrideRow.recurrenceId,
     title: overrideRow.title ?? null,
     startTime: overrideRow.start
-      ? wallClockToUtcIso(overrideRow.start, zone)
+      ? toDbTime(overrideRow.start, zone, allDay)
       : null,
     endTime: overrideRow.end
-      ? wallClockToUtcIso(overrideRow.end, zone)
+      ? toDbTime(overrideRow.end, zone, allDay)
       : null,
     description: overrideRow.description === undefined || overrideRow.description === null
       ? null

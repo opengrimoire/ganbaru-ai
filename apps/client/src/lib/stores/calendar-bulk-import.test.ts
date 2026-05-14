@@ -184,6 +184,36 @@ describe("buildBulkImportPayload", () => {
     expect(event.overrides[0].endTime).toBe("2026-05-01T13:00:00Z");
   });
 
+  it("stores all-day override dates as floating date rows", () => {
+    const payload = buildBulkImportPayload(
+      [
+        makeEvent({
+          allDay: true,
+          timezone: "Asia/Tokyo",
+          start: "2026-05-01 00:00",
+          end: "2026-05-01 00:00",
+          overrides: [
+            {
+              id: "override-1",
+              parentEventId: "ignored",
+              recurrenceId: "2026-05-01T00:00:00Z",
+              start: "2026-05-02 00:00",
+              end: "2026-05-02 00:00",
+            },
+          ],
+        }),
+      ],
+      CAL,
+      NOW,
+      "Asia/Tokyo",
+      deterministicIds(),
+    );
+
+    const overrideRow = payload.events[0].overrides[0];
+    expect(overrideRow.startTime).toBe("2026-05-02T00:00:00Z");
+    expect(overrideRow.endTime).toBe("2026-05-02T00:00:00Z");
+  });
+
   it("omits empty optional JSON fields", () => {
     const payload = buildBulkImportPayload(
       [makeEvent({ notifications: [], categories: [], extendedProperties: {} })],

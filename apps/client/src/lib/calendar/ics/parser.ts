@@ -317,6 +317,7 @@ function defaultGuestPermissions(): GuestPermissions {
 function parseExdates(
 	component: ICAL.Component,
 	deviceZone: string,
+	homeZone: string,
 	warnings: string[],
 ): string[] {
 	const out: string[] = [];
@@ -325,12 +326,24 @@ function parseExdates(
 		const hint = tzidParam ? resolveTimezone(tzidParam, warnings) : undefined;
 		for (const value of prop.getValues()) {
 			if (value instanceof ICAL.Time) {
-				const utc = timeToUtcIso(value, deviceZone, hint);
-				out.push(utc.slice(0, 10));
+				out.push(recurrenceLocalDate(value, deviceZone, homeZone, hint));
 			}
 		}
 	}
 	return out;
+}
+
+function recurrenceLocalDate(
+	time: ICAL.Time,
+	deviceZone: string,
+	homeZone: string,
+	tzidHint?: string | null,
+): string {
+	if (time.isDate || tzidHint) return dateOnlyFromTime(time);
+	const zoneTzid = (time.zone as ICAL.Timezone | null)?.tzid;
+	if (!zoneTzid || zoneTzid === "floating") return dateOnlyFromTime(time);
+	const utc = timeToUtcIso(time, deviceZone);
+	return utcIsoToWallClock(utc, homeZone).slice(0, 10);
 }
 
 function parseRdates(
@@ -464,7 +477,7 @@ function calendarEventBaseFromComponent(
 		.map((c) => parseAlarm(c, warnings))
 		.filter((a): a is EventAlarm => a !== null);
 
-	const exceptions = parseExdates(component, deviceZone, warnings);
+	const exceptions = parseExdates(component, deviceZone, homeZone, warnings);
 	const rdate = parseRdates(component, deviceZone, warnings);
 
 	const rruleValue = component.getFirstPropertyValue("rrule");

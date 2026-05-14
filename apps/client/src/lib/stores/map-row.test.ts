@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { mapRow as mapRowImpl, type DbCalendarEvent } from "./map-row";
+import {
+  mapOverride,
+  mapRow as mapRowImpl,
+  type DbCalendarEvent,
+  type DbOverride,
+} from "./map-row";
 
 // Tests fix the render zone so legacy-format inputs round-trip 1:1 with the
 // stored wall-clock string (the conversion path only kicks in for UTC ISO
@@ -32,6 +37,21 @@ function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
     long_break_minutes: null,
     pomodoro_count: null,
     idle_timeout_minutes: null,
+    ...overrides,
+  };
+}
+
+function makeDbOverride(overrides: Partial<DbOverride> = {}): DbOverride {
+  return {
+    id: "override-1",
+    parent_event_id: "evt-1",
+    recurrence_id: "2026-05-01T00:00:00Z",
+    title: null,
+    start_time: "2026-05-01T00:00:00Z",
+    end_time: "2026-05-01T00:00:00Z",
+    color: null,
+    status: null,
+    transparency: null,
     ...overrides,
   };
 }
@@ -146,5 +166,13 @@ describe("mapRow", () => {
   it("maps location when non-empty", () => {
     const result = mapRow(makeDbRow({ location: "Room A" }));
     expect(result.location).toBe("Room A");
+  });
+});
+
+describe("mapOverride", () => {
+  it("maps all-day override dates without zone shifting", () => {
+    const result = mapOverride(makeDbOverride(), TEST_ZONE, true);
+    expect(result.start).toBe("2026-05-01 00:00");
+    expect(result.end).toBe("2026-05-01 00:00");
   });
 });

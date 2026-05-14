@@ -257,6 +257,40 @@ describe("parseIcs", () => {
 			expect(result.events[0].exceptions).toEqual(["2026-06-02"]);
 		});
 
+		it("parses TZID EXDATE values as local recurrence dates", () => {
+			const ics = wrap(
+				vevent(
+					"UID:exdate-zoned@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART;TZID=Asia/Tokyo:20260601T003000",
+					"DTEND;TZID=Asia/Tokyo:20260601T013000",
+					"RRULE:FREQ=DAILY;COUNT=5",
+					"EXDATE;TZID=Asia/Tokyo:20260602T003000",
+					"SUMMARY:With zoned EXDATE",
+				),
+			);
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(1);
+			expect(result.events[0].exceptions).toEqual(["2026-06-02"]);
+		});
+
+		it("parses UTC EXDATE values in the event home zone", () => {
+			const ics = wrap(
+				vevent(
+					"UID:exdate-utc-zone@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART;TZID=America/Los_Angeles:20260501T230000",
+					"DTEND;TZID=America/Los_Angeles:20260502T000000",
+					"RRULE:FREQ=DAILY;COUNT=5",
+					"EXDATE:20260502T060000Z",
+					"SUMMARY:With UTC EXDATE",
+				),
+			);
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(1);
+			expect(result.events[0].exceptions).toEqual(["2026-05-01"]);
+		});
+
 		it("parses RDATE as a list of UTC ISO 8601 instants", () => {
 			const ics = wrap(
 				vevent(
@@ -365,6 +399,29 @@ describe("parseIcs", () => {
 			);
 			const result = parseIcs(ics);
 			expect(result.events[0].organizer).toEqual({ name: "Alice", email: "alice@example.com" });
+		});
+
+		it("parses quoted and caret-escaped CN parameter values", () => {
+			const ics = wrap(
+				vevent(
+					"UID:param-cn@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					"SUMMARY:Meeting",
+					"ORGANIZER;CN=\"Doe, Jane ^'JJ^'\":mailto:jane@example.com",
+					"ATTENDEE;CN=\"Team; lead^nremote\";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:lead@example.com",
+				),
+			);
+			const result = parseIcs(ics);
+			expect(result.events[0].organizer).toEqual({
+				name: 'Doe, Jane "JJ"',
+				email: "jane@example.com",
+			});
+			expect(result.events[0].attendees?.[0]).toMatchObject({
+				name: "Team; lead\nremote",
+				email: "lead@example.com",
+			});
 		});
 	});
 
