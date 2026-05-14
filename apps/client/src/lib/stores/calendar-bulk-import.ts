@@ -82,6 +82,7 @@ export interface CalendarBulkImportPreservedComponent {
 
 export interface CalendarBulkImportEvent {
   candidateId: string;
+  icalendarComponentId: string | null;
   title: string;
   startTime: string;
   endTime: string;
@@ -116,6 +117,8 @@ export interface CalendarBulkImportEvent {
 
 export interface CalendarBulkImportAttendee {
   id: string;
+  icalendarComponentId: string | null;
+  icalendarPropertyIndex: number | null;
   name: string | null;
   email: string;
   role: string;
@@ -125,6 +128,7 @@ export interface CalendarBulkImportAttendee {
 
 export interface CalendarBulkImportAlarm {
   id: string;
+  icalendarComponentId: string | null;
   action: string;
   triggerType: string;
   triggerValue: string;
@@ -133,6 +137,7 @@ export interface CalendarBulkImportAlarm {
 
 export interface CalendarBulkImportOverride {
   id: string;
+  icalendarComponentId: string | null;
   recurrenceId: string;
   title: string | null;
   startTime: string | null;
@@ -147,6 +152,27 @@ export interface CalendarBulkImportOverride {
   extendedProperties: string | null;
 }
 
+interface CalendarBulkImportBuildPreservation {
+  payload: CalendarBulkImportPreservation;
+  links: PreservationLinkIndex;
+}
+
+interface PreservationLinkIndex {
+  eventsByUid: Map<string, PreservationEventLink>;
+  overridesByUid: Map<string, PreservationEventLink[]>;
+}
+
+interface PreservationEventLink {
+  componentId: string;
+  attendeePropertyIndexes: number[];
+  alarmComponentIds: string[];
+}
+
+interface BuiltPreservedComponent {
+  component: CalendarBulkImportPreservedComponent;
+  link: PreservationEventLink | null;
+}
+
 export function buildBulkImportPayload(
   events: CalendarEvent[],
   targetCalendarId: string,
@@ -157,13 +183,31 @@ export function buildBulkImportPayload(
   sourceName = "",
   sourceKind: CalendarImportSourceKind = "import-file",
 ): CalendarBulkImportPayload {
+  const builtPreservation = buildPreservationPayload(
+    preservation,
+    sourceName,
+    sourceKind,
+    newId,
+  );
   return {
     targetCalendarId,
     now,
-    preservation: buildPreservationPayload(preservation, sourceName, sourceKind, newId),
-    events: events.map((event) =>
-      buildBulkImportEvent(event, newId(), fallbackZone),
-    ),
+    preservation: builtPreservation?.payload ?? null,
+    events: events.map((event) => {
+      const link = event.sourceUid
+        ? builtPreservation?.links.eventsByUid.get(event.sourceUid) ?? null
+        : null;
+      const overrideLinks = event.sourceUid
+        ? builtPreservation?.links.overridesByUid.get(event.sourceUid) ?? []
+        : [];
+      return buildBulkImportEvent(
+        event,
+        newId(),
+        fallbackZone,
+        link,
+        [...overrideLinks],
+      );
+    }),
   };
 }
 
@@ -172,21 +216,29 @@ function buildPreservationPayload(
   sourceName: string,
   sourceKind: CalendarImportSourceKind,
   newId: () => string,
-): CalendarBulkImportPreservation | null {
+): CalendarBulkImportBuildPreservation | null {
   if (!preservation || preservation.objects.length === 0) return null;
+  const links: PreservationLinkIndex = {
+    eventsByUid: new Map(),
+    overridesByUid: new Map(),
+  };
   return {
-    sourceKind,
-    sourceName,
-    sourceFingerprint: preservation.sourceFingerprint,
-    objects: preservation.objects.map((object) =>
-      buildPreservedObject(object, newId),
-    ),
+    payload: {
+      sourceKind,
+      sourceName,
+      sourceFingerprint: preservation.sourceFingerprint,
+      objects: preservation.objects.map((object) =>
+        buildPreservedObject(object, newId, links),
+      ),
+    },
+    links,
   };
 }
 
 function buildPreservedObject(
   object: IcsPreservedObject,
   newId: () => string,
+  links: PreservationLinkIndex,
 ): CalendarBulkImportPreservedObject {
   return {
     id: newId(),
@@ -197,7 +249,7 @@ function buildPreservedObject(
     rawJcal: JSON.stringify(object.rawJcal),
     diagnostics: JSON.stringify(object.diagnostics),
     components: object.components.map((component) =>
-      buildPreservedComponent(component, newId),
+      buildPreservedComponent(component, newId, links).component,
     ),
   };
 }
@@ -205,9 +257,14 @@ function buildPreservedObject(
 function buildPreservedComponent(
   component: IcsPreservedComponent,
   newId: () => string,
-): CalendarBulkImportPreservedComponent {
-  return {
-    id: newId(),
+  links: PreservationLinkIndex,
+): BuiltPreservedComponent {
+  const id = newId();
+  const children = component.components.map((child) =>
+    buildPreservedComponent(child, newId, links),
+  );
+  const built: CalendarBulkImportPreservedComponent = {
+    id,
     componentType: component.componentType,
     uid: component.uid ?? null,
     recurrenceId: component.recurrenceId ?? null,
@@ -217,21 +274,58 @@ function buildPreservedComponent(
     rawJcal: JSON.stringify(component.rawJcal),
     preservationStatus: component.preservationStatus,
     projectionWarnings: JSON.stringify(component.projectionWarnings),
-    components: component.components.map((child) =>
-      buildPreservedComponent(child, newId),
-    ),
+    components: children.map((child) => child.component),
   };
+
+  const link = buildComponentProjectionLink(component, built, children);
+  if (component.componentType === "vevent" && component.uid && link) {
+    if (component.recurrenceId) {
+      const uidLinks = links.overridesByUid.get(component.uid) ?? [];
+      uidLinks.push(link);
+      links.overridesByUid.set(component.uid, uidLinks);
+    } else if (!links.eventsByUid.has(component.uid)) {
+      links.eventsByUid.set(component.uid, link);
+    }
+  }
+  return { component: built, link };
+}
+
+function buildComponentProjectionLink(
+  source: IcsPreservedComponent,
+  built: CalendarBulkImportPreservedComponent,
+  children: BuiltPreservedComponent[],
+): PreservationEventLink | null {
+  if (source.componentType !== "vevent") return null;
+  return {
+    componentId: built.id,
+    attendeePropertyIndexes: attendeePropertyIndexes(source.rawJcal),
+    alarmComponentIds: children
+      .map((child) => child.component)
+      .filter((child) => child.componentType === "valarm")
+      .map((child) => child.id),
+  };
+}
+
+function attendeePropertyIndexes(rawJcal: unknown): number[] {
+  if (!Array.isArray(rawJcal) || !Array.isArray(rawJcal[1])) return [];
+  return rawJcal[1].flatMap((property, index) => {
+    if (!Array.isArray(property) || typeof property[0] !== "string") return [];
+    return property[0].toLowerCase() === "attendee" ? [index] : [];
+  });
 }
 
 function buildBulkImportEvent(
   event: CalendarEvent,
   candidateId: string,
   fallbackZone: string,
+  link: PreservationEventLink | null,
+  overrideLinks: PreservationEventLink[],
 ): CalendarBulkImportEvent {
   const homeZone = event.timezone || fallbackZone;
   const gp = event.guestPermissions;
   return {
     candidateId,
+    icalendarComponentId: link?.componentId ?? event.icalendarComponentId ?? null,
     title: event.title,
     startTime: toDbTime(event.start, homeZone, event.allDay),
     endTime: toDbTime(event.end, homeZone, event.allDay),
@@ -261,17 +355,26 @@ function buildBulkImportEvent(
     guestCanModify: gp?.canModify ?? false,
     guestCanInviteOthers: gp?.canInviteOthers ?? true,
     guestCanSeeOtherGuests: gp?.canSeeOtherGuests ?? true,
-    attendees: buildAttendees(event.attendees),
-    alarms: buildAlarms(event.alarms),
-    overrides: buildOverrides(event.overrides, homeZone, event.allDay === true),
+    attendees: buildAttendees(event.attendees, link),
+    alarms: buildAlarms(event.alarms, link),
+    overrides: buildOverrides(
+      event.overrides,
+      homeZone,
+      event.allDay === true,
+      overrideLinks,
+    ),
   };
 }
 
 function buildAttendees(
   attendees: CalendarEvent["attendees"],
+  link: PreservationEventLink | null,
 ): CalendarBulkImportAttendee[] {
-  return (attendees ?? []).map((attendee: EventAttendee) => ({
+  return (attendees ?? []).map((attendee: EventAttendee, index) => ({
     id: attendee.id,
+    icalendarComponentId: link?.componentId ?? attendee.icalendarComponentId ?? null,
+    icalendarPropertyIndex:
+      link?.attendeePropertyIndexes[index] ?? attendee.icalendarPropertyIndex ?? null,
     name: attendee.name ?? null,
     email: attendee.email,
     role: attendee.role,
@@ -280,9 +383,13 @@ function buildAttendees(
   }));
 }
 
-function buildAlarms(alarms: CalendarEvent["alarms"]): CalendarBulkImportAlarm[] {
-  return (alarms ?? []).map((alarm: EventAlarm) => ({
+function buildAlarms(
+  alarms: CalendarEvent["alarms"],
+  link: PreservationEventLink | null,
+): CalendarBulkImportAlarm[] {
+  return (alarms ?? []).map((alarm: EventAlarm, index) => ({
     id: alarm.id,
+    icalendarComponentId: link?.alarmComponentIds[index] ?? alarm.icalendarComponentId ?? null,
     action: alarm.action,
     triggerType: alarm.triggerType,
     triggerValue: alarm.triggerValue,
@@ -294,9 +401,12 @@ function buildOverrides(
   overrides: CalendarEvent["overrides"],
   zone: string,
   allDay: boolean,
+  overrideLinks: PreservationEventLink[],
 ): CalendarBulkImportOverride[] {
-  return (overrides ?? []).map((overrideRow: EventOverride) => ({
+  return (overrides ?? []).map((overrideRow: EventOverride, index) => ({
     id: overrideRow.id,
+    icalendarComponentId:
+      overrideLinks[index]?.componentId ?? overrideRow.icalendarComponentId ?? null,
     recurrenceId: overrideRow.recurrenceId,
     title: overrideRow.title ?? null,
     startTime: overrideRow.start

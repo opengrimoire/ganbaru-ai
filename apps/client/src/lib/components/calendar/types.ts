@@ -73,6 +73,13 @@ export interface PomodoroConfig {
 export type EventTransparency = "opaque" | "transparent";
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
 export type EventVisibility = "public" | "private" | "confidential";
+export type IcalendarPreservationStatus =
+  | "lossless"
+  | "partial"
+  | "unsupported"
+  | "needs-review"
+  | "regenerated"
+  | "invalid";
 
 // Attendee types (RFC 5545 ATTENDEE/ORGANIZER)
 
@@ -86,6 +93,10 @@ export interface EventAttendee {
   role: AttendeeRole;
   status: AttendeeStatus;
   rsvp: boolean;
+  /** Preserved VEVENT component that contains this ATTENDEE property. */
+  icalendarComponentId?: string;
+  /** Zero-based property index inside the preserved VEVENT component. */
+  icalendarPropertyIndex?: number;
 }
 
 export interface EventOrganizer {
@@ -104,6 +115,8 @@ export interface EventAlarm {
   /** Duration string for relative ("-PT15M") or ISO datetime for absolute. */
   triggerValue: string;
   description?: string;
+  /** Preserved VALARM component that produced this alarm. */
+  icalendarComponentId?: string;
 }
 
 // Geo coordinates (RFC 5545 GEO)
@@ -131,6 +144,8 @@ export interface EventOverride {
   transparency?: EventTransparency;
   visibility?: EventVisibility;
   extendedProperties?: Record<string, string>;
+  /** Preserved override VEVENT component that produced this row. */
+  icalendarComponentId?: string;
 }
 
 // Guest permissions (Google Calendar X-properties)
@@ -203,6 +218,12 @@ export interface CalendarEvent {
   overrides?: EventOverride[];
   /** Guest permission flags (Google Calendar X-properties). */
   guestPermissions?: GuestPermissions;
+  /** Preserved VEVENT component that produced this row. */
+  icalendarComponentId?: string;
+  /** Preservation quality for the linked VEVENT component. */
+  icalendarPreservationStatus?: IcalendarPreservationStatus;
+  /** Lossy projection diagnostics for the linked VEVENT component. */
+  icalendarProjectionWarnings?: string[];
 }
 
 export interface Calendar {

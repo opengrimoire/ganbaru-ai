@@ -45,6 +45,8 @@ export interface DbCalendarEvent {
 export interface DbAttendee {
   id: string;
   event_id: string;
+  icalendar_component_id: string | null;
+  icalendar_property_index: number | null;
   name: string | null;
   email: string;
   role: string;
@@ -56,6 +58,7 @@ export interface DbAttendee {
 export interface DbAlarm {
   id: string;
   event_id: string;
+  icalendar_component_id: string | null;
   action: string;
   trigger_type: string;
   trigger_value: string;
@@ -177,7 +180,7 @@ export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
 }
 
 export function mapAttendee(r: DbAttendee): EventAttendee {
-  return {
+  const attendee: EventAttendee = {
     id: r.id,
     name: r.name || undefined,
     email: r.email,
@@ -185,16 +188,23 @@ export function mapAttendee(r: DbAttendee): EventAttendee {
     status: r.status as AttendeeStatus,
     rsvp: r.rsvp === 1,
   };
+  if (r.icalendar_component_id) attendee.icalendarComponentId = r.icalendar_component_id;
+  if (r.icalendar_property_index != null) {
+    attendee.icalendarPropertyIndex = r.icalendar_property_index;
+  }
+  return attendee;
 }
 
 export function mapAlarm(r: DbAlarm): EventAlarm {
-  return {
+  const alarm: EventAlarm = {
     id: r.id,
     action: r.action as AlarmAction,
     triggerType: r.trigger_type as "relative" | "absolute",
     triggerValue: r.trigger_value,
     description: r.description || undefined,
   };
+  if (r.icalendar_component_id) alarm.icalendarComponentId = r.icalendar_component_id;
+  return alarm;
 }
 
 /**

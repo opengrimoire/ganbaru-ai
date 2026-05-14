@@ -4,7 +4,7 @@ import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import type {
   Calendar, CalendarEvent, EventAttendee, EventColor, EventOverride,
   EventOrganizer, EventStatus, EventTransparency, EventVisibility,
-  GeoCoordinates, GuestPermissions, PomodoroConfig, RecurrenceConfig,
+  GeoCoordinates, GuestPermissions, IcalendarPreservationStatus, PomodoroConfig, RecurrenceConfig,
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
@@ -182,6 +182,9 @@ type DbFullEvent = DbCalendarEvent & {
   guest_can_modify: number;
   guest_can_invite_others: number;
   guest_can_see_other_guests: number;
+  icalendar_component_id: string | null;
+  icalendar_preservation_status: IcalendarPreservationStatus | null;
+  icalendar_projection_warnings: string | null;
 };
 
 type DbFullOverride = DbOverride & {
@@ -190,6 +193,7 @@ type DbFullOverride = DbOverride & {
   url: string | null;
   visibility: string | null;
   extended_properties: string | null;
+  icalendar_component_id: string | null;
 };
 
 interface CalendarWindowRows {
@@ -282,6 +286,12 @@ function applyFullEventFields(row: DbFullEvent, event: CalendarEvent) {
       canSeeOtherGuests: row.guest_can_see_other_guests !== 0,
     };
   }
+  if (row.icalendar_component_id) event.icalendarComponentId = row.icalendar_component_id;
+  if (row.icalendar_preservation_status) {
+    event.icalendarPreservationStatus = row.icalendar_preservation_status;
+  }
+  const projectionWarnings = safeJsonParse<string[]>(row.icalendar_projection_warnings);
+  if (projectionWarnings) event.icalendarProjectionWarnings = projectionWarnings;
 }
 
 function getIndex(): ExpansionIndex {
@@ -805,6 +815,7 @@ export function getCalendar() {
           if (r.visibility) slim.visibility = r.visibility as EventVisibility;
           const ep = safeJsonParse<Record<string, string>>(r.extended_properties);
           if (ep) slim.extendedProperties = ep;
+          if (r.icalendar_component_id) slim.icalendarComponentId = r.icalendar_component_id;
           return slim;
         });
       }

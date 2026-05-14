@@ -259,6 +259,96 @@ function preservationStatusFor(componentType: string): IcsPreservationStatus {
 	}
 }
 
+const PROJECTED_VEVENT_PROPERTIES = new Set([
+	"uid", "summary", "description", "location", "url", "dtstart", "dtend",
+	"duration", "rrule", "rdate", "exdate", "recurrence-id", "status", "class",
+	"transp", "priority", "sequence", "categories", "geo", "organizer",
+	"attendee", "dtstamp", "created", "last-modified",
+	"x-google-guest-can-modify", "x-google-guest-can-invite-others",
+	"x-google-guest-can-see-other-guests",
+]);
+
+const PROJECTED_VALARM_PROPERTIES = new Set([
+	"action", "trigger", "description",
+]);
+
+const SUPPORTED_PARAMS_BY_PROPERTY: Record<string, Set<string>> = {
+	attendee: new Set(["cn", "role", "partstat", "rsvp"]),
+	organizer: new Set(["cn"]),
+	dtstart: new Set(["tzid", "value"]),
+	dtend: new Set(["tzid", "value"]),
+	exdate: new Set(["tzid", "value"]),
+	rdate: new Set(["tzid", "value"]),
+	"recurrence-id": new Set(["tzid", "value"]),
+};
+
+function pushUnique(list: string[], message: string): void {
+	if (!list.includes(message)) list.push(message);
+}
+
+function addUnsupportedParameterWarnings(
+	warnings: string[],
+	componentType: string,
+	property: JcalProperty,
+): void {
+	const propertyName = property[0].toLowerCase();
+	const supported = SUPPORTED_PARAMS_BY_PROPERTY[propertyName] ?? new Set<string>();
+	for (const paramName of Object.keys(property[1])) {
+		const normalized = paramName.toLowerCase();
+		if (supported.has(normalized)) continue;
+		pushUnique(
+			warnings,
+			`${componentType.toUpperCase()} property ${propertyName.toUpperCase()} parameter ${normalized.toUpperCase()} is preserved but not projected.`,
+		);
+	}
+}
+
+function projectionWarningsFor(component: JcalComponent): string[] {
+	const componentType = component[0].toLowerCase();
+	const warnings: string[] = [];
+	if (componentType === "vevent") {
+		for (const property of jcalProperties(component)) {
+			const propertyName = property[0].toLowerCase();
+			if (!PROJECTED_VEVENT_PROPERTIES.has(propertyName)) {
+				const projectedAsExtension = propertyName.startsWith("x-");
+				pushUnique(
+					warnings,
+					projectedAsExtension
+						? `VEVENT property ${propertyName.toUpperCase()} is preserved as an extended property only.`
+						: `VEVENT property ${propertyName.toUpperCase()} is preserved but not projected.`,
+				);
+			}
+			addUnsupportedParameterWarnings(warnings, componentType, property);
+		}
+		return warnings;
+	}
+	if (componentType === "valarm") {
+		for (const property of jcalProperties(component)) {
+			const propertyName = property[0].toLowerCase();
+			if (!PROJECTED_VALARM_PROPERTIES.has(propertyName)) {
+				pushUnique(
+					warnings,
+					`VALARM property ${propertyName.toUpperCase()} is preserved but not projected.`,
+				);
+			}
+			addUnsupportedParameterWarnings(warnings, componentType, property);
+		}
+		return warnings;
+	}
+	if (componentType === "vtimezone") {
+		pushUnique(
+			warnings,
+			"VTIMEZONE is preserved for export while the app projection uses a resolved timezone identifier.",
+		);
+		return warnings;
+	}
+	pushUnique(
+		warnings,
+		`${componentType.toUpperCase()} is preserved without a GanbaruAI projection.`,
+	);
+	return warnings;
+}
+
 function preservedComponentFromJcal(component: JcalComponent): IcsPreservedComponent {
 	const componentType = component[0].toLowerCase();
 	const recurrenceIdProp = firstJcalProperty(component, "recurrence-id");
@@ -272,7 +362,7 @@ function preservedComponentFromJcal(component: JcalComponent): IcsPreservedCompo
 		dtstartKey: firstJcalValue(component, "dtstart"),
 		rawJcal: component,
 		preservationStatus: preservationStatusFor(componentType),
-		projectionWarnings: [],
+		projectionWarnings: projectionWarningsFor(component),
 		components: jcalSubcomponents(component).map(preservedComponentFromJcal),
 	};
 }

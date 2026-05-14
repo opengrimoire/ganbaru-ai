@@ -155,6 +155,8 @@ describe("buildBulkImportPayload", () => {
     expect(event.attendees).toEqual([
       {
         id: "att-1",
+        icalendarComponentId: null,
+        icalendarPropertyIndex: null,
         name: "User",
         email: "user@example.com",
         role: "req-participant",
@@ -165,6 +167,7 @@ describe("buildBulkImportPayload", () => {
     expect(event.alarms).toEqual([
       {
         id: "alarm-1",
+        icalendarComponentId: null,
         action: "display",
         triggerType: "relative",
         triggerValue: "-PT15M",
@@ -173,6 +176,7 @@ describe("buildBulkImportPayload", () => {
     ]);
     expect(event.overrides[0]).toMatchObject({
       id: "override-1",
+      icalendarComponentId: null,
       recurrenceId: "2026-05-01T10:00:00Z",
       title: "Moved",
       color: 2,
@@ -309,5 +313,119 @@ describe("buildBulkImportPayload", () => {
       preservationStatus: "unsupported",
     });
     expect(payload.preservation?.objects[0].components[0].rawJcal).toContain("vtodo");
+  });
+
+  it("links projected rows to preserved iCalendar components", () => {
+    const preservation: IcsPreservationPayload = {
+      sourceFingerprint: "abc123",
+      objects: [
+        {
+          rawJcal: ["vcalendar", [], []],
+          diagnostics: [],
+          components: [
+            {
+              componentType: "vevent",
+              uid: "uid-1@example.com",
+              rawJcal: [
+                "vevent",
+                [
+                  ["uid", {}, "text", "uid-1@example.com"],
+                  ["attendee", {}, "cal-address", "mailto:user@example.com"],
+                ],
+                [
+                  [
+                    "valarm",
+                    [
+                      ["action", {}, "text", "DISPLAY"],
+                      ["trigger", {}, "duration", "-PT15M"],
+                    ],
+                    [],
+                  ],
+                ],
+              ],
+              preservationStatus: "partial",
+              projectionWarnings: [],
+              components: [
+                {
+                  componentType: "valarm",
+                  rawJcal: [
+                    "valarm",
+                    [
+                      ["action", {}, "text", "DISPLAY"],
+                      ["trigger", {}, "duration", "-PT15M"],
+                    ],
+                    [],
+                  ],
+                  preservationStatus: "partial",
+                  projectionWarnings: [],
+                  components: [],
+                },
+              ],
+            },
+            {
+              componentType: "vevent",
+              uid: "uid-1@example.com",
+              recurrenceId: "20260502T100000Z",
+              rawJcal: [
+                "vevent",
+                [
+                  ["uid", {}, "text", "uid-1@example.com"],
+                  ["recurrence-id", {}, "date-time", "20260502T100000Z"],
+                ],
+                [],
+              ],
+              preservationStatus: "partial",
+              projectionWarnings: [],
+              components: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const payload = buildBulkImportPayload(
+      [
+        makeEvent({
+          attendees: [
+            {
+              id: "att-1",
+              email: "user@example.com",
+              role: "req-participant",
+              status: "needs-action",
+              rsvp: false,
+            },
+          ],
+          alarms: [
+            {
+              id: "alarm-1",
+              action: "display",
+              triggerType: "relative",
+              triggerValue: "-PT15M",
+            },
+          ],
+          overrides: [
+            {
+              id: "override-1",
+              parentEventId: "ignored",
+              recurrenceId: "2026-05-02T10:00:00Z",
+            },
+          ],
+        }),
+      ],
+      CAL,
+      NOW,
+      ZONE,
+      deterministicIds(),
+      preservation,
+      "meeting.ics",
+      "import-file",
+    );
+
+    const event = payload.events[0];
+    expect(event.icalendarComponentId).toBe("new-2");
+    expect(event.attendees[0].icalendarComponentId).toBe("new-2");
+    expect(event.attendees[0].icalendarPropertyIndex).toBe(1);
+    expect(event.alarms[0].icalendarComponentId).toBe("new-3");
+    expect(event.overrides[0].icalendarComponentId).toBe("new-4");
   });
 });

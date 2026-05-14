@@ -474,6 +474,45 @@ describe("parseIcs", () => {
 		});
 	});
 
+	describe("preservation diagnostics", () => {
+		it("records component projection warnings for unsupported properties and parameters", () => {
+			const ics = wrap(
+				vevent(
+					"UID:diag@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					"SUMMARY;LANGUAGE=en:Diagnostics",
+					"CONTACT:desk@example.com",
+					"BEGIN:VALARM",
+					"ACTION:DISPLAY",
+					"TRIGGER:-PT15M",
+					"REPEAT:2",
+					"DURATION:PT5M",
+					"END:VALARM",
+				),
+			);
+			const result = parseIcs(ics);
+			const eventComponent = result.preservation?.objects[0].components
+				.find((component) => component.componentType === "vevent");
+			const alarmComponent = eventComponent?.components
+				.find((component) => component.componentType === "valarm");
+
+			expect(eventComponent?.projectionWarnings).toEqual(
+				expect.arrayContaining([
+					"VEVENT property SUMMARY parameter LANGUAGE is preserved but not projected.",
+					"VEVENT property CONTACT is preserved but not projected.",
+				]),
+			);
+			expect(alarmComponent?.projectionWarnings).toEqual(
+				expect.arrayContaining([
+					"VALARM property REPEAT is preserved but not projected.",
+					"VALARM property DURATION is preserved but not projected.",
+				]),
+			);
+		});
+	});
+
 	describe("status, transparency, visibility, priority, sequence", () => {
 		it("maps STATUS, TRANSP, CLASS, PRIORITY, SEQUENCE", () => {
 			const ics = wrap(

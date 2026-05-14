@@ -56,13 +56,13 @@ Migration action:
 
 ## Schema rollout
 
-Suggested order:
+Implementation order:
 
-1. Add preservation tables with no effect on current reads.
-2. Add write path for new imports to populate preservation tables.
-3. Add projection links for imported `VEVENT`s.
+1. Add preservation tables with no effect on current reads. Implemented in migration v12.
+2. Add write path for new imports to populate preservation tables. Implemented for structured jCal-like object and component storage.
+3. Add projection links for imported `VEVENT`s, attendees, alarms, and overrides. Implemented in migration v13.
 4. Add export merger for linked components.
-5. Add diagnostics and repair surfaces.
+5. Add diagnostics and repair surfaces. Projection warnings are stored now; a user-facing repair surface is still future work.
 6. Optional backfill generated preservation records for local events.
 
 Each step must be idempotent.

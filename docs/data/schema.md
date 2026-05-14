@@ -53,7 +53,7 @@ Indexes: `(calendar_id)`, `(calendar_id, source_kind, source_name)`, and `(sourc
 
 ### `icalendar_components`
 
-Lossless component preservation table introduced by migration v12. One row stores one component from an imported object, including unsupported components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, nested `VALARM`, and `STANDARD` or `DAYLIGHT` blocks. The normal calendar render path does not read this table.
+Lossless component preservation table introduced by migration v12. One row stores one component from an imported object, including unsupported components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, nested `VALARM`, and `STANDARD` or `DAYLIGHT` blocks. Migration v13 links projected rows back to these components. The normal calendar render path does not read this table.
 
 Fields:
 
@@ -68,7 +68,7 @@ Fields:
 - `sequence`: copied `SEQUENCE` when present.
 - `dtstart_key`: copied `DTSTART` value for diagnostics and future lookup.
 - `raw_jcal`: structured JSON representation of the component and its properties.
-- `projected_kind`, `projected_id`: reserved link to normalized app rows. These are intentionally null until projection-link work lands.
+- `projected_kind`, `projected_id`: optional reverse link to a normalized app row. Currently used for projected `event`, `alarm`, and `override` rows.
 - `preservation_status`: diagnostic state such as `partial` or `unsupported`.
 - `projection_warnings`: JSON warning list for lossy projection notes.
 - `sort_order`: component order among siblings.
@@ -107,7 +107,7 @@ Why `recurrence_rule` is plain text (the RRULE string) instead of decomposed col
 
 Per-instance overrides live in `calendar_event_overrides` (one row per detached or modified instance). The `recurrence_id` column is a UTC ISO 8601 instant identifying the original DTSTART of the overridden occurrence (the iCalendar `RECURRENCE-ID` field). Matching is by instant, not by wall clock, so a timed override survives DST transitions and zone changes intact. All-day override start and end values use the same floating date convention as all-day event rows: the date portion is canonical and no zone conversion is applied on read.
 
-The full iCalendar compatibility data model is planned in `docs/interop/icalendar/data-model.md`. That plan keeps raw iCalendar components and properties available for lossless round trips while projecting the subset the app understands into these normalized calendar tables.
+The full iCalendar compatibility data model is in `docs/interop/icalendar/data-model.md`. New imports keep raw iCalendar components and properties available for future lossless round trips while projecting the subset the app understands into these normalized calendar tables. Migration v13 adds nullable `icalendar_component_id` links to `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms`; attendee rows also keep `icalendar_property_index` so an `ATTENDEE` row can be traced to the original property inside its preserved `VEVENT`. Full-event loads can join preservation diagnostics on demand, but visible-window loads continue to query only projected calendar rows.
 
 Why `pomodoro_config` is JSON instead of FK to a `pomodoro_configs` table: the config is per-event, immutable after the event is created (changing it ends the active run, see `algorithms/pomodoro-state-machine.md`), and small. A separate table earns no normalization benefit and adds a join to every event read.
 

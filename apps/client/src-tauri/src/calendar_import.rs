@@ -63,6 +63,7 @@ struct CalendarImportPreservedComponent {
 #[serde(rename_all = "camelCase")]
 struct CalendarImportEvent {
     candidate_id: String,
+    icalendar_component_id: Option<String>,
     title: String,
     start_time: String,
     end_time: String,
@@ -99,6 +100,8 @@ struct CalendarImportEvent {
 #[serde(rename_all = "camelCase")]
 struct CalendarImportAttendee {
     id: String,
+    icalendar_component_id: Option<String>,
+    icalendar_property_index: Option<i64>,
     name: Option<String>,
     email: String,
     role: String,
@@ -110,6 +113,7 @@ struct CalendarImportAttendee {
 #[serde(rename_all = "camelCase")]
 struct CalendarImportAlarm {
     id: String,
+    icalendar_component_id: Option<String>,
     action: String,
     trigger_type: String,
     trigger_value: String,
@@ -120,6 +124,7 @@ struct CalendarImportAlarm {
 #[serde(rename_all = "camelCase")]
 struct CalendarImportOverride {
     id: String,
+    icalendar_component_id: Option<String>,
     recurrence_id: String,
     title: Option<String>,
     start_time: Option<String>,
@@ -178,15 +183,24 @@ pub async fn calendar_bulk_import<R: Runtime>(
     let mut skipped_older = 0;
     let mut warnings = Vec::new();
     let mut applied = Vec::new();
+    let apply_preservation_links =
+        payload.preservation.is_some() && !contains_older_revisions(&existing, &payload.events);
 
     if let Some(preservation) = &payload.preservation {
-        replace_preservation(
-            &mut tx,
-            &payload.target_calendar_id,
-            &payload.now,
-            preservation,
-        )
-        .await?;
+        if apply_preservation_links {
+            replace_preservation(
+                &mut tx,
+                &payload.target_calendar_id,
+                &payload.now,
+                preservation,
+            )
+            .await?;
+        } else {
+            warnings.push(
+                "iCalendar preservation was not replaced because the import contains older event revisions."
+                    .to_string(),
+            );
+        }
     }
 
     for event in &payload.events {
@@ -214,17 +228,39 @@ pub async fn calendar_bulk_import<R: Runtime>(
                 &payload.now,
                 event,
                 &existing_row.id,
+                apply_preservation_links,
             )
             .await?;
-            replace_child_rows(&mut tx, &existing_row.id, event).await?;
+            replace_child_rows(
+                &mut tx,
+                &existing_row.id,
+                event,
+                &payload.now,
+                apply_preservation_links,
+            )
+            .await?;
             applied.push(CalendarImportApplied {
                 candidate_id: event.candidate_id.clone(),
                 event_id: existing_row.id.clone(),
                 action: CalendarImportAction::Updated,
             });
         } else {
-            insert_event(&mut tx, &payload.target_calendar_id, &payload.now, event).await?;
-            insert_child_rows(&mut tx, &event.candidate_id, event).await?;
+            insert_event(
+                &mut tx,
+                &payload.target_calendar_id,
+                &payload.now,
+                event,
+                apply_preservation_links,
+            )
+            .await?;
+            insert_child_rows(
+                &mut tx,
+                &event.candidate_id,
+                event,
+                &payload.now,
+                apply_preservation_links,
+            )
+            .await?;
             applied.push(CalendarImportApplied {
                 candidate_id: event.candidate_id.clone(),
                 event_id: event.candidate_id.clone(),
@@ -295,6 +331,19 @@ async fn load_existing_events(
         }
     }
     Ok(existing)
+}
+
+fn contains_older_revisions(
+    existing: &HashMap<String, ExistingEventRow>,
+    events: &[CalendarImportEvent],
+) -> bool {
+    events.iter().any(|event| {
+        event
+            .source_uid
+            .as_deref()
+            .and_then(|uid| existing.get(uid))
+            .is_some_and(|row| event.sequence < row.sequence)
+    })
 }
 
 async fn replace_preservation(
@@ -395,13 +444,48 @@ async fn insert_preserved_components(
     Ok(())
 }
 
+fn preservation_link_id(value: &Option<String>, apply: bool) -> Option<&str> {
+    if !apply {
+        return None;
+    }
+    value.as_deref().filter(|id| !id.trim().is_empty())
+}
+
+async fn link_preserved_component(
+    tx: &mut Transaction<'_, Sqlite>,
+    component_id: Option<&str>,
+    projected_kind: &str,
+    projected_id: &str,
+    now: &str,
+) -> Result<(), String> {
+    let Some(component_id) = component_id else {
+        return Ok(());
+    };
+    sqlx::query(
+        "UPDATE icalendar_components
+            SET projected_kind = ?, projected_id = ?, updated_at = ?
+          WHERE id = ?",
+    )
+    .bind(projected_kind)
+    .bind(projected_id)
+    .bind(now)
+    .bind(component_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("link iCalendar component projection: {e}"))?;
+    Ok(())
+}
+
 async fn insert_event(
     tx: &mut Transaction<'_, Sqlite>,
     target_calendar_id: &str,
     now: &str,
     event: &CalendarImportEvent,
+    apply_preservation_links: bool,
 ) -> Result<(), String> {
     let description = sanitize_calendar_description_html(&event.description);
+    let icalendar_component_id =
+        preservation_link_id(&event.icalendar_component_id, apply_preservation_links);
     sqlx::query(
         "INSERT INTO calendar_events
             (id, title, start_time, end_time, timezone, calendar_id,
@@ -410,8 +494,8 @@ async fn insert_event(
              source_uid, visibility, priority, categories, geo,
              sequence, rdate, extended_properties, organizer,
              guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             icalendar_component_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&event.candidate_id)
     .bind(&event.title)
@@ -450,11 +534,20 @@ async fn insert_event(
     } else {
         0_i64
     })
+    .bind(icalendar_component_id)
     .bind(now)
     .bind(now)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("insert imported event: {e}"))?;
+    link_preserved_component(
+        tx,
+        icalendar_component_id,
+        "event",
+        &event.candidate_id,
+        now,
+    )
+    .await?;
     Ok(())
 }
 
@@ -464,8 +557,11 @@ async fn update_event(
     now: &str,
     event: &CalendarImportEvent,
     event_id: &str,
+    apply_preservation_links: bool,
 ) -> Result<(), String> {
     let description = sanitize_calendar_description_html(&event.description);
+    let icalendar_component_id =
+        preservation_link_id(&event.icalendar_component_id, apply_preservation_links);
     let result = sqlx::query(
         "UPDATE calendar_events
             SET title = ?, start_time = ?, end_time = ?, timezone = ?,
@@ -478,6 +574,7 @@ async fn update_event(
                 sequence = ?, rdate = ?, extended_properties = ?, organizer = ?,
                 guest_can_modify = ?, guest_can_invite_others = ?,
                 guest_can_see_other_guests = ?,
+                icalendar_component_id = CASE WHEN ? = 1 THEN ? ELSE icalendar_component_id END,
                 updated_at = ?
           WHERE id = ? AND calendar_id = ?",
     )
@@ -515,6 +612,12 @@ async fn update_event(
     } else {
         0_i64
     })
+    .bind(if apply_preservation_links {
+        1_i64
+    } else {
+        0_i64
+    })
+    .bind(icalendar_component_id)
     .bind(now)
     .bind(event_id)
     .bind(target_calendar_id)
@@ -524,6 +627,7 @@ async fn update_event(
     if result.rows_affected() == 0 {
         return Err(format!("import target event '{event_id}' not found"));
     }
+    link_preserved_component(tx, icalendar_component_id, "event", event_id, now).await?;
     Ok(())
 }
 
@@ -531,6 +635,8 @@ async fn replace_child_rows(
     tx: &mut Transaction<'_, Sqlite>,
     event_id: &str,
     event: &CalendarImportEvent,
+    now: &str,
+    apply_preservation_links: bool,
 ) -> Result<(), String> {
     for query in [
         "DELETE FROM calendar_event_attendees WHERE event_id = ?",
@@ -543,22 +649,33 @@ async fn replace_child_rows(
             .await
             .map_err(|e| format!("delete imported event children: {e}"))?;
     }
-    insert_child_rows(tx, event_id, event).await
+    insert_child_rows(tx, event_id, event, now, apply_preservation_links).await
 }
 
 async fn insert_child_rows(
     tx: &mut Transaction<'_, Sqlite>,
     event_id: &str,
     event: &CalendarImportEvent,
+    now: &str,
+    apply_preservation_links: bool,
 ) -> Result<(), String> {
     for (sort_order, attendee) in event.attendees.iter().enumerate() {
+        let icalendar_component_id =
+            preservation_link_id(&attendee.icalendar_component_id, apply_preservation_links);
         sqlx::query(
             "INSERT INTO calendar_event_attendees
-                (id, event_id, name, email, role, status, rsvp, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (id, event_id, icalendar_component_id, icalendar_property_index,
+                 name, email, role, status, rsvp, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&attendee.id)
         .bind(event_id)
+        .bind(icalendar_component_id)
+        .bind(if apply_preservation_links {
+            attendee.icalendar_property_index
+        } else {
+            None
+        })
         .bind(&attendee.name)
         .bind(&attendee.email)
         .bind(&attendee.role)
@@ -571,13 +688,17 @@ async fn insert_child_rows(
     }
 
     for (sort_order, alarm) in event.alarms.iter().enumerate() {
+        let icalendar_component_id =
+            preservation_link_id(&alarm.icalendar_component_id, apply_preservation_links);
         sqlx::query(
             "INSERT INTO calendar_event_alarms
-                (id, event_id, action, trigger_type, trigger_value, description, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (id, event_id, icalendar_component_id, action, trigger_type,
+                 trigger_value, description, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&alarm.id)
         .bind(event_id)
+        .bind(icalendar_component_id)
         .bind(&alarm.action)
         .bind(&alarm.trigger_type)
         .bind(&alarm.trigger_value)
@@ -586,16 +707,21 @@ async fn insert_child_rows(
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("insert imported alarm: {e}"))?;
+        link_preserved_component(tx, icalendar_component_id, "alarm", &alarm.id, now).await?;
     }
 
     for override_row in &event.overrides {
         let description = sanitize_optional_calendar_description(&override_row.description);
+        let icalendar_component_id = preservation_link_id(
+            &override_row.icalendar_component_id,
+            apply_preservation_links,
+        );
         sqlx::query(
             "INSERT INTO calendar_event_overrides
                 (id, parent_event_id, recurrence_id, title, start_time, end_time,
                  description, location, url, color, status, transparency, visibility,
-                 extended_properties)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 extended_properties, icalendar_component_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&override_row.id)
         .bind(event_id)
@@ -611,9 +737,18 @@ async fn insert_child_rows(
         .bind(&override_row.transparency)
         .bind(&override_row.visibility)
         .bind(&override_row.extended_properties)
+        .bind(icalendar_component_id)
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("insert imported override: {e}"))?;
+        link_preserved_component(
+            tx,
+            icalendar_component_id,
+            "override",
+            &override_row.id,
+            now,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -694,6 +829,7 @@ fn validate_preserved_component(
 
 fn validate_event(event: &CalendarImportEvent) -> Result<(), String> {
     require_non_empty(&event.candidate_id, "candidate_id")?;
+    validate_optional_id(&event.icalendar_component_id, "icalendar_component_id")?;
     require_non_empty(&event.start_time, "start_time")?;
     require_non_empty(&event.end_time, "end_time")?;
     require_non_empty(&event.timezone, "timezone")?;
@@ -736,6 +872,13 @@ fn validate_event(event: &CalendarImportEvent) -> Result<(), String> {
 
 fn validate_attendee(attendee: &CalendarImportAttendee) -> Result<(), String> {
     require_non_empty(&attendee.id, "attendee.id")?;
+    validate_optional_id(
+        &attendee.icalendar_component_id,
+        "attendee.icalendar_component_id",
+    )?;
+    if let Some(index) = attendee.icalendar_property_index {
+        validate_non_negative(index, "attendee.icalendar_property_index")?;
+    }
     require_non_empty(&attendee.email, "attendee.email")?;
     validate_enum(
         &attendee.role,
@@ -762,6 +905,10 @@ fn validate_attendee(attendee: &CalendarImportAttendee) -> Result<(), String> {
 
 fn validate_alarm(alarm: &CalendarImportAlarm) -> Result<(), String> {
     require_non_empty(&alarm.id, "alarm.id")?;
+    validate_optional_id(
+        &alarm.icalendar_component_id,
+        "alarm.icalendar_component_id",
+    )?;
     require_non_empty(&alarm.trigger_value, "alarm.trigger_value")?;
     validate_enum(
         &alarm.action,
@@ -777,6 +924,10 @@ fn validate_alarm(alarm: &CalendarImportAlarm) -> Result<(), String> {
 
 fn validate_override(override_row: &CalendarImportOverride) -> Result<(), String> {
     require_non_empty(&override_row.id, "override.id")?;
+    validate_optional_id(
+        &override_row.icalendar_component_id,
+        "override.icalendar_component_id",
+    )?;
     require_non_empty(&override_row.recurrence_id, "override.recurrence_id")?;
     validate_color(override_row.color, "override.color")?;
     if let Some(status) = &override_row.status {
@@ -853,6 +1004,13 @@ fn validate_json_string(value: &str, field: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_optional_id(value: &Option<String>, field: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        require_non_empty(value, field)?;
+    }
+    Ok(())
+}
+
 fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         Err(format!("{field} cannot be empty"))
@@ -863,11 +1021,14 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::{
-        insert_child_rows, insert_event, replace_preservation, update_event, validate_color,
-        validate_enum, validate_json_option, validate_preservation, validate_priority,
-        CalendarImportEvent, CalendarImportOverride, CalendarImportPreservation,
-        CalendarImportPreservedComponent, CalendarImportPreservedObject,
+        contains_older_revisions, insert_child_rows, insert_event, replace_preservation,
+        update_event, validate_color, validate_enum, validate_json_option, validate_preservation,
+        validate_priority, CalendarImportAlarm, CalendarImportAttendee, CalendarImportEvent,
+        CalendarImportOverride, CalendarImportPreservation, CalendarImportPreservedComponent,
+        CalendarImportPreservedObject, ExistingEventRow,
     };
 
     #[test]
@@ -981,6 +1142,167 @@ mod tests {
     }
 
     #[test]
+    fn linked_import_rows_reference_preserved_components() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let mut tx = pool.begin().await.unwrap();
+            let preservation = linked_preservation_payload();
+            let mut event = import_event("event-1", "Parent");
+            event.icalendar_component_id = Some("component-event".to_string());
+            event.attendees = vec![CalendarImportAttendee {
+                id: "attendee-1".to_string(),
+                icalendar_component_id: Some("component-event".to_string()),
+                icalendar_property_index: Some(3),
+                name: Some("User".to_string()),
+                email: "user@example.com".to_string(),
+                role: "req-participant".to_string(),
+                status: "accepted".to_string(),
+                rsvp: true,
+            }];
+            event.alarms = vec![CalendarImportAlarm {
+                id: "alarm-1".to_string(),
+                icalendar_component_id: Some("component-alarm".to_string()),
+                action: "display".to_string(),
+                trigger_type: "relative".to_string(),
+                trigger_value: "-PT15M".to_string(),
+                description: Some("Reminder".to_string()),
+            }];
+            event.overrides = vec![CalendarImportOverride {
+                id: "override-1".to_string(),
+                icalendar_component_id: Some("component-override".to_string()),
+                recurrence_id: "2026-05-10T10:00:00Z".to_string(),
+                title: Some("Moved".to_string()),
+                start_time: None,
+                end_time: None,
+                description: None,
+                location: None,
+                url: None,
+                color: None,
+                status: None,
+                transparency: None,
+                visibility: None,
+                extended_properties: None,
+            }];
+
+            replace_preservation(&mut tx, "local", "2026-05-09 10:00:00", &preservation)
+                .await
+                .unwrap();
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &event, true)
+                .await
+                .unwrap();
+            insert_child_rows(&mut tx, "event-1", &event, "2026-05-09 10:00:00", true)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let event_component: String = sqlx::query_scalar(
+                "SELECT icalendar_component_id FROM calendar_events WHERE id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let attendee_link: (String, i64) = sqlx::query_as(
+                "SELECT icalendar_component_id, icalendar_property_index
+                 FROM calendar_event_attendees WHERE id = 'attendee-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let alarm_component: String = sqlx::query_scalar(
+                "SELECT icalendar_component_id FROM calendar_event_alarms WHERE id = 'alarm-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let override_component: String = sqlx::query_scalar(
+                "SELECT icalendar_component_id FROM calendar_event_overrides WHERE id = 'override-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let projected_rows: Vec<(String, String)> = sqlx::query_as(
+                "SELECT projected_kind, projected_id
+                 FROM icalendar_components
+                 WHERE id IN ('component-event', 'component-alarm', 'component-override')
+                 ORDER BY id",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(event_component, "component-event");
+            assert_eq!(attendee_link, ("component-event".to_string(), 3));
+            assert_eq!(alarm_component, "component-alarm");
+            assert_eq!(override_component, "component-override");
+            assert_eq!(
+                projected_rows,
+                vec![
+                    ("alarm".to_string(), "alarm-1".to_string()),
+                    ("event".to_string(), "event-1".to_string()),
+                    ("override".to_string(), "override-1".to_string()),
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn updating_without_preservation_replacement_keeps_existing_event_link() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let mut tx = pool.begin().await.unwrap();
+            let preservation = linked_preservation_payload();
+            let mut initial = import_event("event-1", "Initial");
+            initial.icalendar_component_id = Some("component-event".to_string());
+            let mut older = import_event("event-1", "Older");
+            older.icalendar_component_id = Some("missing-new-component".to_string());
+
+            replace_preservation(&mut tx, "local", "2026-05-09 10:00:00", &preservation)
+                .await
+                .unwrap();
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &initial, true)
+                .await
+                .unwrap();
+            update_event(
+                &mut tx,
+                "local",
+                "2026-05-09 10:05:00",
+                &older,
+                "event-1",
+                false,
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let event_component: String = sqlx::query_scalar(
+                "SELECT icalendar_component_id FROM calendar_events WHERE id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(event_component, "component-event");
+        });
+    }
+
+    #[test]
+    fn detects_older_revisions_before_replacing_preservation() {
+        let mut existing = HashMap::new();
+        existing.insert(
+            "event@example.com".to_string(),
+            ExistingEventRow {
+                id: "event-1".to_string(),
+                sequence: 2,
+            },
+        );
+        let mut event = import_event("event-1", "Older");
+        event.source_uid = Some("event@example.com".to_string());
+        event.sequence = 1;
+
+        assert!(contains_older_revisions(&existing, &[event]));
+    }
+
+    #[test]
     fn imported_event_descriptions_are_sanitized_before_persistence() {
         tauri::async_runtime::block_on(async {
             let pool = in_memory_pool().await;
@@ -990,7 +1312,7 @@ mod tests {
             );
             let mut tx = pool.begin().await.unwrap();
 
-            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &event)
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &event, false)
                 .await
                 .unwrap();
             tx.commit().await.unwrap();
@@ -1015,12 +1337,19 @@ mod tests {
             );
             let mut tx = pool.begin().await.unwrap();
 
-            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &initial)
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &initial, false)
                 .await
                 .unwrap();
-            update_event(&mut tx, "local", "2026-05-09 10:05:00", &updated, "event-1")
-                .await
-                .unwrap();
+            update_event(
+                &mut tx,
+                "local",
+                "2026-05-09 10:05:00",
+                &updated,
+                "event-1",
+                false,
+            )
+            .await
+            .unwrap();
             tx.commit().await.unwrap();
 
             let description: String =
@@ -1039,6 +1368,7 @@ mod tests {
             let mut event = import_event("event-1", "Parent");
             event.overrides = vec![CalendarImportOverride {
                 id: "override-1".to_string(),
+                icalendar_component_id: None,
                 recurrence_id: "2026-05-10".to_string(),
                 title: None,
                 start_time: None,
@@ -1054,10 +1384,12 @@ mod tests {
             }];
             let mut tx = pool.begin().await.unwrap();
 
-            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &event)
+            insert_event(&mut tx, "local", "2026-05-09 10:00:00", &event, false)
                 .await
                 .unwrap();
-            insert_child_rows(&mut tx, "event-1", &event).await.unwrap();
+            insert_child_rows(&mut tx, "event-1", &event, "2026-05-09 10:00:00", false)
+                .await
+                .unwrap();
             tx.commit().await.unwrap();
 
             let description: String = sqlx::query_scalar(
@@ -1083,6 +1415,7 @@ mod tests {
     fn import_event(id: &str, description: &str) -> CalendarImportEvent {
         CalendarImportEvent {
             candidate_id: id.to_string(),
+            icalendar_component_id: None,
             title: "Focus".to_string(),
             start_time: "2026-05-09T10:00:00Z".to_string(),
             end_time: "2026-05-09T11:00:00Z".to_string(),
@@ -1126,6 +1459,27 @@ mod tests {
                     components: vec![preserved_component("component-2", "valarm")],
                     ..preserved_component("component-1", "vtodo")
                 }],
+                ..preserved_object("object-1")
+            }],
+        }
+    }
+
+    fn linked_preservation_payload() -> CalendarImportPreservation {
+        CalendarImportPreservation {
+            source_kind: "import-file".to_string(),
+            source_name: "source.ics".to_string(),
+            source_fingerprint: "fingerprint".to_string(),
+            objects: vec![CalendarImportPreservedObject {
+                components: vec![
+                    CalendarImportPreservedComponent {
+                        components: vec![preserved_component("component-alarm", "valarm")],
+                        ..preserved_component("component-event", "vevent")
+                    },
+                    CalendarImportPreservedComponent {
+                        recurrence_id: Some("20260510T100000Z".to_string()),
+                        ..preserved_component("component-override", "vevent")
+                    },
+                ],
                 ..preserved_object("object-1")
             }],
         }

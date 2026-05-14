@@ -79,6 +79,8 @@ impl_sqlite_from_row!(DbOverrideRow {
 pub struct DbAttendeeRow {
     id: String,
     event_id: String,
+    icalendar_component_id: Option<String>,
+    icalendar_property_index: Option<i64>,
     name: Option<String>,
     email: String,
     role: String,
@@ -89,6 +91,8 @@ pub struct DbAttendeeRow {
 impl_sqlite_from_row!(DbAttendeeRow {
     id,
     event_id,
+    icalendar_component_id,
+    icalendar_property_index,
     name,
     email,
     role,
@@ -101,6 +105,7 @@ impl_sqlite_from_row!(DbAttendeeRow {
 pub struct DbAlarmRow {
     id: String,
     event_id: String,
+    icalendar_component_id: Option<String>,
     action: String,
     trigger_type: String,
     trigger_value: String,
@@ -110,6 +115,7 @@ pub struct DbAlarmRow {
 impl_sqlite_from_row!(DbAlarmRow {
     id,
     event_id,
+    icalendar_component_id,
     action,
     trigger_type,
     trigger_value,
@@ -148,6 +154,9 @@ pub struct DbFullEventRow {
     guest_can_modify: i64,
     guest_can_invite_others: i64,
     guest_can_see_other_guests: i64,
+    icalendar_component_id: Option<String>,
+    icalendar_preservation_status: Option<String>,
+    icalendar_projection_warnings: Option<String>,
     focus_duration_minutes: Option<i64>,
     short_break_minutes: Option<i64>,
     long_break_minutes: Option<i64>,
@@ -184,6 +193,9 @@ impl_sqlite_from_row!(DbFullEventRow {
     guest_can_modify,
     guest_can_invite_others,
     guest_can_see_other_guests,
+    icalendar_component_id,
+    icalendar_preservation_status,
+    icalendar_projection_warnings,
     focus_duration_minutes,
     short_break_minutes,
     long_break_minutes,
@@ -207,6 +219,7 @@ pub struct DbFullOverrideRow {
     transparency: Option<String>,
     visibility: Option<String>,
     extended_properties: Option<String>,
+    icalendar_component_id: Option<String>,
 }
 impl_sqlite_from_row!(DbFullOverrideRow {
     id,
@@ -223,6 +236,7 @@ impl_sqlite_from_row!(DbFullOverrideRow {
     transparency,
     visibility,
     extended_properties,
+    icalendar_component_id,
 });
 
 #[derive(Serialize)]
@@ -291,10 +305,13 @@ const WINDOW_OVERRIDES_SQL: &str = r#"
 
 const FULL_EVENT_SQL: &str = r#"
     SELECT ce.*,
+           ic.preservation_status AS icalendar_preservation_status,
+           ic.projection_warnings AS icalendar_projection_warnings,
            pc.focus_duration_minutes, pc.short_break_minutes,
            pc.long_break_minutes, pc.pomodoro_count,
            pc.idle_timeout_minutes
     FROM calendar_events ce
+    LEFT JOIN icalendar_components ic ON ic.id = ce.icalendar_component_id
     LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
     WHERE ce.id = ?
 "#;
@@ -473,6 +490,7 @@ mod tests {
             transparency: None,
             visibility: None,
             extended_properties: None,
+            icalendar_component_id: None,
         }];
 
         sanitize_full_override_rows(&mut rows);
@@ -514,6 +532,9 @@ mod tests {
             guest_can_modify: 0,
             guest_can_invite_others: 1,
             guest_can_see_other_guests: 1,
+            icalendar_component_id: None,
+            icalendar_preservation_status: None,
+            icalendar_projection_warnings: None,
             focus_duration_minutes: None,
             short_break_minutes: None,
             long_break_minutes: None,

@@ -750,5 +750,34 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_icalendar_components_object
                 ON icalendar_components(object_id);
         ",
+    },
+    Migration {
+        version: 13,
+        description: "link calendar projections to preserved iCalendar components",
+        sql: "
+            ALTER TABLE calendar_events
+                ADD COLUMN icalendar_component_id TEXT
+                    REFERENCES icalendar_components(id) ON DELETE SET NULL;
+            ALTER TABLE calendar_event_overrides
+                ADD COLUMN icalendar_component_id TEXT
+                    REFERENCES icalendar_components(id) ON DELETE SET NULL;
+            ALTER TABLE calendar_event_attendees
+                ADD COLUMN icalendar_component_id TEXT
+                    REFERENCES icalendar_components(id) ON DELETE SET NULL;
+            ALTER TABLE calendar_event_attendees
+                ADD COLUMN icalendar_property_index INTEGER;
+            ALTER TABLE calendar_event_alarms
+                ADD COLUMN icalendar_component_id TEXT
+                    REFERENCES icalendar_components(id) ON DELETE SET NULL;
+
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_icalendar_component
+                ON calendar_events(icalendar_component_id);
+            CREATE INDEX IF NOT EXISTS idx_overrides_icalendar_component
+                ON calendar_event_overrides(icalendar_component_id);
+            CREATE INDEX IF NOT EXISTS idx_attendees_icalendar_component
+                ON calendar_event_attendees(icalendar_component_id);
+            CREATE INDEX IF NOT EXISTS idx_alarms_icalendar_component
+                ON calendar_event_alarms(icalendar_component_id);
+        ",
     }]
 }

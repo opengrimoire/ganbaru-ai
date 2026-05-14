@@ -43,93 +43,94 @@ Evidence reviewed:
 Current implementation summary:
 
 - The parser uses `ical.js` and returns projected `CalendarEvent` rows plus warning strings.
-- There is no lossless iCalendar preservation storage yet.
-- Import only iterates `VEVENT` components. Other legal components are ignored.
+- New imports store structured iCalendar object and component JSON in `icalendar_objects` and `icalendar_components`.
+- Projected events, attendees, alarms, and recurrence overrides link back to preserved components.
+- Import still only projects `VEVENT` components into visible calendar rows. Other legal components are preserved without an app surface.
 - Export always generates a new `VCALENDAR` object from projected rows.
-- Some common event fields round-trip through projection, but unsupported properties, parameters, value types, object metadata, and component ordering are not preserved.
-- Existing tests cover the projected subset well, but they do not prove full RFC 5545 file compatibility.
+- Some common event fields round-trip through projection. Unsupported properties, parameters, value types, object metadata, and component ordering are preserved on new imports but are not merged back into export yet.
+- Existing tests cover the projected subset and new preservation/link storage, but they do not prove full RFC 5545 file compatibility.
 
 ## Components
 
 ### `VCALENDAR`
 
 - Projected: `not-applicable`.
-- Preserved: `no`.
+- Preserved: `partial`.
 - Exported: `partial`.
 - Editable: `no`.
 - Tested: `partial`.
-- Evidence: `parseIcs` finds `VCALENDAR` roots but does not store object-level metadata. `serializeCalendarToIcs` emits generated `PRODID`, `VERSION`, `CALSCALE`, `METHOD`, and `X-WR-CALNAME`.
-- Gap: imported `PRODID`, `CALSCALE`, `METHOD`, `NAME`, `DESCRIPTION`, `COLOR`, `IMAGE`, `REFRESH-INTERVAL`, `SOURCE`, and object-level extensions are not preserved.
+- Evidence: `parseIcs` stores each parsed `VCALENDAR` object as structured JSON, plus copied `PRODID`, `VERSION`, `CALSCALE`, and `METHOD` metadata. `serializeCalendarToIcs` emits generated `PRODID`, `VERSION`, `CALSCALE`, `METHOD`, and `X-WR-CALNAME`.
+- Gap: imported object-level properties are preserved for new imports but not merged into export yet.
 
 ### `VEVENT`
 
 - Projected: `partial`.
-- Preserved: `no`.
+- Preserved: `partial`.
 - Exported: `partial`.
 - Editable: `partial`.
 - Tested: `yes` for the current projected subset.
-- Evidence: parser, serializer, round-trip, import, recurrence, and serializer tests cover core event projection.
-- Gap: fields outside the normalized event model are dropped instead of preserved.
+- Evidence: parser, serializer, round-trip, import, recurrence, and serializer tests cover core event projection. New imports also preserve VEVENT jCal and link projected event rows back to preserved components.
+- Gap: fields outside the normalized event model are preserved for new imports but not merged into export yet.
 
 ### `VTODO`
 
 - Projected: `no`.
-- Preserved: `no`.
+- Preserved: `yes`.
 - Exported: `no`.
 - Editable: `no`.
 - Tested: `no`.
-- Evidence: `parseIcs` only loops through `vcal.getAllSubcomponents("vevent")`.
-- Gap: legal task components are ignored on import and cannot round-trip.
+- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
+- Gap: legal task components do not have a visible app projection or export merge yet.
 
 ### `VJOURNAL`
 
 - Projected: `no`.
-- Preserved: `no`.
+- Preserved: `yes`.
 - Exported: `no`.
 - Editable: `no`.
 - Tested: `no`.
-- Evidence: there is no parser, storage, serializer, or fixture coverage for journal components.
-- Gap: legal journal components are ignored on import and cannot round-trip.
+- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
+- Gap: legal journal components do not have a visible app projection or export merge yet.
 
 ### `VFREEBUSY`
 
 - Projected: `no`.
-- Preserved: `no`.
+- Preserved: `yes`.
 - Exported: `no`.
 - Editable: `no`.
 - Tested: `no`.
-- Evidence: there is no parser, storage, serializer, or fixture coverage for free/busy components.
-- Gap: legal availability components are ignored on import and cannot round-trip.
+- Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
+- Gap: legal availability components do not have a visible app projection or export merge yet.
 
 ### `VTIMEZONE`
 
 - Projected: `partial`.
-- Preserved: `no`.
+- Preserved: `partial`.
 - Exported: `partial`.
 - Editable: `no`.
 - Tested: `partial`.
-- Evidence: parser reads `TZID` parameters and maps common Windows names to IANA zones. Serializer emits stub `VTIMEZONE` blocks for recurring non-UTC zones.
-- Gap: full `STANDARD` and `DAYLIGHT` definitions, custom timezone rules, original Windows names, `LAST-MODIFIED`, `TZURL`, and timezone extensions are not preserved.
+- Evidence: parser reads `TZID` parameters and maps common Windows names to IANA zones. New imports preserve VTIMEZONE, STANDARD, and DAYLIGHT components. Serializer emits stub `VTIMEZONE` blocks for recurring non-UTC zones.
+- Gap: full `STANDARD` and `DAYLIGHT` definitions, custom timezone rules, original Windows names, `LAST-MODIFIED`, `TZURL`, and timezone extensions are preserved for new imports but not used for app recurrence math or merged into export yet.
 
 ### `VALARM`
 
 - Projected: `partial`.
-- Preserved: `no`.
+- Preserved: `partial`.
 - Exported: `partial`.
 - Editable: `partial`.
 - Tested: `partial`.
-- Evidence: parser maps `ACTION`, `TRIGGER`, and `DESCRIPTION` to `EventAlarm`. Serializer emits those fields. Tests cover basic alarms and warning on repeat fields.
-- Gap: `REPEAT`, `DURATION`, `SUMMARY`, `ATTENDEE`, `ATTACH`, `ACKNOWLEDGED`, `PROXIMITY`, parameters, and extensions are not preserved.
+- Evidence: parser maps `ACTION`, `TRIGGER`, and `DESCRIPTION` to `EventAlarm`. New imports preserve nested VALARM components and link projected alarm rows back to them. Serializer emits projected alarm fields. Tests cover basic alarms, warning on repeat fields, and preservation diagnostics.
+- Gap: `REPEAT`, `DURATION`, `SUMMARY`, `ATTENDEE`, `ATTACH`, `ACKNOWLEDGED`, `PROXIMITY`, parameters, and extensions are preserved for new imports but not editable or merged into export yet.
 
 ### Nested and future components
 
 - Projected: `no`.
-- Preserved: `no`.
+- Preserved: `yes`.
 - Exported: `no`.
 - Editable: `no`.
 - Tested: `no`.
-- Evidence: no generic component preservation layer exists.
-- Gap: unknown or future legal components are dropped today.
+- Evidence: new import preservation stores recursive components as structured JSON.
+- Gap: unknown or future legal components do not have a visible app projection or export merge yet.
 
 ## Object-level properties
 

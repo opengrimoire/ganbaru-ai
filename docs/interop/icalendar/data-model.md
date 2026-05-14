@@ -1,6 +1,6 @@
 # Data model
 
-This document proposes the storage responsibilities for lossless iCalendar compatibility. It is a design plan, not a final migration.
+This document defines the storage responsibilities for lossless iCalendar compatibility. The first preservation tables and projection links are implemented, while export merging and complete component semantics remain future milestones.
 
 ## Principles
 
@@ -25,7 +25,7 @@ These tables are optimized for visible-window queries, recurrence expansion, edi
 
 ## Proposed preservation tables
 
-Migration v12 implements the first preservation step with `icalendar_objects` and `icalendar_components`. It stores structured object and recursive component JSON for new imports. Projection links are reserved but intentionally null until the projection-link milestone.
+Migration v12 implements the first preservation step with `icalendar_objects` and `icalendar_components`. It stores structured object and recursive component JSON for new imports. Migration v13 links supported projections back to preserved components.
 
 ### `icalendar_objects`
 
@@ -144,7 +144,9 @@ Projection creates or updates current app rows:
 - recurring override `VEVENT`s map to `calendar_event_overrides`.
 - `VTODO`, `VJOURNAL`, and `VFREEBUSY` are preserved only until matching app surfaces exist.
 
-Every projected row created from preserved data should be traceable back to its component.
+Every projected row created from preserved data should be traceable back to its component. Migration v13 adds nullable `icalendar_component_id` columns to `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms`. Attendees also store `icalendar_property_index`, because `ATTENDEE` is a property on a `VEVENT` rather than its own component.
+
+The `icalendar_components.projected_kind` and `projected_id` reverse link is used where one component maps to one projected row: master events, override events, and alarms. Attendee rows keep their direct link on the projected row so multiple attendees can reference the same preserved `VEVENT` without overwriting the component's reverse link.
 
 ## Re-import dedupe
 
@@ -157,7 +159,7 @@ Re-import should compare:
 - `SEQUENCE`
 - source fingerprint as a fallback diagnostic
 
-Equal or newer sequence can update the preserved component and projection. Older sequence should be skipped unless the user explicitly requests repair or replacement.
+Equal or newer sequence can update the preserved component and projection. Older sequence is skipped unless the user explicitly requests repair or replacement. If an import file contains an older event revision, the importer does not replace preservation rows for that source, which prevents old component links from being detached while the projection is intentionally left unchanged for that event.
 
 ## Data retention
 
