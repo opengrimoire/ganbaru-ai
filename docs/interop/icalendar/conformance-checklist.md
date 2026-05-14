@@ -47,7 +47,7 @@ Current implementation summary:
 - Projected events, attendees, alarms, and recurrence overrides link back to preserved components.
 - Import still only projects `VEVENT` components into visible calendar rows. Other legal components are preserved without an app surface.
 - Export always generates a new `VCALENDAR` object from projected rows.
-- Some common event fields round-trip through projection. Unsupported `VEVENT` properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported `VALARM` fields are preserved on new imports and merged back into export for linked events. Preserved `VTIMEZONE` definitions export before generated timezone stubs. Object metadata, non-event components, and full component ordering are preserved on import but are not merged back into export yet.
+- Some common event fields round-trip through projection. Unsupported `VEVENT` properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported `VALARM` fields are preserved on new imports and merged back into export for linked events. Preserved `VTIMEZONE` definitions export before generated timezone stubs. Preserved top-level non-event components pass through export unchanged while they have no app projection. Object metadata and full component ordering are preserved on import but are not merged back into export yet.
 - Existing tests cover the projected subset and new preservation/link storage, but they do not prove full RFC 5545 file compatibility.
 
 ## Components
@@ -80,7 +80,7 @@ Current implementation summary:
 - Editable: `no`.
 - Tested: `no`.
 - Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
-- Gap: legal task components do not have a visible app projection or export merge yet.
+- Gap: legal task components do not have a visible app projection yet.
 
 ### `VJOURNAL`
 
@@ -90,7 +90,7 @@ Current implementation summary:
 - Editable: `no`.
 - Tested: `no`.
 - Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
-- Gap: legal journal components do not have a visible app projection or export merge yet.
+- Gap: legal journal components do not have a visible app projection yet.
 
 ### `VFREEBUSY`
 
@@ -100,7 +100,7 @@ Current implementation summary:
 - Editable: `no`.
 - Tested: `no`.
 - Evidence: `parseIcs` preserves non-event components recursively and bulk import stores them even when no `VEVENT` rows are projected.
-- Gap: legal availability components do not have a visible app projection or export merge yet.
+- Gap: legal availability components do not have a visible app projection yet.
 
 ### `VTIMEZONE`
 
@@ -270,10 +270,10 @@ Gap: extension projection is value-only for app editing. Structured preservation
 Current status for all listed task fields:
 
 - Projected: `no`.
-- Preserved: `no`.
-- Exported: `no`.
+- Preserved: `yes`.
+- Exported: `preserve-only`.
 - Editable: `no`.
-- Tested: `no`.
+- Tested: `partial`.
 
 ## Journal properties
 
@@ -289,10 +289,10 @@ Current status for all listed task fields:
 Current status for all listed journal fields:
 
 - Projected: `no`.
-- Preserved: `no`.
-- Exported: `no`.
+- Preserved: `yes`.
+- Exported: `preserve-only`.
 - Editable: `no`.
-- Tested: `no`.
+- Tested: `partial`.
 
 ## Free/busy properties
 
@@ -307,10 +307,10 @@ Current status for all listed journal fields:
 Current status for all listed free/busy fields:
 
 - Projected: `no`.
-- Preserved: `no`.
-- Exported: `no`.
+- Preserved: `yes`.
+- Exported: `preserve-only`.
 - Editable: `no`.
-- Tested: `no`.
+- Tested: `partial`.
 
 ## Timezone properties
 
@@ -445,10 +445,10 @@ Current automated fixture coverage:
 - non-ASCII text: `partial`, UTF-8 folding tested.
 - escaped parameters: `partial`, `CN` tested.
 - folded lines: `yes`.
-- `VTODO`: `no`.
-- `VJOURNAL`: `no`.
-- `VFREEBUSY`: `no`.
-- mixed-component calendar: `no`.
+- `VTODO`: `partial`, preserve and export passthrough tested.
+- `VJOURNAL`: `partial`, preserve and export passthrough path is shared with VTODO.
+- `VFREEBUSY`: `partial`, preserve and export passthrough tested.
+- mixed-component calendar: `partial`, parser and export passthrough cover mixed components.
 - invalid or malicious file: `partial`, malformed parser input and import sanitization tested.
 
 Each future fixture should assert parse diagnostics, preservation data, projection result when applicable, and export equivalence.
@@ -460,9 +460,8 @@ The gaps most likely to corrupt common real-world exports today:
 - No preservation layer: unsupported legal data disappears on import.
 - Non-event components are ignored.
 - Object-level metadata is not merged into export yet. Preserved `VTIMEZONE` definitions now export, but app recurrence math still uses projected zones.
-- `VALARM` repeat and duration are dropped.
 - Attendee and organizer parameters beyond the current small subset are dropped.
-- `ATTACH`, `REQUEST-STATUS`, `RELATED-TO`, `CONTACT`, `COMMENT`, and `RESOURCES` are dropped.
+- `CONTACT` is preserved and exported for linked events, but it is not editable as an app field.
 - Floating timed events are interpreted through the device zone for projection, but linked export preserves floating date-time shape.
 - Generated rows without preserved source still export `DTEND` rather than original `DURATION` shape.
 - `RANGE=THISANDFUTURE` is preserved on linked export but not applied as an edit operation.

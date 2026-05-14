@@ -606,6 +606,47 @@ describe("serializeCalendarToIcs", () => {
 		});
 	});
 
+	describe("preserved non-event components", () => {
+		it("passes through preserved top-level components without projection", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[],
+				"UTC",
+				[],
+				[
+					[
+						"vtodo",
+						[
+							["uid", {}, "text", "task@example.com"],
+							["dtstamp", {}, "date-time", "2026-01-01T00:00:00Z"],
+							["summary", { language: "en" }, "text", "Task"],
+							["due", {}, "date", "2026-06-01"],
+							["x-task-field", { "x-param": "kept" }, "text", "custom"],
+						],
+						[],
+					],
+					[
+						"vfreebusy",
+						[
+							["uid", {}, "text", "busy@example.com"],
+							["dtstamp", {}, "date-time", "2026-01-01T00:00:00Z"],
+							["freebusy", { fbtype: "BUSY" }, "period", ["2026-06-01T10:00:00Z", "2026-06-01T11:00:00Z"]],
+						],
+						[],
+					],
+				],
+			);
+			const unfolded = unfold(ics);
+
+			expect(unfolded).toContain("BEGIN:VTODO");
+			expect(unfolded).toContain("SUMMARY;LANGUAGE=en:Task");
+			expect(unfolded).toContain("DUE;VALUE=DATE:20260601");
+			expect(unfolded).toContain("X-TASK-FIELD;X-PARAM=kept;VALUE=TEXT:custom");
+			expect(unfolded).toContain("BEGIN:VFREEBUSY");
+			expect(unfolded).toContain("FREEBUSY;FBTYPE=BUSY:20260601T100000Z/20260601T110000Z");
+		});
+	});
+
 	describe("recurrence and overrides", () => {
 		it("emits EXDATE for exceptions", () => {
 			const ics = serializeCalendarToIcs(

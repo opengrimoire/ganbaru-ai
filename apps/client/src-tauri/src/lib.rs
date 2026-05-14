@@ -639,6 +639,7 @@ pub fn run() {
             calendar_reads::calendar_load_full_event,
             calendar_reads::calendar_list_event_ids_for_calendar,
             calendar_reads::calendar_load_icalendar_timezones_for_calendar,
+            calendar_reads::calendar_load_icalendar_passthrough_components_for_calendar,
             recurrence::calendar_expand_render_events,
             calendar_events::calendar_add_event,
             calendar_events::calendar_delete_event,

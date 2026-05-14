@@ -604,6 +604,16 @@ function preservedVTimezoneLines(rawJcal: unknown): { lines: string[]; tzid: str
 	};
 }
 
+function preservedPassthroughComponentLines(rawJcal: unknown): string[] | null {
+	const component = cloneJcalComponent(rawJcal);
+	if (!component) return null;
+	const componentType = component[0].toLowerCase();
+	if (componentType === "vcalendar" || componentType === "vevent" || componentType === "vtimezone") {
+		return null;
+	}
+	return jcalComponentToLines(component);
+}
+
 interface BuildVeventOptions {
 	event: CalendarEvent;
 	uid: string;
@@ -752,6 +762,7 @@ export function serializeCalendarToIcs(
 	events: CalendarEvent[],
 	renderZone?: string,
 	preservedTimezones: unknown[] = [],
+	preservedPassthroughComponents: unknown[] = [],
 ): string {
 	const zone = renderZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
 	const dtStamp = formatUtcDateTime(new Date().toISOString());
@@ -778,6 +789,11 @@ export function serializeCalendarToIcs(
 		if (!preserved) continue;
 		lines.push(...preserved.lines);
 		if (preserved.tzid) emittedTimezoneIds.add(preserved.tzid);
+	}
+
+	for (const component of preservedPassthroughComponents) {
+		const preserved = preservedPassthroughComponentLines(component);
+		if (preserved) lines.push(...preserved);
 	}
 
 	for (const zoneId of recurringZones) {

@@ -1506,8 +1506,24 @@ export function getCalendar() {
       const preservedTimezones = preservedTimezoneRows
         .map((row) => safeJsonParse<unknown>(row))
         .filter((row): row is unknown => row !== undefined);
+      const preservedPassthroughRows = await invoke<string[]>(
+        "calendar_load_icalendar_passthrough_components_for_calendar",
+        {
+          dbUrl: dbUrl(),
+          calendarId: calendar.id,
+        },
+      );
+      const preservedPassthroughComponents = preservedPassthroughRows
+        .map((row) => safeJsonParse<unknown>(row))
+        .filter((row): row is unknown => row !== undefined);
       const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
-      return serializeCalendarToIcs(calendar, calendarEvents, undefined, preservedTimezones);
+      return serializeCalendarToIcs(
+        calendar,
+        calendarEvents,
+        undefined,
+        preservedTimezones,
+        preservedPassthroughComponents,
+      );
     },
 
     /**
