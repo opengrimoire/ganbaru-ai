@@ -8,7 +8,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
 
-const PALETTE_SIZE: usize = 24;
+const PALETTE_SIZE: usize = 32;
 const MAX_DISPLAY_NAME_LENGTH: usize = 60;
 
 #[derive(Deserialize)]

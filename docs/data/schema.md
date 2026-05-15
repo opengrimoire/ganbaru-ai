@@ -89,7 +89,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `start_time` | ISO datetime | Event start as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). |
 | `end_time` | ISO datetime | Event end as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). For all-day events, the date portion is treated as a floating calendar date with no zone conversion. The internal all-day end date is inclusive for rendering, while `.ics` `DTEND;VALUE=DATE` remains exclusive on import and export. |
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |
-| `color` | integer or null | Slot index (0..23) into the active theme's 24-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
+| `color` | integer or null | Slot index (0..31) into the active theme's 32-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
 | `recurrence_exceptions` | text or null | Comma-separated EXDATE recurrence dates (`YYYY-MM-DD`). Null if none. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |
 | `recurrence_parent_id` | UUID or null | For detached instances, points to the original template. Used to trace history. |
@@ -291,12 +291,12 @@ The `isolated` flag replaces the old override/derived split. `isolated=1` means 
 
 ### `theme_event_palette`
 
-The 24-slot positional event color palette. Slot indices map directly into `eventPalette[i]` on the client.
+The 32-slot positional event color palette. Slot indices map directly into `eventPalette[i]` on the client.
 
 | Field | Type | Description |
 |---|---|---|
 | `theme_id` | text | FK to `themes(id)` ON DELETE CASCADE. |
-| `slot` | integer | `CHECK (slot >= 0 AND slot < 24)`. |
+| `slot` | integer | `CHECK (slot >= 0 AND slot < 32)`. |
 | `value` | text | Hex color. |
 
 Primary key: `(theme_id, slot)`.
@@ -324,7 +324,7 @@ Clone-time snapshot of `theme_event_palette`. Per-slot reset and "Reset all" pul
 | Field | Type | Description |
 |---|---|---|
 | `theme_id` | text | FK to `themes(id)` ON DELETE CASCADE. |
-| `slot` | integer | `CHECK (slot >= 0 AND slot < 24)`. |
+| `slot` | integer | `CHECK (slot >= 0 AND slot < 32)`. |
 | `value` | text | Hex color at clone time. |
 
 Primary key: `(theme_id, slot)`.

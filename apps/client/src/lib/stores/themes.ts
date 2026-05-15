@@ -69,7 +69,7 @@ export const SOURCE_KEY_ORDER = Object.freeze([
 
 /**
  * Full palette for event color slots within a theme. Always exactly
- * PALETTE_SIZE entries (currently 24); each entry is a hex color the slot
+ * PALETTE_SIZE entries (currently 32); each entry is a hex color the slot
  * resolves to. Events store the slot index, not the hex, so two themes can
  * assign the same slot index completely different colors and stored events
  * pick up the active theme's hex automatically when the user switches.
@@ -77,7 +77,7 @@ export const SOURCE_KEY_ORDER = Object.freeze([
  * Stored as an array (not an object) so order is intrinsic to the data
  * shape: a slot's position is its identity. JSON serialization preserves
  * the order without depending on object-key insertion semantics, and the
- * on-disk integer color (0..23) is tighter than any string key.
+ * on-disk integer color (0..31) is tighter than any string key.
  */
 export type EventPaletteHexes = readonly string[];
 
@@ -199,10 +199,11 @@ export type Theme = BuiltinTheme | UserTheme;
 const LIGHT_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
   "#AD1457",
   "#D81B60",
+  "#C62828",
   "#D50000",
   "#E67C73",
+  "#D06A45",
   "#F4511E",
-  "#EF6C00",
   "#F09300",
   "#F6BF26",
   "#E4C441",
@@ -211,25 +212,33 @@ const LIGHT_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
   "#33B679",
   "#0B8043",
   "#009688",
-  "#039BE5",
+  "#4DB6AC",
+  "#00ACC1",
+  "#1E88E5",
   "#4285F4",
   "#3F51B5",
   "#7986CB",
   "#B39DDB",
-  "#9E69AF",
+  "#7E57C2",
   "#8E24AA",
+  "#9E69AF",
+  "#A65A4A",
   "#795548",
-  "#616161",
+  "#5D4037",
+  "#8D7B73",
   "#A79B8E",
+  "#616161",
+  "#546E7A",
 ]);
 
 const DARK_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
   "#C05476",
   "#D85675",
-  "#DA5234",
+  "#CF4F58",
+  "#E5484D",
   "#D6837A",
+  "#C97959",
   "#E3683E",
-  "#DD7835",
   "#E0963C",
   "#E6B951",
   "#D8BE5E",
@@ -238,17 +247,30 @@ const DARK_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
   "#55B080",
   "#489160",
   "#429A8E",
-  "#4B99D2",
+  "#64B7AB",
+  "#4FB3C2",
+  "#55A2DF",
   "#668BE1",
   "#6E72C3",
   "#828BC2",
   "#AE9CCE",
-  "#A479B1",
+  "#9271C8",
   "#A75ABA",
+  "#A479B1",
+  "#B06B5E",
   "#957367",
-  "#7C7C7C",
+  "#80665A",
+  "#93847D",
   "#A5998C",
+  "#7C7C7C",
+  "#7B8FA0",
 ]);
+
+const LEGACY_EVENT_PALETTE_SIZE = 24;
+
+function eventPaletteFallback(base: "light" | "dark"): EventPaletteHexes {
+  return base === "dark" ? DARK_EVENT_PALETTE : LIGHT_EVENT_PALETTE;
+}
 
 export const lightTheme: BuiltinTheme = Object.freeze({
   kind: "builtin",
@@ -1418,25 +1440,45 @@ function validateIdentity(
     cleanBlend = blendCanvas;
   }
 
-  const cleanPalette: string[] = [];
-  if (!Array.isArray(eventPalette)) {
-    errors.push(`eventPalette must be an array of ${PALETTE_SIZE} hex strings`);
-  } else if (eventPalette.length !== PALETTE_SIZE) {
+  const cleanPalette = sanitizeEventPalette(
+    eventPalette,
+    errors,
+    "eventPalette",
+    cleanBlend ? defaultIconLabelFromCanvas(cleanBlend) : "light",
+  ) ?? [];
+  return { cleanId, cleanDisplayName, cleanBlend, cleanPalette };
+}
+
+function sanitizeEventPalette(
+  source: unknown,
+  errors: string[],
+  label: "eventPalette" | "seedEventPalette",
+  fallbackBase: "light" | "dark",
+): string[] | undefined {
+  if (!Array.isArray(source)) {
+    errors.push(`${label} must be an array of ${PALETTE_SIZE} hex strings`);
+    return undefined;
+  }
+  if (source.length !== PALETTE_SIZE && source.length !== LEGACY_EVENT_PALETTE_SIZE) {
     errors.push(
-      `eventPalette must contain exactly ${PALETTE_SIZE} entries (got ${eventPalette.length})`,
+      `${label} must contain exactly ${PALETTE_SIZE} entries (got ${source.length})`,
     );
-  } else {
-    for (let i = 0; i < PALETTE_SIZE; i++) {
-      const value = eventPalette[i];
-      if (!isHexColor(value)) {
-        errors.push(`eventPalette[${i}] must be a hex color`);
-        cleanPalette.push("#000000");
-      } else {
-        cleanPalette.push(value);
-      }
+    return undefined;
+  }
+  const out: string[] = [];
+  for (let i = 0; i < source.length; i++) {
+    const value = source[i];
+    if (!isHexColor(value)) {
+      errors.push(`${label}[${i}] must be a hex color`);
+      out.push("#000000");
+    } else {
+      out.push(value);
     }
   }
-  return { cleanId, cleanDisplayName, cleanBlend, cleanPalette };
+  if (source.length === LEGACY_EVENT_PALETTE_SIZE) {
+    out.push(...eventPaletteFallback(fallbackBase).slice(LEGACY_EVENT_PALETTE_SIZE));
+  }
+  return out;
 }
 
 /**
@@ -1733,7 +1775,11 @@ function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
     seedCalOverrides["--cal-bg"] = legacySeedCalCanvas;
   }
   const seedPalette =
-    sanitizeSeedPalette(input.seedEventPalette, errors) ?? [...cleanPalette];
+    sanitizeSeedPalette(
+      input.seedEventPalette,
+      errors,
+      defaultIconLabelFromCanvas(seedSources.canvas),
+    ) ?? [...cleanPalette];
   let seedBlend = cleanBlend;
   if (input.seedBlendCanvas !== undefined) {
     if (!isHexColor(input.seedBlendCanvas)) {
@@ -1977,28 +2023,10 @@ function extractLegacyCalCanvas(source: unknown): string | undefined {
 function sanitizeSeedPalette(
   source: unknown,
   errors: string[],
+  fallbackBase: "light" | "dark",
 ): string[] | undefined {
   if (source === undefined) return undefined;
-  if (!Array.isArray(source)) {
-    errors.push(`seedEventPalette must be an array of ${PALETTE_SIZE} hex strings`);
-    return undefined;
-  }
-  if (source.length !== PALETTE_SIZE) {
-    errors.push(
-      `seedEventPalette must contain exactly ${PALETTE_SIZE} entries (got ${source.length})`,
-    );
-    return undefined;
-  }
-  const out: string[] = [];
-  for (let i = 0; i < PALETTE_SIZE; i++) {
-    const value = source[i];
-    if (!isHexColor(value)) {
-      errors.push(`seedEventPalette[${i}] must be a hex color`);
-      return undefined;
-    }
-    out.push(value);
-  }
-  return out;
+  return sanitizeEventPalette(source, errors, "seedEventPalette", fallbackBase);
 }
 
 /**

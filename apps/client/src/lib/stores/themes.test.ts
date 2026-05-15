@@ -730,6 +730,19 @@ describe("validateThemeJson legacy branch", () => {
       expect(result.errors.some((e) => e.includes("eventPalette"))).toBe(true);
   });
 
+  it("extends a legacy 24-slot palette with current default slots", () => {
+    const legacyPalette = Array.from({ length: 24 }, () => "#abcdef");
+    const result = validateThemeJson(
+      buildLegacyInput({ eventPalette: legacyPalette }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.theme.eventPalette).toHaveLength(PALETTE_SIZE);
+      expect(result.theme.eventPalette.slice(0, 24)).toEqual(legacyPalette);
+      expect(result.theme.eventPalette[24]).toBe(darkTheme.eventPalette[24]);
+    }
+  });
+
   it("rejects a non-hex palette entry", () => {
     const palette: string[] = paletteOf("#abcdef");
     palette[0] = "not-a-hex";

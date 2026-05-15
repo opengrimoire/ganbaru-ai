@@ -41,7 +41,7 @@ import {
   computeViewWindow,
   visibleMinuteRangeForScroll,
 } from "./utils";
-import type { CalendarEvent } from "./types";
+import { FALLBACK_COLOR_INDEX, PALETTE_SIZE, type CalendarEvent } from "./types";
 import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
 
 /** Build a CalendarEvent with required timezone/calendarId defaults. */
@@ -741,7 +741,7 @@ describe("normalizeEventColor", () => {
 
   it("rejects out-of-range numbers", () => {
     expect(normalizeEventColor(-1)).toBeUndefined();
-    expect(normalizeEventColor(24)).toBeUndefined();
+    expect(normalizeEventColor(32)).toBeUndefined();
     expect(normalizeEventColor(99)).toBeUndefined();
   });
 
@@ -765,16 +765,19 @@ describe("normalizeEventColor", () => {
 });
 
 describe("EVENT_COLOR_OPTIONS", () => {
-  it("contains every palette index in order", () => {
-    expect(EVENT_COLOR_OPTIONS.length).toBeGreaterThan(0);
-    for (let i = 0; i < EVENT_COLOR_OPTIONS.length; i++) {
-      expect(EVENT_COLOR_OPTIONS[i]).toBe(i);
-      expect(normalizeEventColor(EVENT_COLOR_OPTIONS[i])).toBe(i);
+  it("contains every palette index exactly once", () => {
+    expect(EVENT_COLOR_OPTIONS).toHaveLength(PALETTE_SIZE);
+    expect(new Set(EVENT_COLOR_OPTIONS).size).toBe(EVENT_COLOR_OPTIONS.length);
+    for (const color of EVENT_COLOR_OPTIONS) {
+      expect(normalizeEventColor(color)).toBe(color);
     }
+    expect([...EVENT_COLOR_OPTIONS].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: PALETTE_SIZE }, (_, i) => i),
+    );
   });
 
   it("includes the fallback index", () => {
-    expect(EVENT_COLOR_OPTIONS).toContain(22);
+    expect(EVENT_COLOR_OPTIONS).toContain(FALLBACK_COLOR_INDEX);
   });
 });
 
@@ -794,7 +797,9 @@ describe("getEventColor", () => {
 
   it("returns the fallback slot for undefined color (render fallback)", () => {
     const entry = getEventColor(undefined, lightTheme);
-    expect(entry.bg.toLowerCase()).toBe(lightTheme.eventPalette[22].toLowerCase());
+    expect(entry.bg.toLowerCase()).toBe(
+      lightTheme.eventPalette[FALLBACK_COLOR_INDEX].toLowerCase(),
+    );
   });
 
   it("returns different hex values across light and dark themes for the same slot", () => {

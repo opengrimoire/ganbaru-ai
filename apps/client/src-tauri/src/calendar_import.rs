@@ -9,7 +9,7 @@ use crate::calendar_description::{
 };
 use crate::db_path::connect_sqlite;
 
-const PALETTE_SIZE: i64 = 24;
+const PALETTE_SIZE: i64 = 32;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1049,8 +1049,8 @@ mod tests {
     #[test]
     fn validates_calendar_import_color_and_priority_ranges() {
         assert!(validate_color(Some(0), "color").is_ok());
-        assert!(validate_color(Some(23), "color").is_ok());
-        assert!(validate_color(Some(24), "color").is_err());
+        assert!(validate_color(Some(31), "color").is_ok());
+        assert!(validate_color(Some(32), "color").is_err());
         assert!(validate_priority(Some(9)).is_ok());
         assert!(validate_priority(Some(10)).is_err());
     }

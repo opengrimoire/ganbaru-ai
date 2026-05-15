@@ -14,6 +14,7 @@ import {
   type BenchmarkDatasetProfile,
   type BenchmarkEventDraft,
 } from "./types";
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
 
 const MS_PER_DAY = 86_400_000;
 const HOURS_PER_DAY = 24;
@@ -271,7 +272,7 @@ function buildDenseEvent(
       "Preparation: review the previous outcome, capture the next action, and leave a short summary.",
     ].join(" "),
     notifications: [10],
-    color: (dayIndex + hour + stackIndex * 5) % 24,
+    color: (dayIndex + hour + stackIndex * 5) % PALETTE_SIZE,
     location: `${template.location}, ${location.name}`,
     url: `https://benchmark.local/${datasetId}/${date}/${pad2(hour)}/${stackLabel}`,
     transparency: stackIndex === 2 ? "transparent" : "opaque",
@@ -327,7 +328,7 @@ function buildDenseAllDayEvent(
       `Reminder: ${template.action}.`,
       "Context: this all-day item keeps non-hourly planning visible beside dense timed focus blocks.",
     ].join(" "),
-    color: (dayIndex + allDayIndex * 3) % 24,
+    color: (dayIndex + allDayIndex * 3) % PALETTE_SIZE,
     status: (dayIndex + allDayIndex) % 13 === 0 ? "tentative" : "confirmed",
     visibility: template.category === "personal" ? "private" : "public",
     priority: 5 + (allDayIndex % 2),

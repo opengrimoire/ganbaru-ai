@@ -1055,7 +1055,7 @@ const LIGHT_TEXT_ALT = "#1f1f1f";
 const DARK_TEXT = "#131314";
 const DARK_TEXT_ALT = "#e3e3e3";
 
-// Luminance flip thresholds tuned against the 24-color built-in palette.
+// Luminance flip thresholds tuned against the 32-color built-in palette.
 // Light-mode bgs brighter than LIGHT_FLIP_ABOVE cannot carry white text;
 // dark-mode bgs darker than DARK_FLIP_BELOW cannot carry near-black text.
 // Themes with palettes outside the tuned range may need custom thresholds;
@@ -1265,8 +1265,13 @@ export function getEventSurfaceStatusForIdentity(
   )?.status ?? event.localParticipationStatus;
 }
 
+/**
+ * Event-panel color picker order. Built-in palettes are stored in the same
+ * visual order, so this can stay a natural sequence instead of a separate
+ * display remap.
+ */
 export const EVENT_COLOR_OPTIONS: readonly EventColor[] = Object.freeze(
-  Array.from({ length: PALETTE_SIZE }, (_, i) => i),
+  Array.from({ length: PALETTE_SIZE }, (_, index) => index),
 );
 
 /**

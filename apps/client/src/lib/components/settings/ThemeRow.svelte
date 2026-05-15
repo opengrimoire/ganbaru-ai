@@ -33,8 +33,8 @@
 
   // Sampled palette indices for the gradient strip inside the preview.
   // Picked across the spectrum so the strip reads as a quick visual summary
-  // of the palette without needing all 24 swatches.
-  const PREVIEW_INDICES: readonly number[] = [2, 5, 8, 11, 14, 17, 20, 23];
+  // of the palette without needing all 32 swatches.
+  const PREVIEW_INDICES: readonly number[] = [2, 5, 8, 11, 14, 17, 20, 23, 27, 31];
 
   const BaseIcon = $derived(theme.iconLabel === "dark" ? Moon : Sun);
   const appTokens = $derived(resolveAppTokens(theme));

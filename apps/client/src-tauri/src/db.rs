@@ -520,7 +520,7 @@ pub fn migrations() -> Vec<Migration> {
 
             CREATE TABLE IF NOT EXISTS theme_event_palette (
                 theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
-                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 24),
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
                 value TEXT NOT NULL,
                 PRIMARY KEY (theme_id, slot)
             );
@@ -538,7 +538,7 @@ pub fn migrations() -> Vec<Migration> {
 
             CREATE TABLE IF NOT EXISTS theme_seed_event_palette (
                 theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
-                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 24),
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
                 value TEXT NOT NULL,
                 PRIMARY KEY (theme_id, slot)
             );
@@ -789,5 +789,371 @@ pub fn migrations() -> Vec<Migration> {
         version: 15,
         description: "add local event rsvp status",
         sql: "ALTER TABLE calendar_events ADD COLUMN local_rsvp_status TEXT;",
+    },
+    Migration {
+        version: 16,
+        description: "expand theme event palettes to 32 slots",
+        sql: "
+            ALTER TABLE theme_event_palette RENAME TO theme_event_palette_old;
+            CREATE TABLE theme_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_event_palette (theme_id, slot, value)
+                SELECT theme_id, slot, value
+                FROM theme_event_palette_old
+                WHERE slot >= 0 AND slot < 32;
+            DROP TABLE theme_event_palette_old;
+
+            ALTER TABLE theme_seed_event_palette RENAME TO theme_seed_event_palette_old;
+            CREATE TABLE theme_seed_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_seed_event_palette (theme_id, slot, value)
+                SELECT theme_id, slot, value
+                FROM theme_seed_event_palette_old
+                WHERE slot >= 0 AND slot < 32;
+            DROP TABLE theme_seed_event_palette_old;
+        ",
+    },
+    Migration {
+        version: 17,
+        description: "reorder event color slots",
+        sql: "
+            UPDATE calendar_events
+            SET color = CASE color
+                WHEN 0 THEN 0
+                WHEN 1 THEN 1
+                WHEN 2 THEN 3
+                WHEN 3 THEN 4
+                WHEN 4 THEN 6
+                WHEN 5 THEN 19
+                WHEN 6 THEN 7
+                WHEN 7 THEN 8
+                WHEN 8 THEN 9
+                WHEN 9 THEN 10
+                WHEN 10 THEN 11
+                WHEN 11 THEN 12
+                WHEN 12 THEN 13
+                WHEN 13 THEN 14
+                WHEN 14 THEN 17
+                WHEN 15 THEN 18
+                WHEN 16 THEN 20
+                WHEN 17 THEN 21
+                WHEN 18 THEN 22
+                WHEN 19 THEN 25
+                WHEN 20 THEN 24
+                WHEN 21 THEN 27
+                WHEN 22 THEN 31
+                WHEN 23 THEN 30
+                WHEN 24 THEN 2
+                WHEN 25 THEN 5
+                WHEN 26 THEN 15
+                WHEN 27 THEN 16
+                WHEN 28 THEN 23
+                WHEN 29 THEN 26
+                WHEN 30 THEN 29
+                WHEN 31 THEN 28
+                ELSE color
+            END
+            WHERE color BETWEEN 0 AND 31;
+
+            UPDATE calendar_event_overrides
+            SET color = CASE color
+                WHEN 0 THEN 0
+                WHEN 1 THEN 1
+                WHEN 2 THEN 3
+                WHEN 3 THEN 4
+                WHEN 4 THEN 6
+                WHEN 5 THEN 19
+                WHEN 6 THEN 7
+                WHEN 7 THEN 8
+                WHEN 8 THEN 9
+                WHEN 9 THEN 10
+                WHEN 10 THEN 11
+                WHEN 11 THEN 12
+                WHEN 12 THEN 13
+                WHEN 13 THEN 14
+                WHEN 14 THEN 17
+                WHEN 15 THEN 18
+                WHEN 16 THEN 20
+                WHEN 17 THEN 21
+                WHEN 18 THEN 22
+                WHEN 19 THEN 25
+                WHEN 20 THEN 24
+                WHEN 21 THEN 27
+                WHEN 22 THEN 31
+                WHEN 23 THEN 30
+                WHEN 24 THEN 2
+                WHEN 25 THEN 5
+                WHEN 26 THEN 15
+                WHEN 27 THEN 16
+                WHEN 28 THEN 23
+                WHEN 29 THEN 26
+                WHEN 30 THEN 29
+                WHEN 31 THEN 28
+                ELSE color
+            END
+            WHERE color BETWEEN 0 AND 31;
+
+            ALTER TABLE theme_event_palette RENAME TO theme_event_palette_before_reorder;
+            CREATE TABLE theme_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_event_palette (theme_id, slot, value)
+                SELECT theme_id,
+                    CASE slot
+                        WHEN 0 THEN 0
+                        WHEN 1 THEN 1
+                        WHEN 2 THEN 3
+                        WHEN 3 THEN 4
+                        WHEN 4 THEN 6
+                        WHEN 5 THEN 19
+                        WHEN 6 THEN 7
+                        WHEN 7 THEN 8
+                        WHEN 8 THEN 9
+                        WHEN 9 THEN 10
+                        WHEN 10 THEN 11
+                        WHEN 11 THEN 12
+                        WHEN 12 THEN 13
+                        WHEN 13 THEN 14
+                        WHEN 14 THEN 17
+                        WHEN 15 THEN 18
+                        WHEN 16 THEN 20
+                        WHEN 17 THEN 21
+                        WHEN 18 THEN 22
+                        WHEN 19 THEN 25
+                        WHEN 20 THEN 24
+                        WHEN 21 THEN 27
+                        WHEN 22 THEN 31
+                        WHEN 23 THEN 30
+                        WHEN 24 THEN 2
+                        WHEN 25 THEN 5
+                        WHEN 26 THEN 15
+                        WHEN 27 THEN 16
+                        WHEN 28 THEN 23
+                        WHEN 29 THEN 26
+                        WHEN 30 THEN 29
+                        WHEN 31 THEN 28
+                    END,
+                    value
+                FROM theme_event_palette_before_reorder
+                WHERE slot BETWEEN 0 AND 31;
+            DROP TABLE theme_event_palette_before_reorder;
+
+            ALTER TABLE theme_seed_event_palette RENAME TO theme_seed_event_palette_before_reorder;
+            CREATE TABLE theme_seed_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_seed_event_palette (theme_id, slot, value)
+                SELECT theme_id,
+                    CASE slot
+                        WHEN 0 THEN 0
+                        WHEN 1 THEN 1
+                        WHEN 2 THEN 3
+                        WHEN 3 THEN 4
+                        WHEN 4 THEN 6
+                        WHEN 5 THEN 19
+                        WHEN 6 THEN 7
+                        WHEN 7 THEN 8
+                        WHEN 8 THEN 9
+                        WHEN 9 THEN 10
+                        WHEN 10 THEN 11
+                        WHEN 11 THEN 12
+                        WHEN 12 THEN 13
+                        WHEN 13 THEN 14
+                        WHEN 14 THEN 17
+                        WHEN 15 THEN 18
+                        WHEN 16 THEN 20
+                        WHEN 17 THEN 21
+                        WHEN 18 THEN 22
+                        WHEN 19 THEN 25
+                        WHEN 20 THEN 24
+                        WHEN 21 THEN 27
+                        WHEN 22 THEN 31
+                        WHEN 23 THEN 30
+                        WHEN 24 THEN 2
+                        WHEN 25 THEN 5
+                        WHEN 26 THEN 15
+                        WHEN 27 THEN 16
+                        WHEN 28 THEN 23
+                        WHEN 29 THEN 26
+                        WHEN 30 THEN 29
+                        WHEN 31 THEN 28
+                    END,
+                    value
+                FROM theme_seed_event_palette_before_reorder
+                WHERE slot BETWEEN 0 AND 31;
+            DROP TABLE theme_seed_event_palette_before_reorder;
+        ",
+    },
+    Migration {
+        version: 18,
+        description: "move slate event color into neutral range",
+        sql: "
+            UPDATE calendar_events
+            SET color = CASE color
+                WHEN 19 THEN 30
+                WHEN 20 THEN 19
+                WHEN 21 THEN 20
+                WHEN 22 THEN 21
+                WHEN 23 THEN 22
+                WHEN 24 THEN 23
+                WHEN 25 THEN 24
+                WHEN 26 THEN 25
+                WHEN 27 THEN 26
+                WHEN 28 THEN 27
+                WHEN 29 THEN 28
+                WHEN 30 THEN 29
+                ELSE color
+            END
+            WHERE color BETWEEN 19 AND 30;
+
+            UPDATE calendar_event_overrides
+            SET color = CASE color
+                WHEN 19 THEN 30
+                WHEN 20 THEN 19
+                WHEN 21 THEN 20
+                WHEN 22 THEN 21
+                WHEN 23 THEN 22
+                WHEN 24 THEN 23
+                WHEN 25 THEN 24
+                WHEN 26 THEN 25
+                WHEN 27 THEN 26
+                WHEN 28 THEN 27
+                WHEN 29 THEN 28
+                WHEN 30 THEN 29
+                ELSE color
+            END
+            WHERE color BETWEEN 19 AND 30;
+
+            ALTER TABLE theme_event_palette RENAME TO theme_event_palette_before_slate_move;
+            CREATE TABLE theme_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_event_palette (theme_id, slot, value)
+                SELECT theme_id,
+                    CASE slot
+                        WHEN 19 THEN 30
+                        WHEN 20 THEN 19
+                        WHEN 21 THEN 20
+                        WHEN 22 THEN 21
+                        WHEN 23 THEN 22
+                        WHEN 24 THEN 23
+                        WHEN 25 THEN 24
+                        WHEN 26 THEN 25
+                        WHEN 27 THEN 26
+                        WHEN 28 THEN 27
+                        WHEN 29 THEN 28
+                        WHEN 30 THEN 29
+                        ELSE slot
+                    END,
+                    value
+                FROM theme_event_palette_before_slate_move
+                WHERE slot BETWEEN 0 AND 31;
+            DROP TABLE theme_event_palette_before_slate_move;
+
+            ALTER TABLE theme_seed_event_palette RENAME TO theme_seed_event_palette_before_slate_move;
+            CREATE TABLE theme_seed_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_seed_event_palette (theme_id, slot, value)
+                SELECT theme_id,
+                    CASE slot
+                        WHEN 19 THEN 30
+                        WHEN 20 THEN 19
+                        WHEN 21 THEN 20
+                        WHEN 22 THEN 21
+                        WHEN 23 THEN 22
+                        WHEN 24 THEN 23
+                        WHEN 25 THEN 24
+                        WHEN 26 THEN 25
+                        WHEN 27 THEN 26
+                        WHEN 28 THEN 27
+                        WHEN 29 THEN 28
+                        WHEN 30 THEN 29
+                        ELSE slot
+                    END,
+                    value
+                FROM theme_seed_event_palette_before_slate_move
+                WHERE slot BETWEEN 0 AND 31;
+            DROP TABLE theme_seed_event_palette_before_slate_move;
+        ",
+    },
+    Migration {
+        version: 19,
+        description: "swap neutral gray and slate event color slots",
+        sql: "
+            UPDATE calendar_events
+            SET color = CASE color
+                WHEN 30 THEN 31
+                WHEN 31 THEN 30
+                ELSE color
+            END
+            WHERE color IN (30, 31);
+
+            UPDATE calendar_event_overrides
+            SET color = CASE color
+                WHEN 30 THEN 31
+                WHEN 31 THEN 30
+                ELSE color
+            END
+            WHERE color IN (30, 31);
+
+            ALTER TABLE theme_event_palette RENAME TO theme_event_palette_before_neutral_swap;
+            CREATE TABLE theme_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_event_palette (theme_id, slot, value)
+                SELECT theme_id,
+                    CASE slot
+                        WHEN 30 THEN 31
+                        WHEN 31 THEN 30
+                        ELSE slot
+                    END,
+                    value
+                FROM theme_event_palette_before_neutral_swap
+                WHERE slot BETWEEN 0 AND 31;
+            DROP TABLE theme_event_palette_before_neutral_swap;
+
+            ALTER TABLE theme_seed_event_palette RENAME TO theme_seed_event_palette_before_neutral_swap;
+            CREATE TABLE theme_seed_event_palette (
+                theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK (slot >= 0 AND slot < 32),
+                value TEXT NOT NULL,
+                PRIMARY KEY (theme_id, slot)
+            );
+            INSERT INTO theme_seed_event_palette (theme_id, slot, value)
+                SELECT theme_id,
+                    CASE slot
+                        WHEN 30 THEN 31
+                        WHEN 31 THEN 30
+                        ELSE slot
+                    END,
+                    value
+                FROM theme_seed_event_palette_before_neutral_swap
+                WHERE slot BETWEEN 0 AND 31;
+            DROP TABLE theme_seed_event_palette_before_neutral_swap;
+        ",
     }]
 }

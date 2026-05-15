@@ -333,8 +333,8 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
   const seedCalendarIsolated = isolatedFromRows(
     read.seedTokens.filter((t) => t.kind === "calendar"),
   );
-  const eventPalette = paletteFromRows(read.palette);
-  const seedEventPalette = paletteFromRows(read.seedPalette);
+  const eventPalette = paletteFromRows(read.palette, fallbackBase);
+  const seedEventPalette = paletteFromRows(read.seedPalette, seedFallbackBase);
   // Rows created before migration v5 carry NULL for icon_label/
   // seed_icon_label. Default both from canvas luminance so the icon picks
   // the same value the editor used to render before this field existed.
@@ -444,8 +444,12 @@ function isolatedFromRows(
 
 function paletteFromRows(
   rows: ReadonlyArray<{ slot: number; value: string }>,
+  fallbackBase: "light" | "dark",
 ): string[] {
-  const out: string[] = new Array(PALETTE_SIZE).fill("#000000");
+  const fallbackPalette = fallbackBase === "dark"
+    ? darkTheme.eventPalette
+    : lightTheme.eventPalette;
+  const out: string[] = [...fallbackPalette];
   for (const r of rows) {
     if (r.slot >= 0 && r.slot < PALETTE_SIZE) out[r.slot] = r.value;
   }
