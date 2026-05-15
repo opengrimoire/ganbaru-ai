@@ -12,6 +12,7 @@ import {
   DEFAULT_BENCHMARK_DATASET,
   LARGE_BENCHMARK_DATASET,
 } from "./types";
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
 
 const ANCHOR = new Date(2026, 3, 30);
 
@@ -97,6 +98,34 @@ describe("benchmark dense calendar datasets", () => {
     ]);
     expect(events[3]?.start).toBe("2025-05-01 00:00");
     expect(events[3]?.allDay).toBeUndefined();
+  });
+
+  it("uses every current palette slot across dense timed and all-day events", () => {
+    const eventsPerDay = 24 * DEFAULT_BENCHMARK_DATASET.stackCount + 3;
+    const events = generateDenseCalendarEvents({
+      dataset: DEFAULT_BENCHMARK_DATASET,
+      anchor: ANCHOR,
+      count: PALETTE_SIZE * eventsPerDay,
+    });
+    const timedColors = new Set<number>();
+    const allDayColors = new Set<number>();
+
+    for (const event of events) {
+      expect(typeof event.color).toBe("number");
+      if (typeof event.color !== "number") continue;
+      expect(Number.isInteger(event.color)).toBe(true);
+      expect(event.color).toBeGreaterThanOrEqual(0);
+      expect(event.color).toBeLessThan(PALETTE_SIZE);
+      if (event.allDay) {
+        allDayColors.add(event.color);
+      } else {
+        timedColors.add(event.color);
+      }
+    }
+
+    const expected = Array.from({ length: PALETTE_SIZE }, (_, index) => index);
+    expect([...timedColors].sort((a, b) => a - b)).toEqual(expected);
+    expect([...allDayColors].sort((a, b) => a - b)).toEqual(expected);
   });
 
   it("keeps overlapping source UIDs stable when the year radius changes", () => {
