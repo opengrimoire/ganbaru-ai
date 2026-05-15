@@ -229,7 +229,7 @@ Known recurrence gaps:
 
 - `STATUS`: projected for `CONFIRMED`, `TENTATIVE`, and `CANCELLED`; exported and tested.
 - `TRANSP`: projected for `OPAQUE` and `TRANSPARENT`; exported and tested.
-- `CLASS`: projected for `PUBLIC`, `PRIVATE`, and `CONFIDENTIAL`; exported and tested.
+- `CLASS`: projected and exported for `PUBLIC` and `PRIVATE`; `CONFIDENTIAL` imports as `PRIVATE` and is tested.
 - `PRIORITY`: projected, exported, validated, and tested.
 - `CATEGORIES`: projected as string array, exported, and tested.
 - `GEO`: projected, exported, and tested.

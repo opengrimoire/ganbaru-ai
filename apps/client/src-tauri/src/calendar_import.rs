@@ -846,11 +846,7 @@ fn validate_event(event: &CalendarImportEvent) -> Result<(), String> {
         "status",
         &["confirmed", "tentative", "cancelled"],
     )?;
-    validate_enum(
-        &event.visibility,
-        "visibility",
-        &["public", "private", "confidential"],
-    )?;
+    validate_enum(&event.visibility, "visibility", &["public", "private"])?;
     validate_priority(event.priority)?;
     validate_non_negative(event.sequence, "sequence")?;
     validate_json_option(&event.notifications, "notifications")?;
@@ -954,11 +950,7 @@ fn validate_override(override_row: &CalendarImportOverride) -> Result<(), String
         )?;
     }
     if let Some(visibility) = &override_row.visibility {
-        validate_enum(
-            visibility,
-            "override.visibility",
-            &["public", "private", "confidential"],
-        )?;
+        validate_enum(visibility, "override.visibility", &["public", "private"])?;
     }
     validate_json_option(
         &override_row.extended_properties,
@@ -1034,16 +1026,23 @@ mod tests {
 
     use super::{
         contains_older_revisions, insert_child_rows, insert_event, replace_preservation,
-        update_event, validate_color, validate_enum, validate_json_option, validate_preservation,
-        validate_priority, CalendarImportAlarm, CalendarImportAttendee, CalendarImportEvent,
-        CalendarImportOverride, CalendarImportPreservation, CalendarImportPreservedComponent,
-        CalendarImportPreservedObject, ExistingEventRow,
+        update_event, validate_color, validate_enum, validate_event, validate_json_option,
+        validate_preservation, validate_priority, CalendarImportAlarm, CalendarImportAttendee,
+        CalendarImportEvent, CalendarImportOverride, CalendarImportPreservation,
+        CalendarImportPreservedComponent, CalendarImportPreservedObject, ExistingEventRow,
     };
 
     #[test]
     fn validates_calendar_import_enums() {
         assert!(validate_enum("confirmed", "status", &["confirmed"]).is_ok());
         assert!(validate_enum("cancelled", "status", &["confirmed"]).is_err());
+    }
+
+    #[test]
+    fn rejects_confidential_import_visibility() {
+        let mut event = import_event("event-1", "");
+        event.visibility = "confidential".to_string();
+        assert!(validate_event(&event).is_err());
     }
 
     #[test]

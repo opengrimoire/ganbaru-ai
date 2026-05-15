@@ -73,7 +73,7 @@ export interface PomodoroConfig {
 export type EventTransparency = "opaque" | "transparent";
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
 export type EventSurfaceStatus = EventStatus | AttendeeStatus;
-export type EventVisibility = "public" | "private" | "confidential";
+export type EventVisibility = "public" | "private";
 export type IcalendarPreservationStatus =
   | "lossless"
   | "partial"

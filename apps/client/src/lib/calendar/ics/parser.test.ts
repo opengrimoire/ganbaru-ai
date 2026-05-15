@@ -729,6 +729,21 @@ describe("parseIcs", () => {
 			expect(e.priority).toBe(3);
 			expect(e.sequence).toBe(7);
 		});
+
+		it("treats CLASS:CONFIDENTIAL as private", () => {
+			const ics = wrap(
+				vevent(
+					"UID:confidential@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					"SUMMARY:Confidential",
+					"CLASS:CONFIDENTIAL",
+				),
+			);
+			const e = parseIcs(ics).events[0];
+			expect(e.visibility).toBe("private");
+		});
 	});
 
 	describe("categories, geo, X-properties", () => {

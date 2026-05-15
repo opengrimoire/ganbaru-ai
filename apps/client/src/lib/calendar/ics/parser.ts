@@ -609,7 +609,7 @@ const TRANSP_MAP: Record<string, EventTransparency> = {
 const VISIBILITY_MAP: Record<string, EventVisibility> = {
 	"PUBLIC": "public",
 	"PRIVATE": "private",
-	"CONFIDENTIAL": "confidential",
+	"CONFIDENTIAL": "private",
 };
 
 const STANDARD_PROPS = new Set([

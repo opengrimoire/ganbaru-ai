@@ -944,11 +944,7 @@ fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
         "status",
         &["confirmed", "tentative", "cancelled"],
     )?;
-    validate_enum(
-        &event.visibility,
-        "visibility",
-        &["public", "private", "confidential"],
-    )?;
+    validate_enum(&event.visibility, "visibility", &["public", "private"])?;
     validate_priority(event.priority)?;
     validate_non_negative(event.sequence, "sequence")?;
     validate_json_option(&event.notifications, "notifications")?;
@@ -1066,7 +1062,7 @@ fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String>
         }
         CalendarEventUpdateField::SourceUid(_) => Ok(()),
         CalendarEventUpdateField::Visibility(value) => {
-            validate_enum(value, "visibility", &["public", "private", "confidential"])
+            validate_enum(value, "visibility", &["public", "private"])
         }
         CalendarEventUpdateField::Priority(value) => validate_priority(*value),
         CalendarEventUpdateField::Categories(value) => validate_json_option(value, "categories"),
@@ -1287,6 +1283,17 @@ mod tests {
         event.title = String::new();
         assert!(validate_event_create(&event).is_ok());
         assert!(validate_update_field(&CalendarEventUpdateField::Title(String::new())).is_ok());
+    }
+
+    #[test]
+    fn rejects_confidential_event_visibility() {
+        let mut event = event_create();
+        event.visibility = "confidential".to_string();
+        assert!(validate_event_create(&event).is_err());
+        assert!(validate_update_field(&CalendarEventUpdateField::Visibility(
+            "confidential".to_string()
+        ))
+        .is_err());
     }
 
     #[test]

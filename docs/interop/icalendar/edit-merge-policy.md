@@ -19,7 +19,7 @@ For linked `VEVENT` components:
 - Editing recurrence updates `RRULE`, `RDATE`, `EXDATE`, and override relationships.
 - Editing status updates `STATUS`.
 - Editing transparency updates `TRANSP`.
-- Editing visibility updates `CLASS`.
+- Editing visibility updates `CLASS` as `PUBLIC` or `PRIVATE`; imported `CONFIDENTIAL` values are normalized to `PRIVATE`.
 - Editing attendees updates supported `ATTENDEE` fields while preserving unsupported attendee parameters where possible.
 - Editing alarms updates supported `VALARM` fields while preserving unsupported alarm fields where possible.
 

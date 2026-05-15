@@ -1155,5 +1155,17 @@ pub fn migrations() -> Vec<Migration> {
                 WHERE slot BETWEEN 0 AND 31;
             DROP TABLE theme_seed_event_palette_before_neutral_swap;
         ",
+    }, Migration {
+        version: 20,
+        description: "normalize confidential event visibility",
+        sql: "
+            UPDATE calendar_events
+            SET visibility = 'private'
+            WHERE visibility = 'confidential';
+
+            UPDATE calendar_event_overrides
+            SET visibility = 'private'
+            WHERE visibility = 'confidential';
+        ",
     }]
 }

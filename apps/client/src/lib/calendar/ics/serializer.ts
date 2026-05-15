@@ -211,7 +211,6 @@ const TRANSP_REVERSE: Record<NonNullable<CalendarEvent["transparency"]>, string>
 const VISIBILITY_REVERSE: Record<NonNullable<CalendarEvent["visibility"]>, string> = {
 	public: "PUBLIC",
 	private: "PRIVATE",
-	confidential: "CONFIDENTIAL",
 };
 
 const ROLE_REVERSE: Record<EventAttendee["role"], string> = {

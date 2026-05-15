@@ -108,7 +108,7 @@ export function buildCreatePanelInitialChanges(start: string, end: string, allDa
     url: undefined,
     transparency: undefined,
     status: undefined,
-    visibility: undefined,
+    visibility: "private",
     attendees: undefined,
   };
 }

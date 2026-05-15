@@ -212,6 +212,7 @@ describe("panel initial changes", () => {
     expect(result.end).toBe("2026-04-16 10:00");
     expect(result.notifications).toEqual([0]);
     expect(result.allDay).toBe(true);
+    expect(result.visibility).toBe("private");
     expect(result.pomodoroConfig).toEqual({
       focusDurationMinutes: 40,
       shortBreakMinutes: 5,

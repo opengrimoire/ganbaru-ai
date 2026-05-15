@@ -31,9 +31,9 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Music from "@lucide/svelte/icons/music";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
+  import CircleSlash from "@lucide/svelte/icons/circle-slash";
   import Sun from "@lucide/svelte/icons/sun";
   import Eye from "@lucide/svelte/icons/eye";
-  import Shield from "@lucide/svelte/icons/shield";
   import Lock from "@lucide/svelte/icons/lock";
 
 
@@ -133,7 +133,7 @@
   let eventUrl = $state("");
   let transparency: EventTransparency = $state("opaque");
   let eventStatus: EventStatus = $state("confirmed");
-  let visibility: EventVisibility = $state("public");
+  let visibility: EventVisibility = $state("private");
 
   // ─── Meeting (attendees + location + url bundle) ────────────────
   // UI-only flag: when false, the Meeting section's data is retained in
@@ -214,7 +214,6 @@
     if (controlsDisabled) return;
     timePickerTarget = null;
     endDatepickerOpen = false;
-    showAsPicker = false;
     datepickerOpen = !datepickerOpen;
   }
 
@@ -222,21 +221,17 @@
     if (controlsDisabled) return;
     timePickerTarget = null;
     datepickerOpen = false;
-    showAsPicker = false;
     endDatepickerOpen = !endDatepickerOpen;
   }
 
   // ─── Time picker ─────────────────────────────────────────────
   let timePickerTarget: "start" | "end" | null = $state(null);
-  let showAsPicker = $state(false);
-  let visibilityPicker = $state(false);
 
 
   function openTimePicker(target: "start" | "end") {
     if (controlsDisabled) return;
     datepickerOpen = false;
     endDatepickerOpen = false;
-    showAsPicker = false;
     timePickerTarget = target;
   }
 
@@ -280,7 +275,6 @@
   ));
   const panelCanDrag = $derived(panelLayout === "anchored" || panelLayout === "centered");
   const stackedDateTime = $derived(panelWidth < 300);
-  const compactMetadata = $derived(panelWidth < 300);
 
   function isSectionEnabled(s: Section): boolean {
     if (s === "meeting") return meetingEnabled;
@@ -526,7 +520,7 @@
       eventUrl = "";
       transparency = "opaque";
       eventStatus = "confirmed";
-      visibility = "public";
+      visibility = "private";
       organizer = undefined;
       attendees = [];
       localParticipationStatus = undefined;
@@ -541,7 +535,6 @@
     datepickerOpen = false;
     endDatepickerOpen = false;
     timePickerTarget = null;
-    showAsPicker = false;
     openSection = null;
     scope = "this";
     dragOffset = { x: 0, y: 0 };
@@ -903,13 +896,30 @@
     e.stopPropagation();
   }
 
-  function metadataButtonClass(active: boolean, extra?: string): string {
+  function metadataButtonClass(extra?: string): string {
     return cn(
-      "flex min-w-0 items-center gap-1 rounded-none px-2 py-2 hover:bg-black/5 dark:hover:bg-black/15",
-      compactMetadata ? "w-full justify-center" : "",
-      active ? "text-foreground" : "text-muted-foreground",
+      "flex min-w-0 max-w-full items-center justify-center gap-1 rounded-none px-2 py-2",
+      "text-foreground",
       extra,
     );
+  }
+
+  function toggleTransparency() {
+    if (controlsDisabled) return;
+    datepickerOpen = false;
+    endDatepickerOpen = false;
+    timePickerTarget = null;
+    transparency = transparency === "transparent" ? "opaque" : "transparent";
+    emitChange();
+  }
+
+  function toggleVisibility() {
+    if (controlsDisabled) return;
+    datepickerOpen = false;
+    endDatepickerOpen = false;
+    timePickerTarget = null;
+    visibility = visibility === "public" ? "private" : "public";
+    emitChange();
   }
 
   function handleScopeClick(s: RecurringScope) { scope = s; onScopeChange?.(s); }
@@ -1053,12 +1063,17 @@
         {/if}
       </div>
 
-      <!-- Time group, hidden when all-day -->
-      <div class="time-group relative z-2 flex items-center justify-center gap-1 py-1" class:hidden={allDay}>
+      <!-- Time group, visually hidden when all-day so the date grid keeps its shape. -->
+      <div
+        class="time-group relative z-2 flex items-center justify-center gap-1 py-1"
+        class:invisible={allDay}
+        class:pointer-events-none={allDay}
+        aria-hidden={allDay}
+      >
         <input type="text" bind:value={startTime}
           oninput={emitChange}
           onclick={() => openTimePicker("start")}
-          disabled={controlsDisabled}
+          disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
           class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
@@ -1067,7 +1082,7 @@
         <input type="text" bind:value={endTime}
           oninput={emitChange}
           onclick={() => openTimePicker("end")}
-          disabled={controlsDisabled}
+          disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
           class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
@@ -1113,21 +1128,17 @@
   </div>
 
   <!-- Metadata strip -->
-  <div class="flex flex-col gap-3 px-3.5 py-1.5">
+  <div class="flex flex-col gap-3 px-3.5 pb-0 pt-1.5">
 
     <!-- All-day / Availability / Visibility -->
     <div
-      class={cn(
-        "-mt-1 rounded-none px-0.5 text-[10px] leading-none",
-        compactMetadata
-          ? showHeavySections ? "grid grid-cols-3" : "grid grid-cols-2"
-          : "flex items-center",
-      )}
+      class="-mt-1 flex w-full items-center justify-evenly rounded-none px-0.5 text-[10px] leading-none"
       style="background-color: var(--panel-contrast);"
     >
       <!-- All day -->
       <button
         onclick={() => {
+          timePickerTarget = null;
           allDay = !allDay;
           if (allDay) {
             stashedStartTime = startTime;
@@ -1157,11 +1168,10 @@
         }}
         disabled={controlsDisabled}
         class={cn(
-          "flex min-w-0 items-center gap-1 rounded-none px-2 py-2",
-          compactMetadata ? "w-full justify-center" : "",
+          "flex min-w-0 max-w-full items-center justify-center gap-1 rounded-none px-2 py-2",
           allDay
-            ? "bg-black/5 text-foreground dark:bg-black/15"
-            : "text-muted-foreground/40 hover:bg-black/5 hover:text-muted-foreground dark:hover:bg-black/15",
+            ? "text-foreground"
+            : "text-muted-foreground/40",
         )}
         title="All day"
       >
@@ -1170,62 +1180,34 @@
       </button>
 
       <!-- Show as -->
-      <div class="relative min-w-0">
-        <button
-          onclick={() => { showAsPicker = !showAsPicker; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
-          disabled={controlsDisabled}
-          class={metadataButtonClass(showAsPicker)}
-          title="Show as"
-        >
-          <Eye size={12} class="shrink-0" />
-          <span class="truncate text-foreground">{transparency === "transparent" ? "Free" : "Busy"}</span>
-        </button>
-        {#if showAsPicker}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-19" onclick={() => { showAsPicker = false; }}></div>
-          <div class="absolute left-0 top-full z-20 mt-1 w-24 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
-            {#each (["opaque", "transparent"] as const) as t}
-              <button
-                onclick={() => { transparency = t; showAsPicker = false; emitChange(); }}
-                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] hover:bg-black/5 dark:hover:bg-black/15
-                  {transparency === t ? 'text-foreground font-medium' : 'text-muted-foreground'}"
-              >{t === "opaque" ? "Busy" : "Free"}</button>
-            {/each}
-          </div>
+      <button
+        onclick={toggleTransparency}
+        disabled={controlsDisabled}
+        class={metadataButtonClass()}
+        title="Show as"
+      >
+        {#if transparency === "transparent"}
+          <CircleCheck size={12} class="shrink-0" />
+        {:else}
+          <CircleSlash size={12} class="shrink-0" />
         {/if}
-      </div>
+        <span class="truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
+      </button>
 
       {#if showHeavySections}
-        <div class="relative min-w-0">
-          <button
-            onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
-            disabled={controlsDisabled}
-            class={metadataButtonClass(visibilityPicker, "capitalize")}
-            title="Visibility"
-          >
-            {#if visibility === "public"}
-              <Shield size={12} class="shrink-0" />
-            {:else}
-              <Lock size={12} class="shrink-0" />
-            {/if}
-            <span class="truncate {visibility !== 'public' ? 'text-foreground' : ''}">{visibility}</span>
-          </button>
-          {#if visibilityPicker}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0 z-19" onclick={() => { visibilityPicker = false; }}></div>
-            <div class="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
-              {#each (["public", "private", "confidential"] as const) as v}
-                <button
-                  onclick={() => { visibility = v; visibilityPicker = false; emitChange(); }}
-                  class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize hover:bg-black/5 dark:hover:bg-black/15
-                    {visibility === v ? 'text-foreground font-medium' : 'text-muted-foreground'}"
-                >{v}</button>
-              {/each}
-            </div>
+        <button
+          onclick={toggleVisibility}
+          disabled={controlsDisabled}
+          class={metadataButtonClass("capitalize")}
+          title="Visibility"
+        >
+          {#if visibility === "public"}
+            <Eye size={12} class="shrink-0" />
+          {:else}
+            <Lock size={12} class="shrink-0" />
           {/if}
-        </div>
+          <span class="truncate">{visibility}</span>
+        </button>
       {/if}
     </div>
 
