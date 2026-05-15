@@ -8,6 +8,7 @@
     getEventStatusPatternStyle,
     getPastEventColor,
     getOutsideMonthEventColor,
+    isEventSurfaceCancelled,
     formatDayName,
     formatDatePart,
   } from "./utils";
@@ -182,7 +183,7 @@
                 : !inMonth
                   ? getOutsideMonthEventColor(evt.color, theme)
                   : getEventColor(evt.color, theme)}
-              {@const evtIsCancelled = evt.status === "cancelled"}
+              {@const evtIsCancelled = isEventSurfaceCancelled(evt)}
               {@const evtStatusPatternStyle = getEventStatusPatternStyle(evt)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->

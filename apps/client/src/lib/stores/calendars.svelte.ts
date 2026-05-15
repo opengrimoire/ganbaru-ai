@@ -11,6 +11,8 @@ interface DbCalendar {
   read_only: number;
   source_url: string | null;
   last_synced: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 function mapRow(r: DbCalendar): Calendar {
@@ -23,6 +25,8 @@ function mapRow(r: DbCalendar): Calendar {
     readOnly: r.read_only === 1,
     sourceUrl: r.source_url ?? undefined,
     lastSynced: r.last_synced ?? undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
   };
 }
 
@@ -94,6 +98,8 @@ export function getCalendars() {
         readOnly: cal.readOnly ?? false,
         sourceUrl: cal.sourceUrl,
         lastSynced: cal.lastSynced,
+        createdAt: now,
+        updatedAt: now,
       };
       calendars = [...calendars, entry];
       return entry;
@@ -122,11 +128,9 @@ export function getCalendars() {
         }
         return cal;
       }
-      const today = new Date();
-      const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
       const baseName = filename.replace(/\.ics$/i, "");
       return this.add({
-        name: `Imported from ${baseName} (${stamp})`,
+        name: baseName,
         color: "",
         source: "ics",
         sourceUrl: filename,

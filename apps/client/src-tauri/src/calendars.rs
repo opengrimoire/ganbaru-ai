@@ -27,6 +27,8 @@ pub struct CalendarRead {
     read_only: i64,
     source_url: Option<String>,
     last_synced: Option<String>,
+    created_at: String,
+    updated_at: String,
 }
 impl_sqlite_from_row!(CalendarRead {
     id,
@@ -37,6 +39,8 @@ impl_sqlite_from_row!(CalendarRead {
     read_only,
     source_url,
     last_synced,
+    created_at,
+    updated_at,
 });
 
 #[derive(Serialize)]
@@ -52,7 +56,7 @@ pub async fn calendar_list_calendars<R: Runtime>(
 ) -> Result<Vec<CalendarRead>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     sqlx::query_as::<_, CalendarRead>(
-        "SELECT id, name, color, source, visible, read_only, source_url, last_synced
+        "SELECT id, name, color, source, visible, read_only, source_url, last_synced, created_at, updated_at
          FROM calendars ORDER BY name ASC",
     )
     .fetch_all(&pool)
@@ -69,7 +73,7 @@ pub async fn calendar_find_imported_calendar<R: Runtime>(
     require_non_empty(&filename, "filename")?;
     let pool = connect_sqlite(app, db_url).await?;
     sqlx::query_as::<_, CalendarRead>(
-        "SELECT id, name, color, source, visible, read_only, source_url, last_synced
+        "SELECT id, name, color, source, visible, read_only, source_url, last_synced, created_at, updated_at
          FROM calendars WHERE source = 'ics' AND source_url = ? LIMIT 1",
     )
     .bind(filename)

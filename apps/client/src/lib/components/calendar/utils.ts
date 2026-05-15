@@ -1234,17 +1234,33 @@ const TENTATIVE_PATTERN_STYLE =
 const CANCELLED_PATTERN_STYLE =
   "background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, color-mix(in srgb, currentColor 14%, transparent) 4px, color-mix(in srgb, currentColor 14%, transparent) 6px);";
 
+const PENDING_PATTERN_STYLE =
+  "background-image: radial-gradient(circle, color-mix(in srgb, currentColor 14%, transparent) 1px, transparent 1.5px); background-size: 6px 6px;";
+
 /**
- * Return the non-color status pattern for event surfaces. Availability
- * (`TRANSP`) stays metadata-only because it is used for scheduling
+ * Return the non-color status pattern for event surfaces. Event-level
+ * cancelled wins because it cancels the whole event. Otherwise, meeting RSVP
+ * `surfaceStatus` drives the visible surface without changing event `STATUS`.
+ * Availability (`TRANSP`) stays metadata-only because it is used for scheduling
  * free/busy checks, not as a visible event state.
  */
 export function getEventStatusPatternStyle(
-  event: Pick<CalendarEvent, "status" | "transparency">,
+  event: Pick<CalendarEvent, "status" | "surfaceStatus" | "transparency">,
 ): string {
   if (event.status === "cancelled") return CANCELLED_PATTERN_STYLE;
-  if (event.status === "tentative") return TENTATIVE_PATTERN_STYLE;
+  const status = event.surfaceStatus ?? event.status;
+  if (status === "declined") return CANCELLED_PATTERN_STYLE;
+  if (status === "tentative") return TENTATIVE_PATTERN_STYLE;
+  if (status === "needs-action" || status === "delegated") return PENDING_PATTERN_STYLE;
   return "";
+}
+
+export function isEventSurfaceCancelled(
+  event: Pick<CalendarEvent, "status" | "surfaceStatus">,
+): boolean {
+  if (event.status === "cancelled") return true;
+  const status = event.surfaceStatus ?? event.status;
+  return status === "declined";
 }
 
 export const EVENT_COLOR_OPTIONS: readonly EventColor[] = Object.freeze(

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type {
-    CalendarEvent, EventColor, EventStatus, EventTransparency, EventVisibility,
+    CalendarEvent, EventColor, EventStatus, EventSurfaceStatus, EventTransparency, EventVisibility,
     EventAttendee, EventOrganizer, GeoCoordinates, GuestPermissions,
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
@@ -57,6 +57,7 @@
     parked = false,
     readOnly = false,
     skipInlineDeleteConfirm = false,
+    calendarIdentityEmail,
     loadFullEvent,
     onSave,
     onDelete,
@@ -64,6 +65,7 @@
     onChange,
     onInitialSync,
     onScopeChange,
+    onSurfaceStatusChange,
   }: {
     mode: "create" | "edit";
     start?: string;
@@ -77,6 +79,7 @@
     parked?: boolean;
     readOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
+    calendarIdentityEmail?: string;
     /**
      * Fetches the panel detail row (description, attendees, organizer, etc.)
      * for an event id. Used as a fallback when edit mode receives a slim
@@ -106,6 +109,7 @@
     onChange?: (data: Partial<CalendarEvent>) => void;
     onInitialSync?: (data: Partial<CalendarEvent>) => void;
     onScopeChange?: (scope: RecurringScope) => void;
+    onSurfaceStatusChange?: (status: EventSurfaceStatus | undefined) => void;
   } = $props();
 
   const controlsDisabled = $derived(readOnly || parked);
@@ -209,7 +213,6 @@
     timePickerTarget = null;
     endDatepickerOpen = false;
     showAsPicker = false;
-    statusPicker = false;
     datepickerOpen = !datepickerOpen;
   }
 
@@ -218,14 +221,12 @@
     timePickerTarget = null;
     datepickerOpen = false;
     showAsPicker = false;
-    statusPicker = false;
     endDatepickerOpen = !endDatepickerOpen;
   }
 
   // ─── Time picker ─────────────────────────────────────────────
   let timePickerTarget: "start" | "end" | null = $state(null);
   let showAsPicker = $state(false);
-  let statusPicker = $state(false);
   let visibilityPicker = $state(false);
 
 
@@ -234,7 +235,6 @@
     datepickerOpen = false;
     endDatepickerOpen = false;
     showAsPicker = false;
-    statusPicker = false;
     timePickerTarget = target;
   }
 
@@ -460,7 +460,7 @@
       guestCanSeeOtherGuests = event.guestPermissions?.canSeeOtherGuests ?? true;
       geo = event.geo;
       meetingEnabled = !!(event.attendees && event.attendees.length > 0)
-        || !!event.location || !!event.url;
+        || !!event.organizer || !!event.location || !!event.url || !!event.geo;
 
       const pc = event.pomodoroConfig;
       pomodoroEnabled = !!pc;
@@ -524,10 +524,13 @@
       transparency = "opaque";
       eventStatus = "confirmed";
       visibility = "public";
+      organizer = undefined;
       attendees = [];
       guestCanModify = false;
       guestCanInviteOthers = true;
       guestCanSeeOtherGuests = true;
+      geo = undefined;
+      rdate = undefined;
       meetingEnabled = false;
     }
 
@@ -535,7 +538,6 @@
     endDatepickerOpen = false;
     timePickerTarget = null;
     showAsPicker = false;
-    statusPicker = false;
     openSection = null;
     scope = "this";
     dragOffset = { x: 0, y: 0 };
@@ -585,7 +587,7 @@
     guestCanSeeOtherGuests = fullEvent.guestPermissions?.canSeeOtherGuests ?? true;
     geo = fullEvent.geo;
     meetingEnabled = !!(fullEvent.attendees && fullEvent.attendees.length > 0)
-      || !!fullEvent.location || !!fullEvent.url;
+      || !!fullEvent.organizer || !!fullEvent.location || !!fullEvent.url || !!fullEvent.geo;
 
     (onInitialSync ?? onChange)?.(buildHeavyInitPayload());
   });
@@ -1105,11 +1107,13 @@
   <!-- Metadata strip -->
   <div class="flex flex-col gap-3 px-3.5 py-1.5">
 
-    <!-- All-day / Availability / Status / Visibility -->
+    <!-- All-day / Availability / Visibility -->
     <div
       class={cn(
         "-mt-1 rounded-none px-0.5 text-[10px] leading-none",
-        compactMetadata ? "grid grid-cols-2" : "flex items-center",
+        compactMetadata
+          ? showHeavySections ? "grid grid-cols-3" : "grid grid-cols-2"
+          : "flex items-center",
       )}
       style="background-color: var(--panel-contrast);"
     >
@@ -1160,7 +1164,7 @@
       <!-- Show as -->
       <div class="relative min-w-0">
         <button
-          onclick={() => { showAsPicker = !showAsPicker; statusPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+          onclick={() => { showAsPicker = !showAsPicker; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
           disabled={controlsDisabled}
           class={metadataButtonClass(showAsPicker)}
           title="Show as"
@@ -1184,37 +1188,10 @@
         {/if}
       </div>
 
-      <!-- Status -->
-      <div class="relative min-w-0">
-        <button
-          onclick={() => { statusPicker = !statusPicker; showAsPicker = false; visibilityPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
-          disabled={controlsDisabled}
-          class={metadataButtonClass(statusPicker, "capitalize")}
-          title="Status"
-        >
-          <CircleCheck size={12} class="shrink-0" />
-          <span class="truncate text-foreground">{eventStatus}</span>
-        </button>
-        {#if statusPicker}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-19" onclick={() => { statusPicker = false; }}></div>
-          <div class="absolute left-0 top-full z-20 mt-1 w-28 rounded-lg bg-popover shadow-lg ring-1 ring-border/60">
-            {#each (["confirmed", "tentative", "cancelled"] as const) as s}
-              <button
-                onclick={() => { eventStatus = s; statusPicker = false; emitChange(); }}
-                class="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] capitalize hover:bg-black/5 dark:hover:bg-black/15
-                  {eventStatus === s ? 'text-foreground font-medium' : 'text-muted-foreground'}"
-              >{s}</button>
-            {/each}
-          </div>
-        {/if}
-      </div>
-
       {#if showHeavySections}
         <div class="relative min-w-0">
           <button
-            onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; statusPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
+            onclick={() => { visibilityPicker = !visibilityPicker; showAsPicker = false; datepickerOpen = false; endDatepickerOpen = false; timePickerTarget = null; }}
             disabled={controlsDisabled}
             class={metadataButtonClass(visibilityPicker, "capitalize")}
             title="Visibility"
@@ -1261,11 +1238,13 @@
           bind:guestCanInviteOthers
           bind:guestCanSeeOtherGuests
           {organizer}
+          selfEmail={calendarIdentityEmail}
           {description}
           readOnly={controlsDisabled}
           expanded={openSection === "meeting"}
           ontoggle={() => handleToggle("meeting")}
           onexpand={() => handleExpand("meeting")}
+          onsurfacestatuschange={onSurfaceStatusChange}
           onchange={emitChange}
           ondescriptionchange={(html) => { description = html; emitChange(); }} />
       {/if}

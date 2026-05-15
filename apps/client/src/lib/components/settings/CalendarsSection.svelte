@@ -8,6 +8,7 @@
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import type { Calendar } from "$lib/components/calendar/types";
+  import { calendarDisplayName, calendarImportDate } from "$lib/calendar/calendar-display";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const calendarsStore = getCalendars();
@@ -179,8 +180,9 @@
   async function handleExport(calendar: Calendar) {
     try {
       const ics = await calendarStore.exportCalendarAsIcs(calendar);
+      const displayName = calendarDisplayName(calendar);
       const saved = await invoke<boolean>("vault_pick_and_write_ics_export", {
-        defaultName: `${calendar.name.replace(/[^\w.-]+/g, "_")}.ics`,
+        defaultName: `${displayName.replace(/[^\w.-]+/g, "_")}.ics`,
         contents: ics,
       });
       if (saved) flashToast("Exported to file.");
@@ -202,7 +204,7 @@
       await calendarsStore.remove(target.id);
       await calendarStore.load();
       await refreshCounts();
-      flashToast(`Deleted "${target.name}".`);
+      flashToast(`Deleted "${calendarDisplayName(target)}".`);
     } catch (err) {
       console.error("delete calendar failed", err);
       flashToast(err instanceof Error ? err.message : "Delete failed.");
@@ -261,11 +263,13 @@
     class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
   >
     {#each calendarsStore.list as cal (cal.id)}
+      {@const displayName = calendarDisplayName(cal)}
+      {@const importDate = calendarImportDate(cal)}
       <div class="flex items-center gap-3 px-3 py-2.5 max-[520px]:flex-col max-[520px]:items-stretch">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <span class="truncate text-[13px] font-medium text-foreground">
-              {cal.name}
+              {displayName}
             </span>
             <span
               class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
@@ -275,8 +279,8 @@
           </div>
           <div class="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span>{counts[cal.id] ?? 0} event{counts[cal.id] === 1 ? "" : "s"}</span>
-            {#if cal.sourceUrl}
-              <span class="truncate">from {cal.sourceUrl}</span>
+            {#if importDate}
+              <span>imported {importDate}</span>
             {/if}
           </div>
         </div>
@@ -294,7 +298,7 @@
             <button
               type="button"
               onclick={() => handleDelete(cal)}
-              aria-label={`Delete ${cal.name}`}
+              aria-label={`Delete ${displayName}`}
               class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-destructive transition-colors hover:bg-destructive/10 dark:bg-transparent"
             >
               <Trash2 size={12} strokeWidth={2.25} />
@@ -317,7 +321,7 @@
 {#if pendingDelete}
   <ConfirmDialog
     title="Delete calendar"
-    message={`Delete "${pendingDelete.name}" and all of its ${counts[pendingDelete.id] ?? 0} event(s)? This cannot be undone.`}
+    message={`Delete "${calendarDisplayName(pendingDelete)}" and all of its ${counts[pendingDelete.id] ?? 0} event(s)? This cannot be undone.`}
     confirmLabel="Delete (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmDelete}

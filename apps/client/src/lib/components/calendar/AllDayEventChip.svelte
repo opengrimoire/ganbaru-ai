@@ -4,6 +4,7 @@
     getEventColor,
     getEventStatusPatternStyle,
     getPastEventColor,
+    isEventSurfaceCancelled,
   } from "./utils";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import Repeat from "@lucide/svelte/icons/repeat";
@@ -36,7 +37,7 @@
   const isDark = $derived(isThemeCalendarDark(theme));
   const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
   const hasNotification = $derived(event.notifications && event.notifications.length > 0);
-  const isCancelled = $derived(event.status === "cancelled");
+  const isCancelled = $derived(isEventSurfaceCancelled(event));
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
   const statusPatternStyle = $derived(getEventStatusPatternStyle(event));

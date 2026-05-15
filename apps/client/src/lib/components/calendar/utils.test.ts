@@ -28,6 +28,7 @@ import {
   getEventStatusPatternStyle,
   getPastEventColor,
   getOutsideMonthEventColor,
+  isEventSurfaceCancelled,
   getTimezoneCity,
   getTimezoneRegion,
   getTimezoneOffsetMinutes,
@@ -892,6 +893,35 @@ describe("getEventStatusPatternStyle", () => {
     });
     expect(style).toContain("repeating-linear-gradient(45deg");
     expect(style).not.toContain("90deg");
+  });
+
+  it("keeps event-level cancelled stronger than RSVP surface status", () => {
+    const style = getEventStatusPatternStyle({
+      status: "cancelled",
+      surfaceStatus: "accepted",
+    });
+    expect(style).toContain("repeating-linear-gradient(45deg");
+  });
+
+  it("uses dots for pending RSVP state", () => {
+    const style = getEventStatusPatternStyle({
+      surfaceStatus: "needs-action",
+    });
+    expect(style).toContain("radial-gradient");
+  });
+
+  it("uses RSVP surface status before event-level tentative", () => {
+    const style = getEventStatusPatternStyle({
+      status: "tentative",
+      surfaceStatus: "accepted",
+    });
+    expect(style).toBe("");
+  });
+
+  it("treats declined RSVP as a cancelled surface", () => {
+    expect(isEventSurfaceCancelled({ surfaceStatus: "declined" })).toBe(true);
+    expect(isEventSurfaceCancelled({ status: "cancelled" })).toBe(true);
+    expect(isEventSurfaceCancelled({ surfaceStatus: "accepted", status: "cancelled" })).toBe(true);
   });
 });
 

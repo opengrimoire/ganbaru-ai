@@ -72,6 +72,7 @@ export interface PomodoroConfig {
 
 export type EventTransparency = "opaque" | "transparent";
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
+export type EventSurfaceStatus = EventStatus | AttendeeStatus;
 export type EventVisibility = "public" | "private" | "confidential";
 export type IcalendarPreservationStatus =
   | "lossless"
@@ -196,6 +197,8 @@ export interface CalendarEvent {
   url?: string;
   transparency?: EventTransparency;
   status?: EventStatus;
+  /** Frontend-only visual status. Used for meeting RSVP patterns without changing event STATUS. */
+  surfaceStatus?: EventSurfaceStatus;
   /** Original UID from imported .ics file, used for deduplication. */
   sourceUid?: string;
   /** RFC 5545 CLASS: controls visibility to other users. */
@@ -241,6 +244,8 @@ export interface Calendar {
   readOnly: boolean;
   sourceUrl?: string;
   lastSynced?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PositionedAllDayEvent {

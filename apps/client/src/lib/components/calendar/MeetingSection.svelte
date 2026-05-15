@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { EventAttendee, EventOrganizer, GeoCoordinates } from "./types";
+  import type { EventAttendee, EventOrganizer, EventSurfaceStatus, GeoCoordinates } from "./types";
   import { bounceIcon, panelInputKeydown } from "./event-panel-utils";
   import { createSmoothScroll } from "./utils";
   import DescriptionEditor from "./DescriptionEditor.svelte";
@@ -28,12 +28,14 @@
     guestCanInviteOthers = $bindable(true),
     guestCanSeeOtherGuests = $bindable(true),
     organizer,
+    selfEmail,
     description,
     readOnly = false,
     expanded,
     onchange,
     ondescriptionchange,
     onexpand,
+    onsurfacestatuschange,
     ontoggle,
   }: {
     enabled: boolean;
@@ -45,12 +47,14 @@
     guestCanInviteOthers: boolean;
     guestCanSeeOtherGuests: boolean;
     organizer?: EventOrganizer;
+    selfEmail?: string;
     description: string;
     readOnly?: boolean;
     expanded: boolean;
     onchange: () => void;
     ondescriptionchange: (html: string) => void;
     onexpand: () => void;
+    onsurfacestatuschange?: (status: EventSurfaceStatus | undefined) => void;
     ontoggle: () => void;
   } = $props();
 
@@ -58,13 +62,36 @@
     attendees.length > 0 || !!organizer || !!url || !!location,
   );
 
+  let localSelfStatus: EventAttendee["status"] = $state("accepted");
+  let hadLocalSelfRow = false;
+
   const organizerEmail = $derived(organizer?.email.toLowerCase() ?? "");
+  const normalizedSelfEmail = $derived(selfEmail?.toLowerCase() ?? "");
+  const isOrganizerSelf = $derived(!!normalizedSelfEmail && organizerEmail === normalizedSelfEmail);
   const visibleAttendees = $derived(
     organizerEmail
       ? attendees.filter((attendee) => attendee.email.toLowerCase() !== organizerEmail)
       : attendees,
   );
+  const selfAttendee = $derived(
+    normalizedSelfEmail
+      ? visibleAttendees.find((attendee) => attendee.email.toLowerCase() === normalizedSelfEmail)
+      : undefined,
+  );
+  const guestAttendees = $derived(
+    selfAttendee
+      ? visibleAttendees.filter((attendee) => attendee.id !== selfAttendee.id)
+      : visibleAttendees,
+  );
+  const showLocalSelfRow = $derived(enabled && !organizer && !selfAttendee);
   const canEditGuests = $derived(!readOnly && !organizer);
+  const surfaceStatus = $derived.by<EventSurfaceStatus | undefined>(() => {
+    if (!enabled) return undefined;
+    if (selfAttendee) return selfAttendee.status;
+    if (showLocalSelfRow) return localSelfStatus;
+    if (isOrganizerSelf) return "accepted";
+    return undefined;
+  });
 
   /** Collapsed summary: attendee count, location, URL host, joined with middle dots. */
   const summary = $derived.by(() => {
@@ -98,6 +125,16 @@
 
   let attendeeInput = $state("");
 
+  $effect(() => {
+    const visible = showLocalSelfRow;
+    if (visible && !hadLocalSelfRow) localSelfStatus = "accepted";
+    hadLocalSelfRow = visible;
+  });
+
+  $effect(() => {
+    onsurfacestatuschange?.(surfaceStatus);
+  });
+
   function addAttendee() {
     const email = attendeeInput.trim();
     const normalized = email.toLowerCase();
@@ -129,6 +166,27 @@
 
   function attendeeStatusLabel(status: EventAttendee["status"]): string {
     return status === "needs-action" ? "pending" : status;
+  }
+
+  function optionalActionClass(disabled: boolean, optional: boolean): string {
+    if (disabled) return "cursor-not-allowed rounded p-0.5 text-muted-foreground/20";
+    return `rounded p-0.5 active:scale-75 ${optional ? "text-muted-foreground/40" : "text-foreground"}`;
+  }
+
+  function removeActionClass(disabled: boolean): string {
+    if (disabled) return "cursor-not-allowed rounded p-0.5 text-muted-foreground/20";
+    return "rounded p-0.5 text-muted-foreground active:scale-75 hover:text-destructive";
+  }
+
+  function nextRsvpStatus(status: EventAttendee["status"]): EventAttendee["status"] {
+    if (status === "accepted") return "tentative";
+    if (status === "tentative") return "declined";
+    if (status === "declined") return "needs-action";
+    return "accepted";
+  }
+
+  function toggleLocalSelfRsvp() {
+    localSelfStatus = nextRsvpStatus(localSelfStatus);
   }
 
   let scrollEl: HTMLDivElement | undefined = $state();
@@ -199,7 +257,7 @@
       <div class="flex flex-col">
         <div class="flex items-center gap-2 pb-1">
           <span class="text-[9px] uppercase tracking-wider text-muted-foreground">Guests</span>
-          {#if canEditGuests && visibleAttendees.length > 0}
+          {#if canEditGuests && guestAttendees.length > 0}
             <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
               {#each [
                 { icon: Pencil, label: "Edit", title: "Modify event", get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; onchange(); } },
@@ -219,23 +277,109 @@
         {#if organizer}
           <div class="flex items-center gap-2 py-0.5 text-[11px]">
             <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={10} strokeWidth={2.5} class="block text-status-accepted-foreground" /></span>
-            <span class="min-w-0 flex-1 truncate text-foreground">{organizer.name ?? organizer.email}</span>
+            <span class="min-w-0 flex-1 truncate text-foreground">
+              {isOrganizerSelf ? `You (${organizer.email})` : organizer.name ?? organizer.email}
+            </span>
             <span class="shrink-0 text-[10px] text-muted-foreground/60">organizer</span>
+            <div class="flex shrink-0 items-center gap-0.5">
+              <button
+                disabled
+                title="Organizer cannot be marked optional"
+                aria-label="Organizer cannot be marked optional"
+                class={optionalActionClass(true, false)}>
+                <Flag size={11} />
+              </button>
+              <button
+                disabled
+                title="Organizer cannot be removed"
+                aria-label="Organizer cannot be removed"
+                class={removeActionClass(true)}>
+                <X size={11} />
+              </button>
+            </div>
           </div>
         {/if}
-        {#if visibleAttendees.length > 0}
+        {#if selfAttendee}
+          {@const selfStatus = selfAttendee.status}
+          {@const selfBg = selfStatus === "accepted" ? "bg-status-accepted" : selfStatus === "tentative" ? "bg-status-tentative" : selfStatus === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
+          {@const selfFg = selfStatus === "accepted" ? "text-status-accepted-foreground" : selfStatus === "tentative" ? "text-status-tentative-foreground" : selfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
+          {@const SelfIcon = selfStatus === "accepted" ? Check : selfStatus === "tentative" ? CircleHelp : selfStatus === "declined" ? X : Minus}
+          {@const selfStatusLabel = attendeeStatusLabel(selfStatus)}
+          <div class="flex items-center gap-2 py-0.5 text-[11px]">
+            <span
+              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {selfBg}"
+              title={`Your RSVP status: ${selfStatusLabel}`}>
+              <SelfIcon size={10} strokeWidth={2.5} class="block {selfFg}" />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-foreground">You ({selfAttendee.email})</span>
+            <span class="shrink-0 text-[10px] text-muted-foreground/60">{selfStatusLabel}</span>
+            <div class="flex shrink-0 items-center gap-0.5">
+              <button
+                disabled
+                title="Your imported attendee row cannot be marked optional yet"
+                aria-label="Your imported attendee row cannot be marked optional yet"
+                class={optionalActionClass(true, selfAttendee.role === "opt-participant")}>
+                <Flag size={11} />
+              </button>
+              <button
+                disabled
+                title="Your imported attendee row cannot be removed yet"
+                aria-label="Your imported attendee row cannot be removed yet"
+                class={removeActionClass(true)}>
+                <X size={11} />
+              </button>
+            </div>
+          </div>
+        {/if}
+        {#if showLocalSelfRow}
+          {@const localSelfBg = localSelfStatus === "accepted" ? "bg-status-accepted" : localSelfStatus === "tentative" ? "bg-status-tentative" : localSelfStatus === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
+          {@const localSelfFg = localSelfStatus === "accepted" ? "text-status-accepted-foreground" : localSelfStatus === "tentative" ? "text-status-tentative-foreground" : localSelfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
+          {@const LocalSelfIcon = localSelfStatus === "accepted" ? Check : localSelfStatus === "tentative" ? CircleHelp : localSelfStatus === "declined" ? X : Minus}
+          {@const localSelfStatusLabel = attendeeStatusLabel(localSelfStatus)}
+          <div class="flex items-center gap-2 py-0.5 text-[11px]">
+            <button
+              type="button"
+              onclick={toggleLocalSelfRsvp}
+              disabled={readOnly}
+              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {localSelfBg} {readOnly ? 'cursor-not-allowed opacity-60' : 'active:scale-90'}"
+              title={`Toggle local RSVP: ${localSelfStatusLabel}`}
+              aria-label={`Toggle local RSVP: ${localSelfStatusLabel}`}>
+              <LocalSelfIcon size={10} strokeWidth={2.5} class="block {localSelfFg}" />
+            </button>
+            <span class="min-w-0 flex-1 truncate text-foreground">You (Local, no email provided)</span>
+            <span class="shrink-0 text-[10px] text-muted-foreground/60">{localSelfStatusLabel}</span>
+            <div class="flex shrink-0 items-center gap-0.5">
+              <button
+                disabled
+                title="Local user cannot be marked optional until an email is configured"
+                aria-label="Local user cannot be marked optional until an email is configured"
+                class={optionalActionClass(true, false)}>
+                <Flag size={11} />
+              </button>
+              <button
+                disabled
+                title="Local user cannot be removed"
+                aria-label="Local user cannot be removed"
+                class={removeActionClass(true)}>
+                <X size={11} />
+              </button>
+            </div>
+          </div>
+        {/if}
+        {#if guestAttendees.length > 0}
           <!-- svelte-ignore binding_property_non_reactive -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div bind:this={scrollEl} onscroll={updateFade} onwheel={onWheel}
             use:observeResize
-            class="relative max-h-18 overflow-y-auto scrollbar-thin pr-3"
+            class="relative max-h-18 overflow-y-auto scrollbar-thin"
             style:mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}
             style:-webkit-mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}>
-            {#each visibleAttendees as att (att.id)}
+            {#each guestAttendees as att (att.id)}
               {@const sqBg = att.status === "accepted" ? "bg-status-accepted" : att.status === "tentative" ? "bg-status-tentative" : att.status === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
               {@const sqFg = att.status === "accepted" ? "text-status-accepted-foreground" : att.status === "tentative" ? "text-status-tentative-foreground" : att.status === "declined" ? "text-status-declined-foreground" : "text-foreground"}
               {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
               {@const statusLabel = attendeeStatusLabel(att.status)}
+              {@const guestActionsDisabled = !canEditGuests}
               <div class="flex items-center gap-2 py-0.5 text-[11px]">
                 <span
                   class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}"
@@ -247,23 +391,22 @@
                 {#if att.role === "opt-participant"}
                   <span class="shrink-0 text-[10px] text-muted-foreground/60 italic">(optional)</span>
                 {/if}
-                {#if canEditGuests}
-                  <div class="flex shrink-0 items-center gap-0.5">
-                    <button onclick={() => toggleAttendeeOptional(att.id)}
-                      title={att.role === "opt-participant" ? "Mark required" : "Mark optional"}
-                      aria-label={att.role === "opt-participant" ? "Mark required" : "Mark optional"}
-                      class="rounded p-0.5 active:scale-75
-                        {att.role === 'opt-participant' ? 'text-muted-foreground/40' : 'text-foreground'}">
-                      <Flag size={11} />
-                    </button>
-                    <button onclick={() => removeAttendee(att.id)}
-                      title="Remove attendee"
-                      aria-label="Remove attendee"
-                      class="rounded p-0.5 text-muted-foreground active:scale-75 hover:text-destructive">
-                      <X size={11} />
-                    </button>
-                  </div>
-                {/if}
+                <div class="flex shrink-0 items-center gap-0.5">
+                  <button onclick={() => toggleAttendeeOptional(att.id)}
+                    disabled={guestActionsDisabled}
+                    title={guestActionsDisabled ? "Attendee roles are read-only for this event" : att.role === "opt-participant" ? "Mark required" : "Mark optional"}
+                    aria-label={guestActionsDisabled ? "Attendee roles are read-only for this event" : att.role === "opt-participant" ? "Mark required" : "Mark optional"}
+                    class={optionalActionClass(guestActionsDisabled, att.role === "opt-participant")}>
+                    <Flag size={11} />
+                  </button>
+                  <button onclick={() => removeAttendee(att.id)}
+                    disabled={guestActionsDisabled}
+                    title={guestActionsDisabled ? "Attendees cannot be removed from this event" : "Remove attendee"}
+                    aria-label={guestActionsDisabled ? "Attendees cannot be removed from this event" : "Remove attendee"}
+                    class={removeActionClass(guestActionsDisabled)}>
+                    <X size={11} />
+                  </button>
+                </div>
               </div>
             {/each}
           </div>

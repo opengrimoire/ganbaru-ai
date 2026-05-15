@@ -1,6 +1,6 @@
 <script lang="ts">
   import type {
-    CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventStatus,
+    CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventStatus, EventSurfaceStatus,
     EventTransparency, EventVisibility, GuestPermissions,
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
@@ -11,6 +11,7 @@
   import type { TimezoneAbbrMode } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
+  import { calendarIdentityEmail } from "$lib/calendar/calendar-display";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
@@ -126,7 +127,25 @@
   function closeSession() {
     const snapshot = snapshotCurrentPanel();
     if (snapshot) parkedPanelSnapshot = snapshot;
+    panelSurfaceStatus = undefined;
+    panelSurfaceStatusEventId = undefined;
     session.close();
+  }
+
+  function handlePanelSurfaceStatusChange(status: EventSurfaceStatus | undefined) {
+    const s = session.state;
+    if (s.mode === "create") {
+      panelSurfaceStatus = status;
+      panelSurfaceStatusEventId = PENDING_CREATE_ID;
+      return;
+    }
+    if (s.mode === "edit") {
+      panelSurfaceStatus = status;
+      panelSurfaceStatusEventId = s.originalEvent.id;
+      return;
+    }
+    panelSurfaceStatus = undefined;
+    panelSurfaceStatusEventId = undefined;
   }
 
   function markPanelPaintDone(requestId: number) {
@@ -181,6 +200,8 @@
   // When saving edits, suppress preview computation to prevent flash
   // (store updates before session closes, so preview would briefly conflict)
   let suppressEditPreview = $state(false);
+  let panelSurfaceStatus = $state<EventSurfaceStatus | undefined>(undefined);
+  let panelSurfaceStatusEventId = $state<string | undefined>(undefined);
 
   // Visible-viewport window. Drives both the store's expansion index and
   // the edit-flow preview. Held-arrow nav stays cheap because anchor changes
@@ -226,7 +247,14 @@
     );
   });
 
-  const visibleEvents = $derived(displayResult.events);
+  const visibleEvents = $derived.by(() => {
+    if (!panelSurfaceStatus || !panelSurfaceStatusEventId) return displayResult.events;
+    return displayResult.events.map((event) =>
+      event.id === panelSurfaceStatusEventId
+        ? { ...event, surfaceStatus: panelSurfaceStatus }
+        : event,
+    );
+  });
   let bootUsablePaintMarked = false;
 
   $effect(() => {
@@ -400,6 +428,13 @@
       readOnly: parkedPanelSnapshot.readOnly,
       skipInlineDeleteConfirm: parkedPanelSnapshot.skipInlineDeleteConfirm,
     };
+  });
+
+  const panelCalendarIdentityEmail = $derived.by(() => {
+    if (!panelRender || panelRender.mode !== "edit") return undefined;
+    return calendarIdentityEmail(
+      calendarsStore.list.find((calendar) => calendar.id === panelRender.event.calendarId),
+    );
   });
 
   function isRecurring(event: CalendarEvent): boolean {
@@ -1718,6 +1753,7 @@
       initialSyncSeeded
       readOnly={panelRender.readOnly}
       skipInlineDeleteConfirm={panelRender.skipInlineDeleteConfirm}
+      calendarIdentityEmail={panelCalendarIdentityEmail}
       loadFullEvent={calendarStore.loadPanelEvent}
       onSave={handlePanelSave}
       onDelete={panelRender.mode === "edit" && !panelRender.parked ? handleDelete : undefined}
@@ -1725,6 +1761,7 @@
       onInitialSync={handlePanelInitialSync}
       onClose={handlePanelClose}
       onScopeChange={handleScopeChange}
+      onSurfaceStatusChange={handlePanelSurfaceStatusChange}
     />
   {/if}
 

@@ -15,6 +15,7 @@
   import Layers from "@lucide/svelte/icons/layers";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { calendarDisplayName } from "$lib/calendar/calendar-display";
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
   import MiniDatePicker from "./MiniDatePicker.svelte";
@@ -257,6 +258,7 @@
         <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
         {#each calendarsStore.list as cal}
           {@const checked = cal.visible}
+          {@const displayName = calendarDisplayName(cal)}
           <button
             onclick={() => calendarsStore.toggleVisibility(cal.id)}
             class="flex w-full cursor-pointer items-center gap-2 rounded px-1.5 py-1.5 hover:bg-accent"
@@ -268,7 +270,7 @@
                 <Check size={12} class="text-primary-foreground" />
               {/if}
             </span>
-            <span class="truncate text-sm text-foreground">{cal.name}</span>
+            <span class="truncate text-sm text-foreground">{displayName}</span>
             {#if cal.readOnly}
               <span class="ml-auto text-[9px] text-muted-foreground/60">read-only</span>
             {/if}

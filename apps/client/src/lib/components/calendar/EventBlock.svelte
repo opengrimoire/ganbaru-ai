@@ -4,6 +4,7 @@
     getEventColor,
     getEventStatusPatternStyle,
     getPastEventColor,
+    isEventSurfaceCancelled,
   } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
@@ -47,7 +48,7 @@
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
   const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
   const hasNotification = $derived(positioned.event.notifications && positioned.event.notifications.length > 0);
-  const isCancelled = $derived(positioned.event.status === "cancelled");
+  const isCancelled = $derived(isEventSurfaceCancelled(positioned.event));
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);

@@ -26,6 +26,7 @@ import {
   type CalendarBulkImportResult,
 } from "./calendar-bulk-import";
 import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
+import { calendarDisplayName } from "$lib/calendar/calendar-display";
 import { adjacentCalendarWindowRequests } from "./calendar-window-prefetch";
 import {
   BoundedWindowCache,
@@ -1544,7 +1545,7 @@ export function getCalendar() {
       }
       const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
       return serializeCalendarToIcs(
-        calendar,
+        { ...calendar, name: calendarDisplayName(calendar) },
         calendarEvents,
         undefined,
         preservedTimezones,

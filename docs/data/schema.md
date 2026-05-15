@@ -21,7 +21,7 @@ Top-level grouping for events. Lets the user keep their local data in `local` wh
 | Field | Type | Description |
 |---|---|---|
 | `id` | text | Primary key. The built-in row uses `'local'`. Imported rows get a fresh UUID. |
-| `name` | text | Display name. Imported calendars are auto-named `Imported from <basename> (YYYY-MM-DD)` from the `.ics` filename. |
+| `name` | text | Display name. Imported calendars use the `.ics` basename, such as an email address when Google exports one calendar per email. Older rows may still use `Imported from <basename> (YYYY-MM-DD)`, but the UI normalizes those labels. |
 | `color` | text | Per-calendar color hex (`''` to inherit from theme). Reserved for future per-calendar UI. |
 | `source` | text | `'local'` for the built-in calendar, `'ics'` for `.ics` imports. Future values: `'subscription'`, `'google'`, `'caldav'`. |
 | `visible` | integer | 0 or 1. Toggled per calendar in the (planned) calendars panel. |
