@@ -111,6 +111,22 @@ function hasMeetingState(value: Partial<CalendarEvent>): boolean {
     || hasNonDefaultGuestPermissions(value.guestPermissions);
 }
 
+function hasEventPatchKey<K extends keyof CalendarEvent>(
+  changes: Partial<CalendarEvent>,
+  key: K,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(changes, key);
+}
+
+function recurrenceConfigsEqual(
+  a: RecurrenceConfig | undefined,
+  b: RecurrenceConfig | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
  * Detect whether changes affect event timing or pomodoro structure
  * (which would invalidate existing pomodoro segments) vs. purely cosmetic fields.
@@ -1419,10 +1435,13 @@ export function getCalendar() {
         : `${splitDate} ${instanceEvent.end.split(" ")[1]}`;
       const merged = { ...parent, ...changes };
       const meetingEnabled = merged.meetingEnabled ?? hasMeetingState(merged);
-      // New template inherits the original recurrence (without the old end condition)
-      const newRecurrence: RecurrenceConfig | undefined = parent.recurrence
-        ? { ...parent.recurrence, end: { type: "never" } }
-        : undefined;
+      const recurrenceChanged = hasEventPatchKey(changes, "recurrence")
+        && !recurrenceConfigsEqual(changes.recurrence, parent.recurrence);
+      const newRecurrence: RecurrenceConfig | undefined = recurrenceChanged
+        ? changes.recurrence
+        : parent.recurrence
+          ? { ...parent.recurrence, end: { type: "never" } }
+          : undefined;
       const rrule = newRecurrence ? recurrenceToRrule(newRecurrence) : null;
       const localParticipationStatus = merged.localParticipationStatus;
 

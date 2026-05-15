@@ -33,9 +33,9 @@ const DISPLAY_CHANGE_KEYS = [
   "end",
   "color",
   "recurrence",
-  "notifications",
   "pomodoroConfig",
   "allDay",
+  "meetingEnabled",
   "location",
   "transparency",
   "status",
@@ -59,6 +59,21 @@ function hasVisibleEventChanges(originalEvent: CalendarEvent, changes: Partial<C
     if (!fieldEqual(changes[key], originalEvent[key])) return true;
   }
   return false;
+}
+
+function hasChange<K extends keyof CalendarEvent>(
+  changes: Partial<CalendarEvent>,
+  key: K,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(changes, key);
+}
+
+function changeOr<K extends keyof CalendarEvent>(
+  changes: Partial<CalendarEvent>,
+  key: K,
+  fallback: CalendarEvent[K] | undefined,
+): CalendarEvent[K] | undefined {
+  return hasChange(changes, key) ? changes[key] : fallback;
 }
 
 function unchangedEditDisplay(events: CalendarEvent[], editingId: string): DisplayResult {
@@ -115,15 +130,16 @@ export function buildCreateDisplay(
 
   const template: CalendarEvent = {
     id: PENDING_CREATE_ID,
-    title: preview.title ?? changes.title ?? "",
+    title: changeOr(changes, "title", preview.title) ?? "",
     start: startStr,
     end: endStr,
     timezone: "",
     calendarId: "ganbaruai",
-    color: preview.color ?? changes.color,
-    recurrence: preview.recurrence ?? changes.recurrence,
+    color: changeOr(changes, "color", preview.color),
+    recurrence: changeOr(changes, "recurrence", preview.recurrence),
     pomodoroConfig: changes.pomodoroConfig,
     notifications: changes.notifications,
+    meetingEnabled: changes.meetingEnabled,
     location: changes.location,
     description: changes.description,
     url: changes.url,
@@ -441,9 +457,13 @@ export function applyFollowing(
   const newEnd = changes.end
     ? String(changes.end)
     : instanceEvent.end;
-  const newRecurrence: RecurrenceConfig | undefined = template.recurrence
-    ? { ...template.recurrence, end: { type: "never" } }
-    : undefined;
+  const recurrenceChanged = hasChange(changes, "recurrence")
+    && !fieldEqual(changes.recurrence, template.recurrence);
+  const newRecurrence: RecurrenceConfig | undefined = recurrenceChanged
+    ? changes.recurrence
+    : template.recurrence
+      ? { ...template.recurrence, end: { type: "never" } }
+      : undefined;
   const virtualTemplate: CalendarEvent = {
     ...template,
     ...changes,

@@ -117,6 +117,16 @@ describe("buildCreateDisplay", () => {
     expect(created?.localParticipationStatus).toBe("tentative");
   });
 
+  it("carries enabled meeting state into the create preview", () => {
+    const preview = { dateStr: "2026-03-20", startMinute: 720, endMinute: 780 };
+    const result = buildCreateDisplay([], preview, {
+      meetingEnabled: true,
+    }, TEST_WINDOW);
+
+    const created = result.events.find((e) => e.id === PENDING_CREATE_ID);
+    expect(created?.meetingEnabled).toBe(true);
+  });
+
   it("expands recurring create preview", () => {
     const events: CalendarEvent[] = [];
     const preview = {
@@ -129,6 +139,21 @@ describe("buildCreateDisplay", () => {
     // Template + expanded instances
     expect(result.events.length).toBeGreaterThan(1);
     expect(result.previewedIds.size).toBeGreaterThan(1);
+  });
+
+  it("lets cleared recurrence override stale create preview recurrence", () => {
+    const preview = {
+      dateStr: "2026-03-20",
+      startMinute: 600,
+      endMinute: 660,
+      recurrence: { frequency: "daily" as const, interval: 1, end: { type: "never" as const } },
+    };
+
+    const result = buildCreateDisplay([], preview, { recurrence: undefined }, TEST_WINDOW);
+
+    expect(result.events).toHaveLength(1);
+    expect(result.previewedIds).toEqual(new Set([PENDING_CREATE_ID]));
+    expect(result.events[0]?.recurrence).toBeUndefined();
   });
 });
 
@@ -253,6 +278,26 @@ describe("applyAll", () => {
     }
   });
 
+  it("previews clearing recurrence for all events", () => {
+    const template = makeFutureTemplate();
+    const instDate = futureDate(10);
+    const inst = makeInstance(template, instDate);
+    const events = [template, inst];
+
+    const result = applyAll(
+      [template], events, template.id, inst,
+      { recurrence: undefined },
+      TEST_WINDOW,
+    );
+
+    const seriesEvents = result.events.filter((e) =>
+      e.id === template.id || e.recurringParentId === template.id,
+    );
+    expect(seriesEvents).toHaveLength(1);
+    expect(seriesEvents[0]?.recurrence).toBeUndefined();
+    expect(seriesEvents[0]?.recurringParentId).toBeUndefined();
+  });
+
   it("shifts template dates by day delta", () => {
     const template = makeFutureTemplate();
     const instDate = futureDate(10);
@@ -340,6 +385,25 @@ describe("applyFollowing", () => {
 
     // previewedIds should include both old and virtual events
     expect(result.previewedIds.size).toBeGreaterThan(1);
+  });
+
+  it("previews clearing recurrence for following events", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2026-03-20");
+    const events = [template, inst20];
+
+    const result = applyFollowing(
+      [template], events, template.id, inst20,
+      { recurrence: undefined },
+      TEST_WINDOW,
+    );
+
+    const virtualEvents = result.events.filter((e) =>
+      e.id === `__vf__${template.id}` || e.recurringParentId === `__vf__${template.id}`,
+    );
+    expect(virtualEvents).toHaveLength(1);
+    expect(virtualEvents[0]?.recurrence).toBeUndefined();
+    expect(result.previewedIds).toEqual(new Set([`__vf__${template.id}`]));
   });
 
   it("sets editingId to the virtual instance on the target date", () => {
