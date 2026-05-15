@@ -55,15 +55,24 @@
   } = $props();
 
   const hasContent = $derived(
-    attendees.length > 0 || !!url || !!location,
+    attendees.length > 0 || !!organizer || !!url || !!location,
   );
+
+  const organizerEmail = $derived(organizer?.email.toLowerCase() ?? "");
+  const visibleAttendees = $derived(
+    organizerEmail
+      ? attendees.filter((attendee) => attendee.email.toLowerCase() !== organizerEmail)
+      : attendees,
+  );
+  const canEditGuests = $derived(!readOnly && !organizer);
 
   /** Collapsed summary: attendee count, location, URL host, joined with middle dots. */
   const summary = $derived.by(() => {
     if (!enabled || !hasContent) return "";
     const parts: string[] = [];
-    if (attendees.length > 0) {
-      parts.push(`${attendees.length} attendee${attendees.length === 1 ? "" : "s"}`);
+    const peopleCount = visibleAttendees.length + (organizer ? 1 : 0);
+    if (peopleCount > 0) {
+      parts.push(organizer ? `${peopleCount} people` : `${peopleCount} attendee${peopleCount === 1 ? "" : "s"}`);
     }
     if (location) parts.push(location);
     if (url) {
@@ -91,7 +100,8 @@
 
   function addAttendee() {
     const email = attendeeInput.trim();
-    if (!email || attendees.some((a) => a.email === email)) return;
+    const normalized = email.toLowerCase();
+    if (!email || organizerEmail === normalized || attendees.some((a) => a.email.toLowerCase() === normalized)) return;
     attendees = [...attendees, {
       id: crypto.randomUUID(),
       email,
@@ -189,7 +199,7 @@
       <div class="flex flex-col">
         <div class="flex items-center gap-2 pb-1">
           <span class="text-[9px] uppercase tracking-wider text-muted-foreground">Guests</span>
-          {#if !readOnly && attendees.length > 0}
+          {#if canEditGuests && visibleAttendees.length > 0}
             <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
               {#each [
                 { icon: Pencil, label: "Edit", title: "Modify event", get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; onchange(); } },
@@ -206,7 +216,14 @@
             </div>
           {/if}
         </div>
-        {#if organizer || attendees.length > 0}
+        {#if organizer}
+          <div class="flex items-center gap-2 py-0.5 text-[11px]">
+            <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={10} strokeWidth={2.5} class="block text-status-accepted-foreground" /></span>
+            <span class="min-w-0 flex-1 truncate text-foreground">{organizer.name ?? organizer.email}</span>
+            <span class="shrink-0 text-[10px] text-muted-foreground/60">organizer</span>
+          </div>
+        {/if}
+        {#if visibleAttendees.length > 0}
           <!-- svelte-ignore binding_property_non_reactive -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div bind:this={scrollEl} onscroll={updateFade} onwheel={onWheel}
@@ -214,14 +231,7 @@
             class="relative max-h-18 overflow-y-auto scrollbar-thin pr-3"
             style:mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}
             style:-webkit-mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}>
-            {#if organizer}
-              <div class="flex items-center gap-2 py-0.5 text-[11px]">
-                <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={10} strokeWidth={2.5} class="block text-status-accepted-foreground" /></span>
-                <span class="min-w-0 flex-1 truncate text-foreground">{organizer.name ?? organizer.email}</span>
-                <span class="shrink-0 text-[10px] text-muted-foreground/60">organizer</span>
-              </div>
-            {/if}
-            {#each attendees as att (att.id)}
+            {#each visibleAttendees as att (att.id)}
               {@const sqBg = att.status === "accepted" ? "bg-status-accepted" : att.status === "tentative" ? "bg-status-tentative" : att.status === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
               {@const sqFg = att.status === "accepted" ? "text-status-accepted-foreground" : att.status === "tentative" ? "text-status-tentative-foreground" : att.status === "declined" ? "text-status-declined-foreground" : "text-foreground"}
               {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
@@ -237,7 +247,7 @@
                 {#if att.role === "opt-participant"}
                   <span class="shrink-0 text-[10px] text-muted-foreground/60 italic">(optional)</span>
                 {/if}
-                {#if !readOnly}
+                {#if canEditGuests}
                   <div class="flex shrink-0 items-center gap-0.5">
                     <button onclick={() => toggleAttendeeOptional(att.id)}
                       title={att.role === "opt-participant" ? "Mark required" : "Mark optional"}
@@ -258,7 +268,7 @@
             {/each}
           </div>
         {/if}
-        {#if !readOnly}
+        {#if canEditGuests}
           <div class="flex items-center gap-2 py-1">
             <span class="h-3.5 w-3.5 shrink-0"></span>
             <input type="email" bind:value={attendeeInput}

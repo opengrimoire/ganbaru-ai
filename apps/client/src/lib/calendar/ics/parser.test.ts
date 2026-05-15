@@ -800,6 +800,54 @@ describe("parseIcs", () => {
 				canSeeOtherGuests: true,
 			});
 		});
+
+		it("promotes Google Meet conference links out of generated descriptions", () => {
+			const meetUrl = "https://meet.google.com/abc-defg-hij";
+			const generatedBlock = [
+				"-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:-",
+				`Join with Google Meet: ${meetUrl}`,
+				"Or dial: (US) +1 555-0100 PIN: 123 456 789#",
+				"More phone numbers: https://tel.meet/abc-defg-hij",
+				"-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:-",
+			].join("\\n");
+			const ics = wrap(
+				vevent(
+					"UID:meet@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					"SUMMARY:Meeting",
+					`DESCRIPTION:Agenda\\n${generatedBlock}`,
+					`X-GOOGLE-CONFERENCE:${meetUrl}`,
+				),
+			);
+
+			const event = parseIcs(ics).events[0];
+			expect(event.url).toBe(meetUrl);
+			expect(event.description).toBe("Agenda");
+			expect(event.extendedProperties).toMatchObject({
+				"X-GOOGLE-CONFERENCE": meetUrl,
+			});
+		});
+
+		it("drops Google Meet generated descriptions when there is no user description", () => {
+			const meetUrl = "https://meet.google.com/abc-defg-hij";
+			const ics = wrap(
+				vevent(
+					"UID:meet-empty-description@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					"SUMMARY:Meeting",
+					"DESCRIPTION:-::~:~::~:~:~:~:~:~:~:~::~:-\\nJoin with Google Meet: https://meet.google.com/abc-defg-hij\\n-::~:~::~:~:~:~:~:~:~:~::~:-",
+					`X-GOOGLE-CONFERENCE:${meetUrl}`,
+				),
+			);
+
+			const event = parseIcs(ics).events[0];
+			expect(event.url).toBe(meetUrl);
+			expect(event.description).toBeUndefined();
+		});
 	});
 
 	describe("multiple events", () => {

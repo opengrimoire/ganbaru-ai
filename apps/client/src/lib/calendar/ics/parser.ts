@@ -619,6 +619,60 @@ const STANDARD_PROPS = new Set([
 	"attendee", "dtstamp", "created", "last-modified",
 ]);
 
+const GOOGLE_MEET_URL_RE = /^https:\/\/meet\.google\.com\/[a-z0-9-]+$/i;
+
+function googleMeetUrlFromValue(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const trimmed = value.trim();
+	return GOOGLE_MEET_URL_RE.test(trimmed) ? trimmed : undefined;
+}
+
+function googleConferenceUrl(component: ICAL.Component): string | undefined {
+	return googleMeetUrlFromValue(component.getFirstPropertyValue("x-google-conference"));
+}
+
+function isGoogleMeetBoundary(line: string): boolean {
+	const trimmed = line.trim();
+	return trimmed.startsWith("-::~") && trimmed.endsWith(":-");
+}
+
+function stripGoogleMeetGeneratedDescription(
+	description: string | undefined,
+	conferenceUrl: string | undefined,
+): string | undefined {
+	if (!description || !conferenceUrl || !description.includes("Join with Google Meet:")) {
+		return description;
+	}
+
+	const lines = description.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+	const kept: string[] = [];
+	for (let index = 0; index < lines.length; index++) {
+		if (!isGoogleMeetBoundary(lines[index])) {
+			kept.push(lines[index]);
+			continue;
+		}
+
+		let end = index + 1;
+		while (end < lines.length && !isGoogleMeetBoundary(lines[end])) end++;
+		if (end >= lines.length) {
+			kept.push(lines[index]);
+			continue;
+		}
+
+		const block = lines.slice(index, end + 1).join("\n");
+		if (block.includes("Join with Google Meet:") && block.includes(conferenceUrl)) {
+			index = end;
+			continue;
+		}
+
+		kept.push(...lines.slice(index, end + 1));
+		index = end;
+	}
+
+	const cleaned = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+	return cleaned || undefined;
+}
+
 function collectExtendedProperties(component: ICAL.Component): {
 	extended: Record<string, string>;
 	guests: GuestPermissions | undefined;
@@ -828,9 +882,11 @@ function calendarEventBaseFromComponent(
 
 	const sourceUid = (component.getFirstPropertyValue("uid") as string | null) ?? undefined;
 	const summary = (component.getFirstPropertyValue("summary") as string | null) ?? "";
-	const description = (component.getFirstPropertyValue("description") as string | null) ?? undefined;
+	const rawDescription = (component.getFirstPropertyValue("description") as string | null) ?? undefined;
 	const location = (component.getFirstPropertyValue("location") as string | null) ?? undefined;
-	const url = (component.getFirstPropertyValue("url") as string | null) ?? undefined;
+	const conferenceUrl = googleConferenceUrl(component);
+	const description = stripGoogleMeetGeneratedDescription(rawDescription, conferenceUrl);
+	const url = (component.getFirstPropertyValue("url") as string | null) ?? conferenceUrl ?? undefined;
 	const status = (component.getFirstPropertyValue("status") as string | null);
 	const transp = (component.getFirstPropertyValue("transp") as string | null);
 	const visibility = (component.getFirstPropertyValue("class") as string | null);
