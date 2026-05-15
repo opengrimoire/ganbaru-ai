@@ -13,9 +13,10 @@ import {
 /**
  * Row shape returned by the boot SELECT in `calendar.svelte.ts:load()`.
  * Only the columns the slim in-memory `CalendarEvent` reads. Heavy columns
- * (description, url, organizer, geo, extendedProperties, categories, priority,
+ * (description, organizer, geo, extendedProperties, categories, priority,
  * sequence, sourceUid, visibility, guest_can_*) stay in the DB and are loaded
  * on demand by `loadFullEvent` when the EventPanel or ICS export needs them.
+ * The call link URL stays in the DB; window rows only expose whether it exists.
  * Window loads may attach `surfaceAttendees` separately for RSVP rendering.
  */
 export interface DbCalendarEvent {
@@ -32,6 +33,7 @@ export interface DbCalendarEvent {
   repeat_until: string | null;
   all_day: number;
   location: string;
+  has_call_link?: number;
   meeting_enabled: number;
   transparency: string;
   status: string;
@@ -173,6 +175,7 @@ export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
   if (exceptions) slim.exceptions = exceptions;
   if (allDay) slim.allDay = true;
   if (r.location) slim.location = r.location;
+  if (r.has_call_link === 1) slim.hasCallLink = true;
   if (r.meeting_enabled === 1) slim.meetingEnabled = true;
   if (r.transparency === "transparent") slim.transparency = "transparent";
   if (r.status !== "confirmed") slim.status = r.status as EventStatus;

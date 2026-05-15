@@ -8,7 +8,10 @@
   } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
+  import { getEventIndicatorState } from "./event-indicators";
   import Repeat from "@lucide/svelte/icons/repeat";
+  import Video from "@lucide/svelte/icons/video";
+  import MapPin from "@lucide/svelte/icons/map-pin";
   import Users from "@lucide/svelte/icons/users";
 
   const calZoom = getCalendarZoom();
@@ -46,8 +49,8 @@
 
   const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
-  const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
-  const hasMeeting = $derived(positioned.event.meetingEnabled === true);
+  const indicators = $derived(getEventIndicatorState(positioned.event));
+  const hasIcons = $derived(indicators.iconCount > 0);
   const isCancelled = $derived(isEventSurfaceCancelled(positioned.event));
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
@@ -121,17 +124,28 @@
 
   <!-- Content -->
   <div class="relative z-10 min-w-0 flex-1 overflow-hidden px-1 py-0.5">
-    {#if hasRepeat || hasMeeting}
+    {#if hasIcons}
       <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">
-        {#if hasRepeat}
+        {#if indicators.hasRepeat}
           <Repeat size={8} class="shrink-0" />
         {/if}
-        {#if hasMeeting}
+        {#if indicators.hasCallLink}
+          <Video size={8} class="shrink-0" />
+        {/if}
+        {#if indicators.hasLocation}
+          <MapPin size={8} class="shrink-0" />
+        {/if}
+        {#if indicators.hasGenericMeeting}
           <Users size={8} class="shrink-0" />
         {/if}
       </div>
     {/if}
-    <div class="event-title truncate font-medium" class:pr-5={hasRepeat || hasMeeting} style={isCancelled ? 'text-decoration: line-through;' : ''}>
+    <div
+      class="event-title truncate font-medium"
+      class:pr-5={indicators.iconCount > 0 && indicators.iconCount <= 2}
+      class:pr-8={indicators.iconCount > 2}
+      style={isCancelled ? 'text-decoration: line-through;' : ''}
+    >
       {#if positioned.event.title}{positioned.event.title}{:else}(No title){/if}
     </div>
     <div class="event-time truncate" style="color: {timeColor};">{startTime} - {endTime}</div>

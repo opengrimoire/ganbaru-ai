@@ -200,6 +200,8 @@ export interface CalendarEvent {
   allDay?: boolean;
   /** Keeps the Meeting section enabled even when every meeting field is empty. */
   meetingEnabled?: boolean;
+  /** Render-only marker for a stored call link when the URL is not loaded. */
+  hasCallLink?: boolean;
   location?: string;
   url?: string;
   transparency?: EventTransparency;

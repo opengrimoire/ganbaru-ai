@@ -18,6 +18,7 @@
   import TimezoneSelector from "./TimezoneSelector.svelte";
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import AllDayEventChip from "./AllDayEventChip.svelte";
+  import { getEventIndicatorState } from "./event-indicators";
   import { useDragController } from "./useDragController.svelte";
   import { useAllDayDragController } from "./useAllDayDragController.svelte";
   import type { PanelAnchor } from "./edit-session.svelte";
@@ -25,6 +26,8 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
+  import Video from "@lucide/svelte/icons/video";
+  import MapPin from "@lucide/svelte/icons/map-pin";
   import Users from "@lucide/svelte/icons/users";
   import type { Theme } from "$lib/stores/themes";
 
@@ -570,8 +573,7 @@
           {@const dp = allDayDrag.allDayDragPreview}
           {@const dpColor = getEventColor(dp.event.color, theme)}
           {@const dpIconColor = `color-mix(in srgb, ${dpColor.text} 70%, ${dpColor.bg})`}
-          {@const dpHasRepeat = !!dp.event.recurrence || !!dp.event.recurringParentId}
-          {@const dpHasMeeting = dp.event.meetingEnabled === true}
+          {@const dpIndicators = getEventIndicatorState(dp.event)}
           <div
             class="pointer-events-none absolute flex items-center px-0.5"
             style="
@@ -592,17 +594,27 @@
               --outline-mix: {dpColor.text};
             "
           >
-            {#if dpHasRepeat || dpHasMeeting}
+            {#if dpIndicators.iconCount > 0}
               <span class="absolute right-1 top-0.75 flex items-center gap-0.5" style="color: {dpIconColor};">
-                {#if dpHasRepeat}
+                {#if dpIndicators.hasRepeat}
                   <Repeat size={8} class="shrink-0" />
                 {/if}
-                {#if dpHasMeeting}
+                {#if dpIndicators.hasCallLink}
+                  <Video size={8} class="shrink-0" />
+                {/if}
+                {#if dpIndicators.hasLocation}
+                  <MapPin size={8} class="shrink-0" />
+                {/if}
+                {#if dpIndicators.hasGenericMeeting}
                   <Users size={8} class="shrink-0" />
                 {/if}
               </span>
             {/if}
-            <span class="truncate" class:pr-5={dpHasRepeat || dpHasMeeting}>
+            <span
+              class="truncate"
+              class:pr-5={dpIndicators.iconCount > 0 && dpIndicators.iconCount <= 2}
+              class:pr-8={dpIndicators.iconCount > 2}
+            >
               {#if dp.event.title}{dp.event.title}{:else}(No title){/if}
             </span>
           </div>

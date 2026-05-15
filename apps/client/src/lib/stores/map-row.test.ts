@@ -29,6 +29,7 @@ function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
     repeat_until: null,
     all_day: 0,
     location: "",
+    has_call_link: 0,
     meeting_enabled: 0,
     transparency: "opaque",
     status: "confirmed",
@@ -180,6 +181,12 @@ describe("mapRow", () => {
   it("maps location when non-empty", () => {
     const result = mapRow(makeDbRow({ location: "Room A" }));
     expect(result.location).toBe("Room A");
+  });
+
+  it("maps call link presence without loading the URL", () => {
+    const result = mapRow(makeDbRow({ has_call_link: 1 }));
+    expect(result.hasCallLink).toBe(true);
+    expect(result.url).toBeUndefined();
   });
 });
 

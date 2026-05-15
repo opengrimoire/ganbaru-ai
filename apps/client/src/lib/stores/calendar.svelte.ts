@@ -709,6 +709,7 @@ function slimEvent(e: CalendarEvent): CalendarEvent {
   if (e.recurringParentId) slim.recurringParentId = e.recurringParentId;
   if (e.allDay) slim.allDay = true;
   if (e.meetingEnabled) slim.meetingEnabled = true;
+  if (e.hasCallLink || e.url) slim.hasCallLink = true;
   if (e.location) slim.location = e.location;
   if (e.transparency === "transparent") slim.transparency = "transparent";
   if (e.status && e.status !== "confirmed") slim.status = e.status;
@@ -998,7 +999,7 @@ export function getCalendar() {
         recurrence: opts.recurrence, notifications: opts.notifications,
         pomodoroConfig: opts.pomodoroConfig,
         meetingEnabled,
-        allDay: opts.allDay, location: opts.location,
+        allDay: opts.allDay, location: opts.location, url: opts.url,
         transparency: opts.transparency, status: opts.status,
         localParticipationStatus: opts.localParticipationStatus,
       });

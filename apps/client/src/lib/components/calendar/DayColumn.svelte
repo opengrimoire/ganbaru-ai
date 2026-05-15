@@ -16,9 +16,12 @@
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import EventBlock from "./EventBlock.svelte";
+  import { getEventIndicatorState } from "./event-indicators";
   import { CALENDAR_ZOOM_FRAME_EVENT, getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
+  import Video from "@lucide/svelte/icons/video";
+  import MapPin from "@lucide/svelte/icons/map-pin";
   import Users from "@lucide/svelte/icons/users";
   import {
     isThemeCalendarDark,
@@ -664,8 +667,7 @@
     {@const dragTimeColor = `color-mix(in srgb, ${dragBase.text} 80%, ${dragBase.bg})`}
     {@const dragLocationColor = `color-mix(in srgb, ${dragBase.text} 60%, ${dragBase.bg})`}
     {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
-    {@const dragHasRepeat = !!dragPreview.event.recurrence || !!dragPreview.event.recurringParentId}
-    {@const dragHasMeeting = dragPreview.event.meetingEnabled === true}
+    {@const dragIndicators = getEventIndicatorState(dragPreview.event)}
     <div
       class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
       style="
@@ -680,17 +682,27 @@
       "
     >
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {dragBase.bg};">
-        {#if dragHasRepeat || dragHasMeeting}
+        {#if dragIndicators.iconCount > 0}
           <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {dragIconColor};">
-            {#if dragHasRepeat}
+            {#if dragIndicators.hasRepeat}
               <Repeat size={8} class="shrink-0" />
             {/if}
-            {#if dragHasMeeting}
+            {#if dragIndicators.hasCallLink}
+              <Video size={8} class="shrink-0" />
+            {/if}
+            {#if dragIndicators.hasLocation}
+              <MapPin size={8} class="shrink-0" />
+            {/if}
+            {#if dragIndicators.hasGenericMeeting}
               <Users size={8} class="shrink-0" />
             {/if}
           </div>
         {/if}
-        <div class="truncate font-medium" class:pr-5={dragHasRepeat || dragHasMeeting}>
+        <div
+          class="truncate font-medium"
+          class:pr-5={dragIndicators.iconCount > 0 && dragIndicators.iconCount <= 2}
+          class:pr-8={dragIndicators.iconCount > 2}
+        >
           {#if dragPreview.event.title}{dragPreview.event.title}{:else}(No title){/if}
         </div>
         {#if dragH > 28}

@@ -7,7 +7,10 @@
     isEventSurfaceCancelled,
   } from "./utils";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
+  import { getEventIndicatorState } from "./event-indicators";
   import Repeat from "@lucide/svelte/icons/repeat";
+  import Video from "@lucide/svelte/icons/video";
+  import MapPin from "@lucide/svelte/icons/map-pin";
   import Users from "@lucide/svelte/icons/users";
 
   let {
@@ -35,8 +38,8 @@
   } = $props();
 
   const isDark = $derived(isThemeCalendarDark(theme));
-  const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
-  const hasMeeting = $derived(event.meetingEnabled === true);
+  const indicators = $derived(getEventIndicatorState(event));
+  const hasIcons = $derived(indicators.iconCount > 0);
   const isCancelled = $derived(isEventSurfaceCancelled(event));
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
@@ -84,17 +87,28 @@
   onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
-  {#if hasRepeat || hasMeeting}
+  {#if hasIcons}
     <span class="absolute right-1 top-0.75 z-10 flex items-center gap-0.5" style="color: {iconColor};">
-      {#if hasRepeat}
+      {#if indicators.hasRepeat}
         <Repeat size={8} class="shrink-0" />
       {/if}
-      {#if hasMeeting}
+      {#if indicators.hasCallLink}
+        <Video size={8} class="shrink-0" />
+      {/if}
+      {#if indicators.hasLocation}
+        <MapPin size={8} class="shrink-0" />
+      {/if}
+      {#if indicators.hasGenericMeeting}
         <Users size={8} class="shrink-0" />
       {/if}
     </span>
   {/if}
-  <span class="relative z-10 truncate" class:pr-5={hasRepeat || hasMeeting} style={isCancelled ? 'text-decoration: line-through;' : ''}>
+  <span
+    class="relative z-10 truncate"
+    class:pr-5={indicators.iconCount > 0 && indicators.iconCount <= 2}
+    class:pr-8={indicators.iconCount > 2}
+    style={isCancelled ? 'text-decoration: line-through;' : ''}
+  >
     {#if event.title}{event.title}{:else}(No title){/if}
   </span>
 </div>
