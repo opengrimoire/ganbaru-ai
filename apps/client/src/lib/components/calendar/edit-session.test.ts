@@ -201,7 +201,17 @@ describe("panel initial changes", () => {
       idleTimeoutMinutes: 1,
     });
     expect(result.location).toBe("Office");
+    expect(result.meetingEnabled).toBe(true);
     expect(result.visibility).toBe("private");
+  });
+
+  it("keeps explicit empty meeting state in the edit baseline", () => {
+    const result = buildEditPanelInitialChanges(makeEvent({ meetingEnabled: true }));
+
+    expect(result.meetingEnabled).toBe(true);
+    expect(result.location).toBeUndefined();
+    expect(result.url).toBeUndefined();
+    expect(result.attendees).toBeUndefined();
   });
 
   it("seeds create baseline with default panel values", () => {
@@ -212,6 +222,7 @@ describe("panel initial changes", () => {
     expect(result.end).toBe("2026-04-16 10:00");
     expect(result.notifications).toEqual([0]);
     expect(result.allDay).toBe(true);
+    expect(result.meetingEnabled).toBeUndefined();
     expect(result.visibility).toBe("private");
     expect(result.pomodoroConfig).toEqual({
       focusDurationMinutes: 40,

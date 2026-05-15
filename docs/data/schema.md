@@ -89,6 +89,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `start_time` | ISO datetime | Event start as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). |
 | `end_time` | ISO datetime | Event end as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). For all-day events, the date portion is treated as a floating calendar date with no zone conversion. The internal all-day end date is inclusive for rendering, while `.ics` `DTEND;VALUE=DATE` remains exclusive on import and export. |
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |
+| `meeting_enabled` | boolean | True when the Meeting section is enabled, even if every optional meeting field is empty. |
 | `color` | integer or null | Slot index (0..31) into the active theme's 32-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
 | `recurrence_exceptions` | text or null | Comma-separated EXDATE recurrence dates (`YYYY-MM-DD`). Null if none. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |

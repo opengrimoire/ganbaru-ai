@@ -100,6 +100,7 @@
       transparency?: EventTransparency;
       status?: EventStatus;
       visibility?: EventVisibility;
+      meetingEnabled?: boolean;
       attendees?: EventAttendee[];
       localParticipationStatus?: AttendeeStatus;
       guestPermissions?: GuestPermissions;
@@ -135,15 +136,29 @@
   let visibility: EventVisibility = $state("private");
 
   // ─── Meeting (attendees + location + url bundle) ────────────────
-  // UI-only flag: when false, the Meeting section's data is retained in
-  // memory (misclick safety) but omitted from save/change payloads so a
-  // Save commits the erasure.
+  // Persisted flag. When false, Meeting data is retained in memory for
+  // misclick safety but omitted from save/change payloads.
   let meetingEnabled = $state(false);
   let attendees: EventAttendee[] = $state([]);
   let localParticipationStatus: AttendeeStatus | undefined = $state(undefined);
   let guestCanModify = $state(false);
   let guestCanInviteOthers = $state(true);
   let guestCanSeeOtherGuests = $state(true);
+
+  function hasNonDefaultGuestPermissions(value: GuestPermissions | undefined): boolean {
+    return !!value && (value.canModify || !value.canInviteOthers || !value.canSeeOtherGuests);
+  }
+
+  function hasMeetingState(value: Partial<CalendarEvent>): boolean {
+    return value.meetingEnabled === true
+      || !!(value.attendees && value.attendees.length > 0)
+      || !!value.organizer
+      || !!value.location
+      || !!value.url
+      || !!value.geo
+      || value.localParticipationStatus !== undefined
+      || hasNonDefaultGuestPermissions(value.guestPermissions);
+  }
 
 
   // ─── Read-only imported fields ────────────────────────────────────
@@ -298,7 +313,7 @@
       if (openSection === s) openSection = null;
     } else {
       // Enable with defaults
-      if (s === "meeting") { meetingEnabled = true; handleExpand("meeting"); return; }
+      if (s === "meeting") { meetingEnabled = true; emitChange(); handleExpand("meeting"); return; }
       if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "auto"; focusDuration = 40; shortBreak = 5; longBreak = 10; idleTimeoutEnabled = true; }
       if (s === "notifications") { notifEnabled = true; notifSelected = new Set([0]); }
       if (s === "repeat") recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
@@ -454,8 +469,7 @@
       guestCanInviteOthers = event.guestPermissions?.canInviteOthers ?? true;
       guestCanSeeOtherGuests = event.guestPermissions?.canSeeOtherGuests ?? true;
       geo = event.geo;
-      meetingEnabled = !!(event.attendees && event.attendees.length > 0)
-        || !!event.organizer || !!event.location || !!event.url || !!event.geo;
+      meetingEnabled = hasMeetingState(event);
 
       const pc = event.pomodoroConfig;
       pomodoroEnabled = !!pc;
@@ -582,8 +596,7 @@
     guestCanInviteOthers = fullEvent.guestPermissions?.canInviteOthers ?? true;
     guestCanSeeOtherGuests = fullEvent.guestPermissions?.canSeeOtherGuests ?? true;
     geo = fullEvent.geo;
-    meetingEnabled = !!(fullEvent.attendees && fullEvent.attendees.length > 0)
-      || !!fullEvent.organizer || !!fullEvent.location || !!fullEvent.url || !!fullEvent.geo;
+    meetingEnabled = hasMeetingState(fullEvent);
 
     (onInitialSync ?? onChange)?.(buildHeavyInitPayload());
   });
@@ -675,6 +688,7 @@
    * detect revert-to-original without false positives.
    */
   function buildChangesPayload(): Partial<CalendarEvent> {
+    const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
     return {
       title: title.trim(),
       start: `${startDate} ${startTime}`,
@@ -691,6 +705,7 @@
         idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
       allDay: allDay || undefined,
+      meetingEnabled: meetingEnabled || undefined,
       location: meetingEnabled && location ? location : undefined,
       url: meetingEnabled && eventUrl ? eventUrl : undefined,
       transparency: transparency !== "opaque" ? transparency : undefined,
@@ -698,6 +713,11 @@
       visibility: visibility !== "public" ? visibility : undefined,
       attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
       localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
+      guestPermissions: meetingEnabled && hasNonDefaultPerms ? {
+        canModify: guestCanModify,
+        canInviteOthers: guestCanInviteOthers,
+        canSeeOtherGuests: guestCanSeeOtherGuests,
+      } : undefined,
     };
   }
 
@@ -710,12 +730,19 @@
    * an in-progress slim edit that happened during the load window.
    */
   function buildHeavyInitPayload(): Partial<CalendarEvent> {
+    const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
     return {
       description,
+      meetingEnabled: meetingEnabled || undefined,
       url: meetingEnabled && eventUrl ? eventUrl : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
       attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
       localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
+      guestPermissions: meetingEnabled && hasNonDefaultPerms ? {
+        canModify: guestCanModify,
+        canInviteOthers: guestCanInviteOthers,
+        canSeeOtherGuests: guestCanSeeOtherGuests,
+      } : undefined,
     };
   }
 
@@ -814,6 +841,7 @@
         idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
       } : undefined,
       allDay: allDay || undefined,
+      meetingEnabled: meetingEnabled || undefined,
       location: meetingEnabled && location ? location : undefined,
       url: meetingEnabled && eventUrl ? eventUrl : undefined,
       transparency: transparency !== "opaque" ? transparency : undefined,

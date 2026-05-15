@@ -88,6 +88,7 @@ struct CalendarImportEvent {
     rdate: Option<String>,
     extended_properties: Option<String>,
     organizer: Option<String>,
+    meeting_enabled: bool,
     guest_can_modify: bool,
     guest_can_invite_others: bool,
     guest_can_see_other_guests: bool,
@@ -494,9 +495,10 @@ async fn insert_event(
              all_day, location, url, transparency, status,
              source_uid, visibility, priority, categories, geo,
              sequence, rdate, extended_properties, organizer,
+             meeting_enabled,
              guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
              icalendar_component_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&event.candidate_id)
     .bind(&event.title)
@@ -524,6 +526,7 @@ async fn insert_event(
     .bind(&event.rdate)
     .bind(&event.extended_properties)
     .bind(&event.organizer)
+    .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_invite_others {
         1_i64
@@ -573,6 +576,7 @@ async fn update_event(
                 visibility = ?, priority = ?,
                 categories = ?, geo = ?,
                 sequence = ?, rdate = ?, extended_properties = ?, organizer = ?,
+                meeting_enabled = ?,
                 guest_can_modify = ?, guest_can_invite_others = ?,
                 guest_can_see_other_guests = ?,
                 icalendar_component_id = CASE WHEN ? = 1 THEN ? ELSE icalendar_component_id END,
@@ -602,6 +606,7 @@ async fn update_event(
     .bind(&event.rdate)
     .bind(&event.extended_properties)
     .bind(&event.organizer)
+    .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_invite_others {
         1_i64
@@ -1450,6 +1455,7 @@ mod tests {
             rdate: None,
             extended_properties: None,
             organizer: None,
+            meeting_enabled: false,
             guest_can_modify: false,
             guest_can_invite_others: true,
             guest_can_see_other_guests: true,

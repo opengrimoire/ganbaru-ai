@@ -36,6 +36,7 @@ pub struct CalendarEventCreate {
     rdate: Option<String>,
     extended_properties: Option<String>,
     organizer: Option<String>,
+    meeting_enabled: bool,
     local_rsvp_status: Option<String>,
     guest_can_modify: bool,
     guest_can_invite_others: bool,
@@ -141,6 +142,8 @@ enum CalendarEventUpdateField {
     ExtendedProperties(Option<String>),
     #[serde(rename = "organizer")]
     Organizer(Option<String>),
+    #[serde(rename = "meetingEnabled")]
+    MeetingEnabled(bool),
     #[serde(rename = "localRsvpStatus")]
     LocalRsvpStatus(Option<String>),
     #[serde(rename = "guestPermissions")]
@@ -207,6 +210,7 @@ pub struct CalendarSplitSeries {
     description_patch: Option<String>,
     url_patch: Option<String>,
     local_rsvp_status: Option<String>,
+    meeting_enabled: bool,
     pomodoro_config: Option<CalendarPomodoroConfig>,
     now: String,
 }
@@ -229,10 +233,10 @@ pub async fn calendar_add_event<R: Runtime>(
             all_day, location, url, transparency, status,
             source_uid, visibility, priority, categories, geo,
             sequence, rdate, extended_properties, organizer,
-            local_rsvp_status,
+            meeting_enabled, local_rsvp_status,
             guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&event.id)
     .bind(&event.title)
@@ -259,6 +263,7 @@ pub async fn calendar_add_event<R: Runtime>(
     .bind(&event.rdate)
     .bind(&event.extended_properties)
     .bind(&event.organizer)
+    .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
     .bind(&event.local_rsvp_status)
     .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_invite_others {
@@ -483,7 +488,7 @@ pub async fn calendar_detach_instance<R: Runtime>(
            source_uid,
            description, url, visibility, priority, categories, geo,
            sequence, extended_properties, organizer,
-           local_rsvp_status,
+           meeting_enabled, local_rsvp_status,
            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
            created_at, updated_at
          )
@@ -493,7 +498,7 @@ pub async fn calendar_detach_instance<R: Runtime>(
                 NULL,
                 description, url, visibility, priority, categories, geo,
                 sequence, extended_properties, organizer,
-                local_rsvp_status,
+                meeting_enabled, local_rsvp_status,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
                 ?, ?
          FROM calendar_events WHERE id = ?",
@@ -571,7 +576,7 @@ pub async fn calendar_split_series<R: Runtime>(
            source_uid,
            description, url, visibility, priority, categories, geo,
            sequence, extended_properties, organizer,
-           local_rsvp_status,
+           meeting_enabled, local_rsvp_status,
            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
            created_at, updated_at
          )
@@ -583,6 +588,7 @@ pub async fn calendar_split_series<R: Runtime>(
                 COALESCE(?, url),
                 visibility, priority, categories, geo,
                 sequence, extended_properties, organizer,
+                ?,
                 ?,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
                 ?, ?
@@ -603,6 +609,7 @@ pub async fn calendar_split_series<R: Runtime>(
     .bind(&input.status)
     .bind(&description_patch)
     .bind(&input.url_patch)
+    .bind(if input.meeting_enabled { 1_i64 } else { 0_i64 })
     .bind(&input.local_rsvp_status)
     .bind(&input.now)
     .bind(&input.now)
@@ -809,6 +816,9 @@ async fn apply_update_field(
         }
         CalendarEventUpdateField::Organizer(value) => {
             update_optional_text(tx, id, "organizer", value.as_deref()).await
+        }
+        CalendarEventUpdateField::MeetingEnabled(value) => {
+            update_i64(tx, id, "meeting_enabled", if *value { 1 } else { 0 }).await
         }
         CalendarEventUpdateField::LocalRsvpStatus(value) => {
             update_optional_text(tx, id, "local_rsvp_status", value.as_deref()).await
@@ -1073,6 +1083,7 @@ fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String>
             validate_json_option(value, "extended_properties")
         }
         CalendarEventUpdateField::Organizer(value) => validate_json_option(value, "organizer"),
+        CalendarEventUpdateField::MeetingEnabled(_) => Ok(()),
         CalendarEventUpdateField::LocalRsvpStatus(value) => {
             validate_optional_attendee_status(value, "local_rsvp_status")
         }
@@ -1249,6 +1260,7 @@ mod tests {
             rdate: None,
             extended_properties: None,
             organizer: None,
+            meeting_enabled: false,
             local_rsvp_status: None,
             guest_can_modify: false,
             guest_can_invite_others: true,

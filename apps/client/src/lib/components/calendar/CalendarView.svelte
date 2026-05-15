@@ -624,6 +624,7 @@
       description: e.description, recurrence: e.recurrence,
       notifications: e.notifications, pomodoroConfig: e.pomodoroConfig,
       allDay: e.allDay, location: e.location, url: e.url,
+      meetingEnabled: e.meetingEnabled,
       transparency: e.transparency, status: e.status,
       sourceUid: e.sourceUid, visibility: e.visibility,
       priority: e.priority, categories: e.categories, geo: e.geo,
@@ -1307,6 +1308,7 @@
     notifications?: number[];
     pomodoroConfig?: PomodoroConfig;
     allDay?: boolean;
+    meetingEnabled?: boolean;
     location?: string;
     url?: string;
     transparency?: EventTransparency;
@@ -1339,6 +1341,7 @@
         recurrence: data.recurrence, notifications: data.notifications,
         pomodoroConfig: data.pomodoroConfig,
         allDay: data.allDay, location: data.location, url: data.url,
+        meetingEnabled: data.meetingEnabled,
         transparency: data.transparency, status: data.status,
         visibility: data.visibility, attendees: data.attendees,
         localParticipationStatus: data.localParticipationStatus,

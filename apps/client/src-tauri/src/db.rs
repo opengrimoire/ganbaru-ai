@@ -1155,7 +1155,8 @@ pub fn migrations() -> Vec<Migration> {
                 WHERE slot BETWEEN 0 AND 31;
             DROP TABLE theme_seed_event_palette_before_neutral_swap;
         ",
-    }, Migration {
+    },
+    Migration {
         version: 20,
         description: "normalize confidential event visibility",
         sql: "
@@ -1166,6 +1167,30 @@ pub fn migrations() -> Vec<Migration> {
             UPDATE calendar_event_overrides
             SET visibility = 'private'
             WHERE visibility = 'confidential';
+        ",
+    },
+    Migration {
+        version: 21,
+        description: "persist empty meeting section state",
+        sql: "
+            ALTER TABLE calendar_events
+                ADD COLUMN meeting_enabled INTEGER NOT NULL DEFAULT 0;
+
+            UPDATE calendar_events
+            SET meeting_enabled = 1
+            WHERE location <> ''
+                OR url <> ''
+                OR organizer IS NOT NULL
+                OR geo IS NOT NULL
+                OR local_rsvp_status IS NOT NULL
+                OR guest_can_modify <> 0
+                OR guest_can_invite_others <> 1
+                OR guest_can_see_other_guests <> 1
+                OR EXISTS (
+                    SELECT 1
+                    FROM calendar_event_attendees
+                    WHERE calendar_event_attendees.event_id = calendar_events.id
+                );
         ",
     }]
 }

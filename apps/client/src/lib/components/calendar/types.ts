@@ -198,6 +198,8 @@ export interface CalendarEvent {
   /** Set on virtual recurring instances; points to the DB-backed template event. */
   recurringParentId?: string;
   allDay?: boolean;
+  /** Keeps the Meeting section enabled even when every meeting field is empty. */
+  meetingEnabled?: boolean;
   location?: string;
   url?: string;
   transparency?: EventTransparency;

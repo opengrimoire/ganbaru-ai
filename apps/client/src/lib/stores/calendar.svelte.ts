@@ -53,6 +53,7 @@ type CalendarUpdateField =
   | { field: "notifications"; value: string | null }
   | { field: "exceptions"; value: string | null }
   | { field: "allDay"; value: boolean }
+  | { field: "meetingEnabled"; value: boolean }
   | { field: "location"; value: string }
   | { field: "url"; value: string }
   | { field: "transparency"; value: EventTransparency }
@@ -93,6 +94,21 @@ function nowLocal(): string {
 
 function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function hasNonDefaultGuestPermissions(value: GuestPermissions | undefined): boolean {
+  return !!value && (value.canModify || !value.canInviteOthers || !value.canSeeOtherGuests);
+}
+
+function hasMeetingState(value: Partial<CalendarEvent>): boolean {
+  return value.meetingEnabled === true
+    || !!(value.attendees && value.attendees.length > 0)
+    || !!value.organizer
+    || !!value.location
+    || !!value.url
+    || !!value.geo
+    || value.localParticipationStatus !== undefined
+    || hasNonDefaultGuestPermissions(value.guestPermissions);
 }
 
 /**
@@ -182,6 +198,7 @@ type DbFullEvent = DbCalendarEvent & {
   sequence: number;
   extended_properties: string | null;
   organizer: string | null;
+  meeting_enabled: number;
   guest_can_modify: number;
   guest_can_invite_others: number;
   guest_can_see_other_guests: number;
@@ -288,6 +305,7 @@ function applyFullEventFields(row: DbFullEvent, event: CalendarEvent) {
   if (extendedProperties) event.extendedProperties = extendedProperties;
   const organizer = safeJsonParse<EventOrganizer>(row.organizer);
   if (organizer) event.organizer = organizer;
+  if (row.meeting_enabled === 1) event.meetingEnabled = true;
   if (row.local_rsvp_status) {
     event.localParticipationStatus = row.local_rsvp_status as AttendeeStatus;
   }
@@ -674,6 +692,7 @@ function slimEvent(e: CalendarEvent): CalendarEvent {
   if (e.exceptions && e.exceptions.length > 0) slim.exceptions = e.exceptions;
   if (e.recurringParentId) slim.recurringParentId = e.recurringParentId;
   if (e.allDay) slim.allDay = true;
+  if (e.meetingEnabled) slim.meetingEnabled = true;
   if (e.location) slim.location = e.location;
   if (e.transparency === "transparent") slim.transparency = "transparent";
   if (e.status && e.status !== "confirmed") slim.status = e.status;
@@ -888,6 +907,7 @@ export function getCalendar() {
       attendees?: EventAttendee[];
       localParticipationStatus?: AttendeeStatus;
       guestPermissions?: GuestPermissions;
+      meetingEnabled?: boolean;
     }): Promise<CalendarEvent> {
       // Sanitize times to ensure clean integer minutes
       const sanitizedStart = sanitizeCalendarTime(opts.start);
@@ -901,6 +921,7 @@ export function getCalendar() {
       const timezone = localTimezone();
       const calendarId = opts.calendarId ?? "local";
       const description = sanitizeCalendarDescriptionHtml(opts.description ?? "");
+      const meetingEnabled = opts.meetingEnabled ?? hasMeetingState(opts);
       const rrule = opts.recurrence ? recurrenceToRrule(opts.recurrence) : null;
       const repeatUntil = opts.recurrence?.end.type === "until"
         ? opts.recurrence.end.date : null;
@@ -936,6 +957,7 @@ export function getCalendar() {
             ? JSON.stringify(opts.extendedProperties)
             : null,
           organizer: opts.organizer ? JSON.stringify(opts.organizer) : null,
+          meetingEnabled,
           localRsvpStatus: opts.localParticipationStatus ?? null,
           guestCanModify: opts.guestPermissions?.canModify ?? false,
           guestCanInviteOthers: opts.guestPermissions?.canInviteOthers ?? true,
@@ -959,6 +981,7 @@ export function getCalendar() {
         color: opts.color,
         recurrence: opts.recurrence, notifications: opts.notifications,
         pomodoroConfig: opts.pomodoroConfig,
+        meetingEnabled,
         allDay: opts.allDay, location: opts.location,
         transparency: opts.transparency, status: opts.status,
         localParticipationStatus: opts.localParticipationStatus,
@@ -1091,6 +1114,9 @@ export function getCalendar() {
           }
           case "allDay":
             addField({ field: "allDay", value: !!toUpdate.allDay });
+            break;
+          case "meetingEnabled":
+            addField({ field: "meetingEnabled", value: !!toUpdate.meetingEnabled });
             break;
           case "location":
             addField({ field: "location", value: toUpdate.location ?? "" });
@@ -1284,6 +1310,7 @@ export function getCalendar() {
         transparency: parent.transparency,
         status: parent.status,
         localParticipationStatus: parent.localParticipationStatus,
+        meetingEnabled: parent.meetingEnabled,
         notifications: parent.notifications,
         pomodoroConfig: parent.pomodoroConfig,
       });
@@ -1391,6 +1418,7 @@ export function getCalendar() {
         ? String(changes.end)
         : `${splitDate} ${instanceEvent.end.split(" ")[1]}`;
       const merged = { ...parent, ...changes };
+      const meetingEnabled = merged.meetingEnabled ?? hasMeetingState(merged);
       // New template inherits the original recurrence (without the old end condition)
       const newRecurrence: RecurrenceConfig | undefined = parent.recurrence
         ? { ...parent.recurrence, end: { type: "never" } }
@@ -1434,6 +1462,7 @@ export function getCalendar() {
           descriptionPatch,
           urlPatch,
           localRsvpStatus: localParticipationStatus ?? null,
+          meetingEnabled,
           pomodoroConfig: pomConfig ?? null,
           now,
         },

@@ -1,4 +1,6 @@
-import type { CalendarEvent, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope } from "./types";
+import type {
+  CalendarEvent, EventColor, GuestPermissions, PomodoroConfig, RecurrenceConfig, RecurringScope,
+} from "./types";
 
 export type PanelAnchor = { x: number; y: number; width: number; height: number };
 
@@ -57,6 +59,21 @@ function normalizePomodoroConfig(config?: PomodoroConfig): PomodoroConfig | unde
   };
 }
 
+function hasNonDefaultGuestPermissions(value: GuestPermissions | undefined): boolean {
+  return !!value && (value.canModify || !value.canInviteOthers || !value.canSeeOtherGuests);
+}
+
+function hasMeetingState(event: CalendarEvent): boolean {
+  return event.meetingEnabled === true
+    || !!(event.attendees && event.attendees.length > 0)
+    || !!event.organizer
+    || !!event.location
+    || !!event.url
+    || !!event.geo
+    || event.localParticipationStatus !== undefined
+    || hasNonDefaultGuestPermissions(event.guestPermissions);
+}
+
 /**
  * Build the normalized baseline shape used by EventPanel on first paint.
  * Keeping this in the session avoids a parent-state callback during panel
@@ -64,8 +81,7 @@ function normalizePomodoroConfig(config?: PomodoroConfig): PomodoroConfig | unde
  * flush before they can paint.
  */
 export function buildEditPanelInitialChanges(event: CalendarEvent): Partial<CalendarEvent> {
-  const meetingEnabled = !!(event.attendees && event.attendees.length > 0)
-    || !!event.location || !!event.url;
+  const meetingEnabled = hasMeetingState(event);
   return {
     title: event.title.trim(),
     start: event.start,
@@ -76,6 +92,7 @@ export function buildEditPanelInitialChanges(event: CalendarEvent): Partial<Cale
     notifications: normalizeNotifications(event.notifications),
     pomodoroConfig: normalizePomodoroConfig(event.pomodoroConfig),
     allDay: event.allDay || undefined,
+    meetingEnabled: meetingEnabled || undefined,
     location: meetingEnabled && event.location ? event.location : undefined,
     url: meetingEnabled && event.url ? event.url : undefined,
     transparency: event.transparency !== "opaque" ? event.transparency : undefined,
@@ -83,6 +100,10 @@ export function buildEditPanelInitialChanges(event: CalendarEvent): Partial<Cale
     visibility: event.visibility !== "public" ? event.visibility : undefined,
     attendees: meetingEnabled && event.attendees && event.attendees.length > 0
       ? [...event.attendees]
+      : undefined,
+    localParticipationStatus: meetingEnabled ? event.localParticipationStatus : undefined,
+    guestPermissions: meetingEnabled && hasNonDefaultGuestPermissions(event.guestPermissions)
+      ? event.guestPermissions
       : undefined,
   };
 }
@@ -104,6 +125,7 @@ export function buildCreatePanelInitialChanges(start: string, end: string, allDa
       idleTimeoutMinutes: IDLE_TIMEOUT_DEFAULT,
     },
     allDay: allDay || undefined,
+    meetingEnabled: undefined,
     location: undefined,
     url: undefined,
     transparency: undefined,

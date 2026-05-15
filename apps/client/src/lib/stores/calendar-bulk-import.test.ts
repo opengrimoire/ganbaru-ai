@@ -100,9 +100,26 @@ describe("buildBulkImportPayload", () => {
     expect(event.rdate).toBe("[\"2026-05-03\"]");
     expect(event.extendedProperties).toBe("{\"X-TEST\":\"yes\"}");
     expect(event.organizer).toBe("{\"email\":\"owner@example.com\",\"name\":\"Owner\"}");
+    expect(event.meetingEnabled).toBe(true);
     expect(event.guestCanModify).toBe(true);
     expect(event.guestCanInviteOthers).toBe(false);
     expect(event.guestCanSeeOtherGuests).toBe(false);
+  });
+
+  it("preserves an explicitly enabled empty meeting section", () => {
+    const payload = buildBulkImportPayload(
+      [makeEvent({ meetingEnabled: true })],
+      CAL,
+      NOW,
+      ZONE,
+      deterministicIds(),
+    );
+
+    const event = payload.events[0];
+    expect(event.meetingEnabled).toBe(true);
+    expect(event.location).toBe("");
+    expect(event.url).toBe("");
+    expect(event.attendees).toEqual([]);
   });
 
   it("maps attendees, alarms, and overrides without SQL assembly", () => {

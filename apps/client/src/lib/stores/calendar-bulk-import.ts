@@ -107,6 +107,7 @@ export interface CalendarBulkImportEvent {
   rdate: string | null;
   extendedProperties: string | null;
   organizer: string | null;
+  meetingEnabled: boolean;
   guestCanModify: boolean;
   guestCanInviteOthers: boolean;
   guestCanSeeOtherGuests: boolean;
@@ -334,6 +335,7 @@ function buildBulkImportEvent(
 ): CalendarBulkImportEvent {
   const homeZone = event.timezone || fallbackZone;
   const gp = event.guestPermissions;
+  const meetingEnabled = event.meetingEnabled ?? hasMeetingState(event);
   return {
     candidateId,
     icalendarComponentId: link?.componentId ?? event.icalendarComponentId ?? null,
@@ -363,6 +365,7 @@ function buildBulkImportEvent(
     rdate: jsonOrNull(event.rdate),
     extendedProperties: jsonOrNull(event.extendedProperties),
     organizer: jsonOrNull(event.organizer),
+    meetingEnabled,
     guestCanModify: gp?.canModify ?? false,
     guestCanInviteOthers: gp?.canInviteOthers ?? true,
     guestCanSeeOtherGuests: gp?.canSeeOtherGuests ?? true,
@@ -375,6 +378,18 @@ function buildBulkImportEvent(
       overrideLinks,
     ),
   };
+}
+
+function hasMeetingState(event: CalendarEvent): boolean {
+  const gp = event.guestPermissions;
+  return event.meetingEnabled === true
+    || !!(event.attendees && event.attendees.length > 0)
+    || !!event.organizer
+    || !!event.location
+    || !!event.url
+    || !!event.geo
+    || event.localParticipationStatus !== undefined
+    || (!!gp && (gp.canModify || !gp.canInviteOthers || !gp.canSeeOtherGuests));
 }
 
 function buildAttendees(
