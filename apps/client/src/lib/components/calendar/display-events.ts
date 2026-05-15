@@ -176,8 +176,9 @@ export function computeEditDisplay(
 ): DisplayResult {
   const { originalEvent, instanceEvent, templateId } = session;
   const isRecurring = !!originalEvent.recurringParentId || !!originalEvent.recurrence;
+  const scopeNeedsPreview = isRecurring && scope !== "this";
 
-  if (!hasVisibleEventChanges(originalEvent, changes)) {
+  if (!scopeNeedsPreview && !hasVisibleEventChanges(originalEvent, changes)) {
     return unchangedEditDisplay(storeEvents, originalEvent.id);
   }
 

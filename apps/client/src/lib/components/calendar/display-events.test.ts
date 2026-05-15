@@ -4,6 +4,7 @@ import type { CalendarEvent } from "./types";
 import {
   closedDisplay,
   buildCreateDisplay,
+  computeEditDisplay,
   applyNonRecurring,
   applyThis,
   applyAll,
@@ -240,6 +241,51 @@ describe("applyThis", () => {
     expect(result.events).toBe(events);
     expect(result.editingId).toBe(inst20.id);
     expect(result.previewedIds.has(inst20.id)).toBe(true);
+  });
+});
+
+describe("computeEditDisplay", () => {
+  it("keeps following scope preview contours when recurrence returns to its saved value", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2026-03-20");
+    const storeEvents = [template, inst20, makeInstance(template, "2026-03-21")];
+
+    const result = computeEditDisplay(
+      [template],
+      storeEvents,
+      { originalEvent: inst20, instanceEvent: inst20, templateId: template.id },
+      { recurrence: template.recurrence },
+      "following",
+      TEST_WINDOW,
+    );
+
+    expect(result.previewedIds.size).toBeGreaterThan(1);
+    expect([...result.previewedIds].every((id) => id === `__vf__${template.id}` || id.startsWith(`__vf__${template.id}::`))).toBe(true);
+    expect(result.events.filter((event) => result.previewedIds.has(event.id)).length).toBe(result.previewedIds.size);
+  });
+
+  it("keeps all scope preview contours when recurrence returns to its saved value", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-06-01 09:00",
+      end: "2026-06-01 09:30",
+    });
+    const inst02 = makeInstance(template, "2026-06-02");
+    const storeEvents = [template, inst02, makeInstance(template, "2026-06-03")];
+
+    const result = computeEditDisplay(
+      [template],
+      storeEvents,
+      { originalEvent: inst02, instanceEvent: inst02, templateId: template.id },
+      { recurrence: template.recurrence },
+      "all",
+      TEST_WINDOW,
+    );
+
+    const seriesEvents = result.events.filter((event) =>
+      event.id === template.id || event.recurringParentId === template.id,
+    );
+    expect(seriesEvents.length).toBeGreaterThan(1);
+    expect(seriesEvents.every((event) => result.previewedIds.has(event.id))).toBe(true);
   });
 });
 
