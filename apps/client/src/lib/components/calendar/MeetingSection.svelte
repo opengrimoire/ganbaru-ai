@@ -219,8 +219,6 @@
       <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
       {#if enabled && summary}
         <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
-      {:else if !enabled && !readOnly}
-        <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground/40">Add meeting details</span>
       {/if}
     </button>
   </div>
