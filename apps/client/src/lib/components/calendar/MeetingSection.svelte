@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { EventAttendee, EventOrganizer, EventSurfaceStatus, GeoCoordinates } from "./types";
-  import { bounceIcon, panelInputKeydown } from "./event-panel-utils";
+  import { panelInputKeydown } from "./event-panel-utils";
   import { createSmoothScroll } from "./utils";
   import DescriptionEditor from "./DescriptionEditor.svelte";
   import { slide } from "svelte/transition";
@@ -207,7 +207,7 @@
 
 <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
-    <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
+    <button onclick={ontoggle}
       disabled={readOnly}
       class="flex w-9 shrink-0 items-center justify-center
         {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">

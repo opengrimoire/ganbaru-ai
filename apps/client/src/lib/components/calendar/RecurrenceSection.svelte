@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { RecurrenceConfig, RecurrenceFrequency, Weekday } from "./types";
   import { formatRecurrenceLabel } from "./rrule";
-  import { bounceIcon } from "./event-panel-utils";
   import MiniDatePicker from "./MiniDatePicker.svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -189,7 +188,7 @@
 
 <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
-    <button onclick={(e) => { bounceIcon(e); ontoggle(); }}
+    <button onclick={ontoggle}
       class="flex w-9 shrink-0 items-center justify-center
         {recurrence ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Repeat size={13} />

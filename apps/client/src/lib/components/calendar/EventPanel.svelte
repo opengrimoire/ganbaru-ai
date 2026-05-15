@@ -4,7 +4,6 @@
     EventAttendee, EventOrganizer, GeoCoordinates, GuestPermissions, AttendeeStatus,
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
-  import { bounceIcon } from "./event-panel-utils";
   import MiniDatePicker from "./MiniDatePicker.svelte";
   import TimePicker from "./TimePicker.svelte";
   import ColorPicker from "./ColorPicker.svelte";
@@ -285,9 +284,8 @@
   }
 
 
-  function handleToggle(s: Section, e?: MouseEvent) {
+  function handleToggle(s: Section) {
     if (controlsDisabled) return;
-    if (e) bounceIcon(e);
     if (s === "music") return;
     const enabled = isSectionEnabled(s);
     if (enabled) {

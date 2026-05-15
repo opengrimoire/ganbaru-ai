@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { bounceIcon } from "./event-panel-utils";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Timer from "@lucide/svelte/icons/timer";
@@ -32,7 +31,7 @@
     longBreak: number;
     idleTimeoutEnabled: boolean;
     expanded: boolean;
-    ontoggle: (e: MouseEvent) => void;
+    ontoggle: () => void;
     onexpand: () => void;
     onchange: () => void;
   } = $props();
@@ -57,7 +56,7 @@
 
 <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
-    <button onclick={(e) => { bounceIcon(e); ontoggle(e); }}
+    <button onclick={ontoggle}
       class="flex w-9 shrink-0 items-center justify-center
         {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Timer size={13} />

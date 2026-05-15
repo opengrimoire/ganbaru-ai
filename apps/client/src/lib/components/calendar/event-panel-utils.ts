@@ -1,16 +1,3 @@
-export function bounceIcon(e: MouseEvent): void {
-  const btn = (e.currentTarget as HTMLElement).querySelector("svg");
-  if (!btn) return;
-  btn.animate(
-    [
-      { transform: "scale(1)" },
-      { transform: "scale(1.2)" },
-      { transform: "scale(1)" },
-    ],
-    { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
-  );
-}
-
 /**
  * Local keydown handler for panel input/textarea elements.
  *
