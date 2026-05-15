@@ -50,16 +50,44 @@
   let positionInitialized = $state(false);
   let dragging = $state(false);
   let collapsed = $state(false);
+  let panelEl = $state<HTMLDivElement | undefined>(undefined);
+  let renderedPanelHeight = $state(0);
   let dragOffsetX = 0;
   let dragOffsetY = 0;
+  const THEME_EDITOR_COLLAPSED_FALLBACK_HEIGHT = 96;
 
-  function clampFloatingPosition(x: number, y: number): { x: number; y: number } {
+  const floatingClampHeight = $derived.by(() => {
+    if (!collapsed) return editorGeometry.rect.height;
+    if (renderedPanelHeight > 0 && renderedPanelHeight < editorGeometry.rect.height) {
+      return renderedPanelHeight;
+    }
+    return THEME_EDITOR_COLLAPSED_FALLBACK_HEIGHT;
+  });
+
+  function getMeasuredPanelHeight(): number {
+    const domHeight = panelEl?.getBoundingClientRect().height;
+    const measured = domHeight ?? renderedPanelHeight;
+    return Number.isFinite(measured) ? Math.max(0, measured) : 0;
+  }
+
+  function getFloatingClampHeight(): number {
+    if (!collapsed) return editorGeometry.rect.height;
+    const measured = getMeasuredPanelHeight();
+    if (measured > 0 && measured < editorGeometry.rect.height) return measured;
+    return THEME_EDITOR_COLLAPSED_FALLBACK_HEIGHT;
+  }
+
+  function clampFloatingPosition(
+    x: number,
+    y: number,
+    height = getFloatingClampHeight(),
+  ): { x: number; y: number } {
     const clamped = clampPanelRect(
       {
         x,
         y,
         width: editorGeometry.rect.width,
-        height: editorGeometry.rect.height,
+        height: Math.min(Math.max(height, 0), editorGeometry.rect.height),
       },
       { width: viewport.width, height: viewport.height },
       THEME_EDITOR_EDGE_MARGIN,
@@ -112,13 +140,31 @@
       positionInitialized = true;
       return;
     }
-    const next = clampFloatingPosition(posX, posY);
+    const next = clampFloatingPosition(posX, posY, floatingClampHeight);
     posX = next.x;
     posY = next.y;
   });
 
+  // Track the rendered height so collapsed drag bounds match the visible panel.
+  $effect(() => {
+    if (!panelEl) return;
+    const measure = () => {
+      renderedPanelHeight = panelEl?.getBoundingClientRect().height ?? 0;
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panelEl);
+    return () => observer.disconnect();
+  });
+
   function toggleCollapsed() {
-    collapsed = !collapsed;
+    const nextCollapsed = !collapsed;
+    if (!nextCollapsed && editorGeometry.canDrag) {
+      const next = clampFloatingPosition(posX, posY, editorGeometry.rect.height);
+      posX = next.x;
+      posY = next.y;
+    }
+    collapsed = nextCollapsed;
   }
 
   // Cancel rolls the session back to its pre-edit state and returns to the
@@ -144,7 +190,10 @@
     const geometry = editorGeometry;
     const height = collapsed ? "auto" : `${geometry.rect.height}px`;
     const maxHeight = `${geometry.rect.height}px`;
-    const x = geometry.canDrag ? posX : geometry.rect.x;
+    const clamped = geometry.canDrag
+      ? clampFloatingPosition(posX, posY)
+      : { x: geometry.rect.x, y: geometry.rect.y };
+    const x = clamped.x;
 
     if (!geometry.canDrag && collapsed) {
       const bottom = geometry.layout === "fullscreen" ? 0 : THEME_EDITOR_EDGE_MARGIN;
@@ -157,7 +206,7 @@
       ].join("; ");
     }
 
-    const y = geometry.canDrag ? posY : geometry.rect.y;
+    const y = clamped.y;
     return [
       `left: ${x}px`,
       `top: ${y}px`,
@@ -170,6 +219,7 @@
 
 {#if editing}
   <div
+    bind:this={panelEl}
     class={cn(
       "fixed z-75 flex flex-col overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
       editorGeometry.layout === "fullscreen"

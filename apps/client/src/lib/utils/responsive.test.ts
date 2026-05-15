@@ -276,4 +276,24 @@ describe("clampPanelRect", () => {
       ),
     ).toEqual({ x: 12, y: 20, width: 296, height: 228 });
   });
+
+  it("lets collapsed floating panels move lower than their expanded size", () => {
+    const viewport = { width: 1112, height: 977 };
+
+    expect(
+      clampPanelRect(
+        { x: 138, y: 850, width: 924, height: 640 },
+        viewport,
+        16,
+      ).y,
+    ).toBe(321);
+
+    expect(
+      clampPanelRect(
+        { x: 138, y: 850, width: 924, height: 106 },
+        viewport,
+        16,
+      ).y,
+    ).toBe(850);
+  });
 });
