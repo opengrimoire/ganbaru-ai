@@ -52,7 +52,7 @@
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
-  const statusPatternClass = $derived(isTemporaryEvent ? "" : getEventStatusPatternClass(positioned.event));
+  const statusPatternClass = $derived(getEventStatusPatternClass(positioned.event));
   const activeColors = $derived(
     usePastColors
       ? getPastEventColor(positioned.event.color, theme)

@@ -39,6 +39,7 @@ const DISPLAY_CHANGE_KEYS = [
   "location",
   "transparency",
   "status",
+  "localParticipationStatus",
   "rdate",
 ] satisfies (keyof CalendarEvent)[];
 
@@ -128,6 +129,7 @@ export function buildCreateDisplay(
     url: changes.url,
     transparency: changes.transparency,
     status: changes.status,
+    localParticipationStatus: changes.localParticipationStatus,
     allDay: isAllDay || undefined,
   };
 

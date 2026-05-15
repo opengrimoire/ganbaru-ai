@@ -107,6 +107,16 @@ describe("buildCreateDisplay", () => {
     expect(created!.end).toBe("2026-03-20 13:00");
   });
 
+  it("carries local RSVP status into the create preview", () => {
+    const preview = { dateStr: "2026-03-20", startMinute: 720, endMinute: 780 };
+    const result = buildCreateDisplay([], preview, {
+      localParticipationStatus: "tentative",
+    }, TEST_WINDOW);
+
+    const created = result.events.find((e) => e.id === PENDING_CREATE_ID);
+    expect(created?.localParticipationStatus).toBe("tentative");
+  });
+
   it("expands recurring create preview", () => {
     const events: CalendarEvent[] = [];
     const preview = {
@@ -132,6 +142,16 @@ describe("applyNonRecurring", () => {
     expect(result.previewedIds.has("evt1")).toBe(true);
     expect(result.events.find((e) => e.id === "evt1")!.title).toBe("Updated");
     expect(result.events.find((e) => e.id === "evt2")!.title).toBe("Other");
+  });
+
+  it("treats local RSVP status as a visible preview change", () => {
+    const evt = makeEvent();
+    const result = applyNonRecurring([evt], evt, {
+      localParticipationStatus: "tentative",
+    });
+
+    expect(result.previewedIds.has("evt1")).toBe(true);
+    expect(result.events[0]?.localParticipationStatus).toBe("tentative");
   });
 
   it("keeps the original event array when changes do not affect the calendar grid", () => {
