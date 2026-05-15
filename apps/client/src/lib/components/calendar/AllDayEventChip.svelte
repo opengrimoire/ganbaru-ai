@@ -8,7 +8,7 @@
   } from "./utils";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import Repeat from "@lucide/svelte/icons/repeat";
-  import Bell from "@lucide/svelte/icons/bell";
+  import Users from "@lucide/svelte/icons/users";
 
   let {
     event,
@@ -36,7 +36,7 @@
 
   const isDark = $derived(isThemeCalendarDark(theme));
   const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
-  const hasNotification = $derived(event.notifications && event.notifications.length > 0);
+  const hasMeeting = $derived(event.meetingEnabled === true);
   const isCancelled = $derived(isEventSurfaceCancelled(event));
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
@@ -84,17 +84,17 @@
   onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
-  {#if hasRepeat || hasNotification}
+  {#if hasRepeat || hasMeeting}
     <span class="absolute right-1 top-0.75 z-10 flex items-center gap-0.5" style="color: {iconColor};">
       {#if hasRepeat}
         <Repeat size={8} class="shrink-0" />
       {/if}
-      {#if hasNotification}
-        <Bell size={8} class="shrink-0" />
+      {#if hasMeeting}
+        <Users size={8} class="shrink-0" />
       {/if}
     </span>
   {/if}
-  <span class="relative z-10 truncate" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
+  <span class="relative z-10 truncate" class:pr-5={hasRepeat || hasMeeting} style={isCancelled ? 'text-decoration: line-through;' : ''}>
     {#if event.title}{event.title}{:else}(No title){/if}
   </span>
 </div>

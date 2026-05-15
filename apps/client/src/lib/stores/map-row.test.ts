@@ -29,6 +29,7 @@ function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
     repeat_until: null,
     all_day: 0,
     location: "",
+    meeting_enabled: 0,
     transparency: "opaque",
     status: "confirmed",
     local_rsvp_status: null,
@@ -81,6 +82,12 @@ describe("mapRow", () => {
     expect(result.status).toBeUndefined();
     expect(result.pomodoroConfig).toBeUndefined();
     expect(result.rdate).toBeUndefined();
+    expect(result.meetingEnabled).toBeUndefined();
+  });
+
+  it("maps enabled empty meeting state", () => {
+    const result = mapRow(makeDbRow({ meeting_enabled: 1 }));
+    expect(result.meetingEnabled).toBe(true);
   });
 
   it("maps local RSVP status", () => {

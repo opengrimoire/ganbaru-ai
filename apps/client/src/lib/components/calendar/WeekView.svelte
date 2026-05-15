@@ -25,7 +25,7 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
-  import Bell from "@lucide/svelte/icons/bell";
+  import Users from "@lucide/svelte/icons/users";
   import type { Theme } from "$lib/stores/themes";
 
   let {
@@ -571,7 +571,7 @@
           {@const dpColor = getEventColor(dp.event.color, theme)}
           {@const dpIconColor = `color-mix(in srgb, ${dpColor.text} 70%, ${dpColor.bg})`}
           {@const dpHasRepeat = !!dp.event.recurrence || !!dp.event.recurringParentId}
-          {@const dpHasNotification = !!dp.event.notifications?.length}
+          {@const dpHasMeeting = dp.event.meetingEnabled === true}
           <div
             class="pointer-events-none absolute flex items-center px-0.5"
             style="
@@ -592,17 +592,17 @@
               --outline-mix: {dpColor.text};
             "
           >
-            {#if dpHasRepeat || dpHasNotification}
+            {#if dpHasRepeat || dpHasMeeting}
               <span class="absolute right-1 top-0.75 flex items-center gap-0.5" style="color: {dpIconColor};">
                 {#if dpHasRepeat}
                   <Repeat size={8} class="shrink-0" />
                 {/if}
-                {#if dpHasNotification}
-                  <Bell size={8} class="shrink-0" />
+                {#if dpHasMeeting}
+                  <Users size={8} class="shrink-0" />
                 {/if}
               </span>
             {/if}
-            <span class="truncate" class:pr-5={dpHasRepeat || dpHasNotification}>
+            <span class="truncate" class:pr-5={dpHasRepeat || dpHasMeeting}>
               {#if dp.event.title}{dp.event.title}{:else}(No title){/if}
             </span>
           </div>

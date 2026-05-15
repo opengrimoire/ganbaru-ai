@@ -32,6 +32,7 @@ export interface DbCalendarEvent {
   repeat_until: string | null;
   all_day: number;
   location: string;
+  meeting_enabled: number;
   transparency: string;
   status: string;
   local_rsvp_status: string | null;
@@ -172,6 +173,7 @@ export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
   if (exceptions) slim.exceptions = exceptions;
   if (allDay) slim.allDay = true;
   if (r.location) slim.location = r.location;
+  if (r.meeting_enabled === 1) slim.meetingEnabled = true;
   if (r.transparency === "transparent") slim.transparency = "transparent";
   if (r.status !== "confirmed") slim.status = r.status as EventStatus;
   if (r.local_rsvp_status) slim.localParticipationStatus = r.local_rsvp_status as AttendeeStatus;

@@ -104,6 +104,8 @@ Internally, all-day ranges use an inclusive end date because the UI needs to kno
 
 Event status and availability preserve the selected palette color. Past rendering is the only state that dims the fill color. Free/busy (`TRANSP` in `.ics`) is scheduling metadata shown in the event panel, not a grid pattern. Event-level `STATUS` is preserved for import/export but is not a primary top-strip edit control. Event-level cancelled is still a global cancellation marker and uses the left-leaning diagonal hatch plus a line-through title. Otherwise, when an imported calendar identity matches an attendee row, that attendee RSVP becomes the render-only surface status in the closed calendar grid and open panel: accepted has no pattern, pending uses a subtle dot pattern, tentative uses vertical pinstripes, and declined uses the same cancelled/declined treatment. If no email identity matches, app-local RSVP metadata for the "You (Local, no email provided)" row can drive the same surface pattern without becoming iCalendar attendee data.
 
+Closed event blocks show repeat and meeting indicators. Notification settings stay inside the event panel and do not add a block icon.
+
 Time-based view manipulations (zoom, scroll) do not affect the all-day band height. The band auto-sizes to fit its row count.
 
 ## Active session protection

@@ -9,7 +9,7 @@
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import Repeat from "@lucide/svelte/icons/repeat";
-  import Bell from "@lucide/svelte/icons/bell";
+  import Users from "@lucide/svelte/icons/users";
 
   const calZoom = getCalendarZoom();
 
@@ -47,7 +47,7 @@
   const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
   const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
   const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
-  const hasNotification = $derived(positioned.event.notifications && positioned.event.notifications.length > 0);
+  const hasMeeting = $derived(positioned.event.meetingEnabled === true);
   const isCancelled = $derived(isEventSurfaceCancelled(positioned.event));
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
@@ -121,17 +121,17 @@
 
   <!-- Content -->
   <div class="relative z-10 min-w-0 flex-1 overflow-hidden px-1 py-0.5">
-    {#if hasRepeat || hasNotification}
+    {#if hasRepeat || hasMeeting}
       <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">
         {#if hasRepeat}
           <Repeat size={8} class="shrink-0" />
         {/if}
-        {#if hasNotification}
-          <Bell size={8} class="shrink-0" />
+        {#if hasMeeting}
+          <Users size={8} class="shrink-0" />
         {/if}
       </div>
     {/if}
-    <div class="event-title truncate font-medium" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
+    <div class="event-title truncate font-medium" class:pr-5={hasRepeat || hasMeeting} style={isCancelled ? 'text-decoration: line-through;' : ''}>
       {#if positioned.event.title}{positioned.event.title}{:else}(No title){/if}
     </div>
     <div class="event-time truncate" style="color: {timeColor};">{startTime} - {endTime}</div>

@@ -95,9 +95,10 @@
 
   /** Collapsed summary: attendee count, location, URL host, joined with middle dots. */
   const summary = $derived.by(() => {
-    if (!enabled || !hasContent) return "";
+    if (!enabled) return "";
     const parts: string[] = [];
-    const peopleCount = visibleAttendees.length + (organizer ? 1 : 0);
+    const localSelfCount = showLocalSelfRow ? 1 : 0;
+    const peopleCount = visibleAttendees.length + (organizer ? 1 : 0) + localSelfCount;
     if (peopleCount > 0) {
       parts.push(organizer ? `${peopleCount} people` : `${peopleCount} attendee${peopleCount === 1 ? "" : "s"}`);
     }
