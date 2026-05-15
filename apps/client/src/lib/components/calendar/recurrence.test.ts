@@ -496,6 +496,44 @@ describe("expandRecurring - overrides", () => {
     expect(march16!.color).toBe(2);
     expect(march16!.status).toBe("tentative");
   });
+
+  it("hides cancelled override instances", () => {
+    const evt = makeEvent({
+      recurrence: { frequency: "daily", interval: 1, end: { type: "count", count: 3 } },
+      overrides: [
+        {
+          id: "ovr-1",
+          parentEventId: "evt-1",
+          recurrenceId: "2026-03-16T09:00:00Z",
+          status: "cancelled",
+        },
+      ],
+    });
+
+    expect(collectDates(expand([evt]))).toEqual(["2026-03-15", "2026-03-17", "2026-03-18"]);
+  });
+
+  it("hides cancelled this-and-future override instances", () => {
+    const evt = makeEvent({
+      recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+      overrides: [
+        {
+          id: "ovr-1",
+          parentEventId: "evt-1",
+          recurrenceId: "2026-03-17T09:00:00Z",
+          recurrenceRange: "this-and-future",
+          status: "cancelled",
+        },
+      ],
+    });
+
+    const result = expand(
+      [evt],
+      Temporal.PlainDate.from("2026-03-15"),
+      Temporal.PlainDate.from("2026-03-20"),
+    );
+    expect(collectDates(result)).toEqual(["2026-03-15", "2026-03-16"]);
+  });
 });
 
 describe("expandRecurring - exceptions + overrides together", () => {

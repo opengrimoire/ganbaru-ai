@@ -779,5 +779,10 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_alarms_icalendar_component
                 ON calendar_event_alarms(icalendar_component_id);
         ",
+    },
+    Migration {
+        version: 14,
+        description: "add recurrence range to calendar overrides",
+        sql: "ALTER TABLE calendar_event_overrides ADD COLUMN recurrence_range TEXT;",
     }]
 }

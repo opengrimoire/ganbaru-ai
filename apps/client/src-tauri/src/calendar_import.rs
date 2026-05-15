@@ -126,6 +126,7 @@ struct CalendarImportOverride {
     id: String,
     icalendar_component_id: Option<String>,
     recurrence_id: String,
+    recurrence_range: Option<String>,
     title: Option<String>,
     start_time: Option<String>,
     end_time: Option<String>,
@@ -718,14 +719,15 @@ async fn insert_child_rows(
         );
         sqlx::query(
             "INSERT INTO calendar_event_overrides
-                (id, parent_event_id, recurrence_id, title, start_time, end_time,
+                (id, parent_event_id, recurrence_id, recurrence_range, title, start_time, end_time,
                  description, location, url, color, status, transparency, visibility,
                  extended_properties, icalendar_component_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&override_row.id)
         .bind(event_id)
         .bind(&override_row.recurrence_id)
+        .bind(&override_row.recurrence_range)
         .bind(&override_row.title)
         .bind(&override_row.start_time)
         .bind(&override_row.end_time)
@@ -929,6 +931,13 @@ fn validate_override(override_row: &CalendarImportOverride) -> Result<(), String
         "override.icalendar_component_id",
     )?;
     require_non_empty(&override_row.recurrence_id, "override.recurrence_id")?;
+    if let Some(recurrence_range) = &override_row.recurrence_range {
+        validate_enum(
+            recurrence_range,
+            "override.recurrence_range",
+            &["this-and-future"],
+        )?;
+    }
     validate_color(override_row.color, "override.color")?;
     if let Some(status) = &override_row.status {
         validate_enum(
@@ -1171,6 +1180,7 @@ mod tests {
                 id: "override-1".to_string(),
                 icalendar_component_id: Some("component-override".to_string()),
                 recurrence_id: "2026-05-10T10:00:00Z".to_string(),
+                recurrence_range: None,
                 title: Some("Moved".to_string()),
                 start_time: None,
                 end_time: None,
@@ -1370,6 +1380,7 @@ mod tests {
                 id: "override-1".to_string(),
                 icalendar_component_id: None,
                 recurrence_id: "2026-05-10".to_string(),
+                recurrence_range: None,
                 title: None,
                 start_time: None,
                 end_time: None,

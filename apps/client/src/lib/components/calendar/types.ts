@@ -133,6 +133,8 @@ export interface EventOverride {
   parentEventId: string;
   /** Original DTSTART of the overridden instance as a UTC ISO 8601 instant. */
   recurrenceId: string;
+  /** RFC 5545 RECURRENCE-ID RANGE parameter. */
+  recurrenceRange?: "this-and-future";
   title?: string;
   start?: string;
   end?: string;

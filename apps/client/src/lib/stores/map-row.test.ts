@@ -46,6 +46,7 @@ function makeDbOverride(overrides: Partial<DbOverride> = {}): DbOverride {
     id: "override-1",
     parent_event_id: "evt-1",
     recurrence_id: "2026-05-01T00:00:00Z",
+    recurrence_range: null,
     title: null,
     start_time: "2026-05-01T00:00:00Z",
     end_time: "2026-05-01T00:00:00Z",
@@ -174,5 +175,10 @@ describe("mapOverride", () => {
     const result = mapOverride(makeDbOverride(), TEST_ZONE, true);
     expect(result.start).toBe("2026-05-01 00:00");
     expect(result.end).toBe("2026-05-01 00:00");
+  });
+
+  it("maps recurrence range", () => {
+    const result = mapOverride(makeDbOverride({ recurrence_range: "this-and-future" }), TEST_ZONE, true);
+    expect(result.recurrenceRange).toBe("this-and-future");
   });
 });

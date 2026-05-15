@@ -140,6 +140,42 @@ describe("serializeCalendarToIcs", () => {
 			expect(ics).toContain("RRULE:FREQ=DAILY");
 		});
 
+		it("emits timed recurrence UNTIL as a UTC end-of-day date-time", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						timezone: "America/Mexico_City",
+						start: "2021-05-09 22:00",
+						end: "2021-05-10 07:00",
+						recurrence: { frequency: "daily", interval: 1, end: { type: "until", date: "2021-05-09" } },
+					}),
+				],
+				"America/Mexico_City",
+			);
+
+			expect(ics).toContain("DTSTART;TZID=America/Mexico_City:20210509T220000");
+			expect(ics).toContain("RRULE:FREQ=DAILY;UNTIL=20210510T045959Z");
+		});
+
+		it("keeps all-day recurrence UNTIL as a date value", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						allDay: true,
+						start: "2026-05-13 00:00",
+						end: "2026-05-13 00:00",
+						recurrence: { frequency: "yearly", interval: 1, end: { type: "until", date: "2028-05-13" } },
+					}),
+				],
+				"UTC",
+			);
+
+			expect(ics).toContain("DTSTART;VALUE=DATE:20260513");
+			expect(ics).toContain("RRULE:FREQ=YEARLY;UNTIL=20280513");
+		});
+
 		it("emits recurring UTC events as UTC Z (no VTIMEZONE block)", () => {
 			const ics = serializeCalendarToIcs(
 				baseCalendar,
@@ -803,6 +839,31 @@ describe("serializeCalendarToIcs", () => {
 			);
 
 			expect(ics).toContain("RECURRENCE-ID;RANGE=THISANDFUTURE:20260603T140000Z");
+		});
+
+		it("emits RANGE=THISANDFUTURE from projected overrides", () => {
+			const ics = serializeCalendarToIcs(
+				baseCalendar,
+				[
+					makeEvent({
+						sourceUid: "cancel-future@ex",
+						recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+						overrides: [
+							{
+								id: "ov1",
+								parentEventId: "ev-1",
+								recurrenceId: "2026-06-03T14:00:00Z",
+								recurrenceRange: "this-and-future",
+								status: "cancelled",
+							},
+						],
+					}),
+				],
+				"UTC",
+			);
+
+			expect(ics).toContain("RECURRENCE-ID;RANGE=THISANDFUTURE:20260603T140000Z");
+			expect(ics).toContain("STATUS:CANCELLED");
 		});
 	});
 

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { Temporal } from "@js-temporal/polyfill";
+import { expandRecurring } from "$lib/components/calendar/recurrence";
 import { parseIcs } from "./parser";
 
 const HEADER = [
@@ -267,6 +269,95 @@ describe("parseIcs", () => {
 	});
 
 	describe("recurrence", () => {
+		it("does not expand Google UNTIL-capped recurring events into future windows", () => {
+			const ics = wrap(
+				vevent(
+					"DTSTART;TZID=America/Mexico_City:20210208T060000",
+					"DTEND;TZID=America/Mexico_City:20210208T063000",
+					"RRULE:FREQ=DAILY;UNTIL=20210322T055959Z",
+					"DTSTAMP:20260514T213541Z",
+					"UID:3u1hfmnhrngcurk04rq0lnn37p@google.com",
+					"CREATED:20210129T054436Z",
+					"LAST-MODIFIED:20260505T031146Z",
+					"SEQUENCE:1",
+					"STATUS:CONFIRMED",
+					"SUMMARY:Revisar correo\\, mensajes y noticias",
+					"TRANSP:OPAQUE",
+				),
+				vevent(
+					"DTSTART;TZID=America/Mexico_City:20210511T090000",
+					"DTEND;TZID=America/Mexico_City:20210511T130000",
+					"RRULE:FREQ=WEEKLY;WKST=MO;UNTIL=20210612T045959Z;BYDAY=FR,TU,WE",
+					"DTSTAMP:20260514T213541Z",
+					"UID:5uk9s8pts7uh8jmubpde7irjqs@google.com",
+					"CREATED:20210116T024954Z",
+					"LAST-MODIFIED:20260505T031146Z",
+					"SEQUENCE:0",
+					"STATUS:CONFIRMED",
+					"SUMMARY:Dormir",
+					"TRANSP:OPAQUE",
+				),
+			);
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(2);
+			expect(result.events[0].recurrence?.end).toEqual({
+				type: "until",
+				date: "2021-03-22T05:59:59Z",
+			});
+			expect(result.events[1].recurrence?.end).toEqual({
+				type: "until",
+				date: "2021-06-12T04:59:59Z",
+			});
+
+			const expanded = expandRecurring(
+				result.events,
+				Temporal.PlainDate.from("2026-05-01"),
+				Temporal.PlainDate.from("2026-05-31"),
+			);
+			expect(expanded).toHaveLength(0);
+		});
+
+		it("uses the newest duplicate master VEVENT revision before expanding", () => {
+			const ics = wrap(
+				vevent(
+					"DTSTART;TZID=America/Mexico_City:20210208T060000",
+					"DTEND;TZID=America/Mexico_City:20210208T063000",
+					"RRULE:FREQ=DAILY",
+					"DTSTAMP:20210129T054436Z",
+					"UID:duplicate-revision@google.com",
+					"LAST-MODIFIED:20210129T054436Z",
+					"SEQUENCE:0",
+					"STATUS:CONFIRMED",
+					"SUMMARY:Uncapped old revision",
+				),
+				vevent(
+					"DTSTART;TZID=America/Mexico_City:20210208T060000",
+					"DTEND;TZID=America/Mexico_City:20210208T063000",
+					"RRULE:FREQ=DAILY;UNTIL=20210322T055959Z",
+					"DTSTAMP:20260514T213541Z",
+					"UID:duplicate-revision@google.com",
+					"LAST-MODIFIED:20260505T031146Z",
+					"SEQUENCE:1",
+					"STATUS:CONFIRMED",
+					"SUMMARY:Capped newest revision",
+				),
+			);
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(1);
+			expect(result.events[0].title).toBe("Capped newest revision");
+			expect(result.events[0].recurrence?.end).toEqual({
+				type: "until",
+				date: "2021-03-22T05:59:59Z",
+			});
+
+			const expanded = expandRecurring(
+				result.events,
+				Temporal.PlainDate.from("2026-05-01"),
+				Temporal.PlainDate.from("2026-05-31"),
+			);
+			expect(expanded).toHaveLength(0);
+		});
+
 		it("parses RRULE into RecurrenceConfig", () => {
 			const ics = wrap(
 				vevent(
@@ -380,6 +471,63 @@ describe("parseIcs", () => {
 			expect(overrides).toHaveLength(1);
 			expect(overrides![0].title).toBe("Override");
 			expect(overrides![0].recurrenceId).toBe("2026-06-03T14:00:00Z");
+		});
+
+		it("marks cancelled single recurrence components as cancelled overrides", () => {
+			const ics = wrap(
+				vevent(
+					"UID:cancel-one@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260601T140000Z",
+					"DTEND:20260601T150000Z",
+					"RRULE:FREQ=DAILY;COUNT=5",
+					"SUMMARY:Master",
+				),
+				vevent(
+					"UID:cancel-one@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20260603T140000Z",
+					"DTEND:20260603T150000Z",
+					"RECURRENCE-ID:20260603T140000Z",
+					"STATUS:CANCELLED",
+					"SUMMARY:Cancelled",
+				),
+			);
+
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(1);
+			expect(result.events[0].overrides?.[0]).toMatchObject({
+				recurrenceId: "2026-06-03T14:00:00Z",
+				status: "cancelled",
+			});
+		});
+
+		it("preserves cancelled this-and-future recurrence components without DTSTART", () => {
+			const ics = wrap(
+				vevent(
+					"UID:cancel-future@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"DTSTART:20220601T140000Z",
+					"DTEND:20220601T150000Z",
+					"RRULE:FREQ=DAILY",
+					"SUMMARY:Master",
+				),
+				vevent(
+					"UID:cancel-future@example.com",
+					"DTSTAMP:20260101T000000Z",
+					"RECURRENCE-ID;RANGE=THISANDFUTURE:20220603T140000Z",
+					"STATUS:CANCELLED",
+					"SUMMARY:Cancelled future",
+				),
+			);
+
+			const result = parseIcs(ics);
+			expect(result.events).toHaveLength(1);
+			expect(result.events[0].overrides?.[0]).toMatchObject({
+				recurrenceId: "2022-06-03T14:00:00Z",
+				recurrenceRange: "this-and-future",
+				status: "cancelled",
+			});
 		});
 
 		it("warns when an override has no matching master", () => {

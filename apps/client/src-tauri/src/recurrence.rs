@@ -31,6 +31,8 @@ struct EventOverride {
     #[serde(default)]
     recurrence_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    recurrence_range: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     start: Option<String>,
@@ -139,11 +141,12 @@ fn expand_template(
         .iter()
         .cloned()
         .collect();
-    let override_map = build_override_map(event.overrides.as_deref());
+    let override_state = build_override_state(event.overrides.as_deref());
     let mut rdate_set = HashSet::from([start_date_str.to_string()]);
 
     if overlaps_window(orig_start, orig_end, window_start, window_end)
         && !exceptions.contains(start_date_str)
+        && !is_cancelled_occurrence(start_date_str, &override_state)
     {
         result.push(event.clone());
     }
@@ -199,12 +202,21 @@ fn expand_template(
                     break;
                 }
             }
+            if override_state
+                .cancel_from_date
+                .as_ref()
+                .is_some_and(|date| occ_start_str.as_str() >= date.as_str())
+            {
+                break;
+            }
             if cursor > window_end {
                 break;
             }
 
             rdate_set.insert(occ_start_str.clone());
-            if exceptions.contains(&occ_start_str) {
+            if exceptions.contains(&occ_start_str)
+                || is_cancelled_occurrence(&occ_start_str, &override_state)
+            {
                 cursor = advance_date(cursor, config)?;
                 continue;
             }
@@ -217,7 +229,7 @@ fn expand_template(
                 instance.start = format!("{occ_start_str} {start_time}");
                 instance.end = format!("{occ_end_str} {end_time}");
                 instance.recurring_parent_id = Some(event.id.clone());
-                if let Some(override_row) = override_map.get(&occ_start_str) {
+                if let Some(override_row) = override_state.overrides.get(&occ_start_str) {
                     apply_override(&mut instance, override_row);
                 }
                 result.push(instance);
@@ -231,6 +243,9 @@ fn expand_template(
     for raw_rdate in event.rdate.as_deref().unwrap_or(&[]) {
         let rdate = date_part(raw_rdate);
         if rdate_set.contains(rdate) || exceptions.contains(rdate) {
+            continue;
+        }
+        if is_cancelled_occurrence(rdate, &override_state) {
             continue;
         }
         let rdate_plain = parse_date(rdate)?;
@@ -249,7 +264,7 @@ fn expand_template(
         instance.start = format!("{rdate} {start_time}");
         instance.end = format!("{} {end_time}", fmt_date(rdate_end));
         instance.recurring_parent_id = Some(event.id.clone());
-        if let Some(override_row) = override_map.get(rdate) {
+        if let Some(override_row) = override_state.overrides.get(rdate) {
             apply_override(&mut instance, override_row);
         }
         result.push(instance);
@@ -588,13 +603,45 @@ fn is_complex_config(config: &RecurrenceConfig) -> bool {
         || config.by_month.as_ref().is_some_and(|v| !v.is_empty())
 }
 
-fn build_override_map(overrides: Option<&[EventOverride]>) -> HashMap<String, EventOverride> {
-    let mut map = HashMap::new();
+struct OverrideState {
+    overrides: HashMap<String, EventOverride>,
+    cancelled_dates: HashSet<String>,
+    cancel_from_date: Option<String>,
+}
+
+fn build_override_state(overrides: Option<&[EventOverride]>) -> OverrideState {
+    let mut state = OverrideState {
+        overrides: HashMap::new(),
+        cancelled_dates: HashSet::new(),
+        cancel_from_date: None,
+    };
     for override_row in overrides.unwrap_or(&[]) {
         let key = date_part(&override_row.recurrence_id).to_string();
-        map.insert(key, override_row.clone());
+        if override_row.status.as_deref() == Some("cancelled") {
+            if override_row.recurrence_range.as_deref() == Some("this-and-future") {
+                if state
+                    .cancel_from_date
+                    .as_ref()
+                    .is_none_or(|current| key.as_str() < current.as_str())
+                {
+                    state.cancel_from_date = Some(key);
+                }
+            } else {
+                state.cancelled_dates.insert(key);
+            }
+            continue;
+        }
+        state.overrides.insert(key, override_row.clone());
     }
-    map
+    state
+}
+
+fn is_cancelled_occurrence(date: &str, override_state: &OverrideState) -> bool {
+    override_state.cancelled_dates.contains(date)
+        || override_state
+            .cancel_from_date
+            .as_ref()
+            .is_some_and(|cutoff| date >= cutoff.as_str())
 }
 
 fn apply_override(instance: &mut RenderEvent, override_row: &EventOverride) {
@@ -869,6 +916,107 @@ mod tests {
         .unwrap();
         assert!(!dates(&expanded).contains(&"2026-03-17".to_string()));
         assert_eq!(expanded.len(), 5);
+    }
+
+    #[test]
+    fn hides_cancelled_override_instance() {
+        let mut event = event_with_recurrence(RecurrenceConfig {
+            frequency: RecurrenceFrequency::Daily,
+            interval: 1,
+            weekdays: None,
+            ordinal_weekdays: None,
+            by_month_day: None,
+            by_month: None,
+            end: RecurrenceEnd::Count { count: 3 },
+        });
+        event.overrides = Some(vec![EventOverride {
+            recurrence_id: "2026-03-16T09:00:00Z".to_string(),
+            recurrence_range: None,
+            title: None,
+            start: None,
+            end: None,
+            color: None,
+            status: Some("cancelled".to_string()),
+            transparency: None,
+            extra: Map::new(),
+        }]);
+        let expanded = calendar_expand_render_events(
+            vec![event],
+            "2026-03-01".to_string(),
+            "2026-03-31".to_string(),
+        )
+        .unwrap();
+        assert_eq!(dates(&expanded), ["2026-03-15", "2026-03-17", "2026-03-18"]);
+    }
+
+    #[test]
+    fn hides_cancelled_this_and_future_override_instances() {
+        let mut event = event_with_recurrence(RecurrenceConfig {
+            frequency: RecurrenceFrequency::Daily,
+            interval: 1,
+            weekdays: None,
+            ordinal_weekdays: None,
+            by_month_day: None,
+            by_month: None,
+            end: RecurrenceEnd::Never,
+        });
+        event.overrides = Some(vec![EventOverride {
+            recurrence_id: "2026-03-17T09:00:00Z".to_string(),
+            recurrence_range: Some("this-and-future".to_string()),
+            title: None,
+            start: None,
+            end: None,
+            color: None,
+            status: Some("cancelled".to_string()),
+            transparency: None,
+            extra: Map::new(),
+        }]);
+        let expanded = calendar_expand_render_events(
+            vec![event],
+            "2026-03-15".to_string(),
+            "2026-03-20".to_string(),
+        )
+        .unwrap();
+        assert_eq!(dates(&expanded), ["2026-03-15", "2026-03-16"]);
+    }
+
+    #[test]
+    fn does_not_expand_google_until_capped_events_into_future_window() {
+        let mut daily = event_with_recurrence(RecurrenceConfig {
+            frequency: RecurrenceFrequency::Daily,
+            interval: 1,
+            weekdays: None,
+            ordinal_weekdays: None,
+            by_month_day: None,
+            by_month: None,
+            end: RecurrenceEnd::Until {
+                date: "2021-03-22T05:59:59Z".to_string(),
+            },
+        });
+        daily.start = "2021-02-08 06:00".to_string();
+        daily.end = "2021-02-08 06:30".to_string();
+
+        let mut weekly = event_with_recurrence(RecurrenceConfig {
+            frequency: RecurrenceFrequency::Weekly,
+            interval: 1,
+            weekdays: Some(vec![Weekday::FR, Weekday::TU, Weekday::WE]),
+            ordinal_weekdays: None,
+            by_month_day: None,
+            by_month: None,
+            end: RecurrenceEnd::Until {
+                date: "2021-06-12T04:59:59Z".to_string(),
+            },
+        });
+        weekly.start = "2021-05-11 09:00".to_string();
+        weekly.end = "2021-05-11 13:00".to_string();
+
+        let expanded = calendar_expand_render_events(
+            vec![daily, weekly],
+            "2026-05-01".to_string(),
+            "2026-05-31".to_string(),
+        )
+        .unwrap();
+        assert!(expanded.is_empty());
     }
 
     #[test]

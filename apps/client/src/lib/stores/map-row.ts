@@ -75,6 +75,7 @@ export interface DbOverride {
   id: string;
   parent_event_id: string;
   recurrence_id: string;
+  recurrence_range: string | null;
   title: string | null;
   start_time: string | null;
   end_time: string | null;
@@ -217,6 +218,7 @@ export function mapOverride(r: DbOverride, renderZone: string, allDay = false): 
     parentEventId: r.parent_event_id,
     recurrenceId: r.recurrence_id,
   };
+  if (r.recurrence_range === "this-and-future") slim.recurrenceRange = "this-and-future";
   if (r.title) slim.title = r.title;
   if (r.start_time) slim.start = toCalendarDate(r.start_time, renderZone, allDay);
   if (r.end_time) slim.end = toCalendarDate(r.end_time, renderZone, allDay);

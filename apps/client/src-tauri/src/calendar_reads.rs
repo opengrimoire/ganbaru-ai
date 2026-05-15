@@ -57,6 +57,7 @@ pub struct DbOverrideRow {
     id: String,
     parent_event_id: String,
     recurrence_id: String,
+    recurrence_range: Option<String>,
     title: Option<String>,
     start_time: Option<String>,
     end_time: Option<String>,
@@ -68,6 +69,7 @@ impl_sqlite_from_row!(DbOverrideRow {
     id,
     parent_event_id,
     recurrence_id,
+    recurrence_range,
     title,
     start_time,
     end_time,
@@ -211,6 +213,7 @@ pub struct DbFullOverrideRow {
     id: String,
     parent_event_id: String,
     recurrence_id: String,
+    recurrence_range: Option<String>,
     title: Option<String>,
     start_time: Option<String>,
     end_time: Option<String>,
@@ -229,6 +232,7 @@ impl_sqlite_from_row!(DbFullOverrideRow {
     id,
     parent_event_id,
     recurrence_id,
+    recurrence_range,
     title,
     start_time,
     end_time,
@@ -297,7 +301,7 @@ const WINDOW_EVENTS_SQL: &str = r#"
 "#;
 
 const WINDOW_OVERRIDES_SQL: &str = r#"
-    SELECT o.id, o.parent_event_id, o.recurrence_id, o.title, o.start_time,
+    SELECT o.id, o.parent_event_id, o.recurrence_id, o.recurrence_range, o.title, o.start_time,
            o.end_time, o.color, o.status, o.transparency
     FROM calendar_event_overrides o
     JOIN calendar_events ce ON ce.id = o.parent_event_id
@@ -573,6 +577,7 @@ mod tests {
             id: "override-1".to_string(),
             parent_event_id: "event-1".to_string(),
             recurrence_id: "2026-05-10".to_string(),
+            recurrence_range: None,
             title: None,
             start_time: None,
             end_time: None,

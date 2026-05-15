@@ -105,6 +105,7 @@ Rules:
 - UTC master events should export UTC recurrence IDs.
 - All-day master events should export date-only recurrence IDs.
 - Preserve `RANGE=THISANDFUTURE` even before full edit support exists.
+- Imported cancelled recurrence overrides with `RANGE=THISANDFUTURE` suppress that occurrence and later generated occurrences during expansion.
 
 ## Expansion
 

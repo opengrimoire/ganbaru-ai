@@ -248,12 +248,14 @@ function buildRecurrenceId(
 	isAllDay: boolean,
 	useTzid: boolean,
 	homeZone: string,
+	recurrenceRange?: EventOverride["recurrenceRange"],
 ): string {
-	if (isAllDay) return `RECURRENCE-ID;VALUE=DATE:${formatUtcDate(recurrenceIdUtc)}`;
+	const rangeParam = recurrenceRange === "this-and-future" ? ";RANGE=THISANDFUTURE" : "";
+	if (isAllDay) return `RECURRENCE-ID${rangeParam};VALUE=DATE:${formatUtcDate(recurrenceIdUtc)}`;
 	if (useTzid && homeZone !== "UTC") {
-		return `RECURRENCE-ID;TZID=${homeZone}:${formatZonedDateTime(recurrenceIdUtc, homeZone)}`;
+		return `RECURRENCE-ID${rangeParam};TZID=${homeZone}:${formatZonedDateTime(recurrenceIdUtc, homeZone)}`;
 	}
-	return `RECURRENCE-ID:${formatUtcDateTime(recurrenceIdUtc)}`;
+	return `RECURRENCE-ID${rangeParam}:${formatUtcDateTime(recurrenceIdUtc)}`;
 }
 
 function buildExdate(
@@ -282,6 +284,31 @@ function buildExdate(
 		.map((d) => formatDateTimeOnDate(d, utcStart))
 		.join(",");
 	return `EXDATE:${exdates}`;
+}
+
+function recurrenceToExportRrule(
+	event: CalendarEvent,
+	isAllDay: boolean,
+	homeZone: string,
+): string | undefined {
+	const recurrence = event.recurrence;
+	if (!recurrence) return undefined;
+	if (isAllDay || recurrence.end.type !== "until" || recurrence.end.date.includes("T")) {
+		return recurrenceToRrule(recurrence);
+	}
+
+	// RFC 5545 requires timed recurrence UNTIL values to be UTC date-times.
+	const untilInstant = Temporal.PlainDate.from(recurrence.end.date)
+		.toZonedDateTime({
+			timeZone: homeZone || "UTC",
+			plainTime: Temporal.PlainTime.from("23:59:59"),
+		})
+		.toInstant()
+		.toString();
+	return recurrenceToRrule({
+		...recurrence,
+		end: { type: "until", date: untilInstant },
+	});
 }
 
 function buildAlarm(alarm: EventAlarm): string[] {
@@ -629,10 +656,11 @@ interface BuildVeventOptions {
 	dtStamp: string;
 	useTzid: boolean;
 	recurrenceIdUtc?: string;
+	recurrenceRange?: EventOverride["recurrenceRange"];
 }
 
 function buildVevent(opts: BuildVeventOptions): string[] {
-	const { event, uid, renderZone, dtStamp, useTzid, recurrenceIdUtc } = opts;
+	const { event, uid, renderZone, dtStamp, useTzid, recurrenceIdUtc, recurrenceRange } = opts;
 	const isAllDay = event.allDay === true;
 	const homeZone = event.timezone || "UTC";
 	const startUtc = toUtcInstant(event.start, renderZone, isAllDay);
@@ -652,7 +680,7 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 	}
 
 	if (recurrenceIdUtc) {
-		lines.push(buildRecurrenceId(recurrenceIdUtc, isAllDay, useTzid, homeZone));
+		lines.push(buildRecurrenceId(recurrenceIdUtc, isAllDay, useTzid, homeZone, recurrenceRange));
 	}
 
 	lines.push(`SUMMARY:${escapeText(event.title)}`);
@@ -660,9 +688,8 @@ function buildVevent(opts: BuildVeventOptions): string[] {
 	if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
 	if (event.url) lines.push(`URL:${event.url}`);
 
-	if (event.recurrence) {
-		lines.push(`RRULE:${recurrenceToRrule(event.recurrence)}`);
-	}
+	const rrule = recurrenceToExportRrule(event, isAllDay, homeZone);
+	if (rrule) lines.push(`RRULE:${rrule}`);
 
 	const exdateLine = buildExdate(event, isAllDay, useTzid, homeZone, startUtc);
 	if (exdateLine) lines.push(exdateLine);
@@ -748,6 +775,7 @@ function buildOverrideVevent(
 		dtStamp,
 		useTzid,
 		recurrenceIdUtc: override.recurrenceId,
+		recurrenceRange: override.recurrenceRange,
 	});
 }
 

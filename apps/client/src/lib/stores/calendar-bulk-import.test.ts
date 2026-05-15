@@ -189,6 +189,58 @@ describe("buildBulkImportPayload", () => {
     expect(event.overrides[0].endTime).toBe("2026-05-01T13:00:00Z");
   });
 
+  it("stores imported UTC events from the parser display zone without applying the event timezone twice", () => {
+    const payload = buildBulkImportPayload(
+      [
+        makeEvent({
+          title: "ABCD",
+          timezone: "UTC",
+          start: "2026-05-15 14:45",
+          end: "2026-05-15 20:15",
+        }),
+      ],
+      CAL,
+      NOW,
+      "America/Mexico_City",
+      deterministicIds(),
+    );
+
+    expect(payload.events[0].startTime).toBe("2026-05-15T20:45:00Z");
+    expect(payload.events[0].endTime).toBe("2026-05-16T02:15:00Z");
+    expect(payload.events[0].timezone).toBe("UTC");
+  });
+
+  it("stores imported override wall clocks from the parser display zone", () => {
+    const payload = buildBulkImportPayload(
+      [
+        makeEvent({
+          timezone: "America/New_York",
+          start: "2026-05-01 08:00",
+          end: "2026-05-01 09:00",
+          overrides: [
+            {
+              id: "override-1",
+              parentEventId: "ignored",
+              recurrenceId: "2026-05-02T14:00:00Z",
+              start: "2026-05-02 09:30",
+              end: "2026-05-02 10:30",
+            },
+          ],
+        }),
+      ],
+      CAL,
+      NOW,
+      "America/Mexico_City",
+      deterministicIds(),
+    );
+
+    expect(payload.events[0].startTime).toBe("2026-05-01T14:00:00Z");
+    expect(payload.events[0].endTime).toBe("2026-05-01T15:00:00Z");
+    expect(payload.events[0].overrides[0].startTime).toBe("2026-05-02T15:30:00Z");
+    expect(payload.events[0].overrides[0].endTime).toBe("2026-05-02T16:30:00Z");
+    expect(payload.events[0].timezone).toBe("America/New_York");
+  });
+
   it("stores all-day override dates as floating date rows", () => {
     const payload = buildBulkImportPayload(
       [
@@ -427,5 +479,50 @@ describe("buildBulkImportPayload", () => {
     expect(event.attendees[0].icalendarPropertyIndex).toBe(1);
     expect(event.alarms[0].icalendarComponentId).toBe("new-3");
     expect(event.overrides[0].icalendarComponentId).toBe("new-4");
+  });
+
+  it("links duplicate master events to the highest sequence preserved component", () => {
+    const preservation: IcsPreservationPayload = {
+      sourceFingerprint: "abc123",
+      objects: [
+        {
+          rawJcal: ["vcalendar", [], []],
+          diagnostics: [],
+          components: [
+            {
+              componentType: "vevent",
+              uid: "duplicate@example.com",
+              sequence: 0,
+              rawJcal: ["vevent", [["uid", {}, "text", "duplicate@example.com"]], []],
+              preservationStatus: "partial",
+              projectionWarnings: [],
+              components: [],
+            },
+            {
+              componentType: "vevent",
+              uid: "duplicate@example.com",
+              sequence: 1,
+              rawJcal: ["vevent", [["uid", {}, "text", "duplicate@example.com"]], []],
+              preservationStatus: "partial",
+              projectionWarnings: [],
+              components: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const payload = buildBulkImportPayload(
+      [makeEvent({ sourceUid: "duplicate@example.com" })],
+      CAL,
+      NOW,
+      ZONE,
+      deterministicIds(),
+      preservation,
+      "duplicate.ics",
+      "import-file",
+    );
+
+    expect(payload.events[0].icalendarComponentId).toBe("new-3");
   });
 });

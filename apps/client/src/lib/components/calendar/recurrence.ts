@@ -419,15 +419,41 @@ function fastForwardWeeklyByDay(
  * Build an override lookup map keyed by date string (YYYY-MM-DD)
  * extracted from the recurrenceId (which may be an ISO datetime).
  */
-function buildOverrideMap(overrides: EventOverride[] | undefined): Map<string, EventOverride> | null {
+interface OverrideState {
+  overrides: Map<string, EventOverride>;
+  cancelledDates: Set<string>;
+  cancelFromDate: string | null;
+}
+
+function buildOverrideState(overrides: EventOverride[] | undefined): OverrideState | null {
   if (!overrides || overrides.length === 0) return null;
-  const map = new Map<string, EventOverride>();
+  const state: OverrideState = {
+    overrides: new Map<string, EventOverride>(),
+    cancelledDates: new Set<string>(),
+    cancelFromDate: null,
+  };
   for (const ovr of overrides) {
     // recurrenceId may be "2026-04-15", "2026-04-15 09:00", or "2026-04-15T09:00:00Z"
     const dateKey = ovr.recurrenceId.split(/[ T]/)[0];
-    map.set(dateKey, ovr);
+    if (ovr.status === "cancelled") {
+      if (ovr.recurrenceRange === "this-and-future") {
+        if (!state.cancelFromDate || dateKey < state.cancelFromDate) {
+          state.cancelFromDate = dateKey;
+        }
+      } else {
+        state.cancelledDates.add(dateKey);
+      }
+      continue;
+    }
+    state.overrides.set(dateKey, ovr);
   }
-  return map;
+  return state;
+}
+
+function isCancelledOccurrence(occDateStr: string, overrideState: OverrideState | null): boolean {
+  if (!overrideState) return false;
+  if (overrideState.cancelledDates.has(occDateStr)) return true;
+  return overrideState.cancelFromDate !== null && occDateStr >= overrideState.cancelFromDate;
 }
 
 /**
@@ -527,13 +553,13 @@ export function expandTemplate(
   const daySpan = origStart.until(origEnd, { largestUnit: "days" }).days;
 
   const exceptionsSet = evt.exceptions ? new Set(evt.exceptions) : null;
-  const overrideMap = buildOverrideMap(evt.overrides);
+  const overrideState = buildOverrideState(evt.overrides);
 
   // Emit the original template as the first occurrence when it overlaps the
   // window and is not itself excepted. Pushed without an `::date` suffix so
   // the primary event id is preserved (matching legacy behavior).
   const origInWindow = overlapsWindow(origStart, origEnd, windowStart, windowEnd);
-  if (origInWindow && !exceptionsSet?.has(startDateStr)) {
+  if (origInWindow && !exceptionsSet?.has(startDateStr) && !isCancelledOccurrence(startDateStr, overrideState)) {
     result.push(evt);
   }
 
@@ -575,13 +601,14 @@ export function expandTemplate(
       const occStartStr = ymdFromPlainDate(cursor);
 
       if (untilDate && isPastUntil(occStartStr, untilDate)) break;
+      if (overrideState?.cancelFromDate && occStartStr >= overrideState.cancelFromDate) break;
       if (Temporal.PlainDate.compare(cursor, windowEnd) > 0) break;
 
       rdateSet.add(occStartStr);
 
       // EXDATE: skip emission and do NOT count toward COUNT, matching the
       // legacy behavior validated by the "respects exceptions" test.
-      if (exceptionsSet?.has(occStartStr)) {
+      if (exceptionsSet?.has(occStartStr) || isCancelledOccurrence(occStartStr, overrideState)) {
         cursor = advanceDate(cursor, config);
         continue;
       }
@@ -599,7 +626,7 @@ export function expandTemplate(
           end: `${occEndStr} ${endTimeStr}`,
           recurringParentId: evt.id,
         };
-        const override = overrideMap?.get(occStartStr);
+        const override = overrideState?.overrides.get(occStartStr);
         if (override) instance = applyOverride(instance, override);
         result.push(instance);
       }
@@ -614,6 +641,7 @@ export function expandTemplate(
       const rdate = rdateStr.split(/[ T]/)[0];
       if (rdateSet.has(rdate)) continue;
       if (exceptionsSet?.has(rdate)) continue;
+      if (isCancelledOccurrence(rdate, overrideState)) continue;
       const rdatePlain = plainDateFromYMD(rdate);
       const rdateEndPlain = rdatePlain.add({ days: daySpan });
       if (!overlapsWindow(rdatePlain, rdateEndPlain, windowStart, windowEnd)) continue;
@@ -627,7 +655,7 @@ export function expandTemplate(
         end: `${occEndStr} ${endTimeStr}`,
         recurringParentId: evt.id,
       };
-      const override = overrideMap?.get(rdate);
+      const override = overrideState?.overrides.get(rdate);
       if (override) instance = applyOverride(instance, override);
       result.push(instance);
     }

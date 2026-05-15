@@ -139,6 +139,7 @@ export interface CalendarBulkImportOverride {
   id: string;
   icalendarComponentId: string | null;
   recurrenceId: string;
+  recurrenceRange: "this-and-future" | null;
   title: string | null;
   startTime: string | null;
   endTime: string | null;
@@ -164,6 +165,7 @@ interface PreservationLinkIndex {
 
 interface PreservationEventLink {
   componentId: string;
+  sequence: number | null;
   attendeePropertyIndexes: number[];
   alarmComponentIds: string[];
 }
@@ -283,7 +285,7 @@ function buildPreservedComponent(
       const uidLinks = links.overridesByUid.get(component.uid) ?? [];
       uidLinks.push(link);
       links.overridesByUid.set(component.uid, uidLinks);
-    } else if (!links.eventsByUid.has(component.uid)) {
+    } else if (isPreferredEventLink(link, links.eventsByUid.get(component.uid))) {
       links.eventsByUid.set(component.uid, link);
     }
   }
@@ -298,12 +300,21 @@ function buildComponentProjectionLink(
   if (source.componentType !== "vevent") return null;
   return {
     componentId: built.id,
+    sequence: source.sequence ?? null,
     attendeePropertyIndexes: attendeePropertyIndexes(source.rawJcal),
     alarmComponentIds: children
       .map((child) => child.component)
       .filter((child) => child.componentType === "valarm")
       .map((child) => child.id),
   };
+}
+
+function isPreferredEventLink(
+  candidate: PreservationEventLink,
+  existing: PreservationEventLink | undefined,
+): boolean {
+  if (!existing) return true;
+  return (candidate.sequence ?? 0) > (existing.sequence ?? 0);
 }
 
 function attendeePropertyIndexes(rawJcal: unknown): number[] {
@@ -327,8 +338,8 @@ function buildBulkImportEvent(
     candidateId,
     icalendarComponentId: link?.componentId ?? event.icalendarComponentId ?? null,
     title: event.title,
-    startTime: toDbTime(event.start, homeZone, event.allDay),
-    endTime: toDbTime(event.end, homeZone, event.allDay),
+    startTime: toDbTime(event.start, fallbackZone, event.allDay),
+    endTime: toDbTime(event.end, fallbackZone, event.allDay),
     timezone: homeZone,
     color: event.color ?? null,
     description: sanitizeCalendarDescriptionHtml(event.description ?? ""),
@@ -359,7 +370,7 @@ function buildBulkImportEvent(
     alarms: buildAlarms(event.alarms, link),
     overrides: buildOverrides(
       event.overrides,
-      homeZone,
+      fallbackZone,
       event.allDay === true,
       overrideLinks,
     ),
@@ -408,6 +419,7 @@ function buildOverrides(
     icalendarComponentId:
       overrideLinks[index]?.componentId ?? overrideRow.icalendarComponentId ?? null,
     recurrenceId: overrideRow.recurrenceId,
+    recurrenceRange: overrideRow.recurrenceRange ?? null,
     title: overrideRow.title ?? null,
     startTime: overrideRow.start
       ? toDbTime(overrideRow.start, zone, allDay)

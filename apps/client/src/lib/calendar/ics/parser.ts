@@ -24,6 +24,24 @@ import type {
 
 type JcalProperty = [string, Record<string, unknown>, string, ...unknown[]];
 type JcalComponent = [string, unknown[], unknown[]];
+type RecurrenceRange = NonNullable<EventOverride["recurrenceRange"]>;
+
+interface RawRecurrenceIdInfo {
+	value: ICAL.Time;
+	tzidHint?: string | null;
+	recurrenceRange?: RecurrenceRange;
+}
+
+interface ParsedRecurrenceIdInfo {
+	recurrenceId: string;
+	recurrenceRange?: RecurrenceRange;
+}
+
+interface ParsedMasterEvent {
+	event: CalendarEvent;
+	sequence: number;
+	revisionKey: string;
+}
 
 const MAX_UNFOLDED_LINE_CHARS = 2 * 1024 * 1024;
 const MAX_COMPONENT_COUNT = 50_000;
@@ -361,7 +379,7 @@ const SUPPORTED_PARAMS_BY_PROPERTY: Record<string, Set<string>> = {
 	dtend: new Set(["tzid", "value"]),
 	exdate: new Set(["tzid", "value"]),
 	rdate: new Set(["tzid", "value"]),
-	"recurrence-id": new Set(["tzid", "value"]),
+	"recurrence-id": new Set(["tzid", "value", "range"]),
 };
 
 function pushUnique(list: string[], message: string): void {
@@ -516,6 +534,27 @@ function parseOrganizer(prop: ICAL.Property): EventOrganizer {
 	return cn ? { name: cn, email } : { email };
 }
 
+function sortableTimeValue(value: unknown): string {
+	if (value instanceof ICAL.Time) {
+		return value.toJSDate().toISOString();
+	}
+	return typeof value === "string" ? value : "";
+}
+
+function componentRevisionKey(component: ICAL.Component): string {
+	return sortableTimeValue(component.getFirstPropertyValue("last-modified"))
+		|| sortableTimeValue(component.getFirstPropertyValue("dtstamp"))
+		|| sortableTimeValue(component.getFirstPropertyValue("created"));
+}
+
+function shouldReplaceMasterEvent(existing: ParsedMasterEvent, candidate: ParsedMasterEvent): boolean {
+	if (candidate.sequence !== existing.sequence) return candidate.sequence > existing.sequence;
+	if (candidate.revisionKey && candidate.revisionKey !== existing.revisionKey) {
+		return candidate.revisionKey > existing.revisionKey;
+	}
+	return false;
+}
+
 function parseAlarm(
 	component: ICAL.Component,
 	warnings: string[],
@@ -649,6 +688,46 @@ function recurrenceLocalDate(
 	return utcIsoToWallClock(utc, homeZone).slice(0, 10);
 }
 
+function isFloatingTime(time: ICAL.Time): boolean {
+	const zoneTzid = (time.zone as ICAL.Timezone | null)?.tzid;
+	return !zoneTzid || zoneTzid === "floating";
+}
+
+function recurrenceRangeFromProperty(prop: ICAL.Property): RecurrenceRange | undefined {
+	const range = prop.getFirstParameter("range");
+	return typeof range === "string" && range.toUpperCase() === "THISANDFUTURE"
+		? "this-and-future"
+		: undefined;
+}
+
+function rawRecurrenceIdInfo(
+	component: ICAL.Component,
+	warnings: string[],
+	fallbackTzidHint?: string | null,
+): RawRecurrenceIdInfo | undefined {
+	const recurrenceIdProp = component.getFirstProperty("recurrence-id");
+	if (!recurrenceIdProp) return undefined;
+	const value = recurrenceIdProp.getFirstValue();
+	if (!(value instanceof ICAL.Time)) return undefined;
+	const ridTzid = recurrenceIdProp.getFirstParameter("tzid");
+	const tzidHint = ridTzid ? resolveTimezone(ridTzid, warnings) : fallbackTzidHint;
+	const recurrenceRange = recurrenceRangeFromProperty(recurrenceIdProp);
+	return { value, tzidHint, recurrenceRange };
+}
+
+function materializeRecurrenceId(
+	info: RawRecurrenceIdInfo,
+	deviceZone: string,
+	homeZone: string,
+): ParsedRecurrenceIdInfo {
+	const utcHint = info.tzidHint ?? (isFloatingTime(info.value) ? homeZone : undefined);
+	const recurrenceId = timeToUtcIso(info.value, deviceZone, utcHint);
+	return {
+		recurrenceId,
+		recurrenceRange: info.recurrenceRange,
+	};
+}
+
 function parseRdates(
 	component: ICAL.Component,
 	deviceZone: string,
@@ -672,7 +751,7 @@ function calendarEventBaseFromComponent(
 	calendarId: string,
 	deviceZone: string,
 	warnings: string[],
-): { event: CalendarEvent; recurrenceId?: string } | null {
+): { event: CalendarEvent; recurrenceId?: ParsedRecurrenceIdInfo } | null {
 	const dtstartProp = component.getFirstProperty("dtstart");
 	if (!dtstartProp) return null;
 	const dtstartValue = dtstartProp.getFirstValue();
@@ -798,16 +877,10 @@ function calendarEventBaseFromComponent(
 
 	const { extended, guests } = collectExtendedProperties(component);
 
-	const recurrenceIdProp = component.getFirstProperty("recurrence-id");
-	let recurrenceId: string | undefined;
-	if (recurrenceIdProp) {
-		const value = recurrenceIdProp.getFirstValue();
-		if (value instanceof ICAL.Time) {
-			const ridTzid = recurrenceIdProp.getFirstParameter("tzid");
-			const ridHint = ridTzid ? resolveTimezone(ridTzid, warnings) : dtstartHint;
-			recurrenceId = timeToUtcIso(value, deviceZone, ridHint);
-		}
-	}
+	const rawRecurrenceId = rawRecurrenceIdInfo(component, warnings, dtstartHint);
+	const recurrenceId = rawRecurrenceId
+		? materializeRecurrenceId(rawRecurrenceId, deviceZone, homeZone)
+		: undefined;
 
 	const event: CalendarEvent = {
 		id: crypto.randomUUID(),
@@ -845,12 +918,17 @@ function calendarEventBaseFromComponent(
 	return { event, recurrenceId };
 }
 
-function buildOverride(parentEvent: CalendarEvent, child: CalendarEvent, recurrenceId: string): EventOverride {
+function buildOverride(
+	parentEvent: CalendarEvent,
+	child: CalendarEvent,
+	recurrenceId: ParsedRecurrenceIdInfo,
+): EventOverride {
 	const override: EventOverride = {
 		id: crypto.randomUUID(),
 		parentEventId: parentEvent.id,
-		recurrenceId,
+		recurrenceId: recurrenceId.recurrenceId,
 	};
+	if (recurrenceId.recurrenceRange) override.recurrenceRange = recurrenceId.recurrenceRange;
 	if (child.title !== parentEvent.title) override.title = child.title;
 	if (child.start !== parentEvent.start) override.start = child.start;
 	if (child.end !== parentEvent.end) override.end = child.end;
@@ -863,6 +941,25 @@ function buildOverride(parentEvent: CalendarEvent, child: CalendarEvent, recurre
 	if (child.visibility !== parentEvent.visibility) override.visibility = child.visibility;
 	if (child.extendedProperties) override.extendedProperties = child.extendedProperties;
 	return override;
+}
+
+function buildCancelledOverride(
+	parentEvent: CalendarEvent,
+	recurrenceId: ParsedRecurrenceIdInfo,
+): EventOverride {
+	const override: EventOverride = {
+		id: crypto.randomUUID(),
+		parentEventId: parentEvent.id,
+		recurrenceId: recurrenceId.recurrenceId,
+		status: "cancelled",
+	};
+	if (recurrenceId.recurrenceRange) override.recurrenceRange = recurrenceId.recurrenceRange;
+	return override;
+}
+
+function statusFromComponent(component: ICAL.Component): EventStatus | undefined {
+	const status = component.getFirstPropertyValue("status") as string | null;
+	return status ? STATUS_MAP[status.toUpperCase()] : undefined;
 }
 
 /**
@@ -896,40 +993,72 @@ export function parseIcs(text: string, calendarId = "local"): IcsParseResult {
 			: jcalSubcomponents(rootJcal).filter((component) => component[0].toLowerCase() === "vcalendar")
 		: [];
 
-	const masters = new Map<string, CalendarEvent>();
-	const overrides: { uid: string; child: CalendarEvent; recurrenceId: string }[] = [];
+	const masters = new Map<string, ParsedMasterEvent>();
+	const overrides: {
+		uid: string;
+		child: CalendarEvent | null;
+		recurrenceId: ParsedRecurrenceIdInfo | RawRecurrenceIdInfo;
+	}[] = [];
 
 	for (const vcal of vcalendars) {
 		for (const vevent of vcal.getAllSubcomponents("vevent")) {
 			const parsed = calendarEventBaseFromComponent(vevent, calendarId, deviceZone, warnings);
-			if (!parsed) continue;
-			const uid = parsed.event.sourceUid;
+			const uid = parsed?.event.sourceUid
+				?? (vevent.getFirstPropertyValue("uid") as string | null)
+				?? undefined;
 			if (!uid) {
 				warnings.push("VEVENT missing UID; skipped.");
 				continue;
 			}
-			if (parsed.recurrenceId) {
+			if (parsed?.recurrenceId) {
 				overrides.push({ uid, child: parsed.event, recurrenceId: parsed.recurrenceId });
+			} else if (!parsed) {
+				const rawRecurrenceId = rawRecurrenceIdInfo(vevent, warnings);
+				if (rawRecurrenceId && statusFromComponent(vevent) === "cancelled") {
+					overrides.push({ uid, child: null, recurrenceId: rawRecurrenceId });
+				}
 			} else if (!masters.has(uid)) {
-				masters.set(uid, parsed.event);
+				masters.set(uid, {
+					event: parsed.event,
+					sequence: parsed.event.sequence ?? 0,
+					revisionKey: componentRevisionKey(vevent),
+				});
 			} else {
-				warnings.push(`Duplicate UID ${uid}; keeping the first occurrence.`);
+				const existing = masters.get(uid)!;
+				const candidate = {
+					event: parsed.event,
+					sequence: parsed.event.sequence ?? 0,
+					revisionKey: componentRevisionKey(vevent),
+				};
+				if (shouldReplaceMasterEvent(existing, candidate)) {
+					masters.set(uid, candidate);
+					warnings.push(`Duplicate UID ${uid}; kept the newest master VEVENT revision.`);
+				} else {
+					warnings.push(`Duplicate UID ${uid}; kept the newest master VEVENT revision.`);
+				}
 			}
 		}
 	}
 
 	for (const { uid, child, recurrenceId } of overrides) {
-		const parent = masters.get(uid);
+		const parent = masters.get(uid)?.event;
 		if (!parent) {
 			warnings.push(`Override for UID ${uid} has no matching master VEVENT; skipped.`);
 			continue;
 		}
+		const resolvedRecurrenceId = "recurrenceId" in recurrenceId
+			? recurrenceId
+			: materializeRecurrenceId(recurrenceId, deviceZone, parent.timezone);
 		parent.overrides = parent.overrides ?? [];
-		parent.overrides.push(buildOverride(parent, child, recurrenceId));
+		if (child) {
+			parent.overrides.push(buildOverride(parent, child, resolvedRecurrenceId));
+		} else {
+			parent.overrides.push(buildCancelledOverride(parent, resolvedRecurrenceId));
+		}
 	}
 
 	return {
-		events: Array.from(masters.values()),
+		events: Array.from(masters.values()).map((master) => master.event),
 		warnings,
 		preservation: buildPreservationPayload(text, vcalendarJcals, warnings),
 	};

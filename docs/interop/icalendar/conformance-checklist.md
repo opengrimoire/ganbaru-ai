@@ -200,7 +200,8 @@ Gap: non-modeled text properties are not editable as first-class app fields.
 - `RDATE`: projected as a list of instants and exported. Tested for date-time values.
 - `EXDATE`: projected as local date strings and exported at the event start time. Tested.
 - `RECURRENCE-ID`: projected as overrides and exported. Tested for UTC and zoned timed overrides.
-- `RANGE=THISANDFUTURE`: preserved and merged on linked override export, but not implemented as an app recurrence edit operation.
+- `RANGE=THISANDFUTURE`: projected on recurrence overrides, used to hide imported cancelled future instances during expansion, and merged on linked override export. Creating this range from the app UI is not implemented yet.
+- Duplicate master `VEVENT` revisions with the same `UID`: the newest revision is projected by `SEQUENCE`, then by `LAST-MODIFIED`, `DTSTAMP`, or `CREATED` when sequence ties. Tested for Google-style old uncapped plus newer capped recurrence exports.
 
 Current supported `RRULE` parts:
 
@@ -470,6 +471,6 @@ The gaps most likely to corrupt common real-world exports today:
 - `CONTACT` is preserved and exported for linked events, but it is not editable as an app field.
 - Floating timed events are interpreted through the device zone for projection, but linked export preserves floating date-time shape.
 - Generated rows without preserved source still export `DTEND` rather than original `DURATION` shape.
-- `RANGE=THISANDFUTURE` is preserved on linked export but not applied as an edit operation.
+- `RANGE=THISANDFUTURE` is applied for imported cancelled overrides and preserved on linked export, but not exposed as an app recurrence edit operation.
 - Unsupported `RRULE` parts are not editable through the current recurrence UI.
 - Unknown registered event properties are preserve-only for linked export. Unknown event `X-*` properties are projected as value-only editable extensions.
