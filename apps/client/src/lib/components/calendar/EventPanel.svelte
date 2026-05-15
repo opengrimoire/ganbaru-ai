@@ -1,7 +1,7 @@
 <script lang="ts">
   import type {
     CalendarEvent, EventColor, EventStatus, EventSurfaceStatus, EventTransparency, EventVisibility,
-    EventAttendee, EventOrganizer, GeoCoordinates, GuestPermissions,
+    EventAttendee, EventOrganizer, GeoCoordinates, GuestPermissions, AttendeeStatus,
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import { bounceIcon } from "./event-panel-utils";
@@ -102,6 +102,7 @@
       status?: EventStatus;
       visibility?: EventVisibility;
       attendees?: EventAttendee[];
+      localParticipationStatus?: AttendeeStatus;
       guestPermissions?: GuestPermissions;
     }, scope?: RecurringScope) => void;
     onDelete?: (id: string, scope?: RecurringScope) => void;
@@ -140,6 +141,7 @@
   // Save commits the erasure.
   let meetingEnabled = $state(false);
   let attendees: EventAttendee[] = $state([]);
+  let localParticipationStatus: AttendeeStatus | undefined = $state(undefined);
   let guestCanModify = $state(false);
   let guestCanInviteOthers = $state(true);
   let guestCanSeeOtherGuests = $state(true);
@@ -455,6 +457,7 @@
       visibility = event.visibility ?? "public";
       organizer = event.organizer;
       attendees = event.attendees ? [...event.attendees] : [];
+      localParticipationStatus = event.localParticipationStatus;
       guestCanModify = event.guestPermissions?.canModify ?? false;
       guestCanInviteOthers = event.guestPermissions?.canInviteOthers ?? true;
       guestCanSeeOtherGuests = event.guestPermissions?.canSeeOtherGuests ?? true;
@@ -526,6 +529,7 @@
       visibility = "public";
       organizer = undefined;
       attendees = [];
+      localParticipationStatus = undefined;
       guestCanModify = false;
       guestCanInviteOthers = true;
       guestCanSeeOtherGuests = true;
@@ -582,6 +586,7 @@
     visibility = fullEvent.visibility ?? "public";
     organizer = fullEvent.organizer;
     attendees = fullEvent.attendees ? [...fullEvent.attendees] : [];
+    localParticipationStatus = fullEvent.localParticipationStatus;
     guestCanModify = fullEvent.guestPermissions?.canModify ?? false;
     guestCanInviteOthers = fullEvent.guestPermissions?.canInviteOthers ?? true;
     guestCanSeeOtherGuests = fullEvent.guestPermissions?.canSeeOtherGuests ?? true;
@@ -701,6 +706,7 @@
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
       attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
+      localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
     };
   }
 
@@ -718,6 +724,7 @@
       url: meetingEnabled && eventUrl ? eventUrl : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
       attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
+      localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
     };
   }
 
@@ -822,6 +829,7 @@
       status: eventStatus !== "confirmed" ? eventStatus : undefined,
       visibility: visibility !== "public" ? visibility : undefined,
       attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
+      localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
       guestPermissions: meetingEnabled && hasNonDefaultPerms ? {
         canModify: guestCanModify,
         canInviteOthers: guestCanInviteOthers,
@@ -1234,6 +1242,7 @@
           bind:location
           {geo}
           bind:attendees
+          bind:localParticipationStatus
           bind:guestCanModify
           bind:guestCanInviteOthers
           bind:guestCanSeeOtherGuests

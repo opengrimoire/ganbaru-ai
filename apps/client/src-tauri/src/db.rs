@@ -784,5 +784,10 @@ pub fn migrations() -> Vec<Migration> {
         version: 14,
         description: "add recurrence range to calendar overrides",
         sql: "ALTER TABLE calendar_event_overrides ADD COLUMN recurrence_range TEXT;",
+    },
+    Migration {
+        version: 15,
+        description: "add local event rsvp status",
+        sql: "ALTER TABLE calendar_events ADD COLUMN local_rsvp_status TEXT;",
     }]
 }

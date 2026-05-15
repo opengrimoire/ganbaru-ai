@@ -2,7 +2,7 @@
   import type { PositionedEvent } from "./types";
   import {
     getEventColor,
-    getEventStatusPatternStyle,
+    getEventStatusPatternClass,
     getPastEventColor,
     isEventSurfaceCancelled,
   } from "./utils";
@@ -52,7 +52,7 @@
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
   const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
-  const statusPatternStyle = $derived(isTemporaryEvent ? "" : getEventStatusPatternStyle(positioned.event));
+  const statusPatternClass = $derived(isTemporaryEvent ? "" : getEventStatusPatternClass(positioned.event));
   const activeColors = $derived(
     usePastColors
       ? getPastEventColor(positioned.event.color, theme)
@@ -96,12 +96,13 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {statusPatternClass} {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
     left: {positioned.left}%;
     width: {positioned.totalColumns > 1 ? `calc(${positioned.width}% - 2px)` : `${positioned.width}%`};
+    background-color: {activeColors.bg};
     color: {activeColors.text};
     --event-bg: {activeColors.bg};
     --outline-mix: {isDark ? 'white' : 'black'};
@@ -119,7 +120,7 @@
   {/if}
 
   <!-- Content -->
-  <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg}; {statusPatternStyle}">
+  <div class="relative z-10 min-w-0 flex-1 overflow-hidden px-1 py-0.5">
     {#if hasRepeat || hasNotification}
       <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">
         {#if hasRepeat}
@@ -152,7 +153,7 @@
     left: 0;
     right: 0;
     height: 11px;
-    z-index: 2;
+    z-index: 20;
   }
 
   .resize-handle-top {
@@ -167,6 +168,44 @@
     container-type: size;
     container-name: event-block;
     transition: left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .event-block-wrapper::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .event-block-wrapper.event-pattern-tentative::before {
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in srgb, currentColor 10%, transparent) 0 1px,
+      transparent 1px
+    );
+    background-repeat: repeat;
+    background-size: 6px 100%;
+  }
+
+  .event-block-wrapper.event-pattern-declined::before {
+    background-image: linear-gradient(
+      135deg,
+      transparent 0 44%,
+      color-mix(in srgb, currentColor 11%, transparent) 44% 56%,
+      transparent 56%
+    );
+    background-repeat: repeat;
+    background-size: 7px 7px;
+  }
+
+  .event-block-wrapper.event-pattern-pending::before {
+    background-image: radial-gradient(
+      circle,
+      color-mix(in srgb, currentColor 16%, transparent) 1px,
+      transparent 1.3px
+    );
+    background-size: 9px 9px;
   }
 
   .event-title,

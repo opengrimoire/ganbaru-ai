@@ -31,6 +31,7 @@ function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
     location: "",
     transparency: "opaque",
     status: "confirmed",
+    local_rsvp_status: null,
     rdate: null,
     focus_duration_minutes: null,
     short_break_minutes: null,
@@ -80,6 +81,11 @@ describe("mapRow", () => {
     expect(result.status).toBeUndefined();
     expect(result.pomodoroConfig).toBeUndefined();
     expect(result.rdate).toBeUndefined();
+  });
+
+  it("maps local RSVP status", () => {
+    const result = mapRow(makeDbRow({ local_rsvp_status: "tentative" }));
+    expect(result.localParticipationStatus).toBe("tentative");
   });
 
   it("omits heavy fields entirely (loaded on demand by loadFullEvent)", () => {

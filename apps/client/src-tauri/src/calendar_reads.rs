@@ -21,6 +21,7 @@ pub struct DbCalendarEventRow {
     location: String,
     transparency: String,
     status: String,
+    local_rsvp_status: Option<String>,
     rdate: Option<String>,
     focus_duration_minutes: Option<i64>,
     short_break_minutes: Option<i64>,
@@ -44,6 +45,7 @@ impl_sqlite_from_row!(DbCalendarEventRow {
     location,
     transparency,
     status,
+    local_rsvp_status,
     rdate,
     focus_duration_minutes,
     short_break_minutes,
@@ -105,6 +107,18 @@ impl_sqlite_from_row!(DbAttendeeRow {
 });
 
 #[derive(Serialize)]
+pub struct DbWindowAttendeeRow {
+    event_id: String,
+    email: String,
+    status: String,
+}
+impl_sqlite_from_row!(DbWindowAttendeeRow {
+    event_id,
+    email,
+    status,
+});
+
+#[derive(Serialize)]
 pub struct DbAlarmRow {
     id: String,
     event_id: String,
@@ -157,6 +171,7 @@ pub struct DbFullEventRow {
     guest_can_modify: i64,
     guest_can_invite_others: i64,
     guest_can_see_other_guests: i64,
+    local_rsvp_status: Option<String>,
     icalendar_component_id: Option<String>,
     icalendar_preservation_status: Option<String>,
     icalendar_projection_warnings: Option<String>,
@@ -197,6 +212,7 @@ impl_sqlite_from_row!(DbFullEventRow {
     guest_can_modify,
     guest_can_invite_others,
     guest_can_see_other_guests,
+    local_rsvp_status,
     icalendar_component_id,
     icalendar_preservation_status,
     icalendar_projection_warnings,
@@ -252,6 +268,7 @@ impl_sqlite_from_row!(DbFullOverrideRow {
 pub struct CalendarWindowRows {
     events: Vec<DbCalendarEventRow>,
     overrides: Vec<DbOverrideRow>,
+    attendees: Vec<DbWindowAttendeeRow>,
     total_event_count: i64,
 }
 
@@ -280,6 +297,7 @@ const WINDOW_EVENTS_SQL: &str = r#"
            ce.calendar_id, ce.color, ce.rrule,
            ce.notifications, ce.exceptions, ce.repeat_until,
            ce.all_day, ce.location, ce.transparency, ce.status,
+           ce.local_rsvp_status,
            ce.rdate,
            pc.focus_duration_minutes, pc.short_break_minutes,
            pc.long_break_minutes, pc.pomodoro_count,
@@ -316,6 +334,24 @@ const WINDOW_OVERRIDES_SQL: &str = r#"
           OR (ce.all_day <> 1 AND ce.end_time >= ? AND ce.start_time < ?)
         )
       )
+"#;
+
+const WINDOW_ATTENDEES_SQL: &str = r#"
+    SELECT a.event_id, a.email, a.status
+    FROM calendar_event_attendees a
+    JOIN calendar_events ce ON ce.id = a.event_id
+    WHERE
+      (ce.rrule IS NOT NULL AND ce.rrule <> '')
+      OR (ce.rdate IS NOT NULL AND ce.rdate <> '' AND ce.rdate <> '[]')
+      OR (
+        (ce.rrule IS NULL OR ce.rrule = '')
+        AND (ce.rdate IS NULL OR ce.rdate = '' OR ce.rdate = '[]')
+        AND (
+          (ce.all_day = 1 AND substr(ce.end_time, 1, 10) >= ? AND substr(ce.start_time, 1, 10) <= ?)
+          OR (ce.all_day <> 1 AND ce.end_time >= ? AND ce.start_time < ?)
+        )
+      )
+    ORDER BY a.event_id ASC, a.sort_order ASC
 "#;
 
 const FULL_EVENT_SQL: &str = r#"
@@ -362,6 +398,18 @@ pub async fn calendar_load_window<R: Runtime>(
             .await
             .map_err(|e| format!("load calendar window overrides: {e}"))?
     };
+    let attendees = if events.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as::<_, DbWindowAttendeeRow>(WINDOW_ATTENDEES_SQL)
+            .bind(&window_start_date)
+            .bind(&window_end_date)
+            .bind(&window_start_utc)
+            .bind(&window_end_exclusive_utc)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| format!("load calendar window attendees: {e}"))?
+    };
     let total_event_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM calendar_events")
         .fetch_one(&pool)
         .await
@@ -370,6 +418,7 @@ pub async fn calendar_load_window<R: Runtime>(
     Ok(CalendarWindowRows {
         events,
         overrides,
+        attendees,
         total_event_count,
     })
 }
@@ -662,6 +711,7 @@ mod tests {
             guest_can_modify: 0,
             guest_can_invite_others: 1,
             guest_can_see_other_guests: 1,
+            local_rsvp_status: None,
             icalendar_component_id: None,
             icalendar_preservation_status: None,
             icalendar_projection_warnings: None,

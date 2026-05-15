@@ -100,6 +100,11 @@ export interface EventAttendee {
   icalendarPropertyIndex?: number;
 }
 
+export interface EventSurfaceAttendee {
+  email: string;
+  status: AttendeeStatus;
+}
+
 export interface EventOrganizer {
   name?: string;
   email: string;
@@ -199,6 +204,10 @@ export interface CalendarEvent {
   status?: EventStatus;
   /** Frontend-only visual status. Used for meeting RSVP patterns without changing event STATUS. */
   surfaceStatus?: EventSurfaceStatus;
+  /** Slim render-only attendee RSVP data for deriving `surfaceStatus` in calendar views. */
+  surfaceAttendees?: EventSurfaceAttendee[];
+  /** App-local RSVP for the placeholder user row before an email identity exists. */
+  localParticipationStatus?: AttendeeStatus;
   /** Original UID from imported .ics file, used for deduplication. */
   sourceUid?: string;
   /** RFC 5545 CLASS: controls visibility to other users. */

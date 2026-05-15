@@ -53,6 +53,7 @@ Until GanbaruAI has an identity model:
 - the app must not let a user accept, decline, or tentatively accept as another attendee.
 - organizer and attendee data can be displayed as imported metadata.
 - offline edits should not imply that attendees were notified.
+- local placeholder RSVP state may be stored for UI patterns, but it is app-local metadata and must not be exported as an `ATTENDEE`.
 
 If future identity support exists:
 

@@ -36,6 +36,7 @@ pub struct CalendarEventCreate {
     rdate: Option<String>,
     extended_properties: Option<String>,
     organizer: Option<String>,
+    local_rsvp_status: Option<String>,
     guest_can_modify: bool,
     guest_can_invite_others: bool,
     guest_can_see_other_guests: bool,
@@ -140,6 +141,8 @@ enum CalendarEventUpdateField {
     ExtendedProperties(Option<String>),
     #[serde(rename = "organizer")]
     Organizer(Option<String>),
+    #[serde(rename = "localRsvpStatus")]
+    LocalRsvpStatus(Option<String>),
     #[serde(rename = "guestPermissions")]
     GuestPermissions(CalendarGuestPermissions),
 }
@@ -203,6 +206,7 @@ pub struct CalendarSplitSeries {
     status: String,
     description_patch: Option<String>,
     url_patch: Option<String>,
+    local_rsvp_status: Option<String>,
     pomodoro_config: Option<CalendarPomodoroConfig>,
     now: String,
 }
@@ -225,9 +229,10 @@ pub async fn calendar_add_event<R: Runtime>(
             all_day, location, url, transparency, status,
             source_uid, visibility, priority, categories, geo,
             sequence, rdate, extended_properties, organizer,
+            local_rsvp_status,
             guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&event.id)
     .bind(&event.title)
@@ -254,6 +259,7 @@ pub async fn calendar_add_event<R: Runtime>(
     .bind(&event.rdate)
     .bind(&event.extended_properties)
     .bind(&event.organizer)
+    .bind(&event.local_rsvp_status)
     .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_invite_others {
         1_i64
@@ -477,6 +483,7 @@ pub async fn calendar_detach_instance<R: Runtime>(
            source_uid,
            description, url, visibility, priority, categories, geo,
            sequence, extended_properties, organizer,
+           local_rsvp_status,
            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
            created_at, updated_at
          )
@@ -486,6 +493,7 @@ pub async fn calendar_detach_instance<R: Runtime>(
                 NULL,
                 description, url, visibility, priority, categories, geo,
                 sequence, extended_properties, organizer,
+                local_rsvp_status,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
                 ?, ?
          FROM calendar_events WHERE id = ?",
@@ -563,6 +571,7 @@ pub async fn calendar_split_series<R: Runtime>(
            source_uid,
            description, url, visibility, priority, categories, geo,
            sequence, extended_properties, organizer,
+           local_rsvp_status,
            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
            created_at, updated_at
          )
@@ -574,6 +583,7 @@ pub async fn calendar_split_series<R: Runtime>(
                 COALESCE(?, url),
                 visibility, priority, categories, geo,
                 sequence, extended_properties, organizer,
+                ?,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
                 ?, ?
          FROM calendar_events WHERE id = ?",
@@ -593,6 +603,7 @@ pub async fn calendar_split_series<R: Runtime>(
     .bind(&input.status)
     .bind(&description_patch)
     .bind(&input.url_patch)
+    .bind(&input.local_rsvp_status)
     .bind(&input.now)
     .bind(&input.now)
     .bind(&input.parent_id)
@@ -799,6 +810,9 @@ async fn apply_update_field(
         CalendarEventUpdateField::Organizer(value) => {
             update_optional_text(tx, id, "organizer", value.as_deref()).await
         }
+        CalendarEventUpdateField::LocalRsvpStatus(value) => {
+            update_optional_text(tx, id, "local_rsvp_status", value.as_deref()).await
+        }
         CalendarEventUpdateField::GuestPermissions(value) => {
             sqlx::query(
                 "UPDATE calendar_events
@@ -943,6 +957,7 @@ fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
     validate_json_option(&event.rdate, "rdate")?;
     validate_json_option(&event.extended_properties, "extended_properties")?;
     validate_json_option(&event.organizer, "organizer")?;
+    validate_optional_attendee_status(&event.local_rsvp_status, "local_rsvp_status")?;
     if let Some(config) = &event.pomodoro_config {
         validate_pomodoro_config(config)?;
     }
@@ -1012,6 +1027,7 @@ fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
     if let Some(config) = &input.pomodoro_config {
         validate_pomodoro_config(config)?;
     }
+    validate_optional_attendee_status(&input.local_rsvp_status, "local_rsvp_status")?;
     validate_enum(
         &input.transparency,
         "transparency",
@@ -1061,8 +1077,28 @@ fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String>
             validate_json_option(value, "extended_properties")
         }
         CalendarEventUpdateField::Organizer(value) => validate_json_option(value, "organizer"),
+        CalendarEventUpdateField::LocalRsvpStatus(value) => {
+            validate_optional_attendee_status(value, "local_rsvp_status")
+        }
         CalendarEventUpdateField::GuestPermissions(_) => Ok(()),
     }
+}
+
+fn validate_optional_attendee_status(value: &Option<String>, field: &str) -> Result<(), String> {
+    if let Some(status) = value {
+        validate_enum(
+            status,
+            field,
+            &[
+                "needs-action",
+                "accepted",
+                "declined",
+                "tentative",
+                "delegated",
+            ],
+        )?;
+    }
+    Ok(())
 }
 
 fn validate_pomodoro_config(config: &CalendarPomodoroConfig) -> Result<(), String> {
@@ -1217,6 +1253,7 @@ mod tests {
             rdate: None,
             extended_properties: None,
             organizer: None,
+            local_rsvp_status: None,
             guest_can_modify: false,
             guest_can_invite_others: true,
             guest_can_see_other_guests: true,

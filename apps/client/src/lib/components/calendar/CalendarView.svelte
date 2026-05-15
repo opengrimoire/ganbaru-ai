@@ -1,12 +1,12 @@
 <script lang="ts">
   import type {
     CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventStatus, EventSurfaceStatus,
-    EventTransparency, EventVisibility, GuestPermissions,
+    EventTransparency, EventVisibility, GuestPermissions, AttendeeStatus,
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import {
     addDays, computeViewWindow, formatDatePart,
-    getLocalTimezone, parseCalendarDate,
+    getEventSurfaceStatusForIdentity, getLocalTimezone, parseCalendarDate,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
@@ -247,9 +247,33 @@
     );
   });
 
+  const calendarIdentityById = $derived.by(() => {
+    const identities = new Map<string, string>();
+    for (const calendar of calendarsStore.list) {
+      const identityEmail = calendarIdentityEmail(calendar);
+      if (identityEmail) identities.set(calendar.id, identityEmail);
+    }
+    return identities;
+  });
+
+  function applyStoredSurfaceStatus(
+    event: CalendarEvent,
+    identityById: ReadonlyMap<string, string>,
+  ): CalendarEvent {
+    const surfaceStatus = getEventSurfaceStatusForIdentity(
+      event,
+      identityById.get(event.calendarId),
+    );
+    return surfaceStatus === undefined ? event : { ...event, surfaceStatus };
+  }
+
+  const surfaceDisplayEvents = $derived(
+    displayResult.events.map((event) => applyStoredSurfaceStatus(event, calendarIdentityById)),
+  );
+
   const visibleEvents = $derived.by(() => {
-    if (!panelSurfaceStatus || !panelSurfaceStatusEventId) return displayResult.events;
-    return displayResult.events.map((event) =>
+    if (!panelSurfaceStatus || !panelSurfaceStatusEventId) return surfaceDisplayEvents;
+    return surfaceDisplayEvents.map((event) =>
       event.id === panelSurfaceStatusEventId
         ? { ...event, surfaceStatus: panelSurfaceStatus }
         : event,
@@ -606,6 +630,7 @@
       sequence: e.sequence, rdate: e.rdate,
       extendedProperties: e.extendedProperties,
       organizer: e.organizer, attendees: e.attendees,
+      localParticipationStatus: e.localParticipationStatus,
       guestPermissions: e.guestPermissions,
     });
   }
@@ -1288,6 +1313,7 @@
     status?: EventStatus;
     visibility?: EventVisibility;
     attendees?: EventAttendee[];
+    localParticipationStatus?: AttendeeStatus;
     guestPermissions?: GuestPermissions;
   }, scope?: RecurringScope) {
     // Gate: confirm before stopping the active pomodoro session.
@@ -1315,6 +1341,7 @@
         allDay: data.allDay, location: data.location, url: data.url,
         transparency: data.transparency, status: data.status,
         visibility: data.visibility, attendees: data.attendees,
+        localParticipationStatus: data.localParticipationStatus,
         guestPermissions: data.guestPermissions,
       });
       // Capture the full event (heavy fields included) so redo can restore

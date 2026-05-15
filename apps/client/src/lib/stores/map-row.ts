@@ -1,6 +1,6 @@
 import type {
   AlarmAction, AttendeeRole, AttendeeStatus, CalendarEvent, EventAlarm,
-  EventAttendee, EventOverride, EventStatus, EventTransparency,
+  EventAttendee, EventOverride, EventStatus, EventSurfaceAttendee, EventTransparency,
 } from "$lib/components/calendar/types";
 import { rruleToRecurrence } from "$lib/components/calendar/rrule";
 import {
@@ -16,6 +16,7 @@ import {
  * (description, url, organizer, geo, extendedProperties, categories, priority,
  * sequence, sourceUid, visibility, guest_can_*) stay in the DB and are loaded
  * on demand by `loadFullEvent` when the EventPanel or ICS export needs them.
+ * Window loads may attach `surfaceAttendees` separately for RSVP rendering.
  */
 export interface DbCalendarEvent {
   id: string;
@@ -33,6 +34,7 @@ export interface DbCalendarEvent {
   location: string;
   transparency: string;
   status: string;
+  local_rsvp_status: string | null;
   rdate: string | null;
   // LEFT JOIN pomodoro_configs
   focus_duration_minutes: number | null;
@@ -53,6 +55,12 @@ export interface DbAttendee {
   status: string;
   rsvp: number;
   sort_order: number;
+}
+
+export interface DbWindowAttendee {
+  event_id: string;
+  email: string;
+  status: string;
 }
 
 export interface DbAlarm {
@@ -166,6 +174,7 @@ export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
   if (r.location) slim.location = r.location;
   if (r.transparency === "transparent") slim.transparency = "transparent";
   if (r.status !== "confirmed") slim.status = r.status as EventStatus;
+  if (r.local_rsvp_status) slim.localParticipationStatus = r.local_rsvp_status as AttendeeStatus;
   const rdate = safeJsonParse<string[]>(r.rdate);
   if (rdate) slim.rdate = rdate;
   if (r.focus_duration_minutes != null) {
@@ -194,6 +203,13 @@ export function mapAttendee(r: DbAttendee): EventAttendee {
     attendee.icalendarPropertyIndex = r.icalendar_property_index;
   }
   return attendee;
+}
+
+export function mapWindowAttendee(r: DbWindowAttendee): EventSurfaceAttendee {
+  return {
+    email: r.email,
+    status: r.status as AttendeeStatus,
+  };
 }
 
 export function mapAlarm(r: DbAlarm): EventAlarm {

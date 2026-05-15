@@ -3,7 +3,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import type {
   Calendar, CalendarEvent, EventAttendee, EventColor, EventOverride,
-  EventOrganizer, EventStatus, EventTransparency, EventVisibility,
+  EventOrganizer, EventStatus, EventTransparency, EventVisibility, AttendeeStatus,
   GeoCoordinates, GuestPermissions, IcalendarPreservationStatus, PomodoroConfig, RecurrenceConfig,
 } from "$lib/components/calendar/types";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
@@ -17,8 +17,8 @@ import {
   computeViewWindow, sanitizeCalendarTime, wallClockToUtcIso,
 } from "$lib/components/calendar/utils";
 import {
-  mapAlarm, mapAttendee, mapOverride, mapRow, safeJsonParse, toDbTime,
-  type DbAlarm, type DbAttendee, type DbCalendarEvent, type DbOverride,
+  mapAlarm, mapAttendee, mapOverride, mapRow, mapWindowAttendee, safeJsonParse, toDbTime,
+  type DbAlarm, type DbAttendee, type DbCalendarEvent, type DbOverride, type DbWindowAttendee,
 } from "./map-row";
 import {
   buildBulkImportPayload,
@@ -66,6 +66,7 @@ type CalendarUpdateField =
   | { field: "rdate"; value: string | null }
   | { field: "extendedProperties"; value: string | null }
   | { field: "organizer"; value: string | null }
+  | { field: "localRsvpStatus"; value: AttendeeStatus | null }
   | {
       field: "guestPermissions";
       value: {
@@ -203,6 +204,7 @@ type DbFullOverride = DbOverride & {
 interface CalendarWindowRows {
   events: DbCalendarEvent[];
   overrides: DbOverride[];
+  attendees: DbWindowAttendee[];
   total_event_count: number;
 }
 
@@ -286,6 +288,9 @@ function applyFullEventFields(row: DbFullEvent, event: CalendarEvent) {
   if (extendedProperties) event.extendedProperties = extendedProperties;
   const organizer = safeJsonParse<EventOrganizer>(row.organizer);
   if (organizer) event.organizer = organizer;
+  if (row.local_rsvp_status) {
+    event.localParticipationStatus = row.local_rsvp_status as AttendeeStatus;
+  }
   if (row.guest_can_modify === 1
     || row.guest_can_invite_others === 0
     || row.guest_can_see_other_guests === 0) {
@@ -444,9 +449,19 @@ function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEv
 
   const parentAllDayById = new Map(mapped.map((event) => [event.id, event.allDay === true]));
   const overrideMap = mapOverrides(rows.overrides, renderZone, parentAllDayById);
+  const surfaceAttendeesByEventId = new Map<string, DbWindowAttendee[]>();
+  for (const attendee of rows.attendees) {
+    const existing = surfaceAttendeesByEventId.get(attendee.event_id);
+    if (existing) existing.push(attendee);
+    else surfaceAttendeesByEventId.set(attendee.event_id, [attendee]);
+  }
   for (const evt of mapped) {
     const ovr = overrideMap.get(evt.id);
     if (ovr?.length) evt.overrides = ovr;
+    const surfaceAttendees = surfaceAttendeesByEventId.get(evt.id);
+    if (surfaceAttendees?.length) {
+      evt.surfaceAttendees = surfaceAttendees.map(mapWindowAttendee);
+    }
   }
   return mapped;
 }
@@ -477,6 +492,7 @@ async function runWindowLoadRequest(
   perfMark("window.rows-done", {
     mode,
     rows: rows.events.length,
+    attendees: rows.attendees.length,
     total: rows.total_event_count,
   });
 
@@ -661,6 +677,7 @@ function slimEvent(e: CalendarEvent): CalendarEvent {
   if (e.location) slim.location = e.location;
   if (e.transparency === "transparent") slim.transparency = "transparent";
   if (e.status && e.status !== "confirmed") slim.status = e.status;
+  if (e.localParticipationStatus) slim.localParticipationStatus = e.localParticipationStatus;
   if (e.pomodoroConfig) slim.pomodoroConfig = e.pomodoroConfig;
   if (e.rdate && e.rdate.length > 0) slim.rdate = e.rdate;
   if (e.overrides && e.overrides.length > 0) slim.overrides = e.overrides;
@@ -869,6 +886,7 @@ export function getCalendar() {
       extendedProperties?: Record<string, string>;
       organizer?: EventOrganizer;
       attendees?: EventAttendee[];
+      localParticipationStatus?: AttendeeStatus;
       guestPermissions?: GuestPermissions;
     }): Promise<CalendarEvent> {
       // Sanitize times to ensure clean integer minutes
@@ -918,6 +936,7 @@ export function getCalendar() {
             ? JSON.stringify(opts.extendedProperties)
             : null,
           organizer: opts.organizer ? JSON.stringify(opts.organizer) : null,
+          localRsvpStatus: opts.localParticipationStatus ?? null,
           guestCanModify: opts.guestPermissions?.canModify ?? false,
           guestCanInviteOthers: opts.guestPermissions?.canInviteOthers ?? true,
           guestCanSeeOtherGuests: opts.guestPermissions?.canSeeOtherGuests ?? true,
@@ -942,6 +961,7 @@ export function getCalendar() {
         pomodoroConfig: opts.pomodoroConfig,
         allDay: opts.allDay, location: opts.location,
         transparency: opts.transparency, status: opts.status,
+        localParticipationStatus: opts.localParticipationStatus,
       });
       rawBlocks = [...rawBlocks, event];
       totalEventCount++;
@@ -1128,6 +1148,12 @@ export function getCalendar() {
               value: toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null,
             });
             break;
+          case "localParticipationStatus":
+            addField({
+              field: "localRsvpStatus",
+              value: toUpdate.localParticipationStatus ?? null,
+            });
+            break;
           case "guestPermissions": {
             const gp = toUpdate.guestPermissions;
             addField({
@@ -1257,6 +1283,7 @@ export function getCalendar() {
         location: parent.location,
         transparency: parent.transparency,
         status: parent.status,
+        localParticipationStatus: parent.localParticipationStatus,
         notifications: parent.notifications,
         pomodoroConfig: parent.pomodoroConfig,
       });
@@ -1369,6 +1396,7 @@ export function getCalendar() {
         ? { ...parent.recurrence, end: { type: "never" } }
         : undefined;
       const rrule = newRecurrence ? recurrenceToRrule(newRecurrence) : null;
+      const localParticipationStatus = merged.localParticipationStatus;
 
       const splitNotifJson = merged.notifications && merged.notifications.length > 0
         ? JSON.stringify(merged.notifications) : null;
@@ -1405,6 +1433,7 @@ export function getCalendar() {
           status: merged.status ?? "confirmed",
           descriptionPatch,
           urlPatch,
+          localRsvpStatus: localParticipationStatus ?? null,
           pomodoroConfig: pomConfig ?? null,
           now,
         },

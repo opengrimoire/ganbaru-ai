@@ -25,7 +25,8 @@ import {
   normalizeEventColor,
   EVENT_COLOR_OPTIONS,
   getEventColor,
-  getEventStatusPatternStyle,
+  getEventStatusPatternClass,
+  getEventSurfaceStatusForIdentity,
   getPastEventColor,
   getOutsideMonthEventColor,
   isEventSurfaceCancelled,
@@ -871,57 +872,83 @@ describe("dimmed color variants", () => {
   });
 });
 
-describe("getEventStatusPatternStyle", () => {
+describe("getEventStatusPatternClass", () => {
   it("returns no pattern for ordinary confirmed events or free availability", () => {
-    expect(getEventStatusPatternStyle({ status: "confirmed", transparency: "opaque" })).toBe("");
-    expect(getEventStatusPatternStyle({ status: "confirmed", transparency: "transparent" })).toBe("");
-    expect(getEventStatusPatternStyle({})).toBe("");
+    expect(getEventStatusPatternClass({ status: "confirmed", transparency: "opaque" })).toBe("");
+    expect(getEventStatusPatternClass({ status: "confirmed", transparency: "transparent" })).toBe("");
+    expect(getEventStatusPatternClass({})).toBe("");
   });
 
   it("uses vertical pinstripes for tentative events", () => {
-    const style = getEventStatusPatternStyle({
+    const patternClass = getEventStatusPatternClass({
       status: "tentative",
       transparency: "transparent",
     });
-    expect(style).toContain("repeating-linear-gradient(90deg");
+    expect(patternClass).toBe("event-pattern-tentative");
   });
 
   it("uses the strongest cancelled pattern before availability", () => {
-    const style = getEventStatusPatternStyle({
+    const patternClass = getEventStatusPatternClass({
       status: "cancelled",
       transparency: "transparent",
     });
-    expect(style).toContain("repeating-linear-gradient(45deg");
-    expect(style).not.toContain("90deg");
+    expect(patternClass).toBe("event-pattern-declined");
   });
 
   it("keeps event-level cancelled stronger than RSVP surface status", () => {
-    const style = getEventStatusPatternStyle({
+    const patternClass = getEventStatusPatternClass({
       status: "cancelled",
       surfaceStatus: "accepted",
     });
-    expect(style).toContain("repeating-linear-gradient(45deg");
+    expect(patternClass).toBe("event-pattern-declined");
   });
 
   it("uses dots for pending RSVP state", () => {
-    const style = getEventStatusPatternStyle({
+    const patternClass = getEventStatusPatternClass({
       surfaceStatus: "needs-action",
     });
-    expect(style).toContain("radial-gradient");
+    expect(patternClass).toBe("event-pattern-pending");
   });
 
   it("uses RSVP surface status before event-level tentative", () => {
-    const style = getEventStatusPatternStyle({
+    const patternClass = getEventStatusPatternClass({
       status: "tentative",
       surfaceStatus: "accepted",
     });
-    expect(style).toBe("");
+    expect(patternClass).toBe("");
   });
 
   it("treats declined RSVP as a cancelled surface", () => {
     expect(isEventSurfaceCancelled({ surfaceStatus: "declined" })).toBe(true);
     expect(isEventSurfaceCancelled({ status: "cancelled" })).toBe(true);
     expect(isEventSurfaceCancelled({ surfaceStatus: "accepted", status: "cancelled" })).toBe(true);
+  });
+});
+
+describe("getEventSurfaceStatusForIdentity", () => {
+  it("returns the matching attendee RSVP status case-insensitively", () => {
+    expect(getEventSurfaceStatusForIdentity({
+      surfaceAttendees: [
+        { email: "other@example.com", status: "accepted" },
+        { email: "Victor@Example.com", status: "tentative" },
+      ],
+    }, "victor@example.com")).toBe("tentative");
+  });
+
+  it("falls back to local participation status without an identity or matching attendee", () => {
+    const event: Pick<CalendarEvent, "surfaceAttendees"> = {
+      surfaceAttendees: [{ email: "other@example.com", status: "declined" }],
+    };
+    expect(getEventSurfaceStatusForIdentity(event, undefined)).toBeUndefined();
+    expect(getEventSurfaceStatusForIdentity(event, "victor@example.com")).toBeUndefined();
+    expect(getEventSurfaceStatusForIdentity({
+      ...event,
+      localParticipationStatus: "needs-action",
+    }, undefined)).toBe("needs-action");
+    expect(getEventSurfaceStatusForIdentity({
+      ...event,
+      localParticipationStatus: "tentative",
+    }, "victor@example.com")).toBe("tentative");
   });
 });
 

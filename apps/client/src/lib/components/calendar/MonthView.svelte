@@ -5,7 +5,7 @@
     getMonthGrid,
     isPastDay,
     getEventColor,
-    getEventStatusPatternStyle,
+    getEventStatusPatternClass,
     getPastEventColor,
     getOutsideMonthEventColor,
     isEventSurfaceCancelled,
@@ -184,21 +184,20 @@
                   ? getOutsideMonthEventColor(evt.color, theme)
                   : getEventColor(evt.color, theme)}
               {@const evtIsCancelled = isEventSurfaceCancelled(evt)}
-              {@const evtStatusPatternStyle = getEventStatusPatternStyle(evt)}
+              {@const evtStatusPatternClass = getEventStatusPatternClass(evt)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px]"
+                class="month-event-surface relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px] {evtStatusPatternClass}"
                 style="
                   background-color: {evtColors.bg};
                   color: {evtColors.text};
-                  {evtStatusPatternStyle}
                 "
                 onpointerenter={() => onEventPrefetch?.(evt)}
                 onpointerdown={() => onEventPrefetch?.(evt)}
                 onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
               >
-                <span class="truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
+                <span class="relative z-10 truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
               </div>
             {/each}
 
@@ -213,3 +212,43 @@
     {/each}
   </div>
 </div>
+
+<style>
+  .month-event-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .month-event-surface.event-pattern-tentative::before {
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in srgb, currentColor 10%, transparent) 0 1px,
+      transparent 1px
+    );
+    background-repeat: repeat;
+    background-size: 6px 100%;
+  }
+
+  .month-event-surface.event-pattern-declined::before {
+    background-image: linear-gradient(
+      135deg,
+      transparent 0 44%,
+      color-mix(in srgb, currentColor 11%, transparent) 44% 56%,
+      transparent 56%
+    );
+    background-repeat: repeat;
+    background-size: 7px 7px;
+  }
+
+  .month-event-surface.event-pattern-pending::before {
+    background-image: radial-gradient(
+      circle,
+      color-mix(in srgb, currentColor 15%, transparent) 1px,
+      transparent 1.3px
+    );
+    background-size: 8px 8px;
+  }
+</style>

@@ -24,6 +24,7 @@
     location = $bindable(""),
     geo,
     attendees = $bindable([]),
+    localParticipationStatus = $bindable(undefined),
     guestCanModify = $bindable(false),
     guestCanInviteOthers = $bindable(true),
     guestCanSeeOtherGuests = $bindable(true),
@@ -43,6 +44,7 @@
     location: string;
     geo?: GeoCoordinates;
     attendees: EventAttendee[];
+    localParticipationStatus?: EventAttendee["status"];
     guestCanModify: boolean;
     guestCanInviteOthers: boolean;
     guestCanSeeOtherGuests: boolean;
@@ -61,9 +63,6 @@
   const hasContent = $derived(
     attendees.length > 0 || !!organizer || !!url || !!location,
   );
-
-  let localSelfStatus: EventAttendee["status"] = $state("accepted");
-  let hadLocalSelfRow = false;
 
   const organizerEmail = $derived(organizer?.email.toLowerCase() ?? "");
   const normalizedSelfEmail = $derived(selfEmail?.toLowerCase() ?? "");
@@ -84,11 +83,12 @@
       : visibleAttendees,
   );
   const showLocalSelfRow = $derived(enabled && !organizer && !selfAttendee);
+  const effectiveLocalSelfStatus = $derived(localParticipationStatus ?? "accepted");
   const canEditGuests = $derived(!readOnly && !organizer);
   const surfaceStatus = $derived.by<EventSurfaceStatus | undefined>(() => {
     if (!enabled) return undefined;
     if (selfAttendee) return selfAttendee.status;
-    if (showLocalSelfRow) return localSelfStatus;
+    if (showLocalSelfRow) return effectiveLocalSelfStatus;
     if (isOrganizerSelf) return "accepted";
     return undefined;
   });
@@ -124,12 +124,6 @@
   });
 
   let attendeeInput = $state("");
-
-  $effect(() => {
-    const visible = showLocalSelfRow;
-    if (visible && !hadLocalSelfRow) localSelfStatus = "accepted";
-    hadLocalSelfRow = visible;
-  });
 
   $effect(() => {
     onsurfacestatuschange?.(surfaceStatus);
@@ -186,7 +180,9 @@
   }
 
   function toggleLocalSelfRsvp() {
-    localSelfStatus = nextRsvpStatus(localSelfStatus);
+    const nextStatus = nextRsvpStatus(effectiveLocalSelfStatus);
+    localParticipationStatus = nextStatus === "accepted" ? undefined : nextStatus;
+    onchange();
   }
 
   let scrollEl: HTMLDivElement | undefined = $state();
@@ -332,10 +328,10 @@
           </div>
         {/if}
         {#if showLocalSelfRow}
-          {@const localSelfBg = localSelfStatus === "accepted" ? "bg-status-accepted" : localSelfStatus === "tentative" ? "bg-status-tentative" : localSelfStatus === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
-          {@const localSelfFg = localSelfStatus === "accepted" ? "text-status-accepted-foreground" : localSelfStatus === "tentative" ? "text-status-tentative-foreground" : localSelfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
-          {@const LocalSelfIcon = localSelfStatus === "accepted" ? Check : localSelfStatus === "tentative" ? CircleHelp : localSelfStatus === "declined" ? X : Minus}
-          {@const localSelfStatusLabel = attendeeStatusLabel(localSelfStatus)}
+          {@const localSelfBg = effectiveLocalSelfStatus === "accepted" ? "bg-status-accepted" : effectiveLocalSelfStatus === "tentative" ? "bg-status-tentative" : effectiveLocalSelfStatus === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
+          {@const localSelfFg = effectiveLocalSelfStatus === "accepted" ? "text-status-accepted-foreground" : effectiveLocalSelfStatus === "tentative" ? "text-status-tentative-foreground" : effectiveLocalSelfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
+          {@const LocalSelfIcon = effectiveLocalSelfStatus === "accepted" ? Check : effectiveLocalSelfStatus === "tentative" ? CircleHelp : effectiveLocalSelfStatus === "declined" ? X : Minus}
+          {@const localSelfStatusLabel = attendeeStatusLabel(effectiveLocalSelfStatus)}
           <div class="flex items-center gap-2 py-0.5 text-[11px]">
             <button
               type="button"
