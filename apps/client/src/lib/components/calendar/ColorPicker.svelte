@@ -1,11 +1,8 @@
 <script lang="ts">
-  import type { EventColor } from "./types";
+  import { FALLBACK_COLOR_INDEX, type EventColor } from "./types";
   import { EVENT_COLOR_OPTIONS, getEventColor } from "./utils";
-  import {
-    isThemeCalendarDark,
-    resolveCalendarTokens,
-    type Theme,
-  } from "$lib/stores/themes";
+  import { contrastRatio } from "$lib/components/ui/colorMath";
+  import { resolveCalendarTokens, type Theme } from "$lib/stores/themes";
 
   let {
     color,
@@ -19,19 +16,25 @@
 
   let open = $state(false);
 
+  const selectedColor = $derived(color ?? FALLBACK_COLOR_INDEX);
   const colorEntry = $derived(getEventColor(color, theme));
   const calendarTokens = $derived(resolveCalendarTokens(theme));
   const pickerBg = $derived(calendarTokens["--cal-bg"]);
   const pickerText = $derived(calendarTokens["--cal-time-label"]);
   const pickerRing = $derived(calendarTokens["--cal-gridline"]);
-  const outlineMix = $derived(isThemeCalendarDark(theme) ? "white" : "black");
+  const selectionBorder = $derived(
+    contrastRatio(pickerBg, "#000000") >= contrastRatio(pickerBg, "#ffffff")
+      ? "#000000"
+      : "#ffffff",
+  );
 
   function swatchStyle(bg: string): string {
-    return `
-      background-color: ${bg};
-      --event-bg: ${bg};
-      --outline-mix: ${outlineMix};
-    `;
+    return `background-color: ${bg};`;
+  }
+
+  function selectColor(nextColor: EventColor): void {
+    if (selectedColor === nextColor) return;
+    onselect(nextColor);
   }
 </script>
 
@@ -52,15 +55,16 @@
         grid-template-columns: repeat(4, 1.25rem);
         background-color: {pickerBg};
         color: {pickerText};
+        --selection-border: {selectionBorder};
         --tw-ring-color: {pickerRing};
       "
     >
       {#each EVENT_COLOR_OPTIONS as c}
         {@const entry = getEventColor(c, theme)}
         <button
-          onclick={() => { onselect(color === c ? undefined : c); }}
+          onclick={() => { selectColor(c); }}
           class="calendar-color-swatch size-5 rounded-[3px]"
-          class:swatch-selected={color === c}
+          class:swatch-selected={selectedColor === c}
           style={swatchStyle(entry.bg)}
           title={entry.bg}
         ></button>
@@ -79,7 +83,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    border: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
+    border: 2px solid var(--selection-border);
     border-radius: inherit;
     pointer-events: none;
   }
