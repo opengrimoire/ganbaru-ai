@@ -1,12 +1,13 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "path";
 import { fileURLToPath } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
+const TAURI_DEV_READY_PATH = "/__ganbaruai_dev_ready";
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(configDir, "../..");
 const appVersion = readAppVersion();
@@ -69,6 +70,66 @@ function chunkNameForModule(id: string): string | undefined {
   return "vendor";
 }
 
+function svelteFilesWithStyles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === "dist" || entry === "src-tauri") continue;
+    const fullPath = path.join(dir, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      files.push(...svelteFilesWithStyles(fullPath));
+      continue;
+    }
+    if (!entry.endsWith(".svelte")) continue;
+    const source = readFileSync(fullPath, "utf8");
+    if (source.includes("<style")) files.push(fullPath);
+  }
+  return files;
+}
+
+function toViteUrl(filePath: string): string {
+  const relative = path.relative(configDir, filePath).replaceAll(path.sep, "/");
+  return `/${relative}`;
+}
+
+async function warmTauriDevEntry(server: ViteDevServer): Promise<void> {
+  const urls = [
+    "/src/main.ts",
+    ...svelteFilesWithStyles(path.join(configDir, "src")).map(toViteUrl),
+  ];
+  await Promise.all(urls.map((url) => server.transformRequest(url)));
+}
+
+function tauriDevReady(): Plugin {
+  let readyPromise: Promise<void> | null = null;
+  return {
+    name: "ganbaruai:tauri-dev-ready",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const requestUrl = req.url ? new URL(req.url, "http://localhost") : null;
+        if (requestUrl?.pathname !== TAURI_DEV_READY_PATH) {
+          next();
+          return;
+        }
+
+        readyPromise ??= warmTauriDevEntry(server);
+        readyPromise
+          .then(() => {
+            res.statusCode = 302;
+            res.setHeader("Location", "/");
+            res.setHeader("Cache-Control", "no-store");
+            res.end();
+          })
+          .catch((error: unknown) => {
+            readyPromise = null;
+            next(error instanceof Error ? error : new Error(String(error)));
+          });
+      });
+    },
+  };
+}
+
 /**
  * Skip Svelte component style virtuals (`?svelte&type=style&lang.css`) in
  * Tailwind's transform. None of the project's `<style>` blocks use Tailwind
@@ -92,7 +153,7 @@ function skipSvelteStyleVirtuals(plugins: Plugin[]): Plugin[] {
 }
 
 export default defineConfig({
-  plugins: [...skipSvelteStyleVirtuals(tailwindcss()), svelte()],
+  plugins: [tauriDevReady(), ...skipSvelteStyleVirtuals(tailwindcss()), svelte()],
   define: {
     __GANBARUAI_BUILD_REF__: JSON.stringify(buildRef),
   },
@@ -122,6 +183,9 @@ export default defineConfig({
       : undefined,
     watch: {
       ignored: ["**/src-tauri/**"],
+    },
+    warmup: {
+      clientFiles: ["./src/main.ts", "./src/**/*.svelte"],
     },
   },
 });
