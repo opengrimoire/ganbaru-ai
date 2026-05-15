@@ -28,7 +28,7 @@
 <div class="relative flex items-center">
   <button
     onclick={() => { open = !open; }}
-    class="h-3 w-5 shrink-0 rounded-sm"
+    class="size-4 shrink-0 rounded-sm"
     style="background-color: {colorEntry.bg};"
     title="Event color"
   ></button>
@@ -36,12 +36,12 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="fixed inset-0 z-60" onclick={() => { open = false; }}></div>
-    <div class="absolute right-0 top-full z-61 mt-1 grid gap-1.5 rounded-lg bg-popover p-2.5 shadow-lg ring-1 ring-border/60" style="grid-template-columns: repeat(4, 44px);">
+    <div class="absolute right-0 top-full z-61 mt-1 grid gap-1.5 rounded-lg bg-popover p-2.5 shadow-lg ring-1 ring-border/60" style="grid-template-columns: repeat(4, 1.25rem);">
       {#each EVENT_COLOR_OPTIONS as c}
         {@const entry = getEventColor(c, theme)}
         <button
-          onclick={() => { onselect(color === c ? undefined : c); open = false; }}
-          class="h-4.5 w-11 rounded-md"
+          onclick={() => { onselect(color === c ? undefined : c); }}
+          class="size-5 rounded-[3px]"
           style={swatchStyle(entry.bg, entry.text, color === c)}
           title={entry.bg}
         ></button>
