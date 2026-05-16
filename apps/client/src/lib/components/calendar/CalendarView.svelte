@@ -259,6 +259,59 @@
     );
   });
 
+  function currentVisibleStoreEvents(): CalendarEvent[] {
+    const visIds = calendarsStore.visibleIds;
+    return calendarStore
+      .eventsInWindow(viewWindow.start, viewWindow.end)
+      .filter((event) => visIds.has(event.calendarId));
+  }
+
+  function activeDateForEditSession(templateId: string): string | undefined {
+    if (!pomodoro.activeBlockId) return undefined;
+    const parts = pomodoro.activeBlockId.split("::");
+    return parts[0] === templateId ? parts[1] : undefined;
+  }
+
+  function cloneDisplayEvents(events: CalendarEvent[]): CalendarEvent[] {
+    return events.map((event) => ({ ...event }));
+  }
+
+  function buildSaveDisplayFreeze(data: Partial<CalendarEvent>, scope?: RecurringScope): CalendarEvent[] {
+    const storeEvents = currentVisibleStoreEvents();
+    const state = session.state;
+
+    if (state.mode === "create") {
+      return cloneDisplayEvents(
+        buildCreateDisplay(storeEvents, session.createPreview, data, viewWindow).events,
+      );
+    }
+
+    if (state.mode === "edit") {
+      const now = new Date();
+      const currentDate = formatDatePart(now);
+      const currentTime = formatCalendarDate(now).split(" ")[1];
+      return cloneDisplayEvents(
+        computeEditDisplay(
+          calendarStore.rawBlocks,
+          storeEvents,
+          {
+            originalEvent: state.originalEvent,
+            instanceEvent: state.instanceEvent,
+            templateId: state.templateId,
+          },
+          data,
+          scope ?? session.scope,
+          viewWindow,
+          activeDateForEditSession(state.templateId),
+          currentDate,
+          currentTime,
+        ).events,
+      );
+    }
+
+    return cloneDisplayEvents(displayResult.events);
+  }
+
   const calendarIdentityById = $derived.by(() => {
     const identities = new Map<string, string>();
     for (const calendar of calendarsStore.list) {
@@ -1350,10 +1403,12 @@
     const s = session.state;
     let saveRefreshedVisibleWindow = false;
     // While save is in flight, hide edit outlines but keep the previewed
-    // layout until the mutation has updated the store.
+    // layout until canonical reload has updated the store. Capture from the
+    // submitted save payload before suppressing preview recomputation.
+    const saveFreeze = buildSaveDisplayFreeze(data, scope);
     suppressEditingGlow = true;
     suppressEditPreview = true;
-    saveDisplayFreeze = displayResult.events.map((event) => ({ ...event }));
+    saveDisplayFreeze = saveFreeze;
 
     try {
     if (s.mode === "create") {
