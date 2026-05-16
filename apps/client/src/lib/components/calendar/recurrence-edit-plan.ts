@@ -57,6 +57,8 @@ export type RecurrenceCommitOperation =
   | {
       type: "update-template-fields";
       templateId: string;
+      selectedOccurrence: CalendarEvent;
+      currentDate: string;
       patch: Partial<CalendarEvent>;
       materializeProtectedHistory: boolean;
     }
@@ -66,6 +68,7 @@ export type RecurrenceCommitOperation =
       templateId: string;
       survivor: CalendarEvent;
       survivorDate: string;
+      currentDate: string;
       patch: Partial<CalendarEvent>;
       materializeProtectedHistory: boolean;
     }
@@ -438,6 +441,7 @@ function buildCommitOperations(input: {
       templateId: input.templateId,
       survivor: input.instanceEvent,
       survivorDate: instanceDate,
+      currentDate: input.today,
       patch: recurringPatchForDetachedResult(input.changes, input.recurrenceOperation),
       materializeProtectedHistory: true,
     });
@@ -455,6 +459,8 @@ function buildCommitOperations(input: {
   operations.push({
     type: "update-template-fields",
     templateId: input.templateId,
+    selectedOccurrence: input.instanceEvent,
+    currentDate: input.today,
     patch: patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
     materializeProtectedHistory: true,
   });
