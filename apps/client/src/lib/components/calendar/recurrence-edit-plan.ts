@@ -25,6 +25,81 @@ export type FieldOperation<T> =
 
 export type RecurrenceFieldOperation = FieldOperation<RecurrenceConfig>;
 
+export type RecurrenceTransferTarget =
+  | { kind: "event-id"; eventId: string }
+  | { kind: "operation-result"; operationId: string }
+  | { kind: "split-occurrence"; operationId: string; date: string };
+
+export type RecurrenceCommitOperation =
+  | {
+      type: "detach-occurrence";
+      operationId: string;
+      templateId: string;
+      occurrence: CalendarEvent;
+      occurrenceDate: string;
+      target: "standalone" | "recurring-template";
+      patch: Partial<CalendarEvent>;
+      addsException: true;
+    }
+  | {
+      type: "cap-template";
+      templateId: string;
+      untilDate: string;
+    }
+  | {
+      type: "split-series";
+      operationId: string;
+      templateId: string;
+      occurrence: CalendarEvent;
+      startDate: string;
+      patch: Partial<CalendarEvent>;
+    }
+  | {
+      type: "update-template-fields";
+      templateId: string;
+      patch: Partial<CalendarEvent>;
+      materializeProtectedHistory: boolean;
+    }
+  | {
+      type: "collapse-series";
+      operationId: string;
+      templateId: string;
+      survivor: CalendarEvent;
+      survivorDate: string;
+      patch: Partial<CalendarEvent>;
+      materializeProtectedHistory: boolean;
+    }
+  | {
+      type: "materialize-protected-history";
+      templateId: string;
+      cutoffDate: string;
+      excludeDate?: string;
+    }
+  | {
+      type: "materialize-occurrence";
+      operationId: string;
+      templateId: string;
+      occurrence: CalendarEvent;
+      occurrenceDate: string;
+      reason: "active-session" | "protected-progress";
+      patch?: Partial<CalendarEvent>;
+    }
+  | {
+      type: "transfer-active-run";
+      fromId: string;
+      to: RecurrenceTransferTarget;
+      newEnd?: string;
+    }
+  | {
+      type: "refresh-window";
+      force: true;
+    };
+
+export interface RecurrencePlanDiagnostic {
+  severity: "warning" | "error";
+  message: string;
+}
+
 export interface RecurringCommitPlan {
   scope: RecurringScope;
   templateId: string;
@@ -34,6 +109,9 @@ export interface RecurringCommitPlan {
   activeOnSelectedDate: boolean;
   activeOnToday: boolean;
   today: string;
+  operations: RecurrenceCommitOperation[];
+  requiresCanonicalRefresh: boolean;
+  diagnostics: RecurrencePlanDiagnostic[];
 }
 
 export interface RecurringEditPlan {
@@ -129,6 +207,260 @@ function unchangedEditDisplay(events: CalendarEvent[], editingId: string): Displ
   };
 }
 
+function activeDateForTemplate(
+  activeBlockId: string | undefined,
+  templateId: string,
+  today: string,
+): string | undefined {
+  if (!activeBlockId) return undefined;
+  const [root, date] = activeBlockId.split("::");
+  if (root !== templateId) return undefined;
+  return date ?? today;
+}
+
+function recurringPatchForDetachedResult(
+  changes: Partial<CalendarEvent>,
+  recurrenceOperation: RecurrenceFieldOperation,
+): Partial<CalendarEvent> {
+  return {
+    ...changes,
+    recurrence: recurrenceOperation.kind === "set"
+      ? recurrenceOperation.value
+      : undefined,
+  };
+}
+
+function patchWithRecurrenceOperation(
+  changes: Partial<CalendarEvent>,
+  recurrenceOperation: RecurrenceFieldOperation,
+): Partial<CalendarEvent> {
+  if (recurrenceOperation.kind === "cleared") {
+    return { ...changes, recurrence: undefined };
+  }
+  if (recurrenceOperation.kind === "set") {
+    return { ...changes, recurrence: recurrenceOperation.value };
+  }
+  return { ...changes };
+}
+
+export function moveDatedPatchToDate<T extends Partial<CalendarEvent>>(
+  data: T,
+  targetDate: string,
+): T {
+  if (!data.start || !data.end) return data;
+  const dataStartDate = String(data.start).split(" ")[0];
+  const dataEndDate = String(data.end).split(" ")[0];
+  const daySpan = dateDiffDays(dataStartDate, dataEndDate);
+  const newEndDate = daySpan !== 0 ? shiftDateStr(targetDate, daySpan) : targetDate;
+  return {
+    ...data,
+    start: `${targetDate} ${String(data.start).split(" ")[1]}`,
+    end: `${newEndDate} ${String(data.end).split(" ")[1]}`,
+  };
+}
+
+function occurrenceOnDate(source: CalendarEvent, templateId: string, date: string): CalendarEvent {
+  const startTime = source.start.split(" ")[1];
+  const endTime = source.end.split(" ")[1];
+  return {
+    ...source,
+    id: `${templateId}::${date}`,
+    start: `${date} ${startTime}`,
+    end: `${date} ${endTime}`,
+    recurringParentId: templateId,
+  };
+}
+
+function appendRefreshOperation(
+  operations: RecurrenceCommitOperation[],
+): RecurrenceCommitOperation[] {
+  return [...operations, { type: "refresh-window", force: true }];
+}
+
+function buildCommitOperations(input: {
+  template: CalendarEvent | undefined;
+  templateId: string;
+  instanceEvent: CalendarEvent;
+  changes: Partial<CalendarEvent>;
+  scope: RecurringScope;
+  recurrenceOperation: RecurrenceFieldOperation;
+  activeBlockId?: string;
+  activeOnSelectedDate: boolean;
+  today: string;
+}): {
+  operations: RecurrenceCommitOperation[];
+  diagnostics: RecurrencePlanDiagnostic[];
+} {
+  const diagnostics: RecurrencePlanDiagnostic[] = [];
+  const template = input.template;
+  if (!template) {
+    return {
+      operations: [],
+      diagnostics: [{
+        severity: "error",
+        message: `Missing recurrence template ${input.templateId}.`,
+      }],
+    };
+  }
+
+  const instanceDate = input.instanceEvent.start.split(" ")[0];
+  const recurrenceCleared = input.recurrenceOperation.kind === "cleared";
+  const activeDate = activeDateForTemplate(input.activeBlockId, input.templateId, input.today);
+  const activeAfterSelected = activeDate !== undefined && activeDate > instanceDate;
+  const activeOnDifferentOccurrence = activeDate !== undefined && activeDate !== instanceDate;
+
+  if (input.scope === "this") {
+    const operationId = "detach-selected";
+    const target = input.recurrenceOperation.kind === "set" ? "recurring-template" : "standalone";
+    const operations: RecurrenceCommitOperation[] = [{
+      type: "detach-occurrence",
+      operationId,
+      templateId: input.templateId,
+      occurrence: input.instanceEvent,
+      occurrenceDate: instanceDate,
+      target,
+      patch: recurringPatchForDetachedResult(input.changes, input.recurrenceOperation),
+      addsException: true,
+    }];
+    if (input.activeOnSelectedDate && input.activeBlockId) {
+      operations.push({
+        type: "transfer-active-run",
+        fromId: input.activeBlockId,
+        to: { kind: "operation-result", operationId },
+        newEnd: input.changes.end ? String(input.changes.end) : input.instanceEvent.end,
+      });
+    }
+    return { operations: appendRefreshOperation(operations), diagnostics };
+  }
+
+  if (input.scope === "following") {
+    if (input.activeOnSelectedDate) {
+      if (recurrenceCleared) {
+        return {
+          operations: appendRefreshOperation([{
+            type: "cap-template",
+            templateId: input.templateId,
+            untilDate: instanceDate,
+          }]),
+          diagnostics,
+        };
+      }
+
+      const nextDate = shiftDateStr(instanceDate, 1);
+      const operationId = "split-after-active-selected";
+      return {
+        operations: appendRefreshOperation([{
+          type: "split-series",
+          operationId,
+          templateId: input.templateId,
+          occurrence: occurrenceOnDate(input.instanceEvent, input.templateId, nextDate),
+          startDate: nextDate,
+          patch: moveDatedPatchToDate(
+            patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
+            nextDate,
+          ),
+        }]),
+        diagnostics,
+      };
+    }
+
+    const operations: RecurrenceCommitOperation[] = [];
+    if (recurrenceCleared && activeAfterSelected && input.activeBlockId && activeDate) {
+      const operationId = "materialize-active-following";
+      operations.push({
+        type: "materialize-occurrence",
+        operationId,
+        templateId: input.templateId,
+        occurrence: occurrenceOnDate(template, input.templateId, activeDate),
+        occurrenceDate: activeDate,
+        reason: "active-session",
+      });
+      operations.push({
+        type: "transfer-active-run",
+        fromId: input.activeBlockId,
+        to: { kind: "operation-result", operationId },
+      });
+    }
+
+    const splitOperationId = "split-following";
+    operations.push({
+      type: "split-series",
+      operationId: splitOperationId,
+      templateId: input.templateId,
+      occurrence: input.instanceEvent,
+      startDate: instanceDate,
+      patch: patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
+    });
+
+    if (!recurrenceCleared && activeAfterSelected && input.activeBlockId && activeDate) {
+      operations.push({
+        type: "transfer-active-run",
+        fromId: input.activeBlockId,
+        to: { kind: "split-occurrence", operationId: splitOperationId, date: activeDate },
+      });
+    }
+
+    return { operations: appendRefreshOperation(operations), diagnostics };
+  }
+
+  const operations: RecurrenceCommitOperation[] = [];
+  if (template.start.split(" ")[0] < input.today || recurrenceCleared) {
+    operations.push({
+      type: "materialize-protected-history",
+      templateId: input.templateId,
+      cutoffDate: recurrenceCleared ? input.today : input.today,
+      excludeDate: recurrenceCleared ? instanceDate : undefined,
+    });
+  }
+
+  if (recurrenceCleared) {
+    if (activeOnDifferentOccurrence && input.activeBlockId && activeDate) {
+      const operationId = "materialize-active-all";
+      operations.push({
+        type: "materialize-occurrence",
+        operationId,
+        templateId: input.templateId,
+        occurrence: occurrenceOnDate(template, input.templateId, activeDate),
+        occurrenceDate: activeDate,
+        reason: "active-session",
+      });
+      operations.push({
+        type: "transfer-active-run",
+        fromId: input.activeBlockId,
+        to: { kind: "operation-result", operationId },
+      });
+    }
+
+    const collapseOperationId = "collapse-series";
+    operations.push({
+      type: "collapse-series",
+      operationId: collapseOperationId,
+      templateId: input.templateId,
+      survivor: input.instanceEvent,
+      survivorDate: instanceDate,
+      patch: recurringPatchForDetachedResult(input.changes, input.recurrenceOperation),
+      materializeProtectedHistory: true,
+    });
+    if (input.activeOnSelectedDate && input.activeBlockId) {
+      operations.push({
+        type: "transfer-active-run",
+        fromId: input.activeBlockId,
+        to: { kind: "operation-result", operationId: collapseOperationId },
+        newEnd: input.changes.end ? String(input.changes.end) : input.instanceEvent.end,
+      });
+    }
+    return { operations: appendRefreshOperation(operations), diagnostics };
+  }
+
+  operations.push({
+    type: "update-template-fields",
+    templateId: input.templateId,
+    patch: patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
+    materializeProtectedHistory: true,
+  });
+  return { operations: appendRefreshOperation(operations), diagnostics };
+}
+
 export function buildRecurringCommitPlan(input: {
   rawBlocks: CalendarEvent[];
   templateId: string;
@@ -148,6 +480,17 @@ export function buildRecurringCommitPlan(input: {
     || activeBlockId === `${input.templateId}::${instanceDate}`;
   const activeOnToday = activeBlockId === input.templateId
     || activeBlockId === `${input.templateId}::${today}`;
+  const planned = buildCommitOperations({
+    template,
+    templateId: input.templateId,
+    instanceEvent: input.instanceEvent,
+    changes: input.changes,
+    scope: input.scope,
+    recurrenceOperation,
+    activeBlockId,
+    activeOnSelectedDate,
+    today,
+  });
 
   return {
     scope: input.scope,
@@ -158,6 +501,9 @@ export function buildRecurringCommitPlan(input: {
     activeOnSelectedDate,
     activeOnToday,
     today,
+    operations: planned.operations,
+    requiresCanonicalRefresh: planned.operations.some((operation) => operation.type === "refresh-window"),
+    diagnostics: planned.diagnostics,
   };
 }
 
