@@ -12,6 +12,7 @@
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
   import CircleGauge from "@lucide/svelte/icons/circle-gauge";
+  import CirclePause from "@lucide/svelte/icons/circle-pause";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
@@ -232,6 +233,7 @@
 
   const titleBarControls: { id: TitleBarControlId; label: string }[] = [
     { id: "pomodoro", label: "Pomodoro" },
+    { id: "music", label: "Music" },
     { id: "theme", label: "Theme toggle" },
     { id: "performance", label: "Performance" },
     { id: "reset", label: "Reset database" },
@@ -247,6 +249,10 @@
     "help",
     "settings",
   ]);
+  const TITLE_BAR_ICON_COLOR_CLASS = "text-foreground/68 dark:text-white/76";
+  const TITLE_BAR_ICON_STROKE_WIDTH = 1.5;
+  const TITLE_BAR_ICON_SIZE = 14;
+  const POMODORO_RING_STROKE_WIDTH = 2.15;
 
   const autoCompactTabs = $derived(
     preferences.titleBarVisibility.compactTabs || viewport.below("regular"),
@@ -475,7 +481,7 @@
         )}
         title={`${tab.label} (Alt+${i + 1})`}
       >
-        <tab.icon size={14} strokeWidth={1.75} />
+        <tab.icon size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         {#if !autoCompactTabs}
           <span>{tab.label}</span>
         {/if}
@@ -502,7 +508,7 @@
               cy="10"
               r="8"
               fill="none"
-              stroke-width="2.5"
+              stroke-width={POMODORO_RING_STROKE_WIDTH}
               class={isActive ? "stroke-foreground/20 dark:stroke-white/20" : "stroke-foreground/15 dark:stroke-white/15"}
             />
             {#if isActive}
@@ -511,7 +517,7 @@
                 cy="10"
                 r="8"
                 fill="none"
-                stroke-width="2.5"
+                stroke-width={POMODORO_RING_STROKE_WIDTH}
                 stroke-dasharray={`${((100 - progressPercent()) / 100) * 50.27} 50.27`}
                 stroke-linecap="round"
                 class="stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center"
@@ -557,16 +563,28 @@
       </div>
     {/if}
 
+    {#if titleBarControlVisible("music")}
+      <button
+        type="button"
+        class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+        title="Music"
+        aria-label="Music"
+      >
+        <CirclePause size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
+      </button>
+    {/if}
+
     <!-- Theme toggle -->
     {#if titleBarControlVisible("theme")}
       <button
         onclick={() => theme.toggle()}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
-            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            : "hover:bg-sidebar-accent",
         )}
         title={lockedByThemeEditor
           ? "Disabled while editing a theme"
@@ -575,9 +593,9 @@
             : "Switch to dark mode"}
       >
         {#if theme.isDark}
-          <Sun size={14} strokeWidth={1.75} />
+          <Sun size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         {:else}
-          <Moon size={14} strokeWidth={1.75} />
+          <Moon size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         {/if}
       </button>
     {/if}
@@ -587,10 +605,10 @@
       <div class="relative">
         <button
           onclick={togglePerfMenu}
-          class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
           title="Performance"
         >
-          <CircleGauge size={14} strokeWidth={1.75} />
+          <CircleGauge size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         </button>
       </div>
     {/if}
@@ -601,14 +619,15 @@
         onclick={() => { showResetConfirm = true; }}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
-            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            : "hover:bg-sidebar-accent",
         )}
         title={lockedByThemeEditor ? "Disabled while editing a theme" : "Reset database"}
       >
-        <CircleX size={14} strokeWidth={1.75} />
+        <CircleX size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
     {/if}
 
@@ -617,14 +636,15 @@
         onclick={openHelpShortcuts}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
-            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            : "hover:bg-sidebar-accent",
         )}
         title={lockedByThemeEditor ? "Disabled while editing a theme" : "Help"}
       >
-        <CircleHelp size={14} strokeWidth={1.75} />
+        <CircleHelp size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
     {/if}
 
@@ -634,14 +654,15 @@
         onclick={openSettings}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
-            : "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            : "hover:bg-sidebar-accent",
         )}
         title={lockedByThemeEditor ? "Disabled while editing a theme" : "Settings"}
       >
-        <Settings size={14} strokeWidth={1.75} />
+        <Settings size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
     {/if}
 
@@ -649,11 +670,11 @@
       <div class="relative">
         <button
           onclick={() => { showUtilityOverflowMenu = !showUtilityOverflowMenu; showPerfMenu = false; }}
-          class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
           title="More controls"
           aria-label="More controls"
         >
-          <MoreHorizontal size={15} strokeWidth={1.75} />
+          <MoreHorizontal size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         </button>
         {#if showUtilityOverflowMenu}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -688,34 +709,35 @@
   <div class="flex shrink-0 items-center gap-0.5 pr-1.5">
     <button
       onclick={() => win.minimize()}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
       title="Minimize"
     >
-      <Minus size={14} strokeWidth={1.75} />
+      <Minus size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
     </button>
     <button
       onclick={() => win.toggleMaximize()}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
       title={isMaximized ? "Restore" : "Maximize"}
     >
       {#if isMaximized}
-        <Minimize2 size={12.75} strokeWidth={1.75} />
+        <Minimize2 size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       {:else}
-        <Square size={12.75} strokeWidth={1.75} />
+        <Square size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       {/if}
     </button>
     <button
       onclick={handleClose}
       disabled={lockedByBenchmark}
       class={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 dark:text-white transition-colors",
+        "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+        TITLE_BAR_ICON_COLOR_CLASS,
         lockedByBenchmark
           ? "cursor-not-allowed opacity-40"
           : "hover:bg-destructive hover:text-destructive-foreground",
       )}
       title={lockedByBenchmark ? "Disabled while a benchmark is active" : "Close"}
     >
-      <X size={14} strokeWidth={1.75} />
+      <X size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
     </button>
   </div>
 </div>

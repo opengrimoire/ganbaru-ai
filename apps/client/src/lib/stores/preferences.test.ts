@@ -116,6 +116,7 @@ describe("resolveFontFamilyStack", () => {
 describe("title bar visibility helpers", () => {
   it("accepts registered title bar control IDs only", () => {
     expect(isTitleBarControlId("pomodoro")).toBe(true);
+    expect(isTitleBarControlId("music")).toBe(true);
     expect(isTitleBarControlId("settings")).toBe(true);
     expect(isTitleBarControlId("compactTabs")).toBe(true);
     expect(isTitleBarControlId("calendarTab")).toBe(false);
@@ -132,9 +133,10 @@ describe("title bar visibility helpers", () => {
   });
 
   it("parses stored booleans and fills missing values with defaults", () => {
-    expect(parseTitleBarVisibility({ compactTabs: true, performance: false })).toEqual({
+    expect(parseTitleBarVisibility({ compactTabs: true, music: false, performance: false })).toEqual({
       ...DEFAULT_TITLE_BAR_VISIBILITY,
       compactTabs: true,
+      music: false,
       performance: false,
     });
   });

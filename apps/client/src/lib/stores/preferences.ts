@@ -60,6 +60,7 @@ export const DEFAULT_FONT_SCALE = 1.0;
 
 export const TITLE_BAR_CONTROL_IDS = [
   "pomodoro",
+  "music",
   "theme",
   "performance",
   "reset",
@@ -73,6 +74,7 @@ export type TitleBarVisibility = Record<TitleBarControlId, boolean>;
 
 export const DEFAULT_TITLE_BAR_VISIBILITY: TitleBarVisibility = Object.freeze({
   pomodoro: true,
+  music: true,
   theme: true,
   performance: true,
   reset: true,
