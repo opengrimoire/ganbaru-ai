@@ -5,6 +5,8 @@ import {
   closedDisplay,
   buildCreateDisplay,
   computeEditDisplay,
+  buildRecurringCommitPlan,
+  getRecurrenceFieldOperation,
   applyNonRecurring,
   applyThis,
   applyAll,
@@ -89,6 +91,50 @@ describe("closedDisplay", () => {
     expect(result.events).toBe(events);
     expect(result.previewedIds.size).toBe(0);
     expect(result.editingId).toBeUndefined();
+  });
+});
+
+describe("recurrence edit planning", () => {
+  it("distinguishes missing recurrence from explicit clear", () => {
+    const recurrence = { frequency: "daily" as const, interval: 1, end: { type: "never" as const } };
+
+    expect(getRecurrenceFieldOperation(recurrence, {})).toEqual({
+      kind: "unchanged",
+      value: recurrence,
+    });
+    expect(getRecurrenceFieldOperation(recurrence, { recurrence: undefined })).toEqual({
+      kind: "cleared",
+    });
+    expect(getRecurrenceFieldOperation(undefined, { recurrence: undefined })).toEqual({
+      kind: "unchanged",
+      value: undefined,
+    });
+    expect(getRecurrenceFieldOperation(recurrence, {
+      recurrence: { frequency: "weekly", interval: 1, end: { type: "never" } },
+    })).toEqual({
+      kind: "set",
+      value: { frequency: "weekly", interval: 1, end: { type: "never" } },
+    });
+  });
+
+  it("builds a shared commit plan for cleared following recurrence", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2026-03-20");
+
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: inst20,
+      changes: { recurrence: undefined },
+      scope: "following",
+      activeBlockId: `${template.id}::2026-03-20`,
+      today: "2026-03-20",
+    });
+
+    expect(plan.recurrenceOperation).toEqual({ kind: "cleared" });
+    expect(plan.recurrenceCleared).toBe(true);
+    expect(plan.activeOnSelectedDate).toBe(true);
+    expect(plan.activeOnToday).toBe(true);
   });
 });
 
@@ -279,6 +325,52 @@ describe("applyThis", () => {
 });
 
 describe("computeEditDisplay", () => {
+  it("reprojects the same cleared recurrence draft when scope changes", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-06-15 09:00",
+      end: "2026-06-15 09:30",
+    });
+    const inst20 = makeInstance(template, "2026-06-20");
+    const inst21 = makeInstance(template, "2026-06-21");
+    const storeEvents = [template, inst20, inst21];
+    const session = { originalEvent: inst20, instanceEvent: inst20, templateId: template.id };
+    const changes = { recurrence: undefined };
+
+    const thisResult = computeEditDisplay(
+      [template],
+      storeEvents,
+      session,
+      changes,
+      "this",
+      TEST_WINDOW,
+    );
+    const followingResult = computeEditDisplay(
+      [template],
+      storeEvents,
+      session,
+      changes,
+      "following",
+      TEST_WINDOW,
+    );
+    const allResult = computeEditDisplay(
+      [template],
+      storeEvents,
+      session,
+      changes,
+      "all",
+      TEST_WINDOW,
+    );
+
+    expect(thisResult.events.find((event) => event.id === inst20.id)?.recurrence).toBeUndefined();
+    expect(followingResult.events.filter((event) =>
+      event.id === `__vf__${template.id}` || event.recurringParentId === `__vf__${template.id}`,
+    )).toHaveLength(1);
+    expect(allResult.events.filter((event) =>
+      event.id === template.id || event.recurringParentId === template.id,
+    )).toHaveLength(1);
+    expect(allResult.events.find((event) => event.id === template.id)?.start).toBe(inst20.start);
+  });
+
   it("keeps following scope preview contours when recurrence returns to its saved value", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2026-03-20");

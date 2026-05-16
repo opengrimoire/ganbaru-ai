@@ -24,6 +24,27 @@ export interface DisplayResult {
   editingId: string | undefined;
 }
 
+export type RecurrenceFieldOperation =
+  | { kind: "unchanged"; value: RecurrenceConfig | undefined }
+  | { kind: "cleared" }
+  | { kind: "set"; value: RecurrenceConfig };
+
+export interface RecurringCommitPlan {
+  scope: RecurringScope;
+  templateId: string;
+  instanceDate: string;
+  recurrenceOperation: RecurrenceFieldOperation;
+  recurrenceCleared: boolean;
+  activeOnSelectedDate: boolean;
+  activeOnToday: boolean;
+  today: string;
+}
+
+export interface RecurringEditPlan {
+  display: DisplayResult;
+  commit: RecurringCommitPlan;
+}
+
 const PENDING_CREATE_ID = "__pending_create__";
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const fmtMin = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
@@ -66,6 +87,23 @@ function hasChange<K extends keyof CalendarEvent>(
   key: K,
 ): boolean {
   return Object.prototype.hasOwnProperty.call(changes, key);
+}
+
+export function getRecurrenceFieldOperation(
+  baseline: RecurrenceConfig | undefined,
+  changes: Partial<CalendarEvent>,
+): RecurrenceFieldOperation {
+  if (!hasChange(changes, "recurrence")) {
+    return { kind: "unchanged", value: baseline };
+  }
+  if (changes.recurrence === undefined) {
+    return baseline === undefined
+      ? { kind: "unchanged", value: undefined }
+      : { kind: "cleared" };
+  }
+  return fieldEqual(changes.recurrence, baseline)
+    ? { kind: "unchanged", value: baseline }
+    : { kind: "set", value: changes.recurrence };
 }
 
 function changeOr<K extends keyof CalendarEvent>(
@@ -186,14 +224,94 @@ export function computeEditDisplay(
     return applyNonRecurring(storeEvents, originalEvent, changes, window);
   }
 
-  switch (scope) {
-    case "this":
-      return applyThis(storeEvents, originalEvent, changes);
-    case "all":
-      return applyAll(rawBlocks, storeEvents, templateId, instanceEvent, changes, window, activeDate);
-    case "following":
-      return applyFollowing(rawBlocks, storeEvents, templateId, instanceEvent, changes, window);
-  }
+  return buildRecurringEditPlan({
+    rawBlocks,
+    storeEvents,
+    originalEvent,
+    instanceEvent,
+    templateId,
+    changes,
+    scope,
+    window,
+    activeDate,
+  }).display;
+}
+
+export function buildRecurringCommitPlan(input: {
+  rawBlocks: CalendarEvent[];
+  templateId: string;
+  instanceEvent: CalendarEvent;
+  changes: Partial<CalendarEvent>;
+  scope: RecurringScope;
+  activeBlockId?: string;
+  today?: string;
+}): RecurringCommitPlan {
+  const template = input.rawBlocks.find((block) => block.id === input.templateId);
+  const baselineRecurrence = template?.recurrence ?? input.instanceEvent.recurrence;
+  const recurrenceOperation = getRecurrenceFieldOperation(baselineRecurrence, input.changes);
+  const instanceDate = input.instanceEvent.start.split(" ")[0];
+  const today = input.today ?? fmtYMD(new Date());
+  const activeBlockId = input.activeBlockId;
+  const activeOnSelectedDate = activeBlockId === input.instanceEvent.id
+    || activeBlockId === `${input.templateId}::${instanceDate}`;
+  const activeOnToday = activeBlockId === input.templateId
+    || activeBlockId === `${input.templateId}::${today}`;
+
+  return {
+    scope: input.scope,
+    templateId: input.templateId,
+    instanceDate,
+    recurrenceOperation,
+    recurrenceCleared: recurrenceOperation.kind === "cleared",
+    activeOnSelectedDate,
+    activeOnToday,
+    today,
+  };
+}
+
+export function buildRecurringEditPlan(input: {
+  rawBlocks: CalendarEvent[];
+  storeEvents: CalendarEvent[];
+  originalEvent: CalendarEvent;
+  instanceEvent: CalendarEvent;
+  templateId: string;
+  changes: Partial<CalendarEvent>;
+  scope: RecurringScope;
+  window: ExpansionWindow;
+  activeDate?: string;
+}): RecurringEditPlan {
+  const display = input.scope === "this"
+    ? applyThis(input.storeEvents, input.originalEvent, input.changes)
+    : input.scope === "all"
+      ? applyAll(
+          input.rawBlocks,
+          input.storeEvents,
+          input.templateId,
+          input.instanceEvent,
+          input.changes,
+          input.window,
+          input.activeDate,
+        )
+      : applyFollowing(
+          input.rawBlocks,
+          input.storeEvents,
+          input.templateId,
+          input.instanceEvent,
+          input.changes,
+          input.window,
+        );
+
+  return {
+    display,
+    commit: buildRecurringCommitPlan({
+      rawBlocks: input.rawBlocks,
+      templateId: input.templateId,
+      instanceEvent: input.instanceEvent,
+      changes: input.changes,
+      scope: input.scope,
+      activeBlockId: input.activeDate ? `${input.templateId}::${input.activeDate}` : undefined,
+    }),
+  };
 }
 
 /** Non-recurring: replace the event in-place with merged changes. */
@@ -291,7 +409,7 @@ export function applyAll(
   const todayStr = fmtYMD(new Date());
   const templateStartDate = template.start.split(" ")[0];
   const hasPast = templateStartDate < todayStr;
-  const recurrenceCleared = hasChange(changes, "recurrence") && changes.recurrence === undefined;
+  const recurrenceCleared = getRecurrenceFieldOperation(template.recurrence, changes).kind === "cleared";
 
   // Compute day delta between instance date and changes date
   const instanceDateStr = instanceEvent.start.split(" ")[0];

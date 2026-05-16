@@ -37,6 +37,7 @@
     closedDisplay,
     buildCreateDisplay,
     computeEditDisplay,
+    buildRecurringCommitPlan,
     dateDiffDays,
     shiftDateStr,
     PENDING_CREATE_ID,
@@ -203,6 +204,7 @@
   // When saving edits, suppress preview computation to prevent flash
   // (store updates before session closes, so preview would briefly conflict)
   let suppressEditPreview = $state(false);
+  let saveDisplayFreeze = $state<CalendarEvent[] | null>(null);
   let panelSurfaceStatus = $state<EventSurfaceStatus | undefined>(undefined);
   let panelSurfaceStatusEventId = $state<string | undefined>(undefined);
 
@@ -228,6 +230,7 @@
     const storeEvents = calendarStore
       .eventsInWindow(viewWindow.start, viewWindow.end)
       .filter((e) => visIds.has(e.calendarId));
+    if (saveDisplayFreeze) return closedDisplay(saveDisplayFreeze);
     const s = session.state;
     if (s.mode === "closed") return closedDisplay(storeEvents);
     if (s.mode === "create") return buildCreateDisplay(storeEvents, session.createPreview, session.changes, viewWindow);
@@ -469,17 +472,6 @@
 
   function isRecurring(event: CalendarEvent): boolean {
     return !!event.recurringParentId || !!event.recurrence;
-  }
-
-  function hasEventDataKey<K extends keyof CalendarEvent>(
-    value: Partial<CalendarEvent>,
-    key: K,
-  ): boolean {
-    return Object.prototype.hasOwnProperty.call(value, key);
-  }
-
-  function isClearingRecurrence(value: Partial<CalendarEvent>): boolean {
-    return hasEventDataKey(value, "recurrence") && value.recurrence === undefined;
   }
 
   /** Would this delete stop the active pomodoro session? */
@@ -1257,6 +1249,21 @@
     session.updateScope(newScope);
   }
 
+  function moveDatedPatchToDate<T extends { start: string; end: string }>(
+    data: T,
+    targetDate: string,
+  ): T {
+    const dataStartDate = data.start.split(" ")[0];
+    const dataEndDate = data.end.split(" ")[0];
+    const daySpan = dateDiffDays(dataStartDate, dataEndDate);
+    const newEndDate = daySpan !== 0 ? shiftDateStr(targetDate, daySpan) : targetDate;
+    return {
+      ...data,
+      start: `${targetDate} ${data.start.split(" ")[1]}`,
+      end: `${newEndDate} ${data.end.split(" ")[1]}`,
+    };
+  }
+
   function handlePanelClose() {
     panelOpenRequestId++;
     pendingEditEventId = undefined;
@@ -1353,6 +1360,8 @@
     // While save is in flight, hide edit outlines but keep the previewed
     // layout until the mutation has updated the store.
     suppressEditingGlow = true;
+    suppressEditPreview = true;
+    saveDisplayFreeze = displayResult.events.map((event) => ({ ...event }));
 
     try {
     if (s.mode === "create") {
@@ -1378,12 +1387,27 @@
       const isRec = isRecurring(s.originalEvent);
 
       if (isRec && scope) {
+        const recurrencePlan = buildRecurringCommitPlan({
+          rawBlocks: calendarStore.rawBlocks,
+          templateId: s.templateId,
+          instanceEvent,
+          changes: data,
+          scope,
+          activeBlockId: pomodoro.activeBlockId ?? undefined,
+          today: formatDatePart(new Date()),
+        });
         if (scope === "this") {
           // Batch so invalidate() only runs once after both operations complete
           calendarStore.beginBatch();
           try {
             const standalone = await calendarStore.detachInstance(instanceEvent);
-            const updated: CalendarEvent = { ...standalone, ...data, recurrence: undefined };
+            const updated: CalendarEvent = {
+              ...standalone,
+              ...data,
+              recurrence: recurrencePlan.recurrenceOperation.kind === "set"
+                ? recurrencePlan.recurrenceOperation.value
+                : undefined,
+            };
             await calendarStore.updateBlock(updated);
           } finally {
             calendarStore.endBatch();
@@ -1392,24 +1416,10 @@
           const instanceDate = instanceEvent.start.split(" ")[0];
           const templateId = instanceEvent.recurringParentId ?? instanceEvent.id;
 
-          // If this is the active session's date, don't detach it; split from tomorrow
-          const isActiveDate = pomodoro.activeBlockId?.startsWith(templateId + "::" + instanceDate);
-          if (isActiveDate) {
-            const nextDate = shiftDateStr(instanceDate, 1);
-            const startTime = instanceEvent.start.split(" ")[1];
-            const endTime = instanceEvent.end.split(" ")[1];
-            const nextDayInstance: CalendarEvent = {
-              ...instanceEvent,
-              id: `${templateId}::${nextDate}`,
-              start: `${nextDate} ${startTime}`,
-              end: `${nextDate} ${endTime}`,
-            };
-            await calendarStore.splitSeries(nextDayInstance, data);
-          } else {
-            const hasProgress = await calendarStore.hasProgressSegments(templateId, instanceDate);
-            if (hasProgress) {
-              // Instance date has progress: detach it first, then split from next day
-              await calendarStore.detachInstance(instanceEvent);
+          if (recurrencePlan.activeOnSelectedDate) {
+            if (recurrencePlan.recurrenceCleared) {
+              await calendarStore.setRepeatUntil(templateId, instanceDate);
+            } else {
               const nextDate = shiftDateStr(instanceDate, 1);
               const startTime = instanceEvent.start.split(" ")[1];
               const endTime = instanceEvent.end.split(" ")[1];
@@ -1419,7 +1429,34 @@
                 start: `${nextDate} ${startTime}`,
                 end: `${nextDate} ${endTime}`,
               };
-              await calendarStore.splitSeries(nextDayInstance, data);
+              await calendarStore.splitSeries(nextDayInstance, moveDatedPatchToDate(data, nextDate));
+            }
+          } else {
+            const hasProgress = await calendarStore.hasProgressSegments(templateId, instanceDate);
+            if (hasProgress) {
+              // Instance date has progress: detach it first, then split from next day
+              const standalone = await calendarStore.detachInstance(instanceEvent);
+              await calendarStore.updateBlock({
+                ...standalone,
+                ...data,
+                recurrence: recurrencePlan.recurrenceOperation.kind === "set"
+                  ? recurrencePlan.recurrenceOperation.value
+                  : undefined,
+              });
+              const nextDate = shiftDateStr(instanceDate, 1);
+              if (recurrencePlan.recurrenceCleared) {
+                await calendarStore.setRepeatUntil(templateId, instanceDate);
+              } else {
+                const startTime = instanceEvent.start.split(" ")[1];
+                const endTime = instanceEvent.end.split(" ")[1];
+                const nextDayInstance: CalendarEvent = {
+                  ...instanceEvent,
+                  id: `${templateId}::${nextDate}`,
+                  start: `${nextDate} ${startTime}`,
+                  end: `${nextDate} ${endTime}`,
+                };
+                await calendarStore.splitSeries(nextDayInstance, moveDatedPatchToDate(data, nextDate));
+              }
             } else {
               await calendarStore.splitSeries(instanceEvent, data);
             }
@@ -1430,17 +1467,9 @@
           if (template) {
             const templateStartDate = template.start.split(" ")[0];
             const todayStr = formatDatePart(new Date());
+            const activeOnToday = recurrencePlan.activeOnToday;
 
-            // Detect active session on this series today
-            let activeOnToday = false;
-            if (pomodoro.activeBlockId) {
-              const parts = pomodoro.activeBlockId.split("::");
-              if (parts[0] === template.id && parts[1] === todayStr) {
-                activeOnToday = true;
-              }
-            }
-
-            if (isClearingRecurrence(data)) {
+            if (recurrencePlan.recurrenceCleared) {
               const instanceDateStr = instanceEvent.start.split(" ")[0];
               if (templateStartDate < todayStr) {
                 const splitDate = instanceDateStr < todayStr ? instanceDateStr : todayStr;
@@ -1625,8 +1654,6 @@
 
     }
 
-    if (s.mode === "edit") suppressEditPreview = true;
-
     // Stop session after all mutations complete (hybrid logic needs activeBlockId intact)
     if (sessionStopPending) {
       pomodoro.stopSession();
@@ -1638,6 +1665,7 @@
     } finally {
     suppressEditingGlow = false;
     suppressEditPreview = false;
+    saveDisplayFreeze = null;
     }
   }
 
