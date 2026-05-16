@@ -122,7 +122,6 @@ export interface RecurringEditPlan {
   commit: RecurringCommitPlan;
 }
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
 const DISPLAY_CHANGE_KEYS = [
   "title",
   "start",
@@ -474,13 +473,13 @@ export function buildRecurringCommitPlan(input: {
   changes: Partial<CalendarEvent>;
   scope: RecurringScope;
   activeBlockId?: string;
-  today?: string;
+  today: string;
 }): RecurringCommitPlan {
   const template = input.rawBlocks.find((block) => block.id === input.templateId);
   const baselineRecurrence = template?.recurrence ?? input.instanceEvent.recurrence;
   const recurrenceOperation = getRecurrenceFieldOperation(baselineRecurrence, input.changes);
   const instanceDate = input.instanceEvent.start.split(" ")[0];
-  const today = input.today ?? fmtYMD(new Date());
+  const today = input.today;
   const activeBlockId = input.activeBlockId;
   const activeOnSelectedDate = activeBlockId === input.instanceEvent.id
     || activeBlockId === `${input.templateId}::${instanceDate}`;
@@ -522,6 +521,8 @@ export function buildRecurringEditPlan(input: {
   changes: Partial<CalendarEvent>;
   scope: RecurringScope;
   window: ExpansionWindow;
+  currentDate: string;
+  currentTime: string;
   activeDate?: string;
 }): RecurringEditPlan {
   const display = input.scope === "this"
@@ -534,6 +535,8 @@ export function buildRecurringEditPlan(input: {
           input.instanceEvent,
           input.changes,
           input.window,
+          input.currentDate,
+          input.currentTime,
           input.activeDate,
         )
       : applyFollowing(
@@ -555,6 +558,7 @@ export function buildRecurringEditPlan(input: {
       changes: input.changes,
       scope: input.scope,
       activeBlockId: input.activeDate ? `${input.templateId}::${input.activeDate}` : undefined,
+      today: input.currentDate,
     }),
   };
 }
@@ -601,12 +605,14 @@ export function applyAll(
   instanceEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
   window: ExpansionWindow,
+  currentDate: string,
+  currentTime: string,
   activeDate?: string,
 ): DisplayResult {
   const template = rawBlocks.find((b) => b.id === templateId);
   if (!template) return closedDisplay(storeEvents);
 
-  const todayStr = fmtYMD(new Date());
+  const todayStr = currentDate;
   const templateStartDate = template.start.split(" ")[0];
   const hasPast = templateStartDate < todayStr;
   const recurrenceCleared = getRecurrenceFieldOperation(template.recurrence, changes).kind === "cleared";
@@ -698,8 +704,7 @@ export function applyAll(
           if (span !== 0) endDateForActive = shiftDateStr(activeDate, span);
         }
 
-        const now = new Date();
-        const nowTime = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+        const nowTime = currentTime;
         const newStartOnToday = `${activeDate} ${newSTime}`;
         const newEndOnToday = `${endDateForActive} ${newETime}`;
         const nowStr = `${activeDate} ${nowTime}`;

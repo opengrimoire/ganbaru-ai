@@ -17,6 +17,9 @@ import {
 const PENDING_CREATE_ID = "__pending_create__";
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const fmtMin = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+const fmtDate = (d: Date) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtTime = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
 function changeOr<K extends keyof CalendarEvent>(
   changes: Partial<CalendarEvent>,
@@ -123,6 +126,8 @@ export function computeEditDisplay(
   scope: RecurringScope,
   window: ExpansionWindow,
   activeDate?: string,
+  currentDate = fmtDate(new Date()),
+  currentTime = fmtTime(new Date()),
 ): DisplayResult {
   const { originalEvent, instanceEvent, templateId } = session;
   const isRecurring = !!originalEvent.recurringParentId || !!originalEvent.recurrence;
@@ -145,6 +150,8 @@ export function computeEditDisplay(
     changes,
     scope,
     window,
+    currentDate,
+    currentTime,
     activeDate,
   }).display;
 }

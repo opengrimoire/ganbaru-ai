@@ -5,7 +5,7 @@
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import {
-    addDays, computeViewWindow, formatDatePart,
+    addDays, computeViewWindow, formatCalendarDate, formatDatePart,
     getEventSurfaceStatusForIdentity, getLocalTimezone, parseCalendarDate,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
@@ -238,6 +238,9 @@
     // mode === "edit": if saving, skip preview and use store directly
     if (suppressEditPreview) return closedDisplay(storeEvents);
     // Compute active date for hybrid preview (active session keeps original start)
+    const now = new Date();
+    const currentDate = formatDatePart(now);
+    const currentTime = formatCalendarDate(now).split(" ")[1];
     let activeDate: string | undefined;
     if (pomodoro.activeBlockId && s.templateId) {
       const parts = pomodoro.activeBlockId.split("::");
@@ -251,6 +254,8 @@
       session.scope,
       viewWindow,
       activeDate,
+      currentDate,
+      currentTime,
     );
   });
 

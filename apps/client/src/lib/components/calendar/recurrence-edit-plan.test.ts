@@ -73,6 +73,8 @@ describe("recurrence edit planner", () => {
       templateId: template.id,
       changes: { recurrence: undefined },
       window: TEST_WINDOW,
+      currentDate: "2027-06-10",
+      currentTime: "12:00",
     };
 
     const thisResult = buildRecurringEditPlan({ ...input, scope: "this" }).display;
@@ -104,6 +106,8 @@ describe("recurrence edit planner", () => {
         changes: { title: "Changed" },
         scope,
         window: TEST_WINDOW,
+        currentDate: "2027-06-10",
+        currentTime: "12:00",
       }).display;
       const renderedIds = new Set(result.events.map((event) => event.id));
 
@@ -221,6 +225,8 @@ describe("recurrence edit planner", () => {
       changes: { recurrence: undefined },
       scope: "following",
       window: TEST_WINDOW,
+      currentDate: "2027-06-10",
+      currentTime: "12:00",
       activeDate: "2027-06-20",
     }).display;
 
@@ -277,6 +283,8 @@ describe("recurrence edit planner", () => {
       changes: { recurrence: undefined },
       scope: "following",
       window: TEST_WINDOW,
+      currentDate: "2027-06-10",
+      currentTime: "12:00",
       activeDate: "2027-06-22",
     }).display;
 
@@ -361,6 +369,8 @@ describe("recurrence edit planner", () => {
       changes: { recurrence: undefined },
       scope: "all",
       window: TEST_WINDOW,
+      currentDate: "2027-06-10",
+      currentTime: "12:00",
       activeDate: "2027-06-22",
     }).display;
 

@@ -440,6 +440,8 @@ describe("applyAll", () => {
       [template], events, template.id, inst,
       { title: "All changed" },
       TEST_WINDOW,
+      futureDate(0),
+      "12:00",
     );
 
     expect(result.previewedIds.size).toBeGreaterThan(1);
@@ -460,6 +462,8 @@ describe("applyAll", () => {
       [template], events, template.id, inst,
       { recurrence: undefined },
       TEST_WINDOW,
+      futureDate(0),
+      "12:00",
     );
 
     const seriesEvents = result.events.filter((e) =>
@@ -491,6 +495,8 @@ describe("applyAll", () => {
       [detachedTemplate, standaloneOriginal], events, template.id, inst,
       { recurrence: undefined },
       TEST_WINDOW,
+      futureDate(0),
+      "12:00",
     );
 
     expect(result.events.find((e) => e.id === standaloneOriginal.id)).toBe(standaloneOriginal);
@@ -512,6 +518,8 @@ describe("applyAll", () => {
       [template], events, template.id, inst,
       { start: `${shiftedDate} 09:00`, end: `${shiftedDate} 09:30` },
       TEST_WINDOW,
+      futureDate(0),
+      "12:00",
     );
 
     // Template should have shifted by +2 days
@@ -538,6 +546,8 @@ describe("applyAll", () => {
       [template], events, template.id, futInst,
       { title: "Changed" },
       TEST_WINDOW,
+      futureDate(0),
+      "12:00",
     );
 
     // Past instance should keep its original title
