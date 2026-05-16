@@ -110,6 +110,33 @@ describe("LatestWindowLoadCoordinator", () => {
     await coordinator.whenIdle();
   });
 
+  it("runs a forced refresh after superseding stale active work", async () => {
+    const stale = deferred<WindowLoadOutcome>();
+    const fresh = deferred<WindowLoadOutcome>();
+    const started: string[] = [];
+    const waits = new Map<string, TestDeferred<WindowLoadOutcome>>([
+      ["prefetch:week", stale],
+      ["apply:week", fresh],
+    ]);
+    const coordinator = new LatestWindowLoadCoordinator<string>(async (request, isSuperseded) => {
+      started.push(request);
+      await waits.get(request)!.promise;
+      return isSuperseded() ? "superseded" : "applied";
+    });
+
+    const staleResult = coordinator.enqueue("prefetch:week", "prefetch:week");
+    coordinator.supersedePending();
+    const freshResult = coordinator.enqueue("apply:week", "apply:week");
+
+    stale.resolve("applied");
+    await expect(staleResult).resolves.toBe("superseded");
+    await Promise.resolve();
+    expect(started).toEqual(["prefetch:week", "apply:week"]);
+
+    fresh.resolve("applied");
+    await expect(freshResult).resolves.toBe("applied");
+  });
+
   it("resolves when idle after active and queued work finish", async () => {
     const active = deferred<WindowLoadOutcome>();
     const queued = deferred<WindowLoadOutcome>();
@@ -161,5 +188,17 @@ describe("BoundedWindowCache", () => {
     expect(cache.has("a")).toBe(false);
     expect(cache.has("b")).toBe(true);
     expect(cache.has("c")).toBe(true);
+  });
+
+  it("clears every cached window before a forced reload", () => {
+    const cache = new BoundedWindowCache<number>(3);
+    cache.set("current", 1);
+    cache.set("previous", 2);
+
+    cache.clear();
+
+    expect(cache.size).toBe(0);
+    expect(cache.has("current")).toBe(false);
+    expect(cache.has("previous")).toBe(false);
   });
 });
