@@ -183,7 +183,7 @@ export function computeEditDisplay(
   }
 
   if (!isRecurring) {
-    return applyNonRecurring(storeEvents, originalEvent, changes);
+    return applyNonRecurring(storeEvents, originalEvent, changes, window);
   }
 
   switch (scope) {
@@ -201,6 +201,7 @@ export function applyNonRecurring(
   events: CalendarEvent[],
   originalEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
+  window?: ExpansionWindow,
 ): DisplayResult {
   // If the original event no longer exists, return store as-is
   const eventExists = events.some((e) => e.id === originalEvent.id);
@@ -212,6 +213,21 @@ export function applyNonRecurring(
   }
 
   const merged = { ...originalEvent, ...changes };
+  if (merged.recurrence && window) {
+    const expanded = expandRecurring([
+      { ...merged, id: originalEvent.id, recurringParentId: undefined },
+    ], window.start, window.end);
+    const ids = new Set(expanded.map((e) => e.id));
+    const targetDate = merged.start.split(" ")[0];
+    const editingId = expanded.find((e) => e.start.split(" ")[0] === targetDate)?.id
+      ?? originalEvent.id;
+    return {
+      events: [...events.filter((e) => e.id !== originalEvent.id), ...expanded],
+      previewedIds: ids,
+      editingId,
+    };
+  }
+
   const result = events.map((e) =>
     e.id === originalEvent.id ? { ...e, ...merged, id: e.id } : e,
   );
@@ -275,11 +291,41 @@ export function applyAll(
   const todayStr = fmtYMD(new Date());
   const templateStartDate = template.start.split(" ")[0];
   const hasPast = templateStartDate < todayStr;
+  const recurrenceCleared = hasChange(changes, "recurrence") && changes.recurrence === undefined;
 
   // Compute day delta between instance date and changes date
   const instanceDateStr = instanceEvent.start.split(" ")[0];
   const changesDateStr = changes.start ? String(changes.start).split(" ")[0] : instanceDateStr;
   const deltaDays = dateDiffDays(instanceDateStr, changesDateStr);
+  const belongsToSeries = (e: CalendarEvent) =>
+    e.id === templateId || e.recurringParentId === templateId;
+  const otherEvents = storeEvents.filter((e) => !belongsToSeries(e));
+
+  if (recurrenceCleared) {
+    const targetStart = changes.start ? String(changes.start) : instanceEvent.start;
+    const targetEnd = changes.end ? String(changes.end) : instanceEvent.end;
+    const collapsedId = hasPast ? `__va__${templateId}` : templateId;
+    const splitDate = hasPast && instanceDateStr < todayStr ? instanceDateStr : todayStr;
+    const preservedSeries = hasPast
+      ? storeEvents.filter((e) => belongsToSeries(e) && e.start.split(" ")[0] < splitDate)
+      : [];
+    const collapsed: CalendarEvent = {
+      ...template,
+      ...changes,
+      id: collapsedId,
+      start: targetStart,
+      end: targetEnd,
+      recurrence: undefined,
+      recurringParentId: undefined,
+      exceptions: undefined,
+    };
+
+    return {
+      events: [...otherEvents, ...preservedSeries, collapsed],
+      previewedIds: new Set([collapsedId]),
+      editingId: collapsedId,
+    };
+  }
 
   // Compute new template dates (derive end date from changes day span to handle cross-midnight)
   const newStartDate = deltaDays !== 0 ? shiftDateStr(templateStartDate, deltaDays) : templateStartDate;
@@ -306,11 +352,6 @@ export function applyAll(
   const expanded = expandRecurring([patched], window.start, window.end);
 
   // Separate series instances by past vs. today+future
-  const belongsToSeries = (e: CalendarEvent) =>
-    e.id === templateId || e.recurringParentId === templateId;
-
-  const otherEvents = storeEvents.filter((e) => !belongsToSeries(e));
-
   let seriesEvents: CalendarEvent[];
   const previewedIds = new Set<string>();
   let editingId: string | undefined;

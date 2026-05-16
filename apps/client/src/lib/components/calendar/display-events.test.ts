@@ -131,15 +131,27 @@ describe("buildCreateDisplay", () => {
   it("expands recurring create preview", () => {
     const events: CalendarEvent[] = [];
     const preview = {
-      dateStr: "2026-03-20",
+      dateStr: "2026-03-16",
       startMinute: 600,
       endMinute: 660,
       recurrence: { frequency: "daily" as const, interval: 1, end: { type: "never" as const } },
     };
-    const result = buildCreateDisplay(events, preview, {}, TEST_WINDOW);
-    // Template + expanded instances
-    expect(result.events.length).toBeGreaterThan(1);
-    expect(result.previewedIds.size).toBeGreaterThan(1);
+    const result = buildCreateDisplay(events, preview, {}, {
+      start: Temporal.PlainDate.from("2026-03-16"),
+      end: Temporal.PlainDate.from("2026-03-22"),
+    });
+    const recurrenceDates = result.events.map((e) => e.start.split(" ")[0]);
+
+    expect(recurrenceDates).toEqual([
+      "2026-03-16",
+      "2026-03-17",
+      "2026-03-18",
+      "2026-03-19",
+      "2026-03-20",
+      "2026-03-21",
+      "2026-03-22",
+    ]);
+    expect(result.previewedIds.size).toBe(7);
   });
 
   it("lets cleared recurrence override stale create preview recurrence", () => {
@@ -178,6 +190,28 @@ describe("applyNonRecurring", () => {
 
     expect(result.previewedIds.has("evt1")).toBe(true);
     expect(result.events[0]?.localParticipationStatus).toBe("tentative");
+  });
+
+  it("expands preview instances when adding recurrence to a saved non-recurring event", () => {
+    const evt = makeEvent();
+    const other = makeEvent({ id: "evt2", title: "Other", start: "2026-03-20 14:00", end: "2026-03-20 15:00" });
+
+    const result = computeEditDisplay(
+      [evt, other],
+      [evt, other],
+      { originalEvent: evt, instanceEvent: evt, templateId: evt.id },
+      { recurrence: { frequency: "daily", interval: 1, end: { type: "never" } } },
+      "this",
+      TEST_WINDOW,
+    );
+
+    const previewEvents = result.events.filter((e) =>
+      e.id === evt.id || e.recurringParentId === evt.id,
+    );
+    expect(previewEvents.length).toBeGreaterThan(1);
+    expect(previewEvents.every((e) => result.previewedIds.has(e.id))).toBe(true);
+    expect(result.editingId).toBe(evt.id);
+    expect(result.events.find((e) => e.id === other.id)).toBe(other);
   });
 
   it("keeps the original event array when changes do not affect the calendar grid", () => {
@@ -340,8 +374,39 @@ describe("applyAll", () => {
       e.id === template.id || e.recurringParentId === template.id,
     );
     expect(seriesEvents).toHaveLength(1);
+    expect(seriesEvents[0]?.start).toBe(inst.start);
+    expect(seriesEvents[0]?.end).toBe(inst.end);
     expect(seriesEvents[0]?.recurrence).toBeUndefined();
     expect(seriesEvents[0]?.recurringParentId).toBeUndefined();
+  });
+
+  it("keeps the edited instance when clearing recurrence after the first instance was detached", () => {
+    const template = makeFutureTemplate();
+    const templateDate = template.start.split(" ")[0];
+    const instDate = futureDate(6);
+    const inst = makeInstance(template, instDate);
+    const standaloneOriginal = makeEvent({
+      id: "standalone-original",
+      start: template.start,
+      end: template.end,
+      recurrence: undefined,
+      recurringParentId: undefined,
+    });
+    const detachedTemplate = { ...template, exceptions: [templateDate] };
+    const events = [standaloneOriginal, inst];
+
+    const result = applyAll(
+      [detachedTemplate, standaloneOriginal], events, template.id, inst,
+      { recurrence: undefined },
+      TEST_WINDOW,
+    );
+
+    expect(result.events.find((e) => e.id === standaloneOriginal.id)).toBe(standaloneOriginal);
+    const collapsed = result.events.find((e) => e.id === template.id);
+    expect(collapsed).toBeDefined();
+    expect(collapsed?.start).toBe(inst.start);
+    expect(collapsed?.end).toBe(inst.end);
+    expect(collapsed?.recurrence).toBeUndefined();
   });
 
   it("shifts template dates by day delta", () => {

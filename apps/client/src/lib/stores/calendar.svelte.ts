@@ -678,13 +678,20 @@ function clearWindowCache(): void {
   windowLoadCoordinator.supersedePending();
 }
 
-async function refreshCurrentWindow(): Promise<void> {
+async function reloadCurrentWindowFromDb(): Promise<void> {
   if (!currentWindowStart || !currentWindowEnd) {
     invalidate(false);
     return;
   }
+  await reloadWindowFromDb(currentWindowStart, currentWindowEnd);
+}
+
+async function reloadWindowFromDb(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): Promise<void> {
   clearWindowCache();
-  await loadWindowIntoState(currentWindowStart, currentWindowEnd, false, true);
+  await loadWindowIntoState(windowStart, windowEnd, false, true);
 }
 
 /**
@@ -815,6 +822,17 @@ export function getCalendar() {
       windowEnd: Temporal.PlainDate,
     ): Promise<void> {
       await loadWindowIntoState(windowStart, windowEnd, false);
+    },
+
+    async refreshCurrentWindow(): Promise<void> {
+      await reloadCurrentWindowFromDb();
+    },
+
+    async refreshWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<void> {
+      await reloadWindowFromDb(windowStart, windowEnd);
     },
 
     /**
@@ -1565,7 +1583,7 @@ export function getCalendar() {
 
       totalEventCount += result.added;
       if (opts.refreshWindow ?? true) {
-        await refreshCurrentWindow();
+        await reloadCurrentWindowFromDb();
       }
 
       return {

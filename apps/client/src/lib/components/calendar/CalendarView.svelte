@@ -60,6 +60,7 @@
     | {
         mode: "edit";
         event: CalendarEvent;
+        recurringScopeEnabled: boolean;
         anchor: PanelAnchor;
         detailsLoaded: boolean;
         readOnly: boolean;
@@ -87,6 +88,7 @@
         anchor: PanelAnchor;
         initialAllDay: false;
         event: CalendarEvent;
+        recurringScopeEnabled: boolean;
         detailsLoaded: boolean;
         externalDirty: boolean;
         readOnly: boolean;
@@ -127,6 +129,7 @@
   function closeSession() {
     const snapshot = snapshotCurrentPanel();
     if (snapshot) parkedPanelSnapshot = snapshot;
+    pendingEditEventId = undefined;
     panelSurfaceStatus = undefined;
     panelSurfaceStatusEventId = undefined;
     session.close();
@@ -384,6 +387,7 @@
       return {
         mode: "edit",
         event: panelEvent,
+        recurringScopeEnabled: isRecurring(s.originalEvent),
         anchor: s.anchor,
         detailsLoaded: panelDetailsLoaded,
         readOnly: isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId),
@@ -418,6 +422,7 @@
         anchor: s.anchor,
         initialAllDay: false,
         event: panelEvent,
+        recurringScopeEnabled: isRecurring(s.originalEvent),
         detailsLoaded: panelDetailsLoaded,
         externalDirty: session.dirty,
         readOnly: isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId),
@@ -447,6 +452,7 @@
       anchor: parkedPanelSnapshot.anchor,
       initialAllDay: false,
       event: parkedPanelSnapshot.event,
+      recurringScopeEnabled: parkedPanelSnapshot.recurringScopeEnabled,
       detailsLoaded: parkedPanelSnapshot.detailsLoaded,
       externalDirty: false,
       readOnly: parkedPanelSnapshot.readOnly,
@@ -463,6 +469,17 @@
 
   function isRecurring(event: CalendarEvent): boolean {
     return !!event.recurringParentId || !!event.recurrence;
+  }
+
+  function hasEventDataKey<K extends keyof CalendarEvent>(
+    value: Partial<CalendarEvent>,
+    key: K,
+  ): boolean {
+    return Object.prototype.hasOwnProperty.call(value, key);
+  }
+
+  function isClearingRecurrence(value: Partial<CalendarEvent>): boolean {
+    return hasEventDataKey(value, "recurrence") && value.recurrence === undefined;
   }
 
   /** Would this delete stop the active pomodoro session? */
@@ -1333,7 +1350,11 @@
     }
 
     const s = session.state;
+    // While save is in flight, hide edit outlines but keep the previewed
+    // layout until the mutation has updated the store.
+    suppressEditingGlow = true;
 
+    try {
     if (s.mode === "create") {
       const event = await calendarStore.addBlock({
         title: data.title, start: data.start, end: data.end,
@@ -1419,26 +1440,65 @@
               }
             }
 
-            // Determine split date based on session state:
-            // - Hybrid (session continues): split from tomorrow, today keeps extended block
-            // - Stop (new time doesn't cover now): split from today if new time has
-            //   a future portion, otherwise from tomorrow (skip past-only today block)
-            let splitDate: string;
-            if (activeOnToday) {
-              if (sessionStopPending) {
-                const newEndTime = data.end.split(" ")[1];
-                const dsd = data.start.split(" ")[0];
-                const ded = data.end.split(" ")[0];
-                const edSpan = dateDiffDays(dsd, ded);
-                const endDateToday = edSpan !== 0 ? shiftDateStr(todayStr, edSpan) : todayStr;
-                const newEndMs = parseCalendarDate(`${endDateToday} ${newEndTime}`).getTime();
-                splitDate = Date.now() < newEndMs ? todayStr : shiftDateStr(todayStr, 1);
+            if (isClearingRecurrence(data)) {
+              const instanceDateStr = instanceEvent.start.split(" ")[0];
+              if (templateStartDate < todayStr) {
+                const splitDate = instanceDateStr < todayStr ? instanceDateStr : todayStr;
+                const templateTime = template.start.split(" ")[1];
+                const templateEndTime = template.end.split(" ")[1];
+                const virtualInstance: CalendarEvent = {
+                  ...template,
+                  id: `${template.id}::${splitDate}`,
+                  start: `${splitDate} ${templateTime}`,
+                  end: `${splitDate} ${templateEndTime}`,
+                  recurringParentId: template.id,
+                  recurrence: undefined,
+                  exceptions: undefined,
+                };
+                const standalone = await calendarStore.splitSeries(virtualInstance, {
+                  ...data,
+                  recurrence: undefined,
+                });
+                if (activeOnToday && !sessionStopPending) {
+                  pomodoro.transferBlockId(standalone.id, standalone.end);
+                }
               } else {
-                splitDate = shiftDateStr(todayStr, 1);
+                const updated: CalendarEvent = {
+                  ...template,
+                  ...data,
+                  id: template.id,
+                  start: data.start,
+                  end: data.end,
+                  recurrence: undefined,
+                  recurringParentId: undefined,
+                  exceptions: undefined,
+                };
+                await calendarStore.updateBlock(updated);
+                if (activeOnToday && !sessionStopPending) {
+                  pomodoro.transferBlockId(updated.id, updated.end);
+                }
               }
             } else {
-              splitDate = todayStr;
-            }
+              // Determine split date based on session state:
+              // - Hybrid (session continues): split from tomorrow, today keeps extended block
+              // - Stop (new time doesn't cover now): split from today if new time has
+              //   a future portion, otherwise from tomorrow (skip past-only today block)
+              let splitDate: string;
+              if (activeOnToday) {
+                if (sessionStopPending) {
+                  const newEndTime = data.end.split(" ")[1];
+                  const dsd = data.start.split(" ")[0];
+                  const ded = data.end.split(" ")[0];
+                  const edSpan = dateDiffDays(dsd, ded);
+                  const endDateToday = edSpan !== 0 ? shiftDateStr(todayStr, edSpan) : todayStr;
+                  const newEndMs = parseCalendarDate(`${endDateToday} ${newEndTime}`).getTime();
+                  splitDate = Date.now() < newEndMs ? todayStr : shiftDateStr(todayStr, 1);
+                } else {
+                  splitDate = shiftDateStr(todayStr, 1);
+                }
+              } else {
+                splitDate = todayStr;
+              }
 
             // Always split when stopping the active session (even if template started today)
             const shouldSplit = templateStartDate < splitDate
@@ -1545,6 +1605,7 @@
               };
               await calendarStore.updateBlock(updated);
             }
+            }
           }
         }
       } else {
@@ -1562,21 +1623,22 @@
         redoStack = [];
       }
 
-      // After all mutations complete, suppress preview so display uses store directly.
-      // This must happen AFTER mutations (not before) so the preview stays visible
-      // during async operations. Once store has the correct data, we can use it.
-      suppressEditPreview = true;
-      suppressEditingGlow = true;
     }
+
+    if (s.mode === "edit") suppressEditPreview = true;
 
     // Stop session after all mutations complete (hybrid logic needs activeBlockId intact)
     if (sessionStopPending) {
       pomodoro.stopSession();
       sessionStopPending = false;
     }
+    await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
     closeSession();
+    await tick();
+    } finally {
     suppressEditingGlow = false;
     suppressEditPreview = false;
+    }
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {
@@ -1776,6 +1838,7 @@
       start={panelRender.start}
       end={panelRender.end}
       event={panelRender.mode === "edit" ? panelRender.event : undefined}
+      recurringScopeEnabled={panelRender.mode === "edit" ? panelRender.recurringScopeEnabled : false}
       anchor={panelRender.anchor}
       initialAllDay={panelRender.initialAllDay}
       detailsLoaded={panelRender.detailsLoaded}

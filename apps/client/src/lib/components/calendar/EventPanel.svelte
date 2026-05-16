@@ -52,6 +52,7 @@
     initialAllDay = false,
     externalDirty = false,
     detailsLoaded = false,
+    recurringScopeEnabled = false,
     initialSyncSeeded = false,
     parked = false,
     readOnly = false,
@@ -74,6 +75,7 @@
     initialAllDay?: boolean;
     externalDirty?: boolean;
     detailsLoaded?: boolean;
+    recurringScopeEnabled?: boolean;
     initialSyncSeeded?: boolean;
     parked?: boolean;
     readOnly?: boolean;
@@ -388,7 +390,7 @@
   }
 
   const isRecurring = $derived(
-    mode === "edit" && !!event && (!!event.recurringParentId || !!event.recurrence),
+    mode === "edit" && recurringScopeEnabled,
   );
 
   // ─── Initialization ─────────────────────────────────────────────
