@@ -14,14 +14,14 @@ The user-facing model and recurrence structural operations are in `features/cale
 
 ## Outputs
 
-A list of synthetic `CalendarEvent` objects, each with:
+A list of expanded `CalendarEvent` objects. Non-first generated occurrences have:
 
 - `id` set to `templateId::YYYY-MM-DD`.
 - `start_time` and `end_time` shifted to the instance's date, preserving the time of day from the template.
 - All other fields (color, pomodoro config, recurrence rule, etc.) inherited from the template.
 - `recurringParentId` set to the template's UUID for traceability.
 
-The first occurrence (the date of DTSTART) uses the template's plain UUID as its `id`, not a synthetic one. This means a non-detached, never-edited recurring event has its first occurrence indistinguishable from a non-recurring event by ID format. Downstream code that needs to know "is this an instance" must check `recurringParentId`, not parse the ID.
+The first occurrence (the date of DTSTART) uses the template's plain UUID as its `id`, not a synthetic one. This means a non-detached, never-edited recurring event has its first occurrence indistinguishable from a non-recurring event by ID format. Downstream code that needs to know whether an event participates in recurrence must use the template's recurrence state and `recurringParentId`; it must not rely only on a `::date` suffix.
 
 ## Window bound and guard
 

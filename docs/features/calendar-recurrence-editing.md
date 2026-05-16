@@ -36,7 +36,11 @@ These outcomes are required:
 
 **Detached standalone.** A persisted non-recurring event created from one occurrence. It preserves an edited or protected occurrence independently from its original template.
 
-**Protected past occurrence.** A generated occurrence whose end time is before the edit time and that would vanish, move, or change meaning after a structural edit. For supported recurrence rules, all affected past dates from the template start through the edit time are protected, not only dates in the visible window. Dates with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected.
+**Captured edit time.** The wall-clock date and time sampled for one projection and its matching Save plan. Projection and Save must use the same captured edit time for recurrence boundary decisions.
+
+**Protected occurrence.** A generated occurrence whose end time is at or before the captured edit time and that would vanish, move, or change meaning after a structural edit. For supported recurrence rules, all affected protected occurrences from the template start through the captured edit time are protected, not only occurrences in the visible window. Occurrences with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected.
+
+**First mutable occurrence.** The first generated occurrence from the same source series whose end time is after the captured edit time. `All` edits may apply from this occurrence forward while protected history remains unchanged.
 
 **Exception date.** A date on the template that prevents one generated occurrence from appearing.
 
@@ -84,6 +88,7 @@ The session state must include:
 - The baseline event values shown when the panel opened.
 - The current draft field operations.
 - The selected scope.
+- The captured edit time used for projection and Save.
 - The current visible window.
 - Active pomodoro metadata, if any session is running on the selected series.
 
@@ -99,7 +104,7 @@ It must appear for both the template's first occurrence and synthetic occurrence
 
 ## Projection contract
 
-Projection is pure. Given the same saved event rows, selected event, draft, scope, active session metadata, current date, and visible window, it returns the same result without writing to the store or database.
+Projection is pure. Given the same saved event rows, selected event, draft, scope, active session metadata, captured edit time, and visible window, it returns the same result without writing to the store or database.
 
 Projection returns:
 
@@ -115,7 +120,9 @@ Preview contour IDs must be a subset of the rendered event IDs. If a virtual eve
 
 ## Save contract
 
-Save executes the commit plan produced by projection for the current draft and scope. It does not independently decide what recurrence operation means.
+Save executes the same semantic commit plan projection would produce for the current draft, scope, active metadata, captured edit time, and visible window. The implementation may reuse the exact plan object or recompute it from the same normalized inputs, but it must not independently decide what recurrence operation means.
+
+When Save starts, the submitted projection may remain visually frozen until the canonical refresh completes. This freeze is display-only: it must not detach, split, collapse, delete, transfer sessions, or write data before Save executes the commit plan.
 
 After Save succeeds:
 
@@ -165,17 +172,20 @@ Preview shows the old template only before the selected occurrence and shows the
 
 `All` applies to the series as a whole while preserving past data.
 
-If recurrence remains set, Save applies the draft fields to the template after materializing any protected past occurrences that would otherwise vanish or move in a way that rewrites history. The template keeps the series identity and original recurrence anchor unless the edit is defined as a collapse.
+If recurrence remains set and there are no protected occurrences, Save may update the template directly. If protected occurrences exist, Save preserves them first. The preferred preservation mechanism is a capped historical template ending at the last protected occurrence, followed by a new mutable template beginning at the first mutable occurrence. Detached standalones are used when a protected or active occurrence needs its own identity or cannot be represented safely by the capped template.
 
-If recurrence is cleared, Save collapses the series. The selected occurrence becomes the single non-recurring survivor for the series identity with the draft fields. This is true even when the selected occurrence is synthetic and not the original template date. Protected history or active-session rules may also materialize additional standalone events.
+If recurrence is cleared, Save collapses the mutable side of the series. The selected occurrence becomes the single non-recurring survivor for the mutable side with the draft fields. This is true even when the selected occurrence is synthetic and not the original template date. Protected history remains visible through a capped historical template or detached standalones. Active-session rules may also materialize an additional standalone event.
 
 Collapse must preserve invariant 7:
 
-- Any past occurrence that would vanish and is not the selected survivor is materialized as a detached standalone event.
+- Any protected occurrence that would vanish, move, or change meaning remains visible with its original meaning.
+- A capped historical template is preferred when one template can preserve the protected range without rewriting it.
+- A detached standalone is required when an individual occurrence needs its own event ID, when the selected survivor cannot safely reuse the old template, or when an active occurrence would otherwise lose its identity.
 - Any active occurrence that would vanish and is not the selected survivor is materialized as a detached standalone event.
 - Runs and segments attached to materialized occurrences are transferred to their standalone event IDs.
 - The selected survivor receives any runs from the selected occurrence ID.
-- The old template is reused as the survivor only when it represents the selected occurrence. Otherwise the implementation must either convert it into a protected standalone or remove it only when deletion is legal.
+- The old template is reused as the survivor only when reuse does not rewrite protected history. Otherwise it remains as the historical template or is converted only when deletion is legal.
+- Mutable occurrences other than the selected survivor stop expanding after the collapse.
 
 Preview shows exactly the collapsed result inside the visible window. It must not collapse the preview back to the original template date when the user is editing a later occurrence.
 
@@ -209,7 +219,7 @@ For `Following`, if the active selected occurrence is also the requested split p
 
 For `Following`, if the active occurrence is before the selected split point, it is unaffected. If the active occurrence is after the selected split point and recurrence remains set, the active run transfers to the corresponding occurrence ID in the new template. If repeat was cleared, the active occurrence would otherwise vanish, so Save materializes it as a standalone event and transfers the active run there before removing later generated occurrences.
 
-For `All`, if the active selected occurrence becomes the collapse survivor, the active run transfers to that survivor. If the active occurrence is different from the selected survivor and collapse or a template-wide change would make it vanish, move, or change meaning, that active occurrence is materialized before the template changes and the active run transfers to the standalone.
+For `All`, if the active selected occurrence becomes the collapse survivor, the active run transfers to that survivor. If the active occurrence is different from the selected survivor and collapse or a template-wide change would make it vanish, move, or change meaning, that active occurrence is detached before the template changes and the active run transfers to the standalone.
 
 Projection never transfers a session. It only marks which transfer Save would perform.
 
@@ -223,8 +233,9 @@ The frontend can keep windowed caching, but affected mutations must invalidate e
 
 - The old template.
 - The new template.
+- Any capped historical template that preserves protected occurrences.
 - The selected survivor.
-- Detached past standalones in the visible range.
+- Detached protected standalones in the visible range.
 - Deleted or capped future occurrences.
 
 The current foreground load is latest-wins. Older loads or prefetches cannot overwrite a newer post-save refresh.
@@ -258,6 +269,9 @@ Occurrence positions:
 - Synthetic future occurrence.
 - Synthetic past occurrence.
 - Today's occurrence.
+- Same-day occurrence that already ended before the captured edit time.
+- Same-day occurrence that has not ended at the captured edit time.
+- Cross-midnight occurrence whose start date and end date fall on different sides of the captured edit time.
 - Occurrence after the original first occurrence was detached.
 
 Series shapes:
@@ -289,6 +303,7 @@ Runtime states:
 - Active session on an unrelated event.
 - Past occurrences outside the current visible window that would be erased by the edit.
 - Past occurrences outside the current visible window with stored run references.
+- Captured edit time that separates an ended occurrence and a future occurrence on the same date.
 
 Window states:
 
@@ -315,6 +330,8 @@ Required tests:
 - Compare preview projection against post-commit canonical expansion for representative cases.
 - Ensure every preview contour ID exists in the rendered projection.
 - Ensure a daily repeat created on Monday renders through Sunday in the current week.
+- Ensure same-day ended occurrences are protected by end time, not by date only.
+- Ensure clearing recurrence with `All` preserves protected history, removes mutable non-survivors, and keeps the selected survivor.
 - Ensure post-save refresh cannot be overwritten by stale prefetch data at the semantic store boundary.
 
 ## Implementation requirements
@@ -329,7 +346,7 @@ The planner should accept:
 - Baseline values.
 - Draft field operations.
 - Scope.
-- Current date.
+- Captured edit date and time.
 - Active session metadata.
 - Visible window.
 
@@ -353,23 +370,25 @@ The exact TypeScript shape can differ, but the semantic operations should be exp
 - Detach occurrence to new template.
 - Cap template before date.
 - Create following template.
+- Cap historical template at the protected boundary.
 - Collapse series to selected survivor.
-- Materialize protected past occurrences.
+- Materialize protected occurrences when a capped historical template is not enough.
 - Transfer active or historical run references.
 - Refresh canonical window.
 
-Each operation must be ordered. For example, materializing protected past occurrences happens before the template is changed in a way that would make those occurrences impossible to reconstruct.
+Each operation must be ordered. For example, preserving protected occurrences happens before the template is changed in a way that would make those occurrences impossible to reconstruct.
 
 ## Quality bar
 
 The recurrence edit flow is correct only when:
 
 - Preview is a non-mutating projection of Save.
-- Save executes the same plan preview showed.
+- Save executes the same semantic plan preview showed.
 - Save followed by canonical reload equals the preview result inside the visible window.
+- Protected and mutable occurrences are separated by occurrence end time, not calendar date alone.
 - Scope switching never loses the draft recurrence operation.
 - Clearing repeat for `All` keeps the selected occurrence as the survivor.
 - Adding repeat to a non-recurring event previews the new instances immediately and does not show a meaningless scope selector.
-- Saving cannot flash old repeated events back into view.
+- Saving keeps the submitted projection visually stable until the canonical refresh replaces it.
 - Preview contours cannot become stale.
 - Visually invisible clickable events cannot exist.

@@ -237,9 +237,9 @@ After any structural operation on a recurring event, runs must point to valid, r
 | Delete template (future-only, no past instances) | Runs are deleted via CASCADE (no past data exists to preserve). |
 | Archive template | `event_id` becomes null via SET NULL. `original_event_id` preserves the link. |
 | Add recurrence to existing event | Existing runs keep the base UUID. Future instance runs use `UUID::date`. Both are valid. |
-| Remove recurrence (scope "all") | Protected past instances are detached first. The selected occurrence becomes the non-recurring survivor. Runs on the selected occurrence transfer to the survivor when the selected occurrence was synthetic. |
+| Remove recurrence (scope "all") | Protected history remains resolvable through a capped historical template or detached standalones. The selected mutable occurrence becomes the non-recurring survivor. Runs on the selected occurrence transfer to the survivor when the selected occurrence was synthetic. |
 
-When recurrence is removed with scope "all," the base UUID remains the run target only when the selected survivor is the template's first occurrence. If the selected survivor is a synthetic occurrence, runs attached to `templateId::date` move to the survivor event ID, and runs attached to other protected past instances move to their detached standalone IDs.
+When recurrence is removed with scope "all," the base UUID remains the run target only when the selected survivor can safely reuse the template without rewriting protected history. If protected history keeps the old template, the selected survivor is detached into a standalone event, and runs attached to `templateId::date` for that selected occurrence move to the survivor event ID. Runs attached to other protected occurrences remain resolvable through the capped historical template unless those occurrences had to be detached, in which case they move to their detached standalone IDs.
 
 Code that resolves an `event_id` on a run must handle three formats:
 
