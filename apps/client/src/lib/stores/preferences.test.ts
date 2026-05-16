@@ -120,7 +120,7 @@ describe("title bar visibility helpers", () => {
     expect(isTitleBarControlId("settings")).toBe(true);
     expect(isTitleBarControlId("compactTabs")).toBe(true);
     expect(isTitleBarControlId("calendarTab")).toBe(false);
-    expect(isTitleBarControlId("kanbanTab")).toBe(false);
+    expect(isTitleBarControlId("todoTab")).toBe(false);
     expect(isTitleBarControlId("tabs")).toBe(false);
     expect(isTitleBarControlId("window-controls")).toBe(false);
     expect(isTitleBarControlId(null)).toBe(false);
@@ -146,7 +146,7 @@ describe("title bar visibility helpers", () => {
       parseTitleBarVisibility({
         tabs: false,
         calendarTab: false,
-        kanbanTab: false,
+        todoTab: false,
       }),
     ).toEqual(DEFAULT_TITLE_BAR_VISIBILITY);
   });

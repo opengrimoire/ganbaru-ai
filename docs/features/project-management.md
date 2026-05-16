@@ -42,7 +42,7 @@ Beyond the lifecycle, the system includes guided forms for established methodolo
 
 ## Requirement version control
 
-Every change to a task's description, acceptance criteria, scope, or assignment within the project's kanban creates a timestamped diff. The diff records: what changed, when it changed, who requested it, why (mandatory brief explanation), and which downstream tasks or dates are affected. The history is permanently attached to the task and cannot be deleted. It can be searched, filtered, and exported.
+Every change to a task's description, acceptance criteria, scope, or assignment within the project's to-do layer creates a timestamped diff. The diff records: what changed, when it changed, who requested it, why (mandatory brief explanation), and which downstream tasks or dates are affected. The history is permanently attached to the task and cannot be deleted. It can be searched, filtered, and exported.
 
 This solves the specific problem of shifting requirements: when a stakeholder adds a new task mid-sprint, when a client changes specifications, when scope creep happens incrementally. Every change is visible and traceable.
 
@@ -52,7 +52,7 @@ When a task's estimated effort changes, or when a new task is inserted, downstre
 
 ## Automatic report generation
 
-Project status reports can be generated from kanban board state, calendar data, pomodoro history, requirement change history, and milestone completion. Output is markdown or PDF. Reports are read-only views of the database (see `data/architecture.md`); editing the report does not change the underlying data.
+Project status reports can be generated from to-do state, calendar data, pomodoro history, requirement change history, and milestone completion. Output is markdown or PDF. Reports are read-only views of the database (see `data/architecture.md`); editing the report does not change the underlying data.
 
 ## Software repository integration
 
@@ -61,7 +61,7 @@ When a project is a software repository, the `ganbaruai` CLI exports repo-facing
 ## Linkage to other systems
 
 - **Calendar:** project phases generate calendar blocks.
-- **Kanban:** the project's tasks live in a project-scoped kanban board with version control.
+- **To-do:** the project's tasks live in a project-scoped task layer with version control.
 - **Notes:** project notes are working documents for each phase.
 - **Work environments:** each project gets a dedicated environment.
 - **AI panel:** workflow phase prompts adapt the AI's behavior per phase (see `features/ai-integration.md`).

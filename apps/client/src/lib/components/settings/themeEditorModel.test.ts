@@ -54,7 +54,6 @@ describe("theme editor model", () => {
       new Set<ThemeNavTarget>([
         "general",
         "calendar",
-        "todo",
         "signals",
         "json",
       ]),
@@ -66,7 +65,6 @@ describe("theme editor model", () => {
       ),
     );
     expect(groupTargets.has("general")).toBe(true);
-    expect(groupTargets.has("todo")).toBe(true);
     expect(groupTargets.has("signals")).toBe(true);
     expect(CALENDAR_GROUPS.length).toBeGreaterThan(0);
   });

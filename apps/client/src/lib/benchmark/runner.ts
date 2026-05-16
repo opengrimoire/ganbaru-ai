@@ -10,7 +10,7 @@
  *
  * The scenario module owns `setup()`, `runWorkload()`, `seed()`, and
  * `cleanup()`; the runner does not know the difference between a calendar
- * scenario and a future kanban / pomodoro scenario.
+ * scenario and a future to-do / pomodoro scenario.
  */
 import { invoke } from "@tauri-apps/api/core";
 import {

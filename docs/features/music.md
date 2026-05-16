@@ -4,6 +4,8 @@ The music player is the audio side of the work environment. Playlists are tied t
 
 This doc is a placeholder. Deeper design comes in a later pass.
 
+The main app already reserves an empty Music area. It is opened only from the title bar music icon and is not part of the primary Calendar / To-do tab cycle.
+
 ## Sources
 
 **Local files.** Audio and video files on the user's disk, played by a Rust media engine using Symphonia and FFmpeg (via `ffmpeg-next`). The engine is shipped as a separate plugin under LGPL 2.1, decoupled from the AGPL 3.0 main app to keep license obligations clean.

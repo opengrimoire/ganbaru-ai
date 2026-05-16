@@ -12,7 +12,7 @@
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
   import CircleGauge from "@lucide/svelte/icons/circle-gauge";
-  import CirclePause from "@lucide/svelte/icons/circle-pause";
+  import Music from "@lucide/svelte/icons/music";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
@@ -228,7 +228,7 @@
 
   const tabs: { view: View; label: string; icon: typeof CalendarDays }[] = [
     { view: "calendar", label: "Calendar", icon: CalendarDays },
-    { view: "kanban", label: "Kanban", icon: LayoutList },
+    { view: "todo", label: "To-do", icon: LayoutList },
   ];
 
   const titleBarControls: { id: TitleBarControlId; label: string }[] = [
@@ -566,11 +566,17 @@
     {#if titleBarControlVisible("music")}
       <button
         type="button"
-        class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+        onclick={() => nav.navigate("music")}
+        class={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          nav.current === "music"
+            ? "bg-background text-foreground dark:bg-accent dark:text-white"
+            : `${TITLE_BAR_ICON_COLOR_CLASS} hover:bg-sidebar-accent`,
+        )}
         title="Music"
         aria-label="Music"
       >
-        <CirclePause size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
+        <Music size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
     {/if}
 

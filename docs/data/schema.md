@@ -361,7 +361,7 @@ JSON keeps a role as the export format only: `serializeTheme` emits a v2 envelop
 
 These tables are designed but their detailed shape is filled in when the feature ships. Each feature doc owns the deeper definition.
 
-- **`kanban_tasks`:** id, title, description, column, priority, estimated_pomodoros, linked_event_id, created_at, updated_at.
+- **To-do task tables:** deferred until the future task design is settled.
 - **`work_environments`:** id, name, apps_to_open (JSON), browser_tabs (JSON), playlist_id, blocker_ruleset_id.
 - **`notes_index`:** path, title, modified_at, tags, backlinks. Source of truth is the markdown file under `vault/notes/`.
 - **`diary_index`:** date, type (morning/evening), mood, energy, sleep_hours, path. Source of truth is the markdown file under `vault/diary/`.

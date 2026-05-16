@@ -95,7 +95,7 @@ export type CalendarColorDefaultMode =
  * a stored theme's stamp and this constant to render an opt-in "rebake"
  * banner so non-pinned colors do not silently drift across app updates.
  */
-export const DERIVATION_ENGINE_VERSION = 4;
+export const DERIVATION_ENGINE_VERSION = 5;
 
 /**
  * A built-in theme ships with the app, never persists to SQLite, and paints
@@ -409,10 +409,6 @@ export const APP_TOKEN_KEYS = Object.freeze([
   "--event-panel-contrast",
   "--event-panel-text",
   "--event-panel-muted-text",
-  "--priority-easy",
-  "--priority-medium",
-  "--priority-hard",
-  "--priority-epic",
   "--foreground",
   "--primary",
   "--primary-foreground",
@@ -567,10 +563,6 @@ export const THEME_TOKEN_ROW_ORDER = Object.freeze([
   { kind: "app", key: "--event-panel-contrast" },
   { kind: "app", key: "--event-panel-text" },
   { kind: "app", key: "--event-panel-muted-text" },
-  { kind: "app", key: "--priority-easy" },
-  { kind: "app", key: "--priority-medium" },
-  { kind: "app", key: "--priority-hard" },
-  { kind: "app", key: "--priority-epic" },
   { kind: "source", key: "ink" },
   { kind: "app", key: "--foreground" },
   { kind: "source", key: "primary" },
@@ -636,10 +628,6 @@ export const BASE_APP_TOKENS: Readonly<
     "--event-panel-placeholder": "#444746",
     "--event-panel-text": "#141420",
     "--event-panel-muted-text": "#646470",
-    "--priority-easy": "#22C55E",
-    "--priority-medium": "#EAB308",
-    "--priority-hard": "#F97316",
-    "--priority-epic": "#A855F7",
     "--foreground": "#141420",
     "--form-indicator": "#6B6F6E",
     "--primary": "#404048",
@@ -684,10 +672,6 @@ export const BASE_APP_TOKENS: Readonly<
     "--event-panel-placeholder": "#C4C7C5",
     "--event-panel-text": "#C4C7C5",
     "--event-panel-muted-text": "#9EA1A0",
-    "--priority-easy": "#4ADE80",
-    "--priority-medium": "#FACC15",
-    "--priority-hard": "#FB923C",
-    "--priority-epic": "#C084FC",
     "--foreground": "#ECECF2",
     "--form-indicator": "#ECECF2",
     "--primary": "#ECECF2",

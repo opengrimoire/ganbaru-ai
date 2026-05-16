@@ -285,29 +285,6 @@ pub fn migrations() -> Vec<Migration> {
         version: 1,
         description: "initial schema",
         sql: "
-            -- kanban tasks
-            CREATE TABLE IF NOT EXISTS tasks (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'backlog'
-                    CHECK(status IN ('backlog', 'todo', 'in_progress', 'done')),
-                priority TEXT NOT NULL DEFAULT 'medium'
-                    CHECK(priority IN ('easy', 'medium', 'hard', 'epic')),
-                estimated_pomodoros INTEGER NOT NULL DEFAULT 1,
-                actual_pomodoros INTEGER NOT NULL DEFAULT 0,
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-
-            -- task tags
-            CREATE TABLE IF NOT EXISTS task_tags (
-                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-                tag TEXT NOT NULL,
-                PRIMARY KEY (task_id, tag)
-            );
-
             -- calendars
             CREATE TABLE IF NOT EXISTS calendars (
                 id TEXT PRIMARY KEY,

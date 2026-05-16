@@ -39,14 +39,12 @@ export type ThemeNavTarget =
   | "general"
   | "calendar"
   | "signals"
-  | "todo"
   | "json";
 export type SourceGroupId =
   | "app-canvas"
   | "calendar-surface"
   | "calendar-details"
   | "event-panel"
-  | "task-priority"
   | "ink"
   | "primary-action"
   | "destructive"
@@ -156,22 +154,6 @@ export const APP_TOKEN_INFO: Record<string, TokenInfo> = {
   "--status-declined-foreground": {
     title: "Declined attendee text",
     description: "Text color on the declined attendance tile",
-  },
-  "--priority-easy": {
-    title: "Easy priority",
-    description: "Applied as a tint for background and solid for text",
-  },
-  "--priority-medium": {
-    title: "Medium priority",
-    description: "Applied as a tint for background and solid for text",
-  },
-  "--priority-hard": {
-    title: "Hard priority",
-    description: "Applied as a tint for background and solid for text",
-  },
-  "--priority-epic": {
-    title: "Epic priority",
-    description: "Applied as a tint for background and solid for text",
   },
 };
 
@@ -307,19 +289,6 @@ export const SOURCE_GROUPS: SourceGroup[] = [
     ],
   },
   {
-    id: "task-priority",
-    sourceKey: null,
-    title: "Task priority",
-    description: "Kanban badge colors per difficulty tier",
-    navTarget: "todo",
-    rows: [
-      { kind: "single", key: "--priority-easy", scope: "app" },
-      { kind: "single", key: "--priority-medium", scope: "app" },
-      { kind: "single", key: "--priority-hard", scope: "app" },
-      { kind: "single", key: "--priority-epic", scope: "app" },
-    ],
-  },
-  {
     id: "ink",
     sourceKey: "ink",
     title: "Ink",
@@ -399,7 +368,6 @@ export const THEME_NAV_ITEMS: ReadonlyArray<{
 }> = [
   { label: "General", target: "general" },
   { label: "Calendar", target: "calendar" },
-  { label: "To-do", target: "todo" },
   { label: "Text and actions", target: "signals" },
   { label: "JSON", target: "json" },
 ];
@@ -407,7 +375,6 @@ export const THEME_NAV_ITEMS: ReadonlyArray<{
 export const THEME_SECTION_LABELS: Record<ThemeNavTarget, string> = {
   general: "General",
   calendar: "Calendar",
-  todo: "To-do",
   signals: "Text and actions",
   json: "JSON",
 };

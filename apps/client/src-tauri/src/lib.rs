@@ -34,7 +34,6 @@ mod calendar_reads;
 mod calendars;
 mod db;
 mod db_path;
-mod kanban;
 mod notification;
 mod pomodoro;
 mod recurrence;
@@ -628,10 +627,6 @@ pub fn run() {
             vault::vault_pick_and_write_ics_export,
             vault::vault_pick_and_read_theme_json,
             vault::vault_pick_and_write_theme_json,
-            kanban::kanban_add_task,
-            kanban::kanban_load_tasks,
-            kanban::kanban_update_task_status,
-            kanban::kanban_delete_task,
             timezone_migration::calendar_load_timezone_hydration_rows,
             timezone_migration::calendar_apply_timezone_hydration,
             calendar_reads::calendar_load_window,

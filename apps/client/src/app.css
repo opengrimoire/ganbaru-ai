@@ -59,12 +59,6 @@
   --status-declined: #EF4444;
   --status-declined-foreground: #FFFFFF;
 
-  /* Task priority (light) */
-  --priority-easy: #22C55E;
-  --priority-medium: #EAB308;
-  --priority-hard: #F97316;
-  --priority-epic: #A855F7;
-
   /* Color picker alpha checker (fixed, visibility against transparency) */
   --editor-chrome-checker-a: #CCCCCC;
   --editor-chrome-checker-b: #FFFFFF;
@@ -131,12 +125,6 @@
   --status-declined: #EF4444;
   --status-declined-foreground: #FFFFFF;
 
-  /* Task priority (dark) */
-  --priority-easy: #4ADE80;
-  --priority-medium: #FACC15;
-  --priority-hard: #FB923C;
-  --priority-epic: #C084FC;
-
   /* Color picker alpha checker (fixed, visibility against transparency) */
   --editor-chrome-checker-a: #3A3A3F;
   --editor-chrome-checker-b: #5A5A60;
@@ -187,10 +175,6 @@
   --color-status-tentative-foreground: var(--status-tentative-foreground);
   --color-status-declined: var(--status-declined);
   --color-status-declined-foreground: var(--status-declined-foreground);
-  --color-priority-easy: var(--priority-easy);
-  --color-priority-medium: var(--priority-medium);
-  --color-priority-hard: var(--priority-hard);
-  --color-priority-epic: var(--priority-epic);
 }
 
 @layer base {

@@ -1,6 +1,6 @@
 # Work environments
 
-A work environment is a saved configuration that the calendar activates automatically when a session block starts. It covers what apps to open, what browser tabs to load, what playlist to play, what blocker rules to enforce, and what kanban context to show. The user defines environments once during planning; the app enforces them throughout the week.
+A work environment is a saved configuration that the calendar activates automatically when a session block starts. It covers what apps to open, what browser tabs to load, what playlist to play, what blocker rules to enforce, and what to-do context to show. The user defines environments once during planning; the app enforces them throughout the week.
 
 This doc is a placeholder. Deeper design comes in a later pass.
 
@@ -13,7 +13,7 @@ This doc is a placeholder. Deeper design comes in a later pass.
 | Browser tabs | A list of URLs opened in a designated browser window or group |
 | Music playlist | Local file, YouTube playlist, or environment-default playlist |
 | Blocker rules | Which sites and apps are off-limits (see `features/procrastination-stopper.md`) |
-| Edge panel context | Which kanban board / project to display |
+| Edge panel context | Which to-do context or project to display |
 
 ## How activation works
 
@@ -48,5 +48,5 @@ Environment management requires controlling other applications (opening, closing
 - **Calendar:** the source of activation triggers.
 - **Music:** plays the assigned playlist.
 - **Procrastination stopper:** enforces the assigned rules.
-- **Edge panel:** displays the environment name and the relevant kanban context.
+- **Edge panel:** displays the environment name and the relevant to-do context.
 - **Pomodoro:** runs alongside; the timer is independent of the environment but typically pairs with one.

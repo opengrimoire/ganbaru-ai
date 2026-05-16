@@ -38,13 +38,10 @@
 
   let isMaximized = $state(true);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
-  type KanbanViewComponent = typeof import("$lib/components/kanban/KanbanView.svelte").default;
   type IdleOverlayComponent = typeof import("$lib/components/pomodoro/IdleOverlay.svelte").default;
   let BenchmarkOverlay = $state<BenchmarkOverlayComponent | null>(null);
-  let KanbanView = $state<KanbanViewComponent | null>(null);
   let IdleOverlay = $state<IdleOverlayComponent | null>(null);
   let loadingBenchmarkOverlay: Promise<void> | null = null;
-  let loadingKanbanView: Promise<void> | null = null;
   let loadingIdleOverlay: Promise<void> | null = null;
 
   function ensureBenchmarkOverlay(): Promise<void> {
@@ -109,18 +106,6 @@
       }
     }
   }
-  function loadKanbanView(): Promise<void> {
-    if (KanbanView) return Promise.resolve();
-    loadingKanbanView ??= import("$lib/components/kanban/KanbanView.svelte")
-      .then((module) => {
-        KanbanView = module.default;
-      })
-      .finally(() => {
-        loadingKanbanView = null;
-      });
-    return loadingKanbanView;
-  }
-
   function loadIdleOverlay(): Promise<void> {
     if (IdleOverlay) return Promise.resolve();
     loadingIdleOverlay ??= import("$lib/components/pomodoro/IdleOverlay.svelte")
@@ -211,7 +196,7 @@
     return () => cleanup?.();
   });
 
-  const views: View[] = ["calendar", "kanban"];
+  const views: View[] = ["calendar", "todo"];
   let showStopConfirm = $state(false);
   let savedBlockState: CalendarEvent | null = null;
   let reverting = false;
@@ -228,10 +213,6 @@
 
   const suspendInfo = $derived(pomodoro.suspendedAway);
   const idleInfo = $derived(pomodoro.idlePaused);
-
-  $effect(() => {
-    if (nav.current === "kanban") void loadKanbanView();
-  });
 
   $effect(() => {
     if (idleInfo) void loadIdleOverlay();
@@ -471,11 +452,10 @@
     <main class="content-panel flex-1 min-h-0 overflow-hidden bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />
-      {:else if nav.current === "kanban"}
-        {#if KanbanView}
-          {@const Kanban = KanbanView}
-          <Kanban />
-        {/if}
+      {:else if nav.current === "todo"}
+        <div class="h-full"></div>
+      {:else if nav.current === "music"}
+        <div class="h-full"></div>
       {/if}
     </main>
   </div>
