@@ -543,6 +543,7 @@ export function buildRecurringEditPlan(input: {
           input.instanceEvent,
           input.changes,
           input.window,
+          input.activeDate,
         );
 
   return {
@@ -625,6 +626,18 @@ export function applyAll(
     const preservedSeries = hasPast
       ? storeEvents.filter((e) => belongsToSeries(e) && e.start.split(" ")[0] < splitDate)
       : [];
+    const activeMaterialized = activeDate && activeDate !== instanceDateStr
+      ? storeEvents.find((e) => belongsToSeries(e) && e.start.split(" ")[0] === activeDate)
+      : undefined;
+    const activePreview: CalendarEvent[] = activeMaterialized
+      ? [{
+          ...activeMaterialized,
+          id: `__va_active__${templateId}::${activeDate}`,
+          recurringParentId: undefined,
+          recurrence: undefined,
+          exceptions: undefined,
+        }]
+      : [];
     const collapsed: CalendarEvent = {
       ...template,
       ...changes,
@@ -637,8 +650,8 @@ export function applyAll(
     };
 
     return {
-      events: [...otherEvents, ...preservedSeries, collapsed],
-      previewedIds: new Set([collapsedId]),
+      events: [...otherEvents, ...preservedSeries, ...activePreview, collapsed],
+      previewedIds: new Set([collapsedId, ...activePreview.map((event) => event.id)]),
       editingId: collapsedId,
     };
   }
@@ -769,15 +782,30 @@ export function applyFollowing(
   instanceEvent: CalendarEvent,
   changes: Partial<CalendarEvent>,
   window: ExpansionWindow,
+  activeDate?: string,
 ): DisplayResult {
   const template = rawBlocks.find((b) => b.id === templateId);
   if (!template) return closedDisplay(storeEvents);
 
   const instanceDateStr = instanceEvent.start.split(" ")[0];
-  const newStartDateStr = changes.start ? String(changes.start).split(" ")[0] : instanceDateStr;
+  const recurrenceOperation = getRecurrenceFieldOperation(template.recurrence, changes);
+  const recurrenceCleared = recurrenceOperation.kind === "cleared";
+  const activeOnSelectedDate = activeDate === instanceDateStr;
+  const splitStartDate = activeOnSelectedDate && !recurrenceCleared
+    ? shiftDateStr(instanceDateStr, 1)
+    : instanceDateStr;
+  const splitSourceEvent = activeOnSelectedDate && !recurrenceCleared
+    ? occurrenceOnDate(instanceEvent, templateId, splitStartDate)
+    : instanceEvent;
+  const splitPatch = activeOnSelectedDate && !recurrenceCleared
+    ? moveDatedPatchToDate(changes, splitStartDate)
+    : changes;
+  const newStartDateStr = splitPatch.start ? String(splitPatch.start).split(" ")[0] : splitStartDate;
 
   const capDate = newStartDateStr < instanceDateStr ? newStartDateStr : instanceDateStr;
-  const dayBefore = shiftDateStr(capDate, -1);
+  const dayBefore = activeOnSelectedDate && recurrenceCleared
+    ? instanceDateStr
+    : shiftDateStr(capDate, -1);
 
   const cappedRecurrence: RecurrenceConfig | undefined = template.recurrence
     ? { ...template.recurrence, end: { type: "until", date: dayBefore } }
@@ -788,22 +816,22 @@ export function applyFollowing(
   };
 
   const virtualId = `__vf__${templateId}`;
-  const newStart = changes.start
-    ? String(changes.start)
-    : instanceEvent.start;
-  const newEnd = changes.end
-    ? String(changes.end)
-    : instanceEvent.end;
-  const recurrenceChanged = hasChange(changes, "recurrence")
-    && !fieldEqual(changes.recurrence, template.recurrence);
+  const newStart = splitPatch.start
+    ? String(splitPatch.start)
+    : splitSourceEvent.start;
+  const newEnd = splitPatch.end
+    ? String(splitPatch.end)
+    : splitSourceEvent.end;
+  const recurrenceChanged = hasChange(splitPatch, "recurrence")
+    && !fieldEqual(splitPatch.recurrence, template.recurrence);
   const newRecurrence: RecurrenceConfig | undefined = recurrenceChanged
-    ? changes.recurrence
+    ? splitPatch.recurrence
     : template.recurrence
       ? { ...template.recurrence, end: { type: "never" } }
       : undefined;
   const virtualTemplate: CalendarEvent = {
     ...template,
-    ...changes,
+    ...splitPatch,
     id: virtualId,
     start: newStart,
     end: newEnd,
@@ -812,11 +840,14 @@ export function applyFollowing(
     exceptions: undefined,
   };
 
-  const expanded = expandRecurring([cappedTemplate, virtualTemplate], window.start, window.end);
+  const templatesToExpand = activeOnSelectedDate && recurrenceCleared
+    ? [cappedTemplate]
+    : [cappedTemplate, virtualTemplate];
+  const expanded = expandRecurring(templatesToExpand, window.start, window.end);
 
   const previewedIds = new Set<string>();
   let editingId: string | undefined;
-  const changesDateStr = changes.start ? String(changes.start).split(" ")[0] : instanceDateStr;
+  const changesDateStr = splitPatch.start ? String(splitPatch.start).split(" ")[0] : splitStartDate;
 
   for (const e of expanded) {
     if (e.id === virtualId || e.recurringParentId === virtualId) {
@@ -826,7 +857,19 @@ export function applyFollowing(
       editingId = e.id;
     }
   }
-  if (!editingId) editingId = virtualId;
+  if (activeOnSelectedDate && recurrenceCleared) {
+    const selected = expanded.find((e) =>
+      (e.id === templateId || e.recurringParentId === templateId)
+        && e.start.split(" ")[0] === instanceDateStr
+    );
+    if (selected) {
+      previewedIds.add(selected.id);
+      editingId = selected.id;
+    }
+  }
+  if (!editingId) editingId = activeOnSelectedDate && recurrenceCleared
+    ? instanceEvent.id
+    : virtualId;
 
   const otherEvents = storeEvents.filter((e) =>
     e.id !== templateId && e.recurringParentId !== templateId,
@@ -835,9 +878,25 @@ export function applyFollowing(
     e.id === templateId || e.recurringParentId === templateId ||
     e.id === virtualId || e.recurringParentId === virtualId,
   );
+  const activeMaterialized = recurrenceCleared && activeDate && activeDate > instanceDateStr
+    ? storeEvents.find((e) =>
+        (e.id === templateId || e.recurringParentId === templateId)
+          && e.start.split(" ")[0] === activeDate
+      )
+    : undefined;
+  const activePreview: CalendarEvent[] = activeMaterialized
+    ? [{
+        ...activeMaterialized,
+        id: `__vf_active__${templateId}::${activeDate}`,
+        recurringParentId: undefined,
+        recurrence: undefined,
+        exceptions: undefined,
+      }]
+    : [];
+  for (const event of activePreview) previewedIds.add(event.id);
 
   return {
-    events: [...otherEvents, ...affectedEvents],
+    events: [...otherEvents, ...affectedEvents, ...activePreview],
     previewedIds,
     editingId,
   };

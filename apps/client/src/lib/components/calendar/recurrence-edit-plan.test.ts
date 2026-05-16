@@ -207,6 +207,29 @@ describe("recurrence edit planner", () => {
     });
   });
 
+  it("projects following clear on the active selected occurrence as the old active occurrence", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2027-06-20");
+    const inst21 = makeInstance(template, "2027-06-21");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [template, inst20, inst21],
+      originalEvent: inst20,
+      instanceEvent: inst20,
+      templateId: template.id,
+      changes: { recurrence: undefined },
+      scope: "following",
+      window: TEST_WINDOW,
+      activeDate: "2027-06-20",
+    }).display;
+
+    expect(result.events.some((event) => event.id === `__vf__${template.id}`)).toBe(false);
+    expect(result.events.find((event) => event.id === inst20.id)).toBeDefined();
+    expect(result.events.some((event) => event.id === inst21.id)).toBe(false);
+    expect(result.editingId).toBe(inst20.id);
+  });
+
   it("plans following clear by materializing an active later occurrence", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
@@ -238,6 +261,36 @@ describe("recurrence edit planner", () => {
       fromId: activeId,
       to: { kind: "operation-result", operationId: "materialize-active-following" },
     });
+  });
+
+  it("projects following clear by keeping one selected survivor and a materialized active later occurrence", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2027-06-20");
+    const inst22 = makeInstance(template, "2027-06-22");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [template, inst20, inst22],
+      originalEvent: inst20,
+      instanceEvent: inst20,
+      templateId: template.id,
+      changes: { recurrence: undefined },
+      scope: "following",
+      window: TEST_WINDOW,
+      activeDate: "2027-06-22",
+    }).display;
+
+    const selectedSurvivors = result.events.filter((event) =>
+      event.id === `__vf__${template.id}` || event.recurringParentId === `__vf__${template.id}`,
+    );
+    const activeSurvivor = result.events.find((event) =>
+      event.id === `__vf_active__${template.id}::2027-06-22`
+    );
+
+    expect(selectedSurvivors).toHaveLength(1);
+    expect(activeSurvivor).toBeDefined();
+    expect(activeSurvivor?.recurrence).toBeUndefined();
+    expect(result.previewedIds.has(activeSurvivor!.id)).toBe(true);
   });
 
   it("plans following recurrence changes by transferring an active later occurrence to the new split template", () => {
@@ -292,6 +345,32 @@ describe("recurrence edit planner", () => {
       patch: { recurrence: undefined },
       materializeProtectedHistory: true,
     });
+  });
+
+  it("projects all clear with a different active occurrence as an extra standalone survivor", () => {
+    const template = makeRecurringTemplate();
+    const inst20 = makeInstance(template, "2027-06-20");
+    const inst22 = makeInstance(template, "2027-06-22");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [template, inst20, inst22],
+      originalEvent: inst20,
+      instanceEvent: inst20,
+      templateId: template.id,
+      changes: { recurrence: undefined },
+      scope: "all",
+      window: TEST_WINDOW,
+      activeDate: "2027-06-22",
+    }).display;
+
+    expect(result.events.find((event) => event.id === template.id)?.start).toBe(inst20.start);
+    const activeSurvivor = result.events.find((event) =>
+      event.id === `__va_active__${template.id}::2027-06-22`
+    );
+    expect(activeSurvivor).toBeDefined();
+    expect(activeSurvivor?.recurrence).toBeUndefined();
+    expect(result.previewedIds.has(activeSurvivor!.id)).toBe(true);
   });
 
   it("plans all recurrence changes with protected history materialization before template update", () => {
