@@ -7,6 +7,10 @@ import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent, RecurrenceConfig, RecurringScope } from "./types";
 import type { CreatePreview } from "./edit-session.svelte";
 import { expandRecurring, parseYMD, fmtYMD } from "./recurrence";
+import {
+  getRecurrenceFieldOperation,
+  type RecurrenceFieldOperation,
+} from "./recurrence-edit-plan";
 
 /**
  * Inclusive date window used by recurrence expansion. Edit-flow consumers
@@ -23,11 +27,6 @@ export interface DisplayResult {
   previewedIds: Set<string>;
   editingId: string | undefined;
 }
-
-export type RecurrenceFieldOperation =
-  | { kind: "unchanged"; value: RecurrenceConfig | undefined }
-  | { kind: "cleared" }
-  | { kind: "set"; value: RecurrenceConfig };
 
 export interface RecurringCommitPlan {
   scope: RecurringScope;
@@ -82,28 +81,11 @@ function hasVisibleEventChanges(originalEvent: CalendarEvent, changes: Partial<C
   return false;
 }
 
-function hasChange<K extends keyof CalendarEvent>(
+export function hasChange<K extends keyof CalendarEvent>(
   changes: Partial<CalendarEvent>,
   key: K,
 ): boolean {
   return Object.prototype.hasOwnProperty.call(changes, key);
-}
-
-export function getRecurrenceFieldOperation(
-  baseline: RecurrenceConfig | undefined,
-  changes: Partial<CalendarEvent>,
-): RecurrenceFieldOperation {
-  if (!hasChange(changes, "recurrence")) {
-    return { kind: "unchanged", value: baseline };
-  }
-  if (changes.recurrence === undefined) {
-    return baseline === undefined
-      ? { kind: "unchanged", value: undefined }
-      : { kind: "cleared" };
-  }
-  return fieldEqual(changes.recurrence, baseline)
-    ? { kind: "unchanged", value: baseline }
-    : { kind: "set", value: changes.recurrence };
 }
 
 function changeOr<K extends keyof CalendarEvent>(
@@ -689,3 +671,5 @@ export function shiftDateStr(dateStr: string, days: number): string {
 }
 
 export { PENDING_CREATE_ID };
+export { getRecurrenceFieldOperation };
+export type { RecurrenceFieldOperation };

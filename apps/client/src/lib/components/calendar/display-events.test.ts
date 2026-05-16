@@ -6,7 +6,6 @@ import {
   buildCreateDisplay,
   computeEditDisplay,
   buildRecurringCommitPlan,
-  getRecurrenceFieldOperation,
   applyNonRecurring,
   applyThis,
   applyAll,
@@ -15,6 +14,7 @@ import {
   shiftDateStr,
   PENDING_CREATE_ID,
 } from "./display-events";
+import { getRecurrenceFieldOperation } from "./recurrence-edit-plan";
 
 const TEST_WINDOW = {
   start: Temporal.PlainDate.from("2025-01-01"),
