@@ -2,7 +2,7 @@
 
 Given a calendar event with a recurrence rule, expansion produces the list of concrete instances that fall within a time window. The output is what the calendar renders; the input is what the user typed (or what an import populated).
 
-The user-facing model and the three structural operations (detach, split, template-wide edit) are in `features/calendar-recurrence.md`. This doc covers the math.
+The user-facing model and recurrence structural operations are in `features/calendar-recurrence.md`. This doc covers the math.
 
 ## Inputs
 
@@ -10,7 +10,7 @@ The user-facing model and the three structural operations (detach, split, templa
 - **DTSTART.** The template's `start_time`. Expansion always anchors to this.
 - **Window.** A `[from, to]` pair. The expander returns only instances whose start falls within this window.
 - **Exceptions (EXDATE).** A list of `YYYY-MM-DD` dates that should be excluded from the expansion.
-- **Capping rules.** Two fixed limits described below.
+- **Capping rules.** A requested window bound plus the cursor guard described below.
 
 ## Outputs
 
@@ -23,20 +23,19 @@ A list of synthetic `CalendarEvent` objects, each with:
 
 The first occurrence (the date of DTSTART) uses the template's plain UUID as its `id`, not a synthetic one. This means a non-detached, never-edited recurring event has its first occurrence indistinguishable from a non-recurring event by ID format. Downstream code that needs to know "is this an instance" must check `recurringParentId`, not parse the ID.
 
-## Horizon and caps
+## Window bound and guard
 
-Two limits keep expansion bounded:
+Expansion is bounded by the requested window. The expander may fast-forward over occurrences before the window, emits only occurrences that overlap the window, and stops once the recurrence cursor is past the window end.
 
+The implementation also keeps a guard on cursor iterations per template:
+
+```ts
+MAX_INSTANCES = 10000
 ```
-EXPANSION_DAYS = 180
-MAX_INSTANCES = 500
-```
 
-Expansion never produces instances more than 180 days past the window's end, regardless of what the rule allows. A daily event running for ten years would otherwise produce 3,650 rows on every read. The 180-day horizon is enough for the calendar's visible range plus reasonable buffer for cross-day rendering and conflict checks.
+This is a runaway guard, not the normal expansion bound. A daily recurrence would need roughly 27 years of cursor steps to hit it. Normal day, week, and month views terminate by the requested window before the guard matters.
 
-Expansion stops at 500 instances even if the window is wider. This protects against pathological rules (e.g. `FREQ=MINUTELY` from a malformed import) and against the user accidentally creating a daily event that spans years on a single read.
-
-If a rule has an explicit COUNT, the cap is the smaller of COUNT and 500. UNTIL caps in the natural way: expansion stops at the UNTIL date.
+If a rule has an explicit COUNT, expansion respects the count unless the cursor guard fires first. UNTIL caps in the natural way: expansion stops at the UNTIL date.
 
 ## Algorithm
 
@@ -44,7 +43,7 @@ If a rule has an explicit COUNT, the cap is the smaller of COUNT and 500. UNTIL 
 2. **Walk forward from DTSTART.** At each step, advance by INTERVAL units of FREQ (one day for daily, seven days for weekly, one month for monthly, one year for yearly).
 3. **Apply BY* filters.** For each candidate date produced by the walk, check whether it satisfies the BY* constraints. BYDAY filters by weekday (with optional ordinal). BYMONTHDAY filters by day of month. BYMONTH filters by month. BYSETPOS picks specific positions from the candidate set within the FREQ unit.
 4. **Skip EXDATEs.** Drop any candidate whose date matches an exception.
-5. **Stop conditions.** Halt if any of these fire: candidate date is past UNTIL, total instances reach the COUNT or 500 cap, candidate date is past `windowEnd + EXPANSION_DAYS`.
+5. **Stop conditions.** Halt if any of these fire: candidate date is past UNTIL, total generated instances reach COUNT, cursor iteration reaches the 10,000 guard, or candidate date is past the requested window end.
 6. **Filter to the window.** Keep only instances whose start falls within `[windowStart, windowEnd]`. Earlier instances are produced for completeness (so the COUNT/UNTIL semantics are correct) but not returned.
 
 ## EXDATE handling
@@ -61,7 +60,7 @@ Two strategies keep performance acceptable as the user's library grows:
 
 **Incremental on edit.** When a recurring event changes, only that template's instances need to be re-expanded for the visible range. Other templates are untouched.
 
-**Window-bound expansion.** The expander never speculatively produces instances beyond the visible range plus the 180-day horizon. A user looking at this week pays for one week's worth of expansion per template, plus the cap, not the full series history.
+**Window-bound expansion.** The expander never speculatively produces instances beyond the requested visible range. A user looking at this week pays for one week's worth of emitted instances per template. Fast-forward helpers avoid walking every old occurrence for common daily, weekly, monthly, and yearly rules whose template starts far before the current window.
 
 If a future profile shows expansion as a hot path, a per-template instance cache keyed on `(templateId, windowStart, windowEnd)` is a straightforward addition. It is not implemented now because no profile has shown the need.
 
@@ -97,6 +96,6 @@ Output: exactly 5 instances. April 16, April 30, May 14, May 28, June 11. Even i
 Rule: `FREQ=DAILY`. DTSTART: 2026-04-16. EXDATE: `2026-04-18`. Window: April 16 to April 20.
 Output: 4 instances. April 16, 17, 19, 20. April 18 is excluded.
 
-**Pathological: minutely rule from a bad import.**
-Rule: `FREQ=MINUTELY` (somehow). DTSTART: 2026-04-16 00:00. Window: 2026-04-16 to 2026-04-17.
-Output: capped at 500 instances. The first 500 minutes of April 16 are returned. The user sees something obviously wrong and can edit or delete the event. The system does not crash or stall.
+**Pathological: huge count from a bad import.**
+Rule: `FREQ=DAILY;COUNT=9999999`. DTSTART: 2000-01-01. Window: 2026-04-16 to 2026-04-22.
+Output: only the seven overlapping daily instances in the requested window, unless malformed data prevents safe fast-forwarding and hits the cursor guard first. The system does not attempt to expand the full multi-million-instance set.

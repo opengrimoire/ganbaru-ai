@@ -36,11 +36,13 @@ These outcomes are required:
 
 **Detached standalone.** A persisted non-recurring event created from one occurrence. It preserves an edited or protected occurrence independently from its original template.
 
+**Protected past occurrence.** A generated occurrence whose end time is before the edit time and that would vanish, move, or change meaning after a structural edit. For supported recurrence rules, all affected past dates from the template start through the edit time are protected, not only dates in the visible window. Dates with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected.
+
 **Exception date.** A date on the template that prevents one generated occurrence from appearing.
 
 **Split.** A structural edit that caps the old template before the selected occurrence and creates a new template beginning at the selected occurrence.
 
-**Collapse.** A structural edit that removes recurrence from a series and leaves one non-recurring survivor event.
+**Collapse.** A structural edit that removes recurrence from a series and leaves one non-recurring survivor for the series identity. Protected history or active-session rules may also materialize additional standalone events.
 
 **Scope.** The selected edit range: `Only this`, `Following`, or `All`.
 
@@ -165,11 +167,12 @@ Preview shows the old template only before the selected occurrence and shows the
 
 If recurrence remains set, Save applies the draft fields to the template after materializing any protected past occurrences that would otherwise vanish or move in a way that rewrites history. The template keeps the series identity and original recurrence anchor unless the edit is defined as a collapse.
 
-If recurrence is cleared, Save collapses the series. The selected occurrence becomes the single non-recurring survivor with the draft fields. This is true even when the selected occurrence is synthetic and not the original template date.
+If recurrence is cleared, Save collapses the series. The selected occurrence becomes the single non-recurring survivor for the series identity with the draft fields. This is true even when the selected occurrence is synthetic and not the original template date. Protected history or active-session rules may also materialize additional standalone events.
 
 Collapse must preserve invariant 7:
 
 - Any past occurrence that would vanish and is not the selected survivor is materialized as a detached standalone event.
+- Any active occurrence that would vanish and is not the selected survivor is materialized as a detached standalone event.
 - Runs and segments attached to materialized occurrences are transferred to their standalone event IDs.
 - The selected survivor receives any runs from the selected occurrence ID.
 - The old template is reused as the survivor only when it represents the selected occurrence. Otherwise the implementation must either convert it into a protected standalone or remove it only when deletion is legal.
@@ -198,13 +201,15 @@ Preview contours must be recomputed from scratch after each toggle. No contour I
 
 An active session must survive every recurrence edit.
 
-If Save materializes or detaches the active occurrence, the active run's event references transfer to the new event ID.
+If Save materializes, detaches, or otherwise changes the active occurrence's event ID, the active run's event references transfer to the new event ID.
 
-For `Only this`, an active selected occurrence transfers to the detached result.
+For `Only this`, an active selected occurrence transfers to the detached result. An active occurrence elsewhere in the same source series is unaffected because the source template continues unchanged except for the selected exception date.
 
 For `Following`, if the active selected occurrence is also the requested split point, active-session protection wins. The effective split point moves to the next occurrence after the active one. The active occurrence stays attached to the old template, and the old template is capped after that active occurrence. If repeat was cleared, no new recurring template is created and future occurrences after the active occurrence stop.
 
-For `All`, if the active selected occurrence becomes the collapse survivor, the active run transfers to that survivor. If a template-wide change would make an active occurrence vanish, that occurrence is materialized before the template changes.
+For `Following`, if the active occurrence is before the selected split point, it is unaffected. If the active occurrence is after the selected split point and recurrence remains set, the active run transfers to the corresponding occurrence ID in the new template. If repeat was cleared, the active occurrence would otherwise vanish, so Save materializes it as a standalone event and transfers the active run there before removing later generated occurrences.
+
+For `All`, if the active selected occurrence becomes the collapse survivor, the active run transfers to that survivor. If the active occurrence is different from the selected survivor and collapse or a template-wide change would make it vanish, move, or change meaning, that active occurrence is materialized before the template changes and the active run transfers to the standalone.
 
 Projection never transfers a session. It only marks which transfer Save would perform.
 
@@ -282,6 +287,8 @@ Runtime states:
 - Active session on the edited occurrence.
 - Active session on another occurrence in the same series.
 - Active session on an unrelated event.
+- Past occurrences outside the current visible window that would be erased by the edit.
+- Past occurrences outside the current visible window with stored run references.
 
 Window states:
 

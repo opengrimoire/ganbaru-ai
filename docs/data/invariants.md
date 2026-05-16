@@ -86,7 +86,7 @@ A calendar event whose end time is in the past can only be archived, never delet
 
 The user owns the SQLite file and can modify it directly with a third-party tool. The app does not attempt to prevent that. But every code path inside the app must refuse.
 
-Recurring events have additional protection: structural changes that would cause past instances to silently stop expanding (an EXDATE on a past date, an UNTIL moved earlier, a pattern change that excludes past dates) must detach the affected past instances into standalone events first. See `features/calendar-recurrence.md`.
+Recurring events have additional protection: structural changes that would cause past instances to silently stop expanding (an EXDATE on a past date, an UNTIL moved earlier, a pattern change that excludes past dates) must detach the affected past instances into standalone events first. This is not a visible-window-only rule. For supported recurrence rules, structural edit code must reason over all affected past dates from the template start through the edit time. Dates with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected. See `features/calendar-recurrence.md`.
 
 ## Adding new invariants
 

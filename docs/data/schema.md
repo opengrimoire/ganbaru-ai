@@ -90,7 +90,12 @@ The active calendar. One row per event (or per recurring template, with instance
 | `end_time` | ISO datetime | Event end as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). For all-day events, the date portion is treated as a floating calendar date with no zone conversion. The internal all-day end date is inclusive for rendering, while `.ics` `DTEND;VALUE=DATE` remains exclusive on import and export. |
 | `all_day` | boolean | True if this is an all-day event. Time pickers hide when this is true. |
 | `meeting_enabled` | boolean | True when the Meeting section is enabled, even if every optional meeting field is empty. |
+| `location` | text | Plain text location. Empty string means none. |
+| `url` | text | Call link or event URL shown by Meeting. Empty string means none. |
 | `color` | integer or null | Slot index (0..31) into the active theme's 32-slot `eventPalette`. See `features/themes.md` for the palette and theme model. Values are validated on read via `normalizeEventColor`: in-range integers pass through, out-of-range or non-numeric values fall back to the `FALLBACK_COLOR_INDEX` slot with a deduped warning. |
+| `transparency` | enum | `opaque` means busy, `transparent` means free. Defaults to `opaque`; used for scheduling, import, and export, not as an event color or surface pattern. |
+| `status` | enum | `confirmed`, `tentative`, or `cancelled`. Defaults to `confirmed`. Event-level cancelled controls cancelled rendering; attendee RSVP can still drive the local surface pattern independently. |
+| `visibility` | enum | `public` or `private`. Imported `CONFIDENTIAL` values normalize to `private`. The database default is `public` to match missing iCalendar `CLASS`, while app-authored panel events default to `private`. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
 | `recurrence_exceptions` | text or null | Comma-separated EXDATE recurrence dates (`YYYY-MM-DD`). Null if none. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |
 | `recurrence_parent_id` | UUID or null | For detached instances, points to the original template. Used to trace history. |
@@ -232,7 +237,9 @@ After any structural operation on a recurring event, runs must point to valid, r
 | Delete template (future-only, no past instances) | Runs are deleted via CASCADE (no past data exists to preserve). |
 | Archive template | `event_id` becomes null via SET NULL. `original_event_id` preserves the link. |
 | Add recurrence to existing event | Existing runs keep the base UUID. Future instance runs use `UUID::date`. Both are valid. |
-| Remove recurrence (scope "all") | Past instances are detached first (runs transferred). Template becomes non-recurring. Runs on the base UUID remain valid. |
+| Remove recurrence (scope "all") | Protected past instances are detached first. The selected occurrence becomes the non-recurring survivor. Runs on the selected occurrence transfer to the survivor when the selected occurrence was synthetic. |
+
+When recurrence is removed with scope "all," the base UUID remains the run target only when the selected survivor is the template's first occurrence. If the selected survivor is a synthetic occurrence, runs attached to `templateId::date` move to the survivor event ID, and runs attached to other protected past instances move to their detached standalone IDs.
 
 Code that resolves an `event_id` on a run must handle three formats:
 
