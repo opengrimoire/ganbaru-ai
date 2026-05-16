@@ -126,6 +126,7 @@ describe("recurrence edit planner", () => {
       changes: { recurrence: undefined },
       scope: "this",
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
@@ -154,6 +155,7 @@ describe("recurrence edit planner", () => {
       changes: { recurrence },
       scope: "this",
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     expect(plan.operations[0]).toMatchObject({
@@ -174,6 +176,7 @@ describe("recurrence edit planner", () => {
       changes: { recurrence: undefined },
       scope: "following",
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
@@ -199,6 +202,7 @@ describe("recurrence edit planner", () => {
       scope: "following",
       activeBlockId: inst20.id,
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
@@ -249,6 +253,7 @@ describe("recurrence edit planner", () => {
       scope: "following",
       activeBlockId: activeId,
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
@@ -315,6 +320,7 @@ describe("recurrence edit planner", () => {
       scope: "following",
       activeBlockId: activeId,
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
@@ -329,7 +335,7 @@ describe("recurrence edit planner", () => {
     });
   });
 
-  it("plans all clear as a selected survivor collapse with protected history", () => {
+  it("plans all clear on a future-only series as a selected survivor collapse", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
 
@@ -340,6 +346,36 @@ describe("recurrence edit planner", () => {
       changes: { recurrence: undefined },
       scope: "all",
       today: "2027-06-10",
+      currentTime: "12:00",
+    });
+
+    expect(plan.operations.map((operation) => operation.type)).toEqual([
+      "collapse-series",
+      "refresh-window",
+    ]);
+    expect(plan.operations[0]).toMatchObject({
+      type: "collapse-series",
+      survivorDate: "2027-06-20",
+      patch: { recurrence: undefined },
+      materializeProtectedHistory: true,
+    });
+  });
+
+  it("plans all clear after today's occurrence ended by preserving through today", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-05-11 08:00",
+      end: "2026-05-11 09:00",
+    });
+    const inst17 = makeInstance(template, "2026-05-17");
+
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: inst17,
+      changes: { recurrence: undefined },
+      scope: "all",
+      today: "2026-05-15",
+      currentTime: "21:00",
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
@@ -347,11 +383,17 @@ describe("recurrence edit planner", () => {
       "collapse-series",
       "refresh-window",
     ]);
+    expect(plan.operations[0]).toMatchObject({
+      type: "materialize-protected-history",
+      cutoffDate: "2026-05-16",
+      excludeDate: "2026-05-17",
+    });
     expect(plan.operations[1]).toMatchObject({
       type: "collapse-series",
-      survivorDate: "2027-06-20",
+      survivorDate: "2026-05-17",
+      protectedUntilDate: "2026-05-15",
+      firstMutableDate: "2026-05-16",
       patch: { recurrence: undefined },
-      materializeProtectedHistory: true,
     });
   });
 
@@ -383,6 +425,68 @@ describe("recurrence edit planner", () => {
     expect(result.previewedIds.has(activeSurvivor!.id)).toBe(true);
   });
 
+  it("does not preview all-scope changes on occurrences that already ended today", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-05-11 08:00",
+      end: "2026-05-11 09:00",
+    });
+    const inst15 = makeInstance(template, "2026-05-15");
+    const inst16 = makeInstance(template, "2026-05-16");
+    const inst17 = makeInstance(template, "2026-05-17");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [template, makeInstance(template, "2026-05-12"), inst15, inst16, inst17],
+      originalEvent: inst17,
+      instanceEvent: inst17,
+      templateId: template.id,
+      changes: { title: "Changed" },
+      scope: "all",
+      window: {
+        start: Temporal.PlainDate.from("2026-05-10"),
+        end: Temporal.PlainDate.from("2026-05-18"),
+      },
+      currentDate: "2026-05-15",
+      currentTime: "21:00",
+    }).display;
+
+    expect(result.previewedIds.has(inst15.id)).toBe(false);
+    expect(result.events.find((event) => event.id === inst15.id)?.title).toBe("Daily standup");
+    expect(result.previewedIds.has(inst16.id)).toBe(true);
+    expect(result.events.find((event) => event.id === inst16.id)?.title).toBe("Changed");
+  });
+
+  it("previews all clear by preserving ended occurrences and removing future non-survivors", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-05-11 08:00",
+      end: "2026-05-11 09:00",
+    });
+    const inst15 = makeInstance(template, "2026-05-15");
+    const inst16 = makeInstance(template, "2026-05-16");
+    const inst17 = makeInstance(template, "2026-05-17");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [template, makeInstance(template, "2026-05-12"), inst15, inst16, inst17],
+      originalEvent: inst17,
+      instanceEvent: inst17,
+      templateId: template.id,
+      changes: { recurrence: undefined },
+      scope: "all",
+      window: {
+        start: Temporal.PlainDate.from("2026-05-10"),
+        end: Temporal.PlainDate.from("2026-05-18"),
+      },
+      currentDate: "2026-05-15",
+      currentTime: "21:00",
+    }).display;
+
+    expect(result.events.find((event) => event.id === inst15.id)).toBeDefined();
+    expect(result.previewedIds.has(inst15.id)).toBe(false);
+    expect(result.events.find((event) => event.id === inst16.id)).toBeUndefined();
+    expect(result.events.find((event) => event.id === `__va__${template.id}`)?.start).toBe(inst17.start);
+  });
+
   it("plans all recurrence changes with protected history materialization before template update", () => {
     const template = makeRecurringTemplate({
       start: "2027-01-01 09:00",
@@ -398,6 +502,7 @@ describe("recurrence edit planner", () => {
       changes: { recurrence },
       scope: "all",
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
@@ -407,7 +512,12 @@ describe("recurrence edit planner", () => {
     ]);
     expect(plan.operations[0]).toMatchObject({
       type: "materialize-protected-history",
-      cutoffDate: "2027-06-10",
+      cutoffDate: "2027-06-11",
+    });
+    expect(plan.operations[1]).toMatchObject({
+      type: "update-template-fields",
+      protectedUntilDate: "2027-06-10",
+      firstMutableDate: "2027-06-11",
     });
   });
 });

@@ -140,6 +140,7 @@ describe("executeRecurrenceCommitPlan", () => {
       scope: "this",
       activeBlockId: inst20.id,
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     const pomodoro = await execute(plan, store);
@@ -166,6 +167,7 @@ describe("executeRecurrenceCommitPlan", () => {
       scope: "following",
       activeBlockId: `${template.id}::2027-06-22`,
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     const pomodoro = await execute(plan, store);
@@ -192,6 +194,7 @@ describe("executeRecurrenceCommitPlan", () => {
       scope: "following",
       activeBlockId: inst20.id,
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     await execute(plan, store);
@@ -218,6 +221,7 @@ describe("executeRecurrenceCommitPlan", () => {
       changes: { recurrence: { frequency: "weekly", interval: 1, end: { type: "never" } } },
       scope: "all",
       today: "2027-06-10",
+      currentTime: "12:00",
     });
 
     await execute(plan, store);
@@ -231,7 +235,7 @@ describe("executeRecurrenceCommitPlan", () => {
     ]);
   });
 
-  it("executes all clear as protected history then collapse survivor", async () => {
+  it("executes future-only all clear as a template collapse", async () => {
     const template = makeTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
     const store = new FakeCalendarStore(template);
@@ -242,6 +246,34 @@ describe("executeRecurrenceCommitPlan", () => {
       changes: { recurrence: undefined },
       scope: "all",
       today: "2027-06-10",
+      currentTime: "12:00",
+    });
+
+    await execute(plan, store);
+
+    expect(store.calls.map((call) => call.type)).toEqual([
+      "beginBatch",
+      "updateBlock",
+      "endBatch",
+      "refreshWindow",
+    ]);
+  });
+
+  it("executes all clear with protected history by capping before mutable occurrences and detaching the survivor", async () => {
+    const template = makeTemplate({
+      start: "2026-05-11 08:00",
+      end: "2026-05-11 09:00",
+    });
+    const inst17 = makeInstance(template, "2026-05-17");
+    const store = new FakeCalendarStore(template);
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: inst17,
+      changes: { recurrence: undefined },
+      scope: "all",
+      today: "2026-05-15",
+      currentTime: "21:00",
     });
 
     await execute(plan, store);
@@ -249,9 +281,19 @@ describe("executeRecurrenceCommitPlan", () => {
     expect(store.calls.map((call) => call.type)).toEqual([
       "beginBatch",
       "protectHistoricalSegments",
+      "setRepeatUntil",
+      "detachInstance",
       "updateBlock",
       "endBatch",
       "refreshWindow",
     ]);
+    expect(store.calls[2]).toEqual({
+      type: "setRepeatUntil",
+      detail: { parentId: template.id, date: "2026-05-15" },
+    });
+    expect(store.calls[3]).toEqual({
+      type: "detachInstance",
+      detail: inst17.id,
+    });
   });
 });

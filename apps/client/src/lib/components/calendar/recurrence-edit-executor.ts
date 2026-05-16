@@ -138,13 +138,19 @@ async function executeCollapseOperation(
     recurrence: undefined,
   };
 
-  if (template.start.split(" ")[0] < operation.currentDate) {
-    const collapsed = await store.splitSeries(operation.survivor, patch);
-    operationResults.set(operation.operationId, {
-      ...collapsed,
+  if (operation.protectedUntilDate) {
+    await store.setRepeatUntil(operation.templateId, operation.protectedUntilDate);
+    const detached = await store.detachInstance(operation.survivor);
+    const updated: CalendarEvent = {
+      ...detached,
+      ...patch,
+      id: detached.id,
       recurrence: undefined,
       recurringParentId: undefined,
-    });
+      exceptions: undefined,
+    };
+    await store.updateBlock(updated);
+    operationResults.set(operation.operationId, updated);
     return;
   }
 
@@ -170,9 +176,12 @@ async function executeTemplateUpdateOperation(
   const template = store.getTemplate(operation.selectedOccurrence);
   if (!template) throw new Error(`Template ${operation.templateId} not found`);
 
-  if (template.start.split(" ")[0] < operation.currentDate) {
-    const virtualInstance = occurrenceOnDate(template, template.id, operation.currentDate);
-    const patch = moveDatedPatchToDate(operation.patch, operation.currentDate);
+  if (operation.protectedUntilDate) {
+    if (!operation.firstMutableDate) {
+      throw new Error(`No mutable occurrence remains for recurrence template ${operation.templateId}`);
+    }
+    const virtualInstance = occurrenceOnDate(template, template.id, operation.firstMutableDate);
+    const patch = moveDatedPatchToDate(operation.patch, operation.firstMutableDate);
     const newTemplate = await store.splitSeries(virtualInstance, patch);
     operationResults.set(operation.templateId, newTemplate);
     return;

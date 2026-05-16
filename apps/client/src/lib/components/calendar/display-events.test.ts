@@ -129,6 +129,7 @@ describe("recurrence edit planning", () => {
       scope: "following",
       activeBlockId: `${template.id}::2026-03-20`,
       today: "2026-03-20",
+      currentTime: "12:00",
     });
 
     expect(plan.recurrenceOperation).toEqual({ kind: "cleared" });

@@ -59,6 +59,9 @@ export type RecurrenceCommitOperation =
       templateId: string;
       selectedOccurrence: CalendarEvent;
       currentDate: string;
+      currentTime: string;
+      protectedUntilDate?: string;
+      firstMutableDate?: string;
       patch: Partial<CalendarEvent>;
       materializeProtectedHistory: boolean;
     }
@@ -69,6 +72,9 @@ export type RecurrenceCommitOperation =
       survivor: CalendarEvent;
       survivorDate: string;
       currentDate: string;
+      currentTime: string;
+      protectedUntilDate?: string;
+      firstMutableDate?: string;
       patch: Partial<CalendarEvent>;
       materializeProtectedHistory: boolean;
     }
@@ -112,6 +118,7 @@ export interface RecurringCommitPlan {
   activeOnSelectedDate: boolean;
   activeOnToday: boolean;
   today: string;
+  currentTime: string;
   operations: RecurrenceCommitOperation[];
   requiresCanonicalRefresh: boolean;
   diagnostics: RecurrencePlanDiagnostic[];
@@ -220,6 +227,67 @@ function activeDateForTemplate(
   return date ?? today;
 }
 
+function datePart(value: string): string {
+  return value.split(" ")[0];
+}
+
+function timePart(value: string, fallback = "00:00"): string {
+  return (value.split(" ")[1] ?? fallback).slice(0, 5);
+}
+
+function calendarDateTime(date: string, time: string): string {
+  return `${date} ${time.slice(0, 5)}`;
+}
+
+function eventEndDateTime(event: CalendarEvent): string {
+  return `${datePart(event.end)} ${timePart(event.end, "23:59")}`;
+}
+
+function occurrenceIsProtected(event: CalendarEvent, currentDateTime: string): boolean {
+  return eventEndDateTime(event) <= currentDateTime;
+}
+
+function boundaryWindowEnd(currentDate: string, selectedDate: string): Temporal.PlainDate {
+  return Temporal.PlainDate.from(selectedDate > currentDate ? selectedDate : currentDate);
+}
+
+function recurrenceEditBoundary(
+  template: CalendarEvent,
+  selectedOccurrence: CalendarEvent,
+  currentDate: string,
+  currentTime: string,
+): {
+  currentDateTime: string;
+  protectedUntilDate?: string;
+  firstMutableDate?: string;
+} {
+  const currentDateTime = calendarDateTime(currentDate, currentTime);
+  const selectedDate = datePart(selectedOccurrence.start);
+  const occurrences = expandRecurring(
+    [template],
+    Temporal.PlainDate.from(datePart(template.start)),
+    boundaryWindowEnd(currentDate, selectedDate),
+  );
+
+  let protectedUntilDate: string | undefined;
+  let firstMutableDate: string | undefined;
+
+  for (const occurrence of occurrences) {
+    const occurrenceDate = datePart(occurrence.start);
+    if (occurrenceIsProtected(occurrence, currentDateTime)) {
+      protectedUntilDate = occurrenceDate;
+    } else if (!firstMutableDate) {
+      firstMutableDate = occurrenceDate;
+    }
+  }
+
+  if (!firstMutableDate && !occurrenceIsProtected(selectedOccurrence, currentDateTime)) {
+    firstMutableDate = selectedDate;
+  }
+
+  return { currentDateTime, protectedUntilDate, firstMutableDate };
+}
+
 function recurringPatchForDetachedResult(
   changes: Partial<CalendarEvent>,
   recurrenceOperation: RecurrenceFieldOperation,
@@ -289,6 +357,7 @@ function buildCommitOperations(input: {
   activeBlockId?: string;
   activeOnSelectedDate: boolean;
   today: string;
+  currentTime: string;
 }): {
   operations: RecurrenceCommitOperation[];
   diagnostics: RecurrencePlanDiagnostic[];
@@ -406,11 +475,14 @@ function buildCommitOperations(input: {
   }
 
   const operations: RecurrenceCommitOperation[] = [];
-  if (template.start.split(" ")[0] < input.today || recurrenceCleared) {
+  const boundary = recurrenceEditBoundary(template, input.instanceEvent, input.today, input.currentTime);
+  const historyCutoffDate = boundary.firstMutableDate
+    ?? (boundary.protectedUntilDate ? shiftDateStr(boundary.protectedUntilDate, 1) : input.today);
+  if (boundary.protectedUntilDate) {
     operations.push({
       type: "materialize-protected-history",
       templateId: input.templateId,
-      cutoffDate: recurrenceCleared ? input.today : input.today,
+      cutoffDate: historyCutoffDate,
       excludeDate: recurrenceCleared ? instanceDate : undefined,
     });
   }
@@ -441,6 +513,9 @@ function buildCommitOperations(input: {
       survivor: input.instanceEvent,
       survivorDate: instanceDate,
       currentDate: input.today,
+      currentTime: input.currentTime,
+      protectedUntilDate: boundary.protectedUntilDate,
+      firstMutableDate: boundary.firstMutableDate,
       patch: recurringPatchForDetachedResult(input.changes, input.recurrenceOperation),
       materializeProtectedHistory: true,
     });
@@ -460,6 +535,9 @@ function buildCommitOperations(input: {
     templateId: input.templateId,
     selectedOccurrence: input.instanceEvent,
     currentDate: input.today,
+    currentTime: input.currentTime,
+    protectedUntilDate: boundary.protectedUntilDate,
+    firstMutableDate: boundary.firstMutableDate,
     patch: patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
     materializeProtectedHistory: true,
   });
@@ -474,6 +552,7 @@ export function buildRecurringCommitPlan(input: {
   scope: RecurringScope;
   activeBlockId?: string;
   today: string;
+  currentTime: string;
 }): RecurringCommitPlan {
   const template = input.rawBlocks.find((block) => block.id === input.templateId);
   const baselineRecurrence = template?.recurrence ?? input.instanceEvent.recurrence;
@@ -495,6 +574,7 @@ export function buildRecurringCommitPlan(input: {
     activeBlockId,
     activeOnSelectedDate,
     today,
+    currentTime: input.currentTime,
   });
 
   return {
@@ -506,6 +586,7 @@ export function buildRecurringCommitPlan(input: {
     activeOnSelectedDate,
     activeOnToday,
     today,
+    currentTime: input.currentTime,
     operations: planned.operations,
     requiresCanonicalRefresh: planned.operations.some((operation) => operation.type === "refresh-window"),
     diagnostics: planned.diagnostics,
@@ -559,6 +640,7 @@ export function buildRecurringEditPlan(input: {
       scope: input.scope,
       activeBlockId: input.activeDate ? `${input.templateId}::${input.activeDate}` : undefined,
       today: input.currentDate,
+      currentTime: input.currentTime,
     }),
   };
 }
@@ -613,24 +695,24 @@ export function applyAll(
   if (!template) return closedDisplay(storeEvents);
 
   const todayStr = currentDate;
-  const templateStartDate = template.start.split(" ")[0];
-  const hasPast = templateStartDate < todayStr;
+  const currentDateTime = calendarDateTime(currentDate, currentTime);
+  const templateStartDate = datePart(template.start);
   const recurrenceCleared = getRecurrenceFieldOperation(template.recurrence, changes).kind === "cleared";
 
-  const instanceDateStr = instanceEvent.start.split(" ")[0];
+  const instanceDateStr = datePart(instanceEvent.start);
   const changesDateStr = changes.start ? String(changes.start).split(" ")[0] : instanceDateStr;
   const deltaDays = dateDiffDays(instanceDateStr, changesDateStr);
   const belongsToSeries = (e: CalendarEvent) =>
     e.id === templateId || e.recurringParentId === templateId;
+  const hasPast = storeEvents.some((e) => belongsToSeries(e) && occurrenceIsProtected(e, currentDateTime));
   const otherEvents = storeEvents.filter((e) => !belongsToSeries(e));
 
   if (recurrenceCleared) {
     const targetStart = changes.start ? String(changes.start) : instanceEvent.start;
     const targetEnd = changes.end ? String(changes.end) : instanceEvent.end;
     const collapsedId = hasPast ? `__va__${templateId}` : templateId;
-    const splitDate = hasPast && instanceDateStr < todayStr ? instanceDateStr : todayStr;
     const preservedSeries = hasPast
-      ? storeEvents.filter((e) => belongsToSeries(e) && e.start.split(" ")[0] < splitDate)
+      ? storeEvents.filter((e) => belongsToSeries(e) && occurrenceIsProtected(e, currentDateTime))
       : [];
     const activeMaterialized = activeDate && activeDate !== instanceDateStr
       ? storeEvents.find((e) => belongsToSeries(e) && e.start.split(" ")[0] === activeDate)
@@ -686,7 +768,7 @@ export function applyAll(
 
   if (hasPast) {
     const pastFromStore = storeEvents.filter(
-      (e) => belongsToSeries(e) && e.start.split(" ")[0] < todayStr,
+      (e) => belongsToSeries(e) && occurrenceIsProtected(e, currentDateTime),
     );
 
     const activeDayEvents: CalendarEvent[] = [];
@@ -750,7 +832,7 @@ export function applyAll(
 
     const futureFromExpanded = expanded.filter(
       (e) => belongsToSeries(e)
-        && e.start.split(" ")[0] >= todayStr
+        && !occurrenceIsProtected(e, currentDateTime)
         && (!activeDate || e.start.split(" ")[0] !== activeDate),
     );
     seriesEvents = [...pastFromStore, ...activeDayEvents, ...futureFromExpanded];

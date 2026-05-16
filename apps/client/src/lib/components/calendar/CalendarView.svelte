@@ -1434,6 +1434,7 @@
       const isRec = isRecurring(s.originalEvent);
 
       if (isRec && scope) {
+        const now = new Date();
         const recurrencePlan = buildRecurringCommitPlan({
           rawBlocks: calendarStore.rawBlocks,
           templateId: s.templateId,
@@ -1441,7 +1442,8 @@
           changes: data,
           scope,
           activeBlockId: pomodoro.activeBlockId ?? undefined,
-          today: formatDatePart(new Date()),
+          today: formatDatePart(now),
+          currentTime: formatCalendarDate(now).split(" ")[1],
         });
         const blockingDiagnostic = recurrencePlan.diagnostics.find((diagnostic) => diagnostic.severity === "error");
         if (blockingDiagnostic) throw new Error(blockingDiagnostic.message);
