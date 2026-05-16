@@ -40,3 +40,6 @@ coverage/
 
 # Claude
 .claude/
+
+# Goal
+goal/
