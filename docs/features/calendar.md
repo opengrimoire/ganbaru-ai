@@ -4,7 +4,8 @@ The calendar is the anchor of the app. Every other feature ties back to a time b
 
 Recurrence math, structural operations on recurring series, and conflict resolution between overlapping blocks each have their own documents:
 
-- `features/calendar-recurrence.md`: detach, split, template-wide edit, and the rules that keep past instances safe.
+- `features/calendar-recurrence.md`: template, instance, detach, split, and the rules that keep past instances safe.
+- `features/calendar-recurrence-editing.md`: event panel preview, scope switching, recurrence save semantics, and post-save rendering.
 - `algorithms/recurrence-expansion.md`: how an RRULE turns into a list of instances.
 - `algorithms/time-conflict-detection.md`: containment, overlap, and tiebreakers.
 - `features/pomodoro.md`: how events drive the pomodoro feature.
@@ -36,7 +37,7 @@ A calendar event is a structured record (see `data/schema.md` for the table). Th
 - **Notifications:** zero or more offsets in minutes before the event start. The list is configured per-event; defaults can be set globally.
 - **Meeting:** a unified section that groups location (plain text with optional geo coordinates), call link (URL), organizer, the local user's participation row, and attendees (RFC 5545 ORGANIZER / ATTENDEE shape with RSVP status and guest permissions). The section is collapsible in the event panel and shares the same header pattern as pomodoro, notifications, and recurrence. Its enabled state is stored separately so a user can keep Meeting on without adding guests, a location, or a call link. Imported organizers are read-only metadata and should not be duplicated as removable attendees in the panel. The local placeholder row is shown as "You (Local, no email provided)"; its non-accepted RSVP state is stored as app-local event metadata, drives the local surface pattern, is not counted as a stored attendee, and is not exported as an `ATTENDEE` or `ORGANIZER`. Imported `.ics` calendars may infer "You (<email>)" from the source calendar filename when that filename is an email and an organizer or attendee row matches it. Other imported attendee emails must not be relabeled as "You" until identity settings can match the user's real email to an attendee row. Row-level attendee actions should remain visible for organizer, self, and guests, but disabled with a not-allowed cursor whenever the current identity or permissions do not allow the action. Attendee sync behavior for shared and team events is described in `data/sync.md` once collaboration ships.
 - **Pomodoro config:** optional. When present, the event participates in the pomodoro system. See `features/pomodoro.md`.
-- **Recurrence:** optional RRULE. See `features/calendar-recurrence.md`.
+- **Recurrence:** optional RRULE. See `features/calendar-recurrence.md` and `features/calendar-recurrence-editing.md`.
 - **Timezone:** IANA home zone. Required and non-empty. Anchors recurrence math (so "9 AM daily" stays 9 AM through DST) and is the `TZID` on `.ics` re-export. Independent of the render zone: changing your device zone does not rewrite this field.
 
 Events without a pomodoro config are still first-class citizens. They appear in the calendar, drive notifications, and trigger work-environment activation. They simply do not show a rail and do not contribute to focus stats.
@@ -76,7 +77,7 @@ Inside the panel, sections are split per concern:
 - **TimezoneSelector:** IANA timezone for the event. Defaults to the user's timezone.
 - **TimePicker:** start and end time. Hidden when all-day is on.
 
-Unsaved changes are tracked. Closing the panel with unsaved edits prompts to save or discard. Confirmation dialogs opened from the panel own their pointer events, so the panel's outside-close listener must not block clicks on dialog buttons. Saving on a recurring event triggers the scope picker (this, following, all). See `features/calendar-recurrence.md`.
+Unsaved changes are tracked. Closing the panel with unsaved edits prompts to save or discard. Confirmation dialogs opened from the panel own their pointer events, so the panel's outside-close listener must not block clicks on dialog buttons. Saving on an event that was already part of a saved recurring series uses the scope picker (this, following, all). Adding repeat to a saved non-recurring event does not show the scope picker because there is no previous series to scope. See `features/calendar-recurrence-editing.md`.
 
 ## Smooth scrolling and zoom
 
@@ -167,4 +168,4 @@ The mental model: an `.ics` import is a separate calendar that the user can dele
 
 ## What this doc does not cover
 
-Recurring instance expansion and structural operations are in `features/calendar-recurrence.md`. The pomodoro timer, break screen, and idle behavior are in their own docs under `features/`. Rail rendering and band computation are in `features/pomodoro-progress-displays.md`. Conflict tiebreakers are in `algorithms/time-conflict-detection.md`.
+Recurring instance expansion and structural operations are in `features/calendar-recurrence.md`. Event panel recurrence edit semantics are in `features/calendar-recurrence-editing.md`. The pomodoro timer, break screen, and idle behavior are in their own docs under `features/`. Rail rendering and band computation are in `features/pomodoro-progress-displays.md`. Conflict tiebreakers are in `algorithms/time-conflict-detection.md`.

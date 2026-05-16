@@ -2,7 +2,7 @@
 
 Recurring events let the user describe a schedule once ("daily", "every Monday and Wednesday", "first Tuesday of each month") and have the calendar generate instances over time. The model balances two requirements that pull in opposite directions: efficient storage (one row per pattern, not one row per occurrence) and faithful preservation of the past (existing instances must not silently disappear when the user edits the rule).
 
-This doc covers the user-facing model and the three structural operations. The expansion math is in `algorithms/recurrence-expansion.md`. The invariants that protect past instances are in `data/invariants.md` (invariant 7).
+This doc covers the user-facing model and the three structural operations. The detailed event panel preview, scope switching, and save semantics are in `features/calendar-recurrence-editing.md`. The expansion math is in `algorithms/recurrence-expansion.md`. The invariants that protect past instances are in `data/invariants.md` (invariant 7).
 
 ## Supported RRULE subset
 
@@ -100,9 +100,9 @@ Five operations can cause past instances to silently stop expanding from a recur
 
    **Example, pattern change.** "Exercise" recurs every weekday. The user changes it to "every Monday" with scope "all." Before applying, the system computes which past dates matched the old pattern but not the new one. Past Tuesdays, Wednesdays, Thursdays, and Fridays would vanish. Each is detached into a standalone event. Runs on those dates (if any) are transferred. Dates with no runs still get a standalone event (the absence of work is data). Then the template's pattern updates to "every Monday."
 
-5. **Removing recurrence entirely with scope "all."** Every past instance is detached. The template becomes a non-recurring event (the original date). Future occurrences stop expanding.
+5. **Removing recurrence entirely with scope "all."** Every affected past instance is detached. The selected occurrence becomes the single non-recurring survivor, even when that selected occurrence is synthetic and not the original template date. Future occurrences stop expanding.
 
-   **Example.** "Weekly review" recurs every Friday. The user removes recurrence with scope "all." Every past Friday instance is detached into a standalone event. The template becomes non-recurring (the original Friday). Future Fridays stop expanding.
+   **Example.** "Weekly review" recurs every Friday. The user selects the next Friday occurrence and removes recurrence with scope "all." Past Friday instances are detached into standalone events as needed. The selected next Friday becomes the non-recurring survivor. Future Fridays stop expanding.
 
 To keep this tractable for series with many past instances, the system only needs to detach past instances within a reasonable historical window (matching the expansion horizon, see `algorithms/recurrence-expansion.md`). Instances beyond that window were never expanded and never produced visible events or tracking opportunities, so they need no detaching.
 
