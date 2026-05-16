@@ -1169,5 +1169,98 @@ pub fn migrations() -> Vec<Migration> {
                     WHERE calendar_event_attendees.event_id = calendar_events.id
                 );
         ",
+    },
+    Migration {
+        version: 22,
+        description: "remove obsolete pomodoro session task reference",
+        sql: "
+            ALTER TABLE pomodoro_sessions RENAME TO pomodoro_sessions_before_task_cleanup;
+
+            CREATE TABLE pomodoro_sessions (
+                id TEXT PRIMARY KEY,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                completed INTEGER NOT NULL DEFAULT 1,
+                app_switch_count INTEGER NOT NULL DEFAULT 0,
+                break_extended INTEGER NOT NULL DEFAULT 0,
+                focus_score REAL NOT NULL DEFAULT 1.0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL
+            );
+
+            INSERT INTO pomodoro_sessions (
+                id,
+                start_time,
+                end_time,
+                completed,
+                app_switch_count,
+                break_extended,
+                focus_score,
+                created_at,
+                event_id
+            )
+            SELECT
+                id,
+                start_time,
+                end_time,
+                completed,
+                app_switch_count,
+                break_extended,
+                focus_score,
+                created_at,
+                CASE
+                    WHEN event_id IS NULL THEN NULL
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM calendar_events
+                        WHERE calendar_events.id =
+                            pomodoro_sessions_before_task_cleanup.event_id
+                    ) THEN event_id
+                    ELSE NULL
+                END
+            FROM pomodoro_sessions_before_task_cleanup;
+
+            DROP TABLE pomodoro_sessions_before_task_cleanup;
+        ",
     }]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_migrations;
+
+    #[test]
+    fn pomodoro_sessions_can_insert_with_foreign_keys_enabled() {
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+            sqlx::raw_sql("PRAGMA foreign_keys=ON")
+                .execute(&pool)
+                .await
+                .unwrap();
+            run_migrations(&pool).await.unwrap();
+
+            sqlx::query(
+                "INSERT INTO pomodoro_sessions
+                    (id, start_time, end_time, completed, focus_score, created_at)
+                 VALUES (?, ?, ?, 1, 1.0, ?)",
+            )
+            .bind("session-1")
+            .bind("2026-05-16T10:00:00Z")
+            .bind("2026-05-16T10:40:00Z")
+            .bind("2026-05-16T10:40:00Z")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(count, 1);
+        });
+    }
 }
