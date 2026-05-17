@@ -251,6 +251,7 @@ class MusicPlayerStore {
   muted = $state(initialPlayerSettings.muted);
   shuffleOrder = $state<number[]>([]);
   queueHistory = $state<number[]>([]);
+  pendingQueueIndex = $state<number | null>(null);
   youtubeHostUrl = $state<string | null>(null);
   youtubeFrame = $state<HTMLIFrameElement | null>(null);
   private youtubeHostBaseUrl: string | null = null;
@@ -324,6 +325,13 @@ class MusicPlayerStore {
     const source = this.currentSource;
     if (!source) return -1;
     return this.queue.findIndex((item) => item.identity === source.identity);
+  }
+
+  get highlightedQueueIndex(): number {
+    if (this.pendingQueueIndex !== null && this.queue[this.pendingQueueIndex]) {
+      return this.pendingQueueIndex;
+    }
+    return this.currentQueueIndex;
   }
 
   get canPlayPreviousTrack(): boolean {
@@ -439,6 +447,7 @@ class MusicPlayerStore {
       );
       this.shuffleOrder = [];
       this.queueHistory = [];
+      this.pendingQueueIndex = null;
       if (this.queue.length === 0) {
         this.playerError = "No supported audio or video files were found in that folder.";
         this.updateMusicTray();
@@ -447,6 +456,7 @@ class MusicPlayerStore {
       const queueSelection = initialQueueSelection(this.queue.length, this.shuffleEnabled);
       const initialIndex = queueSelection.index ?? 0;
       this.shuffleOrder = queueSelection.remainingOrder;
+      this.pendingQueueIndex = initialIndex;
       await this.loadSource(this.queue[initialIndex] ?? this.queue[0], {
         autoplay: true,
         resume: false,
@@ -472,8 +482,10 @@ class MusicPlayerStore {
       this.queue = [source];
       this.shuffleOrder = [];
       this.queueHistory = [];
+      this.pendingQueueIndex = 0;
     }
     this.currentSource = source;
+    this.pendingQueueIndex = null;
     this.sourceInput = "";
     this.parseError = null;
     this.playerError = null;
@@ -681,6 +693,7 @@ class MusicPlayerStore {
     this.folderScanTruncated = false;
     this.shuffleOrder = [];
     this.queueHistory = [];
+    this.pendingQueueIndex = null;
     this.currentArtworkUrl = null;
     this.updateMusicTray();
   }
@@ -704,6 +717,7 @@ class MusicPlayerStore {
       this.queueHistory = [...this.queueHistory, currentIndex];
     }
     this.shuffleOrder = this.shuffleOrder.filter((item) => item !== index);
+    this.pendingQueueIndex = index;
     await this.loadSource(source, {
       autoplay: true,
       resume: false,
@@ -733,6 +747,7 @@ class MusicPlayerStore {
     if (currentIndex >= 0 && currentIndex !== nextIndex) {
       this.queueHistory = [...this.queueHistory, currentIndex];
     }
+    this.pendingQueueIndex = nextIndex;
     await this.loadSource(this.queue[nextIndex], {
       autoplay: true,
       resume: false,
@@ -749,6 +764,7 @@ class MusicPlayerStore {
       const previousIndex = history.pop();
       this.queueHistory = history;
       if (previousIndex !== undefined && this.queue[previousIndex]) {
+        this.pendingQueueIndex = previousIndex;
         await this.loadSource(this.queue[previousIndex], {
           autoplay: true,
           resume: false,
@@ -759,6 +775,7 @@ class MusicPlayerStore {
     }
 
     if (currentIndex > 0 && this.queue[currentIndex - 1]) {
+      this.pendingQueueIndex = currentIndex - 1;
       await this.loadSource(this.queue[currentIndex - 1], {
         autoplay: true,
         resume: false,
@@ -1532,6 +1549,7 @@ class MusicPlayerStore {
     this.queue = queue;
     this.queueHistory = [];
     this.shuffleOrder = queueSelection.remainingOrder.filter((index) => index !== initialIndex);
+    this.pendingQueueIndex = initialIndex;
     this.clearYouTubePlaylistResolution();
     await this.loadSource(queue[initialIndex] ?? queue[0], {
       autoplay: resolving.autoplay,

@@ -433,14 +433,14 @@
               Add a source or pick a folder to start a queue.
             </div>
           {:else}
-            <div class="space-y-1">
+            <div class="flex flex-col">
               {#each player.queue as item, index}
                 <button
                   type="button"
                   onclick={() => { void player.playQueueItem(index); }}
                   class={cn(
-                    "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-[12px] transition-colors hover:bg-accent hover:text-accent-foreground",
-                    player.currentSource?.identity === item.identity && "bg-accent text-accent-foreground",
+                    "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
+                    player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
                   )}
                 >
                   <span class="min-w-0 truncate">{item.title}</span>
