@@ -110,6 +110,10 @@ export function isVolumeBoosted(value: number): boolean {
   return clampVolume(value) > NORMAL_VOLUME;
 }
 
+export function shouldRouteLocalMediaThroughWebAudio(volume: number, hasExistingRoute: boolean): boolean {
+  return hasExistingRoute || isVolumeBoosted(volume);
+}
+
 export function formatVolumePercent(value: number): string {
   return `${Math.round(clampVolume(value) * 100)}%`;
 }

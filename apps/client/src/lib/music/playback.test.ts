@@ -12,6 +12,7 @@ import {
   nextShuffleIndex,
   previousQueueSelection,
   shouldPersistPlaybackState,
+  shouldRouteLocalMediaThroughWebAudio,
   stableStatusDuringYouTubeBuffering,
   type PersistedPlaybackState,
 } from "./playback";
@@ -94,6 +95,12 @@ describe("clamp helpers", () => {
     expect(isVolumeBoosted(1)).toBe(false);
     expect(isVolumeBoosted(1.01)).toBe(true);
     expect(formatVolumePercent(1.25)).toBe("125%");
+  });
+
+  it("routes local media through Web Audio only when boost is needed or already active", () => {
+    expect(shouldRouteLocalMediaThroughWebAudio(1, false)).toBe(false);
+    expect(shouldRouteLocalMediaThroughWebAudio(1.01, false)).toBe(true);
+    expect(shouldRouteLocalMediaThroughWebAudio(0.8, true)).toBe(true);
   });
 
   it("formats preset and custom speed labels", () => {

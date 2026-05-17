@@ -34,6 +34,7 @@ import {
   nextShuffleIndex,
   stableStatusDuringYouTubeBuffering,
   shouldPersistPlaybackState,
+  shouldRouteLocalMediaThroughWebAudio,
   type PersistedPlaybackState,
   type PlaybackSnapshot,
   type PlaybackStatus,
@@ -1498,7 +1499,12 @@ class MusicPlayerStore {
     const element = this.localMediaElement;
     if (!element) return;
     const volume = this.localPauseSilenced ? 0 : this.effectiveVolume();
-    const nodes = this.ensureLocalAudioNodes(element);
+    const existingNodes = this.audioNodes.get(element);
+    // Keep ordinary local video audio on the browser media path. Web Audio is only needed for boost
+    // and can choose a different system sink on some Linux Bluetooth setups.
+    const nodes = shouldRouteLocalMediaThroughWebAudio(volume, existingNodes !== undefined)
+      ? existingNodes ?? this.ensureLocalAudioNodes(element)
+      : null;
     if (nodes) {
       element.muted = volume === 0;
       element.volume = 1;
@@ -1549,7 +1555,10 @@ class MusicPlayerStore {
   }
 
   private async resumeAudioContext(element: HTMLMediaElement): Promise<void> {
-    const nodes = this.ensureLocalAudioNodes(element);
+    const existingNodes = this.audioNodes.get(element);
+    const nodes = shouldRouteLocalMediaThroughWebAudio(this.effectiveVolume(), existingNodes !== undefined)
+      ? existingNodes ?? this.ensureLocalAudioNodes(element)
+      : null;
     if (!nodes || nodes.context.state !== "suspended") return;
     await nodes.context.resume();
   }

@@ -86,21 +86,23 @@
     {/key}
   {:else if player.currentSource?.kind === "local-file"}
     {#if player.localMediaSrc && player.localHasVideo}
-      <video
-        bind:this={localMediaElement}
-        class="pointer-events-none h-full w-full bg-black object-contain"
-        src={player.localMediaSrc}
-        crossorigin="anonymous"
-        playsinline
-        onloadedmetadata={(event) => player.handleLocalLoadedMetadata(event)}
-        ontimeupdate={(event) => player.handleLocalTimeUpdate(event)}
-        onplay={(event) => player.handleLocalPlay(event)}
-        onpause={(event) => player.handleLocalPause(event)}
-        onended={(event) => { void player.handleLocalEnded(event); }}
-        onerror={(event) => player.handleLocalError(event)}
-      >
-        <track kind="captions" />
-      </video>
+      {#key player.localMediaSrc}
+        <video
+          bind:this={localMediaElement}
+          class="pointer-events-none h-full w-full bg-black object-contain"
+          src={player.localMediaSrc}
+          crossorigin="anonymous"
+          playsinline
+          onloadedmetadata={(event) => player.handleLocalLoadedMetadata(event)}
+          ontimeupdate={(event) => player.handleLocalTimeUpdate(event)}
+          onplay={(event) => player.handleLocalPlay(event)}
+          onpause={(event) => player.handleLocalPause(event)}
+          onended={(event) => { void player.handleLocalEnded(event); }}
+          onerror={(event) => player.handleLocalError(event)}
+        >
+          <track kind="captions" />
+        </video>
+      {/key}
     {/if}
   {/if}
   {#if hasVisualSurface}
