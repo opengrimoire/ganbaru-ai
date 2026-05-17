@@ -357,6 +357,14 @@ Three motivations lined up at once. First, structural changes to the token catal
 
 JSON keeps a role as the export format only: `serializeTheme` emits a v2 envelope (`schemaVersion: 2`, full snapshot, `calendarDefaults`, `appIsolated` / `calendarIsolated` arrays) and `validateThemeJson` accepts v2, v1, and the legacy `appTokenOverrides` / `calendarTokenOverrides` shape. Older v1 or legacy calendar-header rows are migrated into the app-token header row during import.
 
+## Music
+
+Music files remain outside the vault. SQLite stores playlist definitions, source identities, and playback resume state.
+
+- **`music_playlists`:** id, name, created_at, updated_at.
+- **`music_playlist_tracks`:** id, playlist_id, position, source_kind, source_uri, source_identity, title, start_ms, end_ms, skip_ranges_json, volume, rate, break_source_json, created_at, updated_at.
+- **`music_playback_states`:** source_identity, source_kind, position_ms, duration_ms, status, updated_at.
+
 ## Other features (stub)
 
 These tables are designed but their detailed shape is filled in when the feature ships. Each feature doc owns the deeper definition.
@@ -366,6 +374,5 @@ These tables are designed but their detailed shape is filled in when the feature
 - **`notes_index`:** path, title, modified_at, tags, backlinks. Source of truth is the markdown file under `vault/notes/`.
 - **`diary_index`:** date, type (morning/evening), mood, energy, sleep_hours, path. Source of truth is the markdown file under `vault/diary/`.
 - **`projects`:** id, name, status, lifecycle_phase, created_at.
-- **`playlists`:** id, name, tracks (JSON of file paths or YouTube IDs).
 
 When designing one of these, follow the pomodoro pattern: snapshot any value that the user could change later but that an audit query needs to know about at the moment of the action.

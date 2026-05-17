@@ -1,0 +1,19 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = """
+Allows the main GanbaruAI window to control local media playback through the native media player plugin.
+"""
+
+permissions = [
+  "allow-probe",
+  "allow-load",
+  "allow-play",
+  "allow-pause",
+  "allow-stop",
+  "allow-seek",
+  "allow-set-volume",
+  "allow-set-rate",
+  "allow-set-surface-rect",
+  "allow-clear-surface",
+]

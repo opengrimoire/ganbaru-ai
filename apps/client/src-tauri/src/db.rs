@@ -1222,6 +1222,49 @@ pub fn migrations() -> Vec<Migration> {
 
             DROP TABLE pomodoro_sessions_before_task_cleanup;
         ",
+    },
+    Migration {
+        version: 23,
+        description: "add music playlists and playback state",
+        sql: "
+            CREATE TABLE IF NOT EXISTS music_playlists (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS music_playlist_tracks (
+                id TEXT PRIMARY KEY,
+                playlist_id TEXT NOT NULL REFERENCES music_playlists(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL CHECK (position >= 0),
+                source_kind TEXT NOT NULL CHECK (source_kind IN ('local-file', 'youtube-video', 'youtube-playlist')),
+                source_uri TEXT NOT NULL,
+                source_identity TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                start_ms INTEGER CHECK (start_ms IS NULL OR start_ms >= 0),
+                end_ms INTEGER CHECK (end_ms IS NULL OR end_ms >= 0),
+                skip_ranges_json TEXT NOT NULL DEFAULT '[]',
+                volume REAL CHECK (volume IS NULL OR (volume >= 0 AND volume <= 1)),
+                rate REAL CHECK (rate IS NULL OR (rate >= 0.25 AND rate <= 2)),
+                break_source_json TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_music_playlist_tracks_playlist_position
+                ON music_playlist_tracks(playlist_id, position);
+            CREATE INDEX IF NOT EXISTS idx_music_playlist_tracks_source_identity
+                ON music_playlist_tracks(source_identity);
+
+            CREATE TABLE IF NOT EXISTS music_playback_states (
+                source_identity TEXT PRIMARY KEY,
+                source_kind TEXT NOT NULL CHECK (source_kind IN ('local-file', 'youtube-video', 'youtube-playlist')),
+                position_ms INTEGER NOT NULL CHECK (position_ms >= 0),
+                duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
+                status TEXT NOT NULL CHECK (status IN ('idle', 'loading', 'ready', 'playing', 'paused', 'ended', 'error')),
+                updated_at INTEGER NOT NULL
+            );
+        ",
     }]
 }
 

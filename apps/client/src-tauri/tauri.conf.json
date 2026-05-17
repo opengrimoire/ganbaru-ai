@@ -26,25 +26,27 @@
     "security": {
       "csp": {
         "default-src": "'self'",
-        "script-src": "'self'",
+        "script-src": "'self' https://www.youtube.com https://s.ytimg.com",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' asset: http://asset.localhost",
+        "img-src": "'self' asset: http://asset.localhost http://127.0.0.1:* http://localhost:*",
+        "media-src": "'self' http://127.0.0.1:* http://localhost:*",
         "font-src": "'self'",
         "connect-src": "ipc: http://ipc.localhost",
         "object-src": "'none'",
-        "frame-src": "'none'",
+        "frame-src": "http://127.0.0.1:* http://localhost:* https://www.youtube.com https://www.youtube-nocookie.com",
         "base-uri": "'none'",
         "form-action": "'none'"
       },
       "devCsp": {
         "default-src": "'self' http://localhost:1420 http://127.0.0.1:1420",
-        "script-src": "'self' 'unsafe-eval' http://localhost:1420 http://127.0.0.1:1420",
+        "script-src": "'self' 'unsafe-eval' http://localhost:1420 http://127.0.0.1:1420 https://www.youtube.com https://s.ytimg.com",
         "style-src": "'self' 'unsafe-inline' http://localhost:1420 http://127.0.0.1:1420",
-        "img-src": "'self' asset: http://asset.localhost http://localhost:1420 http://127.0.0.1:1420",
+        "img-src": "'self' asset: http://asset.localhost http://127.0.0.1:* http://localhost:* http://localhost:1420 http://127.0.0.1:1420",
+        "media-src": "'self' http://127.0.0.1:* http://localhost:* http://localhost:1420 http://127.0.0.1:1420",
         "font-src": "'self' http://localhost:1420 http://127.0.0.1:1420",
         "connect-src": "ipc: http://ipc.localhost http://localhost:1420 http://127.0.0.1:1420 ws://localhost:1420 ws://127.0.0.1:1420 ws://localhost:1421 ws://127.0.0.1:1421",
         "object-src": "'none'",
-        "frame-src": "'none'",
+        "frame-src": "http://127.0.0.1:* http://localhost:* https://www.youtube.com https://www.youtube-nocookie.com",
         "base-uri": "'none'",
         "form-action": "'none'"
       }

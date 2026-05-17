@@ -16,6 +16,8 @@
   import TitleBar from "$lib/components/TitleBar.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
+  import MusicPlaybackHost from "$lib/components/music/MusicPlaybackHost.svelte";
+  import MusicView from "$lib/components/music/MusicView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import {
     firstMarkTime,
@@ -455,7 +457,7 @@
       {:else if nav.current === "todo"}
         <div class="h-full"></div>
       {:else if nav.current === "music"}
-        <div class="h-full"></div>
+        <MusicView />
       {/if}
     </main>
   </div>
@@ -498,6 +500,7 @@
     <Overlay />
   {/if}
 
+  <MusicPlaybackHost />
   <WindowResizeHandles disabled={isMaximized || !!idleInfo} />
 </div>
 

@@ -46,7 +46,7 @@ apps/
           pomodoro/: timer display, break screen, idle overlay
           notes/: (planned) Tiptap editor wrapper, slash commands
           diary/: (planned) morning/evening entry forms
-          music/: (planned) player controls, playlist management
+          music/: player controls, source parsing, playlist management surfaces
           ai-panel/: (planned) integrated terminal (xterm.js) and BYOK chat
           visual-novel/: (planned) NPC dialogue, conversation state machine
           edge-panel/: (planned) panel layout, quick-access widgets
@@ -71,8 +71,8 @@ apps/
       tauri.conf.json, Cargo.toml
     index.html, package.json, svelte.config.js, vite.config.ts, tsconfig.json
   server/: (planned) Hocuspocus sync server (self-hostable)
-plugins/: (planned)
-  media-player/: LGPL 2.1 Tauri plugin (Rust crate + npm)
+plugins/
+  media-player/: LGPL 2.1 Tauri plugin (Rust crate + npm API)
 packages/
   shared-types/: TypeScript types shared across workspaces
 extensions/: (planned)

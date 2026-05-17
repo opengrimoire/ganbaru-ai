@@ -403,9 +403,19 @@ The protocol connecting the browser extension to the Tauri backend via stdin/std
 
 A local-first media player licensed separately under LGPL 2.1 and integrated directly into the AGPL 3.0 app. Structured as a Tauri plugin pattern with both a Rust crate (publishable to crates.io) and an npm package, so the media engine is reusable independently of GanbaruAI. Supports two sources: local files (primary) and YouTube via the official IFrame API (secondary).
 
+### Current local playback path
+
+Desktop local playback currently uses the browser media element inside the Tauri WebView, with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types. This keeps local audio and video usable without requiring GStreamer development packages in every developer build.
+
+This path is a compatibility fallback, not the final codec story. It can play the formats and codecs supported by the user's platform WebView.
+
+### Native media backend target
+
+The production local backend should be Rust-controlled through `plugins/media-player`, with GStreamer as the primary playback engine and an LGPL-compatible FFmpeg/libav path for broader format coverage.
+
 ### `ffmpeg-next`
 
-Rust bindings for FFmpeg. Handles audio and video decoding, format detection, and codec support for local files. This is the primary media engine, covering all formats the user might throw at it. The FFmpeg dependency is linked at build time.
+Rust bindings for FFmpeg. Handles audio and video decoding, format detection, and codec support for local files when the native backend needs libav coverage beyond the GStreamer path. The FFmpeg dependency is linked at build time.
 
 ### Symphonia (optional, audio-only path)
 

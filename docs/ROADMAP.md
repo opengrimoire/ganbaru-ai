@@ -125,8 +125,8 @@ Local-first media playback integrated into the productivity workflow, licensed s
 **Includes:**
 
 - Tauri plugin structure: Rust crate (publishable to crates.io) + npm package (publishable to npm), separate from the AGPL app
-- Local file playback: Symphonia for audio-only (lightweight, pure Rust), ffmpeg-next fallback for video and unsupported audio formats, format detection and codec support
-- YouTube IFrame API integration: load videos by ID/URL, start/end timestamps, volume and speed control, seek, transparent div overlay blocking direct user interaction (input-locked, not hidden), playback position persistence in SQLite, ad-compatible (YouTube Premium removes ads if user is logged in)
+- Local file playback: current loopback WebView fallback for basic local audio and video, plus GStreamer as the primary Rust-controlled playback engine target, FFmpeg/libav support through an LGPL-compatible build path, format detection, codec support, and native video surface embedding in the music view
+- YouTube IFrame API integration: load videos by ID/URL, start/end timestamps, volume and speed control, seek, desktop WebView client identity through a loopback HTTP player host plus referrer policy, `origin`, and `widget_referrer`, playback position persistence in SQLite, ad-compatible (YouTube Premium removes ads if user is logged in)
 - Playlist management: definitions stored in SQLite (track paths, ordering, environment associations), create/edit/delete playlists, assign playlists to work environment templates and session blocks
 - Session block integration: automatic playlist start when block activates, focus/break playlist switching on Pomodoro phase change
 - User preconfiguration per session block: source selection, timestamps, skip ranges, volume, playback speed, break source override
@@ -135,7 +135,7 @@ Local-first media playback integrated into the productivity workflow, licensed s
 
 **Depends on:** phase 1 (calendar session blocks for playlist assignment, SQLite), phase 4 (edge panel for controls, work environments for playlist association)
 
-**Out of scope:** Spotify (explicitly not supported, as documented in project), collaborative playlists, AI music recommendations, video display in main app window (audio-focused initially)
+**Out of scope:** Spotify (explicitly not supported, as documented in project), collaborative playlists, AI music recommendations, and stream extraction from YouTube or YouTube Music
 
 **Complexity:** medium
 

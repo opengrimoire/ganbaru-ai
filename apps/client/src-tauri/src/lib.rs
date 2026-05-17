@@ -34,6 +34,7 @@ mod calendar_reads;
 mod calendars;
 mod db;
 mod db_path;
+mod music;
 mod notification;
 mod pomodoro;
 mod recurrence;
@@ -600,6 +601,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(db_path::DatabaseState::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_media_player::init())
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
             notification::show_event_notification,
@@ -608,6 +610,13 @@ pub fn run() {
             notification::get_idle_status,
             notification::play_alert_sound,
             notification::show_idle_overlay,
+            music::music_get_playback_state,
+            music::music_pick_media_folder,
+            music::music_register_embedded_artwork,
+            music::music_register_media_file,
+            music::music_save_playback_state,
+            music::music_youtube_host_url,
+            tray::update_music_tray,
             tray::update_tray,
             force_quit,
             reset_database,
@@ -678,6 +687,7 @@ pub fn run() {
             themes::theme_reset_to_seed,
         ])
         .setup(|app| {
+            music::setup_youtube_host(app.handle())?;
             if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {
                 eprintln!("failed to restore stale Linux shortcuts: {err}");
             }
