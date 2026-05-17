@@ -25,6 +25,7 @@
   let speedMenuOpen = $state(false);
   let customSpeedOpen = $state(false);
   let customRateDraft = $state("1");
+  let queueVisible = $state(false);
 
   const volumeMax = $derived(player.isYouTubeActive ? 1 : 1.5);
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
@@ -184,7 +185,14 @@
     </form>
   </div>
 
-  <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] grid-rows-[minmax(0,1fr)_auto] max-[860px]:grid-cols-1 max-[860px]:grid-rows-[minmax(0,1fr)_minmax(7rem,35%)_auto]">
+  <div
+    class={cn(
+      "grid min-h-0 flex-1",
+      queueVisible
+        ? "grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] grid-rows-[minmax(0,1fr)_auto] max-[860px]:grid-cols-1 max-[860px]:grid-rows-[minmax(0,1fr)_minmax(7rem,35%)_auto]"
+        : "grid-cols-1 grid-rows-[minmax(0,1fr)_auto]",
+    )}
+  >
     <div class="min-h-0">
       <div
         bind:this={mediaSurface}
@@ -218,50 +226,55 @@
       </div>
     </div>
 
-    <aside class="min-h-0" style="background-color: var(--cal-bg);">
-      <div class="flex h-full min-h-0 flex-col">
-        <div class="flex items-center justify-between gap-2 px-4 py-3">
-          <div class="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
-            <ListMusic size={15} strokeWidth={2.25} />
-            Queue
-          </div>
-          {#if player.queue.length > 0}
-            <div class="text-[11px] text-muted-foreground">{player.queue.length} tracks</div>
-          {/if}
-        </div>
-
-        {#if player.folderScanTruncated}
-          <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] text-warning">
-            Showing the first 5000 media files.
-          </div>
-        {/if}
-
-        <div class="music-queue-scroll min-h-0 flex-1 overflow-auto p-3" data-music-scrollable="true">
-          {#if player.queue.length === 0}
-            <div class="p-3 text-[12px] text-muted-foreground">
-              Add a source or pick a folder to start a queue.
+    {#if queueVisible}
+      <aside id="music-queue" class="min-h-0" style="background-color: var(--cal-bg);">
+        <div class="flex h-full min-h-0 flex-col">
+          <div class="flex items-center justify-between gap-2 px-4 py-3">
+            <div class="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+              <ListMusic size={15} strokeWidth={2.25} />
+              Queue
             </div>
-          {:else}
-            <div class="flex flex-col">
-              {#each player.queue as item, index}
-                <button
-                  type="button"
-                  onclick={() => { void player.playQueueItem(index); }}
-                  class={cn(
-                    "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
-                    player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
-                  )}
-                >
-                  <span class="min-w-0 truncate">{item.title}</span>
-                </button>
-              {/each}
+            {#if player.queue.length > 0}
+              <div class="text-[11px] text-muted-foreground">{player.queue.length} tracks</div>
+            {/if}
+          </div>
+
+          {#if player.folderScanTruncated}
+            <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] text-warning">
+              Showing the first 5000 media files.
             </div>
           {/if}
-        </div>
-      </div>
-    </aside>
 
-    <div class="col-span-2 px-4 py-2 max-[860px]:col-span-1 max-[520px]:px-3" style="background-color: var(--cal-bg);">
+          <div class="music-queue-scroll min-h-0 flex-1 overflow-auto p-3" data-music-scrollable="true">
+            {#if player.queue.length === 0}
+              <div class="p-3 text-[12px] text-muted-foreground">
+                Add a source or pick a folder to start a queue.
+              </div>
+            {:else}
+              <div class="flex flex-col">
+                {#each player.queue as item, index}
+                  <button
+                    type="button"
+                    onclick={() => { void player.playQueueItem(index); }}
+                    class={cn(
+                      "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
+                      player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <span class="min-w-0 truncate">{item.title}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+      </aside>
+    {/if}
+
+    <div
+      class={cn("px-4 py-2 max-[520px]:px-3", queueVisible && "col-span-2 max-[860px]:col-span-1")}
+      style="background-color: var(--cal-bg);"
+    >
       {#key player.currentSource?.identity ?? "empty"}
         <div class="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
           <span class="w-12 shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
@@ -281,169 +294,179 @@
 
       <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-            <button
-              type="button"
-              onclick={() => { void player.playPreviousTrack(); }}
-              disabled={!player.canPlayPreviousTrack}
-              class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-              title="Last played track"
-              aria-label="Last played track"
-            >
-              <SkipBack size={15} strokeWidth={2.25} />
-            </button>
-            <button
-              type="button"
-              onclick={() => { void player.togglePlay(); }}
-              disabled={!player.currentSource}
-              class={cn(
-                "inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90",
-                !player.currentSource && "pointer-events-none opacity-50",
-              )}
-              title={player.isPlaying ? "Pause" : "Play"}
-              aria-label={player.isPlaying ? "Pause" : "Play"}
-            >
-              {#if player.isPlaying}
-                <Pause size={17} strokeWidth={2.25} />
-              {:else}
-                <Play size={17} strokeWidth={2.25} />
-              {/if}
-            </button>
-            <button
-              type="button"
-              onclick={() => { void player.playNextTrack(); }}
-              disabled={!player.canPlayNextTrack}
-              class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-              title="Next track"
-              aria-label="Next track"
-            >
-              <SkipForward size={15} strokeWidth={2.25} />
-            </button>
-            <button
-              type="button"
-              onclick={() => player.toggleShuffle()}
-              disabled={player.queue.length < 2}
-              class={cn(
-                "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
-                player.shuffleEnabled && "border-primary bg-primary/15 text-primary",
-              )}
-              title={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
-              aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
-              aria-pressed={player.shuffleEnabled}
-            >
-              <Shuffle size={15} strokeWidth={2.25} />
-            </button>
+          <button
+            type="button"
+            onclick={() => { void player.playPreviousTrack(); }}
+            disabled={!player.canPlayPreviousTrack}
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+            title="Last played track"
+            aria-label="Last played track"
+          >
+            <SkipBack size={15} strokeWidth={2.25} />
+          </button>
+          <button
+            type="button"
+            onclick={() => { void player.togglePlay(); }}
+            disabled={!player.currentSource}
+            class={cn(
+              "inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90",
+              !player.currentSource && "pointer-events-none opacity-50",
+            )}
+            title={player.isPlaying ? "Pause" : "Play"}
+            aria-label={player.isPlaying ? "Pause" : "Play"}
+          >
+            {#if player.isPlaying}
+              <Pause size={17} strokeWidth={2.25} />
+            {:else}
+              <Play size={17} strokeWidth={2.25} />
+            {/if}
+          </button>
+          <button
+            type="button"
+            onclick={() => { void player.playNextTrack(); }}
+            disabled={!player.canPlayNextTrack}
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+            title="Next track"
+            aria-label="Next track"
+          >
+            <SkipForward size={15} strokeWidth={2.25} />
+          </button>
+          <button
+            type="button"
+            onclick={() => player.toggleShuffle()}
+            disabled={player.queue.length < 2}
+            class={cn(
+              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+              player.shuffleEnabled && "border-primary bg-primary/15 text-primary",
+            )}
+            title={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
+            aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
+            aria-pressed={player.shuffleEnabled}
+          >
+            <Shuffle size={15} strokeWidth={2.25} />
+          </button>
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
-            <div
-              class="flex items-center gap-2 text-[12px] text-muted-foreground"
-              data-music-volume-control="true"
-              onwheel={(event) => player.handleVolumeWheel(event)}
+          <div
+            class="flex items-center gap-2 text-[12px] text-muted-foreground"
+            data-music-volume-control="true"
+            onwheel={(event) => player.handleVolumeWheel(event)}
+          >
+            <button
+              type="button"
+              onclick={() => { void player.toggleMute(); }}
+              class={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                player.muted && "text-muted-foreground opacity-70",
+              )}
+              title={player.muted ? "Unmute" : "Mute"}
+              aria-label={player.muted ? "Unmute" : "Mute"}
+              aria-pressed={player.muted}
             >
-              <button
-                type="button"
-                onclick={() => { void player.toggleMute(); }}
-                class={cn(
-                  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                  player.muted && "text-muted-foreground opacity-70",
-                )}
-                title={player.muted ? "Unmute" : "Mute"}
-                aria-label={player.muted ? "Unmute" : "Mute"}
-                aria-pressed={player.muted}
-              >
-                {#if player.muted}
-                  <VolumeX size={15} strokeWidth={2.25} />
-                {:else}
-                  <Volume2
-                    size={15}
-                    strokeWidth={2.25}
-                    class={player.volumeBoosted ? "text-warning" : undefined}
-                  />
-                {/if}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max={volumeMax}
-                step="0.01"
-                value={Math.min(player.snapshot.volume, volumeMax)}
-                class={cn("block w-28", player.volumeBoosted ? "accent-warning" : "accent-primary")}
-                aria-label="Volume"
-                oninput={(event) => { void player.setVolume(Number(event.currentTarget.value)); }}
-              />
-              <span
-                class={cn(
-                  "min-w-10 text-right tabular-nums",
-                  player.muted && "line-through opacity-60",
-                  player.volumeBoosted && !player.muted && "text-warning",
-                )}
-              >
-                {player.volumePercentLabel}
-              </span>
-            </div>
+              {#if player.muted}
+                <VolumeX size={15} strokeWidth={2.25} />
+              {:else}
+                <Volume2
+                  size={15}
+                  strokeWidth={2.25}
+                  class={player.volumeBoosted ? "text-warning" : undefined}
+                />
+              {/if}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max={volumeMax}
+              step="0.01"
+              value={Math.min(player.snapshot.volume, volumeMax)}
+              class={cn("block w-28", player.volumeBoosted ? "accent-warning" : "accent-primary")}
+              aria-label="Volume"
+              oninput={(event) => { void player.setVolume(Number(event.currentTarget.value)); }}
+            />
+            <span
+              class={cn(
+                "min-w-10 text-right tabular-nums",
+                player.muted && "line-through opacity-60",
+                player.volumeBoosted && !player.muted && "text-warning",
+              )}
+            >
+              {player.volumePercentLabel}
+            </span>
+          </div>
 
-            <div bind:this={speedMenuRoot} class="relative">
-              <button
-                type="button"
-                onclick={openSpeedMenu}
-                class="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                aria-haspopup="menu"
-                aria-expanded={speedMenuOpen}
+          <div bind:this={speedMenuRoot} class="relative">
+            <button
+              type="button"
+              onclick={openSpeedMenu}
+              class="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              aria-haspopup="menu"
+              aria-expanded={speedMenuOpen}
+            >
+              <Gauge size={15} strokeWidth={2.25} />
+              {player.speedLabel}
+            </button>
+            {#if speedMenuOpen}
+              <div
+                class="absolute bottom-full right-0 z-30 mb-2 w-36 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+                style="max-height: min(14rem, calc(100vh - 2rem));"
               >
-                <Gauge size={15} strokeWidth={2.25} />
-                {player.speedLabel}
-              </button>
-              {#if speedMenuOpen}
-                <div
-                  class="absolute bottom-full right-0 z-30 mb-2 w-36 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
-                  style="max-height: min(14rem, calc(100vh - 2rem));"
-                >
-                  {#if !customSpeedOpen}
-                    {#each SPEED_PRESETS as preset}
-                      <button
-                        type="button"
-                        onclick={() => { void applySpeed(preset); }}
-                        class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[12px] hover:bg-accent hover:text-accent-foreground"
-                      >
-                        <span>{preset}x</span>
-                        {#if Math.abs(player.snapshot.rate - preset) < 0.001}
-                          <Check size={14} strokeWidth={2.25} />
-                        {/if}
-                      </button>
-                    {/each}
+                {#if !customSpeedOpen}
+                  {#each SPEED_PRESETS as preset}
                     <button
                       type="button"
-                      onclick={openCustomSpeed}
+                      onclick={() => { void applySpeed(preset); }}
                       class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[12px] hover:bg-accent hover:text-accent-foreground"
                     >
-                      <span>Custom</span>
-                      {#if !activeSpeedIsPreset}
+                      <span>{preset}x</span>
+                      {#if Math.abs(player.snapshot.rate - preset) < 0.001}
                         <Check size={14} strokeWidth={2.25} />
                       {/if}
                     </button>
-                  {:else}
-                    <form class="flex items-center gap-2 p-1" onsubmit={(event) => { event.preventDefault(); void applyCustomSpeed(); }}>
-                      <input
-                        bind:value={customRateDraft}
-                        type="number"
-                        min="0.25"
-                        max="2"
-                        step="0.05"
-                        class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[12px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                        aria-label="Custom playback speed"
-                      />
-                      <button
-                        type="submit"
-                        class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-                        aria-label="Apply custom speed"
-                      >
-                        <Check size={14} strokeWidth={2.25} />
-                      </button>
-                    </form>
-                  {/if}
-                </div>
-              {/if}
-            </div>
+                  {/each}
+                  <button
+                    type="button"
+                    onclick={openCustomSpeed}
+                    class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[12px] hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <span>Custom</span>
+                    {#if !activeSpeedIsPreset}
+                      <Check size={14} strokeWidth={2.25} />
+                    {/if}
+                  </button>
+                {:else}
+                  <form class="flex items-center gap-2 p-1" onsubmit={(event) => { event.preventDefault(); void applyCustomSpeed(); }}>
+                    <input
+                      bind:value={customRateDraft}
+                      type="number"
+                      min="0.25"
+                      max="2"
+                      step="0.05"
+                      class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[12px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      aria-label="Custom playback speed"
+                    />
+                    <button
+                      type="submit"
+                      class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+                      aria-label="Apply custom speed"
+                    >
+                      <Check size={14} strokeWidth={2.25} />
+                    </button>
+                  </form>
+                {/if}
+              </div>
+            {/if}
+          </div>
+          <button
+            type="button"
+            onclick={() => { queueVisible = !queueVisible; }}
+            class="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            aria-controls="music-queue"
+            aria-expanded={queueVisible}
+          >
+            <ListMusic size={15} strokeWidth={2.25} />
+            {queueVisible ? "Hide queue" : "Show queue"}
+          </button>
         </div>
       </div>
     </div>
