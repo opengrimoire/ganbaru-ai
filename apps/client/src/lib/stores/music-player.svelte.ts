@@ -852,8 +852,7 @@ class MusicPlayerStore {
 
   private pauseLocalMediaElement(): void {
     if (!this.localMediaElement) return;
-    this.localPauseSilenced = true;
-    this.applyLocalVolume();
+    this.silenceLocalMediaElement(this.localMediaElement);
     this.localMediaElement.pause();
     this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "paused");
     this.updateMediaSession();
@@ -865,8 +864,7 @@ class MusicPlayerStore {
       return;
     }
     this.ignoreNextLocalPause = true;
-    this.localPauseSilenced = true;
-    this.applyLocalVolume();
+    this.silenceLocalMediaElement(this.localMediaElement);
     this.localMediaElement.pause();
     this.seekMediaElement(this.localMediaElement, 0);
     this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "idle");
@@ -943,8 +941,7 @@ class MusicPlayerStore {
   private resetLocalMediaElement(): void {
     if (this.localMediaElement) {
       this.ignoreNextLocalPause = true;
-      this.localPauseSilenced = true;
-      this.applyLocalVolume();
+      this.silenceLocalMediaElement(this.localMediaElement);
       this.localMediaElement.pause();
       this.localMediaElement.removeAttribute("src");
       this.localMediaElement.load();
@@ -1097,10 +1094,24 @@ class MusicPlayerStore {
     const element = this.localMediaElement;
     if (!element) return;
     const volume = this.localPauseSilenced ? 0 : this.effectiveVolume();
-    element.volume = volume > 1 ? 1 : volume;
     const nodes = this.ensureLocalAudioNodes(element);
     if (nodes) {
-      nodes.gain.gain.value = volume > 1 ? volume : 1;
+      element.muted = volume === 0;
+      element.volume = 1;
+      nodes.gain.gain.value = volume;
+      return;
+    }
+    element.muted = volume === 0;
+    element.volume = volume > 1 ? 1 : volume;
+  }
+
+  private silenceLocalMediaElement(element: HTMLMediaElement): void {
+    this.localPauseSilenced = true;
+    element.muted = true;
+    element.volume = 0;
+    const nodes = this.audioNodes.get(element);
+    if (nodes) {
+      nodes.gain.gain.value = 0;
     }
   }
 
