@@ -184,11 +184,11 @@
     {/if}
   </div>
 
-  <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] max-[860px]:grid-cols-1">
-    <div class="flex min-h-0 flex-col">
+  <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] grid-rows-[minmax(0,1fr)_auto] max-[860px]:grid-cols-1 max-[860px]:grid-rows-[minmax(0,1fr)_minmax(7rem,35%)_auto]">
+    <div class="min-h-0">
       <div
         bind:this={mediaSurface}
-        class="relative min-h-48 flex-1 cursor-pointer overflow-hidden bg-black max-[520px]:min-h-36"
+        class="relative h-full min-h-48 cursor-pointer overflow-hidden bg-black max-[520px]:min-h-36"
         role="button"
         tabindex="-1"
         aria-label={player.isPlaying ? "Pause" : "Play"}
@@ -215,27 +215,71 @@
           </div>
         {/if}
       </div>
+    </div>
 
-      <div class="border-t border-border bg-card px-4 py-2 max-[520px]:px-3">
-        {#key player.currentSource?.identity ?? "empty"}
-          <div class="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
-            <span class="w-12 shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
-            <input
-              type="range"
-              min="0"
-              max={player.progressMax}
-              value={player.progressValue}
-              disabled={!player.currentSource}
-              class="h-2 min-w-0 flex-1 accent-primary disabled:opacity-50"
-              aria-label="Seek"
-              oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
-            />
-            <span class="w-12 shrink-0 text-right">{formatPlaybackTime(player.snapshot.durationMs)}</span>
+    <aside class="min-h-0 border-l border-border bg-sidebar max-[860px]:border-l-0 max-[860px]:border-t">
+      <div class="flex h-full min-h-0 flex-col">
+        <div class="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <div class="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+            <ListMusic size={15} strokeWidth={2.25} />
+            Queue
           </div>
-        {/key}
+          {#if player.queue.length > 0}
+            <div class="text-[11px] text-muted-foreground">{player.queue.length} tracks</div>
+          {/if}
+        </div>
 
-        <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
+        {#if player.folderScanTruncated}
+          <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] text-warning">
+            Showing the first 5000 media files.
+          </div>
+        {/if}
+
+        <div class="music-queue-scroll min-h-0 flex-1 overflow-auto p-3" data-music-scrollable="true">
+          {#if player.queue.length === 0}
+            <div class="rounded-md border border-dashed border-border p-3 text-[12px] text-muted-foreground">
+              Add a source or pick a folder to start a queue.
+            </div>
+          {:else}
+            <div class="flex flex-col">
+              {#each player.queue as item, index}
+                <button
+                  type="button"
+                  onclick={() => { void player.playQueueItem(index); }}
+                  class={cn(
+                    "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
+                    player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  <span class="min-w-0 truncate">{item.title}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </div>
+    </aside>
+
+    <div class="col-span-2 border-t border-border bg-card px-4 py-2 max-[860px]:col-span-1 max-[520px]:px-3">
+      {#key player.currentSource?.identity ?? "empty"}
+        <div class="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+          <span class="w-12 shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
+          <input
+            type="range"
+            min="0"
+            max={player.progressMax}
+            value={player.progressValue}
+            disabled={!player.currentSource}
+            class="h-2 min-w-0 flex-1 accent-primary disabled:opacity-50"
+            aria-label="Seek"
+            oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
+          />
+          <span class="w-12 shrink-0 text-right">{formatPlaybackTime(player.snapshot.durationMs)}</span>
+        </div>
+      {/key}
+
+      <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
             <button
               type="button"
               onclick={() => { void player.playPreviousTrack(); }}
@@ -287,9 +331,9 @@
             >
               <Shuffle size={15} strokeWidth={2.25} />
             </button>
-          </div>
+        </div>
 
-          <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
             <div
               class="flex items-center gap-2 text-[12px] text-muted-foreground"
               data-music-volume-control="true"
@@ -399,53 +443,9 @@
                 </div>
               {/if}
             </div>
-          </div>
         </div>
       </div>
     </div>
-
-    <aside class="min-h-0 border-l border-border bg-sidebar max-[860px]:border-l-0 max-[860px]:border-t">
-      <div class="flex h-full min-h-0 flex-col">
-        <div class="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <div class="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
-            <ListMusic size={15} strokeWidth={2.25} />
-            Queue
-          </div>
-          {#if player.queue.length > 0}
-            <div class="text-[11px] text-muted-foreground">{player.queue.length} tracks</div>
-          {/if}
-        </div>
-
-        {#if player.folderScanTruncated}
-          <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] text-warning">
-            Showing the first 5000 media files.
-          </div>
-        {/if}
-
-        <div class="music-queue-scroll min-h-0 flex-1 overflow-auto p-3" data-music-scrollable="true">
-          {#if player.queue.length === 0}
-            <div class="rounded-md border border-dashed border-border p-3 text-[12px] text-muted-foreground">
-              Add a source or pick a folder to start a queue.
-            </div>
-          {:else}
-            <div class="flex flex-col">
-              {#each player.queue as item, index}
-                <button
-                  type="button"
-                  onclick={() => { void player.playQueueItem(index); }}
-                  class={cn(
-                    "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
-                    player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
-                  )}
-                >
-                  <span class="min-w-0 truncate">{item.title}</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-    </aside>
   </div>
 </section>
 
