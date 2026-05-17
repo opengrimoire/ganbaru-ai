@@ -305,7 +305,7 @@
             type="button"
             onclick={() => { void player.playPreviousTrack(); }}
             disabled={!player.canPlayPreviousTrack}
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
             title="Last played track"
             aria-label="Last played track"
           >
@@ -315,10 +315,7 @@
             type="button"
             onclick={() => { void player.togglePlay(); }}
             disabled={!player.currentSource}
-            class={cn(
-              "inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90",
-              !player.currentSource && "pointer-events-none opacity-50",
-            )}
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
             title={player.isPlaying ? "Pause" : "Play"}
             aria-label={player.isPlaying ? "Pause" : "Play"}
           >
@@ -332,7 +329,7 @@
             type="button"
             onclick={() => { void player.playNextTrack(); }}
             disabled={!player.canPlayNextTrack}
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
             title="Next track"
             aria-label="Next track"
           >
@@ -343,8 +340,8 @@
             onclick={() => player.toggleShuffle()}
             disabled={player.queue.length < 2}
             class={cn(
-              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
-              player.shuffleEnabled && "border-primary bg-primary/15 text-primary",
+              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
+              !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
             title={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
             aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
