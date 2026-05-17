@@ -9,7 +9,11 @@ import {
   initialQueueSelection,
   isSpeedPreset,
   isVolumeBoosted,
+  localMediaSeekTargetMs,
   nextShuffleIndex,
+  normalizeLocalMediaDurationMs,
+  normalizeLocalMediaPositionMs,
+  normalizeMediaTimelineStartMs,
   previousQueueSelection,
   shouldPersistPlaybackState,
   shouldRouteLocalMediaThroughWebAudio,
@@ -101,6 +105,17 @@ describe("clamp helpers", () => {
     expect(shouldRouteLocalMediaThroughWebAudio(1, false)).toBe(false);
     expect(shouldRouteLocalMediaThroughWebAudio(1.01, false)).toBe(true);
     expect(shouldRouteLocalMediaThroughWebAudio(0.8, true)).toBe(true);
+  });
+
+  it("normalizes local media timelines with a non-zero playable start", () => {
+    const timelineStartMs = normalizeMediaTimelineStartMs(62_200);
+
+    expect(timelineStartMs).toBe(62_200);
+    expect(normalizeLocalMediaPositionMs(62_200, timelineStartMs)).toBe(0);
+    expect(normalizeLocalMediaPositionMs(64_000, timelineStartMs)).toBe(1_800);
+    expect(normalizeLocalMediaDurationMs(128_000, timelineStartMs)).toBe(65_800);
+    expect(localMediaSeekTargetMs(0, timelineStartMs)).toBe(62_200);
+    expect(localMediaSeekTargetMs(10_000, timelineStartMs)).toBe(72_200);
   });
 
   it("formats preset and custom speed labels", () => {

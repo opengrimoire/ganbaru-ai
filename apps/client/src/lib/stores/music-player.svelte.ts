@@ -31,7 +31,11 @@ import {
   formatVolumePercent,
   initialQueueSelection,
   isVolumeBoosted,
+  localMediaSeekTargetMs,
   nextShuffleIndex,
+  normalizeLocalMediaDurationMs,
+  normalizeLocalMediaPositionMs,
+  normalizeMediaTimelineStartMs,
   stableStatusDuringYouTubeBuffering,
   shouldPersistPlaybackState,
   shouldRouteLocalMediaThroughWebAudio,
@@ -259,6 +263,8 @@ class MusicPlayerStore {
   surfaceElement = $state<HTMLElement | null>(null);
 
   private pendingLocalResumeMs = 0;
+  private pendingLocalPersistedDurationMs: number | null = null;
+  private localMediaTimelineStartMs = 0;
   private ignoreNextLocalPause = false;
   private loadGeneration = 0;
   private lastPersisted: PersistedPlaybackState | null = null;
@@ -747,12 +753,12 @@ class MusicPlayerStore {
   handleLocalLoadedMetadata(event: Event): void {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
-    if (this.pendingLocalResumeMs > 0) {
-      const boundedResumeMs = element.duration > 0
-        ? Math.min(this.pendingLocalResumeMs, Math.round(element.duration * 1000))
-        : this.pendingLocalResumeMs;
-      this.pendingLocalResumeMs = 0;
-      this.seekMediaElement(element, boundedResumeMs);
+    this.updateLocalMediaTimeline(element);
+    const resumeMs = this.pendingLocalResumePositionMs(element);
+    this.pendingLocalResumeMs = 0;
+    this.pendingLocalPersistedDurationMs = null;
+    if (resumeMs > 0 || this.localMediaTimelineStartMs > 0) {
+      this.seekMediaElement(element, resumeMs);
     }
     this.snapshot = this.localSnapshotFromElement(
       element,
@@ -767,6 +773,8 @@ class MusicPlayerStore {
   handleLocalLoadedData(event: Event): void {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
+    this.updateLocalMediaTimeline(element);
+    this.alignLocalMediaToPlayableStart(element);
     this.localVideoReady = true;
   }
 
@@ -859,6 +867,8 @@ class MusicPlayerStore {
       artworkUrl ??= await registerEmbeddedArtwork(source.path).catch(() => null);
       if (generation !== this.loadGeneration) return;
       this.pendingLocalResumeMs = persisted?.positionMs ?? source.startMs ?? 0;
+      this.pendingLocalPersistedDurationMs = persisted?.durationMs ?? null;
+      this.localMediaTimelineStartMs = 0;
       this.localHasVideo = useVideoElement;
       this.localVideoReady = !useVideoElement;
       this.localMediaSrc = mediaUrl;
@@ -1048,6 +1058,7 @@ class MusicPlayerStore {
     try {
       this.restoreLocalMediaElementVolume(this.localMediaElement);
       this.localMediaElement.playbackRate = this.snapshot.rate;
+      this.alignLocalMediaToPlayableStart(this.localMediaElement);
       await this.resumeAudioContext(this.localMediaElement);
       await this.localMediaElement.play();
       this.restoreLocalMediaElementVolume(this.localMediaElement);
@@ -1094,7 +1105,7 @@ class MusicPlayerStore {
 
   private seekMediaElement(element: HTMLMediaElement, positionMs: number): void {
     try {
-      element.currentTime = Math.max(0, positionMs) / 1000;
+      element.currentTime = localMediaSeekTargetMs(positionMs, this.localMediaTimelineStartMs) / 1000;
     } catch {
       this.pendingLocalResumeMs = positionMs;
     }
@@ -1118,15 +1129,67 @@ class MusicPlayerStore {
   }
 
   private mediaPositionMs(element: HTMLMediaElement): number {
-    return Number.isFinite(element.currentTime) && element.currentTime > 0
-      ? Math.round(element.currentTime * 1000)
-      : 0;
+    return normalizeLocalMediaPositionMs(element.currentTime * 1000, this.localMediaTimelineStartMs);
   }
 
   private mediaDurationMs(element: HTMLMediaElement): number | null {
-    return Number.isFinite(element.duration) && element.duration > 0
+    const rawDurationMs = Number.isFinite(element.duration) && element.duration > 0
       ? Math.round(element.duration * 1000)
       : null;
+    return normalizeLocalMediaDurationMs(
+      rawDurationMs,
+      this.localMediaTimelineStartMs,
+      this.mediaSeekableEndMs(element),
+    );
+  }
+
+  private updateLocalMediaTimeline(element: HTMLMediaElement): void {
+    this.localMediaTimelineStartMs = normalizeMediaTimelineStartMs(this.mediaSeekableStartMs(element));
+  }
+
+  private alignLocalMediaToPlayableStart(element: HTMLMediaElement): void {
+    this.updateLocalMediaTimeline(element);
+    if (this.localMediaTimelineStartMs <= 0 || this.mediaPositionMs(element) > 0) return;
+    this.seekMediaElement(element, 0);
+  }
+
+  private pendingLocalResumePositionMs(element: HTMLMediaElement): number {
+    let positionMs = this.pendingLocalResumeMs;
+    const rawDurationMs = Number.isFinite(element.duration) && element.duration > 0
+      ? Math.round(element.duration * 1000)
+      : null;
+    if (
+      this.localMediaTimelineStartMs > 0
+      && rawDurationMs !== null
+      && this.pendingLocalPersistedDurationMs !== null
+      && Math.abs(this.pendingLocalPersistedDurationMs - rawDurationMs) <= 1_000
+    ) {
+      positionMs = Math.max(0, positionMs - this.localMediaTimelineStartMs);
+    }
+    const durationMs = this.mediaDurationMs(element);
+    return durationMs === null ? positionMs : Math.min(positionMs, durationMs);
+  }
+
+  private mediaSeekableStartMs(element: HTMLMediaElement): number | null {
+    const range = element.seekable;
+    if (range.length === 0) return null;
+    try {
+      const start = range.start(0);
+      return Number.isFinite(start) ? Math.round(start * 1000) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private mediaSeekableEndMs(element: HTMLMediaElement): number | null {
+    const range = element.seekable;
+    if (range.length === 0) return null;
+    try {
+      const end = range.end(range.length - 1);
+      return Number.isFinite(end) ? Math.round(end * 1000) : null;
+    } catch {
+      return null;
+    }
   }
 
   private localMediaErrorMessage(element: HTMLMediaElement): string {
@@ -1174,6 +1237,8 @@ class MusicPlayerStore {
     this.localHasVideo = false;
     this.localVideoReady = false;
     this.pendingLocalResumeMs = 0;
+    this.pendingLocalPersistedDurationMs = null;
+    this.localMediaTimelineStartMs = 0;
   }
 
   private async ensureYouTubeHostFrame(
