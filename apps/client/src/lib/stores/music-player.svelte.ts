@@ -98,6 +98,7 @@ interface WindowWithWebkitAudioContext extends Window {
 
 const SETTINGS_KEY = "ganbaruai-music-player";
 const progressMaxFallback = 1;
+const YOUTUBE_OPTIMISTIC_PAUSE_MS = 1_500;
 const audioFileExtensions = new Set([
   "aac",
   "aif",
@@ -222,6 +223,8 @@ class MusicPlayerStore {
   private unlisteners: UnlistenFn[] = [];
   private audioNodes = new WeakMap<HTMLMediaElement, LocalAudioNodes>();
   private lastTraySignature = "";
+  private localPauseSilenced = false;
+  private youtubeOptimisticPauseUntil = 0;
 
   get isBusy(): boolean {
     return this.snapshot.status === "loading";
@@ -443,7 +446,12 @@ class MusicPlayerStore {
       this.updateMusicTray();
       return;
     }
-    this.postYouTubeCommand({ action: "play" });
+    this.youtubeOptimisticPauseUntil = 0;
+    this.postYouTubeCommand({ action: "play", volume: this.effectiveYouTubeVolume() });
+    this.snapshot = { ...this.snapshot, status: "playing" };
+    this.updateMediaSession();
+    void this.persistCurrentPlaybackState();
+    this.updateMusicTray();
   }
 
   async pausePlayback(): Promise<void> {
@@ -451,10 +459,12 @@ class MusicPlayerStore {
     if (this.currentSource.kind === "local-file") {
       this.pauseLocalMediaElement();
     } else {
-      this.postYouTubeCommand({ action: "pause" });
+      this.youtubeOptimisticPauseUntil = Date.now() + YOUTUBE_OPTIMISTIC_PAUSE_MS;
+      this.postYouTubeCommand({ action: "pause", volume: 0 });
       this.snapshot = { ...this.snapshot, status: "paused" };
+      this.updateMediaSession();
     }
-    await this.persistCurrentPlaybackState();
+    void this.persistCurrentPlaybackState();
     this.updateMusicTray();
   }
 
@@ -825,6 +835,7 @@ class MusicPlayerStore {
       return;
     }
     try {
+      this.localPauseSilenced = false;
       this.applyLocalVolume();
       this.localMediaElement.playbackRate = this.snapshot.rate;
       await this.resumeAudioContext(this.localMediaElement);
@@ -841,6 +852,8 @@ class MusicPlayerStore {
 
   private pauseLocalMediaElement(): void {
     if (!this.localMediaElement) return;
+    this.localPauseSilenced = true;
+    this.applyLocalVolume();
     this.localMediaElement.pause();
     this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "paused");
     this.updateMediaSession();
@@ -852,6 +865,8 @@ class MusicPlayerStore {
       return;
     }
     this.ignoreNextLocalPause = true;
+    this.localPauseSilenced = true;
+    this.applyLocalVolume();
     this.localMediaElement.pause();
     this.seekMediaElement(this.localMediaElement, 0);
     this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "idle");
@@ -928,10 +943,13 @@ class MusicPlayerStore {
   private resetLocalMediaElement(): void {
     if (this.localMediaElement) {
       this.ignoreNextLocalPause = true;
+      this.localPauseSilenced = true;
+      this.applyLocalVolume();
       this.localMediaElement.pause();
       this.localMediaElement.removeAttribute("src");
       this.localMediaElement.load();
     }
+    this.localPauseSilenced = false;
     this.localMediaSrc = null;
     this.localHasVideo = false;
     this.pendingLocalResumeMs = 0;
@@ -968,6 +986,12 @@ class MusicPlayerStore {
       void this.persistCurrentPlaybackState();
       this.updateMusicTray();
       return;
+    }
+    if (message.status === "playing" && Date.now() < this.youtubeOptimisticPauseUntil) {
+      return;
+    }
+    if (message.status !== "playing") {
+      this.youtubeOptimisticPauseUntil = 0;
     }
     this.snapshot = {
       ...this.snapshot,
@@ -1072,7 +1096,7 @@ class MusicPlayerStore {
   private applyLocalVolume(): void {
     const element = this.localMediaElement;
     if (!element) return;
-    const volume = this.effectiveVolume();
+    const volume = this.localPauseSilenced ? 0 : this.effectiveVolume();
     element.volume = volume > 1 ? 1 : volume;
     const nodes = this.ensureLocalAudioNodes(element);
     if (nodes) {

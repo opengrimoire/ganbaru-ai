@@ -1443,8 +1443,22 @@ fn youtube_host_html() -> &'static str {
         snapshot();
         return;
       }
-      if (data.action === "play") player.playVideo();
-      if (data.action === "pause") player.pauseVideo();
+      if (data.action === "play") {
+        if (typeof data.volume === "number") {
+          player.setVolume(Math.max(0, Math.min(100, Math.round(data.volume * 100))));
+        }
+        player.playVideo();
+        snapshot("playing");
+        return;
+      }
+      if (data.action === "pause") {
+        if (typeof data.volume === "number") {
+          player.setVolume(Math.max(0, Math.min(100, Math.round(data.volume * 100))));
+        }
+        player.pauseVideo();
+        snapshot("paused");
+        return;
+      }
       if (data.action === "stop") player.stopVideo();
       if (data.action === "seek") player.seekTo(data.positionMs / 1000, true);
       if (data.action === "volume") player.setVolume(Math.max(0, Math.min(100, Math.round(data.volume * 100))));
