@@ -407,11 +407,13 @@ A local-first media player licensed separately under LGPL 2.1 and integrated dir
 
 Desktop local playback currently uses the browser media element inside the Tauri WebView, with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types. This keeps local audio and video usable without requiring GStreamer development packages in every developer build.
 
-This path is a compatibility fallback, not the final codec story. It can play the formats and codecs supported by the user's platform WebView.
+This path is a compatibility fallback, not the final codec story or the final latency story. It does not currently decode through FFmpeg, libav, GStreamer, or Symphonia. It can play only the formats and codecs supported by the user's platform WebView, and it carries the memory overhead of the WebView media element plus the loopback host and optional Web Audio graph.
+
+Local volume uses the media element directly only when Web Audio is unavailable. When Web Audio is available, local playback is routed through a `GainNode`; normal volume, boosted volume, mute, and pause silence all update that gain synchronously. This avoids waiting on slower WebView pause completion for audible silence, but it is still a fallback around a browser media pipeline rather than a native transport engine.
 
 ### Native media backend target
 
-The production local backend should be Rust-controlled through `plugins/media-player`, with GStreamer as the primary playback engine and an LGPL-compatible FFmpeg/libav path for broader format coverage.
+The production local backend should be Rust-controlled through `plugins/media-player`, with GStreamer as the primary playback engine and an LGPL-compatible FFmpeg/libav path for broader format coverage. That backend should own decoding, transport controls, buffering, metadata, artwork extraction, audio device output, and native video surfaces instead of routing local playback through WebView media elements. The goals are VLC-class pause and seek latency, lower steady-state memory overhead for audio-only playback, and predictable codec support across platforms.
 
 ### `ffmpeg-next`
 
