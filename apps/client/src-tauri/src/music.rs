@@ -173,14 +173,12 @@ pub async fn music_pick_media_folder(
     app: tauri::AppHandle,
 ) -> Result<Option<MediaFolderSelection>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(folder) = app
-            .dialog()
-            .file()
-            .set_title("Select music folder")
-            .blocking_pick_folder()
-            .map(dialog_path)
-            .transpose()?
-        else {
+        let mut picker = app.dialog().file().set_title("Select music folder");
+        if let Some(directory) = music_folder_start_directory(&app) {
+            picker = picker.set_directory(directory);
+        }
+
+        let Some(folder) = picker.blocking_pick_folder().map(dialog_path).transpose()? else {
             return Ok(None);
         };
 
@@ -188,6 +186,14 @@ pub async fn music_pick_media_folder(
     })
     .await
     .map_err(|e| format!("media folder picker failed: {e}"))?
+}
+
+fn music_folder_start_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
+    existing_music_start_directory(app.path().audio_dir().ok())
+}
+
+fn existing_music_start_directory(candidate: Option<PathBuf>) -> Option<PathBuf> {
+    candidate.filter(|path| path.is_dir())
 }
 
 #[tauri::command]
@@ -1780,6 +1786,24 @@ mod tests {
             media_title_from_path(Path::new("/music/focus.flac")),
             "focus"
         );
+    }
+
+    #[test]
+    fn music_folder_start_directory_uses_only_existing_directories() {
+        let root = unique_temp_dir("ganbaruai-music-start-dir");
+        let music_dir = root.join("localized-audio");
+        let file_path = root.join("not-a-directory");
+        fs::create_dir_all(&music_dir).unwrap();
+        fs::write(&file_path, []).unwrap();
+
+        assert_eq!(
+            existing_music_start_directory(Some(music_dir.clone())),
+            Some(music_dir)
+        );
+        assert_eq!(existing_music_start_directory(Some(file_path)), None);
+        assert_eq!(existing_music_start_directory(None), None);
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

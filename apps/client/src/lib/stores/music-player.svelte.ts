@@ -467,6 +467,7 @@ class MusicPlayerStore {
       : clampVolume(this.snapshot.volume);
     this.destroyYouTubePlayer();
     await this.resetLocalPlayback();
+    this.currentArtworkUrl = null;
     if (!options.preserveQueue) {
       this.queue = [source];
       this.shuffleOrder = [];
