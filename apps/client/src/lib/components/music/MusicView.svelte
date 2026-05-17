@@ -125,8 +125,8 @@
 
 <svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
 
-<section class="flex h-full min-h-0 flex-col bg-background text-foreground" onwheel={(event) => player.handleVolumeWheel(event)}>
-  <div class="flex h-(--cal-header-row-h) shrink-0 items-center border-b border-border px-3">
+<section class="flex h-full min-h-0 flex-col text-foreground" style="background-color: var(--cal-bg);" onwheel={(event) => player.handleVolumeWheel(event)}>
+  <div class="flex h-(--cal-header-row-h) shrink-0 items-center px-3">
     <form
       class="flex min-w-0 flex-1 items-center gap-2"
       onsubmit={(event) => { event.preventDefault(); void player.loadFromInput(); }}
@@ -188,7 +188,8 @@
     <div class="min-h-0">
       <div
         bind:this={mediaSurface}
-        class="relative h-full min-h-48 cursor-pointer overflow-hidden bg-black max-[520px]:min-h-36"
+        class="relative h-full min-h-48 cursor-pointer overflow-hidden max-[520px]:min-h-36"
+        style="background-color: var(--cal-bg);"
         role="button"
         tabindex="-1"
         aria-label={player.isPlaying ? "Pause" : "Play"}
@@ -196,7 +197,7 @@
         onkeydown={handleMediaSurfaceKeydown}
       >
         {#if player.currentSource?.kind === "local-file" && (!player.localHasVideo || player.snapshot.error)}
-          <div class="absolute inset-0 flex items-center justify-center bg-black text-white/70">
+          <div class="absolute inset-0 flex items-center justify-center text-muted-foreground" style="background-color: var(--cal-bg);">
             {#if player.currentArtworkUrl && !player.snapshot.error}
               <img
                 src={player.currentArtworkUrl}
@@ -217,9 +218,9 @@
       </div>
     </div>
 
-    <aside class="min-h-0 border-l border-border bg-sidebar max-[860px]:border-l-0 max-[860px]:border-t">
+    <aside class="min-h-0" style="background-color: var(--cal-bg);">
       <div class="flex h-full min-h-0 flex-col">
-        <div class="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <div class="flex items-center justify-between gap-2 px-4 py-3">
           <div class="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
             <ListMusic size={15} strokeWidth={2.25} />
             Queue
@@ -237,7 +238,7 @@
 
         <div class="music-queue-scroll min-h-0 flex-1 overflow-auto p-3" data-music-scrollable="true">
           {#if player.queue.length === 0}
-            <div class="rounded-md border border-dashed border-border p-3 text-[12px] text-muted-foreground">
+            <div class="p-3 text-[12px] text-muted-foreground">
               Add a source or pick a folder to start a queue.
             </div>
           {:else}
@@ -260,7 +261,7 @@
       </div>
     </aside>
 
-    <div class="col-span-2 border-t border-border bg-card px-4 py-2 max-[860px]:col-span-1 max-[520px]:px-3">
+    <div class="col-span-2 px-4 py-2 max-[860px]:col-span-1 max-[520px]:px-3" style="background-color: var(--cal-bg);">
       {#key player.currentSource?.identity ?? "empty"}
         <div class="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
           <span class="w-12 shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
@@ -451,12 +452,13 @@
 
 <style>
   .music-queue-scroll {
+    background-color: var(--cal-bg);
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--muted-foreground) 42%, transparent) transparent;
+    scrollbar-color: var(--cal-scrollbar-thumb) transparent;
   }
 
   .music-queue-scroll::-webkit-scrollbar {
-    width: 0.5rem;
+    width: 8px;
   }
 
   .music-queue-scroll::-webkit-scrollbar-track {
@@ -464,13 +466,13 @@
   }
 
   .music-queue-scroll::-webkit-scrollbar-thumb {
-    border: 0.125rem solid transparent;
+    border: 2px solid transparent;
     border-radius: 999px;
-    background-color: color-mix(in srgb, var(--muted-foreground) 42%, transparent);
+    background-color: var(--cal-scrollbar-thumb);
     background-clip: content-box;
   }
 
   .music-queue-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--muted-foreground) 62%, transparent);
+    background-color: var(--cal-scrollbar-thumb-hover);
   }
 </style>

@@ -14,8 +14,8 @@
       && (player.isYouTubeActive || (player.currentSource.kind === "local-file" && player.localHasVideo)),
   ));
   const hostStyle = $derived(surfaceRect && hasVisualSurface
-    ? `left: ${surfaceRect.left}px; top: ${surfaceRect.top}px; width: ${surfaceRect.width}px; height: ${surfaceRect.height}px;`
-    : "left: -10000px; top: -10000px; width: 1px; height: 1px;");
+    ? `left: ${surfaceRect.left}px; top: ${surfaceRect.top}px; width: ${surfaceRect.width}px; height: ${surfaceRect.height}px; background-color: var(--cal-bg);`
+    : "left: -10000px; top: -10000px; width: 1px; height: 1px; background-color: var(--cal-bg);");
 
   onMount(() => {
     player.init();
@@ -69,7 +69,7 @@
 </script>
 
 <div
-  class="pointer-events-none fixed z-20 overflow-hidden bg-black"
+  class="pointer-events-none fixed z-20 overflow-hidden"
   style={hostStyle}
   aria-hidden={!hasVisualSurface}
 >
@@ -89,7 +89,8 @@
       {#key player.localMediaSrc}
         <video
           bind:this={localMediaElement}
-          class="pointer-events-none h-full w-full bg-black object-contain transition-opacity duration-75"
+          class="pointer-events-none h-full w-full object-contain transition-opacity duration-75"
+          style="background-color: var(--cal-bg);"
           class:opacity-0={!player.localVideoReady}
           class:opacity-100={player.localVideoReady}
           src={player.localMediaSrc}
