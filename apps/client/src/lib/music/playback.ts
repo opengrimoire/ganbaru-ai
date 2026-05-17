@@ -80,7 +80,7 @@ export function stableStatusDuringYouTubeBuffering(
 }
 
 export function formatPlaybackTime(ms: number | null): string {
-  if (ms === null || !Number.isFinite(ms) || ms < 0) return "n/a";
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return "0:00";
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);

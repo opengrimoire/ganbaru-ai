@@ -263,6 +263,7 @@ class MusicPlayerStore {
   localVideoReady = $state(false);
   currentArtworkUrl = $state<string | null>(null);
   surfaceElement = $state<HTMLElement | null>(null);
+  sourceActionBusy = $state(false);
 
   private pendingLocalResumeMs = 0;
   private localMediaPlayableStartMs = 0;
@@ -301,6 +302,7 @@ class MusicPlayerStore {
   }
 
   get progressValue(): number {
+    if (this.durationMs <= 0) return 0;
     return Math.min(this.snapshot.positionMs, this.progressMax);
   }
 
@@ -325,12 +327,12 @@ class MusicPlayerStore {
   }
 
   get canPlayPreviousTrack(): boolean {
-    if (!this.currentSource || this.isBusy) return false;
+    if (!this.currentSource) return false;
     return this.queueHistory.length > 0 || this.currentQueueIndex > 0;
   }
 
   get canPlayNextTrack(): boolean {
-    if (!this.currentSource || this.isBusy) return false;
+    if (!this.currentSource) return false;
     if (this.shuffleEnabled) return this.queue.length > 1;
     const index = this.currentQueueIndex;
     return index >= 0 && index < this.queue.length - 1;
@@ -416,12 +418,18 @@ class MusicPlayerStore {
     this.parseError = result.error;
     this.playerError = null;
     if (!result.source) return;
-    await this.loadSource(result.source, { autoplay: true });
+    this.sourceActionBusy = true;
+    try {
+      await this.loadSource(result.source, { autoplay: true });
+    } finally {
+      this.sourceActionBusy = false;
+    }
   }
 
   async loadFolder(): Promise<void> {
     this.parseError = null;
     this.playerError = null;
+    this.sourceActionBusy = true;
     try {
       const folderSelection = await pickMediaFolder();
       if (!folderSelection) return;
@@ -447,6 +455,8 @@ class MusicPlayerStore {
     } catch (error) {
       this.playerError = error instanceof Error ? error.message : String(error);
       this.updateMusicTray();
+    } finally {
+      this.sourceActionBusy = false;
     }
   }
 
@@ -684,6 +694,7 @@ class MusicPlayerStore {
   }
 
   async playQueueItem(index: number): Promise<void> {
+    if (this.isBusy) return;
     const source = this.queue[index];
     if (!source) return;
     const currentIndex = this.currentQueueIndex;
@@ -700,6 +711,7 @@ class MusicPlayerStore {
   }
 
   async playNextTrack(): Promise<void> {
+    if (this.isBusy) return;
     if (this.queue.length === 0) return;
     const currentIndex = this.currentQueueIndex;
     let nextIndex: number | null = null;
@@ -728,6 +740,7 @@ class MusicPlayerStore {
   }
 
   async playPreviousTrack(): Promise<void> {
+    if (this.isBusy) return;
     if (!this.currentSource) return;
     const currentIndex = this.currentQueueIndex;
     if (this.queueHistory.length > 0) {

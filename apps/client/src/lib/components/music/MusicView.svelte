@@ -148,7 +148,7 @@
         <button
           type="button"
           onclick={() => { void player.loadFolder(); }}
-          disabled={player.isBusy}
+          disabled={player.sourceActionBusy}
           class="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
         >
           <FolderOpen size={15} strokeWidth={2.25} />
@@ -156,10 +156,10 @@
         </button>
         <button
           type="submit"
-          disabled={player.isBusy}
+          disabled={player.sourceActionBusy}
           class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
-          {#if player.isBusy}
+          {#if player.sourceActionBusy}
             <LoaderCircle class="animate-spin" size={15} strokeWidth={2.25} />
           {:else}
             <Play size={15} strokeWidth={2.25} />
@@ -237,16 +237,18 @@
           </div>
         </div>
 
-        <input
-          type="range"
-          min="0"
-          max={player.progressMax}
-          value={player.progressValue}
-          disabled={!player.currentSource}
-          class="h-2 w-full accent-primary disabled:opacity-50"
-          aria-label="Seek"
-          oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
-        />
+        {#key player.currentSource?.identity ?? "empty"}
+          <input
+            type="range"
+            min="0"
+            max={player.progressMax}
+            value={player.progressValue}
+            disabled={!player.currentSource}
+            class="h-2 w-full accent-primary disabled:opacity-50"
+            aria-label="Seek"
+            oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
+          />
+        {/key}
 
         <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-2">
@@ -263,10 +265,10 @@
             <button
               type="button"
               onclick={() => { void player.togglePlay(); }}
-              disabled={!player.currentSource || player.isBusy}
+              disabled={!player.currentSource}
               class={cn(
                 "inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90",
-                (!player.currentSource || player.isBusy) && "pointer-events-none opacity-50",
+                !player.currentSource && "pointer-events-none opacity-50",
               )}
               title={player.isPlaying ? "Pause" : "Play"}
               aria-label={player.isPlaying ? "Pause" : "Play"}

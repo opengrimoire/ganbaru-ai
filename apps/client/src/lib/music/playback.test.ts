@@ -67,7 +67,7 @@ describe("formatPlaybackTime", () => {
   it("formats minute and hour durations", () => {
     expect(formatPlaybackTime(61_000)).toBe("1:01");
     expect(formatPlaybackTime(3_661_000)).toBe("1:01:01");
-    expect(formatPlaybackTime(null)).toBe("n/a");
+    expect(formatPlaybackTime(null)).toBe("0:00");
   });
 });
 
