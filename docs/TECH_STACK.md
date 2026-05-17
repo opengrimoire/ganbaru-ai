@@ -12,7 +12,7 @@ Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v
 
 ### Rust
 
-The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, the media player engine (FFmpeg decoding via `ffmpeg-next`), and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
+The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, native local audio playback through the media player plugin, the local video loopback fallback, and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
 
 On mobile, Rust still runs as the Tauri core but OS-level features like process management, global mouse events, and desktop activity monitoring are unavailable or sandboxed. The mobile Rust layer focuses on file system access, SQLite, the Yjs persistence layer, and audio playback.
 
@@ -425,11 +425,11 @@ Rodio is the selected first native local audio playback target. Rodio provides t
 
 The native audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG Vorbis, and WAV/PCM. Opus, WMA, APE, AIFF, local video, and other unsupported formats should either fail explicitly or use a later broad native multimedia fallback. They should not silently reintroduce the hidden WebView audio element as the normal audio path.
 
-### `ffmpeg-next`
+### FFmpeg or libav fallback role
 
-Rust bindings for FFmpeg. Handles audio and video decoding, format detection, and codec support for local files when the native backend needs libav coverage beyond the GStreamer path. The FFmpeg dependency is linked at build time.
+FFmpeg or libav is a fallback candidate for broader native media support, not part of the current shipped local playback path. If it is added later, it must stay lazy and separate from the Rodio and Symphonia audio-only path so normal local music does not initialize a video-capable backend.
 
-### Symphonia fallback role
+### Symphonia decoder role
 
 A pure-Rust audio decoding library. Used through the first native audio backend when only audio playback is needed, such as Pomodoro playlists, background music, and morning alarm audio. Avoids initializing a full video-capable stack for audio-only sessions, reducing the memory footprint during typical productivity use. Broader backends can still handle video or unsupported audio formats later.
 
@@ -641,7 +641,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Sync server               | Hocuspocus                                           | Yjs server with persistence, presence, and auth hooks                              |
 | Encryption                | libsodium / `@noble/ciphers`                         | E2E encryption, server sees only ciphertext                                        |
 | Local DB                  | SQLite through Rust `sqlx` commands                  | Metadata, search, tags, pomodoro sessions, requirement diffs    |
-| Media engine (video)      | GStreamer, libVLC, or `ffmpeg-next` fallback target  | Broader native multimedia path for video or unsupported audio formats              |
+| Media engine (video)      | GStreamer, libVLC, or FFmpeg/libav fallback target   | Broader native multimedia path for video or unsupported audio formats              |
 | Media engine (audio-only) | Rodio + Symphonia target                             | Native audio playback and decoding path for low-RAM local music                    |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |
 | File watching             | `notify`                                             | Cross-platform file system events for vault reindexing |
