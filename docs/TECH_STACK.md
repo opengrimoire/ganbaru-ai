@@ -405,15 +405,15 @@ A local-first media player licensed separately under LGPL 2.1 and integrated dir
 
 ### Current local playback path
 
-Desktop local playback currently uses the browser media element inside the Tauri WebView, with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types. This keeps local audio and video usable without requiring GStreamer development packages in every developer build.
+Desktop local audio playback is Rust-controlled through `plugins/media-player` with Rodio and Symphonia. Local video still uses the browser media element inside the Tauri WebView, with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
 
-This path is a compatibility fallback, not the final codec story or the final latency story. It does not currently decode through FFmpeg, libav, GStreamer, or Symphonia. It can play only the formats and codecs supported by the user's platform WebView, and it carries the memory overhead of the WebView media element plus the loopback host and optional Web Audio graph.
+The WebView path is a compatibility fallback for local video and any future unsupported local media path, not the normal audio story. It can play only the formats and codecs supported by the user's platform WebView, and it carries the memory overhead of the WebView media element plus the loopback host and optional Web Audio graph.
 
-Local volume uses the media element directly only when Web Audio is unavailable. When Web Audio is available, local playback is routed through a `GainNode`; normal volume, boosted volume, mute, and pause silence all update that gain synchronously. This avoids waiting on slower WebView pause completion for audible silence, but it is still a fallback around a browser media pipeline rather than a native transport engine.
+Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local video fallback uses the media element directly only when Web Audio is unavailable. When Web Audio is available, local video fallback playback is routed through a `GainNode`; normal volume, boosted volume, mute, and pause silence all update that gain synchronously.
 
 ### Native media backend target
 
-The production local backend should be Rust-controlled through `plugins/media-player`. The selected first implementation target is Rodio with default features disabled and only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend owns local audio decoding, transport controls, native volume, native mute, seeking, rate changes, duration, position snapshots, and audio device output. Metadata, artwork extraction, frontend event delivery, and full Music view migration are still being wired.
+The production local backend is Rust-controlled through `plugins/media-player`. The selected first implementation target is Rodio with default features disabled and only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend owns local audio decoding, transport controls, native volume, native mute, seeking, rate changes, duration, position snapshots, and audio device output. Metadata and artwork extraction still use the existing Rust music commands.
 
 Rodio is the first target because it is a RustAudio playback crate, uses CPAL for cross-platform audio output, supports player controls such as play, pause, seek, volume, and speed, and uses Symphonia as the default decoder backend for common file types. The approved dependency shape is `rodio` with `default-features = false` and features limited to `playback`, `symphonia-flac`, `symphonia-mp3`, `symphonia-isomp4`, `symphonia-aac`, `symphonia-alac`, `symphonia-ogg`, `symphonia-vorbis`, `symphonia-wav`, and `symphonia-pcm`.
 
@@ -421,7 +421,7 @@ GStreamer, libVLC, and an LGPL-compatible FFmpeg/libav path remain fallback cand
 
 ### Rodio and Symphonia audio path
 
-Rodio is the selected first native local audio playback target. Rodio provides the playback controller and audio output path through CPAL. Symphonia provides decoding for common music containers and codecs. This path should replace the WebView audio element for normal local music playback after the frontend migration, and it is optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
+Rodio is the selected first native local audio playback target. Rodio provides the playback controller and audio output path through CPAL. Symphonia provides decoding for common music containers and codecs. This path replaces the WebView audio element for normal local music playback and is optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
 
 ### `ffmpeg-next`
 

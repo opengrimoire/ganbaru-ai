@@ -1,7 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { tick } from "svelte";
-import { loadLocalMedia, mediaPlayerErrorMessage, type LocalPlayerSnapshot } from "$lib/api/media-player";
+import {
+  getLocalSnapshot,
+  loadLocalMedia,
+  mediaPlayerErrorMessage,
+  pauseLocalMedia,
+  playLocalMedia,
+  seekLocalMedia,
+  setLocalMuted,
+  setLocalRate,
+  setLocalVolume,
+  stopLocalMedia,
+  type LocalPlayerSnapshot,
+} from "$lib/api/media-player";
 import {
   getPlaybackState,
   getYouTubeHostUrl,
@@ -220,11 +232,13 @@ class MusicPlayerStore {
   private lastPersisted: PersistedPlaybackState | null = null;
   private listenersInitialized = false;
   private youtubeSnapshotIntervalId: number | null = null;
+  private localSnapshotIntervalId: number | null = null;
   private unlisteners: UnlistenFn[] = [];
   private audioNodes = new WeakMap<HTMLMediaElement, LocalAudioNodes>();
   private lastTraySignature = "";
   private localPauseSilenced = false;
   private youtubeOptimisticPauseUntil = 0;
+  private handlingNativeLocalEnded = false;
 
   get isBusy(): boolean {
     return this.snapshot.status === "loading";
@@ -308,6 +322,10 @@ class MusicPlayerStore {
         this.postYouTubeCommand({ action: "snapshot" });
         void this.persistCurrentPlaybackState();
       }, 1_000);
+      this.localSnapshotIntervalId = window.setInterval(() => {
+        if (!this.usesNativeLocalAudio() || this.snapshot.status === "loading") return;
+        void this.refreshNativeLocalSnapshot();
+      }, 500);
     }
     this.listenToTrayEvents();
     this.updateMusicTray();
@@ -319,6 +337,10 @@ class MusicPlayerStore {
       if (this.youtubeSnapshotIntervalId !== null) {
         window.clearInterval(this.youtubeSnapshotIntervalId);
         this.youtubeSnapshotIntervalId = null;
+      }
+      if (this.localSnapshotIntervalId !== null) {
+        window.clearInterval(this.localSnapshotIntervalId);
+        this.localSnapshotIntervalId = null;
       }
     }
     for (const unlisten of this.unlisteners) {
@@ -392,7 +414,7 @@ class MusicPlayerStore {
       ? clampYouTubeVolume(this.snapshot.volume)
       : clampVolume(this.snapshot.volume);
     this.destroyYouTubePlayer();
-    this.resetLocalMediaElement();
+    await this.resetLocalPlayback();
     if (!options.preserveQueue) {
       this.queue = [source];
       this.shuffleOrder = [];
@@ -441,7 +463,11 @@ class MusicPlayerStore {
     if (!this.currentSource) return;
     this.playerError = null;
     if (this.currentSource.kind === "local-file") {
-      await this.playLocalMediaElement();
+      if (this.usesNativeLocalAudio()) {
+        await this.playNativeLocalAudio();
+      } else {
+        await this.playLocalMediaElement();
+      }
       await this.persistCurrentPlaybackState();
       this.updateMusicTray();
       return;
@@ -457,7 +483,11 @@ class MusicPlayerStore {
   async pausePlayback(): Promise<void> {
     if (!this.currentSource) return;
     if (this.currentSource.kind === "local-file") {
-      this.pauseLocalMediaElement();
+      if (this.usesNativeLocalAudio()) {
+        await this.pauseNativeLocalAudio();
+      } else {
+        this.pauseLocalMediaElement();
+      }
     } else {
       this.youtubeOptimisticPauseUntil = Date.now() + YOUTUBE_OPTIMISTIC_PAUSE_MS;
       this.postYouTubeCommand({ action: "pause", volume: 0 });
@@ -471,7 +501,11 @@ class MusicPlayerStore {
   async stopPlayback(): Promise<void> {
     if (!this.currentSource) return;
     if (this.currentSource.kind === "local-file") {
-      this.stopLocalMediaElement();
+      if (this.usesNativeLocalAudio()) {
+        await this.stopNativeLocalAudio();
+      } else {
+        this.stopLocalMediaElement();
+      }
     } else {
       this.postYouTubeCommand({ action: "stop" });
       this.snapshot = { ...this.snapshot, status: "idle", positionMs: 0 };
@@ -484,7 +518,11 @@ class MusicPlayerStore {
     if (!this.currentSource) return;
     const bounded = Math.max(0, Math.min(positionMs, this.progressMax));
     if (this.currentSource.kind === "local-file") {
-      this.seekLocalMediaElement(bounded);
+      if (this.usesNativeLocalAudio()) {
+        await this.seekNativeLocalAudio(bounded);
+      } else {
+        this.seekLocalMediaElement(bounded);
+      }
     } else {
       this.postYouTubeCommand({ action: "seek", positionMs: bounded });
       this.snapshot = { ...this.snapshot, positionMs: bounded };
@@ -501,7 +539,11 @@ class MusicPlayerStore {
     this.persistPlayerSettings();
     if (!this.currentSource) return;
     if (this.currentSource.kind === "local-file") {
-      this.applyLocalVolume();
+      if (this.usesNativeLocalAudio()) {
+        await this.applyNativeLocalVolume();
+      } else {
+        this.applyLocalVolume();
+      }
     } else {
       this.postYouTubeCommand({ action: "volume", volume: clampYouTubeVolume(volume) });
     }
@@ -514,7 +556,11 @@ class MusicPlayerStore {
     this.persistPlayerSettings();
     if (!this.currentSource) return;
     if (this.currentSource.kind === "local-file") {
-      this.applyLocalVolume();
+      if (this.usesNativeLocalAudio()) {
+        await this.applyNativeLocalMute();
+      } else {
+        this.applyLocalVolume();
+      }
     } else {
       this.postYouTubeCommand({ action: "volume", volume: this.effectiveYouTubeVolume() });
     }
@@ -552,7 +598,10 @@ class MusicPlayerStore {
     this.persistPlayerSettings();
     if (!this.currentSource) return;
     if (this.currentSource.kind === "local-file") {
-      if (this.localMediaElement) {
+      if (this.usesNativeLocalAudio()) {
+        const localSnapshot = await setLocalRate(rate);
+        this.applyLocalSnapshot(localSnapshot);
+      } else if (this.localMediaElement) {
         this.localMediaElement.playbackRate = rate;
       }
     } else {
@@ -563,6 +612,7 @@ class MusicPlayerStore {
 
   async resetPlayer(): Promise<void> {
     this.destroyYouTubePlayer();
+    await this.resetLocalPlayback();
     this.currentSource = null;
     this.parseError = null;
     this.playerError = null;
@@ -578,7 +628,6 @@ class MusicPlayerStore {
     this.folderScanTruncated = false;
     this.shuffleOrder = [];
     this.queueHistory = [];
-    this.resetLocalMediaElement();
     this.currentArtworkUrl = null;
     this.updateMusicTray();
   }
@@ -752,11 +801,16 @@ class MusicPlayerStore {
           title: source.title,
         },
         startMs: persisted?.positionMs ?? source.startMs ?? 0,
-        volume: Math.min(this.effectiveVolume(), 1),
+        volume: clampVolume(this.snapshot.volume),
         rate: this.snapshot.rate,
       });
       if (generation !== this.loadGeneration) return;
-      const mediaUrl = await registerMediaFile(source.path);
+      await setLocalMuted(this.muted);
+      if (generation !== this.loadGeneration) return;
+      const useVideoElement = this.shouldUseVideoElement(source.path, localSnapshot.hasVideo);
+      const mediaUrl = useVideoElement
+        ? await registerMediaFile(source.path)
+        : null;
       if (generation !== this.loadGeneration) return;
       let artworkUrl = source.artworkPath
         ? await registerMediaFile(source.artworkPath).catch(() => null)
@@ -764,15 +818,21 @@ class MusicPlayerStore {
       artworkUrl ??= await registerEmbeddedArtwork(source.path).catch(() => null);
       if (generation !== this.loadGeneration) return;
       this.pendingLocalResumeMs = persisted?.positionMs ?? source.startMs ?? 0;
-      this.localHasVideo = this.shouldUseVideoElement(source.path, localSnapshot.hasVideo);
+      this.localHasVideo = useVideoElement;
       this.localMediaSrc = mediaUrl;
       this.currentArtworkUrl = artworkUrl;
       this.applyLocalSnapshot(localSnapshot);
       await tick();
       if (generation !== this.loadGeneration) return;
-      this.configureLocalMediaElement();
       if (options.autoplay) {
-        await this.playLocalMediaElement();
+        if (useVideoElement) {
+          this.configureLocalMediaElement();
+          await this.playLocalMediaElement();
+        } else {
+          await this.playNativeLocalAudio();
+        }
+      } else if (useVideoElement) {
+        this.configureLocalMediaElement();
       }
       this.updateMediaSession();
       await this.persistCurrentPlaybackState();
@@ -817,6 +877,102 @@ class MusicPlayerStore {
       error: localSnapshot.error,
     };
     this.playerError = localSnapshot.error;
+  }
+
+  private async playNativeLocalAudio(): Promise<void> {
+    try {
+      const localSnapshot = await playLocalMedia();
+      this.applyLocalSnapshot(localSnapshot);
+      this.playerError = null;
+      this.updateMediaSession();
+    } catch (error) {
+      this.playerError = mediaPlayerErrorMessage(error);
+      this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
+    }
+    this.updateMusicTray();
+  }
+
+  private async pauseNativeLocalAudio(): Promise<void> {
+    this.snapshot = { ...this.snapshot, status: "paused" };
+    this.updateMediaSession();
+    try {
+      const localSnapshot = await pauseLocalMedia();
+      this.applyLocalSnapshot(localSnapshot);
+      this.updateMediaSession();
+    } catch (error) {
+      this.playerError = mediaPlayerErrorMessage(error);
+      this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
+    }
+  }
+
+  private async stopNativeLocalAudio(): Promise<void> {
+    try {
+      const localSnapshot = await stopLocalMedia();
+      this.applyLocalSnapshot(localSnapshot);
+      this.snapshot = { ...this.snapshot, status: "idle", positionMs: 0 };
+      this.updateMediaSession();
+    } catch {
+      this.snapshot = { ...this.snapshot, status: "idle", positionMs: 0 };
+    }
+  }
+
+  private async seekNativeLocalAudio(positionMs: number): Promise<void> {
+    try {
+      const localSnapshot = await seekLocalMedia(positionMs);
+      this.applyLocalSnapshot(localSnapshot);
+    } catch (error) {
+      this.playerError = mediaPlayerErrorMessage(error);
+      this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
+    }
+  }
+
+  private async applyNativeLocalVolume(): Promise<void> {
+    try {
+      const volumeSnapshot = await setLocalVolume(this.snapshot.volume);
+      this.applyLocalSnapshot(volumeSnapshot);
+      const muteSnapshot = await setLocalMuted(false);
+      this.applyLocalSnapshot(muteSnapshot);
+    } catch (error) {
+      this.playerError = mediaPlayerErrorMessage(error);
+      this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
+    }
+  }
+
+  private async applyNativeLocalMute(): Promise<void> {
+    try {
+      const localSnapshot = await setLocalMuted(this.muted);
+      this.applyLocalSnapshot(localSnapshot);
+    } catch (error) {
+      this.playerError = mediaPlayerErrorMessage(error);
+      this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
+    }
+  }
+
+  private async refreshNativeLocalSnapshot(): Promise<void> {
+    if (this.handlingNativeLocalEnded) return;
+    const wasEnded = this.snapshot.status === "ended";
+    try {
+      const localSnapshot = await getLocalSnapshot();
+      if (!this.usesNativeLocalAudio()) return;
+      this.applyLocalSnapshot(localSnapshot);
+      if (localSnapshot.status === "ended" && !wasEnded) {
+        this.handlingNativeLocalEnded = true;
+        this.updateMediaSession();
+        await this.persistCurrentPlaybackState(true);
+        this.updateMusicTray();
+        try {
+          await this.playNextTrack();
+        } finally {
+          this.handlingNativeLocalEnded = false;
+        }
+        return;
+      }
+      this.updateMediaSession();
+      void this.persistCurrentPlaybackState();
+      this.updateMusicTray();
+    } catch {
+      this.handlingNativeLocalEnded = false;
+    }
   }
 
   private configureLocalMediaElement(): void {
@@ -936,6 +1092,17 @@ class MusicPlayerStore {
     if (hasVideo) return true;
     const extension = path.split(".").pop()?.toLowerCase();
     return extension ? !audioFileExtensions.has(extension) : true;
+  }
+
+  private usesNativeLocalAudio(): boolean {
+    return this.currentSource?.kind === "local-file" && !this.localHasVideo;
+  }
+
+  private async resetLocalPlayback(): Promise<void> {
+    if (this.usesNativeLocalAudio()) {
+      await stopLocalMedia().catch(() => null);
+    }
+    this.resetLocalMediaElement();
   }
 
   private resetLocalMediaElement(): void {

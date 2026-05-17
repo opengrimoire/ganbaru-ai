@@ -90,18 +90,6 @@
       >
         <track kind="captions" />
       </video>
-    {:else if player.localMediaSrc}
-      <audio
-        bind:this={localMediaElement}
-        src={player.localMediaSrc}
-        crossorigin="anonymous"
-        onloadedmetadata={(event) => player.handleLocalLoadedMetadata(event)}
-        ontimeupdate={(event) => player.handleLocalTimeUpdate(event)}
-        onplay={(event) => player.handleLocalPlay(event)}
-        onpause={(event) => player.handleLocalPause(event)}
-        onended={(event) => { void player.handleLocalEnded(event); }}
-        onerror={(event) => player.handleLocalError(event)}
-      ></audio>
     {/if}
   {/if}
 </div>
