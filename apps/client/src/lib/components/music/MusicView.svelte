@@ -216,30 +216,25 @@
         {/if}
       </div>
 
-      <div class="border-t border-border bg-card px-4 py-3 max-[520px]:px-3">
-        <div class="mb-2 flex min-w-0 items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="truncate text-[15px] font-medium">{player.loadedTitle}</div>
-          </div>
-          <div class="shrink-0 text-[12px] tabular-nums text-muted-foreground">
-            {formatPlaybackTime(player.snapshot.positionMs)} / {formatPlaybackTime(player.snapshot.durationMs)}
-          </div>
-        </div>
-
+      <div class="border-t border-border bg-card px-4 py-2 max-[520px]:px-3">
         {#key player.currentSource?.identity ?? "empty"}
-          <input
-            type="range"
-            min="0"
-            max={player.progressMax}
-            value={player.progressValue}
-            disabled={!player.currentSource}
-            class="h-2 w-full accent-primary disabled:opacity-50"
-            aria-label="Seek"
-            oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
-          />
+          <div class="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+            <span class="w-12 shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
+            <input
+              type="range"
+              min="0"
+              max={player.progressMax}
+              value={player.progressValue}
+              disabled={!player.currentSource}
+              class="h-2 min-w-0 flex-1 accent-primary disabled:opacity-50"
+              aria-label="Seek"
+              oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
+            />
+            <span class="w-12 shrink-0 text-right">{formatPlaybackTime(player.snapshot.durationMs)}</span>
+          </div>
         {/key}
 
-        <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-2">
             <button
               type="button"
