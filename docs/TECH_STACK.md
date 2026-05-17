@@ -407,9 +407,9 @@ A local-first media player licensed separately under LGPL 2.1 and integrated dir
 
 Desktop local audio playback is Rust-controlled through `plugins/media-player` with Rodio and Symphonia. Local video still uses the browser media element inside the Tauri WebView, with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
 
-The WebView path is a compatibility fallback for local video and any future unsupported local media path, not the normal audio story. It can play only the formats and codecs supported by the user's platform WebView, and it carries the memory overhead of the WebView media element plus the loopback host and optional Web Audio graph.
+The WebView path is a compatibility fallback for local video and any future unsupported local media path, not the normal audio story. It can play only the formats and codecs supported by the user's platform WebView, and it carries the memory overhead of the WebView media element plus the loopback host.
 
-Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local video fallback uses the media element directly only when Web Audio is unavailable. When Web Audio is available, local video fallback playback is routed through a `GainNode`; normal volume, boosted volume, mute, and pause silence all update that gain synchronously.
+Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local video fallback uses the media element directly, caps volume at normal `100%`, and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes playback if it was playing.
 
 ### Native media backend target
 

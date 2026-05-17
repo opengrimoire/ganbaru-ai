@@ -27,7 +27,7 @@
   let customRateDraft = $state("1");
   let playlistVisible = $state(false);
 
-  const volumeMax = $derived(player.isYouTubeActive ? 1 : 1.5);
+  const volumeMax = $derived(player.volumeMax);
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
   const speedShortcutStep = 0.25;
   const musicIconSize = 14;
@@ -389,7 +389,7 @@
               min="0"
               max={volumeMax}
               step="0.01"
-              value={Math.min(player.snapshot.volume, volumeMax)}
+              value={player.volumeControlValue}
               class={cn("block w-28", player.volumeBoosted ? "accent-warning" : "accent-primary")}
               aria-label="Volume"
               oninput={(event) => { void player.setVolume(Number(event.currentTarget.value)); }}

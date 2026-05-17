@@ -26,17 +26,19 @@ import {
   clampRate,
   clampVolume,
   clampYouTubeVolume,
+  clampPlaybackVolume,
   DEFAULT_PLAYBACK_SNAPSHOT,
   formatRateLabel,
   formatVolumePercent,
   initialQueueSelection,
   isVolumeBoosted,
   localMediaSeekTargetMs,
+  maxPlaybackVolume,
   nextShuffleIndex,
   normalizeLocalPlayableStartMs,
+  playbackVolumeControlValue,
   stableStatusDuringYouTubeBuffering,
   shouldPersistPlaybackState,
-  shouldRouteLocalMediaThroughWebAudio,
   type PersistedPlaybackState,
   type PlaybackSnapshot,
   type PlaybackStatus,
@@ -127,16 +129,6 @@ interface MusicPlayerSettings {
   shuffleEnabled: boolean;
   shuffleExplicit: boolean;
   muted: boolean;
-}
-
-interface LocalAudioNodes {
-  context: AudioContext;
-  source: MediaElementAudioSourceNode;
-  gain: GainNode;
-}
-
-interface WindowWithWebkitAudioContext extends Window {
-  webkitAudioContext?: typeof AudioContext;
 }
 
 const SETTINGS_KEY = "ganbaruai-music-player";
@@ -277,7 +269,6 @@ class MusicPlayerStore {
   private youtubeSnapshotIntervalId: number | null = null;
   private localSnapshotIntervalId: number | null = null;
   private unlisteners: UnlistenFn[] = [];
-  private audioNodes = new WeakMap<HTMLMediaElement, LocalAudioNodes>();
   private lastTraySignature = "";
   private localPauseSilenced = false;
   private youtubeOptimisticPauseUntil = 0;
@@ -346,16 +337,33 @@ class MusicPlayerStore {
     return index >= 0 && index < this.queue.length - 1;
   }
 
+  get isLocalVideoActive(): boolean {
+    return this.currentSource?.kind === "local-file" && this.localHasVideo;
+  }
+
+  get supportsVolumeBoost(): boolean {
+    if (!this.currentSource) return true;
+    return this.currentSource.kind === "local-file" && !this.localHasVideo;
+  }
+
+  get volumeMax(): number {
+    return maxPlaybackVolume(this.supportsVolumeBoost);
+  }
+
+  get volumeControlValue(): number {
+    return playbackVolumeControlValue(this.snapshot.volume, this.supportsVolumeBoost);
+  }
+
   get volumePercentLabel(): string {
-    return formatVolumePercent(this.snapshot.volume);
+    return formatVolumePercent(this.volumeControlValue);
   }
 
   get volumeBoosted(): boolean {
-    return !this.muted && !this.isYouTubeActive && isVolumeBoosted(this.snapshot.volume);
+    return !this.muted && this.supportsVolumeBoost && isVolumeBoosted(this.snapshot.volume);
   }
 
   get boostUnavailable(): boolean {
-    return this.isYouTubeActive;
+    return Boolean(this.currentSource) && !this.supportsVolumeBoost;
   }
 
   get speedLabel(): string {
@@ -381,6 +389,9 @@ class MusicPlayerStore {
         void this.refreshNativeLocalSnapshot();
       }, 500);
     }
+    if (typeof navigator !== "undefined" && typeof navigator.mediaDevices?.addEventListener === "function") {
+      navigator.mediaDevices.addEventListener("devicechange", this.handleMediaDeviceChange);
+    }
     this.listenToTrayEvents();
     this.updateMusicTray();
   }
@@ -397,6 +408,9 @@ class MusicPlayerStore {
         this.localSnapshotIntervalId = null;
       }
       this.clearYouTubePlaylistTimeout();
+    }
+    if (typeof navigator !== "undefined" && typeof navigator.mediaDevices?.removeEventListener === "function") {
+      navigator.mediaDevices.removeEventListener("devicechange", this.handleMediaDeviceChange);
     }
     for (const unlisten of this.unlisteners) {
       unlisten();
@@ -596,9 +610,7 @@ class MusicPlayerStore {
   }
 
   async setVolume(value: number): Promise<void> {
-    const volume = this.isYouTubeActive
-      ? clampYouTubeVolume(value)
-      : clampVolume(value);
+    const volume = clampPlaybackVolume(value, this.supportsVolumeBoost);
     this.snapshot = { ...this.snapshot, volume };
     this.muted = false;
     this.persistPlayerSettings();
@@ -633,7 +645,7 @@ class MusicPlayerStore {
   }
 
   async adjustVolume(delta: number): Promise<void> {
-    await this.setVolume(this.snapshot.volume + delta);
+    await this.setVolume(this.volumeControlValue + delta);
   }
 
   async seekByMs(deltaMs: number): Promise<void> {
@@ -654,7 +666,7 @@ class MusicPlayerStore {
     if (delta === 0) return;
     const step = event.shiftKey ? 0.01 : 0.05;
     const direction = delta > 0 ? -1 : 1;
-    void this.setVolume(this.snapshot.volume + direction * step);
+    void this.setVolume(this.volumeControlValue + direction * step);
   }
 
   async setRate(value: number): Promise<void> {
@@ -870,6 +882,33 @@ class MusicPlayerStore {
     this.currentArtworkUrl = null;
   }
 
+  private handleMediaDeviceChange = (): void => {
+    void this.reloadLocalVideoForOutputDeviceChange();
+  };
+
+  private async reloadLocalVideoForOutputDeviceChange(): Promise<void> {
+    const element = this.localMediaElement;
+    const src = this.localMediaSrc;
+    if (!this.isLocalVideoActive || !element || !src) return;
+    const generation = this.loadGeneration;
+    const resumeMs = this.mediaPositionMs(element);
+    const wasPlaying = this.snapshot.status === "playing" && !element.paused && !element.ended;
+    this.pendingLocalResumeMs = resumeMs;
+    this.ignoreNextLocalPause = true;
+    element.pause();
+    this.localVideoReady = false;
+    this.localMediaSrc = null;
+    await tick();
+    if (generation !== this.loadGeneration) return;
+    this.localMediaSrc = src;
+    await tick();
+    if (generation !== this.loadGeneration) return;
+    this.configureLocalMediaElement();
+    if (wasPlaying) {
+      await this.playLocalMediaElement();
+    }
+  }
+
   private async loadLocalSource(
     source: LocalFileSource,
     persisted: PersistedPlaybackState | null,
@@ -892,6 +931,12 @@ class MusicPlayerStore {
       await setLocalMuted(this.muted);
       if (generation !== this.loadGeneration) return;
       const useVideoElement = this.shouldUseVideoElement(source.path, localSnapshot.hasVideo);
+      if (useVideoElement) {
+        this.snapshot = {
+          ...this.snapshot,
+          volume: clampPlaybackVolume(this.snapshot.volume, false),
+        };
+      }
       const mediaUrl = useVideoElement
         ? await registerMediaFile(source.path)
         : null;
@@ -1095,7 +1140,6 @@ class MusicPlayerStore {
       this.restoreLocalMediaElementVolume(this.localMediaElement);
       this.localMediaElement.playbackRate = this.snapshot.rate;
       this.alignLocalMediaToPlayableStart(this.localMediaElement);
-      await this.resumeAudioContext(this.localMediaElement);
       await this.localMediaElement.play();
       this.scheduleLocalPlayableStartKick(this.localMediaElement);
       this.restoreLocalMediaElementVolume(this.localMediaElement);
@@ -1658,30 +1702,14 @@ class MusicPlayerStore {
     const element = this.localMediaElement;
     if (!element) return;
     const volume = this.localPauseSilenced ? 0 : this.effectiveVolume();
-    const existingNodes = this.audioNodes.get(element);
-    // Keep ordinary local video audio on the browser media path. Web Audio is only needed for boost
-    // and can choose a different system sink on some Linux Bluetooth setups.
-    const nodes = shouldRouteLocalMediaThroughWebAudio(volume, existingNodes !== undefined)
-      ? existingNodes ?? this.ensureLocalAudioNodes(element)
-      : null;
-    if (nodes) {
-      element.muted = volume === 0;
-      element.volume = 1;
-      nodes.gain.gain.value = volume;
-      return;
-    }
     element.muted = volume === 0;
-    element.volume = volume > 1 ? 1 : volume;
+    element.volume = volume;
   }
 
   private silenceLocalMediaElement(element: HTMLMediaElement): void {
     this.localPauseSilenced = true;
     element.muted = true;
     element.volume = 0;
-    const nodes = this.audioNodes.get(element);
-    if (nodes) {
-      nodes.gain.gain.value = 0;
-    }
   }
 
   private restoreLocalMediaElementVolume(element: HTMLMediaElement): void {
@@ -1702,41 +1730,11 @@ class MusicPlayerStore {
   }
 
   private effectiveVolume(): number {
-    return this.muted ? 0 : clampVolume(this.snapshot.volume);
+    return this.muted ? 0 : this.volumeControlValue;
   }
 
   private effectiveYouTubeVolume(): number {
     return this.muted ? 0 : clampYouTubeVolume(this.snapshot.volume);
-  }
-
-  private ensureLocalAudioNodes(element: HTMLMediaElement): LocalAudioNodes | null {
-    if (typeof window === "undefined") return null;
-    const existing = this.audioNodes.get(element);
-    if (existing) return existing;
-    const contextConstructor =
-      window.AudioContext ?? (window as WindowWithWebkitAudioContext).webkitAudioContext;
-    if (!contextConstructor) return null;
-    try {
-      const context = new contextConstructor();
-      const source = context.createMediaElementSource(element);
-      const gain = context.createGain();
-      source.connect(gain);
-      gain.connect(context.destination);
-      const nodes = { context, source, gain };
-      this.audioNodes.set(element, nodes);
-      return nodes;
-    } catch {
-      return null;
-    }
-  }
-
-  private async resumeAudioContext(element: HTMLMediaElement): Promise<void> {
-    const existingNodes = this.audioNodes.get(element);
-    const nodes = shouldRouteLocalMediaThroughWebAudio(this.effectiveVolume(), existingNodes !== undefined)
-      ? existingNodes ?? this.ensureLocalAudioNodes(element)
-      : null;
-    if (!nodes || nodes.context.state !== "suspended") return;
-    await nodes.context.resume();
   }
 
   private updateMediaSession(): void {

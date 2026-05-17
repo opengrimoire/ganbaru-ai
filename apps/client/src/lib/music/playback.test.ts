@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampRate,
+  clampPlaybackVolume,
   clampYouTubeVolume,
   clampVolume,
   formatRateLabel,
@@ -10,11 +11,12 @@ import {
   isSpeedPreset,
   isVolumeBoosted,
   localMediaSeekTargetMs,
+  maxPlaybackVolume,
   nextShuffleIndex,
   normalizeLocalPlayableStartMs,
+  playbackVolumeControlValue,
   previousQueueSelection,
   shouldPersistPlaybackState,
-  shouldRouteLocalMediaThroughWebAudio,
   stableStatusDuringYouTubeBuffering,
   type PersistedPlaybackState,
 } from "./playback";
@@ -99,10 +101,12 @@ describe("clamp helpers", () => {
     expect(formatVolumePercent(1.25)).toBe("125%");
   });
 
-  it("routes local media through Web Audio only when boost is needed or already active", () => {
-    expect(shouldRouteLocalMediaThroughWebAudio(1, false)).toBe(false);
-    expect(shouldRouteLocalMediaThroughWebAudio(1.01, false)).toBe(true);
-    expect(shouldRouteLocalMediaThroughWebAudio(0.8, true)).toBe(true);
+  it("caps active volume when boost is unavailable", () => {
+    expect(maxPlaybackVolume(true)).toBe(1.5);
+    expect(maxPlaybackVolume(false)).toBe(1);
+    expect(clampPlaybackVolume(1.25, true)).toBe(1.25);
+    expect(clampPlaybackVolume(1.25, false)).toBe(1);
+    expect(playbackVolumeControlValue(1.25, false)).toBe(1);
   });
 
   it("keeps local media seeks out of a non-playable prefix", () => {

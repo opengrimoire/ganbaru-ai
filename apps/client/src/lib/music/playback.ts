@@ -106,12 +106,20 @@ export function clampYouTubeVolume(value: number): number {
   return Math.min(NORMAL_VOLUME, Math.max(0, value));
 }
 
-export function isVolumeBoosted(value: number): boolean {
-  return clampVolume(value) > NORMAL_VOLUME;
+export function maxPlaybackVolume(supportsBoost: boolean): number {
+  return supportsBoost ? MAX_VOLUME : NORMAL_VOLUME;
 }
 
-export function shouldRouteLocalMediaThroughWebAudio(volume: number, hasExistingRoute: boolean): boolean {
-  return hasExistingRoute || isVolumeBoosted(volume);
+export function clampPlaybackVolume(value: number, supportsBoost: boolean): number {
+  return supportsBoost ? clampVolume(value) : clampYouTubeVolume(value);
+}
+
+export function playbackVolumeControlValue(value: number, supportsBoost: boolean): number {
+  return Math.min(clampVolume(value), maxPlaybackVolume(supportsBoost));
+}
+
+export function isVolumeBoosted(value: number): boolean {
+  return clampVolume(value) > NORMAL_VOLUME;
 }
 
 export function normalizeLocalPlayableStartMs(startMs: number | null): number {
