@@ -1,7 +1,6 @@
 <script lang="ts">
   import AlertCircle from "@lucide/svelte/icons/alert-circle";
   import Check from "@lucide/svelte/icons/check";
-  import FileAudio from "@lucide/svelte/icons/file-audio";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import Gauge from "@lucide/svelte/icons/gauge";
   import LinkIcon from "@lucide/svelte/icons/link";
@@ -196,33 +195,23 @@
         onclick={handleMediaSurfaceClick}
         onkeydown={handleMediaSurfaceKeydown}
       >
-        {#if player.currentSource?.kind === "local-file"}
-          {#if !player.localHasVideo || player.snapshot.error}
-            <div class="absolute inset-0 flex items-center justify-center bg-black text-white/70">
-              {#if player.currentArtworkUrl && !player.snapshot.error}
-                <img
-                  src={player.currentArtworkUrl}
-                  alt=""
-                  class="absolute inset-0 h-full w-full object-contain"
-                  draggable="false"
-                  onerror={() => player.handleArtworkError()}
-                />
-              {/if}
+        {#if player.currentSource?.kind === "local-file" && (!player.localHasVideo || player.snapshot.error)}
+          <div class="absolute inset-0 flex items-center justify-center bg-black text-white/70">
+            {#if player.currentArtworkUrl && !player.snapshot.error}
+              <img
+                src={player.currentArtworkUrl}
+                alt=""
+                class="absolute inset-0 h-full w-full object-contain"
+                draggable="false"
+                onerror={() => player.handleArtworkError()}
+              />
+            {/if}
+            {#if player.snapshot.error}
               <div class="flex max-w-[80%] flex-col items-center gap-2 text-center text-[12px]">
-                {#if player.snapshot.error}
-                  <AlertCircle size={22} strokeWidth={2.25} />
-                {:else if !player.currentArtworkUrl}
-                  <FileAudio size={24} strokeWidth={2.25} />
-                {/if}
-                {#if player.snapshot.error}
-                  <span class="max-w-full truncate">{player.snapshot.error ?? player.loadedTitle}</span>
-                {/if}
+                <AlertCircle size={22} strokeWidth={2.25} />
+                <span class="max-w-full truncate">{player.snapshot.error ?? player.loadedTitle}</span>
               </div>
-            </div>
-          {/if}
-        {:else if !player.currentSource}
-          <div class="absolute inset-0 flex items-center justify-center bg-black text-white/60">
-            <FileAudio size={28} strokeWidth={2.25} />
+            {/if}
           </div>
         {/if}
       </div>
@@ -454,7 +443,6 @@
                     player.currentSource?.identity === item.identity && "bg-accent text-accent-foreground",
                   )}
                 >
-                  <FileAudio class="shrink-0" size={14} strokeWidth={2.25} />
                   <span class="min-w-0 truncate">{item.title}</span>
                 </button>
               {/each}
