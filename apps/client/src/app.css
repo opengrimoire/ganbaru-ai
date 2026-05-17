@@ -201,6 +201,18 @@
   * {
     @apply border-border outline-ring/50;
   }
+  :where(button, a, input, select, textarea, [tabindex]):focus,
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: none;
+  }
+  html[data-focus-intent="keyboard"] :where(button, a, input, select, textarea, [tabindex]):focus {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  html:not([data-focus-intent="keyboard"]) :where(button, a, input, select, textarea, [tabindex]):focus,
+  html:not([data-focus-intent="keyboard"]) :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    box-shadow: none;
+  }
   body {
     @apply text-foreground;
   }

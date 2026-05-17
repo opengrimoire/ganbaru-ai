@@ -161,6 +161,19 @@
     const blockNativeWheelScale = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
     document.addEventListener("wheel", blockNativeWheelScale, { passive: false, capture: true });
 
+    const root = document.documentElement;
+    const markPointerFocus = () => {
+      root.dataset.focusIntent = "pointer";
+    };
+    const markKeyboardFocus = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        root.dataset.focusIntent = "keyboard";
+      }
+    };
+    markPointerFocus();
+    document.addEventListener("pointerdown", markPointerFocus, { capture: true });
+    document.addEventListener("keydown", markKeyboardFocus, { capture: true });
+
     // Track device timezone changes (travel, OS-level update). On change,
     // reload calendar events so wall-clock strings reflect the new zone.
     // Re-resolves on visibility change (returning from suspend/lock screen),
@@ -181,6 +194,8 @@
 
     return () => {
       document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
+      document.removeEventListener("pointerdown", markPointerFocus, { capture: true });
+      document.removeEventListener("keydown", markKeyboardFocus, { capture: true });
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", checkZone);
       clearTimeout(startupMemoryTimerId);

@@ -17,6 +17,7 @@ import {
   DEFAULT_PLAYBACK_SNAPSHOT,
   formatRateLabel,
   formatVolumePercent,
+  initialQueueSelection,
   isVolumeBoosted,
   nextShuffleIndex,
   shouldPersistPlaybackState,
@@ -355,10 +356,10 @@ class MusicPlayerStore {
     this.parseError = null;
     this.playerError = null;
     try {
-      const selection = await pickMediaFolder();
-      if (!selection) return;
-      this.folderScanTruncated = selection.truncated;
-      this.queue = selection.tracks.map((track) =>
+      const folderSelection = await pickMediaFolder();
+      if (!folderSelection) return;
+      this.folderScanTruncated = folderSelection.truncated;
+      this.queue = folderSelection.tracks.map((track) =>
         localFileSourceFromPath(track.path, track.title, track.artworkPath)
       );
       this.shuffleOrder = [];
@@ -368,7 +369,14 @@ class MusicPlayerStore {
         this.updateMusicTray();
         return;
       }
-      await this.loadSource(this.queue[0], { preserveQueue: true });
+      const queueSelection = initialQueueSelection(this.queue.length, this.shuffleEnabled);
+      const initialIndex = queueSelection.index ?? 0;
+      this.shuffleOrder = queueSelection.remainingOrder;
+      await this.loadSource(this.queue[initialIndex] ?? this.queue[0], {
+        autoplay: true,
+        resume: false,
+        preserveQueue: true,
+      });
     } catch (error) {
       this.playerError = error instanceof Error ? error.message : String(error);
       this.updateMusicTray();
@@ -578,6 +586,7 @@ class MusicPlayerStore {
     const source = this.queue[index];
     if (!source) return;
     const currentIndex = this.currentQueueIndex;
+    if (currentIndex === index) return;
     if (currentIndex >= 0 && currentIndex !== index) {
       this.queueHistory = [...this.queueHistory, currentIndex];
     }
@@ -925,7 +934,6 @@ class MusicPlayerStore {
     }
     this.localMediaSrc = null;
     this.localHasVideo = false;
-    this.currentArtworkUrl = null;
     this.pendingLocalResumeMs = 0;
   }
 

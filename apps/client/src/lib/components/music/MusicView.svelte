@@ -112,6 +112,16 @@
     await player.setRate(clampRate(Number(customRateDraft)));
     closeSpeedMenu();
   }
+
+  function handleMediaSurfaceClick(): void {
+    void player.togglePlay();
+  }
+
+  function handleMediaSurfaceKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    void player.togglePlay();
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
@@ -179,10 +189,15 @@
     <div class="flex min-h-0 flex-col">
       <div
         bind:this={mediaSurface}
-        class="relative min-h-48 flex-1 overflow-hidden bg-black max-[520px]:min-h-36"
+        class="relative min-h-48 flex-1 cursor-pointer overflow-hidden bg-black max-[520px]:min-h-36"
+        role="button"
+        tabindex="-1"
+        aria-label={player.isPlaying ? "Pause" : "Play"}
+        onclick={handleMediaSurfaceClick}
+        onkeydown={handleMediaSurfaceKeydown}
       >
         {#if player.currentSource?.kind === "local-file"}
-          {#if !player.localHasVideo || player.snapshot.status === "loading" || player.snapshot.error}
+          {#if !player.localHasVideo || player.snapshot.error}
             <div class="absolute inset-0 flex items-center justify-center bg-black text-white/70">
               {#if player.currentArtworkUrl && !player.snapshot.error}
                 <img
@@ -194,14 +209,12 @@
                 />
               {/if}
               <div class="flex max-w-[80%] flex-col items-center gap-2 text-center text-[12px]">
-                {#if player.snapshot.status === "loading"}
-                  <LoaderCircle class="animate-spin" size={22} strokeWidth={2.25} />
-                {:else if player.snapshot.error}
+                {#if player.snapshot.error}
                   <AlertCircle size={22} strokeWidth={2.25} />
                 {:else if !player.currentArtworkUrl}
                   <FileAudio size={24} strokeWidth={2.25} />
                 {/if}
-                {#if player.snapshot.error || !player.currentArtworkUrl}
+                {#if player.snapshot.error}
                   <span class="max-w-full truncate">{player.snapshot.error ?? player.loadedTitle}</span>
                 {/if}
               </div>

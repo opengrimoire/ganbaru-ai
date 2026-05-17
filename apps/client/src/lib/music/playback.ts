@@ -148,6 +148,16 @@ export function nextShuffleIndex(
   return { index: index ?? null, remainingOrder: nextRemaining };
 }
 
+export function initialQueueSelection(
+  queueLength: number,
+  shuffleEnabled: boolean,
+  random: () => number = Math.random,
+): ShuffleSelection {
+  if (queueLength <= 0) return { index: null, remainingOrder: [] };
+  if (!shuffleEnabled) return { index: 0, remainingOrder: [] };
+  return nextShuffleIndex(queueLength, -1, [], random);
+}
+
 export function previousQueueSelection(
   currentIndex: number,
   positionMs: number,

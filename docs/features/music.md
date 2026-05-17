@@ -31,13 +31,13 @@ Playlists tied to work environments inherit to all session blocks using that env
 
 Music files stay wherever the user keeps them; the vault stores only playlist definitions (lists of file paths, YouTube IDs, and per-track config). Backups go to the user's chosen path, not into the vault.
 
-The Music view can scan a user-selected local folder recursively for common audio and video extensions. The scan runs outside the UI thread, skips symlinks, and caps the first queue at 5000 files to avoid blocking on unexpectedly large folders.
+The Music view can scan a user-selected local folder recursively for common audio and video extensions. The scan runs outside the UI thread, skips symlinks, and caps the first queue at 5000 files to avoid blocking on unexpectedly large folders. Loading a folder starts playback immediately. If shuffle is enabled, the initial track is selected from the shuffled queue instead of always using the first file.
 
-Local queue playback advances automatically to the next folder track when the current track ends. Clicking a track in the local folder queue starts it immediately from the beginning. Queue rows show clean track names without file extensions or raw source labels.
+Local queue playback advances automatically to the next folder track when the current track ends. Clicking a different track in the local folder queue starts it immediately from the beginning, while clicking the active track is ignored. Queue rows show clean track names without file extensions or raw source labels.
 
 When local tracks are loaded from a folder, the scanner looks for cover images beside the track, nearby artwork subfolders, and parent album folders up to the selected scan root. It prefers sidecar images that match the track name, then common names such as `cover`, `folder`, `front`, `album`, and `albumart`, with common image extensions such as `jpg`, `png`, and `webp`. If no folder artwork is found, local playback falls back to embedded ID3, MP4/M4A, or FLAC picture metadata. The detected image is shown for audio tracks that do not have video.
 
-The visible Music view is a player plus queue surface. It shows track title, seek state, transport controls, shuffle, volume, speed, and clean queue rows. It does not show selected folder paths, raw local paths, YouTube URLs, source labels, queue source-kind labels, or path tooltips in the normal playback surface.
+The visible Music view is a player plus queue surface. It shows track title, seek state, transport controls, shuffle, volume, speed, and clean queue rows. Clicking the media surface toggles play and pause. It does not show selected folder paths, raw local paths, YouTube URLs, source labels, queue source-kind labels, or path tooltips in the normal playback surface.
 
 Keyboard controls are Music-view-only and do not run while focus is inside an input, textarea, select, or editable text area. Space toggles play and pause. Left and Right seek by 10 seconds. Up and Down adjust volume. Shift+Left loads the last played or previous track. Shift+Right loads the next track. Shuffle is enabled by default and avoids immediate repeats until the shuffled queue is exhausted.
 

@@ -66,7 +66,7 @@
   {#if player.currentSource && player.isYouTubeActive}
     <iframe
       bind:this={youtubeFrame}
-      class="pointer-events-auto h-full w-full"
+      class="pointer-events-none h-full w-full"
       src={player.youtubeHostUrl ?? "about:blank"}
       title={player.loadedTitle}
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"

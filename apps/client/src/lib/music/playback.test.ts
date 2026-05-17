@@ -6,6 +6,7 @@ import {
   formatRateLabel,
   formatPlaybackTime,
   formatVolumePercent,
+  initialQueueSelection,
   isSpeedPreset,
   isVolumeBoosted,
   nextShuffleIndex,
@@ -91,6 +92,19 @@ describe("clamp helpers", () => {
 });
 
 describe("queue helpers", () => {
+  it("selects a shuffled initial track when shuffle is enabled", () => {
+    const random = () => 0;
+
+    expect(initialQueueSelection(4, true, random)).toEqual({
+      index: 1,
+      remainingOrder: [2, 3, 0],
+    });
+    expect(initialQueueSelection(4, false, random)).toEqual({
+      index: 0,
+      remainingOrder: [],
+    });
+  });
+
   it("does not immediately repeat a shuffled track until the queue is exhausted", () => {
     const random = () => 0;
     const first = nextShuffleIndex(3, 0, [], random);
