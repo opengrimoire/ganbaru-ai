@@ -53,7 +53,7 @@ Keyboard controls are Music-view-only and do not run while focus is inside an in
 
 Playback speed is chosen from presets (`0.5x`, `1x`, `1.25x`, `1.5x`, `2x`) or a custom value clamped to the supported range. The speed button always shows the active speed.
 
-Volume shows one exact percent value. Local audio playback supports `0%` to `150%` through native Rodio gain, including the boosted range above `100%`. Local video fallback uses the WebView media element and the Web Audio gain stage when available. YouTube playback remains capped at `100%`. Clicking the volume icon toggles mute without moving the saved volume slider position.
+Volume shows one exact percent value. Local audio playback supports `0%` to `150%` through native Rodio gain, including the boosted range above `100%`. Local video fallback uses the WebView media element and the Web Audio gain stage when available. YouTube playback remains capped at `100%`. Clicking the volume percent text toggles mute without moving the saved volume slider position.
 
 The existing `main` tray icon owns both Pomodoro and Music controls. The menu has separated Pomodoro and Music sections, shows Music status without track titles, and emits prefixed Music tray events for play/pause, previous, next, shuffle, and opening the Music view.
 

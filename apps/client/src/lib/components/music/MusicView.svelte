@@ -12,8 +12,6 @@
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
-  import Volume2 from "@lucide/svelte/icons/volume-2";
-  import VolumeX from "@lucide/svelte/icons/volume-x";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
@@ -362,27 +360,6 @@
             data-music-volume-control="true"
             onwheel={(event) => player.handleVolumeWheel(event)}
           >
-            <button
-              type="button"
-              onclick={() => { void player.toggleMute(); }}
-              class={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                player.muted && "text-muted-foreground opacity-70",
-              )}
-              title={player.muted ? "Unmute" : "Mute"}
-              aria-label={player.muted ? "Unmute" : "Mute"}
-              aria-pressed={player.muted}
-            >
-              {#if player.muted}
-                <VolumeX size={15} strokeWidth={2.25} />
-              {:else}
-                <Volume2
-                  size={15}
-                  strokeWidth={2.25}
-                  class={player.volumeBoosted ? "text-warning" : undefined}
-                />
-              {/if}
-            </button>
             <input
               type="range"
               min="0"
@@ -393,15 +370,20 @@
               aria-label="Volume"
               oninput={(event) => { void player.setVolume(Number(event.currentTarget.value)); }}
             />
-            <span
+            <button
+              type="button"
+              onclick={() => { void player.toggleMute(); }}
               class={cn(
-                "min-w-10 text-right tabular-nums",
+                "inline-flex h-8 min-w-10 items-center justify-end tabular-nums",
                 player.muted && "line-through opacity-60",
                 player.volumeBoosted && !player.muted && "text-warning",
               )}
+              title={player.muted ? "Unmute" : "Mute"}
+              aria-label={player.muted ? "Unmute volume" : "Mute volume"}
+              aria-pressed={player.muted}
             >
               {player.volumePercentLabel}
-            </span>
+            </button>
           </div>
 
           <div bind:this={speedMenuRoot} class="relative">
@@ -469,7 +451,7 @@
           <button
             type="button"
             onclick={() => { queueVisible = !queueVisible; }}
-            class="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            class="inline-flex h-9 w-32 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             aria-controls="music-queue"
             aria-expanded={queueVisible}
           >
