@@ -141,9 +141,6 @@ export function buildYouTubeEmbedUrl(source: YouTubeVideoSource | YouTubePlaylis
   const url = new URL("https://www.youtube.com/embed/");
   if (source.kind === "youtube-video") {
     url.pathname = `/embed/${encodeURIComponent(source.videoId)}`;
-    if (source.playlistId) {
-      url.searchParams.set("list", source.playlistId);
-    }
   } else {
     url.pathname = "/embed";
     url.searchParams.set("listType", "playlist");

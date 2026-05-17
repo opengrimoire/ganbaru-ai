@@ -1337,22 +1337,68 @@ fn youtube_host_html() -> &'static str {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GanbaruAI YouTube player</title>
   <style>
-    html, body, #player { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
+    html, body, #player-root, #player { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
   </style>
 </head>
 <body>
-  <div id="player"></div>
+  <div id="player-root"><div id="player"></div></div>
   <script>
     const params = new URLSearchParams(location.search);
     const token = params.get("token") || "";
+    const loadId = params.get("load") || "";
     let player = null;
     let apiReady = false;
-    let pendingLoad = null;
     let activeSource = null;
     let playlistSnapshotTimer = null;
+    let playlistErrorSent = false;
+
+    function numberParam(name, fallback) {
+      const raw = params.get(name);
+      if (raw === null || raw === "") return fallback;
+      const value = Number(raw);
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function booleanParam(name) {
+      return params.get(name) === "true";
+    }
+
+    function initialPayloadFromParams() {
+      const kind = params.get("sourceKind");
+      const videoId = params.get("videoId");
+      const playlistId = params.get("playlistId");
+      if (kind !== "youtube-video" && kind !== "youtube-playlist") return null;
+      if (kind === "youtube-video" && !videoId) return null;
+      if (kind === "youtube-playlist" && !playlistId) return null;
+
+      const source = {
+        kind,
+        videoId,
+        playlistId: playlistId || null,
+        startMs: numberParam("startMs", null),
+        endMs: numberParam("endMs", null)
+      };
+      return {
+        source,
+        resumeMs: numberParam("resumeMs", 0),
+        volume: numberParam("volume", 0.8),
+        rate: numberParam("rate", 1),
+        autoplay: booleanParam("autoplay")
+      };
+    }
 
     function send(message) {
-      parent.postMessage({ token, ...message }, "*");
+      parent.postMessage({ token, load: loadId, ...message }, "*");
+    }
+
+    function resetPlayerElement() {
+      const root = document.getElementById("player-root");
+      if (!root) return "player";
+      root.replaceChildren();
+      const element = document.createElement("div");
+      element.id = "player";
+      root.appendChild(element);
+      return element;
     }
 
     function playbackStatus(state) {
@@ -1392,7 +1438,7 @@ fn youtube_host_html() -> &'static str {
     }
 
     function sendPlaylistSnapshot(retries) {
-      if (!activeSource || !activeSource.playlistId) return;
+      if (!activeSource || activeSource.kind !== "youtube-playlist" || !activeSource.playlistId) return;
       const videoIds = currentPlaylistIds();
       if (videoIds.length > 0) {
         send({
@@ -1403,12 +1449,24 @@ fn youtube_host_html() -> &'static str {
         });
         return;
       }
-      if (retries <= 0) return;
+      if (retries <= 0) {
+        sendPlaylistResolutionError();
+        return;
+      }
       if (playlistSnapshotTimer) clearTimeout(playlistSnapshotTimer);
       playlistSnapshotTimer = setTimeout(() => {
         playlistSnapshotTimer = null;
         sendPlaylistSnapshot(retries - 1);
-      }, 300);
+      }, 500);
+    }
+
+    function sendPlaylistResolutionError() {
+      if (!activeSource || !activeSource.playlistId || playlistErrorSent) return;
+      playlistErrorSent = true;
+      send({
+        type: "ganbaruai-youtube-playlist-error",
+        playlistId: activeSource.playlistId
+      });
     }
 
     function playlistRequest(source, payload) {
@@ -1474,21 +1532,23 @@ fn youtube_host_html() -> &'static str {
     }
 
     function loadSource(payload) {
-      if (!apiReady) {
-        pendingLoad = payload;
-        return;
-      }
+      if (!apiReady) return;
       if (player) {
         player.destroy();
         player = null;
       }
+      const playerElement = resetPlayerElement();
       const source = payload.source;
       activeSource = source;
-      player = new YT.Player("player", {
+      playlistErrorSent = false;
+      if (playlistSnapshotTimer) {
+        clearTimeout(playlistSnapshotTimer);
+        playlistSnapshotTimer = null;
+      }
+      const options = {
         host: "https://www.youtube.com",
         width: "100%",
         height: "100%",
-        videoId: source.kind === "youtube-video" ? source.videoId : source.videoId || undefined,
         playerVars: playerVars(source),
         events: {
           onReady(event) {
@@ -1509,24 +1569,24 @@ fn youtube_host_html() -> &'static str {
               event.target.playVideo();
             }
             snapshot("ready");
-            sendPlaylistSnapshot(12);
+            sendPlaylistSnapshot(30);
           },
           onStateChange(event) {
             snapshot(playbackStatus(event.data));
-            sendPlaylistSnapshot(4);
+            sendPlaylistSnapshot(30);
           },
           onError(event) {
             send({ type: "ganbaruai-youtube-error", code: event.data });
           }
         }
-      });
+      };
+      if (source.kind === "youtube-video" || source.videoId) {
+        options.videoId = source.kind === "youtube-video" ? source.videoId : source.videoId;
+      }
+      player = new YT.Player(playerElement, options);
     }
 
     function handleCommand(data) {
-      if (data.action === "load") {
-        loadSource(data);
-        return;
-      }
       if (!player) return;
       if (data.action === "snapshot") {
         snapshot();
@@ -1559,10 +1619,9 @@ fn youtube_host_html() -> &'static str {
     window.onYouTubeIframeAPIReady = () => {
       apiReady = true;
       send({ type: "ganbaruai-youtube-ready" });
-      if (pendingLoad) {
-        const next = pendingLoad;
-        pendingLoad = null;
-        loadSource(next);
+      const initialLoad = initialPayloadFromParams();
+      if (initialLoad) {
+        loadSource(initialLoad);
       }
     };
 
@@ -1647,6 +1706,18 @@ mod tests {
         assert!(host.contains("data.title"));
         assert!(host.contains("function applyVolume"));
         assert!(host.contains("player.unMute()"));
+        assert!(host.contains("function resetPlayerElement"));
+        assert!(host.contains("root.replaceChildren()"));
+        assert!(host.contains("function initialPayloadFromParams"));
+        assert!(host.contains("params.get(\"sourceKind\")"));
+        assert!(host.contains("params.get(\"videoId\")"));
+        assert!(host.contains("params.get(\"playlistId\")"));
+        assert!(host.contains("const initialLoad = initialPayloadFromParams()"));
+        assert!(host.contains("load: loadId"));
+        assert!(host.contains("ganbaruai-youtube-playlist-error"));
+        assert!(host.contains("activeSource.kind !== \"youtube-playlist\""));
+        assert!(host.contains("if (source.kind === \"youtube-video\" || source.videoId)"));
+        assert!(!host.contains("videoId: source.kind"));
         assert!(!host.contains("modestbranding"));
         assert!(!host.contains("showinfo"));
         assert!(!host.contains("autohide"));

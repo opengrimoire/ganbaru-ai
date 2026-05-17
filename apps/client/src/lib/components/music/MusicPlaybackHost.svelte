@@ -74,14 +74,16 @@
   aria-hidden={!hasVisualSurface}
 >
   {#if player.currentSource && player.isYouTubeActive}
-    <iframe
-      bind:this={youtubeFrame}
-      class="pointer-events-none h-full w-full"
-      src={player.youtubeHostUrl ?? "about:blank"}
-      title={player.loadedTitle}
-      allow="autoplay; encrypted-media"
-      referrerpolicy="strict-origin-when-cross-origin"
-    ></iframe>
+    {#key player.youtubeHostUrl}
+      <iframe
+        bind:this={youtubeFrame}
+        class="pointer-events-none h-full w-full"
+        src={player.youtubeHostUrl ?? "about:blank"}
+        title={player.loadedTitle}
+        allow="autoplay; encrypted-media"
+        referrerpolicy="strict-origin-when-cross-origin"
+      ></iframe>
+    {/key}
   {:else if player.currentSource?.kind === "local-file"}
     {#if player.localMediaSrc && player.localHasVideo}
       <video

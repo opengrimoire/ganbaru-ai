@@ -133,4 +133,15 @@ describe("buildYouTubeEmbedUrl", () => {
     expect(embed.searchParams.get("widget_referrer")).toBeTruthy();
     expect(embed.searchParams.get("start")).toBe("10");
   });
+
+  it("keeps playlist queue videos as single-video embeds", () => {
+    const embed = new URL(buildYouTubeEmbedUrl(youtubeVideoSourceFromId("abcDEF_1234", {
+      playlistId: "PLabcdef",
+      playlistIndex: 2,
+    })));
+
+    expect(embed.pathname).toBe("/embed/abcDEF_1234");
+    expect(embed.searchParams.has("list")).toBe(false);
+    expect(embed.searchParams.has("listType")).toBe(false);
+  });
 });
