@@ -30,6 +30,7 @@ export interface MediaProbe {
   fileSizeBytes: number;
   extension: string | null;
   mediaKind: "audio" | "video" | "unknown";
+  playableStartMs: number | null;
 }
 
 export interface LocalPlayerSnapshot {
@@ -42,6 +43,7 @@ export interface LocalPlayerSnapshot {
   muted: boolean;
   rate: number;
   hasVideo: boolean;
+  playableStartMs: number | null;
   error: string | null;
 }
 

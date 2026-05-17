@@ -114,32 +114,14 @@ export function shouldRouteLocalMediaThroughWebAudio(volume: number, hasExisting
   return hasExistingRoute || isVolumeBoosted(volume);
 }
 
-export function normalizeMediaTimelineStartMs(startMs: number | null): number {
+export function normalizeLocalPlayableStartMs(startMs: number | null): number {
   if (startMs === null || !Number.isFinite(startMs) || startMs <= 0) return 0;
   return Math.round(startMs);
 }
 
-export function normalizeLocalMediaPositionMs(rawPositionMs: number, timelineStartMs: number): number {
-  if (!Number.isFinite(rawPositionMs) || rawPositionMs <= 0) return 0;
-  return Math.max(0, Math.round(rawPositionMs) - normalizeMediaTimelineStartMs(timelineStartMs));
-}
-
-export function normalizeLocalMediaDurationMs(
-  rawDurationMs: number | null,
-  timelineStartMs: number,
-  seekableEndMs: number | null = null,
-): number | null {
-  const startMs = normalizeMediaTimelineStartMs(timelineStartMs);
-  const endMs = seekableEndMs !== null && Number.isFinite(seekableEndMs) && seekableEndMs > 0
-    ? Math.round(seekableEndMs)
-    : rawDurationMs;
-  if (endMs === null || !Number.isFinite(endMs) || endMs <= 0) return null;
-  return Math.max(0, Math.round(endMs) - startMs);
-}
-
-export function localMediaSeekTargetMs(positionMs: number, timelineStartMs: number): number {
+export function localMediaSeekTargetMs(positionMs: number, playableStartMs: number): number {
   const position = Number.isFinite(positionMs) && positionMs > 0 ? Math.round(positionMs) : 0;
-  return position + normalizeMediaTimelineStartMs(timelineStartMs);
+  return Math.max(position, normalizeLocalPlayableStartMs(playableStartMs));
 }
 
 export function formatVolumePercent(value: number): string {

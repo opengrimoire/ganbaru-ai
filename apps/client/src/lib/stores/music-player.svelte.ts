@@ -33,9 +33,7 @@ import {
   isVolumeBoosted,
   localMediaSeekTargetMs,
   nextShuffleIndex,
-  normalizeLocalMediaDurationMs,
-  normalizeLocalMediaPositionMs,
-  normalizeMediaTimelineStartMs,
+  normalizeLocalPlayableStartMs,
   stableStatusDuringYouTubeBuffering,
   shouldPersistPlaybackState,
   shouldRouteLocalMediaThroughWebAudio,
@@ -145,6 +143,10 @@ const SETTINGS_KEY = "ganbaruai-music-player";
 const progressMaxFallback = 1;
 const YOUTUBE_OPTIMISTIC_PAUSE_MS = 1_500;
 const YOUTUBE_PLAYLIST_RESOLVE_TIMEOUT_MS = 18_000;
+const LOCAL_PLAYABLE_START_KICK_MS = 650;
+const LOCAL_PLAYABLE_START_NUDGE_MS = 1_000;
+const LOCAL_PLAYABLE_START_MAX_NUDGES = 12;
+const MEDIA_HAVE_CURRENT_DATA_READY_STATE = 2;
 const audioFileExtensions = new Set([
   "aac",
   "aif",
@@ -263,8 +265,9 @@ class MusicPlayerStore {
   surfaceElement = $state<HTMLElement | null>(null);
 
   private pendingLocalResumeMs = 0;
-  private pendingLocalPersistedDurationMs: number | null = null;
-  private localMediaTimelineStartMs = 0;
+  private localMediaPlayableStartMs = 0;
+  private localPlayableStartKickTimeoutId: number | null = null;
+  private localPlayableStartKickCount = 0;
   private ignoreNextLocalPause = false;
   private loadGeneration = 0;
   private lastPersisted: PersistedPlaybackState | null = null;
@@ -753,11 +756,10 @@ class MusicPlayerStore {
   handleLocalLoadedMetadata(event: Event): void {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
-    this.updateLocalMediaTimeline(element);
+    this.updateLocalPlayableStart(element);
     const resumeMs = this.pendingLocalResumePositionMs(element);
     this.pendingLocalResumeMs = 0;
-    this.pendingLocalPersistedDurationMs = null;
-    if (resumeMs > 0 || this.localMediaTimelineStartMs > 0) {
+    if (resumeMs > 0 || this.localMediaPlayableStartMs > 0) {
       this.seekMediaElement(element, resumeMs);
     }
     this.snapshot = this.localSnapshotFromElement(
@@ -773,8 +775,9 @@ class MusicPlayerStore {
   handleLocalLoadedData(event: Event): void {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
-    this.updateLocalMediaTimeline(element);
+    this.updateLocalPlayableStart(element);
     this.alignLocalMediaToPlayableStart(element);
+    this.localPlayableStartKickCount = 0;
     this.localVideoReady = true;
   }
 
@@ -788,6 +791,7 @@ class MusicPlayerStore {
   handleLocalPlay(event: Event): void {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
+    this.scheduleLocalPlayableStartKick(element);
     this.restoreLocalMediaElementVolume(element);
     this.scheduleLocalVolumeRestore(element);
     this.snapshot = this.localSnapshotFromElement(element, "playing");
@@ -867,8 +871,9 @@ class MusicPlayerStore {
       artworkUrl ??= await registerEmbeddedArtwork(source.path).catch(() => null);
       if (generation !== this.loadGeneration) return;
       this.pendingLocalResumeMs = persisted?.positionMs ?? source.startMs ?? 0;
-      this.pendingLocalPersistedDurationMs = persisted?.durationMs ?? null;
-      this.localMediaTimelineStartMs = 0;
+      this.localMediaPlayableStartMs = useVideoElement
+        ? normalizeLocalPlayableStartMs(localSnapshot.playableStartMs)
+        : 0;
       this.localHasVideo = useVideoElement;
       this.localVideoReady = !useVideoElement;
       this.localMediaSrc = mediaUrl;
@@ -1061,6 +1066,7 @@ class MusicPlayerStore {
       this.alignLocalMediaToPlayableStart(this.localMediaElement);
       await this.resumeAudioContext(this.localMediaElement);
       await this.localMediaElement.play();
+      this.scheduleLocalPlayableStartKick(this.localMediaElement);
       this.restoreLocalMediaElementVolume(this.localMediaElement);
       this.scheduleLocalVolumeRestore(this.localMediaElement);
       this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "playing");
@@ -1105,7 +1111,7 @@ class MusicPlayerStore {
 
   private seekMediaElement(element: HTMLMediaElement, positionMs: number): void {
     try {
-      element.currentTime = localMediaSeekTargetMs(positionMs, this.localMediaTimelineStartMs) / 1000;
+      element.currentTime = localMediaSeekTargetMs(positionMs, this.localMediaPlayableStartMs) / 1000;
     } catch {
       this.pendingLocalResumeMs = positionMs;
     }
@@ -1129,45 +1135,88 @@ class MusicPlayerStore {
   }
 
   private mediaPositionMs(element: HTMLMediaElement): number {
-    return normalizeLocalMediaPositionMs(element.currentTime * 1000, this.localMediaTimelineStartMs);
+    return Number.isFinite(element.currentTime) && element.currentTime > 0
+      ? Math.round(element.currentTime * 1000)
+      : 0;
   }
 
   private mediaDurationMs(element: HTMLMediaElement): number | null {
-    const rawDurationMs = Number.isFinite(element.duration) && element.duration > 0
-      ? Math.round(element.duration * 1000)
-      : null;
-    return normalizeLocalMediaDurationMs(
-      rawDurationMs,
-      this.localMediaTimelineStartMs,
-      this.mediaSeekableEndMs(element),
-    );
+    return this.rawMediaDurationMs(element);
   }
 
-  private updateLocalMediaTimeline(element: HTMLMediaElement): void {
-    this.localMediaTimelineStartMs = normalizeMediaTimelineStartMs(this.mediaSeekableStartMs(element));
+  private updateLocalPlayableStart(element: HTMLMediaElement): void {
+    const startMs = normalizeLocalPlayableStartMs(this.mediaSeekableStartMs(element));
+    if (startMs > 0 || this.localMediaPlayableStartMs === 0) {
+      this.localMediaPlayableStartMs = startMs;
+    }
   }
 
   private alignLocalMediaToPlayableStart(element: HTMLMediaElement): void {
-    this.updateLocalMediaTimeline(element);
-    if (this.localMediaTimelineStartMs <= 0 || this.mediaPositionMs(element) > 0) return;
+    this.updateLocalPlayableStart(element);
+    if (this.localMediaPlayableStartMs <= 0 || element.currentTime * 1000 >= this.localMediaPlayableStartMs) return;
     this.seekMediaElement(element, 0);
   }
 
   private pendingLocalResumePositionMs(element: HTMLMediaElement): number {
-    let positionMs = this.pendingLocalResumeMs;
-    const rawDurationMs = Number.isFinite(element.duration) && element.duration > 0
-      ? Math.round(element.duration * 1000)
-      : null;
-    if (
-      this.localMediaTimelineStartMs > 0
-      && rawDurationMs !== null
-      && this.pendingLocalPersistedDurationMs !== null
-      && Math.abs(this.pendingLocalPersistedDurationMs - rawDurationMs) <= 1_000
-    ) {
-      positionMs = Math.max(0, positionMs - this.localMediaTimelineStartMs);
-    }
+    const positionMs = this.pendingLocalResumeMs;
     const durationMs = this.mediaDurationMs(element);
     return durationMs === null ? positionMs : Math.min(positionMs, durationMs);
+  }
+
+  private rawMediaDurationMs(element: HTMLMediaElement): number | null {
+    return Number.isFinite(element.duration) && element.duration > 0
+      ? Math.round(element.duration * 1000)
+      : null;
+  }
+
+  private scheduleLocalPlayableStartKick(element: HTMLMediaElement, resetCount = true): void {
+    this.clearLocalPlayableStartKick();
+    if (resetCount) {
+      this.localPlayableStartKickCount = 0;
+    }
+    if (typeof window === "undefined") return;
+    this.localPlayableStartKickTimeoutId = window.setTimeout(() => {
+      this.localPlayableStartKickTimeoutId = null;
+      this.kickLocalMediaToPlayableStart(element);
+    }, LOCAL_PLAYABLE_START_KICK_MS);
+  }
+
+  private clearLocalPlayableStartKick(): void {
+    if (this.localPlayableStartKickTimeoutId === null || typeof window === "undefined") return;
+    window.clearTimeout(this.localPlayableStartKickTimeoutId);
+    this.localPlayableStartKickTimeoutId = null;
+  }
+
+  private kickLocalMediaToPlayableStart(element: HTMLMediaElement): void {
+    if (element !== this.localMediaElement || element.paused) return;
+    if (element.readyState >= MEDIA_HAVE_CURRENT_DATA_READY_STATE) return;
+    const startMs = this.nextLocalPlayableStartCandidateMs(element);
+    if (startMs <= 0 || this.localPlayableStartKickCount >= LOCAL_PLAYABLE_START_MAX_NUDGES) return;
+    this.localPlayableStartKickCount += 1;
+    this.localMediaPlayableStartMs = startMs;
+    this.seekMediaElement(element, startMs);
+    void element.play().catch(() => null);
+    this.snapshot = this.localSnapshotFromElement(element, "playing");
+    this.scheduleLocalPlayableStartKick(element, false);
+  }
+
+  private nextLocalPlayableStartCandidateMs(element: HTMLMediaElement): number {
+    const currentMs = Number.isFinite(element.currentTime) && element.currentTime > 0
+      ? Math.round(element.currentTime * 1000)
+      : 0;
+    const seekableStartMs = normalizeLocalPlayableStartMs(this.mediaSeekableStartMs(element));
+    if (seekableStartMs > currentMs + 100) return seekableStartMs;
+    const seekableEndMs = this.mediaSeekableEndStartCandidateMs(element);
+    if (seekableEndMs > currentMs + 100) return seekableEndMs;
+    return currentMs + LOCAL_PLAYABLE_START_NUDGE_MS;
+  }
+
+  private mediaSeekableEndStartCandidateMs(element: HTMLMediaElement): number {
+    const rawDurationMs = this.rawMediaDurationMs(element);
+    const seekableEndMs = this.mediaSeekableEndMs(element);
+    if (rawDurationMs === null || seekableEndMs === null) return 0;
+    if (seekableEndMs <= 1_000 || seekableEndMs >= rawDurationMs - 1_000) return 0;
+    return normalizeLocalPlayableStartMs(seekableEndMs);
   }
 
   private mediaSeekableStartMs(element: HTMLMediaElement): number | null {
@@ -1236,9 +1285,10 @@ class MusicPlayerStore {
     this.localMediaSrc = null;
     this.localHasVideo = false;
     this.localVideoReady = false;
+    this.clearLocalPlayableStartKick();
+    this.localPlayableStartKickCount = 0;
     this.pendingLocalResumeMs = 0;
-    this.pendingLocalPersistedDurationMs = null;
-    this.localMediaTimelineStartMs = 0;
+    this.localMediaPlayableStartMs = 0;
   }
 
   private async ensureYouTubeHostFrame(

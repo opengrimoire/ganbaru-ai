@@ -1007,7 +1007,15 @@ fn spawn_music_host() -> Result<MusicHostState, String> {
                 let Ok(stream) = stream else {
                     continue;
                 };
-                handle_music_host_stream(stream, Arc::clone(&thread_shared));
+                let connection_shared = Arc::clone(&thread_shared);
+                let spawn_result = thread::Builder::new()
+                    .name("music-player-host-request".to_string())
+                    .spawn(move || {
+                        handle_music_host_stream(stream, connection_shared);
+                    });
+                if spawn_result.is_err() {
+                    continue;
+                }
             }
         })
         .map_err(|e| format!("failed to start music player host: {e}"))?;
