@@ -126,62 +126,62 @@
 <svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
 
 <section class="flex h-full min-h-0 flex-col bg-background text-foreground" onwheel={(event) => player.handleVolumeWheel(event)}>
-  <div class="border-b border-border px-4 py-3 max-[520px]:px-3 max-[520px]:py-2">
+  <div class="flex h-(--cal-header-row-h) shrink-0 items-center border-b border-border px-3">
     <form
-      class="flex min-w-0 items-center gap-2 max-[560px]:flex-col max-[560px]:items-stretch"
+      class="flex min-w-0 flex-1 items-center gap-2"
       onsubmit={(event) => { event.preventDefault(); void player.loadFromInput(); }}
     >
       <label class="sr-only" for="music-source">Music source</label>
-      <div class="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
-        <LinkIcon class="shrink-0 text-muted-foreground" size={16} strokeWidth={2.25} />
+      <div class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-2.5">
+        <LinkIcon class="shrink-0 text-muted-foreground" size={14} strokeWidth={2.25} />
         <input
           id="music-source"
           bind:value={player.sourceInput}
-          class="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+          class="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
           placeholder="Add a local file path or YouTube link"
           autocomplete="off"
           spellcheck="false"
         />
       </div>
-      <div class="flex items-center gap-2 max-[560px]:justify-end">
+      {#if player.parseError || player.playerError}
+        <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[11px] text-destructive min-[680px]:flex">
+          <AlertCircle class="shrink-0" size={13} strokeWidth={2.25} />
+          <span class="truncate">{player.parseError ?? player.playerError}</span>
+        </div>
+      {/if}
+      <div class="flex shrink-0 items-center gap-2">
         <button
           type="button"
           onclick={() => { void player.loadFolder(); }}
           disabled={player.sourceActionBusy}
-          class="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
         >
-          <FolderOpen size={15} strokeWidth={2.25} />
-          Folder
+          <FolderOpen size={14} strokeWidth={2.25} />
+          <span class="hidden min-[420px]:inline">Folder</span>
         </button>
         <button
           type="submit"
           disabled={player.sourceActionBusy}
-          class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
           {#if player.sourceActionBusy}
-            <LoaderCircle class="animate-spin" size={15} strokeWidth={2.25} />
+            <LoaderCircle class="animate-spin" size={14} strokeWidth={2.25} />
           {:else}
-            <Play size={15} strokeWidth={2.25} />
+            <Play size={14} strokeWidth={2.25} />
           {/if}
-          Load
+          <span class="hidden min-[420px]:inline">Load</span>
         </button>
         <button
           type="button"
           onclick={() => { void player.resetPlayer(); }}
-          class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           title="Reset"
           aria-label="Reset"
         >
-          <RotateCcw size={15} strokeWidth={2.25} />
+          <RotateCcw size={13} strokeWidth={2.25} />
         </button>
       </div>
     </form>
-    {#if player.parseError || player.playerError}
-      <div class="mt-2 flex items-center gap-2 text-[12px] text-destructive">
-        <AlertCircle size={14} strokeWidth={2.25} />
-        <span>{player.parseError ?? player.playerError}</span>
-      </div>
-    {/if}
   </div>
 
   <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] grid-rows-[minmax(0,1fr)_auto] max-[860px]:grid-cols-1 max-[860px]:grid-rows-[minmax(0,1fr)_minmax(7rem,35%)_auto]">
