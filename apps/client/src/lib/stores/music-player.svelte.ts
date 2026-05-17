@@ -780,6 +780,8 @@ class MusicPlayerStore {
   handleLocalPlay(event: Event): void {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
+    this.restoreLocalMediaElementVolume(element);
+    this.scheduleLocalVolumeRestore(element);
     this.snapshot = this.localSnapshotFromElement(element, "playing");
     this.playerError = null;
     this.updateMediaSession();
@@ -1044,11 +1046,12 @@ class MusicPlayerStore {
       return;
     }
     try {
-      this.localPauseSilenced = false;
-      this.applyLocalVolume();
+      this.restoreLocalMediaElementVolume(this.localMediaElement);
       this.localMediaElement.playbackRate = this.snapshot.rate;
       await this.resumeAudioContext(this.localMediaElement);
       await this.localMediaElement.play();
+      this.restoreLocalMediaElementVolume(this.localMediaElement);
+      this.scheduleLocalVolumeRestore(this.localMediaElement);
       this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "playing");
       this.playerError = null;
       this.updateMediaSession();
@@ -1532,6 +1535,23 @@ class MusicPlayerStore {
     if (nodes) {
       nodes.gain.gain.value = 0;
     }
+  }
+
+  private restoreLocalMediaElementVolume(element: HTMLMediaElement): void {
+    if (element !== this.localMediaElement) return;
+    this.localPauseSilenced = false;
+    this.applyLocalVolume();
+  }
+
+  private scheduleLocalVolumeRestore(element: HTMLMediaElement): void {
+    if (typeof window === "undefined") return;
+    const restoreIfPlaying = () => {
+      if (!element.paused) {
+        this.restoreLocalMediaElementVolume(element);
+      }
+    };
+    window.setTimeout(restoreIfPlaying, 0);
+    window.setTimeout(restoreIfPlaying, 150);
   }
 
   private effectiveVolume(): number {
