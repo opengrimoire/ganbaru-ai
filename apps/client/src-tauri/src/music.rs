@@ -1367,11 +1367,14 @@ fn youtube_host_html() -> &'static str {
     function snapshot(status) {
       if (!player) return;
       const duration = player.getDuration();
+      const metadata = videoMetadata();
       send({
         type: "ganbaruai-youtube-state",
         status: status || playbackStatus(player.getPlayerState()),
         positionMs: Math.max(0, Math.round(player.getCurrentTime() * 1000)),
-        durationMs: Number.isFinite(duration) && duration > 0 ? Math.round(duration * 1000) : null
+        durationMs: Number.isFinite(duration) && duration > 0 ? Math.round(duration * 1000) : null,
+        videoId: metadata.videoId,
+        title: metadata.title
       });
     }
 
@@ -1419,6 +1422,23 @@ fn youtube_host_html() -> &'static str {
         : (source.startMs !== null ? Math.floor(source.startMs / 1000) : null);
       if (startSeconds !== null) request.startSeconds = startSeconds;
       return request;
+    }
+
+    function videoMetadata() {
+      if (!player || typeof player.getVideoData !== "function") {
+        return { videoId: null, title: null };
+      }
+      const data = player.getVideoData();
+      if (!data || typeof data !== "object") {
+        return { videoId: null, title: null };
+      }
+      const videoId = typeof data.video_id === "string" && data.video_id.trim()
+        ? data.video_id.trim()
+        : null;
+      const title = typeof data.title === "string" && data.title.trim()
+        ? data.title.trim()
+        : null;
+      return { videoId, title };
     }
 
     function applyVolume(value) {
@@ -1623,6 +1643,8 @@ mod tests {
         assert!(host.contains("fs: 0"));
         assert!(host.contains("iv_load_policy: 3"));
         assert!(host.contains("rel: 0"));
+        assert!(host.contains("function videoMetadata"));
+        assert!(host.contains("data.title"));
         assert!(host.contains("function applyVolume"));
         assert!(host.contains("player.unMute()"));
         assert!(!host.contains("modestbranding"));

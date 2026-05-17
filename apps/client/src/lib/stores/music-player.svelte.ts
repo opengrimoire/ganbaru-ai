@@ -83,6 +83,8 @@ interface YouTubeHostStateMessage {
   status: PlaybackStatus;
   positionMs: number;
   durationMs: number | null;
+  videoId: string | null;
+  title: string | null;
 }
 
 interface YouTubeHostReadyMessage {
@@ -1194,6 +1196,7 @@ class MusicPlayerStore {
       void this.applyYouTubePlaylist(message);
       return;
     }
+    this.applyYouTubeMetadataTitle(message.videoId, message.title);
     if (message.status === "playing" && Date.now() < this.youtubeOptimisticPauseUntil) {
       return;
     }
@@ -1246,6 +1249,8 @@ class MusicPlayerStore {
       && isPlaybackStatus(record.status)
       && typeof record.positionMs === "number"
       && (typeof record.durationMs === "number" || record.durationMs === null)
+      && (typeof record.videoId === "string" || record.videoId === null)
+      && (typeof record.title === "string" || record.title === null)
     ) {
       return {
         token: record.token,
@@ -1253,9 +1258,40 @@ class MusicPlayerStore {
         status: record.status,
         positionMs: record.positionMs,
         durationMs: record.durationMs,
+        videoId: record.videoId,
+        title: record.title,
       };
     }
     return null;
+  }
+
+  private applyYouTubeMetadataTitle(videoId: string | null, title: string | null): void {
+    const resolvedTitle = title?.trim();
+    if (!resolvedTitle) return;
+
+    const matchesVideo = (source: MusicSource): boolean => {
+      if (source.kind === "youtube-video") {
+        return videoId ? source.videoId === videoId : true;
+      }
+      if (source.kind === "youtube-playlist") {
+        return source.videoId !== null && (videoId ? source.videoId === videoId : true);
+      }
+      return false;
+    };
+
+    if (this.currentSource && matchesVideo(this.currentSource) && this.currentSource.title !== resolvedTitle) {
+      this.currentSource = { ...this.currentSource, title: resolvedTitle };
+    }
+
+    let queueChanged = false;
+    const queue = this.queue.map((source) => {
+      if (!matchesVideo(source) || source.title === resolvedTitle) return source;
+      queueChanged = true;
+      return { ...source, title: resolvedTitle };
+    });
+    if (queueChanged) {
+      this.queue = queue;
+    }
   }
 
   private postPendingYouTubeLoad(): void {
