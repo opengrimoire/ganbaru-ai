@@ -1,6 +1,7 @@
 use std::{
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{mpsc, Mutex},
+    thread::{self, JoinHandle},
 };
 
 use serde::{Deserialize, Serialize};
@@ -114,28 +115,225 @@ impl MediaPlayerError {
     fn backend_unavailable() -> Self {
         Self {
             code: "backendUnavailable".to_string(),
-            message: "Native local playback is not enabled in this build. Install GStreamer development libraries and enable the media backend before using local audio or video playback.".to_string(),
+            message: "Native local playback is not enabled in this build. Add the approved audio backend dependencies before using native local playback.".to_string(),
         }
     }
 
-    fn state_lock() -> Self {
+    fn backend_thread() -> Self {
         Self {
-            code: "stateLock".to_string(),
-            message: "Media player state is temporarily unavailable.".to_string(),
+            code: "backendThread".to_string(),
+            message: "The native media player backend is temporarily unavailable.".to_string(),
         }
     }
 }
 
 #[derive(Debug, Default)]
-struct PlayerInner {
+struct PlayerCore {
     loaded: bool,
     snapshot: PlayerSnapshot,
     surface_rect: Option<SurfaceRect>,
 }
 
+impl PlayerCore {
+    fn handle(&mut self, command: BackendCommand) -> Result<PlayerSnapshot, MediaPlayerError> {
+        match command {
+            BackendCommand::Load { request, probe } => self.load(request, probe),
+            BackendCommand::Play => self.play(),
+            BackendCommand::Pause => Ok(self.pause()),
+            BackendCommand::Stop => Ok(self.stop()),
+            BackendCommand::Seek(position_ms) => Ok(self.seek(position_ms)),
+            BackendCommand::SetVolume(volume) => Ok(self.set_volume(volume)),
+            BackendCommand::SetRate(rate) => Ok(self.set_rate(rate)),
+            BackendCommand::SetSurfaceRect(rect) => Ok(self.set_surface_rect(rect)),
+            BackendCommand::ClearSurface => Ok(self.clear_surface()),
+            BackendCommand::Snapshot => Ok(self.snapshot.clone()),
+        }
+    }
+
+    fn load(
+        &mut self,
+        request: LoadRequest,
+        probe: MediaProbe,
+    ) -> Result<PlayerSnapshot, MediaPlayerError> {
+        let volume = request
+            .volume
+            .map(clamp_volume)
+            .unwrap_or(self.snapshot.volume);
+        let rate = request.rate.map(clamp_rate).unwrap_or(self.snapshot.rate);
+        let title = request
+            .source
+            .title
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| probe.title.clone());
+        self.loaded = true;
+        self.snapshot = PlayerSnapshot {
+            status: PlayerStatus::Ready,
+            source_identity: Some(request.source.identity),
+            title: Some(title),
+            position_ms: request.start_ms.unwrap_or(0),
+            duration_ms: None,
+            volume,
+            rate,
+            has_video: probe.media_kind == MediaKind::Video,
+            error: None,
+        };
+        Ok(self.snapshot.clone())
+    }
+
+    fn play(&mut self) -> Result<PlayerSnapshot, MediaPlayerError> {
+        if !self.loaded {
+            self.snapshot.status = PlayerStatus::Error;
+            self.snapshot.error = Some("Load a local media file before playing.".to_string());
+            return Err(MediaPlayerError::invalid_source(
+                "Load a local media file before playing.",
+            ));
+        }
+        let err = MediaPlayerError::backend_unavailable();
+        self.snapshot.status = PlayerStatus::Error;
+        self.snapshot.error = Some(err.message.clone());
+        Err(err)
+    }
+
+    fn pause(&mut self) -> PlayerSnapshot {
+        if self.loaded {
+            self.snapshot.status = PlayerStatus::Paused;
+            self.snapshot.error = None;
+        }
+        self.snapshot.clone()
+    }
+
+    fn stop(&mut self) -> PlayerSnapshot {
+        let volume = self.snapshot.volume;
+        let rate = self.snapshot.rate;
+        self.loaded = false;
+        self.snapshot = PlayerSnapshot {
+            volume,
+            rate,
+            ..PlayerSnapshot::default()
+        };
+        self.snapshot.clone()
+    }
+
+    fn seek(&mut self, position_ms: u64) -> PlayerSnapshot {
+        self.snapshot.position_ms = position_ms;
+        self.snapshot.clone()
+    }
+
+    fn set_volume(&mut self, volume: f64) -> PlayerSnapshot {
+        self.snapshot.volume = clamp_volume(volume);
+        self.snapshot.clone()
+    }
+
+    fn set_rate(&mut self, rate: f64) -> PlayerSnapshot {
+        self.snapshot.rate = clamp_rate(rate);
+        self.snapshot.clone()
+    }
+
+    fn set_surface_rect(&mut self, rect: SurfaceRect) -> PlayerSnapshot {
+        self.surface_rect = Some(rect);
+        self.snapshot.clone()
+    }
+
+    fn clear_surface(&mut self) -> PlayerSnapshot {
+        self.surface_rect = None;
+        self.snapshot.clone()
+    }
+}
+
+#[derive(Debug)]
+enum BackendCommand {
+    Load {
+        request: LoadRequest,
+        probe: MediaProbe,
+    },
+    Play,
+    Pause,
+    Stop,
+    Seek(u64),
+    SetVolume(f64),
+    SetRate(f64),
+    SetSurfaceRect(SurfaceRect),
+    ClearSurface,
+    Snapshot,
+}
+
+enum BackendMessage {
+    Command(
+        Box<BackendCommand>,
+        mpsc::Sender<Result<PlayerSnapshot, MediaPlayerError>>,
+    ),
+    Shutdown,
+}
+
+struct PlaybackController {
+    sender: mpsc::Sender<BackendMessage>,
+    worker: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl std::fmt::Debug for PlaybackController {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PlaybackController").finish_non_exhaustive()
+    }
+}
+
+impl PlaybackController {
+    fn new() -> Self {
+        let (sender, receiver) = mpsc::channel::<BackendMessage>();
+        let worker = thread::Builder::new()
+            .name("ganbaruai-media-player".to_string())
+            .spawn(move || playback_worker(receiver))
+            .expect("failed to start media player worker thread");
+        Self {
+            sender,
+            worker: Mutex::new(Some(worker)),
+        }
+    }
+
+    fn dispatch(&self, command: BackendCommand) -> Result<PlayerSnapshot, MediaPlayerError> {
+        let (reply_sender, reply_receiver) = mpsc::channel();
+        self.sender
+            .send(BackendMessage::Command(Box::new(command), reply_sender))
+            .map_err(|_| MediaPlayerError::backend_thread())?;
+        reply_receiver
+            .recv()
+            .map_err(|_| MediaPlayerError::backend_thread())?
+    }
+}
+
+impl Default for PlaybackController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for PlaybackController {
+    fn drop(&mut self) {
+        let _ = self.sender.send(BackendMessage::Shutdown);
+        if let Ok(mut worker) = self.worker.lock() {
+            if let Some(worker) = worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+}
+
+fn playback_worker(receiver: mpsc::Receiver<BackendMessage>) {
+    let mut core = PlayerCore::default();
+    while let Ok(message) = receiver.recv() {
+        match message {
+            BackendMessage::Command(command, reply) => {
+                let result = core.handle(*command);
+                let _ = reply.send(result);
+            }
+            BackendMessage::Shutdown => break,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct MediaPlayerState {
-    inner: Mutex<PlayerInner>,
+    controller: PlaybackController,
 }
 
 #[tauri::command]
@@ -150,76 +348,24 @@ fn load(
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
     validate_load_request(&request)?;
     let probe = probe_local_file(&request.source.path)?;
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    let volume = request
-        .volume
-        .map(clamp_volume)
-        .unwrap_or(inner.snapshot.volume);
-    let rate = request.rate.map(clamp_rate).unwrap_or(inner.snapshot.rate);
-    let title = request
-        .source
-        .title
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| probe.title.clone());
-    inner.loaded = true;
-    inner.snapshot = PlayerSnapshot {
-        status: PlayerStatus::Ready,
-        source_identity: Some(request.source.identity),
-        title: Some(title),
-        position_ms: request.start_ms.unwrap_or(0),
-        duration_ms: None,
-        volume,
-        rate,
-        has_video: probe.media_kind == MediaKind::Video,
-        error: None,
-    };
-    Ok(inner.snapshot.clone())
+    state
+        .controller
+        .dispatch(BackendCommand::Load { request, probe })
 }
 
 #[tauri::command]
 fn play(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    if !inner.loaded {
-        inner.snapshot.status = PlayerStatus::Error;
-        inner.snapshot.error = Some("Load a local media file before playing.".to_string());
-        return Err(MediaPlayerError::invalid_source(
-            "Load a local media file before playing.",
-        ));
-    }
-    inner.snapshot.status = PlayerStatus::Error;
-    inner.snapshot.error = Some(MediaPlayerError::backend_unavailable().message);
-    Err(MediaPlayerError::backend_unavailable())
+    state.controller.dispatch(BackendCommand::Play)
 }
 
 #[tauri::command]
 fn pause(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    if inner.loaded {
-        inner.snapshot.status = PlayerStatus::Paused;
-    }
-    Ok(inner.snapshot.clone())
+    state.controller.dispatch(BackendCommand::Pause)
 }
 
 #[tauri::command]
 fn stop(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    inner.snapshot.status = PlayerStatus::Idle;
-    inner.snapshot.position_ms = 0;
-    inner.loaded = false;
-    Ok(inner.snapshot.clone())
+    state.controller.dispatch(BackendCommand::Stop)
 }
 
 #[tauri::command]
@@ -227,12 +373,7 @@ fn seek(
     state: State<'_, MediaPlayerState>,
     position_ms: u64,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    inner.snapshot.position_ms = position_ms;
-    Ok(inner.snapshot.clone())
+    state.controller.dispatch(BackendCommand::Seek(position_ms))
 }
 
 #[tauri::command]
@@ -240,12 +381,7 @@ fn set_volume(
     state: State<'_, MediaPlayerState>,
     volume: f64,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    inner.snapshot.volume = clamp_volume(volume);
-    Ok(inner.snapshot.clone())
+    state.controller.dispatch(BackendCommand::SetVolume(volume))
 }
 
 #[tauri::command]
@@ -253,12 +389,7 @@ fn set_rate(
     state: State<'_, MediaPlayerState>,
     rate: f64,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    inner.snapshot.rate = clamp_rate(rate);
-    Ok(inner.snapshot.clone())
+    state.controller.dispatch(BackendCommand::SetRate(rate))
 }
 
 #[tauri::command]
@@ -266,23 +397,19 @@ fn set_surface_rect(
     state: State<'_, MediaPlayerState>,
     rect: SurfaceRect,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    inner.surface_rect = Some(rect);
-    Ok(inner.snapshot.clone())
+    state
+        .controller
+        .dispatch(BackendCommand::SetSurfaceRect(rect))
 }
 
 #[tauri::command]
 fn clear_surface(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
-    let mut inner = state
-        .inner
-        .lock()
-        .map_err(|_| MediaPlayerError::state_lock())?;
-    let _had_surface = inner.surface_rect.is_some();
-    inner.surface_rect = None;
-    Ok(inner.snapshot.clone())
+    state.controller.dispatch(BackendCommand::ClearSurface)
+}
+
+#[tauri::command]
+fn snapshot(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
+    state.controller.dispatch(BackendCommand::Snapshot)
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -298,6 +425,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             set_rate,
             set_surface_rect,
             clear_surface,
+            snapshot,
         ])
         .setup(|app, _api| {
             app.manage(MediaPlayerState::default());
@@ -360,7 +488,7 @@ fn validate_local_file_path(path: &Path) -> Result<(), MediaPlayerError> {
 }
 
 fn media_title_from_path(path: &Path) -> String {
-    path.file_name()
+    path.file_stem()
         .and_then(|value| value.to_str())
         .filter(|value| !value.is_empty())
         .unwrap_or("Untitled media")
@@ -380,7 +508,7 @@ fn media_kind_from_extension(extension: &str) -> MediaKind {
 
 fn clamp_volume(value: f64) -> f64 {
     if value.is_finite() {
-        value.clamp(0.0, 1.0)
+        value.clamp(0.0, 1.5)
     } else {
         PlayerSnapshot::default().volume
     }
@@ -408,7 +536,8 @@ mod tests {
     #[test]
     fn clamp_helpers_bound_user_values() {
         assert_eq!(clamp_volume(-1.0), 0.0);
-        assert_eq!(clamp_volume(2.0), 1.0);
+        assert_eq!(clamp_volume(1.25), 1.25);
+        assert_eq!(clamp_volume(2.0), 1.5);
         assert_eq!(clamp_rate(0.1), 0.25);
         assert_eq!(clamp_rate(4.0), 2.0);
     }
@@ -417,5 +546,106 @@ mod tests {
     fn local_file_validation_rejects_relative_paths() {
         let err = validate_local_file_path(Path::new("song.mp3")).unwrap_err();
         assert_eq!(err.code, "invalidSource");
+    }
+
+    #[test]
+    fn media_title_omits_file_extension() {
+        assert_eq!(
+            media_title_from_path(Path::new("/music/01 - Made in Abyss.mp3")),
+            "01 - Made in Abyss"
+        );
+    }
+
+    #[test]
+    fn player_core_loads_and_updates_snapshot() {
+        let mut core = PlayerCore::default();
+        let snapshot = core
+            .handle(BackendCommand::Load {
+                request: local_load_request(Some(1_500)),
+                probe: audio_probe(),
+            })
+            .unwrap();
+
+        assert_eq!(snapshot.status, PlayerStatus::Ready);
+        assert_eq!(snapshot.position_ms, 1_500);
+        assert_eq!(snapshot.volume, 1.25);
+        assert_eq!(snapshot.rate, 1.5);
+        assert_eq!(snapshot.title.as_deref(), Some("Song title"));
+        assert!(!snapshot.has_video);
+    }
+
+    #[test]
+    fn player_core_pause_is_state_only_and_clears_errors() {
+        let mut core = loaded_core();
+        let play_error = core.handle(BackendCommand::Play).unwrap_err();
+        assert_eq!(play_error.code, "backendUnavailable");
+
+        let snapshot = core.handle(BackendCommand::Pause).unwrap();
+        assert_eq!(snapshot.status, PlayerStatus::Paused);
+        assert_eq!(snapshot.error, None);
+    }
+
+    #[test]
+    fn player_core_stop_releases_source_state_and_keeps_settings() {
+        let mut core = loaded_core();
+        let snapshot = core.handle(BackendCommand::Stop).unwrap();
+
+        assert_eq!(snapshot.status, PlayerStatus::Idle);
+        assert_eq!(snapshot.source_identity, None);
+        assert_eq!(snapshot.position_ms, 0);
+        assert_eq!(snapshot.volume, 1.25);
+        assert_eq!(snapshot.rate, 1.5);
+    }
+
+    #[test]
+    fn playback_controller_dispatches_on_worker_thread() {
+        let controller = PlaybackController::new();
+        let loaded = controller
+            .dispatch(BackendCommand::Load {
+                request: local_load_request(None),
+                probe: audio_probe(),
+            })
+            .unwrap();
+        assert_eq!(loaded.status, PlayerStatus::Ready);
+
+        let seeked = controller.dispatch(BackendCommand::Seek(42_000)).unwrap();
+        assert_eq!(seeked.position_ms, 42_000);
+
+        let snapshot = controller.dispatch(BackendCommand::Snapshot).unwrap();
+        assert_eq!(snapshot.position_ms, 42_000);
+    }
+
+    fn loaded_core() -> PlayerCore {
+        let mut core = PlayerCore::default();
+        core.handle(BackendCommand::Load {
+            request: local_load_request(None),
+            probe: audio_probe(),
+        })
+        .unwrap();
+        core
+    }
+
+    fn local_load_request(start_ms: Option<u64>) -> LoadRequest {
+        LoadRequest {
+            source: LocalMediaSource {
+                kind: "local-file".to_string(),
+                path: "/music/song.mp3".to_string(),
+                identity: "local:/music/song.mp3".to_string(),
+                title: Some("Song title".to_string()),
+            },
+            start_ms,
+            volume: Some(1.25),
+            rate: Some(1.5),
+        }
+    }
+
+    fn audio_probe() -> MediaProbe {
+        MediaProbe {
+            path: "/music/song.mp3".to_string(),
+            title: "song".to_string(),
+            file_size_bytes: 1024,
+            extension: Some("mp3".to_string()),
+            media_kind: MediaKind::Audio,
+        }
     }
 }

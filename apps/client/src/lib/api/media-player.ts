@@ -89,6 +89,10 @@ export function clearLocalSurface(): Promise<LocalPlayerSnapshot> {
   return invoke("plugin:media-player|clear_surface");
 }
 
+export function getLocalSnapshot(): Promise<LocalPlayerSnapshot> {
+  return invoke("plugin:media-player|snapshot");
+}
+
 export function mediaPlayerErrorMessage(error: unknown): string {
   if (isMediaPlayerErrorPayload(error)) return error.message;
   if (error instanceof Error) return error.message;

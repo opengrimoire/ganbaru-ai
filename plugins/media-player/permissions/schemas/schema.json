@@ -403,6 +403,18 @@
           "markdownDescription": "Denies the set_volume command without any pre-configured scope."
         },
         {
+          "description": "Enables the snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-snapshot",
+          "markdownDescription": "Enables the snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-snapshot",
+          "markdownDescription": "Denies the snapshot command without any pre-configured scope."
+        },
+        {
           "description": "Enables the stop command without any pre-configured scope.",
           "type": "string",
           "const": "allow-stop",
@@ -415,10 +427,10 @@
           "markdownDescription": "Denies the stop command without any pre-configured scope."
         },
         {
-          "description": "Allows the main GanbaruAI window to control local media playback through the native media player plugin.\n\n#### This default permission set includes:\n\n- `allow-probe`\n- `allow-load`\n- `allow-play`\n- `allow-pause`\n- `allow-stop`\n- `allow-seek`\n- `allow-set-volume`\n- `allow-set-rate`\n- `allow-set-surface-rect`\n- `allow-clear-surface`",
+          "description": "Allows the main GanbaruAI window to control local media playback through the native media player plugin.\n\n#### This default permission set includes:\n\n- `allow-probe`\n- `allow-load`\n- `allow-play`\n- `allow-pause`\n- `allow-stop`\n- `allow-seek`\n- `allow-set-volume`\n- `allow-set-rate`\n- `allow-set-surface-rect`\n- `allow-clear-surface`\n- `allow-snapshot`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows the main GanbaruAI window to control local media playback through the native media player plugin.\n\n#### This default permission set includes:\n\n- `allow-probe`\n- `allow-load`\n- `allow-play`\n- `allow-pause`\n- `allow-stop`\n- `allow-seek`\n- `allow-set-volume`\n- `allow-set-rate`\n- `allow-set-surface-rect`\n- `allow-clear-surface`"
+          "markdownDescription": "Allows the main GanbaruAI window to control local media playback through the native media player plugin.\n\n#### This default permission set includes:\n\n- `allow-probe`\n- `allow-load`\n- `allow-play`\n- `allow-pause`\n- `allow-stop`\n- `allow-seek`\n- `allow-set-volume`\n- `allow-set-rate`\n- `allow-set-surface-rect`\n- `allow-clear-surface`\n- `allow-snapshot`"
         }
       ]
     }

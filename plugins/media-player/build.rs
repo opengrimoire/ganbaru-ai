@@ -9,6 +9,7 @@ const COMMANDS: &[&str] = &[
     "set_rate",
     "set_surface_rect",
     "clear_surface",
+    "snapshot",
 ];
 
 fn main() {

@@ -14,6 +14,7 @@ Allows the main GanbaruAI window to control local media playback through the nat
 - `allow-set-rate`
 - `allow-set-surface-rect`
 - `allow-clear-surface`
+- `allow-snapshot`
 
 ## Permission Table
 
@@ -254,6 +255,32 @@ Enables the set_volume command without any pre-configured scope.
 <td>
 
 Denies the set_volume command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`media-player:allow-snapshot`
+
+</td>
+<td>
+
+Enables the snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`media-player:deny-snapshot`
+
+</td>
+<td>
+
+Denies the snapshot command without any pre-configured scope.
 
 </td>
 </tr>

@@ -83,3 +83,7 @@ export function setSurfaceRect(rect: SurfaceRect): Promise<PlayerSnapshot> {
 export function clearSurface(): Promise<PlayerSnapshot> {
   return invoke("plugin:media-player|clear_surface");
 }
+
+export function snapshot(): Promise<PlayerSnapshot> {
+  return invoke("plugin:media-player|snapshot");
+}
