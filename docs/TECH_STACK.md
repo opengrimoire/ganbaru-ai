@@ -423,6 +423,8 @@ GStreamer, libVLC, and an LGPL-compatible FFmpeg/libav path remain fallback cand
 
 Rodio is the selected first native local audio playback target. Rodio provides the playback controller and audio output path through CPAL. Symphonia provides decoding for common music containers and codecs. This path replaces the WebView audio element for normal local music playback and is optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
 
+The native audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG Vorbis, and WAV/PCM. Opus, WMA, APE, AIFF, local video, and other unsupported formats should either fail explicitly or use a later broad native multimedia fallback. They should not silently reintroduce the hidden WebView audio element as the normal audio path.
+
 ### `ffmpeg-next`
 
 Rust bindings for FFmpeg. Handles audio and video decoding, format detection, and codec support for local files when the native backend needs libav coverage beyond the GStreamer path. The FFmpeg dependency is linked at build time.
