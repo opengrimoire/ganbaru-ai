@@ -89,11 +89,14 @@
       {#key player.localMediaSrc}
         <video
           bind:this={localMediaElement}
-          class="pointer-events-none h-full w-full bg-black object-contain"
+          class="pointer-events-none h-full w-full bg-black object-contain transition-opacity duration-75"
+          class:opacity-0={!player.localVideoReady}
+          class:opacity-100={player.localVideoReady}
           src={player.localMediaSrc}
           crossorigin="anonymous"
           playsinline
           onloadedmetadata={(event) => player.handleLocalLoadedMetadata(event)}
+          onloadeddata={(event) => player.handleLocalLoadedData(event)}
           ontimeupdate={(event) => player.handleLocalTimeUpdate(event)}
           onplay={(event) => player.handleLocalPlay(event)}
           onpause={(event) => player.handleLocalPause(event)}

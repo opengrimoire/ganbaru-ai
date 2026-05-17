@@ -254,6 +254,7 @@ class MusicPlayerStore {
   localMediaElement = $state<HTMLMediaElement | null>(null);
   localMediaSrc = $state<string | null>(null);
   localHasVideo = $state(false);
+  localVideoReady = $state(false);
   currentArtworkUrl = $state<string | null>(null);
   surfaceElement = $state<HTMLElement | null>(null);
 
@@ -763,6 +764,12 @@ class MusicPlayerStore {
     this.updateMusicTray();
   }
 
+  handleLocalLoadedData(event: Event): void {
+    const element = this.localMediaElementFromEvent(event);
+    if (!element || this.currentSource?.kind !== "local-file") return;
+    this.localVideoReady = true;
+  }
+
   handleLocalTimeUpdate(event: Event): void {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
@@ -851,6 +858,7 @@ class MusicPlayerStore {
       if (generation !== this.loadGeneration) return;
       this.pendingLocalResumeMs = persisted?.positionMs ?? source.startMs ?? 0;
       this.localHasVideo = useVideoElement;
+      this.localVideoReady = !useVideoElement;
       this.localMediaSrc = mediaUrl;
       this.currentArtworkUrl = artworkUrl;
       this.applyLocalSnapshot(localSnapshot);
@@ -1161,6 +1169,7 @@ class MusicPlayerStore {
     this.localPauseSilenced = false;
     this.localMediaSrc = null;
     this.localHasVideo = false;
+    this.localVideoReady = false;
     this.pendingLocalResumeMs = 0;
   }
 
