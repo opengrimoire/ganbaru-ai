@@ -20,15 +20,18 @@
   const player = getMusicPlayer();
 
   let mediaSurface = $state<HTMLElement | null>(null);
-  let queueScrollContainer = $state<HTMLElement | undefined>();
+  let playlistScrollContainer = $state<HTMLElement | undefined>();
   let speedMenuRoot = $state<HTMLElement | null>(null);
   let speedMenuOpen = $state(false);
   let customSpeedOpen = $state(false);
   let customRateDraft = $state("1");
-  let queueVisible = $state(false);
+  let playlistVisible = $state(false);
 
   const volumeMax = $derived(player.isYouTubeActive ? 1 : 1.5);
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
+  const speedShortcutStep = 0.25;
+  const musicIconSize = 14;
+  const musicIconStrokeWidth = 1.5;
 
   $effect(() => {
     player.setSurfaceElement(mediaSurface);
@@ -38,8 +41,15 @@
   });
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.altKey || event.metaKey) return;
     if (isEditableTarget(event.target)) return;
+    if (event.ctrlKey) {
+      if (event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        playlistVisible = !playlistVisible;
+      }
+      return;
+    }
     if (event.code === "Space") {
       event.preventDefault();
       void player.togglePlay();
@@ -73,6 +83,23 @@
     if (event.key === "ArrowDown") {
       event.preventDefault();
       void player.adjustVolume(-0.05);
+      return;
+    }
+    if (event.key === "s" || event.key === "S") {
+      event.preventDefault();
+      if (player.queue.length >= 2) {
+        player.toggleShuffle();
+      }
+      return;
+    }
+    if (event.key === "+" || event.key === "=" || event.code === "NumpadAdd") {
+      event.preventDefault();
+      void player.setRate(clampRate(player.snapshot.rate + speedShortcutStep));
+      return;
+    }
+    if (event.key === "-" || event.code === "NumpadSubtract") {
+      event.preventDefault();
+      void player.setRate(clampRate(player.snapshot.rate - speedShortcutStep));
     }
   }
 
@@ -134,7 +161,7 @@
     >
       <label class="sr-only" for="music-source">Music source</label>
       <div class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-2.5">
-        <LinkIcon class="shrink-0 text-muted-foreground" size={14} strokeWidth={2.25} />
+        <LinkIcon class="shrink-0 text-muted-foreground" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         <input
           id="music-source"
           bind:value={player.sourceInput}
@@ -146,7 +173,7 @@
       </div>
       {#if player.parseError || player.playerError}
         <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[11px] text-destructive min-[680px]:flex">
-          <AlertCircle class="shrink-0" size={13} strokeWidth={2.25} />
+          <AlertCircle class="shrink-0" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           <span class="truncate">{player.parseError ?? player.playerError}</span>
         </div>
       {/if}
@@ -157,7 +184,7 @@
           disabled={player.sourceActionBusy}
           class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
         >
-          <FolderOpen size={14} strokeWidth={2.25} />
+          <FolderOpen size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           <span class="hidden min-[420px]:inline">Folder</span>
         </button>
         <button
@@ -166,9 +193,9 @@
           class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
           {#if player.sourceActionBusy}
-            <LoaderCircle class="animate-spin" size={14} strokeWidth={2.25} />
+            <LoaderCircle class="animate-spin" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           {:else}
-            <Play size={14} strokeWidth={2.25} />
+            <Play size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           {/if}
           <span class="hidden min-[420px]:inline">Load</span>
         </button>
@@ -179,7 +206,7 @@
           title="Reset"
           aria-label="Reset"
         >
-          <RotateCcw size={13} strokeWidth={2.25} />
+          <RotateCcw size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         </button>
       </div>
     </form>
@@ -188,7 +215,7 @@
   <div
     class={cn(
       "grid min-h-0 flex-1",
-      queueVisible
+      playlistVisible
         ? "grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] grid-rows-[minmax(0,1fr)_auto] max-[860px]:grid-cols-1 max-[860px]:grid-rows-[minmax(0,1fr)_minmax(7rem,35%)_auto]"
         : "grid-cols-1 grid-rows-[minmax(0,1fr)_auto]",
     )}
@@ -217,7 +244,7 @@
             {/if}
             {#if player.snapshot.error}
               <div class="flex max-w-[80%] flex-col items-center gap-2 text-center text-[12px]">
-                <AlertCircle size={22} strokeWidth={2.25} />
+                <AlertCircle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
                 <span class="max-w-full truncate">{player.snapshot.error ?? player.loadedTitle}</span>
               </div>
             {/if}
@@ -226,13 +253,13 @@
       </div>
     </div>
 
-    {#if queueVisible}
-      <aside id="music-queue" class="min-h-0" style="background-color: var(--cal-bg);">
+    {#if playlistVisible}
+      <aside id="music-playlist" class="min-h-0" style="background-color: var(--cal-bg);">
         <div class="flex h-full min-h-0 flex-col">
           <div class="flex items-center justify-between gap-2 px-4 py-3">
             <div class="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
-              <ListMusic size={15} strokeWidth={2.25} />
-              Queue
+              <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+              Playlist
             </div>
             {#if player.queue.length > 0}
               <div class="text-[11px] text-muted-foreground">{player.queue.length} tracks</div>
@@ -247,13 +274,13 @@
 
           <div class="relative min-h-0 flex-1">
             <div
-              bind:this={queueScrollContainer}
+              bind:this={playlistScrollContainer}
               class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden p-3"
               data-music-scrollable="true"
             >
               {#if player.queue.length === 0}
                 <div class="p-3 text-[12px] text-muted-foreground">
-                  Add a source or pick a folder to start a queue.
+                  Add a source or pick a folder to start a playlist.
                 </div>
               {:else}
                 <div class="flex flex-col">
@@ -272,14 +299,14 @@
                 </div>
               {/if}
             </div>
-            <CalendarScrollbar scrollContainer={queueScrollContainer} wheelPassthrough />
+            <CalendarScrollbar scrollContainer={playlistScrollContainer} wheelPassthrough />
           </div>
         </div>
       </aside>
     {/if}
 
     <div
-      class={cn("px-4 py-2 max-[520px]:px-3", queueVisible && "col-span-2 max-[860px]:col-span-1")}
+      class={cn("px-4 py-2 max-[520px]:px-3", playlistVisible && "col-span-2 max-[860px]:col-span-1")}
       style="background-color: var(--cal-bg);"
     >
       {#key player.currentSource?.identity ?? "empty"}
@@ -306,23 +333,23 @@
             onclick={() => { void player.playPreviousTrack(); }}
             disabled={!player.canPlayPreviousTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Last played track"
+            title="Last played track (Shift+Left)"
             aria-label="Last played track"
           >
-            <SkipBack size={15} strokeWidth={2.25} />
+            <SkipBack size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
           <button
             type="button"
             onclick={() => { void player.togglePlay(); }}
             disabled={!player.currentSource}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={player.isPlaying ? "Pause" : "Play"}
+            title={player.isPlaying ? "Pause (Space)" : "Play (Space)"}
             aria-label={player.isPlaying ? "Pause" : "Play"}
           >
             {#if player.isPlaying}
-              <Pause size={17} strokeWidth={2.25} />
+              <Pause size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
             {:else}
-              <Play size={17} strokeWidth={2.25} />
+              <Play size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
             {/if}
           </button>
           <button
@@ -330,10 +357,10 @@
             onclick={() => { void player.playNextTrack(); }}
             disabled={!player.canPlayNextTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Next track"
+            title="Next track (Shift+Right)"
             aria-label="Next track"
           >
-            <SkipForward size={15} strokeWidth={2.25} />
+            <SkipForward size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
           <button
             type="button"
@@ -343,11 +370,11 @@
               "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
               !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
-            title={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
+            title={player.shuffleEnabled ? "Shuffle on (S)" : "Shuffle off (S)"}
             aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
             aria-pressed={player.shuffleEnabled}
           >
-            <Shuffle size={15} strokeWidth={2.25} />
+            <Shuffle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
         </div>
 
@@ -388,10 +415,12 @@
               type="button"
               onclick={openSpeedMenu}
               class="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Playback speed (+/-)"
+              aria-label="Playback speed"
               aria-haspopup="menu"
               aria-expanded={speedMenuOpen}
             >
-              <Gauge size={15} strokeWidth={2.25} />
+              <Gauge size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
               {player.speedLabel}
             </button>
             {#if speedMenuOpen}
@@ -408,7 +437,7 @@
                     >
                       <span>{preset}x</span>
                       {#if Math.abs(player.snapshot.rate - preset) < 0.001}
-                        <Check size={14} strokeWidth={2.25} />
+                        <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
                       {/if}
                     </button>
                   {/each}
@@ -419,7 +448,7 @@
                   >
                     <span>Custom</span>
                     {#if !activeSpeedIsPreset}
-                      <Check size={14} strokeWidth={2.25} />
+                      <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
                     {/if}
                   </button>
                 {:else}
@@ -438,7 +467,7 @@
                       class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
                       aria-label="Apply custom speed"
                     >
-                      <Check size={14} strokeWidth={2.25} />
+                      <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
                     </button>
                   </form>
                 {/if}
@@ -447,13 +476,15 @@
           </div>
           <button
             type="button"
-            onclick={() => { queueVisible = !queueVisible; }}
-            class="inline-flex h-9 w-32 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            aria-controls="music-queue"
-            aria-expanded={queueVisible}
+            onclick={() => { playlistVisible = !playlistVisible; }}
+            class="inline-flex h-9 w-36 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            title={playlistVisible ? "Hide playlist (Ctrl+L)" : "Show playlist (Ctrl+L)"}
+            aria-label={playlistVisible ? "Hide playlist" : "Show playlist"}
+            aria-controls="music-playlist"
+            aria-expanded={playlistVisible}
           >
-            <ListMusic size={15} strokeWidth={2.25} />
-            {queueVisible ? "Hide queue" : "Show queue"}
+            <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+            {playlistVisible ? "Hide playlist" : "Show playlist"}
           </button>
         </div>
       </div>

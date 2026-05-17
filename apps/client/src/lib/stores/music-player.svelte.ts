@@ -317,7 +317,7 @@ class MusicPlayerStore {
 
   get queuePositionLabel(): string {
     const index = this.currentQueueIndex;
-    if (index < 0 || this.queue.length === 0) return "No queue";
+    if (index < 0 || this.queue.length === 0) return "No playlist";
     return `${index + 1} of ${this.queue.length}`;
   }
 
