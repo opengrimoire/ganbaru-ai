@@ -14,6 +14,7 @@
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
+  import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { cn } from "$lib/utils";
@@ -21,6 +22,7 @@
   const player = getMusicPlayer();
 
   let mediaSurface = $state<HTMLElement | null>(null);
+  let queueScrollContainer = $state<HTMLElement | undefined>();
   let speedMenuRoot = $state<HTMLElement | null>(null);
   let speedMenuOpen = $state(false);
   let customSpeedOpen = $state(false);
@@ -245,27 +247,34 @@
             </div>
           {/if}
 
-          <div class="music-queue-scroll min-h-0 flex-1 overflow-auto p-3" data-music-scrollable="true">
-            {#if player.queue.length === 0}
-              <div class="p-3 text-[12px] text-muted-foreground">
-                Add a source or pick a folder to start a queue.
-              </div>
-            {:else}
-              <div class="flex flex-col">
-                {#each player.queue as item, index}
-                  <button
-                    type="button"
-                    onclick={() => { void player.playQueueItem(index); }}
-                    class={cn(
-                      "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
-                      player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
-                    )}
-                  >
-                    <span class="min-w-0 truncate">{item.title}</span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
+          <div class="relative min-h-0 flex-1">
+            <div
+              bind:this={queueScrollContainer}
+              class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden p-3"
+              data-music-scrollable="true"
+            >
+              {#if player.queue.length === 0}
+                <div class="p-3 text-[12px] text-muted-foreground">
+                  Add a source or pick a folder to start a queue.
+                </div>
+              {:else}
+                <div class="flex flex-col">
+                  {#each player.queue as item, index}
+                    <button
+                      type="button"
+                      onclick={() => { void player.playQueueItem(index); }}
+                      class={cn(
+                        "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
+                        player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <span class="min-w-0 truncate">{item.title}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            <CalendarScrollbar scrollContainer={queueScrollContainer} wheelPassthrough />
           </div>
         </div>
       </aside>
@@ -472,30 +481,3 @@
     </div>
   </div>
 </section>
-
-<style>
-  .music-queue-scroll {
-    background-color: var(--cal-bg);
-    scrollbar-width: thin;
-    scrollbar-color: var(--cal-scrollbar-thumb) transparent;
-  }
-
-  .music-queue-scroll::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  .music-queue-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .music-queue-scroll::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-color: var(--cal-scrollbar-thumb);
-    background-clip: content-box;
-  }
-
-  .music-queue-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: var(--cal-scrollbar-thumb-hover);
-  }
-</style>

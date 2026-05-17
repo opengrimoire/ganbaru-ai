@@ -10,10 +10,12 @@
     scrollContainer,
     stickyTop = 0,
     onTimelineWheel,
+    wheelPassthrough = false,
   }: {
     scrollContainer: HTMLElement | undefined;
     stickyTop?: number;
     onTimelineWheel?: (e: WheelEvent) => void;
+    wheelPassthrough?: boolean;
   } = $props();
 
   const calZoom = getCalendarZoom();
@@ -83,6 +85,12 @@
     trackEl.setPointerCapture(e.pointerId);
   }
 
+  function isPointerInsideTrack(e: PointerEvent): boolean {
+    if (!trackEl) return false;
+    const rect = trackEl.getBoundingClientRect();
+    return e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+  }
+
   function handlePointerMove(e: PointerEvent) {
     if (!dragging || !scrollContainer || !trackEl) return;
     const deltaY = e.clientY - dragStartY;
@@ -98,6 +106,7 @@
   }
 
   function handleWheel(e: WheelEvent) {
+    if (wheelPassthrough) return;
     e.preventDefault();
     e.stopPropagation();
     if (scrollContainer) {
@@ -116,13 +125,40 @@
       onTimelineWheel?.(e);
     }
   }
+
+  $effect(() => {
+    const el = scrollContainer;
+    if (!wheelPassthrough || !el) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!isPointerInsideTrack(e)) return;
+      e.stopPropagation();
+      handleTrackPointerDown(e);
+    };
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!dragging) hovering = isPointerInsideTrack(e);
+    };
+    const handlePointerLeave = () => {
+      if (!dragging) hovering = false;
+    };
+
+    el.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    el.addEventListener("pointermove", handlePointerMove, { passive: true });
+    el.addEventListener("pointerleave", handlePointerLeave);
+
+    return () => {
+      el.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+      el.removeEventListener("pointermove", handlePointerMove);
+      el.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  });
 </script>
 
 <!-- Absolute overlay: positioned outside scroll container so it never scrolls -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={trackEl}
-  class="pointer-events-auto absolute right-0 z-48"
+  class="{wheelPassthrough ? 'pointer-events-none' : 'pointer-events-auto'} absolute right-0 z-48"
   style="top: {stickyTop}px; bottom: 0; width: 8px;"
   onpointerdown={handleTrackPointerDown}
   onpointermove={handlePointerMove}
