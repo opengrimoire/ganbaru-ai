@@ -39,6 +39,7 @@ export interface LocalPlayerSnapshot {
   positionMs: number;
   durationMs: number | null;
   volume: number;
+  muted: boolean;
   rate: number;
   hasVideo: boolean;
   error: string | null;
@@ -75,6 +76,10 @@ export function seekLocalMedia(positionMs: number): Promise<LocalPlayerSnapshot>
 
 export function setLocalVolume(volume: number): Promise<LocalPlayerSnapshot> {
   return invoke("plugin:media-player|set_volume", { volume });
+}
+
+export function setLocalMuted(muted: boolean): Promise<LocalPlayerSnapshot> {
+  return invoke("plugin:media-player|set_muted", { muted });
 }
 
 export function setLocalRate(rate: number): Promise<LocalPlayerSnapshot> {

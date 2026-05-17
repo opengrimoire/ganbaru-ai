@@ -13,6 +13,18 @@ name = "tauri_plugin_media_player"
 crate-type = ["rlib"]
 
 [dependencies]
+rodio = { version = "0.22.2", default-features = false, features = [
+  "playback",
+  "symphonia-flac",
+  "symphonia-mp3",
+  "symphonia-isomp4",
+  "symphonia-aac",
+  "symphonia-alac",
+  "symphonia-ogg",
+  "symphonia-vorbis",
+  "symphonia-wav",
+  "symphonia-pcm",
+] }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2" }
 

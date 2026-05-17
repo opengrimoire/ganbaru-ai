@@ -11,6 +11,7 @@ Allows the main GanbaruAI window to control local media playback through the nat
 - `allow-stop`
 - `allow-seek`
 - `allow-set-volume`
+- `allow-set-muted`
 - `allow-set-rate`
 - `allow-set-surface-rect`
 - `allow-clear-surface`
@@ -177,6 +178,32 @@ Enables the seek command without any pre-configured scope.
 <td>
 
 Denies the seek command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`media-player:allow-set-muted`
+
+</td>
+<td>
+
+Enables the set_muted command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`media-player:deny-set-muted`
+
+</td>
+<td>
+
+Denies the set_muted command without any pre-configured scope.
 
 </td>
 </tr>

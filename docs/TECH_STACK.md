@@ -413,15 +413,15 @@ Local volume uses the media element directly only when Web Audio is unavailable.
 
 ### Native media backend target
 
-The production local backend should be Rust-controlled through `plugins/media-player`. The selected first implementation target is Rodio with default features disabled and only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend should own decoding, transport controls, buffering, metadata, artwork extraction, audio device output, and native playback events instead of routing local audio through WebView media elements.
+The production local backend should be Rust-controlled through `plugins/media-player`. The selected first implementation target is Rodio with default features disabled and only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend owns local audio decoding, transport controls, native volume, native mute, seeking, rate changes, duration, position snapshots, and audio device output. Metadata, artwork extraction, frontend event delivery, and full Music view migration are still being wired.
 
-Rodio is the first target because it is a RustAudio playback crate, uses CPAL for cross-platform audio output, supports player controls such as play, pause, seek, volume, and speed, and uses Symphonia as the default decoder backend for common file types. The planned dependency shape is `rodio` with `default-features = false` and features limited to `playback`, `symphonia-flac`, `symphonia-mp3`, `symphonia-isomp4`, `symphonia-aac`, `symphonia-alac`, `symphonia-ogg`, `symphonia-vorbis`, `symphonia-wav`, and `symphonia-pcm`, subject to explicit dependency approval.
+Rodio is the first target because it is a RustAudio playback crate, uses CPAL for cross-platform audio output, supports player controls such as play, pause, seek, volume, and speed, and uses Symphonia as the default decoder backend for common file types. The approved dependency shape is `rodio` with `default-features = false` and features limited to `playback`, `symphonia-flac`, `symphonia-mp3`, `symphonia-isomp4`, `symphonia-aac`, `symphonia-alac`, `symphonia-ogg`, `symphonia-vorbis`, `symphonia-wav`, and `symphonia-pcm`.
 
 GStreamer, libVLC, and an LGPL-compatible FFmpeg/libav path remain fallback candidates for local video, unsupported audio formats, or broader codec coverage. They should be lazy and separate from the default audio-only path so normal background music does not pay their memory cost.
 
 ### Rodio and Symphonia audio path
 
-Rodio is the selected first native local audio playback target, pending explicit dependency approval. Rodio should provide the playback controller and audio output path through CPAL. Symphonia should provide decoding for common music containers and codecs. This path replaces the WebView audio element for normal local music playback and should be optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
+Rodio is the selected first native local audio playback target. Rodio provides the playback controller and audio output path through CPAL. Symphonia provides decoding for common music containers and codecs. This path should replace the WebView audio element for normal local music playback after the frontend migration, and it is optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
 
 ### `ffmpeg-next`
 

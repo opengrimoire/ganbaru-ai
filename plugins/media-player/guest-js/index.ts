@@ -39,6 +39,7 @@ export interface PlayerSnapshot {
   positionMs: number;
   durationMs: number | null;
   volume: number;
+  muted: boolean;
   rate: number;
   hasVideo: boolean;
   error: string | null;
@@ -70,6 +71,10 @@ export function seek(positionMs: number): Promise<PlayerSnapshot> {
 
 export function setVolume(volume: number): Promise<PlayerSnapshot> {
   return invoke("plugin:media-player|set_volume", { volume });
+}
+
+export function setMuted(muted: boolean): Promise<PlayerSnapshot> {
+  return invoke("plugin:media-player|set_muted", { muted });
 }
 
 export function setRate(rate: number): Promise<PlayerSnapshot> {

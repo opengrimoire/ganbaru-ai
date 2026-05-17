@@ -1,9 +1,12 @@
 use std::{
+    fs::File,
     path::{Path, PathBuf},
     sync::{mpsc, Mutex},
     thread::{self, JoinHandle},
+    time::Duration,
 };
 
+use rodio::{cpal::BufferSize, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use serde::{Deserialize, Serialize};
 use tauri::{
     plugin::{Builder as PluginBuilder, TauriPlugin},
@@ -76,6 +79,7 @@ pub struct PlayerSnapshot {
     pub position_ms: u64,
     pub duration_ms: Option<u64>,
     pub volume: f64,
+    pub muted: bool,
     pub rate: f64,
     pub has_video: bool,
     pub error: Option<String>,
@@ -90,6 +94,7 @@ impl Default for PlayerSnapshot {
             position_ms: 0,
             duration_ms: None,
             volume: 0.8,
+            muted: false,
             rate: 1.0,
             has_video: false,
             error: None,
@@ -115,7 +120,29 @@ impl MediaPlayerError {
     fn backend_unavailable() -> Self {
         Self {
             code: "backendUnavailable".to_string(),
-            message: "Native local playback is not enabled in this build. Add the approved audio backend dependencies before using native local playback.".to_string(),
+            message: "Native audio playback is only available for supported local audio files."
+                .to_string(),
+        }
+    }
+
+    fn audio_device(message: impl Into<String>) -> Self {
+        Self {
+            code: "audioDevice".to_string(),
+            message: message.into(),
+        }
+    }
+
+    fn decode_failed(message: impl Into<String>) -> Self {
+        Self {
+            code: "decodeFailed".to_string(),
+            message: message.into(),
+        }
+    }
+
+    fn seek_failed(message: impl Into<String>) -> Self {
+        Self {
+            code: "seekFailed".to_string(),
+            message: message.into(),
         }
     }
 
@@ -127,26 +154,154 @@ impl MediaPlayerError {
     }
 }
 
-#[derive(Debug, Default)]
+trait LocalAudioBackend: Send {
+    fn play(&mut self);
+    fn pause(&mut self);
+    fn stop(&mut self);
+    fn seek(&mut self, position_ms: u64) -> Result<(), MediaPlayerError>;
+    fn set_volume(&mut self, volume: f64, muted: bool);
+    fn set_rate(&mut self, rate: f64);
+    fn position_ms(&self) -> u64;
+    fn duration_ms(&self) -> Option<u64>;
+    fn is_empty(&self) -> bool;
+}
+
+trait LocalAudioFactory: Send {
+    fn load(
+        &mut self,
+        request: &LoadRequest,
+        volume: f64,
+        muted: bool,
+        rate: f64,
+    ) -> Result<Box<dyn LocalAudioBackend>, MediaPlayerError>;
+}
+
+struct RodioAudioFactory;
+
+impl LocalAudioFactory for RodioAudioFactory {
+    fn load(
+        &mut self,
+        request: &LoadRequest,
+        volume: f64,
+        muted: bool,
+        rate: f64,
+    ) -> Result<Box<dyn LocalAudioBackend>, MediaPlayerError> {
+        let file = File::open(&request.source.path).map_err(|e| {
+            MediaPlayerError::invalid_source(format!("Failed to open local audio file: {e}"))
+        })?;
+        let decoder = Decoder::try_from(file).map_err(|e| {
+            MediaPlayerError::decode_failed(format!("Failed to decode local audio file: {e}"))
+        })?;
+        let duration_ms = duration_to_ms(decoder.total_duration());
+        let mut sink = open_low_latency_sink()?;
+        sink.log_on_drop(false);
+        let player = Player::connect_new(sink.mixer());
+        player.pause();
+        player.set_volume(effective_native_volume(volume, muted));
+        player.set_speed(clamp_rate(rate) as f32);
+        player.append(decoder);
+        if let Some(start_ms) = request.start_ms.filter(|value| *value > 0) {
+            player
+                .try_seek(Duration::from_millis(start_ms))
+                .map_err(|e| {
+                    MediaPlayerError::seek_failed(format!("Failed to seek local audio file: {e}"))
+                })?;
+        }
+        Ok(Box::new(RodioAudioBackend {
+            _sink: sink,
+            player,
+            duration_ms,
+        }))
+    }
+}
+
+struct RodioAudioBackend {
+    _sink: MixerDeviceSink,
+    player: Player,
+    duration_ms: Option<u64>,
+}
+
+impl LocalAudioBackend for RodioAudioBackend {
+    fn play(&mut self) {
+        self.player.play();
+    }
+
+    fn pause(&mut self) {
+        self.player.set_volume(0.0);
+        self.player.pause();
+    }
+
+    fn stop(&mut self) {
+        self.player.set_volume(0.0);
+        self.player.stop();
+    }
+
+    fn seek(&mut self, position_ms: u64) -> Result<(), MediaPlayerError> {
+        self.player
+            .try_seek(Duration::from_millis(position_ms))
+            .map_err(|e| MediaPlayerError::seek_failed(format!("Failed to seek local audio: {e}")))
+    }
+
+    fn set_volume(&mut self, volume: f64, muted: bool) {
+        self.player
+            .set_volume(effective_native_volume(volume, muted));
+    }
+
+    fn set_rate(&mut self, rate: f64) {
+        self.player.set_speed(clamp_rate(rate) as f32);
+    }
+
+    fn position_ms(&self) -> u64 {
+        duration_to_ms(Some(self.player.get_pos())).unwrap_or(0)
+    }
+
+    fn duration_ms(&self) -> Option<u64> {
+        self.duration_ms
+    }
+
+    fn is_empty(&self) -> bool {
+        self.player.empty()
+    }
+}
+
 struct PlayerCore {
+    audio_factory: Box<dyn LocalAudioFactory>,
+    audio: Option<Box<dyn LocalAudioBackend>>,
     loaded: bool,
     snapshot: PlayerSnapshot,
     surface_rect: Option<SurfaceRect>,
 }
 
+impl Default for PlayerCore {
+    fn default() -> Self {
+        Self::with_audio_factory(Box::new(RodioAudioFactory))
+    }
+}
+
 impl PlayerCore {
+    fn with_audio_factory(audio_factory: Box<dyn LocalAudioFactory>) -> Self {
+        Self {
+            audio_factory,
+            audio: None,
+            loaded: false,
+            snapshot: PlayerSnapshot::default(),
+            surface_rect: None,
+        }
+    }
+
     fn handle(&mut self, command: BackendCommand) -> Result<PlayerSnapshot, MediaPlayerError> {
         match command {
             BackendCommand::Load { request, probe } => self.load(request, probe),
             BackendCommand::Play => self.play(),
             BackendCommand::Pause => Ok(self.pause()),
             BackendCommand::Stop => Ok(self.stop()),
-            BackendCommand::Seek(position_ms) => Ok(self.seek(position_ms)),
+            BackendCommand::Seek(position_ms) => self.seek(position_ms),
             BackendCommand::SetVolume(volume) => Ok(self.set_volume(volume)),
+            BackendCommand::SetMuted(muted) => Ok(self.set_muted(muted)),
             BackendCommand::SetRate(rate) => Ok(self.set_rate(rate)),
             BackendCommand::SetSurfaceRect(rect) => Ok(self.set_surface_rect(rect)),
             BackendCommand::ClearSurface => Ok(self.clear_surface()),
-            BackendCommand::Snapshot => Ok(self.snapshot.clone()),
+            BackendCommand::Snapshot => Ok(self.current_snapshot()),
         }
     }
 
@@ -155,6 +310,7 @@ impl PlayerCore {
         request: LoadRequest,
         probe: MediaProbe,
     ) -> Result<PlayerSnapshot, MediaPlayerError> {
+        self.stop_audio();
         let volume = request
             .volume
             .map(clamp_volume)
@@ -166,16 +322,28 @@ impl PlayerCore {
             .clone()
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| probe.title.clone());
+        let has_video = probe.media_kind == MediaKind::Video;
+        let audio = if has_video {
+            None
+        } else {
+            Some(
+                self.audio_factory
+                    .load(&request, volume, self.snapshot.muted, rate)?,
+            )
+        };
+        let duration_ms = audio.as_ref().and_then(|backend| backend.duration_ms());
         self.loaded = true;
+        self.audio = audio;
         self.snapshot = PlayerSnapshot {
             status: PlayerStatus::Ready,
             source_identity: Some(request.source.identity),
             title: Some(title),
             position_ms: request.start_ms.unwrap_or(0),
-            duration_ms: None,
+            duration_ms,
             volume,
+            muted: self.snapshot.muted,
             rate,
-            has_video: probe.media_kind == MediaKind::Video,
+            has_video,
             error: None,
         };
         Ok(self.snapshot.clone())
@@ -189,45 +357,79 @@ impl PlayerCore {
                 "Load a local media file before playing.",
             ));
         }
-        let err = MediaPlayerError::backend_unavailable();
-        self.snapshot.status = PlayerStatus::Error;
-        self.snapshot.error = Some(err.message.clone());
-        Err(err)
+        if self.snapshot.status == PlayerStatus::Ended {
+            self.seek(0)?;
+        }
+        if self.audio.is_none() {
+            let err = MediaPlayerError::backend_unavailable();
+            self.snapshot.status = PlayerStatus::Error;
+            self.snapshot.error = Some(err.message.clone());
+            return Err(err);
+        }
+        let audio = self.audio.as_mut().expect("checked audio backend above");
+        audio.set_volume(self.snapshot.volume, self.snapshot.muted);
+        audio.play();
+        self.snapshot.status = PlayerStatus::Playing;
+        self.snapshot.error = None;
+        Ok(self.current_snapshot())
     }
 
     fn pause(&mut self) -> PlayerSnapshot {
         if self.loaded {
+            if let Some(audio) = self.audio.as_mut() {
+                audio.pause();
+            }
             self.snapshot.status = PlayerStatus::Paused;
             self.snapshot.error = None;
         }
-        self.snapshot.clone()
+        self.current_snapshot()
     }
 
     fn stop(&mut self) -> PlayerSnapshot {
         let volume = self.snapshot.volume;
         let rate = self.snapshot.rate;
+        let muted = self.snapshot.muted;
+        self.stop_audio();
         self.loaded = false;
         self.snapshot = PlayerSnapshot {
             volume,
+            muted,
             rate,
             ..PlayerSnapshot::default()
         };
         self.snapshot.clone()
     }
 
-    fn seek(&mut self, position_ms: u64) -> PlayerSnapshot {
+    fn seek(&mut self, position_ms: u64) -> Result<PlayerSnapshot, MediaPlayerError> {
+        if let Some(audio) = self.audio.as_mut() {
+            audio.seek(position_ms)?;
+        }
         self.snapshot.position_ms = position_ms;
-        self.snapshot.clone()
+        Ok(self.current_snapshot())
     }
 
     fn set_volume(&mut self, volume: f64) -> PlayerSnapshot {
         self.snapshot.volume = clamp_volume(volume);
-        self.snapshot.clone()
+        if let Some(audio) = self.audio.as_mut() {
+            audio.set_volume(self.snapshot.volume, self.snapshot.muted);
+        }
+        self.current_snapshot()
+    }
+
+    fn set_muted(&mut self, muted: bool) -> PlayerSnapshot {
+        self.snapshot.muted = muted;
+        if let Some(audio) = self.audio.as_mut() {
+            audio.set_volume(self.snapshot.volume, self.snapshot.muted);
+        }
+        self.current_snapshot()
     }
 
     fn set_rate(&mut self, rate: f64) -> PlayerSnapshot {
         self.snapshot.rate = clamp_rate(rate);
-        self.snapshot.clone()
+        if let Some(audio) = self.audio.as_mut() {
+            audio.set_rate(self.snapshot.rate);
+        }
+        self.current_snapshot()
     }
 
     fn set_surface_rect(&mut self, rect: SurfaceRect) -> PlayerSnapshot {
@@ -238,6 +440,26 @@ impl PlayerCore {
     fn clear_surface(&mut self) -> PlayerSnapshot {
         self.surface_rect = None;
         self.snapshot.clone()
+    }
+
+    fn current_snapshot(&mut self) -> PlayerSnapshot {
+        if let Some(audio) = self.audio.as_ref() {
+            self.snapshot.position_ms = audio.position_ms();
+            self.snapshot.duration_ms = audio.duration_ms();
+            if self.snapshot.status == PlayerStatus::Playing && audio.is_empty() {
+                self.snapshot.status = PlayerStatus::Ended;
+                if let Some(duration_ms) = self.snapshot.duration_ms {
+                    self.snapshot.position_ms = duration_ms;
+                }
+            }
+        }
+        self.snapshot.clone()
+    }
+
+    fn stop_audio(&mut self) {
+        if let Some(mut audio) = self.audio.take() {
+            audio.stop();
+        }
     }
 }
 
@@ -252,6 +474,7 @@ enum BackendCommand {
     Stop,
     Seek(u64),
     SetVolume(f64),
+    SetMuted(bool),
     SetRate(f64),
     SetSurfaceRect(SurfaceRect),
     ClearSurface,
@@ -279,10 +502,14 @@ impl std::fmt::Debug for PlaybackController {
 
 impl PlaybackController {
     fn new() -> Self {
+        Self::with_core(PlayerCore::default())
+    }
+
+    fn with_core(core: PlayerCore) -> Self {
         let (sender, receiver) = mpsc::channel::<BackendMessage>();
         let worker = thread::Builder::new()
             .name("ganbaruai-media-player".to_string())
-            .spawn(move || playback_worker(receiver))
+            .spawn(move || playback_worker(receiver, core))
             .expect("failed to start media player worker thread");
         Self {
             sender,
@@ -318,8 +545,7 @@ impl Drop for PlaybackController {
     }
 }
 
-fn playback_worker(receiver: mpsc::Receiver<BackendMessage>) {
-    let mut core = PlayerCore::default();
+fn playback_worker(receiver: mpsc::Receiver<BackendMessage>, mut core: PlayerCore) {
     while let Ok(message) = receiver.recv() {
         match message {
             BackendMessage::Command(command, reply) => {
@@ -385,6 +611,14 @@ fn set_volume(
 }
 
 #[tauri::command]
+fn set_muted(
+    state: State<'_, MediaPlayerState>,
+    muted: bool,
+) -> Result<PlayerSnapshot, MediaPlayerError> {
+    state.controller.dispatch(BackendCommand::SetMuted(muted))
+}
+
+#[tauri::command]
 fn set_rate(
     state: State<'_, MediaPlayerState>,
     rate: f64,
@@ -422,6 +656,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             stop,
             seek,
             set_volume,
+            set_muted,
             set_rate,
             set_surface_rect,
             clear_surface,
@@ -506,6 +741,34 @@ fn media_kind_from_extension(extension: &str) -> MediaKind {
     }
 }
 
+fn open_low_latency_sink() -> Result<MixerDeviceSink, MediaPlayerError> {
+    DeviceSinkBuilder::from_default_device()
+        .map(|builder| builder.with_buffer_size(BufferSize::Fixed(1024)))
+        .and_then(|builder| builder.open_sink_or_fallback())
+        .map_err(|e| {
+            MediaPlayerError::audio_device(format!("Failed to open local audio output: {e}"))
+        })
+}
+
+fn effective_native_volume(volume: f64, muted: bool) -> f32 {
+    if muted {
+        0.0
+    } else {
+        clamp_volume(volume) as f32
+    }
+}
+
+fn duration_to_ms(duration: Option<Duration>) -> Option<u64> {
+    duration.map(|value| {
+        let millis = value.as_millis();
+        if millis > u128::from(u64::MAX) {
+            u64::MAX
+        } else {
+            millis as u64
+        }
+    })
+}
+
 fn clamp_volume(value: f64) -> f64 {
     if value.is_finite() {
         value.clamp(0.0, 1.5)
@@ -525,6 +788,7 @@ fn clamp_rate(value: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn media_kind_uses_extension_groups() {
@@ -558,7 +822,7 @@ mod tests {
 
     #[test]
     fn player_core_loads_and_updates_snapshot() {
-        let mut core = PlayerCore::default();
+        let mut core = test_core();
         let snapshot = core
             .handle(BackendCommand::Load {
                 request: local_load_request(Some(1_500)),
@@ -569,16 +833,18 @@ mod tests {
         assert_eq!(snapshot.status, PlayerStatus::Ready);
         assert_eq!(snapshot.position_ms, 1_500);
         assert_eq!(snapshot.volume, 1.25);
+        assert!(!snapshot.muted);
         assert_eq!(snapshot.rate, 1.5);
         assert_eq!(snapshot.title.as_deref(), Some("Song title"));
         assert!(!snapshot.has_video);
+        assert_eq!(snapshot.duration_ms, Some(120_000));
     }
 
     #[test]
     fn player_core_pause_is_state_only_and_clears_errors() {
         let mut core = loaded_core();
-        let play_error = core.handle(BackendCommand::Play).unwrap_err();
-        assert_eq!(play_error.code, "backendUnavailable");
+        let playing = core.handle(BackendCommand::Play).unwrap();
+        assert_eq!(playing.status, PlayerStatus::Playing);
 
         let snapshot = core.handle(BackendCommand::Pause).unwrap();
         assert_eq!(snapshot.status, PlayerStatus::Paused);
@@ -588,18 +854,32 @@ mod tests {
     #[test]
     fn player_core_stop_releases_source_state_and_keeps_settings() {
         let mut core = loaded_core();
+        core.handle(BackendCommand::SetMuted(true)).unwrap();
         let snapshot = core.handle(BackendCommand::Stop).unwrap();
 
         assert_eq!(snapshot.status, PlayerStatus::Idle);
         assert_eq!(snapshot.source_identity, None);
         assert_eq!(snapshot.position_ms, 0);
         assert_eq!(snapshot.volume, 1.25);
+        assert!(snapshot.muted);
         assert_eq!(snapshot.rate, 1.5);
     }
 
     #[test]
+    fn player_core_muting_does_not_change_volume() {
+        let mut core = loaded_core();
+        let muted = core.handle(BackendCommand::SetMuted(true)).unwrap();
+        assert!(muted.muted);
+        assert_eq!(muted.volume, 1.25);
+
+        let unmuted = core.handle(BackendCommand::SetMuted(false)).unwrap();
+        assert!(!unmuted.muted);
+        assert_eq!(unmuted.volume, 1.25);
+    }
+
+    #[test]
     fn playback_controller_dispatches_on_worker_thread() {
-        let controller = PlaybackController::new();
+        let controller = PlaybackController::with_core(test_core());
         let loaded = controller
             .dispatch(BackendCommand::Load {
                 request: local_load_request(None),
@@ -615,8 +895,12 @@ mod tests {
         assert_eq!(snapshot.position_ms, 42_000);
     }
 
+    fn test_core() -> PlayerCore {
+        PlayerCore::with_audio_factory(Box::new(FakeAudioFactory))
+    }
+
     fn loaded_core() -> PlayerCore {
-        let mut core = PlayerCore::default();
+        let mut core = test_core();
         core.handle(BackendCommand::Load {
             request: local_load_request(None),
             probe: audio_probe(),
@@ -646,6 +930,93 @@ mod tests {
             file_size_bytes: 1024,
             extension: Some("mp3".to_string()),
             media_kind: MediaKind::Audio,
+        }
+    }
+
+    struct FakeAudioFactory;
+
+    impl LocalAudioFactory for FakeAudioFactory {
+        fn load(
+            &mut self,
+            request: &LoadRequest,
+            volume: f64,
+            muted: bool,
+            rate: f64,
+        ) -> Result<Box<dyn LocalAudioBackend>, MediaPlayerError> {
+            Ok(Box::new(FakeAudioBackend {
+                state: Arc::new(Mutex::new(FakeAudioState {
+                    position_ms: request.start_ms.unwrap_or(0),
+                    duration_ms: Some(120_000),
+                    volume,
+                    muted,
+                    rate,
+                    playing: false,
+                    stopped: false,
+                    empty: false,
+                })),
+            }))
+        }
+    }
+
+    struct FakeAudioBackend {
+        state: Arc<Mutex<FakeAudioState>>,
+    }
+
+    struct FakeAudioState {
+        position_ms: u64,
+        duration_ms: Option<u64>,
+        volume: f64,
+        muted: bool,
+        rate: f64,
+        playing: bool,
+        stopped: bool,
+        empty: bool,
+    }
+
+    impl LocalAudioBackend for FakeAudioBackend {
+        fn play(&mut self) {
+            let mut state = self.state.lock().unwrap();
+            state.playing = true;
+        }
+
+        fn pause(&mut self) {
+            let mut state = self.state.lock().unwrap();
+            state.playing = false;
+        }
+
+        fn stop(&mut self) {
+            let mut state = self.state.lock().unwrap();
+            state.stopped = true;
+            state.playing = false;
+        }
+
+        fn seek(&mut self, position_ms: u64) -> Result<(), MediaPlayerError> {
+            let mut state = self.state.lock().unwrap();
+            state.position_ms = position_ms;
+            Ok(())
+        }
+
+        fn set_volume(&mut self, volume: f64, muted: bool) {
+            let mut state = self.state.lock().unwrap();
+            state.volume = volume;
+            state.muted = muted;
+        }
+
+        fn set_rate(&mut self, rate: f64) {
+            let mut state = self.state.lock().unwrap();
+            state.rate = rate;
+        }
+
+        fn position_ms(&self) -> u64 {
+            self.state.lock().unwrap().position_ms
+        }
+
+        fn duration_ms(&self) -> Option<u64> {
+            self.state.lock().unwrap().duration_ms
+        }
+
+        fn is_empty(&self) -> bool {
+            self.state.lock().unwrap().empty
         }
     }
 }
