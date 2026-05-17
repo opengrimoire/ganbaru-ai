@@ -32,6 +32,7 @@ import {
   initialQueueSelection,
   isVolumeBoosted,
   nextShuffleIndex,
+  stableStatusDuringYouTubeBuffering,
   shouldPersistPlaybackState,
   type PersistedPlaybackState,
   type PlaybackSnapshot,
@@ -1204,9 +1205,10 @@ class MusicPlayerStore {
       this.youtubeOptimisticPauseUntil = 0;
     }
     const wasEnded = this.snapshot.status === "ended";
+    const status = stableStatusDuringYouTubeBuffering(this.snapshot.status, message.status);
     this.snapshot = {
       ...this.snapshot,
-      status: message.status,
+      status,
       positionMs: message.positionMs,
       durationMs: message.durationMs,
       error: null,
@@ -1214,7 +1216,7 @@ class MusicPlayerStore {
     this.updateMediaSession();
     void this.persistCurrentPlaybackState();
     this.updateMusicTray();
-    if (message.status === "ended" && !wasEnded) {
+    if (status === "ended" && !wasEnded) {
       void this.advanceEndedYouTubeTrack();
     }
   }

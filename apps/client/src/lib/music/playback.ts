@@ -69,6 +69,16 @@ export function shouldPersistPlaybackState(
   return Math.abs(next.positionMs - previous.positionMs) >= POSITION_SAVE_DELTA_MS;
 }
 
+export function stableStatusDuringYouTubeBuffering(
+  current: PlaybackStatus,
+  incoming: PlaybackStatus,
+): PlaybackStatus {
+  if (incoming === "loading" && current !== "loading") {
+    return current;
+  }
+  return incoming;
+}
+
 export function formatPlaybackTime(ms: number | null): string {
   if (ms === null || !Number.isFinite(ms) || ms < 0) return "n/a";
   const totalSeconds = Math.floor(ms / 1000);

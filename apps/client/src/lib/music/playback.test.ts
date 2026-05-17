@@ -12,6 +12,7 @@ import {
   nextShuffleIndex,
   previousQueueSelection,
   shouldPersistPlaybackState,
+  stableStatusDuringYouTubeBuffering,
   type PersistedPlaybackState,
 } from "./playback";
 
@@ -64,6 +65,19 @@ describe("formatPlaybackTime", () => {
     expect(formatPlaybackTime(61_000)).toBe("1:01");
     expect(formatPlaybackTime(3_661_000)).toBe("1:01:01");
     expect(formatPlaybackTime(null)).toBe("n/a");
+  });
+});
+
+describe("stableStatusDuringYouTubeBuffering", () => {
+  it("keeps playback controls stable during normal YouTube buffering", () => {
+    expect(stableStatusDuringYouTubeBuffering("playing", "loading")).toBe("playing");
+    expect(stableStatusDuringYouTubeBuffering("paused", "loading")).toBe("paused");
+    expect(stableStatusDuringYouTubeBuffering("loading", "loading")).toBe("loading");
+  });
+
+  it("accepts non-buffering YouTube status changes", () => {
+    expect(stableStatusDuringYouTubeBuffering("playing", "paused")).toBe("paused");
+    expect(stableStatusDuringYouTubeBuffering("paused", "playing")).toBe("playing");
   });
 });
 
