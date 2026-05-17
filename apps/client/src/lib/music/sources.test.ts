@@ -3,6 +3,7 @@ import {
   buildYouTubeEmbedUrl,
   parseMusicSourceInput,
   parseTimestampMs,
+  youtubeVideoSourceFromId,
 } from "./sources";
 
 describe("parseMusicSourceInput", () => {
@@ -41,6 +42,18 @@ describe("parseMusicSourceInput", () => {
     });
   });
 
+  it("parses YouTube playlist links without a starting video", () => {
+    const result = parseMusicSourceInput("https://www.youtube.com/playlist?list=PLabcdef12345");
+
+    expect(result.error).toBeNull();
+    expect(result.source).toMatchObject({
+      kind: "youtube-playlist",
+      videoId: null,
+      playlistId: "PLabcdef12345",
+      identity: "youtube:playlist:PLabcdef12345",
+    });
+  });
+
   it("parses short youtu.be links", () => {
     const result = parseMusicSourceInput("https://youtu.be/dQw4w9WgXcQ?start=42");
 
@@ -72,6 +85,22 @@ describe("parseMusicSourceInput", () => {
   });
 });
 
+describe("youtubeVideoSourceFromId", () => {
+  it("creates stable playlist queue entries", () => {
+    expect(youtubeVideoSourceFromId("abcDEF_1234", {
+      playlistId: "PLabcdef",
+      playlistIndex: 2,
+      startMs: 10_000,
+    })).toMatchObject({
+      kind: "youtube-video",
+      videoId: "abcDEF_1234",
+      playlistId: "PLabcdef",
+      identity: "youtube:playlist:PLabcdef:item:2:video:abcDEF_1234",
+      startMs: 10_000,
+    });
+  });
+});
+
 describe("parseTimestampMs", () => {
   it("parses seconds, token, and colon forms", () => {
     expect(parseTimestampMs("90")).toBe(90_000);
@@ -98,6 +127,9 @@ describe("buildYouTubeEmbedUrl", () => {
     expect(embed.pathname).toBe("/embed/dQw4w9WgXcQ");
     expect(embed.searchParams.get("enablejsapi")).toBe("1");
     expect(embed.searchParams.get("controls")).toBe("0");
+    expect(embed.searchParams.get("disablekb")).toBe("1");
+    expect(embed.searchParams.get("fs")).toBe("0");
+    expect(embed.searchParams.get("iv_load_policy")).toBe("3");
     expect(embed.searchParams.get("widget_referrer")).toBeTruthy();
     expect(embed.searchParams.get("start")).toBe("10");
   });

@@ -29,6 +29,13 @@ export interface YouTubePlaylistSource extends MusicSourceBase {
 
 export type MusicSource = LocalFileSource | YouTubeVideoSource | YouTubePlaylistSource;
 
+export interface YouTubeVideoSourceOptions {
+  playlistId?: string | null;
+  playlistIndex?: number | null;
+  startMs?: number | null;
+  endMs?: number | null;
+}
+
 export interface SourceParseResult {
   source: MusicSource | null;
   error: string | null;
@@ -108,6 +115,28 @@ export function localFileSourceFromPath(path: string, title?: string, artworkPat
   return makeLocalFileSource(path, path, title, artworkPath);
 }
 
+export function youtubeVideoSourceFromId(
+  videoId: string,
+  options: YouTubeVideoSourceOptions = {},
+): YouTubeVideoSource {
+  const playlistId = options.playlistId ?? null;
+  const playlistIndex = options.playlistIndex ?? null;
+  return {
+    kind: "youtube-video",
+    originalInput: playlistId
+      ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&list=${encodeURIComponent(playlistId)}`
+      : `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
+    identity: playlistId && playlistIndex !== null
+      ? `youtube:playlist:${playlistId}:item:${playlistIndex}:video:${videoId}`
+      : `youtube:video:${videoId}`,
+    title: videoId,
+    videoId,
+    playlistId,
+    startMs: options.startMs ?? null,
+    endMs: options.endMs ?? null,
+  };
+}
+
 export function buildYouTubeEmbedUrl(source: YouTubeVideoSource | YouTubePlaylistSource): string {
   const url = new URL("https://www.youtube.com/embed/");
   if (source.kind === "youtube-video") {
@@ -128,6 +157,9 @@ export function buildYouTubeEmbedUrl(source: YouTubeVideoSource | YouTubePlaylis
   url.searchParams.set("widget_referrer", browserReferrer());
   url.searchParams.set("playsinline", "1");
   url.searchParams.set("controls", "0");
+  url.searchParams.set("disablekb", "1");
+  url.searchParams.set("fs", "0");
+  url.searchParams.set("iv_load_policy", "3");
   url.searchParams.set("rel", "0");
   if (source.startMs !== null) {
     url.searchParams.set("start", Math.floor(source.startMs / 1000).toString());

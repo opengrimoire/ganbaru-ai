@@ -43,6 +43,7 @@ import {
   localFileSourceFromPath,
   parseMusicSourceInput,
   sourceDisplayLabel,
+  youtubeVideoSourceFromId,
   type LocalFileSource,
   type MusicSource,
   type YouTubePlaylistSource,
@@ -57,6 +58,16 @@ type YouTubeCommandAction = "load" | "play" | "pause" | "stop" | "seek" | "volum
 interface PendingYouTubeLoad {
   source: YouTubeSource;
   persisted: PersistedPlaybackState | null;
+  generation: number;
+  autoplay: boolean;
+}
+
+interface ResolvingYouTubePlaylist {
+  playlistId: string;
+  preferredVideoId: string | null;
+  startMs: number | null;
+  endMs: number | null;
+  autoplay: boolean;
   generation: number;
 }
 
@@ -85,10 +96,19 @@ interface YouTubeHostErrorMessage {
   code: number;
 }
 
+interface YouTubeHostPlaylistMessage {
+  token: string;
+  type: "ganbaruai-youtube-playlist";
+  playlistId: string;
+  videoIds: string[];
+  index: number | null;
+}
+
 type YouTubeHostMessage =
   | YouTubeHostReadyMessage
   | YouTubeHostStateMessage
-  | YouTubeHostErrorMessage;
+  | YouTubeHostErrorMessage
+  | YouTubeHostPlaylistMessage;
 
 interface MusicPlayerSettings {
   volume: number;
@@ -239,6 +259,8 @@ class MusicPlayerStore {
   private localPauseSilenced = false;
   private youtubeOptimisticPauseUntil = 0;
   private handlingNativeLocalEnded = false;
+  private handlingYouTubeEnded = false;
+  private resolvingYouTubePlaylist: ResolvingYouTubePlaylist | null = null;
 
   get isBusy(): boolean {
     return this.snapshot.status === "loading";
@@ -374,7 +396,7 @@ class MusicPlayerStore {
     this.parseError = result.error;
     this.playerError = null;
     if (!result.source) return;
-    await this.loadSource(result.source);
+    await this.loadSource(result.source, { autoplay: true });
   }
 
   async loadFolder(): Promise<void> {
@@ -426,6 +448,7 @@ class MusicPlayerStore {
     this.playerError = null;
     if (!isYouTubeSource(source)) {
       this.pendingYouTubeLoad = null;
+      this.resolvingYouTubePlaylist = null;
     }
     this.snapshot = {
       ...DEFAULT_PLAYBACK_SNAPSHOT,
@@ -490,7 +513,7 @@ class MusicPlayerStore {
       }
     } else {
       this.youtubeOptimisticPauseUntil = Date.now() + YOUTUBE_OPTIMISTIC_PAUSE_MS;
-      this.postYouTubeCommand({ action: "pause", volume: 0 });
+      this.postYouTubeCommand({ action: "pause", volume: this.effectiveYouTubeVolume() });
       this.snapshot = { ...this.snapshot, status: "paused" };
       this.updateMediaSession();
     }
@@ -861,9 +884,25 @@ class MusicPlayerStore {
       return;
     }
 
-    this.pendingYouTubeLoad = { source, persisted, generation };
+    const autoplay = options.autoplay === true;
+    this.pendingYouTubeLoad = {
+      source,
+      persisted,
+      generation,
+      autoplay: autoplay && source.kind !== "youtube-playlist",
+    };
+    this.resolvingYouTubePlaylist = source.kind === "youtube-playlist"
+      ? {
+          playlistId: source.playlistId,
+          preferredVideoId: source.videoId,
+          startMs: source.startMs,
+          endMs: source.endMs,
+          autoplay,
+          generation,
+        }
+      : null;
     if (this.youtubeHostReady) {
-      this.postPendingYouTubeLoad(options.autoplay === true);
+      this.postPendingYouTubeLoad();
     }
   }
 
@@ -1151,12 +1190,17 @@ class MusicPlayerStore {
       this.updateMusicTray();
       return;
     }
+    if (message.type === "ganbaruai-youtube-playlist") {
+      void this.applyYouTubePlaylist(message);
+      return;
+    }
     if (message.status === "playing" && Date.now() < this.youtubeOptimisticPauseUntil) {
       return;
     }
     if (message.status !== "playing") {
       this.youtubeOptimisticPauseUntil = 0;
     }
+    const wasEnded = this.snapshot.status === "ended";
     this.snapshot = {
       ...this.snapshot,
       status: message.status,
@@ -1167,6 +1211,9 @@ class MusicPlayerStore {
     this.updateMediaSession();
     void this.persistCurrentPlaybackState();
     this.updateMusicTray();
+    if (message.status === "ended" && !wasEnded) {
+      void this.advanceEndedYouTubeTrack();
+    }
   }
 
   private parseYouTubeHostMessage(value: unknown): YouTubeHostMessage | null {
@@ -1178,6 +1225,21 @@ class MusicPlayerStore {
     }
     if (record.type === "ganbaruai-youtube-error" && typeof record.code === "number") {
       return { token: record.token, type: "ganbaruai-youtube-error", code: record.code };
+    }
+    if (
+      record.type === "ganbaruai-youtube-playlist"
+      && typeof record.playlistId === "string"
+      && Array.isArray(record.videoIds)
+      && record.videoIds.every((id) => typeof id === "string" && id.length > 0)
+      && (typeof record.index === "number" || record.index === null)
+    ) {
+      return {
+        token: record.token,
+        type: "ganbaruai-youtube-playlist",
+        playlistId: record.playlistId,
+        videoIds: record.videoIds,
+        index: record.index,
+      };
     }
     if (
       record.type === "ganbaruai-youtube-state"
@@ -1196,9 +1258,9 @@ class MusicPlayerStore {
     return null;
   }
 
-  private postPendingYouTubeLoad(autoplay = false): void {
+  private postPendingYouTubeLoad(): void {
     if (!this.pendingYouTubeLoad || this.pendingYouTubeLoad.generation !== this.loadGeneration) return;
-    const { source, persisted } = this.pendingYouTubeLoad;
+    const { source, persisted, autoplay } = this.pendingYouTubeLoad;
     this.postYouTubeCommand({
       action: "load",
       source,
@@ -1208,6 +1270,56 @@ class MusicPlayerStore {
       autoplay,
     });
     this.pendingYouTubeLoad = null;
+  }
+
+  private async applyYouTubePlaylist(message: YouTubeHostPlaylistMessage): Promise<void> {
+    const resolving = this.resolvingYouTubePlaylist;
+    if (
+      !resolving
+      || resolving.generation !== this.loadGeneration
+      || resolving.playlistId !== message.playlistId
+      || message.videoIds.length === 0
+    ) {
+      return;
+    }
+
+    const preferredIndex = resolving.preferredVideoId
+      ? message.videoIds.findIndex((videoId) => videoId === resolving.preferredVideoId)
+      : -1;
+    const queueSelection = preferredIndex >= 0
+      ? { index: preferredIndex, remainingOrder: [] }
+      : initialQueueSelection(message.videoIds.length, this.shuffleEnabled);
+    const selectedIndex = queueSelection.index ?? 0;
+    const queue = message.videoIds.map((videoId, index) =>
+      youtubeVideoSourceFromId(videoId, {
+        playlistId: message.playlistId,
+        playlistIndex: index,
+        startMs: index === selectedIndex ? resolving.startMs : null,
+        endMs: index === selectedIndex ? resolving.endMs : null,
+      })
+    );
+
+    const initialIndex = queueSelection.index ?? selectedIndex;
+    this.queue = queue;
+    this.queueHistory = [];
+    this.shuffleOrder = queueSelection.remainingOrder.filter((index) => index !== initialIndex);
+    this.resolvingYouTubePlaylist = null;
+    await this.loadSource(queue[initialIndex] ?? queue[0], {
+      autoplay: resolving.autoplay,
+      resume: false,
+      preserveQueue: true,
+    });
+  }
+
+  private async advanceEndedYouTubeTrack(): Promise<void> {
+    if (this.handlingYouTubeEnded || !this.canPlayNextTrack) return;
+    this.handlingYouTubeEnded = true;
+    try {
+      await this.persistCurrentPlaybackState(true);
+      await this.playNextTrack();
+    } finally {
+      this.handlingYouTubeEnded = false;
+    }
   }
 
   private postYouTubeCommand(payload: Record<string, unknown> & { action: YouTubeCommandAction | "snapshot" }): void {

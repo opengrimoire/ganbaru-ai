@@ -1348,6 +1348,8 @@ fn youtube_host_html() -> &'static str {
     let player = null;
     let apiReady = false;
     let pendingLoad = null;
+    let activeSource = null;
+    let playlistSnapshotTimer = null;
 
     function send(message) {
       parent.postMessage({ token, ...message }, "*");
@@ -1373,11 +1375,70 @@ fn youtube_host_html() -> &'static str {
       });
     }
 
+    function currentPlaylistIds() {
+      if (!player || typeof player.getPlaylist !== "function") return [];
+      const playlist = player.getPlaylist();
+      if (!Array.isArray(playlist)) return [];
+      return playlist.filter((videoId) => typeof videoId === "string" && videoId.length > 0);
+    }
+
+    function currentPlaylistIndex() {
+      if (!player || typeof player.getPlaylistIndex !== "function") return null;
+      const index = player.getPlaylistIndex();
+      return Number.isFinite(index) && index >= 0 ? index : null;
+    }
+
+    function sendPlaylistSnapshot(retries) {
+      if (!activeSource || !activeSource.playlistId) return;
+      const videoIds = currentPlaylistIds();
+      if (videoIds.length > 0) {
+        send({
+          type: "ganbaruai-youtube-playlist",
+          playlistId: activeSource.playlistId,
+          videoIds,
+          index: currentPlaylistIndex()
+        });
+        return;
+      }
+      if (retries <= 0) return;
+      if (playlistSnapshotTimer) clearTimeout(playlistSnapshotTimer);
+      playlistSnapshotTimer = setTimeout(() => {
+        playlistSnapshotTimer = null;
+        sendPlaylistSnapshot(retries - 1);
+      }, 300);
+    }
+
+    function playlistRequest(source, payload) {
+      const request = {
+        listType: "playlist",
+        list: source.playlistId,
+        index: 0
+      };
+      const startSeconds = payload.resumeMs > 0
+        ? payload.resumeMs / 1000
+        : (source.startMs !== null ? Math.floor(source.startMs / 1000) : null);
+      if (startSeconds !== null) request.startSeconds = startSeconds;
+      return request;
+    }
+
+    function applyVolume(value) {
+      if (!player || typeof value !== "number" || !Number.isFinite(value)) return;
+      const volume = Math.max(0, Math.min(100, Math.round(value * 100)));
+      player.setVolume(volume);
+      if (volume > 0 && typeof player.unMute === "function") {
+        player.unMute();
+      } else if (volume === 0 && typeof player.mute === "function") {
+        player.mute();
+      }
+    }
+
     function playerVars(source) {
       const vars = {
         autoplay: 0,
-        controls: 1,
+        controls: 0,
         disablekb: 1,
+        fs: 0,
+        iv_load_policy: 3,
         playsinline: 1,
         rel: 0,
         origin: location.origin,
@@ -1385,8 +1446,6 @@ fn youtube_host_html() -> &'static str {
       };
       if (source.kind === "youtube-playlist") {
         vars.listType = "playlist";
-        vars.list = source.playlistId;
-      } else if (source.playlistId) {
         vars.list = source.playlistId;
       }
       if (source.startMs !== null) vars.start = Math.floor(source.startMs / 1000);
@@ -1404,6 +1463,7 @@ fn youtube_host_html() -> &'static str {
         player = null;
       }
       const source = payload.source;
+      activeSource = source;
       player = new YT.Player("player", {
         host: "https://www.youtube.com",
         width: "100%",
@@ -1413,18 +1473,27 @@ fn youtube_host_html() -> &'static str {
         events: {
           onReady(event) {
             event.target.getIframe().setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
-            event.target.setVolume(Math.max(0, Math.min(100, Math.round(payload.volume * 100))));
+            applyVolume(payload.volume);
             event.target.setPlaybackRate(payload.rate);
-            if (payload.resumeMs > 0) {
+            if (source.kind === "youtube-playlist" && !source.videoId) {
+              const request = playlistRequest(source, payload);
+              if (payload.autoplay === true) {
+                event.target.loadPlaylist(request);
+              } else {
+                event.target.cuePlaylist(request);
+              }
+            } else if (payload.resumeMs > 0) {
               event.target.seekTo(payload.resumeMs / 1000, true);
             }
             if (payload.autoplay === true) {
               event.target.playVideo();
             }
             snapshot("ready");
+            sendPlaylistSnapshot(12);
           },
           onStateChange(event) {
             snapshot(playbackStatus(event.data));
+            sendPlaylistSnapshot(4);
           },
           onError(event) {
             send({ type: "ganbaruai-youtube-error", code: event.data });
@@ -1444,24 +1513,25 @@ fn youtube_host_html() -> &'static str {
         return;
       }
       if (data.action === "play") {
-        if (typeof data.volume === "number") {
-          player.setVolume(Math.max(0, Math.min(100, Math.round(data.volume * 100))));
-        }
+        const volume = typeof data.volume === "number" ? data.volume : null;
+        applyVolume(volume);
         player.playVideo();
+        if (volume !== null) {
+          setTimeout(() => applyVolume(volume), 0);
+          setTimeout(() => applyVolume(volume), 150);
+        }
         snapshot("playing");
         return;
       }
       if (data.action === "pause") {
-        if (typeof data.volume === "number") {
-          player.setVolume(Math.max(0, Math.min(100, Math.round(data.volume * 100))));
-        }
+        applyVolume(data.volume);
         player.pauseVideo();
         snapshot("paused");
         return;
       }
       if (data.action === "stop") player.stopVideo();
       if (data.action === "seek") player.seekTo(data.positionMs / 1000, true);
-      if (data.action === "volume") player.setVolume(Math.max(0, Math.min(100, Math.round(data.volume * 100))));
+      if (data.action === "volume") applyVolume(data.volume);
       if (data.action === "rate") player.setPlaybackRate(data.rate);
       snapshot();
     }
@@ -1542,6 +1612,23 @@ mod tests {
         state.status = "buffering-hard".to_string();
 
         assert!(validate_playback_state(&state).is_err());
+    }
+
+    #[test]
+    fn youtube_host_uses_supported_minimal_chrome_parameters() {
+        let host = youtube_host_html();
+
+        assert!(host.contains("controls: 0"));
+        assert!(host.contains("disablekb: 1"));
+        assert!(host.contains("fs: 0"));
+        assert!(host.contains("iv_load_policy: 3"));
+        assert!(host.contains("rel: 0"));
+        assert!(host.contains("function applyVolume"));
+        assert!(host.contains("player.unMute()"));
+        assert!(!host.contains("modestbranding"));
+        assert!(!host.contains("showinfo"));
+        assert!(!host.contains("autohide"));
+        assert!(!host.contains("theme"));
     }
 
     #[test]

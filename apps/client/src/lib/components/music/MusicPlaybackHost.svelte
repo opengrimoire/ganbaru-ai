@@ -33,6 +33,16 @@
     player.registerLocalMedia(localMediaElement);
   });
 
+  function handleSurfacePointerDown(event: PointerEvent): void {
+    event.preventDefault();
+  }
+
+  function handleSurfacePointerUp(event: PointerEvent): void {
+    event.preventDefault();
+    if (event.button !== 0) return;
+    void player.togglePlay();
+  }
+
   $effect(() => {
     const element = player.surfaceElement;
     if (!element) {
@@ -69,15 +79,14 @@
       class="pointer-events-none h-full w-full"
       src={player.youtubeHostUrl ?? "about:blank"}
       title={player.loadedTitle}
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allow="autoplay; encrypted-media"
       referrerpolicy="strict-origin-when-cross-origin"
-      allowfullscreen
     ></iframe>
   {:else if player.currentSource?.kind === "local-file"}
     {#if player.localMediaSrc && player.localHasVideo}
       <video
         bind:this={localMediaElement}
-        class="h-full w-full bg-black object-contain"
+        class="pointer-events-none h-full w-full bg-black object-contain"
         src={player.localMediaSrc}
         crossorigin="anonymous"
         playsinline
@@ -91,5 +100,15 @@
         <track kind="captions" />
       </video>
     {/if}
+  {/if}
+  {#if hasVisualSurface}
+    <button
+      type="button"
+      tabindex="-1"
+      class="pointer-events-auto absolute inset-0 z-10 cursor-pointer border-0 bg-transparent p-0 text-transparent outline-none focus:outline-none"
+      aria-label={player.isPlaying ? "Pause" : "Play"}
+      onpointerdown={handleSurfacePointerDown}
+      onpointerup={handleSurfacePointerUp}
+    ></button>
   {/if}
 </div>
