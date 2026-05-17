@@ -413,15 +413,23 @@ Local volume uses the media element directly only when Web Audio is unavailable.
 
 ### Native media backend target
 
-The production local backend should be Rust-controlled through `plugins/media-player`, with GStreamer as the primary playback engine and an LGPL-compatible FFmpeg/libav path for broader format coverage. That backend should own decoding, transport controls, buffering, metadata, artwork extraction, audio device output, and native video surfaces instead of routing local playback through WebView media elements. The goals are VLC-class pause and seek latency, lower steady-state memory overhead for audio-only playback, and predictable codec support across platforms.
+The production local backend should be Rust-controlled through `plugins/media-player`. The selected first implementation target is Rodio with default features disabled and only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend should own decoding, transport controls, buffering, metadata, artwork extraction, audio device output, and native playback events instead of routing local audio through WebView media elements.
+
+Rodio is the first target because it is a RustAudio playback crate, uses CPAL for cross-platform audio output, supports player controls such as play, pause, seek, volume, and speed, and uses Symphonia as the default decoder backend for common file types. The planned dependency shape is `rodio` with `default-features = false` and features limited to `playback`, `symphonia-flac`, `symphonia-mp3`, `symphonia-isomp4`, `symphonia-aac`, `symphonia-alac`, `symphonia-ogg`, `symphonia-vorbis`, `symphonia-wav`, and `symphonia-pcm`, subject to explicit dependency approval.
+
+GStreamer, libVLC, and an LGPL-compatible FFmpeg/libav path remain fallback candidates for local video, unsupported audio formats, or broader codec coverage. They should be lazy and separate from the default audio-only path so normal background music does not pay their memory cost.
+
+### Rodio and Symphonia audio path
+
+Rodio is the selected first native local audio playback target, pending explicit dependency approval. Rodio should provide the playback controller and audio output path through CPAL. Symphonia should provide decoding for common music containers and codecs. This path replaces the WebView audio element for normal local music playback and should be optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
 
 ### `ffmpeg-next`
 
 Rust bindings for FFmpeg. Handles audio and video decoding, format detection, and codec support for local files when the native backend needs libav coverage beyond the GStreamer path. The FFmpeg dependency is linked at build time.
 
-### Symphonia (optional, audio-only path)
+### Symphonia fallback role
 
-A pure-Rust audio decoding library. Used as a lightweight alternative to FFmpeg when only audio playback is needed (Pomodoro playlists, background music, morning alarm audio). Avoids initializing the full FFmpeg stack for audio-only sessions, reducing the memory footprint during typical productivity use. Falls back to `ffmpeg-next` for video or unsupported audio formats.
+A pure-Rust audio decoding library. Used through the first native audio backend when only audio playback is needed, such as Pomodoro playlists, background music, and morning alarm audio. Avoids initializing a full video-capable stack for audio-only sessions, reducing the memory footprint during typical productivity use. Broader backends can still handle video or unsupported audio formats later.
 
 ### YouTube integration (IFrame API)
 
@@ -631,8 +639,8 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Sync server               | Hocuspocus                                           | Yjs server with persistence, presence, and auth hooks                              |
 | Encryption                | libsodium / `@noble/ciphers`                         | E2E encryption, server sees only ciphertext                                        |
 | Local DB                  | SQLite through Rust `sqlx` commands                  | Metadata, search, tags, pomodoro sessions, requirement diffs    |
-| Media engine (video)      | `ffmpeg-next`                                        | FFmpeg Rust bindings for full audio/video format support                           |
-| Media engine (audio-only) | Symphonia (optional)                                 | Pure-Rust audio decoding, lighter than FFmpeg for playlist-only use                |
+| Media engine (video)      | GStreamer, libVLC, or `ffmpeg-next` fallback target  | Broader native multimedia path for video or unsupported audio formats              |
+| Media engine (audio-only) | Rodio + Symphonia target                             | Native audio playback and decoding path for low-RAM local music                    |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |
 | File watching             | `notify`                                             | Cross-platform file system events for vault reindexing |
 | Process control           | `sysinfo` + `std::process`                           | App blocking and environment switching                                             |
