@@ -866,6 +866,48 @@ mod tests {
     }
 
     #[test]
+    fn player_core_reloading_stops_previous_audio_backend() {
+        let loaded_backends = Arc::new(Mutex::new(Vec::new()));
+        let mut core = PlayerCore::with_audio_factory(Box::new(RecordingAudioFactory {
+            loaded_backends: Arc::clone(&loaded_backends),
+        }));
+        core.handle(BackendCommand::Load {
+            request: local_load_request(None),
+            probe: audio_probe(),
+        })
+        .unwrap();
+        core.handle(BackendCommand::Load {
+            request: local_load_request(Some(5_000)),
+            probe: audio_probe(),
+        })
+        .unwrap();
+
+        let backends = loaded_backends.lock().unwrap();
+        assert_eq!(backends.len(), 2);
+        assert!(backends[0].lock().unwrap().stopped);
+        assert!(!backends[1].lock().unwrap().stopped);
+    }
+
+    #[test]
+    fn player_core_reports_backend_unavailable_for_video_playback() {
+        let mut core = test_core();
+        let loaded = core
+            .handle(BackendCommand::Load {
+                request: local_load_request(None),
+                probe: video_probe(),
+            })
+            .unwrap();
+        assert_eq!(loaded.status, PlayerStatus::Ready);
+        assert!(loaded.has_video);
+
+        let err = core.handle(BackendCommand::Play).unwrap_err();
+        assert_eq!(err.code, "backendUnavailable");
+        let snapshot = core.handle(BackendCommand::Snapshot).unwrap();
+        assert_eq!(snapshot.status, PlayerStatus::Error);
+        assert_eq!(snapshot.error.as_deref(), Some(err.message.as_str()));
+    }
+
+    #[test]
     fn player_core_muting_does_not_change_volume() {
         let mut core = loaded_core();
         let muted = core.handle(BackendCommand::SetMuted(true)).unwrap();
@@ -933,6 +975,16 @@ mod tests {
         }
     }
 
+    fn video_probe() -> MediaProbe {
+        MediaProbe {
+            path: "/music/video.mp4".to_string(),
+            title: "video".to_string(),
+            file_size_bytes: 1024,
+            extension: Some("mp4".to_string()),
+            media_kind: MediaKind::Video,
+        }
+    }
+
     struct FakeAudioFactory;
 
     impl LocalAudioFactory for FakeAudioFactory {
@@ -955,6 +1007,36 @@ mod tests {
                     empty: false,
                 })),
             }))
+        }
+    }
+
+    struct RecordingAudioFactory {
+        loaded_backends: Arc<Mutex<Vec<Arc<Mutex<FakeAudioState>>>>>,
+    }
+
+    impl LocalAudioFactory for RecordingAudioFactory {
+        fn load(
+            &mut self,
+            request: &LoadRequest,
+            volume: f64,
+            muted: bool,
+            rate: f64,
+        ) -> Result<Box<dyn LocalAudioBackend>, MediaPlayerError> {
+            let state = Arc::new(Mutex::new(FakeAudioState {
+                position_ms: request.start_ms.unwrap_or(0),
+                duration_ms: Some(120_000),
+                volume,
+                muted,
+                rate,
+                playing: false,
+                stopped: false,
+                empty: false,
+            }));
+            self.loaded_backends
+                .lock()
+                .unwrap()
+                .push(Arc::clone(&state));
+            Ok(Box::new(FakeAudioBackend { state }))
         }
     }
 
