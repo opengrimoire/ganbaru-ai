@@ -223,7 +223,7 @@
     <div class="min-h-0">
       <div
         bind:this={mediaSurface}
-        class="relative h-full min-h-48 cursor-pointer overflow-hidden max-[520px]:min-h-36"
+        class="relative h-full min-h-48 cursor-default overflow-hidden max-[520px]:min-h-36"
         style="background-color: var(--cal-bg);"
         role="button"
         tabindex="-1"
@@ -332,7 +332,7 @@
             type="button"
             onclick={() => { void player.playPreviousTrack(); }}
             disabled={!player.canPlayPreviousTrack}
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
             title="Last played track (Shift+Left)"
             aria-label="Last played track"
           >
@@ -342,7 +342,7 @@
             type="button"
             onclick={() => { void player.togglePlay(); }}
             disabled={!player.currentSource}
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
             title={player.isPlaying ? "Pause (Space)" : "Play (Space)"}
             aria-label={player.isPlaying ? "Pause" : "Play"}
           >
@@ -356,7 +356,7 @@
             type="button"
             onclick={() => { void player.playNextTrack(); }}
             disabled={!player.canPlayNextTrack}
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
             title="Next track (Shift+Right)"
             aria-label="Next track"
           >
@@ -367,7 +367,7 @@
             onclick={() => player.toggleShuffle()}
             disabled={player.queue.length < 2}
             class={cn(
-              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
+              "inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
               !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
             title={player.shuffleEnabled ? "Shuffle on (S)" : "Shuffle off (S)"}
@@ -378,7 +378,7 @@
           </button>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2">
           <div
             class="flex items-center gap-2 text-[12px] text-muted-foreground"
             data-music-volume-control="true"
@@ -414,14 +414,13 @@
             <button
               type="button"
               onclick={openSpeedMenu}
-              class="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              title="Playback speed (+/-)"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              title={`Playback speed (${player.speedLabel}) (+/-)`}
               aria-label="Playback speed"
               aria-haspopup="menu"
               aria-expanded={speedMenuOpen}
             >
               <Gauge size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-              {player.speedLabel}
             </button>
             {#if speedMenuOpen}
               <div
@@ -477,14 +476,13 @@
           <button
             type="button"
             onclick={() => { playlistVisible = !playlistVisible; }}
-            class="inline-flex h-9 w-36 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             title={playlistVisible ? "Hide playlist (Ctrl+L)" : "Show playlist (Ctrl+L)"}
             aria-label={playlistVisible ? "Hide playlist" : "Show playlist"}
             aria-controls="music-playlist"
             aria-expanded={playlistVisible}
           >
             <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-            {playlistVisible ? "Hide playlist" : "Show playlist"}
           </button>
         </div>
       </div>

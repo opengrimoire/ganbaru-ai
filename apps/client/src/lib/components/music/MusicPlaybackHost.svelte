@@ -4,24 +4,30 @@
 
   const player = getMusicPlayer();
 
+  let hostElement = $state<HTMLDivElement | null>(null);
   let youtubeFrame = $state<HTMLIFrameElement | null>(null);
   let localMediaElement = $state<HTMLMediaElement | null>(null);
   let surfaceRect = $state<DOMRect | null>(null);
+  let surfaceFullscreen = $state(false);
+  let surfaceClickTimeoutId: number | null = null;
 
   const hasVisualSurface = $derived(Boolean(
     player.surfaceElement
       && player.currentSource
       && (player.isYouTubeActive || (player.currentSource.kind === "local-file" && player.localHasVideo)),
   ));
-  const hostStyle = $derived(surfaceRect && hasVisualSurface
-    ? `left: ${surfaceRect.left}px; top: ${surfaceRect.top}px; width: ${surfaceRect.width}px; height: ${surfaceRect.height}px; background-color: var(--cal-bg);`
-    : "left: -10000px; top: -10000px; width: 1px; height: 1px; background-color: var(--cal-bg);");
+  const hostStyle = $derived(surfaceFullscreen && hasVisualSurface
+    ? "left: 0; top: 0; width: 100vw; height: 100vh; background-color: var(--cal-bg);"
+    : surfaceRect && hasVisualSurface
+      ? `left: ${surfaceRect.left}px; top: ${surfaceRect.top}px; width: ${surfaceRect.width}px; height: ${surfaceRect.height}px; background-color: var(--cal-bg);`
+      : "left: -10000px; top: -10000px; width: 1px; height: 1px; background-color: var(--cal-bg);");
 
   onMount(() => {
     player.init();
   });
 
   onDestroy(() => {
+    clearSurfaceClickTimeout();
     player.destroy();
   });
 
@@ -41,10 +47,54 @@
     event.preventDefault();
   }
 
-  function handleSurfacePointerUp(event: PointerEvent): void {
+  function handleSurfaceClick(event: MouseEvent): void {
     event.preventDefault();
     if (event.button !== 0) return;
-    void player.togglePlay();
+    if (event.detail > 1) return;
+    clearSurfaceClickTimeout();
+    surfaceClickTimeoutId = window.setTimeout(() => {
+      surfaceClickTimeoutId = null;
+      void player.togglePlay();
+    }, 250);
+  }
+
+  function handleSurfaceDoubleClick(event: MouseEvent): void {
+    event.preventDefault();
+    if (event.button !== 0) return;
+    clearSurfaceClickTimeout();
+    void toggleSurfaceFullscreen();
+  }
+
+  function clearSurfaceClickTimeout(): void {
+    if (surfaceClickTimeoutId === null) return;
+    window.clearTimeout(surfaceClickTimeoutId);
+    surfaceClickTimeoutId = null;
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent): void {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key.toLowerCase() !== "f") return;
+    if (!hasVisualSurface || isEditableTarget(event.target)) return;
+    event.preventDefault();
+    void toggleSurfaceFullscreen();
+  }
+
+  function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+  }
+
+  async function toggleSurfaceFullscreen(): Promise<void> {
+    if (!hostElement || !hasVisualSurface || typeof document === "undefined" || !document.fullscreenEnabled) return;
+    try {
+      if (document.fullscreenElement === hostElement) {
+        await document.exitFullscreen();
+      } else {
+        await hostElement.requestFullscreen({ navigationUI: "hide" });
+      }
+    } catch (error) {
+      console.warn("Unable to toggle music fullscreen.", error);
+    }
   }
 
   $effect(() => {
@@ -55,12 +105,16 @@
     }
 
     const updateRect = () => {
-      surfaceRect = element.getBoundingClientRect();
+      const rectElement = surfaceFullscreen && hostElement ? hostElement : element;
+      surfaceRect = rectElement.getBoundingClientRect();
     };
     updateRect();
 
     const observer = new ResizeObserver(updateRect);
     observer.observe(element);
+    if (hostElement) {
+      observer.observe(hostElement);
+    }
     window.addEventListener("resize", updateRect);
     window.addEventListener("scroll", updateRect, true);
 
@@ -70,9 +124,31 @@
       window.removeEventListener("scroll", updateRect, true);
     };
   });
+
+  $effect(() => {
+    if (typeof document === "undefined") return;
+    const updateFullscreenState = () => {
+      surfaceFullscreen = Boolean(hostElement && document.fullscreenElement === hostElement);
+    };
+    updateFullscreenState();
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    return () => {
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+    };
+  });
+
+  $effect(() => {
+    if (!surfaceFullscreen || hasVisualSurface || typeof document === "undefined") return;
+    if (hostElement && document.fullscreenElement === hostElement) {
+      void document.exitFullscreen();
+    }
+  });
 </script>
 
+<svelte:window onkeydown={handleWindowKeydown} />
+
 <div
+  bind:this={hostElement}
   class="pointer-events-none fixed z-20 overflow-hidden"
   style={hostStyle}
   aria-hidden={!hasVisualSurface}
@@ -117,10 +193,12 @@
     <button
       type="button"
       tabindex="-1"
-      class="pointer-events-auto absolute inset-0 z-10 cursor-pointer border-0 bg-transparent p-0 text-transparent outline-none focus:outline-none"
+      class="pointer-events-auto absolute inset-0 z-10 cursor-default border-0 bg-transparent p-0 text-transparent outline-none focus:outline-none"
       aria-label={player.isPlaying ? "Pause" : "Play"}
       onpointerdown={handleSurfacePointerDown}
-      onpointerup={handleSurfacePointerUp}
+      onclick={handleSurfaceClick}
+      ondblclick={handleSurfaceDoubleClick}
+      onwheel={(event) => player.handleVolumeWheel(event)}
     ></button>
   {/if}
 </div>
