@@ -12,18 +12,7 @@ links = "tauri-plugin-media-player"
 name = "tauri_plugin_media_player"
 crate-type = ["rlib"]
 
-[features]
-default = []
-native-video-gstreamer = [
-  "dep:gstreamer",
-  "dep:gstreamer-video",
-  "dep:raw-window-handle",
-]
-
 [dependencies]
-gstreamer = { version = "0.25.2", optional = true }
-gstreamer-video = { version = "0.25.2", optional = true }
-raw-window-handle = { version = "0.6", optional = true }
 rodio = { version = "0.22.2", default-features = false, features = [
   "playback",
   "symphonia-flac",

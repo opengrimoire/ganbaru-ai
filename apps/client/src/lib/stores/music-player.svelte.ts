@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { tick } from "svelte";
 import {
-  clearLocalSurface,
   getLocalSnapshot,
   loadLocalMedia,
   mediaPlayerErrorMessage,
@@ -11,7 +10,6 @@ import {
   seekLocalMedia,
   setLocalMuted,
   setLocalRate,
-  setLocalSurfaceRect,
   setLocalVolume,
   stopLocalMedia,
   type LocalBackendKind,
@@ -244,7 +242,6 @@ class MusicPlayerStore {
   localMediaElement = $state<HTMLMediaElement | null>(null);
   localMediaSrc = $state<string | null>(null);
   localHasVideo = $state(false);
-  localNativeVideo = $state(false);
   localBackendKind = $state<LocalBackendKind>("none");
   localVideoReady = $state(false);
   currentArtworkUrl = $state<string | null>(null);
@@ -268,7 +265,6 @@ class MusicPlayerStore {
   private youtubeOptimisticPauseUntil = 0;
   private handlingNativeLocalEnded = false;
   private handlingYouTubeEnded = false;
-  private nativeSurfaceRectSignature: string | null = null;
   private resolvingYouTubePlaylist: ResolvingYouTubePlaylist | null = null;
   private youtubePlaylistTimeoutId: number | null = null;
 
@@ -415,41 +411,6 @@ class MusicPlayerStore {
 
   setSurfaceElement(element: HTMLElement | null): void {
     this.surfaceElement = element;
-  }
-
-  syncNativeLocalSurface(rect: DOMRect | null): void {
-    if (!this.usesNativeLocalVideo() || !rect || rect.width <= 0 || rect.height <= 0) {
-      this.clearNativeLocalSurface();
-      return;
-    }
-    const scaleFactor = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-    const surfaceRect = {
-      x: rect.left,
-      y: rect.top,
-      width: rect.width,
-      height: rect.height,
-      scaleFactor,
-    };
-    const signature = [
-      surfaceRect.x,
-      surfaceRect.y,
-      surfaceRect.width,
-      surfaceRect.height,
-      surfaceRect.scaleFactor,
-    ].map((value) => value.toFixed(2)).join("|");
-    if (signature === this.nativeSurfaceRectSignature) return;
-    this.nativeSurfaceRectSignature = signature;
-    void setLocalSurfaceRect(surfaceRect)
-      .then((localSnapshot) => {
-        if (this.usesNativeLocalVideo()) {
-          this.applyLocalSnapshot(localSnapshot);
-        }
-      })
-      .catch((error) => {
-        if (!this.usesNativeLocalVideo()) return;
-        this.playerError = mediaPlayerErrorMessage(error);
-        this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
-      });
   }
 
   registerYouTubeFrame(frame: HTMLIFrameElement | null): void {
@@ -959,9 +920,8 @@ class MusicPlayerStore {
         ? normalizeLocalPlayableStartMs(localSnapshot.playableStartMs)
         : 0;
       this.localHasVideo = localSnapshot.hasVideo;
-      this.localNativeVideo = localSnapshot.nativeVideo;
       this.localBackendKind = localSnapshot.backendKind;
-      this.localVideoReady = localSnapshot.nativeVideo || !useVideoElement;
+      this.localVideoReady = !useVideoElement;
       this.localMediaSrc = mediaUrl;
       this.currentArtworkUrl = artworkUrl;
       this.applyLocalSnapshot(localSnapshot);
@@ -1350,12 +1310,6 @@ class MusicPlayerStore {
       && supportsLocalBackendVolumeBoost(this.localBackendKind);
   }
 
-  private usesNativeLocalVideo(): boolean {
-    return this.currentSource?.kind === "local-file"
-      && this.localBackendKind === "gstreamer"
-      && this.localNativeVideo;
-  }
-
   private async resetLocalPlayback(): Promise<void> {
     if (this.usesNativeLocalBackend()) {
       await stopLocalMedia().catch(() => null);
@@ -1363,14 +1317,7 @@ class MusicPlayerStore {
     this.resetLocalMediaElement();
   }
 
-  private clearNativeLocalSurface(): void {
-    if (this.nativeSurfaceRectSignature === null) return;
-    this.nativeSurfaceRectSignature = null;
-    void clearLocalSurface().catch(() => null);
-  }
-
   private resetLocalMediaElement(): void {
-    this.clearNativeLocalSurface();
     if (this.localMediaElement) {
       this.ignoreNextLocalPause = true;
       this.silenceLocalMediaElement(this.localMediaElement);
@@ -1381,7 +1328,6 @@ class MusicPlayerStore {
     this.localPauseSilenced = false;
     this.localMediaSrc = null;
     this.localHasVideo = false;
-    this.localNativeVideo = false;
     this.localBackendKind = "none";
     this.localVideoReady = false;
     this.clearLocalPlayableStartKick();

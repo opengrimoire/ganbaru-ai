@@ -15,7 +15,5 @@ permissions = [
   "allow-set-volume",
   "allow-set-muted",
   "allow-set-rate",
-  "allow-set-surface-rect",
-  "allow-clear-surface",
   "allow-snapshot",
 ]

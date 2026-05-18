@@ -19,7 +19,6 @@ use tauri::{
 pub enum BackendKind {
     None,
     Rodio,
-    Gstreamer,
     Webview,
 }
 
@@ -62,16 +61,6 @@ pub struct LoadRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct SurfaceRect {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-    pub scale_factor: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub struct MediaProbe {
     pub path: String,
     pub title: String,
@@ -94,8 +83,6 @@ pub struct PlayerSnapshot {
     pub rate: f64,
     pub has_video: bool,
     pub backend_kind: BackendKind,
-    pub native_video: bool,
-    pub native_video_available: bool,
     pub playable_start_ms: Option<u64>,
     pub error: Option<String>,
 }
@@ -113,8 +100,6 @@ impl Default for PlayerSnapshot {
             rate: 1.0,
             has_video: false,
             backend_kind: BackendKind::None,
-            native_video: false,
-            native_video_available: false,
             playable_start_ms: None,
             error: None,
         }
@@ -140,13 +125,6 @@ impl MediaPlayerError {
         Self {
             code: "backendUnavailable".to_string(),
             message: "The requested local media backend is not available.".to_string(),
-        }
-    }
-
-    fn native_video_unavailable(message: impl Into<String>) -> Self {
-        Self {
-            code: "nativeVideoUnavailable".to_string(),
-            message: message.into(),
         }
     }
 
@@ -289,102 +267,26 @@ impl LocalAudioBackend for RodioAudioBackend {
     }
 }
 
-trait LocalVideoBackend: Send {
-    fn play(&mut self) -> Result<(), MediaPlayerError>;
-    fn pause(&mut self) -> Result<(), MediaPlayerError>;
-    fn stop(&mut self);
-    fn seek(&mut self, position_ms: u64, rate: f64) -> Result<(), MediaPlayerError>;
-    fn set_volume(&mut self, volume: f64, muted: bool);
-    fn set_rate(&mut self, rate: f64) -> Result<(), MediaPlayerError>;
-    fn set_surface_rect(&mut self, rect: Option<SurfaceRect>) -> Result<(), MediaPlayerError>;
-    fn position_ms(&self) -> u64;
-    fn duration_ms(&self) -> Option<u64>;
-    fn refresh(&mut self) -> Result<bool, MediaPlayerError>;
-}
-
-trait LocalVideoFactory: Send {
-    fn is_available(&self) -> bool;
-
-    fn load(
-        &mut self,
-        request: &LoadRequest,
-        surface_rect: Option<SurfaceRect>,
-        volume: f64,
-        muted: bool,
-        rate: f64,
-    ) -> Result<Box<dyn LocalVideoBackend>, MediaPlayerError>;
-}
-
-struct UnavailableVideoFactory {
-    reason: String,
-}
-
-impl UnavailableVideoFactory {
-    fn new(reason: impl Into<String>) -> Self {
-        Self {
-            reason: reason.into(),
-        }
-    }
-}
-
-impl LocalVideoFactory for UnavailableVideoFactory {
-    fn is_available(&self) -> bool {
-        false
-    }
-
-    fn load(
-        &mut self,
-        _request: &LoadRequest,
-        _surface_rect: Option<SurfaceRect>,
-        _volume: f64,
-        _muted: bool,
-        _rate: f64,
-    ) -> Result<Box<dyn LocalVideoBackend>, MediaPlayerError> {
-        Err(MediaPlayerError::native_video_unavailable(
-            self.reason.clone(),
-        ))
-    }
-}
-
 struct PlayerCore {
     audio_factory: Box<dyn LocalAudioFactory>,
-    video_factory: Box<dyn LocalVideoFactory>,
     audio: Option<Box<dyn LocalAudioBackend>>,
-    video: Option<Box<dyn LocalVideoBackend>>,
     loaded: bool,
     snapshot: PlayerSnapshot,
-    surface_rect: Option<SurfaceRect>,
 }
 
 impl Default for PlayerCore {
     fn default() -> Self {
-        Self::with_factories(Box::new(RodioAudioFactory), default_local_video_factory())
+        Self::with_audio_factory(Box::new(RodioAudioFactory))
     }
 }
 
 impl PlayerCore {
-    #[cfg(test)]
     fn with_audio_factory(audio_factory: Box<dyn LocalAudioFactory>) -> Self {
-        Self::with_factories(audio_factory, default_local_video_factory())
-    }
-
-    fn with_factories(
-        audio_factory: Box<dyn LocalAudioFactory>,
-        video_factory: Box<dyn LocalVideoFactory>,
-    ) -> Self {
-        let native_video_available = video_factory.is_available();
-        let snapshot = PlayerSnapshot {
-            native_video_available,
-            ..PlayerSnapshot::default()
-        };
         Self {
             audio_factory,
-            video_factory,
             audio: None,
-            video: None,
             loaded: false,
-            snapshot,
-            surface_rect: None,
+            snapshot: PlayerSnapshot::default(),
         }
     }
 
@@ -398,8 +300,6 @@ impl PlayerCore {
             BackendCommand::SetVolume(volume) => Ok(self.set_volume(volume)),
             BackendCommand::SetMuted(muted) => Ok(self.set_muted(muted)),
             BackendCommand::SetRate(rate) => Ok(self.set_rate(rate)),
-            BackendCommand::SetSurfaceRect(rect) => Ok(self.set_surface_rect(rect)),
-            BackendCommand::ClearSurface => Ok(self.clear_surface()),
             BackendCommand::Snapshot => Ok(self.current_snapshot()),
         }
     }
@@ -427,36 +327,20 @@ impl PlayerCore {
         } else {
             None
         };
-        let (audio, video, backend_kind) = if has_video {
-            match self.video_factory.load(
-                &request,
-                self.surface_rect.clone(),
-                volume,
-                self.snapshot.muted,
-                rate,
-            ) {
-                Ok(video) => (None, Some(video), BackendKind::Gstreamer),
-                Err(_) => (None, None, BackendKind::Webview),
-            }
+        let (audio, backend_kind) = if has_video {
+            (None, BackendKind::Webview)
         } else {
             (
                 Some(
                     self.audio_factory
                         .load(&request, volume, self.snapshot.muted, rate)?,
                 ),
-                None,
                 BackendKind::Rodio,
             )
         };
-        let duration_ms = audio
-            .as_ref()
-            .and_then(|backend| backend.duration_ms())
-            .or_else(|| video.as_ref().and_then(|backend| backend.duration_ms()));
-        let native_video_available = self.video_factory.is_available();
-        let native_video = backend_kind == BackendKind::Gstreamer;
+        let duration_ms = audio.as_ref().and_then(|backend| backend.duration_ms());
         self.loaded = true;
         self.audio = audio;
-        self.video = video;
         self.snapshot = PlayerSnapshot {
             status: PlayerStatus::Ready,
             source_identity: Some(request.source.identity),
@@ -468,8 +352,6 @@ impl PlayerCore {
             rate,
             has_video,
             backend_kind,
-            native_video,
-            native_video_available,
             playable_start_ms,
             error: None,
         };
@@ -487,7 +369,7 @@ impl PlayerCore {
         if self.snapshot.status == PlayerStatus::Ended {
             self.seek(0)?;
         }
-        if self.audio.is_none() && self.video.is_none() {
+        if self.audio.is_none() {
             let err = MediaPlayerError::backend_unavailable();
             self.snapshot.status = PlayerStatus::Error;
             self.snapshot.error = Some(err.message.clone());
@@ -496,13 +378,6 @@ impl PlayerCore {
         if let Some(audio) = self.audio.as_mut() {
             audio.set_volume(self.snapshot.volume, self.snapshot.muted);
             audio.play();
-        }
-        if let Some(video) = self.video.as_mut() {
-            video.set_volume(self.snapshot.volume, self.snapshot.muted);
-            if let Err(err) = video.play() {
-                self.apply_backend_error(err.clone());
-                return Err(err);
-            }
         }
         self.snapshot.status = PlayerStatus::Playing;
         self.snapshot.error = None;
@@ -514,11 +389,6 @@ impl PlayerCore {
             if let Some(audio) = self.audio.as_mut() {
                 audio.pause();
             }
-            if let Some(video) = self.video.as_mut() {
-                if let Err(err) = video.pause() {
-                    return self.apply_backend_error(err);
-                }
-            }
             self.snapshot.status = PlayerStatus::Paused;
             self.snapshot.error = None;
         }
@@ -529,14 +399,12 @@ impl PlayerCore {
         let volume = self.snapshot.volume;
         let rate = self.snapshot.rate;
         let muted = self.snapshot.muted;
-        let native_video_available = self.video_factory.is_available();
         self.stop_active_backend();
         self.loaded = false;
         self.snapshot = PlayerSnapshot {
             volume,
             muted,
             rate,
-            native_video_available,
             ..PlayerSnapshot::default()
         };
         self.snapshot.clone()
@@ -545,12 +413,6 @@ impl PlayerCore {
     fn seek(&mut self, position_ms: u64) -> Result<PlayerSnapshot, MediaPlayerError> {
         if let Some(audio) = self.audio.as_mut() {
             audio.seek(position_ms)?;
-        }
-        if let Some(video) = self.video.as_mut() {
-            if let Err(err) = video.seek(position_ms, self.snapshot.rate) {
-                self.apply_backend_error(err.clone());
-                return Err(err);
-            }
         }
         self.snapshot.position_ms = position_ms;
         Ok(self.current_snapshot())
@@ -561,9 +423,6 @@ impl PlayerCore {
         if let Some(audio) = self.audio.as_mut() {
             audio.set_volume(self.snapshot.volume, self.snapshot.muted);
         }
-        if let Some(video) = self.video.as_mut() {
-            video.set_volume(self.snapshot.volume, self.snapshot.muted);
-        }
         self.current_snapshot()
     }
 
@@ -572,9 +431,6 @@ impl PlayerCore {
         if let Some(audio) = self.audio.as_mut() {
             audio.set_volume(self.snapshot.volume, self.snapshot.muted);
         }
-        if let Some(video) = self.video.as_mut() {
-            video.set_volume(self.snapshot.volume, self.snapshot.muted);
-        }
         self.current_snapshot()
     }
 
@@ -582,31 +438,6 @@ impl PlayerCore {
         self.snapshot.rate = clamp_rate(rate);
         if let Some(audio) = self.audio.as_mut() {
             audio.set_rate(self.snapshot.rate);
-        }
-        if let Some(video) = self.video.as_mut() {
-            if let Err(err) = video.set_rate(self.snapshot.rate) {
-                return self.apply_backend_error(err);
-            }
-        }
-        self.current_snapshot()
-    }
-
-    fn set_surface_rect(&mut self, rect: SurfaceRect) -> PlayerSnapshot {
-        self.surface_rect = Some(rect);
-        if let Some(video) = self.video.as_mut() {
-            if let Err(err) = video.set_surface_rect(self.surface_rect.clone()) {
-                return self.apply_backend_error(err);
-            }
-        }
-        self.current_snapshot()
-    }
-
-    fn clear_surface(&mut self) -> PlayerSnapshot {
-        self.surface_rect = None;
-        if let Some(video) = self.video.as_mut() {
-            if let Err(err) = video.set_surface_rect(None) {
-                return self.apply_backend_error(err);
-            }
         }
         self.current_snapshot()
     }
@@ -622,21 +453,6 @@ impl PlayerCore {
                 }
             }
         }
-        if let Some(video) = self.video.as_mut() {
-            match video.refresh() {
-                Ok(false) => {}
-                Ok(true) => {
-                    if self.snapshot.status == PlayerStatus::Playing {
-                        self.snapshot.status = PlayerStatus::Ended;
-                    }
-                }
-                Err(err) => {
-                    return self.apply_backend_error(err);
-                }
-            }
-            self.snapshot.position_ms = video.position_ms();
-            self.snapshot.duration_ms = video.duration_ms();
-        }
         self.snapshot.clone()
     }
 
@@ -644,15 +460,6 @@ impl PlayerCore {
         if let Some(mut audio) = self.audio.take() {
             audio.stop();
         }
-        if let Some(mut video) = self.video.take() {
-            video.stop();
-        }
-    }
-
-    fn apply_backend_error(&mut self, err: MediaPlayerError) -> PlayerSnapshot {
-        self.snapshot.status = PlayerStatus::Error;
-        self.snapshot.error = Some(err.message);
-        self.snapshot.clone()
     }
 }
 
@@ -669,8 +476,6 @@ enum BackendCommand {
     SetVolume(f64),
     SetMuted(bool),
     SetRate(f64),
-    SetSurfaceRect(SurfaceRect),
-    ClearSurface,
     Snapshot,
 }
 
@@ -759,50 +564,9 @@ fn playback_worker(receiver: mpsc::Receiver<BackendMessage>, mut core: PlayerCor
     }
 }
 
-fn default_local_video_factory() -> Box<dyn LocalVideoFactory> {
-    Box::new(UnavailableVideoFactory::new(
-        "Native video playback is not enabled for this build.",
-    ))
-}
-
-fn local_video_factory_for_app<R: Runtime>(
-    _app: &tauri::AppHandle<R>,
-) -> Box<dyn LocalVideoFactory> {
-    native_local_video_factory(_app)
-}
-
-#[cfg(not(all(feature = "native-video-gstreamer", not(mobile))))]
-fn native_local_video_factory<R: Runtime>(
-    _app: &tauri::AppHandle<R>,
-) -> Box<dyn LocalVideoFactory> {
-    default_local_video_factory()
-}
-
-#[cfg(all(feature = "native-video-gstreamer", not(mobile)))]
-fn native_local_video_factory<R: Runtime>(app: &tauri::AppHandle<R>) -> Box<dyn LocalVideoFactory> {
-    gstreamer_video_backend::factory_for_app(app)
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct MediaPlayerState {
     controller: PlaybackController,
-}
-
-impl MediaPlayerState {
-    fn new(video_factory: Box<dyn LocalVideoFactory>) -> Self {
-        Self {
-            controller: PlaybackController::with_core(PlayerCore::with_factories(
-                Box::new(RodioAudioFactory),
-                video_factory,
-            )),
-        }
-    }
-}
-
-impl Default for MediaPlayerState {
-    fn default() -> Self {
-        Self::new(default_local_video_factory())
-    }
 }
 
 #[tauri::command]
@@ -870,21 +634,6 @@ fn set_rate(
 }
 
 #[tauri::command]
-fn set_surface_rect(
-    state: State<'_, MediaPlayerState>,
-    rect: SurfaceRect,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state
-        .controller
-        .dispatch(BackendCommand::SetSurfaceRect(rect))
-}
-
-#[tauri::command]
-fn clear_surface(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::ClearSurface)
-}
-
-#[tauri::command]
 fn snapshot(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
     state.controller.dispatch(BackendCommand::Snapshot)
 }
@@ -892,21 +641,10 @@ fn snapshot(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaP
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     PluginBuilder::new("media-player")
         .invoke_handler(tauri::generate_handler![
-            probe,
-            load,
-            play,
-            pause,
-            stop,
-            seek,
-            set_volume,
-            set_muted,
-            set_rate,
-            set_surface_rect,
-            clear_surface,
-            snapshot,
+            probe, load, play, pause, stop, seek, set_volume, set_muted, set_rate, snapshot,
         ])
         .setup(|app, _api| {
-            app.manage(MediaPlayerState::new(local_video_factory_for_app(app)));
+            app.manage(MediaPlayerState::default());
             Ok(())
         })
         .build()
@@ -1234,319 +972,6 @@ fn clamp_rate(value: f64) -> f64 {
     }
 }
 
-#[cfg(any(test, all(feature = "native-video-gstreamer", not(mobile))))]
-fn surface_rect_to_pixels(rect: &SurfaceRect) -> Option<(i32, i32, i32, i32)> {
-    let values = [rect.x, rect.y, rect.width, rect.height, rect.scale_factor];
-    if values.iter().any(|value| !value.is_finite()) || rect.width <= 0.0 || rect.height <= 0.0 {
-        return None;
-    }
-    let scale_factor = rect.scale_factor.max(0.1);
-    Some((
-        scaled_f64_to_i32(rect.x, scale_factor),
-        scaled_f64_to_i32(rect.y, scale_factor),
-        scaled_f64_to_i32(rect.width, scale_factor).max(1),
-        scaled_f64_to_i32(rect.height, scale_factor).max(1),
-    ))
-}
-
-#[cfg(any(test, all(feature = "native-video-gstreamer", not(mobile))))]
-fn scaled_f64_to_i32(value: f64, scale_factor: f64) -> i32 {
-    let scaled = (value * scale_factor).round();
-    scaled.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
-}
-
-#[cfg(all(feature = "native-video-gstreamer", not(mobile)))]
-mod gstreamer_video_backend {
-    use super::*;
-    use gstreamer as gst;
-    use gstreamer::prelude::*;
-    use gstreamer_video::prelude::*;
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use std::sync::{Arc, Mutex};
-
-    pub(super) fn factory_for_app<R: Runtime>(
-        app: &tauri::AppHandle<R>,
-    ) -> Box<dyn LocalVideoFactory> {
-        let window_handle = app
-            .get_webview_window("main")
-            .and_then(|window| native_window_handle(&window));
-        Box::new(GstreamerVideoFactory::new(window_handle))
-    }
-
-    fn native_window_handle<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Option<usize> {
-        let handle = window.window_handle().ok()?;
-        match handle.as_raw() {
-            RawWindowHandle::Xlib(handle) => Some(handle.window as usize),
-            RawWindowHandle::Xcb(handle) => Some(handle.window.get() as usize),
-            RawWindowHandle::Wayland(handle) => Some(handle.surface.as_ptr() as usize),
-            RawWindowHandle::Win32(handle) => Some(handle.hwnd.get() as usize),
-            RawWindowHandle::AppKit(handle) => Some(handle.ns_view.as_ptr() as usize),
-            _ => None,
-        }
-    }
-
-    struct GstreamerVideoFactory {
-        window_handle: Option<usize>,
-        init_error: Option<String>,
-    }
-
-    impl GstreamerVideoFactory {
-        fn new(window_handle: Option<usize>) -> Self {
-            let init_error = gst::init().err().map(|error| error.to_string());
-            Self {
-                window_handle,
-                init_error,
-            }
-        }
-    }
-
-    impl LocalVideoFactory for GstreamerVideoFactory {
-        fn is_available(&self) -> bool {
-            self.window_handle.is_some() && self.init_error.is_none()
-        }
-
-        fn load(
-            &mut self,
-            request: &LoadRequest,
-            surface_rect: Option<SurfaceRect>,
-            volume: f64,
-            muted: bool,
-            rate: f64,
-        ) -> Result<Box<dyn LocalVideoBackend>, MediaPlayerError> {
-            let window_handle = self.window_handle.ok_or_else(|| {
-                MediaPlayerError::native_video_unavailable(
-                    "Native video needs a desktop window handle.",
-                )
-            })?;
-            if let Some(error) = &self.init_error {
-                return Err(MediaPlayerError::native_video_unavailable(format!(
-                    "Failed to initialize GStreamer: {error}"
-                )));
-            }
-            let uri = gst::glib::filename_to_uri(Path::new(&request.source.path), None).map_err(
-                |error| {
-                    MediaPlayerError::invalid_source(format!(
-                        "Failed to convert local video path to a URI: {error}"
-                    ))
-                },
-            )?;
-            let playbin = gst::ElementFactory::make("playbin")
-                .property("uri", uri.as_str())
-                .build()
-                .map_err(|error| {
-                    MediaPlayerError::native_video_unavailable(format!(
-                        "Failed to create the GStreamer playbin element: {error}"
-                    ))
-                })?;
-            playbin.set_property("volume", effective_native_volume_f64(volume, muted));
-            playbin.set_property("mute", muted);
-            let bus = playbin.bus().ok_or_else(|| {
-                MediaPlayerError::native_video_unavailable(
-                    "The GStreamer video pipeline did not expose a bus.",
-                )
-            })?;
-            let overlay = Arc::new(Mutex::new(None));
-            let shared_rect = Arc::new(Mutex::new(surface_rect));
-            install_overlay_sync_handler(
-                &bus,
-                window_handle,
-                Arc::clone(&overlay),
-                Arc::clone(&shared_rect),
-            );
-            let mut backend = GstreamerVideoBackend {
-                playbin,
-                bus,
-                overlay,
-                surface_rect: shared_rect,
-                rate,
-            };
-            backend.set_surface_rect(backend.current_surface_rect())?;
-            if let Some(start_ms) = request.start_ms.filter(|value| *value > 0) {
-                backend.seek(start_ms, rate)?;
-            } else if (rate - 1.0).abs() > f64::EPSILON {
-                backend.set_rate(rate)?;
-            }
-            Ok(Box::new(backend))
-        }
-    }
-
-    fn install_overlay_sync_handler(
-        bus: &gst::Bus,
-        window_handle: usize,
-        overlay_slot: Arc<Mutex<Option<gstreamer_video::VideoOverlay>>>,
-        surface_rect: Arc<Mutex<Option<SurfaceRect>>>,
-    ) {
-        bus.set_sync_handler(move |_, message| {
-            if !gstreamer_video::is_video_overlay_prepare_window_handle_message(message) {
-                return gst::BusSyncReply::Pass;
-            }
-            if let Some(source) = message.src() {
-                if let Ok(overlay) = source.dynamic_cast::<gstreamer_video::VideoOverlay>() {
-                    unsafe {
-                        overlay.set_window_handle(window_handle);
-                    }
-                    let rect = surface_rect.lock().ok().and_then(|guard| guard.clone());
-                    let _ = apply_overlay_rect(&overlay, rect.as_ref());
-                    if let Ok(mut slot) = overlay_slot.lock() {
-                        *slot = Some(overlay);
-                    }
-                }
-            }
-            gst::BusSyncReply::Drop
-        });
-    }
-
-    struct GstreamerVideoBackend {
-        playbin: gst::Element,
-        bus: gst::Bus,
-        overlay: Arc<Mutex<Option<gstreamer_video::VideoOverlay>>>,
-        surface_rect: Arc<Mutex<Option<SurfaceRect>>>,
-        rate: f64,
-    }
-
-    impl GstreamerVideoBackend {
-        fn set_state(&self, state: gst::State, action: &str) -> Result<(), MediaPlayerError> {
-            self.playbin.set_state(state).map(|_| ()).map_err(|error| {
-                MediaPlayerError::native_video_unavailable(format!(
-                    "GStreamer failed to {action}: {error:?}"
-                ))
-            })
-        }
-
-        fn current_surface_rect(&self) -> Option<SurfaceRect> {
-            self.surface_rect
-                .lock()
-                .ok()
-                .and_then(|guard| guard.clone())
-        }
-
-        fn seek_with_rate(&self, position_ms: u64, rate: f64) -> Result<(), MediaPlayerError> {
-            let start = gst::ClockTime::from_mseconds(position_ms);
-            self.playbin
-                .seek(
-                    rate,
-                    gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
-                    gst::SeekType::Set,
-                    start,
-                    gst::SeekType::None,
-                    gst::ClockTime::NONE,
-                )
-                .map_err(|error| {
-                    MediaPlayerError::seek_failed(format!(
-                        "Failed to seek native video with GStreamer: {error}"
-                    ))
-                })
-        }
-
-        fn drain_bus(&mut self) -> Result<bool, MediaPlayerError> {
-            let mut ended = false;
-            while let Some(message) = self.bus.timed_pop_filtered(
-                gst::ClockTime::ZERO,
-                &[
-                    gst::MessageType::Eos,
-                    gst::MessageType::Error,
-                    gst::MessageType::DurationChanged,
-                ],
-            ) {
-                match message.view() {
-                    gst::MessageView::Eos(_) => ended = true,
-                    gst::MessageView::Error(error) => {
-                        return Err(MediaPlayerError::decode_failed(format!(
-                            "GStreamer playback failed: {}",
-                            error.error()
-                        )));
-                    }
-                    _ => {}
-                }
-            }
-            Ok(ended)
-        }
-    }
-
-    impl LocalVideoBackend for GstreamerVideoBackend {
-        fn play(&mut self) -> Result<(), MediaPlayerError> {
-            self.set_state(gst::State::Playing, "play native video")
-        }
-
-        fn pause(&mut self) -> Result<(), MediaPlayerError> {
-            self.set_state(gst::State::Paused, "pause native video")
-        }
-
-        fn stop(&mut self) {
-            let _ = self.playbin.set_state(gst::State::Null);
-        }
-
-        fn seek(&mut self, position_ms: u64, rate: f64) -> Result<(), MediaPlayerError> {
-            self.rate = clamp_rate(rate);
-            self.seek_with_rate(position_ms, self.rate)
-        }
-
-        fn set_volume(&mut self, volume: f64, muted: bool) {
-            self.playbin
-                .set_property("volume", effective_native_volume_f64(volume, muted));
-            self.playbin.set_property("mute", muted);
-        }
-
-        fn set_rate(&mut self, rate: f64) -> Result<(), MediaPlayerError> {
-            self.rate = clamp_rate(rate);
-            self.seek_with_rate(self.position_ms(), self.rate)
-        }
-
-        fn set_surface_rect(&mut self, rect: Option<SurfaceRect>) -> Result<(), MediaPlayerError> {
-            if let Ok(mut stored_rect) = self.surface_rect.lock() {
-                *stored_rect = rect.clone();
-            }
-            if let Ok(overlay) = self.overlay.lock() {
-                if let Some(overlay) = overlay.as_ref() {
-                    apply_overlay_rect(overlay, rect.as_ref())?;
-                }
-            }
-            Ok(())
-        }
-
-        fn position_ms(&self) -> u64 {
-            self.playbin
-                .query_position::<gst::ClockTime>()
-                .map(|position| position.mseconds())
-                .unwrap_or(0)
-        }
-
-        fn duration_ms(&self) -> Option<u64> {
-            self.playbin
-                .query_duration::<gst::ClockTime>()
-                .map(|duration| duration.mseconds())
-        }
-
-        fn refresh(&mut self) -> Result<bool, MediaPlayerError> {
-            self.drain_bus()
-        }
-    }
-
-    fn apply_overlay_rect(
-        overlay: &gstreamer_video::VideoOverlay,
-        rect: Option<&SurfaceRect>,
-    ) -> Result<(), MediaPlayerError> {
-        let (x, y, width, height) = rect
-            .and_then(surface_rect_to_pixels)
-            .unwrap_or((-32_768, -32_768, 1, 1));
-        overlay
-            .set_render_rectangle(x, y, width, height)
-            .map_err(|error| {
-                MediaPlayerError::native_video_unavailable(format!(
-                    "Failed to update the native video surface: {error}"
-                ))
-            })
-    }
-
-    fn effective_native_volume_f64(volume: f64, muted: bool) -> f64 {
-        if muted {
-            0.0
-        } else {
-            clamp_volume(volume)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1566,19 +991,6 @@ mod tests {
         assert_eq!(clamp_volume(2.0), 1.5);
         assert_eq!(clamp_rate(0.1), 0.25);
         assert_eq!(clamp_rate(4.0), 2.0);
-    }
-
-    #[test]
-    fn surface_rect_conversion_uses_physical_pixels() {
-        let rect = SurfaceRect {
-            x: 10.25,
-            y: 20.25,
-            width: 300.0,
-            height: 150.0,
-            scale_factor: 2.0,
-        };
-
-        assert_eq!(surface_rect_to_pixels(&rect), Some((21, 41, 600, 300)));
     }
 
     #[test]
@@ -1631,8 +1043,6 @@ mod tests {
         assert_eq!(snapshot.title.as_deref(), Some("Song title"));
         assert!(!snapshot.has_video);
         assert_eq!(snapshot.backend_kind, BackendKind::Rodio);
-        assert!(!snapshot.native_video);
-        assert!(!snapshot.native_video_available);
         assert_eq!(snapshot.playable_start_ms, None);
         assert_eq!(snapshot.duration_ms, Some(120_000));
     }
@@ -1686,7 +1096,7 @@ mod tests {
     }
 
     #[test]
-    fn player_core_falls_back_to_webview_for_video_when_native_video_is_unavailable() {
+    fn player_core_uses_webview_for_video() {
         let mut core = test_core();
         let loaded = core
             .handle(BackendCommand::load(
@@ -1698,88 +1108,7 @@ mod tests {
         assert!(loaded.has_video);
         assert_eq!(loaded.playable_start_ms, Some(62_561));
         assert_eq!(loaded.backend_kind, BackendKind::Webview);
-        assert!(!loaded.native_video);
-        assert!(!loaded.native_video_available);
         assert_eq!(loaded.error, None);
-    }
-
-    #[test]
-    fn player_core_falls_back_to_webview_when_native_video_load_fails() {
-        let mut core =
-            PlayerCore::with_factories(Box::new(FakeAudioFactory), Box::new(FailingVideoFactory));
-
-        let loaded = core
-            .handle(BackendCommand::load(
-                local_load_request(None),
-                video_probe(),
-            ))
-            .unwrap();
-
-        assert_eq!(loaded.status, PlayerStatus::Ready);
-        assert_eq!(loaded.backend_kind, BackendKind::Webview);
-        assert!(!loaded.native_video);
-        assert!(loaded.native_video_available);
-        assert_eq!(loaded.error, None);
-    }
-
-    #[test]
-    fn player_core_uses_native_video_backend_when_available() {
-        let loaded_backends = Arc::new(Mutex::new(Vec::new()));
-        let mut core = PlayerCore::with_factories(
-            Box::new(FakeAudioFactory),
-            Box::new(RecordingVideoFactory {
-                loaded_backends: Arc::clone(&loaded_backends),
-            }),
-        );
-
-        let loaded = core
-            .handle(BackendCommand::load(
-                local_load_request(Some(7_000)),
-                video_probe(),
-            ))
-            .unwrap();
-        let playing = core.handle(BackendCommand::Play).unwrap();
-
-        assert_eq!(loaded.backend_kind, BackendKind::Gstreamer);
-        assert!(loaded.native_video);
-        assert!(loaded.native_video_available);
-        assert_eq!(loaded.position_ms, 7_000);
-        assert_eq!(playing.status, PlayerStatus::Playing);
-        assert_eq!(loaded_backends.lock().unwrap().len(), 1);
-        assert!(loaded_backends.lock().unwrap()[0].lock().unwrap().playing);
-    }
-
-    #[test]
-    fn surface_rect_updates_are_forwarded_to_native_video() {
-        let loaded_backends = Arc::new(Mutex::new(Vec::new()));
-        let mut core = PlayerCore::with_factories(
-            Box::new(FakeAudioFactory),
-            Box::new(RecordingVideoFactory {
-                loaded_backends: Arc::clone(&loaded_backends),
-            }),
-        );
-        let rect = SurfaceRect {
-            x: 1.0,
-            y: 2.0,
-            width: 300.0,
-            height: 200.0,
-            scale_factor: 1.0,
-        };
-
-        core.handle(BackendCommand::SetSurfaceRect(rect.clone()))
-            .unwrap();
-        core.handle(BackendCommand::load(
-            local_load_request(None),
-            video_probe(),
-        ))
-        .unwrap();
-        core.handle(BackendCommand::ClearSurface).unwrap();
-
-        let backend = loaded_backends.lock().unwrap()[0].clone();
-        let state = backend.lock().unwrap();
-        assert_eq!(state.surface_rect, None);
-        assert_eq!(state.surface_updates, 1);
-        assert_eq!(state.initial_surface_rect, Some(rect));
     }
 
     #[test]
@@ -2007,142 +1336,6 @@ mod tests {
 
         fn is_empty(&self) -> bool {
             self.state.lock().unwrap().empty
-        }
-    }
-
-    struct FailingVideoFactory;
-
-    impl LocalVideoFactory for FailingVideoFactory {
-        fn is_available(&self) -> bool {
-            true
-        }
-
-        fn load(
-            &mut self,
-            _request: &LoadRequest,
-            _surface_rect: Option<SurfaceRect>,
-            _volume: f64,
-            _muted: bool,
-            _rate: f64,
-        ) -> Result<Box<dyn LocalVideoBackend>, MediaPlayerError> {
-            Err(MediaPlayerError::native_video_unavailable(
-                "GStreamer is not available in this test.",
-            ))
-        }
-    }
-
-    struct RecordingVideoFactory {
-        loaded_backends: Arc<Mutex<Vec<Arc<Mutex<FakeVideoState>>>>>,
-    }
-
-    impl LocalVideoFactory for RecordingVideoFactory {
-        fn is_available(&self) -> bool {
-            true
-        }
-
-        fn load(
-            &mut self,
-            request: &LoadRequest,
-            surface_rect: Option<SurfaceRect>,
-            volume: f64,
-            muted: bool,
-            rate: f64,
-        ) -> Result<Box<dyn LocalVideoBackend>, MediaPlayerError> {
-            let state = Arc::new(Mutex::new(FakeVideoState {
-                position_ms: request.start_ms.unwrap_or(0),
-                duration_ms: Some(240_000),
-                volume,
-                muted,
-                rate,
-                playing: false,
-                stopped: false,
-                ended: false,
-                surface_rect: surface_rect.clone(),
-                initial_surface_rect: surface_rect,
-                surface_updates: 0,
-            }));
-            self.loaded_backends
-                .lock()
-                .unwrap()
-                .push(Arc::clone(&state));
-            Ok(Box::new(FakeVideoBackend { state }))
-        }
-    }
-
-    struct FakeVideoBackend {
-        state: Arc<Mutex<FakeVideoState>>,
-    }
-
-    struct FakeVideoState {
-        position_ms: u64,
-        duration_ms: Option<u64>,
-        volume: f64,
-        muted: bool,
-        rate: f64,
-        playing: bool,
-        stopped: bool,
-        ended: bool,
-        surface_rect: Option<SurfaceRect>,
-        initial_surface_rect: Option<SurfaceRect>,
-        surface_updates: usize,
-    }
-
-    impl LocalVideoBackend for FakeVideoBackend {
-        fn play(&mut self) -> Result<(), MediaPlayerError> {
-            let mut state = self.state.lock().unwrap();
-            state.playing = true;
-            Ok(())
-        }
-
-        fn pause(&mut self) -> Result<(), MediaPlayerError> {
-            let mut state = self.state.lock().unwrap();
-            state.playing = false;
-            Ok(())
-        }
-
-        fn stop(&mut self) {
-            let mut state = self.state.lock().unwrap();
-            state.stopped = true;
-            state.playing = false;
-        }
-
-        fn seek(&mut self, position_ms: u64, rate: f64) -> Result<(), MediaPlayerError> {
-            let mut state = self.state.lock().unwrap();
-            state.position_ms = position_ms;
-            state.rate = rate;
-            Ok(())
-        }
-
-        fn set_volume(&mut self, volume: f64, muted: bool) {
-            let mut state = self.state.lock().unwrap();
-            state.volume = volume;
-            state.muted = muted;
-        }
-
-        fn set_rate(&mut self, rate: f64) -> Result<(), MediaPlayerError> {
-            let mut state = self.state.lock().unwrap();
-            state.rate = rate;
-            Ok(())
-        }
-
-        fn set_surface_rect(&mut self, rect: Option<SurfaceRect>) -> Result<(), MediaPlayerError> {
-            let mut state = self.state.lock().unwrap();
-            state.surface_rect = rect;
-            state.surface_updates += 1;
-            Ok(())
-        }
-
-        fn position_ms(&self) -> u64 {
-            self.state.lock().unwrap().position_ms
-        }
-
-        fn duration_ms(&self) -> Option<u64> {
-            self.state.lock().unwrap().duration_ms
-        }
-
-        fn refresh(&mut self) -> Result<bool, MediaPlayerError> {
-            let state = self.state.lock().unwrap();
-            Ok(state.ended)
         }
     }
 }

@@ -13,8 +13,6 @@ Allows the main GanbaruAI window to control local media playback through the nat
 - `allow-set-volume`
 - `allow-set-muted`
 - `allow-set-rate`
-- `allow-set-surface-rect`
-- `allow-clear-surface`
 - `allow-snapshot`
 
 ## Permission Table
@@ -25,32 +23,6 @@ Allows the main GanbaruAI window to control local media playback through the nat
 <th>Description</th>
 </tr>
 
-
-<tr>
-<td>
-
-`media-player:allow-clear-surface`
-
-</td>
-<td>
-
-Enables the clear_surface command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`media-player:deny-clear-surface`
-
-</td>
-<td>
-
-Denies the clear_surface command without any pre-configured scope.
-
-</td>
-</tr>
 
 <tr>
 <td>
@@ -230,32 +202,6 @@ Enables the set_rate command without any pre-configured scope.
 <td>
 
 Denies the set_rate command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`media-player:allow-set-surface-rect`
-
-</td>
-<td>
-
-Enables the set_surface_rect command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`media-player:deny-set-surface-rect`
-
-</td>
-<td>
-
-Denies the set_surface_rect command without any pre-configured scope.
 
 </td>
 </tr>

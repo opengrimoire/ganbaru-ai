@@ -10,10 +10,6 @@ edition = "2021"
 name = "desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[features]
-default = []
-native-video-gstreamer = ["tauri-plugin-media-player/native-video-gstreamer"]
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

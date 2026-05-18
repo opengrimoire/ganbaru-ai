@@ -405,11 +405,11 @@ A local-first media player licensed separately under LGPL 2.1 and integrated dir
 
 ### Current local playback path
 
-Desktop local audio playback is Rust-controlled through `plugins/media-player` with Rodio and Symphonia. Desktop local video uses GStreamer through the same plugin when the app is built with the `native-video-gstreamer` Cargo feature and a compatible system GStreamer installation is available. If the feature is disabled, GStreamer cannot initialize, or a file cannot be loaded by the native video backend, local video uses the browser media element inside the Tauri WebView with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
+Desktop local audio playback is Rust-controlled through `plugins/media-player` with Rodio and Symphonia. Desktop local video uses the browser media element inside the Tauri WebView with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
 
-The WebView path is a compatibility fallback for local video and any future unsupported local media path, not the normal audio story. It can play only the formats and codecs supported by the user's platform WebView, and it carries the memory overhead of the WebView media element plus the loopback host.
+The WebView path is the intentional local video path. It can play only the formats and codecs supported by the user's platform WebView, but it delegates video decoding and rendering to the media stack that Tauri already ships on each platform. On Linux this is WebKitGTK, which uses GStreamer internally for web media. On Windows this is WebView2. On macOS and iOS this is WKWebView. On Android this is Android WebView.
 
-Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Native local video uses the same plugin API and renders to the main Tauri window handle with a GStreamer overlay rectangle driven by the measured Music surface. Local video fallback uses the media element directly, caps volume at normal `100%`, and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active WebView fallback video media at the current position and resumes playback if it was playing.
+Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local video uses the media element directly, caps volume at normal `100%`, and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes if it was playing.
 
 ### Native media backend target
 
@@ -417,7 +417,7 @@ The production local backend is Rust-controlled through `plugins/media-player`. 
 
 Rodio is the first target because it is a RustAudio playback crate, uses CPAL for cross-platform audio output, supports player controls such as play, pause, seek, volume, and speed, and uses Symphonia as the default decoder backend for common file types. The approved dependency shape is `rodio` with `default-features = false` and features limited to `playback`, `symphonia-flac`, `symphonia-mp3`, `symphonia-isomp4`, `symphonia-aac`, `symphonia-alac`, `symphonia-ogg`, `symphonia-vorbis`, `symphonia-wav`, and `symphonia-pcm`.
 
-GStreamer is the selected native local video backend. It is feature-gated by `native-video-gstreamer` and should stay lazy and separate from the default audio-only path so normal background music does not pay its memory cost. It relies on system GStreamer libraries and optional system plugin sets for codec coverage. Do not bundle GPL, nonfree, or patent-sensitive plugin sets by default without a separate license review. libVLC and an LGPL-compatible FFmpeg/libav path remain fallback candidates for unsupported audio formats or broader codec coverage later.
+Native video is not part of the shipped local playback path. An app-owned video backend is not clearly better for RAM than the platform WebView stack and increases the platform surface area. A single GStreamer backend is especially poor as a cross-platform default: Linux WebKitGTK already uses GStreamer internally, while Windows, macOS, iOS, and Android are better served by their platform WebView media stacks unless measured evidence proves otherwise. Platform-specific native video should only be revisited for a concrete RAM, speed, compatibility, or stability problem.
 
 ### Rodio and Symphonia audio path
 
@@ -425,13 +425,9 @@ Rodio is the selected first native local audio playback target. Rodio provides t
 
 The native audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG Vorbis, and WAV/PCM. Opus, WMA, APE, AIFF, and other unsupported audio formats should either fail explicitly or use a later broad native multimedia fallback. They should not silently reintroduce the hidden WebView audio element as the normal audio path.
 
-### GStreamer video path
+### WebView video path
 
-GStreamer is used for desktop local video only when the `native-video-gstreamer` Cargo feature is enabled. The first pass uses `playbin` for playback, seeking, duration, rate, volume, mute, EOS, and errors. Video is rendered with `VideoOverlay` to the main Tauri window handle, and the frontend forwards the measured Music surface rectangle through `set_surface_rect`. If the native backend cannot initialize or load the file, the player reports `backendKind: "webview"` and the frontend mounts the existing WebView video fallback instead.
-
-Native GStreamer video can use the same `0%` to `150%` volume range as native local audio. The WebView fallback remains capped at `100%`. Visualizations and an audio-only video mode are planned follow-ups, not part of this first native video pass.
-
-On Ubuntu 24.04, checking this feature requires `libgstreamer1.0-dev`, `libgstreamer-plugins-base1.0-dev`, `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-bad`, and `gstreamer1.0-libav` installed from the system package manager.
+Local video is hosted through the app's loopback media server and rendered by a normal WebView media element. This keeps the implementation aligned with Tauri's platform media stack, avoids extra video runtime packaging, and avoids a second rendering surface over the app window. The tradeoff is that local video volume is capped at `100%`, matching HTML media element behavior. Visualizations and an audio-only video mode remain planned follow-ups.
 
 ### FFmpeg or libav fallback role
 
@@ -649,7 +645,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Sync server               | Hocuspocus                                           | Yjs server with persistence, presence, and auth hooks                              |
 | Encryption                | libsodium / `@noble/ciphers`                         | E2E encryption, server sees only ciphertext                                        |
 | Local DB                  | SQLite through Rust `sqlx` commands                  | Metadata, search, tags, pomodoro sessions, requirement diffs    |
-| Media engine (video)      | GStreamer, libVLC, or FFmpeg/libav fallback target   | Broader native multimedia path for video or unsupported audio formats              |
+| Media engine (video)      | Platform WebView media element                       | Local video through Tauri's platform WebView stack                                 |
 | Media engine (audio-only) | Rodio + Symphonia target                             | Native audio playback and decoding path for low-RAM local music                    |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |
 | File watching             | `notify`                                             | Cross-platform file system events for vault reindexing |

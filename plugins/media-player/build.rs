@@ -8,8 +8,6 @@ const COMMANDS: &[&str] = &[
     "set_volume",
     "set_muted",
     "set_rate",
-    "set_surface_rect",
-    "clear_surface",
     "snapshot",
 ];
 

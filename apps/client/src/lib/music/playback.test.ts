@@ -113,26 +113,18 @@ describe("clamp helpers", () => {
 
   it("allows boost for native local backends only", () => {
     expect(supportsLocalBackendVolumeBoost("rodio")).toBe(true);
-    expect(supportsLocalBackendVolumeBoost("gstreamer")).toBe(true);
     expect(supportsLocalBackendVolumeBoost("webview")).toBe(false);
     expect(supportsLocalBackendVolumeBoost("none")).toBe(false);
   });
 
-  it("mounts the WebView element only for local video fallback", () => {
-    expect(shouldUseWebviewLocalVideo({
-      backendKind: "gstreamer",
-      hasVideo: true,
-      nativeVideo: true,
-    })).toBe(false);
+  it("mounts the WebView element for local video playback", () => {
     expect(shouldUseWebviewLocalVideo({
       backendKind: "webview",
       hasVideo: true,
-      nativeVideo: false,
     })).toBe(true);
     expect(shouldUseWebviewLocalVideo({
       backendKind: "rodio",
       hasVideo: false,
-      nativeVideo: false,
     })).toBe(false);
   });
 

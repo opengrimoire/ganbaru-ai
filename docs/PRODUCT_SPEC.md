@@ -88,7 +88,7 @@ The alarm system knows sleep duration (time from setting alarm to dismissal), wh
 
 ### Music player
 
-A local-first media player (LGPL 2.1, Rodio and Symphonia for native audio, optional GStreamer for native desktop video) integrated into the productivity workflow. Two supported sources: local audio/video files (primary) and YouTube via the official IFrame Player API (secondary).
+A local-first media player (LGPL 2.1, Rodio and Symphonia for native audio, platform WebView media for local video) integrated into the productivity workflow. Two supported sources: local audio/video files (primary) and YouTube via the official IFrame Player API (secondary).
 
 **Local files** are handled by the Rust media engine. **YouTube** is integrated via the IFrame API, which is officially supported, free with no developer key required, and works without user registration. The IFrame API provides full programmatic control: loading videos by ID or URL, start/end timestamps, volume, playback speed, and seeking. A transparent overlay covers the iframe to block direct user interaction, so all control is handled programmatically based on the user's preconfiguration. The player remains fully visible and ads play normally; it is simply input-locked. If the user has YouTube Premium, ads do not appear. Playback position is persisted to SQLite and restored on app restart via the `start` URL parameter.
 

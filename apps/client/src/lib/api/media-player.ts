@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type LocalPlayerStatus = "idle" | "ready" | "playing" | "paused" | "ended" | "error";
-export type LocalBackendKind = "none" | "rodio" | "gstreamer" | "webview";
+export type LocalBackendKind = "none" | "rodio" | "webview";
 
 export interface LocalMediaSource {
   kind: "local-file";
@@ -15,14 +15,6 @@ export interface LocalLoadRequest {
   startMs?: number | null;
   volume?: number | null;
   rate?: number | null;
-}
-
-export interface SurfaceRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  scaleFactor: number;
 }
 
 export interface MediaProbe {
@@ -45,8 +37,6 @@ export interface LocalPlayerSnapshot {
   rate: number;
   hasVideo: boolean;
   backendKind: LocalBackendKind;
-  nativeVideo: boolean;
-  nativeVideoAvailable: boolean;
   playableStartMs: number | null;
   error: string | null;
 }
@@ -90,14 +80,6 @@ export function setLocalMuted(muted: boolean): Promise<LocalPlayerSnapshot> {
 
 export function setLocalRate(rate: number): Promise<LocalPlayerSnapshot> {
   return invoke("plugin:media-player|set_rate", { rate });
-}
-
-export function setLocalSurfaceRect(rect: SurfaceRect): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|set_surface_rect", { rect });
-}
-
-export function clearLocalSurface(): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|clear_surface");
 }
 
 export function getLocalSnapshot(): Promise<LocalPlayerSnapshot> {
