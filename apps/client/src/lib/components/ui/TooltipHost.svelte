@@ -1,9 +1,17 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { calculateTooltipPosition, type TooltipPlacement } from "./tooltip";
+  import {
+    calculateTooltipPosition,
+    deriveTooltipPalette,
+    isVisibleCssColor,
+    type TooltipPalette,
+    type TooltipPaletteTokens,
+    type TooltipPlacement,
+  } from "./tooltip";
 
   const tooltipId = "app-global-tooltip";
   const hoverDelayMs = 350;
+  const maxSurfaceLookupDepth = 12;
   const targetSelector = [
     "[data-app-tooltip]",
     "[data-tooltip]",
@@ -20,6 +28,7 @@
   let ready = $state(false);
   let placement = $state<TooltipPlacement>("top");
   let tooltipStyle = $state("left: -9999px; top: -9999px;");
+  let tooltipPaletteStyle = $state("");
   let showTimer: ReturnType<typeof setTimeout> | undefined;
   const migratingTitleElements = new WeakSet<HTMLElement>();
 
@@ -106,6 +115,51 @@
     return tooltipTextFor(element).length > 0 ? element : null;
   }
 
+  function readCssVar(style: CSSStyleDeclaration, name: string): string | undefined {
+    const value = style.getPropertyValue(name).trim();
+    return value.length > 0 ? value : undefined;
+  }
+
+  function readTooltipPaletteTokens(): TooltipPaletteTokens {
+    const rootStyle = getComputedStyle(document.documentElement);
+    return {
+      background: readCssVar(rootStyle, "--background"),
+      foreground: readCssVar(rootStyle, "--foreground"),
+      popover: readCssVar(rootStyle, "--popover"),
+      popoverForeground: readCssVar(rootStyle, "--popover-foreground"),
+    };
+  }
+
+  function localSurfaceColorFor(element: HTMLElement): string | undefined {
+    let current: HTMLElement | null = element;
+    for (let depth = 0; current && depth < maxSurfaceLookupDepth; depth += 1) {
+      const backgroundColor = getComputedStyle(current).backgroundColor;
+      if (isVisibleCssColor(backgroundColor)) return backgroundColor;
+      current = current.parentElement;
+    }
+
+    return readTooltipPaletteTokens().background;
+  }
+
+  function paletteStyle(palette: TooltipPalette): string {
+    return [
+      `--app-tooltip-bg: ${palette.background}`,
+      `--app-tooltip-fg: ${palette.foreground}`,
+      `--app-tooltip-border: ${palette.border}`,
+      `--app-tooltip-shadow: ${palette.shadow}`,
+    ].join("; ");
+  }
+
+  function hiddenTooltipStyle(): string {
+    return [`left: -9999px`, `top: -9999px`, tooltipPaletteStyle].filter(Boolean).join("; ");
+  }
+
+  function refreshTooltipPalette(element: HTMLElement): void {
+    tooltipPaletteStyle = paletteStyle(
+      deriveTooltipPalette(localSurfaceColorFor(element), readTooltipPaletteTokens()),
+    );
+  }
+
   async function positionTooltip(): Promise<void> {
     if (!anchor || !tooltipEl || !visible) return;
     if (!document.documentElement.contains(anchor)) {
@@ -123,6 +177,7 @@
       `left: ${position.left}px`,
       `top: ${position.top}px`,
       `--app-tooltip-arrow-left: ${position.arrowLeft}px`,
+      tooltipPaletteStyle,
     ].join("; ");
     ready = true;
   }
@@ -142,7 +197,8 @@
     anchor = element;
     text = nextText;
     ready = false;
-    tooltipStyle = "left: -9999px; top: -9999px;";
+    refreshTooltipPalette(element);
+    tooltipStyle = hiddenTooltipStyle();
 
     showTimer = setTimeout(() => {
       showTimer = undefined;
@@ -163,7 +219,7 @@
     visible = false;
     ready = false;
     text = "";
-    tooltipStyle = "left: -9999px; top: -9999px;";
+    tooltipStyle = hiddenTooltipStyle();
   }
 
   function isStillInsideAnchor(event: PointerEvent | FocusEvent): boolean {
@@ -228,6 +284,18 @@
       void positionTooltip();
     };
 
+    const refreshPaletteAndPosition = () => {
+      if (!anchor) return;
+      refreshTooltipPalette(anchor);
+      void positionTooltip();
+    };
+
+    const themeObserver = new MutationObserver(refreshPaletteAndPosition);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
+
     document.addEventListener("pointerover", handlePointerOver, true);
     document.addEventListener("pointerout", handlePointerOut, true);
     document.addEventListener("focusin", handleFocusIn, true);
@@ -239,6 +307,7 @@
     return () => {
       clearShowTimer();
       observer.disconnect();
+      themeObserver.disconnect();
       document.removeEventListener("pointerover", handlePointerOver, true);
       document.removeEventListener("pointerout", handlePointerOut, true);
       document.removeEventListener("focusin", handleFocusIn, true);
@@ -271,9 +340,10 @@
     max-width: min(18rem, calc(100vw - 16px));
     padding: 0.42rem 0.65rem;
     border-radius: 0.5rem;
-    background: #202020;
-    color: #ffffff;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--app-tooltip-border, var(--border));
+    background: var(--app-tooltip-bg, var(--popover));
+    color: var(--app-tooltip-fg, var(--popover-foreground));
+    box-shadow: var(--app-tooltip-shadow, 0 8px 28px rgba(0, 0, 0, 0.22));
     font-size: 12px;
     font-weight: 500;
     letter-spacing: 0;
