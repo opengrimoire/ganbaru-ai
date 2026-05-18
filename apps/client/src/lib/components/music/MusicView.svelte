@@ -39,6 +39,9 @@
 
   const mediaSurfaceFullscreenEvent = "ganbaruai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
+  const volumeSliderProgress = $derived(volumeMax > 0
+    ? `${Math.min(100, Math.max(0, (player.volumeControlValue / volumeMax) * 100))}%`
+    : "0%");
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
   const topBarMediaTitleMaxLength = 42;
   const volumeShortcutStep = 0.05;
@@ -633,7 +636,8 @@
               max={volumeMax}
               step={volumeShortcutStep}
               value={player.volumeControlValue}
-              class="block w-28 accent-primary"
+              class="music-volume-slider block w-28"
+              style={`--music-volume-progress: ${volumeSliderProgress};`}
               aria-label="Volume"
               data-app-tooltip="Volume (↑ and ↓ keys or scroll wheel)"
               tabindex="-1"
@@ -735,3 +739,56 @@
     </div>
   </div>
 </section>
+
+<style>
+  .music-volume-slider {
+    --music-volume-thumb-size: 0.875rem;
+    --music-volume-track-height: 0.25rem;
+    --music-volume-track-color: color-mix(in srgb, var(--foreground) 22%, transparent);
+    --music-volume-thumb-border: color-mix(in srgb, var(--foreground) 18%, transparent);
+
+    height: var(--music-volume-thumb-size);
+    appearance: none;
+    cursor: pointer;
+    background:
+      linear-gradient(
+        to right,
+        var(--primary) 0%,
+        var(--primary) var(--music-volume-progress),
+        var(--music-volume-track-color) var(--music-volume-progress),
+        var(--music-volume-track-color) 100%
+      )
+      center / calc(100% - var(--music-volume-thumb-size)) var(--music-volume-track-height) no-repeat;
+  }
+
+  .music-volume-slider::-webkit-slider-runnable-track {
+    height: var(--music-volume-track-height);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .music-volume-slider::-webkit-slider-thumb {
+    width: var(--music-volume-thumb-size);
+    height: var(--music-volume-thumb-size);
+    margin-top: calc((var(--music-volume-track-height) - var(--music-volume-thumb-size)) / 2);
+    appearance: none;
+    border: 1px solid var(--music-volume-thumb-border);
+    border-radius: 999px;
+    background: var(--card);
+  }
+
+  .music-volume-slider::-moz-range-track,
+  .music-volume-slider::-moz-range-progress {
+    height: var(--music-volume-track-height);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .music-volume-slider::-moz-range-thumb {
+    width: var(--music-volume-thumb-size);
+    height: var(--music-volume-thumb-size);
+    border: 1px solid var(--music-volume-thumb-border);
+    border-radius: 999px;
+    background: var(--card);
+  }
+</style>
