@@ -33,6 +33,10 @@
     player.registerLocalMedia(localMediaElement);
   });
 
+  $effect(() => {
+    player.syncNativeLocalSurface(surfaceRect);
+  });
+
   function handleSurfacePointerDown(event: PointerEvent): void {
     event.preventDefault();
   }
@@ -85,7 +89,7 @@
       ></iframe>
     {/key}
   {:else if player.currentSource?.kind === "local-file"}
-    {#if player.localMediaSrc && player.localHasVideo}
+    {#if player.localMediaSrc && player.localHasVideo && !player.localNativeVideo}
       {#key player.localMediaSrc}
         <video
           bind:this={localMediaElement}

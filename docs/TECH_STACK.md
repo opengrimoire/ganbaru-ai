@@ -405,25 +405,33 @@ A local-first media player licensed separately under LGPL 2.1 and integrated dir
 
 ### Current local playback path
 
-Desktop local audio playback is Rust-controlled through `plugins/media-player` with Rodio and Symphonia. Local video still uses the browser media element inside the Tauri WebView, with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
+Desktop local audio playback is Rust-controlled through `plugins/media-player` with Rodio and Symphonia. Desktop local video uses GStreamer through the same plugin when the app is built with the `native-video-gstreamer` Cargo feature and a compatible system GStreamer installation is available. If the feature is disabled, GStreamer cannot initialize, or a file cannot be loaded by the native video backend, local video uses the browser media element inside the Tauri WebView with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
 
 The WebView path is a compatibility fallback for local video and any future unsupported local media path, not the normal audio story. It can play only the formats and codecs supported by the user's platform WebView, and it carries the memory overhead of the WebView media element plus the loopback host.
 
-Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local video fallback uses the media element directly, caps volume at normal `100%`, and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes playback if it was playing.
+Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Native local video uses the same plugin API and renders to the main Tauri window handle with a GStreamer overlay rectangle driven by the measured Music surface. Local video fallback uses the media element directly, caps volume at normal `100%`, and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active WebView fallback video media at the current position and resumes playback if it was playing.
 
 ### Native media backend target
 
-The production local backend is Rust-controlled through `plugins/media-player`. The selected first implementation target is Rodio with default features disabled and only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend owns local audio decoding, transport controls, native volume, native mute, seeking, rate changes, duration, position snapshots, and audio device output. Metadata and artwork extraction still use the existing Rust music commands.
+The production local backend is Rust-controlled through `plugins/media-player`. Rodio with default features disabled remains the default local audio target, with only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend owns local audio decoding, transport controls, native volume, native mute, seeking, rate changes, duration, position snapshots, and audio device output. Metadata and artwork extraction still use the existing Rust music commands.
 
 Rodio is the first target because it is a RustAudio playback crate, uses CPAL for cross-platform audio output, supports player controls such as play, pause, seek, volume, and speed, and uses Symphonia as the default decoder backend for common file types. The approved dependency shape is `rodio` with `default-features = false` and features limited to `playback`, `symphonia-flac`, `symphonia-mp3`, `symphonia-isomp4`, `symphonia-aac`, `symphonia-alac`, `symphonia-ogg`, `symphonia-vorbis`, `symphonia-wav`, and `symphonia-pcm`.
 
-GStreamer, libVLC, and an LGPL-compatible FFmpeg/libav path remain fallback candidates for local video, unsupported audio formats, or broader codec coverage. They should be lazy and separate from the default audio-only path so normal background music does not pay their memory cost.
+GStreamer is the selected native local video backend. It is feature-gated by `native-video-gstreamer` and should stay lazy and separate from the default audio-only path so normal background music does not pay its memory cost. It relies on system GStreamer libraries and optional system plugin sets for codec coverage. Do not bundle GPL, nonfree, or patent-sensitive plugin sets by default without a separate license review. libVLC and an LGPL-compatible FFmpeg/libav path remain fallback candidates for unsupported audio formats or broader codec coverage later.
 
 ### Rodio and Symphonia audio path
 
 Rodio is the selected first native local audio playback target. Rodio provides the playback controller and audio output path through CPAL. Symphonia provides decoding for common music containers and codecs. This path replaces the WebView audio element for normal local music playback and is optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
 
-The native audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG Vorbis, and WAV/PCM. Opus, WMA, APE, AIFF, local video, and other unsupported formats should either fail explicitly or use a later broad native multimedia fallback. They should not silently reintroduce the hidden WebView audio element as the normal audio path.
+The native audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG Vorbis, and WAV/PCM. Opus, WMA, APE, AIFF, and other unsupported audio formats should either fail explicitly or use a later broad native multimedia fallback. They should not silently reintroduce the hidden WebView audio element as the normal audio path.
+
+### GStreamer video path
+
+GStreamer is used for desktop local video only when the `native-video-gstreamer` Cargo feature is enabled. The first pass uses `playbin` for playback, seeking, duration, rate, volume, mute, EOS, and errors. Video is rendered with `VideoOverlay` to the main Tauri window handle, and the frontend forwards the measured Music surface rectangle through `set_surface_rect`. If the native backend cannot initialize or load the file, the player reports `backendKind: "webview"` and the frontend mounts the existing WebView video fallback instead.
+
+Native GStreamer video can use the same `0%` to `150%` volume range as native local audio. The WebView fallback remains capped at `100%`. Visualizations and an audio-only video mode are planned follow-ups, not part of this first native video pass.
+
+On Ubuntu 24.04, checking this feature requires `libgstreamer1.0-dev`, `libgstreamer-plugins-base1.0-dev`, `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-bad`, and `gstreamer1.0-libav` installed from the system package manager.
 
 ### FFmpeg or libav fallback role
 

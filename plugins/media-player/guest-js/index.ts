@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type MediaPlayerStatus = "idle" | "ready" | "playing" | "paused" | "ended" | "error";
+export type BackendKind = "none" | "rodio" | "gstreamer" | "webview";
 
 export interface LocalMediaSource {
   kind: "local-file";
@@ -43,6 +44,9 @@ export interface PlayerSnapshot {
   muted: boolean;
   rate: number;
   hasVideo: boolean;
+  backendKind: BackendKind;
+  nativeVideo: boolean;
+  nativeVideoAvailable: boolean;
   playableStartMs: number | null;
   error: string | null;
 }

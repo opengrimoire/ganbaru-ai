@@ -29,6 +29,14 @@ export interface PersistedPlaybackState {
   updatedAt: number;
 }
 
+export type LocalPlaybackBackendKind = "none" | "rodio" | "gstreamer" | "webview";
+
+export interface LocalPlaybackBackendSnapshot {
+  backendKind: LocalPlaybackBackendKind;
+  hasVideo: boolean;
+  nativeVideo: boolean;
+}
+
 export const DEFAULT_PLAYBACK_SNAPSHOT: PlaybackSnapshot = Object.freeze({
   status: "idle",
   positionMs: 0,
@@ -120,6 +128,14 @@ export function playbackVolumeControlValue(value: number, supportsBoost: boolean
 
 export function isVolumeBoosted(value: number): boolean {
   return clampVolume(value) > NORMAL_VOLUME;
+}
+
+export function supportsLocalBackendVolumeBoost(backendKind: LocalPlaybackBackendKind): boolean {
+  return backendKind === "rodio" || backendKind === "gstreamer";
+}
+
+export function shouldUseWebviewLocalVideo(snapshot: LocalPlaybackBackendSnapshot): boolean {
+  return snapshot.backendKind === "webview" || (snapshot.hasVideo && !snapshot.nativeVideo);
 }
 
 export function normalizeLocalPlayableStartMs(startMs: number | null): number {

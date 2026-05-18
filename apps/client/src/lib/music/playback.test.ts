@@ -17,7 +17,9 @@ import {
   playbackVolumeControlValue,
   previousQueueSelection,
   shouldPersistPlaybackState,
+  shouldUseWebviewLocalVideo,
   stableStatusDuringYouTubeBuffering,
+  supportsLocalBackendVolumeBoost,
   type PersistedPlaybackState,
 } from "./playback";
 
@@ -107,6 +109,31 @@ describe("clamp helpers", () => {
     expect(clampPlaybackVolume(1.25, true)).toBe(1.25);
     expect(clampPlaybackVolume(1.25, false)).toBe(1);
     expect(playbackVolumeControlValue(1.25, false)).toBe(1);
+  });
+
+  it("allows boost for native local backends only", () => {
+    expect(supportsLocalBackendVolumeBoost("rodio")).toBe(true);
+    expect(supportsLocalBackendVolumeBoost("gstreamer")).toBe(true);
+    expect(supportsLocalBackendVolumeBoost("webview")).toBe(false);
+    expect(supportsLocalBackendVolumeBoost("none")).toBe(false);
+  });
+
+  it("mounts the WebView element only for local video fallback", () => {
+    expect(shouldUseWebviewLocalVideo({
+      backendKind: "gstreamer",
+      hasVideo: true,
+      nativeVideo: true,
+    })).toBe(false);
+    expect(shouldUseWebviewLocalVideo({
+      backendKind: "webview",
+      hasVideo: true,
+      nativeVideo: false,
+    })).toBe(true);
+    expect(shouldUseWebviewLocalVideo({
+      backendKind: "rodio",
+      hasVideo: false,
+      nativeVideo: false,
+    })).toBe(false);
   });
 
   it("keeps local media seeks out of a non-playable prefix", () => {

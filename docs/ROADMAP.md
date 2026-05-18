@@ -125,7 +125,7 @@ Local-first media playback integrated into the productivity workflow, licensed s
 **Includes:**
 
 - Tauri plugin structure: Rust crate (publishable to crates.io) + npm package (publishable to npm), separate from the AGPL app
-- Local file playback: native Rodio and Symphonia backend for common local audio, loopback WebView fallback for local video while native video is deferred, broader native multimedia fallback candidates for unsupported codecs, lower audio-only memory overhead, VLC-class transport latency, and future native video surface embedding in the music view
+- Local file playback: native Rodio and Symphonia backend for common local audio, feature-gated native GStreamer backend for desktop local video when available, loopback WebView fallback for local video when native video is unavailable, broader native multimedia fallback candidates for unsupported codecs, lower audio-only memory overhead, and VLC-class transport latency
 - YouTube IFrame API integration: load videos by ID/URL, start/end timestamps, volume and speed control, seek, desktop WebView client identity through a loopback HTTP player host plus referrer policy, `origin`, and `widget_referrer`, playback position persistence in SQLite, ad-compatible (YouTube Premium removes ads if user is logged in)
 - Playlist management: definitions stored in SQLite (track paths, ordering, environment associations), create/edit/delete playlists, assign playlists to work environment templates and session blocks
 - Session block integration: automatic playlist start when block activates, focus/break playlist switching on Pomodoro phase change
