@@ -327,7 +327,7 @@
   use:releaseClickedButtonFocusAction
   onwheel={(event) => player.handleVolumeWheel(event)}
 >
-  <div class="flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-3">
+  <div class="flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
     <div
       class="hidden min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block"
       title={player.currentSource ? player.loadedTitle : undefined}
@@ -495,12 +495,12 @@
     {/if}
 
     <div
-      class={cn("px-4 py-2 max-[520px]:px-3", playlistVisible && "col-span-2 max-[860px]:col-span-1")}
+      class={cn("px-2 py-2", playlistVisible && "col-span-2 max-[860px]:col-span-1")}
       style="background-color: var(--cal-bg);"
     >
       {#key player.currentSource?.identity ?? "empty"}
         <div class="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
-          <span class="w-12 shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
+          <span class="shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
           <input
             type="range"
             min="0"
@@ -514,7 +514,7 @@
             onpointerup={releaseRangeFocus}
             onpointercancel={releaseRangeFocus}
           />
-          <span class="w-12 shrink-0 text-right">{formatPlaybackTime(player.snapshot.durationMs)}</span>
+          <span class="shrink-0 text-right">{formatPlaybackTime(player.snapshot.durationMs)}</span>
         </div>
       {/key}
 
