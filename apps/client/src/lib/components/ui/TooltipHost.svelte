@@ -30,6 +30,7 @@
   let tooltipStyle = $state("left: -9999px; top: -9999px;");
   let tooltipPaletteStyle = $state("");
   let showTimer: ReturnType<typeof setTimeout> | undefined;
+  let suppressedPointerTarget: HTMLElement | null = null;
   const migratingTitleElements = new WeakSet<HTMLElement>();
 
   function isInteractiveElement(element: HTMLElement): boolean {
@@ -113,6 +114,23 @@
     if (!(element instanceof HTMLElement)) return null;
     if (!document.documentElement.contains(element)) return null;
     return tooltipTextFor(element).length > 0 ? element : null;
+  }
+
+  function isKeyboardFocusIntent(): boolean {
+    return document.documentElement.dataset.focusIntent === "keyboard";
+  }
+
+  function isSuppressedPointerTarget(element: HTMLElement): boolean {
+    return suppressedPointerTarget === element;
+  }
+
+  function clearSuppressionIfPointerLeft(event: PointerEvent): void {
+    if (!suppressedPointerTarget || !(event.target instanceof Node)) return;
+    if (!suppressedPointerTarget.contains(event.target)) return;
+
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && suppressedPointerTarget.contains(relatedTarget)) return;
+    suppressedPointerTarget = null;
   }
 
   function readCssVar(style: CSSStyleDeclaration, name: string): string | undefined {
@@ -257,10 +275,12 @@
     const handlePointerOver = (event: PointerEvent) => {
       const target = findTooltipTarget(event.target);
       if (!target) return;
+      if (isSuppressedPointerTarget(target)) return;
       showTooltipFor(target, hoverDelayMs);
     };
 
     const handlePointerOut = (event: PointerEvent) => {
+      clearSuppressionIfPointerLeft(event);
       if (isStillInsideAnchor(event)) return;
       hideTooltip();
     };
@@ -268,6 +288,7 @@
     const handleFocusIn = (event: FocusEvent) => {
       const target = findTooltipTarget(event.target);
       if (!target) return;
+      if (isSuppressedPointerTarget(target) && !isKeyboardFocusIntent()) return;
       showTooltipFor(target, 0);
     };
 
@@ -276,7 +297,8 @@
       hideTooltip();
     };
 
-    const handlePointerDown = () => {
+    const handlePointerDown = (event: PointerEvent) => {
+      suppressedPointerTarget = findTooltipTarget(event.target);
       hideTooltip();
     };
 
