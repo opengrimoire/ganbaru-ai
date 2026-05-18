@@ -1370,7 +1370,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ganbaruai-desktop"
+name = "ganbaruai"
 version = "0.1.0"
 dependencies = [
  "ammonia",

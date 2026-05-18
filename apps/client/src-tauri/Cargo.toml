@@ -1,5 +1,5 @@
 [package]
-name = "ganbaruai-desktop"
+name = "ganbaruai"
 version = "0.1.0"
 description = "GanbaruAI desktop app"
 authors = ["GanbaruAI"]
