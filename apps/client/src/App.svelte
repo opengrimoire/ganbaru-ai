@@ -19,6 +19,7 @@
   import MusicPlaybackHost from "$lib/components/music/MusicPlaybackHost.svelte";
   import MusicView from "$lib/components/music/MusicView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
   import {
     firstMarkTime,
     mark as perfMark,
@@ -517,6 +518,7 @@
   {/if}
 
   <MusicPlaybackHost />
+  <TooltipHost />
   <WindowResizeHandles disabled={isMaximized || !!idleInfo} />
 </div>
 
