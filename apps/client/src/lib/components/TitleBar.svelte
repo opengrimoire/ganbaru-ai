@@ -679,7 +679,7 @@
             ? "cursor-not-allowed opacity-40"
             : "hover:bg-sidebar-accent",
         )}
-        title={lockedByThemeEditor ? "Disabled while editing a theme" : 'Help ("F1" key)'}
+        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Help (F1 key)"}
         aria-label="Help"
       >
         <CircleHelp size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />

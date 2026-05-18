@@ -137,6 +137,16 @@
     if (event.altKey || event.metaKey) return;
     if (isEditableTarget(event.target)) return;
     if (event.ctrlKey) {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        void player.playPreviousTrack();
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        void player.playNextTrack();
+        return;
+      }
       if (!event.shiftKey && (event.key.toLowerCase() === "l" || event.key.toLowerCase() === "p")) {
         event.preventDefault();
         togglePlaylist();
@@ -361,12 +371,9 @@
   onwheel={(event) => player.handleVolumeWheel(event)}
 >
   <div class="flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
-    <div
-      class="hidden min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block"
-      title={player.currentSource ? player.loadedTitle : undefined}
-    >
+    <div class="hidden min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block">
       {#if topBarMediaTitle}
-        <span>{topBarMediaTitle}</span>
+        <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
       {/if}
     </div>
     <form
@@ -559,8 +566,8 @@
             onclick={() => { void player.playPreviousTrack(); }}
             disabled={!player.canPlayPreviousTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Last played track (Shift + Arrow left)"
-            aria-label="Last played track"
+            title="Last track (Ctrl + ←)"
+            aria-label="Last track"
           >
             <SkipBack size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
@@ -569,7 +576,7 @@
             onclick={() => { void player.togglePlay(); }}
             disabled={!player.currentSource}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={player.isPlaying ? 'Pause ("Spacebar" key)' : 'Play ("Spacebar" key)'}
+            title={player.isPlaying ? "Pause (Spacebar key)" : "Play (Spacebar key)"}
             aria-label={player.isPlaying ? "Pause" : "Play"}
           >
             {#if player.isPlaying}
@@ -583,7 +590,7 @@
             onclick={() => { void player.playNextTrack(); }}
             disabled={!player.canPlayNextTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Next track (Shift + Arrow right)"
+            title="Next track (Ctrl + →)"
             aria-label="Next track"
           >
             <SkipForward size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -596,7 +603,7 @@
               "inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
               !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
-            title={player.shuffleEnabled ? 'Shuffle on ("S" key)' : 'Shuffle off ("S" key)'}
+            title={player.shuffleEnabled ? "Shuffle on (S key)" : "Shuffle off (S key)"}
             aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
             aria-pressed={player.shuffleEnabled}
           >
@@ -618,6 +625,7 @@
               value={player.volumeControlValue}
               class={cn("block w-28", player.volumeBoosted ? "accent-warning" : "accent-primary")}
               aria-label="Volume"
+              data-app-tooltip="Volume (↑ and ↓ keys or scroll wheel)"
               tabindex="-1"
               oninput={(event) => { void player.setVolume(Number(event.currentTarget.value)); }}
               onpointerup={releaseRangeFocus}
@@ -631,7 +639,7 @@
                 player.muted && "line-through opacity-60",
                 player.volumeBoosted && !player.muted && "text-warning",
               )}
-              title={player.muted ? 'Unmute ("M" key)' : 'Mute ("M" key)'}
+              title={player.muted ? "Unmute (M key)" : "Mute (M key)"}
               aria-label={player.muted ? "Unmute volume" : "Mute volume"}
               aria-pressed={player.muted}
             >
@@ -644,8 +652,8 @@
               type="button"
               onclick={openSpeedMenu}
               class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              title={`Playback speed (${player.speedLabel}) (+/-)`}
-              aria-label="Playback speed"
+              title="Speed (+ and - keys)"
+              aria-label="Speed"
               aria-haspopup="menu"
               aria-expanded={speedMenuOpen}
             >
@@ -706,7 +714,7 @@
             type="button"
             onclick={togglePlaylist}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            title={playlistVisible ? 'Hide playlist ("P" key)' : 'Show playlist ("P" key)'}
+            title={playlistVisible ? "Hide playlist (P key)" : "Show playlist (P key)"}
             aria-label={playlistVisible ? "Hide playlist" : "Show playlist"}
             aria-controls="music-playlist"
             aria-expanded={playlistVisible}

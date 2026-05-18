@@ -5,6 +5,7 @@
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import X from "@lucide/svelte/icons/x";
+  import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -68,8 +69,8 @@
         { keys: ["0-9"], action: "Jump to 0% through 90%" },
         { keys: ["Arrow left", "Arrow right"], action: "Seek backward or forward" },
         { keys: ["Arrow up", "Arrow down"], action: "Adjust volume" },
-        { keys: ["Shift + Arrow left"], action: "Previous track" },
-        { keys: ["Shift + Arrow right"], action: "Next track" },
+        { keys: ["Ctrl + Arrow left", "Ctrl + Shift + Arrow left", "Shift + Arrow left"], action: "Last track" },
+        { keys: ["Ctrl + Arrow right", "Ctrl + Shift + Arrow right", "Shift + Arrow right"], action: "Next track" },
         { keys: ["+", "-"], action: "Adjust playback speed" },
       ],
     },
@@ -95,6 +96,7 @@
   }
 
   let closeButton: HTMLButtonElement | undefined = $state();
+  let shortcutsScrollContainer: HTMLElement | undefined = $state();
 
   onMount(() => {
     closeButton?.focus();
@@ -134,7 +136,7 @@
         bind:this={closeButton}
         onclick={onClose}
         class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        title='Close ("Esc" key)'
+        title="Close (Esc key)"
         aria-label="Close shortcuts"
         data-app-tooltip-focus-disabled="true"
       >
@@ -142,49 +144,52 @@
       </button>
     </header>
 
-    <div class="min-h-0 overflow-y-auto px-5 py-4">
-      <div class="flex flex-col gap-5">
-        {#each SHORTCUT_GROUPS as group}
-          <section class="min-w-0">
-            <h3 class="mb-2 text-[12px] font-semibold text-muted-foreground">{group.title}</h3>
-            <div class="flex flex-col divide-y divide-border/70">
-              {#each group.items as item}
-                <div class="grid grid-cols-[14rem_12.5rem] gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
-                  <div class="min-w-0 text-sm leading-5 text-foreground">
-                    <div>{item.action}</div>
-                    {#if item.context}
-                      <div class="text-xs text-muted-foreground">{item.context}</div>
-                    {/if}
-                  </div>
-                  <div class="flex min-w-0 flex-col items-start gap-1 overflow-hidden">
-                    {#each item.keys as key}
-                      <span class="flex flex-wrap items-center gap-1">
-                        {#each shortcutParts(key) as part, i}
-                          {#if i > 0}
-                            <span class="text-[11px] leading-5 text-muted-foreground">+</span>
-                          {/if}
-                          {@const ArrowIcon = arrowIconForKey(part)}
-                          <kbd
-                            class="inline-flex min-h-6 items-center justify-center rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] leading-5 text-foreground shadow-sm"
-                            aria-label={ArrowIcon ? part : undefined}
-                            title={ArrowIcon ? part : undefined}
-                          >
-                            {#if ArrowIcon}
-                              <ArrowIcon size={13} strokeWidth={2.1} aria-hidden="true" />
-                            {:else}
-                              {part}
+    <div class="relative min-h-0 flex-1">
+      <div bind:this={shortcutsScrollContainer} class="hide-scrollbar h-full min-h-0 overflow-y-auto px-5 py-4">
+        <div class="flex flex-col gap-5">
+          {#each SHORTCUT_GROUPS as group}
+            <section class="min-w-0">
+              <h3 class="mb-2 text-[12px] font-semibold text-muted-foreground">{group.title}</h3>
+              <div class="flex flex-col divide-y divide-border/70">
+                {#each group.items as item}
+                  <div class="grid grid-cols-[14rem_12.5rem] gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
+                    <div class="min-w-0 text-sm leading-5 text-foreground">
+                      <div>{item.action}</div>
+                      {#if item.context}
+                        <div class="text-xs text-muted-foreground">{item.context}</div>
+                      {/if}
+                    </div>
+                    <div class="flex min-w-0 flex-col items-start gap-1 overflow-hidden">
+                      {#each item.keys as key}
+                        <span class="flex flex-wrap items-center gap-1">
+                          {#each shortcutParts(key) as part, i}
+                            {#if i > 0}
+                              <span class="text-[11px] leading-5 text-muted-foreground">+</span>
                             {/if}
-                          </kbd>
-                        {/each}
-                      </span>
-                    {/each}
+                            {@const ArrowIcon = arrowIconForKey(part)}
+                            <kbd
+                              class="inline-flex min-h-6 items-center justify-center rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] leading-5 text-foreground shadow-sm"
+                              aria-label={ArrowIcon ? part : undefined}
+                              title={ArrowIcon ? part : undefined}
+                            >
+                              {#if ArrowIcon}
+                                <ArrowIcon size={13} strokeWidth={2.1} aria-hidden="true" />
+                              {:else}
+                                {part}
+                              {/if}
+                            </kbd>
+                          {/each}
+                        </span>
+                      {/each}
+                    </div>
                   </div>
-                </div>
-              {/each}
-            </div>
-          </section>
-        {/each}
+                {/each}
+              </div>
+            </section>
+          {/each}
+        </div>
       </div>
+      <CalendarScrollbar scrollContainer={shortcutsScrollContainer} wheelPassthrough />
     </div>
   </div>
 </div>

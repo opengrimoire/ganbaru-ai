@@ -52,9 +52,9 @@
   const todayShortcuts = ["T", "0"] as const;
 
   function shortcutTitle(shortcuts: readonly string[]): string {
-    const labels = shortcuts.map((shortcut) => `"${shortcut}"`);
-    if (labels.length === 1) return `${labels[0]} key`;
-    return `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]} keys`;
+    const labels = shortcuts.map((shortcut) => `${shortcut} key`);
+    if (labels.length === 1) return labels[0];
+    return `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}`;
   }
 
   // Keyboard shortcuts for view switching and "today". Arrow-key navigation is
@@ -147,7 +147,7 @@
   <button
     onclick={() => onNavigate("back")}
     class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    title='Previous ("←" key)'
+    title="Previous (← key)"
   >
     <ChevronLeft size={14} />
   </button>
@@ -183,7 +183,7 @@
   <button
     onclick={() => onNavigate("forward")}
     class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    title='Next ("→" key)'
+    title="Next (→ key)"
   >
     <ChevronRight size={14} />
   </button>
