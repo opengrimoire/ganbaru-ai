@@ -248,7 +248,7 @@
   {/if}
   {#if hasVisualSurface}
     {#if hostIsFullscreen && volumeFeedbackVisible}
-      <div class="pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white drop-shadow">
+      <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white">
         {player.volumeFeedbackLabel}
       </div>
     {/if}
@@ -276,6 +276,15 @@
   :global(.music-playback-host:fullscreen),
   :global(.music-playback-host:fullscreen video) {
     background-color: #000 !important;
+  }
+
+  :global(.music-volume-feedback) {
+    text-shadow:
+      0 0 1px #000,
+      0 1px 2px rgb(0 0 0 / 0.95),
+      1px 0 2px rgb(0 0 0 / 0.95),
+      0 -1px 2px rgb(0 0 0 / 0.95),
+      -1px 0 2px rgb(0 0 0 / 0.95);
   }
 
   :global(.music-playback-host:fullscreen *),

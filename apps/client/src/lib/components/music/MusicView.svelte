@@ -328,7 +328,7 @@
         onwheel={(event) => player.handleVolumeWheel(event)}
       >
         {#if mediaSurfaceFullscreen && volumeFeedbackVisible}
-          <div class="pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white drop-shadow">
+          <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white">
             {player.volumeFeedbackLabel}
           </div>
         {/if}
