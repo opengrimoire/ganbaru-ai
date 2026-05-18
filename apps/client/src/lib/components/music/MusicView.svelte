@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import AlertCircle from "@lucide/svelte/icons/alert-circle";
   import Check from "@lucide/svelte/icons/check";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
@@ -32,6 +32,10 @@
   let mediaSurfaceClickTimeoutId: number | null = null;
   let volumeFeedbackTimeoutId: number | null = null;
   let lastVolumeFeedbackId = 0;
+  let playlistAutoScrollActive = false;
+  let lastPlaylistAutoScrollIndex = -1;
+  let lastPlaylistAutoScrollIdentity: string | null = null;
+  let playlistScrollRequestId = 0;
 
   const mediaSurfaceFullscreenEvent = "ganbaruai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
@@ -78,6 +82,38 @@
     lastVolumeFeedbackId = feedbackId;
     if (!mediaSurfaceFullscreen) return;
     showVolumeFeedback();
+  });
+
+  $effect(() => {
+    const visible = playlistVisible;
+    const container = playlistScrollContainer;
+    const index = player.highlightedQueueIndex;
+    const identity = index >= 0 ? player.queue[index]?.identity ?? null : null;
+
+    if (!visible) {
+      playlistAutoScrollActive = false;
+      lastPlaylistAutoScrollIndex = index;
+      lastPlaylistAutoScrollIdentity = identity;
+      return;
+    }
+
+    if (!container) return;
+
+    const opened = !playlistAutoScrollActive;
+    playlistAutoScrollActive = true;
+
+    if (index < 0 || identity === null) {
+      lastPlaylistAutoScrollIndex = index;
+      lastPlaylistAutoScrollIdentity = identity;
+      return;
+    }
+
+    if (opened || index !== lastPlaylistAutoScrollIndex || identity !== lastPlaylistAutoScrollIdentity) {
+      scrollPlaylistItemIntoView(index, opened ? "center" : "nearest");
+    }
+
+    lastPlaylistAutoScrollIndex = index;
+    lastPlaylistAutoScrollIdentity = identity;
   });
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -250,6 +286,24 @@
     }, 900);
   }
 
+  function scrollPlaylistItemIntoView(index: number, block: "center" | "nearest"): void {
+    const requestId = ++playlistScrollRequestId;
+    void tick().then(() => {
+      if (requestId !== playlistScrollRequestId) return;
+      if (!playlistVisible || !playlistScrollContainer) return;
+      const item = playlistScrollContainer.querySelector<HTMLElement>(`[data-playlist-index="${index}"]`);
+      if (!item) return;
+      if (block === "nearest" && playlistItemFullyVisible(item, playlistScrollContainer)) return;
+      item.scrollIntoView({ block, inline: "nearest", behavior: "auto" });
+    });
+  }
+
+  function playlistItemFullyVisible(item: HTMLElement, container: HTMLElement): boolean {
+    const itemRect = item.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    return itemRect.top >= containerRect.top && itemRect.bottom <= containerRect.bottom;
+  }
+
   function handleMediaSurfaceKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter" || event.code === "Space") {
       event.preventDefault();
@@ -409,7 +463,7 @@
           <div class="relative min-h-0 flex-1">
             <div
               bind:this={playlistScrollContainer}
-              class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden p-3"
+              class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-0"
               data-music-scrollable="true"
             >
               {#if player.queue.length === 0}
@@ -421,6 +475,7 @@
                   {#each player.queue as item, index}
                     <button
                       type="button"
+                      data-playlist-index={index}
                       onclick={() => { void player.playQueueItem(index); }}
                       class={cn(
                         "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
