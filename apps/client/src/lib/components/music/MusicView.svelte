@@ -41,6 +41,7 @@
   const volumeMax = $derived(player.volumeMax);
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
   const topBarMediaTitleMaxLength = 42;
+  const volumeShortcutStep = 0.05;
   const topBarMediaTitle = $derived(
     player.currentSource
       ? truncateTopBarMediaTitle(
@@ -133,6 +134,15 @@
     void player.seekToMs(Math.round((durationMs * digit) / 10));
   }
 
+  function snappedVolume(value: number): number {
+    if (!Number.isFinite(value)) return player.volumeControlValue;
+    return Number((Math.round(value / volumeShortcutStep) * volumeShortcutStep).toFixed(2));
+  }
+
+  function setVolumeFromControl(value: number): void {
+    void player.setVolume(snappedVolume(value));
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (event.altKey || event.metaKey) return;
     if (isEditableTarget(event.target)) return;
@@ -196,12 +206,12 @@
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      void player.adjustVolume(0.05);
+      void player.adjustVolume(volumeShortcutStep);
       return;
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      void player.adjustVolume(-0.05);
+      void player.adjustVolume(-volumeShortcutStep);
       return;
     }
     if (event.key === "s" || event.key === "S") {
@@ -621,13 +631,13 @@
               type="range"
               min="0"
               max={volumeMax}
-              step="0.01"
+              step={volumeShortcutStep}
               value={player.volumeControlValue}
               class={cn("block w-28", player.volumeBoosted ? "accent-warning" : "accent-primary")}
               aria-label="Volume"
               data-app-tooltip="Volume (↑ and ↓ keys or scroll wheel)"
               tabindex="-1"
-              oninput={(event) => { void player.setVolume(Number(event.currentTarget.value)); }}
+              oninput={(event) => { setVolumeFromControl(Number(event.currentTarget.value)); }}
               onpointerup={releaseRangeFocus}
               onpointercancel={releaseRangeFocus}
             />

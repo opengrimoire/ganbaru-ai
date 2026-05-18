@@ -637,7 +637,12 @@ class MusicPlayerStore {
   }
 
   async adjustVolume(delta: number): Promise<void> {
-    await this.setVolume(this.volumeControlValue + delta);
+    await this.setVolume(this.snappedVolume(this.volumeControlValue + delta, Math.abs(delta)));
+  }
+
+  private snappedVolume(value: number, step: number): number {
+    if (!Number.isFinite(value) || !Number.isFinite(step) || step <= 0) return this.volumeControlValue;
+    return Number((Math.round(value / step) * step).toFixed(2));
   }
 
   private announceVolumeFeedback(): void {
@@ -660,9 +665,9 @@ class MusicPlayerStore {
     event.stopPropagation();
     const delta = event.deltaY === 0 ? -event.deltaX : event.deltaY;
     if (delta === 0) return;
-    const step = event.shiftKey ? 0.01 : 0.05;
+    const step = 0.05;
     const direction = delta > 0 ? -1 : 1;
-    void this.setVolume(this.volumeControlValue + direction * step);
+    void this.setVolume(this.snappedVolume(this.volumeControlValue + direction * step, step));
   }
 
   async setRate(value: number): Promise<void> {
