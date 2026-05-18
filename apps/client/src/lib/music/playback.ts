@@ -47,8 +47,7 @@ export const DEFAULT_PLAYBACK_SNAPSHOT: PlaybackSnapshot = Object.freeze({
 
 const POSITION_SAVE_INTERVAL_MS = 5_000;
 const POSITION_SAVE_DELTA_MS = 10_000;
-export const NORMAL_VOLUME = 1;
-export const MAX_VOLUME = 1.5;
+export const MAX_VOLUME = 1;
 export const MIN_RATE = 0.25;
 export const MAX_RATE = 2;
 export const PREVIOUS_RESTART_THRESHOLD_MS = 3_000;
@@ -106,31 +105,6 @@ export function clampVolume(value: number): number {
 export function clampRate(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_PLAYBACK_SNAPSHOT.rate;
   return Math.min(MAX_RATE, Math.max(MIN_RATE, value));
-}
-
-export function clampYouTubeVolume(value: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_PLAYBACK_SNAPSHOT.volume;
-  return Math.min(NORMAL_VOLUME, Math.max(0, value));
-}
-
-export function maxPlaybackVolume(supportsBoost: boolean): number {
-  return supportsBoost ? MAX_VOLUME : NORMAL_VOLUME;
-}
-
-export function clampPlaybackVolume(value: number, supportsBoost: boolean): number {
-  return supportsBoost ? clampVolume(value) : clampYouTubeVolume(value);
-}
-
-export function playbackVolumeControlValue(value: number, supportsBoost: boolean): number {
-  return Math.min(clampVolume(value), maxPlaybackVolume(supportsBoost));
-}
-
-export function isVolumeBoosted(value: number): boolean {
-  return clampVolume(value) > NORMAL_VOLUME;
-}
-
-export function supportsLocalBackendVolumeBoost(backendKind: LocalPlaybackBackendKind): boolean {
-  return backendKind === "rodio";
 }
 
 export function shouldUseWebviewLocalVideo(snapshot: LocalPlaybackBackendSnapshot): boolean {

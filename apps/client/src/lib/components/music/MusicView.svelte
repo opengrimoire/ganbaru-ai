@@ -633,7 +633,7 @@
               max={volumeMax}
               step={volumeShortcutStep}
               value={player.volumeControlValue}
-              class={cn("block w-28", player.volumeBoosted ? "accent-warning" : "accent-primary")}
+              class="block w-28 accent-primary"
               aria-label="Volume"
               data-app-tooltip="Volume (↑ and ↓ keys or scroll wheel)"
               tabindex="-1"
@@ -647,7 +647,6 @@
               class={cn(
                 "inline-flex h-8 min-w-10 items-center justify-end tabular-nums",
                 player.muted && "line-through opacity-60",
-                player.volumeBoosted && !player.muted && "text-warning",
               )}
               title={player.muted ? "Unmute (M key)" : "Mute (M key)"}
               aria-label={player.muted ? "Unmute volume" : "Mute volume"}

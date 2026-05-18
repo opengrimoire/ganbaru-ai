@@ -958,7 +958,7 @@ fn duration_to_ms(duration: Option<Duration>) -> Option<u64> {
 
 fn clamp_volume(value: f64) -> f64 {
     if value.is_finite() {
-        value.clamp(0.0, 1.5)
+        value.clamp(0.0, 1.0)
     } else {
         PlayerSnapshot::default().volume
     }
@@ -987,8 +987,9 @@ mod tests {
     #[test]
     fn clamp_helpers_bound_user_values() {
         assert_eq!(clamp_volume(-1.0), 0.0);
-        assert_eq!(clamp_volume(1.25), 1.25);
-        assert_eq!(clamp_volume(2.0), 1.5);
+        assert_eq!(clamp_volume(0.75), 0.75);
+        assert_eq!(clamp_volume(1.25), 1.0);
+        assert_eq!(clamp_volume(2.0), 1.0);
         assert_eq!(clamp_rate(0.1), 0.25);
         assert_eq!(clamp_rate(4.0), 2.0);
     }
@@ -1037,7 +1038,7 @@ mod tests {
 
         assert_eq!(snapshot.status, PlayerStatus::Ready);
         assert_eq!(snapshot.position_ms, 1_500);
-        assert_eq!(snapshot.volume, 1.25);
+        assert_eq!(snapshot.volume, 0.75);
         assert!(!snapshot.muted);
         assert_eq!(snapshot.rate, 1.5);
         assert_eq!(snapshot.title.as_deref(), Some("Song title"));
@@ -1067,7 +1068,7 @@ mod tests {
         assert_eq!(snapshot.status, PlayerStatus::Idle);
         assert_eq!(snapshot.source_identity, None);
         assert_eq!(snapshot.position_ms, 0);
-        assert_eq!(snapshot.volume, 1.25);
+        assert_eq!(snapshot.volume, 0.75);
         assert!(snapshot.muted);
         assert_eq!(snapshot.rate, 1.5);
     }
@@ -1116,11 +1117,11 @@ mod tests {
         let mut core = loaded_core();
         let muted = core.handle(BackendCommand::SetMuted(true)).unwrap();
         assert!(muted.muted);
-        assert_eq!(muted.volume, 1.25);
+        assert_eq!(muted.volume, 0.75);
 
         let unmuted = core.handle(BackendCommand::SetMuted(false)).unwrap();
         assert!(!unmuted.muted);
-        assert_eq!(unmuted.volume, 1.25);
+        assert_eq!(unmuted.volume, 0.75);
     }
 
     #[test]
@@ -1164,7 +1165,7 @@ mod tests {
                 title: Some("Song title".to_string()),
             },
             start_ms,
-            volume: Some(1.25),
+            volume: Some(0.75),
             rate: Some(1.5),
         }
     }

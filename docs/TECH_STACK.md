@@ -409,7 +409,7 @@ Desktop local audio playback is Rust-controlled through `plugins/media-player` w
 
 The WebView path is the intentional local video path. It can play only the formats and codecs supported by the user's platform WebView, but it delegates video decoding and rendering to the media stack that Tauri already ships on each platform. On Linux this is WebKitGTK, which uses GStreamer internally for web media. On Windows this is WebView2. On macOS and iOS this is WKWebView. On Android this is Android WebView.
 
-Local audio volume, boosted volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local video uses the media element directly, caps volume at normal `100%`, and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes if it was playing.
+Local audio volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local audio, local video, and YouTube volume are capped at normal `100%`. Local video uses the media element directly and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes if it was playing.
 
 ### Native media backend target
 
@@ -427,7 +427,7 @@ The native audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG V
 
 ### WebView video path
 
-Local video is hosted through the app's loopback media server and rendered by a normal WebView media element. This keeps the implementation aligned with Tauri's platform media stack, avoids extra video runtime packaging, and avoids a second rendering surface over the app window. The tradeoff is that local video volume is capped at `100%`, matching HTML media element behavior. Visualizations and an audio-only video mode remain planned follow-ups.
+Local video is hosted through the app's loopback media server and rendered by a normal WebView media element. This keeps the implementation aligned with Tauri's platform media stack, avoids extra video runtime packaging, and avoids a second rendering surface over the app window. The shared Music volume cap matches HTML media element behavior at `100%`. Visualizations and an audio-only video mode remain planned follow-ups.
 
 ### FFmpeg or libav fallback role
 

@@ -26,22 +26,17 @@ import {
 import {
   clampRate,
   clampVolume,
-  clampYouTubeVolume,
-  clampPlaybackVolume,
   DEFAULT_PLAYBACK_SNAPSHOT,
   formatRateLabel,
   formatVolumePercent,
   initialQueueSelection,
-  isVolumeBoosted,
   localMediaSeekTargetMs,
-  maxPlaybackVolume,
   nextShuffleIndex,
   normalizeLocalPlayableStartMs,
-  playbackVolumeControlValue,
   shouldUseWebviewLocalVideo,
   stableStatusDuringYouTubeBuffering,
-  supportsLocalBackendVolumeBoost,
   shouldPersistPlaybackState,
+  MAX_VOLUME,
   type PersistedPlaybackState,
   type PlaybackSnapshot,
   type PlaybackStatus,
@@ -332,18 +327,12 @@ class MusicPlayerStore {
     return this.currentSource?.kind === "local-file" && this.localHasVideo;
   }
 
-  get supportsVolumeBoost(): boolean {
-    if (!this.currentSource) return true;
-    if (this.currentSource.kind !== "local-file") return false;
-    return supportsLocalBackendVolumeBoost(this.localBackendKind);
-  }
-
   get volumeMax(): number {
-    return maxPlaybackVolume(this.supportsVolumeBoost);
+    return MAX_VOLUME;
   }
 
   get volumeControlValue(): number {
-    return playbackVolumeControlValue(this.snapshot.volume, this.supportsVolumeBoost);
+    return clampVolume(this.snapshot.volume);
   }
 
   get volumePercentLabel(): string {
@@ -352,14 +341,6 @@ class MusicPlayerStore {
 
   get volumeFeedbackLabel(): string {
     return `Sound ${formatVolumePercent(this.muted ? 0 : this.volumeControlValue)}`;
-  }
-
-  get volumeBoosted(): boolean {
-    return !this.muted && this.supportsVolumeBoost && isVolumeBoosted(this.snapshot.volume);
-  }
-
-  get boostUnavailable(): boolean {
-    return Boolean(this.currentSource) && !this.supportsVolumeBoost;
   }
 
   get speedLabel(): string {
@@ -476,9 +457,7 @@ class MusicPlayerStore {
 
   async loadSource(source: MusicSource, options: LoadSourceOptions = {}): Promise<void> {
     const generation = ++this.loadGeneration;
-    const nextVolume = isYouTubeSource(source)
-      ? clampYouTubeVolume(this.snapshot.volume)
-      : clampVolume(this.snapshot.volume);
+    const nextVolume = clampVolume(this.snapshot.volume);
     this.destroyYouTubePlayer();
     await this.resetLocalPlayback();
     this.currentArtworkUrl = null;
@@ -600,7 +579,7 @@ class MusicPlayerStore {
   }
 
   async setVolume(value: number): Promise<void> {
-    const volume = clampPlaybackVolume(value, this.supportsVolumeBoost);
+    const volume = clampVolume(value);
     this.snapshot = { ...this.snapshot, volume };
     this.muted = false;
     this.announceVolumeFeedback();
@@ -613,7 +592,7 @@ class MusicPlayerStore {
         this.applyLocalVolume();
       }
     } else {
-      this.postYouTubeCommand({ action: "volume", volume: clampYouTubeVolume(volume) });
+      this.postYouTubeCommand({ action: "volume", volume: clampVolume(volume) });
     }
     await this.persistCurrentPlaybackState();
     this.updateMusicTray();
@@ -908,7 +887,7 @@ class MusicPlayerStore {
       if (useVideoElement) {
         this.snapshot = {
           ...this.snapshot,
-          volume: clampPlaybackVolume(this.snapshot.volume, false),
+          volume: clampVolume(this.snapshot.volume),
         };
       }
       const mediaUrl = useVideoElement
@@ -1312,7 +1291,7 @@ class MusicPlayerStore {
 
   private usesNativeLocalBackend(): boolean {
     return this.currentSource?.kind === "local-file"
-      && supportsLocalBackendVolumeBoost(this.localBackendKind);
+      && this.localBackendKind === "rodio";
   }
 
   private async resetLocalPlayback(): Promise<void> {
@@ -1709,7 +1688,7 @@ class MusicPlayerStore {
   }
 
   private effectiveYouTubeVolume(): number {
-    return this.muted ? 0 : clampYouTubeVolume(this.snapshot.volume);
+    return this.muted ? 0 : clampVolume(this.snapshot.volume);
   }
 
   private updateMediaSession(): void {

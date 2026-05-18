@@ -1,25 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   clampRate,
-  clampPlaybackVolume,
-  clampYouTubeVolume,
   clampVolume,
   formatRateLabel,
   formatPlaybackTime,
   formatVolumePercent,
   initialQueueSelection,
   isSpeedPreset,
-  isVolumeBoosted,
   localMediaSeekTargetMs,
-  maxPlaybackVolume,
   nextShuffleIndex,
   normalizeLocalPlayableStartMs,
-  playbackVolumeControlValue,
   previousQueueSelection,
   shouldPersistPlaybackState,
   shouldUseWebviewLocalVideo,
   stableStatusDuringYouTubeBuffering,
-  supportsLocalBackendVolumeBoost,
   type PersistedPlaybackState,
 } from "./playback";
 
@@ -91,30 +85,14 @@ describe("stableStatusDuringYouTubeBuffering", () => {
 describe("clamp helpers", () => {
   it("keeps volume and rate in supported ranges", () => {
     expect(clampVolume(-1)).toBe(0);
-    expect(clampVolume(2)).toBe(1.5);
-    expect(clampYouTubeVolume(1.5)).toBe(1);
+    expect(clampVolume(2)).toBe(1);
     expect(clampRate(0.1)).toBe(0.25);
     expect(clampRate(4)).toBe(2);
   });
 
-  it("reports volume boost only above normal volume", () => {
-    expect(isVolumeBoosted(1)).toBe(false);
-    expect(isVolumeBoosted(1.01)).toBe(true);
-    expect(formatVolumePercent(1.25)).toBe("125%");
-  });
-
-  it("caps active volume when boost is unavailable", () => {
-    expect(maxPlaybackVolume(true)).toBe(1.5);
-    expect(maxPlaybackVolume(false)).toBe(1);
-    expect(clampPlaybackVolume(1.25, true)).toBe(1.25);
-    expect(clampPlaybackVolume(1.25, false)).toBe(1);
-    expect(playbackVolumeControlValue(1.25, false)).toBe(1);
-  });
-
-  it("allows boost for native local backends only", () => {
-    expect(supportsLocalBackendVolumeBoost("rodio")).toBe(true);
-    expect(supportsLocalBackendVolumeBoost("webview")).toBe(false);
-    expect(supportsLocalBackendVolumeBoost("none")).toBe(false);
+  it("formats volume using the normal volume cap", () => {
+    expect(formatVolumePercent(0.75)).toBe("75%");
+    expect(formatVolumePercent(1.25)).toBe("100%");
   });
 
   it("mounts the WebView element for local video playback", () => {
