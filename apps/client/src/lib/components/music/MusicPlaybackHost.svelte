@@ -20,6 +20,8 @@
       && player.currentSource
       && (player.isYouTubeActive || (player.currentSource.kind === "local-file" && player.localHasVideo)),
   ));
+  const hasStaleVisual = $derived(Boolean(player.surfaceElement && player.staleVisual));
+  const hasHostSurface = $derived(hasVisualSurface || hasStaleVisual);
   const hasFullscreenSurface = $derived(Boolean(player.surfaceElement && player.currentSource));
   const hostIsFullscreen = $derived(Boolean(
     surfaceFullscreen
@@ -29,7 +31,7 @@
   ));
   const hostStyle = $derived(hostIsFullscreen && hasVisualSurface
     ? "left: 0; top: 0; width: 100vw; height: 100vh; background-color: #000;"
-    : surfaceRect && hasVisualSurface
+    : surfaceRect && hasHostSurface
       ? `left: ${surfaceRect.left}px; top: ${surfaceRect.top}px; width: ${surfaceRect.width}px; height: ${surfaceRect.height}px; background-color: var(--cal-bg);`
       : "left: -10000px; top: -10000px; width: 1px; height: 1px; background-color: var(--cal-bg);");
 
@@ -224,7 +226,7 @@
   class="music-playback-host pointer-events-none fixed z-20 overflow-hidden"
   style={hostStyle}
   tabindex="-1"
-  aria-hidden={!hasVisualSurface}
+  aria-hidden={!hasHostSurface}
   onkeydown={handleFullscreenSurfaceKeydown}
 >
   {#if player.currentSource && player.isYouTubeActive}
@@ -263,6 +265,19 @@
       {/key}
     {/if}
   {/if}
+  {#if player.staleVisual}
+    <div
+      class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"
+      style="background-color: var(--cal-bg);"
+    >
+      <img
+        src={player.staleVisual.url}
+        alt=""
+        class="h-full w-full object-contain"
+        draggable="false"
+      />
+    </div>
+  {/if}
   {#if hasVisualSurface}
     {#if hostIsFullscreen && volumeFeedbackVisible}
       <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white">
@@ -272,7 +287,7 @@
     <button
       type="button"
       tabindex="-1"
-      class="pointer-events-auto absolute inset-0 z-10 cursor-default border-0 bg-transparent p-0 text-transparent outline-none focus:outline-none"
+      class="pointer-events-auto absolute inset-0 z-20 cursor-default border-0 bg-transparent p-0 text-transparent outline-none focus:outline-none"
       aria-label={player.isPlaying ? "Pause" : "Play"}
       data-app-tooltip-disabled="true"
       onpointerdown={handleSurfacePointerDown}

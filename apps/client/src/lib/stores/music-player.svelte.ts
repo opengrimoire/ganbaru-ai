@@ -129,6 +129,9 @@ interface MusicPlayerSettings {
   muted: boolean;
 }
 
+export type MusicStaleVisual =
+  { kind: "image"; url: string; title: string };
+
 const SETTINGS_KEY = "ganbaruai-music-player";
 const progressMaxFallback = 1;
 const YOUTUBE_OPTIMISTIC_PAUSE_MS = 1_500;
@@ -240,6 +243,7 @@ class MusicPlayerStore {
   localBackendKind = $state<LocalBackendKind>("none");
   localVideoReady = $state(false);
   currentArtworkUrl = $state<string | null>(null);
+  staleVisual = $state<MusicStaleVisual | null>(null);
   surfaceElement = $state<HTMLElement | null>(null);
   sourceActionBusy = $state(false);
   volumeFeedbackId = $state(0);
@@ -262,6 +266,8 @@ class MusicPlayerStore {
   private handlingYouTubeEnded = false;
   private resolvingYouTubePlaylist: ResolvingYouTubePlaylist | null = null;
   private youtubePlaylistTimeoutId: number | null = null;
+  private staleVisualClearTimeoutId: number | null = null;
+  private staleVisualVersion = 0;
 
   get isBusy(): boolean {
     return this.snapshot.status === "loading";
@@ -382,6 +388,7 @@ class MusicPlayerStore {
         this.localSnapshotIntervalId = null;
       }
       this.clearYouTubePlaylistTimeout();
+      this.clearStaleVisual();
     }
     for (const unlisten of this.unlisteners) {
       unlisten();
@@ -457,6 +464,14 @@ class MusicPlayerStore {
 
   async loadSource(source: MusicSource, options: LoadSourceOptions = {}): Promise<void> {
     const generation = ++this.loadGeneration;
+    const transitionStarted = source.kind === "local-file" ? this.startVisualTransition() : false;
+    if (source.kind !== "local-file") {
+      this.clearStaleVisual();
+    }
+    if (transitionStarted) {
+      await this.waitForStaleVisualPaint();
+      if (generation !== this.loadGeneration) return;
+    }
     const nextVolume = clampVolume(this.snapshot.volume);
     this.destroyYouTubePlayer();
     await this.resetLocalPlayback();
@@ -668,6 +683,7 @@ class MusicPlayerStore {
   }
 
   async resetPlayer(): Promise<void> {
+    this.clearStaleVisual();
     this.destroyYouTubePlayer();
     await this.resetLocalPlayback();
     this.currentSource = null;
@@ -858,6 +874,10 @@ class MusicPlayerStore {
     this.updateMusicTray();
   }
 
+  handleArtworkLoaded(): void {
+    this.finishVisualTransitionAfterPaint();
+  }
+
   handleArtworkError(): void {
     this.currentArtworkUrl = null;
   }
@@ -903,6 +923,9 @@ class MusicPlayerStore {
       this.localMediaPlayableStartMs = useVideoElement
         ? normalizeLocalPlayableStartMs(localSnapshot.playableStartMs)
         : 0;
+      if (useVideoElement) {
+        this.clearStaleVisual();
+      }
       this.localHasVideo = localSnapshot.hasVideo;
       this.localBackendKind = localSnapshot.backendKind;
       this.localVideoReady = !useVideoElement;
@@ -1640,6 +1663,82 @@ class MusicPlayerStore {
     if (this.currentSource && isYouTubeSource(this.currentSource)) {
       this.postYouTubeCommand({ action: "stop" });
     }
+  }
+
+  private startVisualTransition(): boolean {
+    const visual = this.currentVisualSnapshot();
+    this.staleVisualVersion += 1;
+    if (visual) {
+      this.clearStaleVisualTimeout();
+      this.staleVisual = visual;
+      return true;
+    }
+    if (this.staleVisual) {
+      this.clearStaleVisualTimeout();
+      return true;
+    }
+    this.clearStaleVisual();
+    return false;
+  }
+
+  private finishVisualTransition(): void {
+    if (!this.staleVisual) return;
+    this.clearStaleVisualTimeout();
+    this.staleVisual = null;
+  }
+
+  private finishVisualTransitionAfterPaint(): void {
+    if (!this.staleVisual) return;
+    const staleVisualVersion = this.staleVisualVersion;
+    this.clearStaleVisualTimeout();
+    if (typeof window === "undefined") {
+      this.finishVisualTransition();
+      return;
+    }
+    this.staleVisualClearTimeoutId = window.setTimeout(() => {
+      this.staleVisualClearTimeoutId = null;
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          if (this.staleVisualVersion === staleVisualVersion) {
+            this.finishVisualTransition();
+          }
+        });
+      });
+    }, 80);
+  }
+
+  private clearStaleVisual(): void {
+    this.staleVisualVersion += 1;
+    this.clearStaleVisualTimeout();
+    this.staleVisual = null;
+  }
+
+  private clearStaleVisualTimeout(): void {
+    if (this.staleVisualClearTimeoutId === null || typeof window === "undefined") return;
+    window.clearTimeout(this.staleVisualClearTimeoutId);
+    this.staleVisualClearTimeoutId = null;
+  }
+
+  private async waitForStaleVisualPaint(): Promise<void> {
+    await tick();
+    if (typeof window === "undefined") return;
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  private currentVisualSnapshot(): MusicStaleVisual | null {
+    if (!this.currentSource) return null;
+    const title = this.loadedTitle;
+    if (this.currentSource.kind === "local-file") {
+      if (this.localHasVideo) return null;
+      return this.currentArtworkUrl
+        ? { kind: "image", url: this.currentArtworkUrl, title }
+        : null;
+    }
+    return null;
   }
 
   private persistPlayerSettings(): void {
