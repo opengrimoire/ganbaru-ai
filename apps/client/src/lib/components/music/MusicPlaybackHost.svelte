@@ -111,6 +111,21 @@
     return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
   }
 
+  function handleFullscreenSurfaceKeydown(event: KeyboardEvent): void {
+    if (!surfaceFullscreen || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.code === "Space" || event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      void player.togglePlay();
+      return;
+    }
+    if (event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      void toggleSurfaceFullscreen();
+    }
+  }
+
   async function toggleSurfaceFullscreen(): Promise<void> {
     if (typeof document === "undefined" || !document.fullscreenEnabled) return;
     const target = fullscreenTargetElement();
@@ -120,6 +135,7 @@
         await document.exitFullscreen();
       } else {
         await target.requestFullscreen({ navigationUI: "hide" });
+        target.focus({ preventScroll: true });
       }
     } catch (error) {
       console.warn("Unable to toggle music fullscreen.", error);
@@ -167,6 +183,9 @@
         document.fullscreenElement
           && (document.fullscreenElement === hostElement || document.fullscreenElement === player.surfaceElement),
       );
+      if (surfaceFullscreen && document.fullscreenElement instanceof HTMLElement) {
+        document.fullscreenElement.focus({ preventScroll: true });
+      }
     };
     updateFullscreenState();
     document.addEventListener("fullscreenchange", updateFullscreenState);
@@ -208,7 +227,9 @@
   bind:this={hostElement}
   class="music-playback-host pointer-events-none fixed z-20 overflow-hidden"
   style={hostStyle}
+  tabindex="-1"
   aria-hidden={!hasVisualSurface}
+  onkeydown={handleFullscreenSurfaceKeydown}
 >
   {#if player.currentSource && player.isYouTubeActive}
     {#key player.youtubeHostUrl}
@@ -260,6 +281,7 @@
       onpointerdown={handleSurfacePointerDown}
       onclick={handleSurfaceClick}
       ondblclick={handleSurfaceDoubleClick}
+      onkeydown={handleFullscreenSurfaceKeydown}
       onwheel={(event) => player.handleVolumeWheel(event)}
     ></button>
   {/if}

@@ -210,6 +210,26 @@
     volumeFeedbackTimeoutId = null;
   }
 
+  function releaseRangeFocus(event: Event): void {
+    if (event.currentTarget instanceof HTMLElement) {
+      event.currentTarget.blur();
+    }
+  }
+
+  function releaseClickedButtonFocus(event: PointerEvent): void {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest("button");
+    if (!button) return;
+    window.setTimeout(() => button.blur(), 0);
+  }
+
+  function releaseClickedButtonFocusAction(node: HTMLElement): { destroy: () => void } {
+    node.addEventListener("pointerup", releaseClickedButtonFocus);
+    return {
+      destroy: () => node.removeEventListener("pointerup", releaseClickedButtonFocus),
+    };
+  }
+
   function mediaTitleWithoutExtension(title: string, localFile: boolean): string {
     const trimmed = title.trim();
     if (!localFile) return trimmed;
@@ -231,15 +251,28 @@
   }
 
   function handleMediaSurfaceKeydown(event: KeyboardEvent): void {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    void player.togglePlay();
+    if (event.key === "Enter" || event.code === "Space") {
+      event.preventDefault();
+      event.stopPropagation();
+      void player.togglePlay();
+      return;
+    }
+    if (mediaSurfaceFullscreen && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      window.dispatchEvent(new CustomEvent(mediaSurfaceFullscreenEvent));
+    }
   }
 </script>
 
 <svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
 
-<section class="flex h-full min-h-0 flex-col text-foreground" style="background-color: var(--cal-bg);" onwheel={(event) => player.handleVolumeWheel(event)}>
+<section
+  class="flex h-full min-h-0 flex-col text-foreground"
+  style="background-color: var(--cal-bg);"
+  use:releaseClickedButtonFocusAction
+  onwheel={(event) => player.handleVolumeWheel(event)}
+>
   <div class="flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-3">
     <div
       class="hidden min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block"
@@ -421,7 +454,10 @@
             disabled={!player.currentSource}
             class="h-2 min-w-0 flex-1 accent-primary disabled:opacity-50"
             aria-label="Seek"
+            tabindex="-1"
             oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
+            onpointerup={releaseRangeFocus}
+            onpointercancel={releaseRangeFocus}
           />
           <span class="w-12 shrink-0 text-right">{formatPlaybackTime(player.snapshot.durationMs)}</span>
         </div>
@@ -493,7 +529,10 @@
               value={player.volumeControlValue}
               class={cn("block w-28", player.volumeBoosted ? "accent-warning" : "accent-primary")}
               aria-label="Volume"
+              tabindex="-1"
               oninput={(event) => { void player.setVolume(Number(event.currentTarget.value)); }}
+              onpointerup={releaseRangeFocus}
+              onpointercancel={releaseRangeFocus}
             />
             <button
               type="button"
