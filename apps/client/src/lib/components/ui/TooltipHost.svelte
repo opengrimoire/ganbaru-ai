@@ -287,9 +287,11 @@
     };
 
     const handleFocusIn = (event: FocusEvent) => {
+      if (!isKeyboardFocusIntent()) return;
       const target = findTooltipTarget(event.target);
       if (!target) return;
-      if (isSuppressedPointerTarget(target) && !isKeyboardFocusIntent()) return;
+      if (target.dataset.appTooltipFocusDisabled === "true") return;
+      if (isSuppressedPointerTarget(target)) return;
       showTooltipFor(target, 0);
     };
 

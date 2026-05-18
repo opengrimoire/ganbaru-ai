@@ -136,6 +136,7 @@
         class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title='Close ("Esc" key)'
         aria-label="Close shortcuts"
+        data-app-tooltip-focus-disabled="true"
       >
         <X size={16} strokeWidth={1.9} />
       </button>
