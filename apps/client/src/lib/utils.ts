@@ -16,3 +16,9 @@ export function isAppShortcutBlockedTarget(target: EventTarget | null): boolean 
 	if (!(target instanceof Element)) return false;
 	return target.closest("[data-app-shortcuts='ignore']") !== null;
 }
+
+export type FocusIntentKeydown = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">;
+
+export function shouldUseKeyboardFocusIntent(event: FocusIntentKeydown): boolean {
+	return event.key === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey;
+}

@@ -25,6 +25,7 @@
     setShellStartupMs,
   } from "$lib/stores/perflog.svelte";
   import type { MemoryReport, StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
+  import { shouldUseKeyboardFocusIntent } from "$lib/utils";
   import { onMount } from "svelte";
 
   perfMark("boot.script-start");
@@ -166,7 +167,7 @@
       root.dataset.focusIntent = "pointer";
     };
     const markKeyboardFocus = (event: KeyboardEvent) => {
-      if (event.key === "Tab") {
+      if (shouldUseKeyboardFocusIntent(event)) {
         root.dataset.focusIntent = "keyboard";
       }
     };
