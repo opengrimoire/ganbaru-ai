@@ -6,6 +6,7 @@
   import Gauge from "@lucide/svelte/icons/gauge";
   import LinkIcon from "@lucide/svelte/icons/link";
   import ListMusic from "@lucide/svelte/icons/list-music";
+  import ListPlus from "@lucide/svelte/icons/list-plus";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
@@ -14,11 +15,14 @@
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
+  import MusicPlaylistBuilderView from "$lib/components/music/MusicPlaylistBuilderView.svelte";
   import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { cn } from "$lib/utils";
 
   const player = getMusicPlayer();
+
+  type MusicPage = "player" | "playlist-builder";
 
   let mediaSurface = $state<HTMLElement | null>(null);
   let playlistScrollContainer = $state<HTMLElement | undefined>();
@@ -27,6 +31,7 @@
   let customSpeedOpen = $state(false);
   let customRateDraft = $state("1");
   let playlistVisible = $state(false);
+  let musicPage = $state<MusicPage>("player");
   let mediaSurfaceFullscreen = $state(false);
   let volumeFeedbackVisible = $state(false);
   let mediaSurfaceClickTimeoutId: number | null = null;
@@ -124,6 +129,15 @@
     playlistVisible = !playlistVisible;
   }
 
+  function openPlaylistBuilder(): void {
+    closeSpeedMenu();
+    musicPage = "playlist-builder";
+  }
+
+  function closePlaylistBuilder(): void {
+    musicPage = "player";
+  }
+
   function digitSeekShortcut(event: KeyboardEvent): number | null {
     if (event.shiftKey) return null;
     if (/^[0-9]$/.test(event.key)) return Number(event.key);
@@ -147,6 +161,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
+    if (musicPage !== "player") return;
     if (event.altKey || event.metaKey) return;
     if (isEditableTarget(event.target)) return;
     if (event.ctrlKey) {
@@ -377,17 +392,31 @@
 
 <svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
 
+{#if musicPage === "playlist-builder"}
+  <MusicPlaylistBuilderView onBack={closePlaylistBuilder} />
+{:else}
 <section
-  class="flex h-full min-h-0 flex-col text-foreground"
-  style="background-color: var(--cal-bg);"
-  use:releaseClickedButtonFocusAction
-  onwheel={(event) => player.handleVolumeWheel(event)}
->
+    class="flex h-full min-h-0 flex-col text-foreground"
+    style="background-color: var(--cal-bg);"
+    use:releaseClickedButtonFocusAction
+    onwheel={(event) => player.handleVolumeWheel(event)}
+  >
   <div class="flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
-    <div class="hidden min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block">
-      {#if topBarMediaTitle}
-        <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
-      {/if}
+    <div class="flex min-w-0 flex-1 items-center gap-2">
+      <button
+        type="button"
+        onclick={openPlaylistBuilder}
+        class="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        aria-label="Playlist builder"
+      >
+        <ListPlus size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+        <span>Playlist builder</span>
+      </button>
+      <div class="hidden min-w-0 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block">
+        {#if topBarMediaTitle}
+          <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
+        {/if}
+      </div>
     </div>
     <form
       class="ml-auto flex min-w-0 flex-[0_1_36rem] items-center justify-end gap-2 max-[720px]:flex-1"
@@ -739,6 +768,7 @@
     </div>
   </div>
 </section>
+{/if}
 
 <style>
   .music-volume-slider {
