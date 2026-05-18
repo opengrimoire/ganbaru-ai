@@ -36,6 +36,14 @@
   const mediaSurfaceFullscreenEvent = "ganbaruai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
+  const topBarMediaTitleMaxLength = 42;
+  const topBarMediaTitle = $derived(
+    player.currentSource
+      ? truncateTopBarMediaTitle(
+        mediaTitleWithoutExtension(player.loadedTitle, player.currentSource.kind === "local-file"),
+      )
+      : "",
+  );
   const speedShortcutStep = 0.25;
   const musicIconSize = 14;
   const musicIconStrokeWidth = 1.5;
@@ -202,6 +210,17 @@
     volumeFeedbackTimeoutId = null;
   }
 
+  function mediaTitleWithoutExtension(title: string, localFile: boolean): string {
+    const trimmed = title.trim();
+    if (!localFile) return trimmed;
+    return trimmed.replace(/\.[A-Za-z0-9]{1,8}$/, "");
+  }
+
+  function truncateTopBarMediaTitle(title: string): string {
+    if (title.length <= topBarMediaTitleMaxLength) return title;
+    return `${title.slice(0, topBarMediaTitleMaxLength - 3).trimEnd()}...`;
+  }
+
   function showVolumeFeedback(): void {
     clearVolumeFeedbackTimeout();
     volumeFeedbackVisible = true;
@@ -221,9 +240,17 @@
 <svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
 
 <section class="flex h-full min-h-0 flex-col text-foreground" style="background-color: var(--cal-bg);" onwheel={(event) => player.handleVolumeWheel(event)}>
-  <div class="flex h-(--cal-header-row-h) shrink-0 items-center px-3">
+  <div class="flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-3">
+    <div
+      class="hidden min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block"
+      title={player.currentSource ? player.loadedTitle : undefined}
+    >
+      {#if topBarMediaTitle}
+        <span>{topBarMediaTitle}</span>
+      {/if}
+    </div>
     <form
-      class="flex min-w-0 flex-1 items-center gap-2"
+      class="ml-auto flex min-w-0 flex-[0_1_36rem] items-center justify-end gap-2 max-[720px]:flex-1"
       onsubmit={(event) => { event.preventDefault(); void player.loadFromInput(); }}
     >
       <label class="sr-only" for="music-source">Music source</label>
