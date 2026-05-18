@@ -120,6 +120,19 @@
     playlistVisible = !playlistVisible;
   }
 
+  function digitSeekShortcut(event: KeyboardEvent): number | null {
+    if (event.shiftKey) return null;
+    if (/^[0-9]$/.test(event.key)) return Number(event.key);
+    if (/^Numpad[0-9]$/.test(event.code)) return Number(event.code.slice("Numpad".length));
+    return null;
+  }
+
+  function seekToDigitPosition(digit: number): void {
+    const durationMs = player.snapshot.durationMs;
+    if (!player.currentSource || durationMs === null || durationMs <= 0) return;
+    void player.seekToMs(Math.round((durationMs * digit) / 10));
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (event.altKey || event.metaKey) return;
     if (isEditableTarget(event.target)) return;
@@ -133,6 +146,12 @@
     if (event.code === "Space") {
       event.preventDefault();
       void player.togglePlay();
+      return;
+    }
+    const seekDigit = digitSeekShortcut(event);
+    if (seekDigit !== null) {
+      event.preventDefault();
+      seekToDigitPosition(seekDigit);
       return;
     }
     if (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "l") {

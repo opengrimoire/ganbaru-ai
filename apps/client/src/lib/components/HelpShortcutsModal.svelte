@@ -65,6 +65,7 @@
         { keys: ["P", "L", "Ctrl + P", "Ctrl + L"], action: "Show or hide playlist" },
         { keys: ["M"], action: "Mute or unmute" },
         { keys: ["S"], action: "Toggle shuffle" },
+        { keys: ["0-9"], action: "Jump to 0% through 90%" },
         { keys: ["Arrow left", "Arrow right"], action: "Seek backward or forward" },
         { keys: ["Arrow up", "Arrow down"], action: "Adjust volume" },
         { keys: ["Shift + Arrow left"], action: "Previous track" },
