@@ -250,6 +250,7 @@ class MusicPlayerStore {
   currentArtworkUrl = $state<string | null>(null);
   surfaceElement = $state<HTMLElement | null>(null);
   sourceActionBusy = $state(false);
+  volumeFeedbackId = $state(0);
 
   private pendingLocalResumeMs = 0;
   private localMediaPlayableStartMs = 0;
@@ -351,6 +352,10 @@ class MusicPlayerStore {
 
   get volumePercentLabel(): string {
     return formatVolumePercent(this.volumeControlValue);
+  }
+
+  get volumeFeedbackLabel(): string {
+    return `Sound ${formatVolumePercent(this.muted ? 0 : this.volumeControlValue)}`;
   }
 
   get volumeBoosted(): boolean {
@@ -637,6 +642,7 @@ class MusicPlayerStore {
     const volume = clampPlaybackVolume(value, this.supportsVolumeBoost);
     this.snapshot = { ...this.snapshot, volume };
     this.muted = false;
+    this.announceVolumeFeedback();
     this.persistPlayerSettings();
     if (!this.currentSource) return;
     if (this.currentSource.kind === "local-file") {
@@ -654,6 +660,7 @@ class MusicPlayerStore {
 
   async toggleMute(): Promise<void> {
     this.muted = !this.muted;
+    this.announceVolumeFeedback();
     this.persistPlayerSettings();
     if (!this.currentSource) return;
     if (this.currentSource.kind === "local-file") {
@@ -670,6 +677,10 @@ class MusicPlayerStore {
 
   async adjustVolume(delta: number): Promise<void> {
     await this.setVolume(this.volumeControlValue + delta);
+  }
+
+  private announceVolumeFeedback(): void {
+    this.volumeFeedbackId += 1;
   }
 
   async seekByMs(deltaMs: number): Promise<void> {

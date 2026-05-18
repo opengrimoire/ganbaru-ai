@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import AlertCircle from "@lucide/svelte/icons/alert-circle";
   import Check from "@lucide/svelte/icons/check";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
@@ -26,7 +27,13 @@
   let customSpeedOpen = $state(false);
   let customRateDraft = $state("1");
   let playlistVisible = $state(false);
+  let mediaSurfaceFullscreen = $state(false);
+  let volumeFeedbackVisible = $state(false);
+  let mediaSurfaceClickTimeoutId: number | null = null;
+  let volumeFeedbackTimeoutId: number | null = null;
+  let lastVolumeFeedbackId = 0;
 
+  const mediaSurfaceFullscreenEvent = "ganbaruai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
   const speedShortcutStep = 0.25;
@@ -38,6 +45,31 @@
     return () => {
       player.setSurfaceElement(null);
     };
+  });
+
+  onDestroy(() => {
+    clearMediaSurfaceClickTimeout();
+    clearVolumeFeedbackTimeout();
+  });
+
+  $effect(() => {
+    if (typeof document === "undefined") return;
+    const updateFullscreenState = () => {
+      mediaSurfaceFullscreen = Boolean(mediaSurface && document.fullscreenElement === mediaSurface);
+    };
+    updateFullscreenState();
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    return () => {
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+    };
+  });
+
+  $effect(() => {
+    const feedbackId = player.volumeFeedbackId;
+    if (feedbackId === lastVolumeFeedbackId) return;
+    lastVolumeFeedbackId = feedbackId;
+    if (!mediaSurfaceFullscreen) return;
+    showVolumeFeedback();
   });
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -140,8 +172,43 @@
     closeSpeedMenu();
   }
 
-  function handleMediaSurfaceClick(): void {
-    void player.togglePlay();
+  function handleMediaSurfaceClick(event: MouseEvent): void {
+    event.preventDefault();
+    if (event.button !== 0) return;
+    if (event.detail > 1) return;
+    clearMediaSurfaceClickTimeout();
+    mediaSurfaceClickTimeoutId = window.setTimeout(() => {
+      mediaSurfaceClickTimeoutId = null;
+      void player.togglePlay();
+    }, 250);
+  }
+
+  function handleMediaSurfaceDoubleClick(event: MouseEvent): void {
+    event.preventDefault();
+    if (event.button !== 0) return;
+    clearMediaSurfaceClickTimeout();
+    window.dispatchEvent(new CustomEvent(mediaSurfaceFullscreenEvent));
+  }
+
+  function clearMediaSurfaceClickTimeout(): void {
+    if (mediaSurfaceClickTimeoutId === null) return;
+    window.clearTimeout(mediaSurfaceClickTimeoutId);
+    mediaSurfaceClickTimeoutId = null;
+  }
+
+  function clearVolumeFeedbackTimeout(): void {
+    if (volumeFeedbackTimeoutId === null) return;
+    window.clearTimeout(volumeFeedbackTimeoutId);
+    volumeFeedbackTimeoutId = null;
+  }
+
+  function showVolumeFeedback(): void {
+    clearVolumeFeedbackTimeout();
+    volumeFeedbackVisible = true;
+    volumeFeedbackTimeoutId = window.setTimeout(() => {
+      volumeFeedbackVisible = false;
+      volumeFeedbackTimeoutId = null;
+    }, 900);
   }
 
   function handleMediaSurfaceKeydown(event: KeyboardEvent): void {
@@ -223,14 +290,21 @@
     <div class="min-h-0">
       <div
         bind:this={mediaSurface}
-        class="relative h-full min-h-48 cursor-default overflow-hidden max-[520px]:min-h-36"
+        class="music-media-surface relative h-full min-h-48 cursor-default overflow-hidden max-[520px]:min-h-36"
         style="background-color: var(--cal-bg);"
         role="button"
         tabindex="-1"
         aria-label={player.isPlaying ? "Pause" : "Play"}
         onclick={handleMediaSurfaceClick}
+        ondblclick={handleMediaSurfaceDoubleClick}
         onkeydown={handleMediaSurfaceKeydown}
+        onwheel={(event) => player.handleVolumeWheel(event)}
       >
+        {#if mediaSurfaceFullscreen && volumeFeedbackVisible}
+          <div class="pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white drop-shadow">
+            {player.volumeFeedbackLabel}
+          </div>
+        {/if}
         {#if player.currentSource?.kind === "local-file" && (!player.localHasVideo || player.snapshot.error)}
           <div class="absolute inset-0 flex items-center justify-center text-muted-foreground" style="background-color: var(--cal-bg);">
             {#if player.currentArtworkUrl && !player.snapshot.error}

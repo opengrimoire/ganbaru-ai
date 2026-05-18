@@ -9,15 +9,26 @@
   let localMediaElement = $state<HTMLMediaElement | null>(null);
   let surfaceRect = $state<DOMRect | null>(null);
   let surfaceFullscreen = $state(false);
+  let volumeFeedbackVisible = $state(false);
   let surfaceClickTimeoutId: number | null = null;
+  let volumeFeedbackTimeoutId: number | null = null;
+  let lastVolumeFeedbackId = 0;
 
+  const mediaSurfaceFullscreenEvent = "ganbaruai-music-media-surface-fullscreen";
   const hasVisualSurface = $derived(Boolean(
     player.surfaceElement
       && player.currentSource
       && (player.isYouTubeActive || (player.currentSource.kind === "local-file" && player.localHasVideo)),
   ));
-  const hostStyle = $derived(surfaceFullscreen && hasVisualSurface
-    ? "left: 0; top: 0; width: 100vw; height: 100vh; background-color: var(--cal-bg);"
+  const hasFullscreenSurface = $derived(Boolean(player.surfaceElement && player.currentSource));
+  const hostIsFullscreen = $derived(Boolean(
+    surfaceFullscreen
+      && hostElement
+      && typeof document !== "undefined"
+      && document.fullscreenElement === hostElement,
+  ));
+  const hostStyle = $derived(hostIsFullscreen && hasVisualSurface
+    ? "left: 0; top: 0; width: 100vw; height: 100vh; background-color: #000;"
     : surfaceRect && hasVisualSurface
       ? `left: ${surfaceRect.left}px; top: ${surfaceRect.top}px; width: ${surfaceRect.width}px; height: ${surfaceRect.height}px; background-color: var(--cal-bg);`
       : "left: -10000px; top: -10000px; width: 1px; height: 1px; background-color: var(--cal-bg);");
@@ -28,6 +39,7 @@
 
   onDestroy(() => {
     clearSurfaceClickTimeout();
+    clearVolumeFeedbackTimeout();
     player.destroy();
   });
 
@@ -71,10 +83,25 @@
     surfaceClickTimeoutId = null;
   }
 
+  function clearVolumeFeedbackTimeout(): void {
+    if (volumeFeedbackTimeoutId === null) return;
+    window.clearTimeout(volumeFeedbackTimeoutId);
+    volumeFeedbackTimeoutId = null;
+  }
+
+  function showVolumeFeedback(): void {
+    clearVolumeFeedbackTimeout();
+    volumeFeedbackVisible = true;
+    volumeFeedbackTimeoutId = window.setTimeout(() => {
+      volumeFeedbackVisible = false;
+      volumeFeedbackTimeoutId = null;
+    }, 900);
+  }
+
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key.toLowerCase() !== "f") return;
-    if (!hasVisualSurface || isEditableTarget(event.target)) return;
+    if (!hasFullscreenSurface || isEditableTarget(event.target)) return;
     event.preventDefault();
     void toggleSurfaceFullscreen();
   }
@@ -85,16 +112,24 @@
   }
 
   async function toggleSurfaceFullscreen(): Promise<void> {
-    if (!hostElement || !hasVisualSurface || typeof document === "undefined" || !document.fullscreenEnabled) return;
+    if (typeof document === "undefined" || !document.fullscreenEnabled) return;
+    const target = fullscreenTargetElement();
+    if (!target) return;
     try {
-      if (document.fullscreenElement === hostElement) {
+      if (surfaceFullscreen) {
         await document.exitFullscreen();
       } else {
-        await hostElement.requestFullscreen({ navigationUI: "hide" });
+        await target.requestFullscreen({ navigationUI: "hide" });
       }
     } catch (error) {
       console.warn("Unable to toggle music fullscreen.", error);
     }
+  }
+
+  function fullscreenTargetElement(): HTMLElement | null {
+    if (!hasFullscreenSurface) return null;
+    if (hasVisualSurface && hostElement) return hostElement;
+    return player.surfaceElement;
   }
 
   $effect(() => {
@@ -105,7 +140,7 @@
     }
 
     const updateRect = () => {
-      const rectElement = surfaceFullscreen && hostElement ? hostElement : element;
+      const rectElement = hostIsFullscreen && hostElement ? hostElement : element;
       surfaceRect = rectElement.getBoundingClientRect();
     };
     updateRect();
@@ -128,7 +163,10 @@
   $effect(() => {
     if (typeof document === "undefined") return;
     const updateFullscreenState = () => {
-      surfaceFullscreen = Boolean(hostElement && document.fullscreenElement === hostElement);
+      surfaceFullscreen = Boolean(
+        document.fullscreenElement
+          && (document.fullscreenElement === hostElement || document.fullscreenElement === player.surfaceElement),
+      );
     };
     updateFullscreenState();
     document.addEventListener("fullscreenchange", updateFullscreenState);
@@ -138,10 +176,29 @@
   });
 
   $effect(() => {
-    if (!surfaceFullscreen || hasVisualSurface || typeof document === "undefined") return;
-    if (hostElement && document.fullscreenElement === hostElement) {
+    if (!surfaceFullscreen || hasFullscreenSurface || typeof document === "undefined") return;
+    if (document.fullscreenElement === hostElement || document.fullscreenElement === player.surfaceElement) {
       void document.exitFullscreen();
     }
+  });
+
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    const handleMediaSurfaceFullscreenRequest = () => {
+      void toggleSurfaceFullscreen();
+    };
+    window.addEventListener(mediaSurfaceFullscreenEvent, handleMediaSurfaceFullscreenRequest);
+    return () => {
+      window.removeEventListener(mediaSurfaceFullscreenEvent, handleMediaSurfaceFullscreenRequest);
+    };
+  });
+
+  $effect(() => {
+    const feedbackId = player.volumeFeedbackId;
+    if (feedbackId === lastVolumeFeedbackId) return;
+    lastVolumeFeedbackId = feedbackId;
+    if (!hostIsFullscreen) return;
+    showVolumeFeedback();
   });
 </script>
 
@@ -149,7 +206,7 @@
 
 <div
   bind:this={hostElement}
-  class="pointer-events-none fixed z-20 overflow-hidden"
+  class="music-playback-host pointer-events-none fixed z-20 overflow-hidden"
   style={hostStyle}
   aria-hidden={!hasVisualSurface}
 >
@@ -190,6 +247,11 @@
     {/if}
   {/if}
   {#if hasVisualSurface}
+    {#if hostIsFullscreen && volumeFeedbackVisible}
+      <div class="pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white drop-shadow">
+        {player.volumeFeedbackLabel}
+      </div>
+    {/if}
     <button
       type="button"
       tabindex="-1"
@@ -202,3 +264,23 @@
     ></button>
   {/if}
 </div>
+
+<style>
+  :global(.music-media-surface:fullscreen) {
+    width: 100vw;
+    height: 100vh;
+    background-color: #000 !important;
+  }
+
+  :global(.music-media-surface:fullscreen > div),
+  :global(.music-playback-host:fullscreen),
+  :global(.music-playback-host:fullscreen video) {
+    background-color: #000 !important;
+  }
+
+  :global(.music-playback-host:fullscreen *),
+  :global(.music-media-surface:fullscreen),
+  :global(.music-media-surface:fullscreen *) {
+    cursor: none;
+  }
+</style>
