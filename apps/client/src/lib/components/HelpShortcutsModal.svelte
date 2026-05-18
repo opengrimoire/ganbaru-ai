@@ -28,7 +28,11 @@
         { keys: ["Ctrl + 0"], action: "Reset zoom" },
         { keys: ["Alt + 1"], action: "Open calendar" },
         { keys: ["Alt + 2"], action: "Open to-do" },
+        { keys: ["Ctrl + M"], action: "Open music" },
         { keys: ["Ctrl + ,"], action: "Open settings" },
+        { keys: ["Ctrl + Shift + L"], action: "Toggle light/dark mode" },
+        { keys: ["Ctrl + Shift + P"], action: "Toggle performance panel" },
+        { keys: ["F1"], action: "Open help" },
         { keys: ["Ctrl + Tab"], action: "Next view" },
         { keys: ["Ctrl + Shift + Tab"], action: "Previous view" },
         { keys: ["Ctrl + Shift + W"], action: "Close app" },
@@ -52,6 +56,20 @@
         { keys: ["Shift + +", "+"], action: "Zoom in the calendar timeline" },
         { keys: ["Shift + -", "-"], action: "Zoom out the calendar timeline" },
         { keys: ["Shift + 0"], action: "Reset calendar timeline zoom" },
+      ],
+    },
+    {
+      title: "Music",
+      items: [
+        { keys: ["Spacebar"], action: "Play or pause" },
+        { keys: ["P", "L", "Ctrl + P", "Ctrl + L"], action: "Show or hide playlist" },
+        { keys: ["M"], action: "Mute or unmute" },
+        { keys: ["S"], action: "Toggle shuffle" },
+        { keys: ["Arrow left", "Arrow right"], action: "Seek backward or forward" },
+        { keys: ["Arrow up", "Arrow down"], action: "Adjust volume" },
+        { keys: ["Shift + Arrow left"], action: "Previous track" },
+        { keys: ["Shift + Arrow right"], action: "Next track" },
+        { keys: ["+", "-"], action: "Adjust playback speed" },
       ],
     },
     {
@@ -115,7 +133,7 @@
         bind:this={closeButton}
         onclick={onClose}
         class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        title="Close (Esc)"
+        title='Close ("Esc" key)'
         aria-label="Close shortcuts"
       >
         <X size={16} strokeWidth={1.9} />

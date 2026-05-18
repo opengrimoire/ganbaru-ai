@@ -112,6 +112,7 @@
     if (!(target instanceof Element)) return null;
     const element = target.closest<HTMLElement>(targetSelector);
     if (!(element instanceof HTMLElement)) return null;
+    if (element.dataset.appTooltipDisabled === "true") return null;
     if (!document.documentElement.contains(element)) return null;
     return tooltipTextFor(element).length > 0 ? element : null;
   }

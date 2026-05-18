@@ -77,7 +77,6 @@
       class="flex shrink-0 flex-col gap-0.5 rounded-md p-1 ring-1 ring-black/10 dark:ring-white/10"
       style="background: {appTokens['--background']}; width: 96px;"
       aria-hidden="true"
-      title="App, card, text, primary, calendar, palette"
     >
       <div
         class="flex h-3 items-center gap-1 rounded-sm px-1"
@@ -105,8 +104,8 @@
     <button
       type="button"
       onclick={onDuplicate}
-      title="Duplicate and edit"
       aria-label="Duplicate and edit theme"
+      data-app-tooltip-disabled="true"
       class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
       <Copy size={13} strokeWidth={2} />
@@ -115,8 +114,8 @@
     <button
       type="button"
       onclick={onOpen}
-      title={isBuiltin ? "View" : "Edit"}
       aria-label={isBuiltin ? "View theme" : "Edit theme"}
+      data-app-tooltip-disabled="true"
       class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
       {#if isBuiltin}

@@ -8,7 +8,7 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import type { TitleBarControlId } from "$lib/stores/preferences";
-  import { cn } from "$lib/utils";
+  import { cn, isEditableKeyboardTarget } from "$lib/utils";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import LayoutList from "@lucide/svelte/icons/layout-list";
   import CircleGauge from "@lucide/svelte/icons/circle-gauge";
@@ -128,6 +128,12 @@
     showPerfMenu = !showPerfMenu;
     showUtilityOverflowMenu = false;
     if (showPerfMenu) void loadPerformancePopover();
+  }
+
+  function toggleTheme() {
+    if (lockedByThemeEditor) return;
+    showUtilityOverflowMenu = false;
+    theme.toggle();
   }
 
   function openSettings() {
@@ -312,6 +318,29 @@
 
     if (showTitleBarMenu && e.key === "Escape") {
       showTitleBarMenu = false;
+      return;
+    }
+
+    if (e.key === "F1") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!lockedByThemeEditor) openHelpShortcuts();
+      return;
+    }
+
+    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "l") {
+      if (isEditableKeyboardTarget(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTheme();
+      return;
+    }
+
+    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "p") {
+      if (isEditableKeyboardTarget(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      togglePerfMenu();
       return;
     }
 
@@ -575,7 +604,7 @@
             ? "bg-background text-foreground dark:bg-accent dark:text-white"
             : `${TITLE_BAR_ICON_COLOR_CLASS} hover:bg-sidebar-accent`,
         )}
-        title="Music"
+        title="Music (Ctrl + M)"
         aria-label="Music"
       >
         <Music size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -585,7 +614,7 @@
     <!-- Theme toggle -->
     {#if titleBarControlVisible("theme")}
       <button
-        onclick={() => theme.toggle()}
+        onclick={toggleTheme}
         disabled={lockedByThemeEditor}
         class={cn(
           "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
@@ -597,8 +626,8 @@
         title={lockedByThemeEditor
           ? "Disabled while editing a theme"
           : theme.isDark
-            ? "Switch to light mode"
-            : "Switch to dark mode"}
+            ? "Switch to light mode (Ctrl + Shift + L)"
+            : "Switch to dark mode (Ctrl + Shift + L)"}
       >
         {#if theme.isDark}
           <Sun size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -614,7 +643,7 @@
         <button
           onclick={togglePerfMenu}
           class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
-          title="Performance"
+          title="Performance (Ctrl + Shift + P)"
         >
           <CircleGauge size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         </button>
@@ -650,7 +679,8 @@
             ? "cursor-not-allowed opacity-40"
             : "hover:bg-sidebar-accent",
         )}
-        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Help"}
+        title={lockedByThemeEditor ? "Disabled while editing a theme" : 'Help ("F1" key)'}
+        aria-label="Help"
       >
         <CircleHelp size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
@@ -668,7 +698,8 @@
             ? "cursor-not-allowed opacity-40"
             : "hover:bg-sidebar-accent",
         )}
-        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Settings"}
+        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Settings (Ctrl + ,)"}
+        aria-label="Settings"
       >
         <Settings size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
@@ -679,8 +710,8 @@
         <button
           onclick={() => { showUtilityOverflowMenu = !showUtilityOverflowMenu; showPerfMenu = false; }}
           class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
-          title="More controls"
           aria-label="More controls"
+          data-app-tooltip-disabled="true"
         >
           <MoreHorizontal size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         </button>
@@ -718,14 +749,16 @@
     <button
       onclick={() => win.minimize()}
       class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
-      title="Minimize"
+      aria-label="Minimize"
+      data-app-tooltip-disabled="true"
     >
       <Minus size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
     </button>
     <button
       onclick={() => win.toggleMaximize()}
       class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
-      title={isMaximized ? "Restore" : "Maximize"}
+      aria-label={isMaximized ? "Restore" : "Maximize"}
+      data-app-tooltip-disabled="true"
     >
       {#if isMaximized}
         <Minimize2 size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -743,7 +776,8 @@
           ? "cursor-not-allowed opacity-40"
           : "hover:bg-destructive hover:text-destructive-foreground",
       )}
-      title={lockedByBenchmark ? "Disabled while a benchmark is active" : "Close"}
+      title={lockedByBenchmark ? "Disabled while a benchmark is active" : "Close app (Ctrl + Shift + W)"}
+      aria-label="Close"
     >
       <X size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
     </button>

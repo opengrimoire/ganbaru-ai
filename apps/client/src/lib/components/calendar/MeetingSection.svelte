@@ -259,7 +259,7 @@
                 { icon: UserPlus, label: "Invite", title: "Invite others", get: () => guestCanInviteOthers, set: (v: boolean) => { guestCanInviteOthers = v; onchange(); } },
                 { icon: Eye, label: "See list", title: "See guest list", get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; onchange(); } },
               ] as perm}
-                <button onclick={() => perm.set(!perm.get())} title={perm.title}
+                <button onclick={() => perm.set(!perm.get())}
                   class="flex items-center gap-1 rounded px-1 py-0.5 active:scale-95
                     {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
                   <perm.icon size={11} strokeWidth={2} />
@@ -302,8 +302,7 @@
           {@const selfStatusLabel = attendeeStatusLabel(selfStatus)}
           <div class="flex items-center gap-2 py-0.5 text-[11px]">
             <span
-              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {selfBg}"
-              title={`Your RSVP status: ${selfStatusLabel}`}>
+              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {selfBg}">
               <SelfIcon size={10} strokeWidth={2.5} class="block {selfFg}" />
             </span>
             <span class="min-w-0 flex-1 truncate text-foreground">You ({selfAttendee.email})</span>
@@ -377,8 +376,7 @@
               {@const guestActionsDisabled = !canEditGuests}
               <div class="flex items-center gap-2 py-0.5 text-[11px]">
                 <span
-                  class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}"
-                  title={`RSVP status: ${statusLabel}`}>
+                  class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}">
                   <StatusIcon size={10} strokeWidth={2.5} class="block {sqFg}" />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>

@@ -1201,7 +1201,6 @@
             ? "text-foreground"
             : "text-muted-foreground/40",
         )}
-        title="All day"
       >
         <Sun size={12} class="shrink-0" />
         <span class="truncate">All day</span>
@@ -1337,7 +1336,6 @@
             bind:this={confirmDeleteBtn}
             onclick={() => { deleteArmed = false; handleDeleteClick(); }}
             disabled={controlsDisabled}
-            title="Click again to delete (Ctrl + D)"
             class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-action-danger-armed-foreground bg-action-danger-armed">
             <Trash2 size={13} strokeWidth={1.8} />
             <span>Click again to delete (Ctrl + D)</span>
@@ -1353,7 +1351,6 @@
           {/if}
           <button onclick={handleSave}
             disabled={controlsDisabled}
-            title="Save (Ctrl + Enter)"
             class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px]
               {saving || saveReady
                 ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'

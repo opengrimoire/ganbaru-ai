@@ -133,7 +133,7 @@
           type="button"
           onclick={onClose}
           aria-label="Close settings"
-          title="Close settings"
+          data-app-tooltip-disabled="true"
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <X size={15} strokeWidth={2} />
@@ -158,7 +158,7 @@
             type="button"
             onclick={onClose}
             aria-label="Close settings"
-            title="Close settings"
+            data-app-tooltip-disabled="true"
             class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <X size={14} strokeWidth={2} />
@@ -171,8 +171,8 @@
               onclick={() => {
                 activeSection = section.id;
               }}
-              title={section.label}
               aria-label={section.label}
+              data-app-tooltip-disabled="true"
               class={cn(
                 "flex items-center rounded-md text-left text-[13px] font-medium transition-colors",
                 useIconRail ? "h-9 justify-center px-0" : "gap-2.5 px-3 py-1.5",

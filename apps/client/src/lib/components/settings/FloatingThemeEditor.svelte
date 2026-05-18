@@ -255,7 +255,7 @@
         onclick={toggleCollapsed}
         aria-label={collapsed ? "Expand editor" : "Collapse editor"}
         aria-expanded={!collapsed}
-        title={collapsed ? "Expand" : "Collapse"}
+        data-app-tooltip-disabled="true"
         class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         {#if collapsed}

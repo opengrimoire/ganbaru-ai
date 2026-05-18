@@ -174,7 +174,7 @@
         onclick={onReset}
         disabled={!canReset}
         aria-label="Reset"
-        title="Reset to default"
+        data-app-tooltip-disabled="true"
         class={cn(
           "flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors",
           canReset

@@ -48,6 +48,7 @@
             : "cursor-not-allowed opacity-40",
         )}
         aria-label="Decrease"
+        data-app-tooltip-disabled="true"
       >
         <Minus size={13} strokeWidth={2.5} />
       </button>
@@ -66,6 +67,7 @@
             : "cursor-not-allowed opacity-40",
         )}
         aria-label="Increase"
+        data-app-tooltip-disabled="true"
       >
         <Plus size={13} strokeWidth={2.5} />
       </button>
@@ -75,7 +77,7 @@
         onclick={onReset}
         disabled={!canReset}
         aria-label="Reset"
-        title="Reset to default"
+        data-app-tooltip-disabled="true"
         class={cn(
           "flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors",
           canReset

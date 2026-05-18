@@ -462,7 +462,8 @@
         "flex h-5 w-5 items-center justify-center rounded transition-colors",
         pinned ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground",
       )}
-      title={pinned ? "Unpin" : "Pin"}
+      aria-label={pinned ? "Unpin" : "Pin"}
+      data-app-tooltip-disabled="true"
     >
       {#if pinned}
         <Pin size={11} />
@@ -548,7 +549,6 @@
     <button
       onclick={() => (launchExpanded = !launchExpanded)}
       class="flex w-full items-center justify-between rounded text-left transition-colors hover:bg-accent"
-      title={launchExpanded ? "Hide boot breakdown" : "Show boot breakdown"}
     >
       <span class="text-[10px] uppercase tracking-wider text-foreground">Launch time</span>
       <span class="flex items-center gap-1.5">
@@ -607,7 +607,6 @@
         onclick={clearPerfLog}
         disabled={!hasSpeedLogEntries}
         class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
-        title="Clear speed log buffer"
       >Clear</button>
     </div>
   </div>
@@ -655,7 +654,6 @@
           ? "border border-border bg-card text-foreground hover:bg-accent dark:bg-transparent"
           : "bg-primary text-primary-foreground hover:bg-primary/90",
       )}
-      title={calendarScrollCapture ? "Stop scroll sample" : "Start scroll sample"}
     >
       {#if calendarScrollCapture}
         <Square size={10} />
@@ -732,8 +730,8 @@
               type="button"
               onclick={() => toggleBenchmarkSuite(suite.id)}
               class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
-              title={suiteExpanded(suite.id) ? `Hide ${suite.label.toLowerCase()}` : `Show ${suite.label.toLowerCase()}`}
               aria-label={suiteExpanded(suite.id) ? `Hide ${suite.label}` : `Show ${suite.label}`}
+              data-app-tooltip-disabled="true"
               aria-expanded={suiteExpanded(suite.id)}
             >
               <ChevronDown

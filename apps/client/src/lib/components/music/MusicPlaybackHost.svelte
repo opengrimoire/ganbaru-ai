@@ -274,6 +274,7 @@
       tabindex="-1"
       class="pointer-events-auto absolute inset-0 z-10 cursor-default border-0 bg-transparent p-0 text-transparent outline-none focus:outline-none"
       aria-label={player.isPlaying ? "Pause" : "Play"}
+      data-app-tooltip-disabled="true"
       onpointerdown={handleSurfacePointerDown}
       onclick={handleSurfaceClick}
       ondblclick={handleSurfaceDoubleClick}

@@ -116,19 +116,33 @@
     lastPlaylistAutoScrollIdentity = identity;
   });
 
+  function togglePlaylist(): void {
+    playlistVisible = !playlistVisible;
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (event.altKey || event.metaKey) return;
     if (isEditableTarget(event.target)) return;
     if (event.ctrlKey) {
-      if (event.key.toLowerCase() === "l") {
+      if (!event.shiftKey && (event.key.toLowerCase() === "l" || event.key.toLowerCase() === "p")) {
         event.preventDefault();
-        playlistVisible = !playlistVisible;
+        togglePlaylist();
       }
       return;
     }
     if (event.code === "Space") {
       event.preventDefault();
       void player.togglePlay();
+      return;
+    }
+    if (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "l") {
+      event.preventDefault();
+      togglePlaylist();
+      return;
+    }
+    if (event.key.toLowerCase() === "m") {
+      event.preventDefault();
+      void player.toggleMute();
       return;
     }
     if (event.shiftKey && event.key === "ArrowLeft") {
@@ -384,8 +398,8 @@
           type="button"
           onclick={() => { void player.resetPlayer(); }}
           class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          title="Reset"
           aria-label="Reset"
+          data-app-tooltip-disabled="true"
         >
           <RotateCcw size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         </button>
@@ -409,6 +423,7 @@
         role="button"
         tabindex="-1"
         aria-label={player.isPlaying ? "Pause" : "Play"}
+        data-app-tooltip-disabled="true"
         onclick={handleMediaSurfaceClick}
         ondblclick={handleMediaSurfaceDoubleClick}
         onkeydown={handleMediaSurfaceKeydown}
@@ -525,7 +540,7 @@
             onclick={() => { void player.playPreviousTrack(); }}
             disabled={!player.canPlayPreviousTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Last played track (Shift+Left)"
+            title="Last played track (Shift + Arrow left)"
             aria-label="Last played track"
           >
             <SkipBack size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -535,7 +550,7 @@
             onclick={() => { void player.togglePlay(); }}
             disabled={!player.currentSource}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={player.isPlaying ? "Pause (Space)" : "Play (Space)"}
+            title={player.isPlaying ? 'Pause ("Spacebar" key)' : 'Play ("Spacebar" key)'}
             aria-label={player.isPlaying ? "Pause" : "Play"}
           >
             {#if player.isPlaying}
@@ -549,7 +564,7 @@
             onclick={() => { void player.playNextTrack(); }}
             disabled={!player.canPlayNextTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Next track (Shift+Right)"
+            title="Next track (Shift + Arrow right)"
             aria-label="Next track"
           >
             <SkipForward size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -562,7 +577,7 @@
               "inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
               !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
-            title={player.shuffleEnabled ? "Shuffle on (S)" : "Shuffle off (S)"}
+            title={player.shuffleEnabled ? 'Shuffle on ("S" key)' : 'Shuffle off ("S" key)'}
             aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
             aria-pressed={player.shuffleEnabled}
           >
@@ -597,7 +612,7 @@
                 player.muted && "line-through opacity-60",
                 player.volumeBoosted && !player.muted && "text-warning",
               )}
-              title={player.muted ? "Unmute" : "Mute"}
+              title={player.muted ? 'Unmute ("M" key)' : 'Mute ("M" key)'}
               aria-label={player.muted ? "Unmute volume" : "Mute volume"}
               aria-pressed={player.muted}
             >
@@ -670,9 +685,9 @@
           </div>
           <button
             type="button"
-            onclick={() => { playlistVisible = !playlistVisible; }}
+            onclick={togglePlaylist}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            title={playlistVisible ? "Hide playlist (Ctrl+L)" : "Show playlist (Ctrl+L)"}
+            title={playlistVisible ? 'Hide playlist ("P" key)' : 'Show playlist ("P" key)'}
             aria-label={playlistVisible ? "Hide playlist" : "Show playlist"}
             aria-controls="music-playlist"
             aria-expanded={playlistVisible}

@@ -26,7 +26,7 @@
     setShellStartupMs,
   } from "$lib/stores/perflog.svelte";
   import type { MemoryReport, StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
-  import { shouldUseKeyboardFocusIntent } from "$lib/utils";
+  import { isEditableKeyboardTarget, shouldUseKeyboardFocusIntent } from "$lib/utils";
   import { onMount } from "svelte";
 
   perfMark("boot.script-start");
@@ -274,6 +274,13 @@
     if (e.altKey && e.key >= "1" && e.key <= String(views.length)) {
       e.preventDefault();
       nav.navigate(views[parseInt(e.key) - 1]);
+      return;
+    }
+
+    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && e.key.toLowerCase() === "m") {
+      if (isEditableKeyboardTarget(e.target)) return;
+      e.preventDefault();
+      nav.navigate("music");
       return;
     }
 
