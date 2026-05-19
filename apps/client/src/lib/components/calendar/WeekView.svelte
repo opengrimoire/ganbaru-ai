@@ -650,9 +650,10 @@
     class="hide-scrollbar absolute inset-x-0 bottom-0 overflow-y-auto overflow-x-hidden"
     style="top: {gutterTopHeight}px; --hour-h: {calZoom.hourHeight}; background-color: var(--cal-bg);"
   >
+    <div class="relative" style="height: calc({allDayOverlayHeight}px + 24 * var(--hour-h) * 1px);">
     <div
-      class="week-grid grid"
-      style="grid-template-columns: {gridCols}; padding-top: {allDayOverlayHeight}px;"
+      class="week-grid absolute inset-x-0 top-0 grid"
+      style="grid-template-columns: {gridCols}; transform: translateY({allDayOverlayHeight}px);"
     >
       <!-- Body: one cell per timezone + 7 day columns -->
       <div
@@ -696,6 +697,7 @@
 
               </div>
       </div>
+    </div>
     </div>
   </div>
   <CalendarScrollbar {scrollContainer} stickyTop={gutterTopHeight + allDayOverlayHeight} onTimelineWheel={scrollTimelineByWheel} />
