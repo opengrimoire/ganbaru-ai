@@ -221,22 +221,6 @@
     <div class="min-w-0 flex-1">
       <h2 class="text-[0.866667rem] font-semibold text-foreground">Calendars</h2>
     </div>
-    <div class="flex shrink-0 items-center gap-1.5 max-[520px]:w-full max-[520px]:justify-end">
-      <button
-        type="button"
-        onclick={handleImport}
-        disabled={isImporting}
-        class="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border bg-primary px-2 text-[0.733333rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {#if isImporting}
-          <LoaderCircle size={11} strokeWidth={2.25} class="animate-spin" />
-          <span>Importing calendar</span>
-        {:else}
-          <Upload size={11} strokeWidth={2.25} />
-          <span>Import calendar</span>
-        {/if}
-      </button>
-    </div>
   </header>
 
   {#if isImporting && importProgress}
@@ -311,6 +295,22 @@
         </div>
       </div>
     {/each}
+    <div class="px-3 py-2.5">
+      <button
+        type="button"
+        onclick={handleImport}
+        disabled={isImporting}
+        class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-dashed border-border bg-card text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
+      >
+        {#if isImporting}
+          <LoaderCircle size={13} strokeWidth={2.25} class="animate-spin" />
+          <span>Importing calendar</span>
+        {:else}
+          <Upload size={13} strokeWidth={2.25} />
+          <span>Import calendar</span>
+        {/if}
+      </button>
+    </div>
   </div>
 
   {#if toast}
