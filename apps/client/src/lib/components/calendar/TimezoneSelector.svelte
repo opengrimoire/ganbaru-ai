@@ -340,7 +340,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={triggerEl}
-  class="relative grid cursor-pointer self-stretch rounded text-[13px] transition-colors hover:bg-accent"
+  class="timezone-trigger relative grid cursor-pointer self-stretch rounded text-[13px] transition-colors hover:bg-accent"
   style="color: var(--foreground); grid-column: span {tzCount}; grid-template-columns: subgrid;"
   onclick={toggleOpen}
   role="button"
@@ -545,5 +545,10 @@
   .tz-scrollbar-thumb:hover,
   .tz-scrollbar-thumb.is-dragging {
     background-color: var(--accent);
+  }
+
+  :global(html[data-focus-intent="keyboard"]) .timezone-trigger:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
   }
 </style>

@@ -501,7 +501,7 @@
         bind:this={tabEls[i]}
         onclick={() => nav.navigate(tab.view)}
         class={cn(
-          "relative z-1 flex h-8 items-center rounded-md text-sm font-medium transition-colors",
+          "titlebar-tab relative z-1 flex h-8 items-center rounded-md text-sm font-medium transition-colors",
           activeTabOnly && nav.current !== tab.view ? "hidden" : "",
           autoCompactTabs
             ? "w-8 justify-center"
@@ -896,5 +896,10 @@
 <style>
   .tab-indicator {
     transition: none;
+  }
+
+  :global(html[data-focus-intent="keyboard"]) .titlebar-tab:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
   }
 </style>
