@@ -87,7 +87,7 @@
 
   // Cursor is controlled by parent (DayColumn) via inResizeZone prop
   const effectiveCursor = $derived(
-    !canDrag ? 'pointer' : inResizeZone ? 'ns-resize' : 'grab'
+    !canDrag ? 'pointer' : inResizeZone ? 'ns-resize' : 'default'
   );
 </script>
 

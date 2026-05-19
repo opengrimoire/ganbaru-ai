@@ -238,12 +238,10 @@ export function useDragController(config: DragControllerConfig) {
 
     if (dragState.type === "resize-top" || dragState.type === "resize-bottom") {
       lockCursor("ns-resize");
-    } else {
-      lockCursor("grabbing");
     }
 
     dragInteractionActive = false;
-    grabbingId = eventId; // Show contour immediately on grab
+    grabbingId = eventId; // Show contour immediately on pointer down
     lastPointerEvent = e;
     window.addEventListener("pointermove", handleDragMove);
     window.addEventListener("pointerup", handleDragEnd);
@@ -380,6 +378,7 @@ export function useDragController(config: DragControllerConfig) {
       const movedEnough = Math.hypot(dx, dy) >= EVENT_DRAG_THRESHOLD_PX;
       if (!movedEnough) return;
       dragInteractionActive = true;
+      if (dragState.type === "move") lockCursor("grabbing");
       startAutoScroll();
     }
     updateDragPreview();
