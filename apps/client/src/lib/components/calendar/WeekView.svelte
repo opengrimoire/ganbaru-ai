@@ -133,9 +133,9 @@
   let headerCells: HTMLElement[] = $state([]);
   let dayFormat: DayNameFormat = $state("short");
   let stickyHeaderHeight = $state(0);
-  let stickyAllDayBannerHeight = $state(0);
-  $effect(() => { if (allDayMaxRow === 0) stickyAllDayBannerHeight = 0; });
-  const gutterTopHeight = $derived(stickyHeaderHeight + stickyAllDayBannerHeight);
+  let allDayOverlayHeight = $state(0);
+  $effect(() => { if (allDayMaxRow === 0) allDayOverlayHeight = 0; });
+  const gutterTopHeight = $derived(stickyHeaderHeight);
 
   $effect(() => {
     const el = headerCells[0];
@@ -159,7 +159,6 @@
   let visibleStartMinute = $state(0);
   let visibleEndMinute = $state(1440);
 
-  // stickyAllDayBannerHeight is measured via bind:offsetHeight on the all-day banner
   const calZoom = getCalendarZoom();
   const timelineWheelScroll = createTimelineWheelScroll(() => scrollContainer);
 
@@ -174,11 +173,20 @@
     const range = visibleMinuteRangeForScroll({
       scrollTop: scrollContainer.scrollTop,
       viewportHeight: scrollContainer.clientHeight,
-      stickyTop: 0,
+      stickyTop: allDayOverlayHeight,
       hourHeight: renderedHourHeight(),
     });
     visibleStartMinute = range.startMinute;
     visibleEndMinute = range.endMinute;
+  }
+
+  function scrollTopForMinute(minute: number, hourHeight: number): number {
+    if (minute <= 0) return 0;
+    return allDayOverlayHeight + (minute / 60) * hourHeight;
+  }
+
+  function scrollMinuteFromTop(scrollTop: number, hourHeight: number): number {
+    return (Math.max(0, scrollTop - allDayOverlayHeight) / hourHeight) * 60;
   }
 
   function scrollTimelineByWheel(e: WheelEvent) {
@@ -233,11 +241,11 @@
 
       const hh = calZoom.hourHeight;
       if (initialScrollMinute >= 0) {
-        scrollContainer.scrollTop = (initialScrollMinute / 60) * hh;
+        scrollContainer.scrollTop = scrollTopForMinute(initialScrollMinute, hh);
       } else {
         const now = new Date();
         const targetHour = Math.max(0, now.getHours() - 2);
-        scrollContainer.scrollTop = targetHour * hh;
+        scrollContainer.scrollTop = scrollTopForMinute(targetHour * 60, hh);
       }
 
       scrollContainer.addEventListener("scroll", handleScroll);
@@ -300,13 +308,13 @@
       // Compute center time at old zoom level
       const viewportH = scrollContainer.clientHeight;
       const centerOffset = viewportH / 2;
-      const centerMinute = (scrollContainer.scrollTop + centerOffset) / oldH * 60;
+      const centerMinute = scrollMinuteFromTop(scrollContainer.scrollTop + centerOffset, oldH);
 
       // Apply new zoom
       scrollContainer.style.setProperty("--hour-h", String(newH));
 
       // Adjust scrollTop to keep the same center time visible
-      const newScrollTop = (centerMinute / 60) * newH - centerOffset;
+      const newScrollTop = scrollTopForMinute(centerMinute, newH) - centerOffset;
       scrollContainer.scrollTop = Math.max(0, newScrollTop);
     } else {
       scrollContainer.style.setProperty("--hour-h", String(newH));
@@ -314,7 +322,16 @@
     updateVisibleMinuteRange();
   });
 
+  let previousAllDayOverlayHeight = 0;
   $effect(() => {
+    const nextAllDayOverlayHeight = allDayOverlayHeight;
+    if (scrollContainer && previousAllDayOverlayHeight !== nextAllDayOverlayHeight) {
+      const delta = nextAllDayOverlayHeight - previousAllDayOverlayHeight;
+      if (scrollContainer.scrollTop > 0) {
+        scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop + delta);
+      }
+    }
+    previousAllDayOverlayHeight = nextAllDayOverlayHeight;
     void gutterTopHeight;
     updateVisibleMinuteRange();
   });
@@ -323,7 +340,7 @@
     lastScrollAt = performance.now();
     updateVisibleMinuteRange();
     if (!scrollContainer || !onScrollChange || calZoom.isAnimating) return;
-    const minute = (scrollContainer.scrollTop / calZoom.hourHeight) * 60;
+    const minute = scrollMinuteFromTop(scrollContainer.scrollTop, calZoom.hourHeight);
     onScrollChange(Math.round(minute));
   }
 
@@ -476,7 +493,7 @@
     {#if allDayMaxRow > 0}
     <!-- All-day banner -->
     <div
-      bind:offsetHeight={stickyAllDayBannerHeight}
+      bind:offsetHeight={allDayOverlayHeight}
       class="grid border-b border-sidebar"
       onwheel={scrollTimelineByWheel}
       style="
@@ -635,7 +652,7 @@
   >
     <div
       class="week-grid grid"
-      style="grid-template-columns: {gridCols};"
+      style="grid-template-columns: {gridCols}; padding-top: {allDayOverlayHeight}px;"
     >
       <!-- Body: one cell per timezone + 7 day columns -->
       <div
@@ -681,7 +698,7 @@
       </div>
     </div>
   </div>
-  <CalendarScrollbar {scrollContainer} stickyTop={gutterTopHeight} onTimelineWheel={scrollTimelineByWheel} />
+  <CalendarScrollbar {scrollContainer} stickyTop={gutterTopHeight + allDayOverlayHeight} onTimelineWheel={scrollTimelineByWheel} />
 </div>
 </div>
 
