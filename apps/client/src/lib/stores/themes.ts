@@ -128,7 +128,7 @@ export interface BuiltinTheme {
  * shell token is stored as a resolved hex; the per-token `isolated` flag
  * controls whether each token participates in the next source-edit cascade
  * or is treated as user-pinned. Sources drive multi-token derivation only
- * at write time (source edits, rebake, clone, preset apply); at runtime the
+ * at write time (source edits, rebake, clone); at runtime the
  * snapshot is the source of truth, which makes saved themes stable across
  * derivation-engine changes.
  *

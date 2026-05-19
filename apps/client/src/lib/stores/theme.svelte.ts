@@ -49,7 +49,6 @@ import {
   type UserThemeRead,
   type UserThemeWrite,
 } from "../api/themes";
-import type { ThemePreset } from "$lib/data/themePresets";
 
 const ACTIVE_KEY = "theme.activeId";
 const LEGACY_CUSTOM_KEY = "themes.user";
@@ -62,11 +61,11 @@ let hydrated = false;
 
 /**
  * Themes that exist in memory but have not been written to SQLite yet.
- * `createTheme` and `duplicateTheme` add the new id here; `persistThemeToDb`
- * removes it after a successful INSERT. The buffer model means the editor
- * runs on this in-memory state until the user clicks Save, at which point
- * `persistThemeToDb` flushes the entire snapshot in one shot. Cancel just
- * deletes the entry without ever touching the DB.
+ * `duplicateTheme` adds the new id here; `persistThemeToDb` removes it after
+ * a successful INSERT. The buffer model means the editor runs on this
+ * in-memory state until the user clicks Save, at which point `persistThemeToDb`
+ * flushes the entire snapshot in one shot. Cancel just deletes the entry
+ * without ever touching the DB.
  */
 const freshThemes = new Set<ThemeId>();
 
@@ -554,27 +553,8 @@ function restoreThemeFromSnapshot(id: ThemeId, json: string): boolean {
 }
 
 /**
- * Create a brand-new user theme cloned from the active theme (or the
- * given seed). The clone lands in memory only; `freshThemes` records that
- * the editor's Save path needs an INSERT rather than a content replace.
- */
-function createTheme(seedFromId?: ThemeId): ThemeId {
-  const registry = combinedRegistry();
-  const seed = seedFromId
-    ? (registry[seedFromId] ?? darkTheme)
-    : (registry[activeId] ?? darkTheme);
-  const id = generateThemeId(registry);
-  const displayName = nextUniqueDisplayName("New theme", existingDisplayNames());
-  const clone = cloneTheme(seed, id, displayName);
-  customThemes[id] = clone;
-  freshThemes.add(id);
-  return id;
-}
-
-/**
  * Duplicate an existing theme (built-in or user) into a new in-memory
- * user theme. Same buffer-model contract as `createTheme`: the row is
- * not in SQLite until the editor commits.
+ * user theme. The row is not in SQLite until the editor commits.
  */
 function duplicateTheme(sourceId: ThemeId): ThemeId | undefined {
   const registry = combinedRegistry();
@@ -990,57 +970,6 @@ function setBlendCanvas(id: ThemeId, value: string): boolean {
 }
 
 /**
- * Replace a freshly-created clone's content with the given preset's
- * palette. Used by the "New theme" preset picker: the call site has just
- * created a clone in memory and now overwrites it with the preset's
- * sources, re-derived snapshot, and matching seeds.
- */
-function applyPreset(id: ThemeId, preset: ThemePreset): boolean {
-  const current = customThemes[id];
-  if (!current) return false;
-  const sources: ThemeSources = { ...preset.sources };
-  const derivedApp = deriveAppTokens(sources);
-  const calendarDefaultCustom = sources.canvas;
-  const calendarBundle = deriveCalendarColorDefaultBundle(
-    sources,
-    "app-canvas",
-    calendarDefaultCustom,
-  );
-  const appTokens: Record<string, string> = { ...BASE_APP_TOKENS[preset.base] };
-  for (const [k, v] of Object.entries(derivedApp)) appTokens[k] = v;
-  const calTokens: Record<string, string> = {
-    ...BASE_CALENDAR_TOKENS[preset.base],
-  };
-  for (const [k, v] of Object.entries(calendarBundle.calendarTokens)) {
-    calTokens[k] = v;
-  }
-  const next: UserTheme = {
-    ...current,
-    sources,
-    appTokens,
-    calendarTokens: calTokens,
-    calendarDefaultMode: "app-canvas",
-    calendarDefaultCustom,
-    appIsolated: new Set(),
-    calendarIsolated: new Set(),
-    eventPalette: [...calendarBundle.eventPalette],
-    blendCanvas: calendarBundle.blendCanvas,
-    seedSources: { ...sources },
-    seedAppTokens: { ...appTokens },
-    seedCalendarTokens: { ...calTokens },
-    seedCalendarDefaultMode: "app-canvas",
-    seedCalendarDefaultCustom: calendarDefaultCustom,
-    seedAppIsolated: new Set(),
-    seedCalendarIsolated: new Set(),
-    seedEventPalette: [...calendarBundle.eventPalette],
-    seedBlendCanvas: calendarBundle.blendCanvas,
-  };
-  customThemes[id] = next;
-  if (id === activeId) applyThemeToDom();
-  return true;
-}
-
-/**
  * Re-run the current derivation engine on every non-isolated token and
  * stamp the new engine version. Pinned tokens keep their hex and stay
  * isolated.
@@ -1220,7 +1149,6 @@ export function getTheme() {
     },
     shouldOfferRebake,
     setTheme,
-    createTheme,
     duplicateTheme,
     renameTheme,
     deleteTheme,
@@ -1241,7 +1169,6 @@ export function getTheme() {
     resetCalendarDefaultToSeed,
     setPaletteSlot,
     setBlendCanvas,
-    applyPreset,
     rebakeTheme,
     dismissUpgrade,
     persistThemeToDb,

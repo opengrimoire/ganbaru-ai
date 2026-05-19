@@ -216,30 +216,24 @@
   }
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4">
   <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
       <h2 class="text-[0.866667rem] font-semibold text-foreground">Calendars</h2>
-      <p class="mt-0.5 text-[0.8rem] text-muted-foreground">
-        Import a Google Calendar or Outlook export (.ics, or the .zip bundle
-        Google ships with one .ics per calendar) as a separate calendar you
-        can delete in one click. Re-importing the same file deduplicates by
-        event UID, so it stays safe to test against your real export.
-      </p>
     </div>
     <div class="flex shrink-0 items-center gap-1.5 max-[520px]:w-full max-[520px]:justify-end">
       <button
         type="button"
         onclick={handleImport}
         disabled={isImporting}
-        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+        class="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border bg-primary px-2 text-[0.733333rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
       >
         {#if isImporting}
-          <LoaderCircle size={12} strokeWidth={2.25} class="animate-spin" />
-          <span>Importing</span>
+          <LoaderCircle size={11} strokeWidth={2.25} class="animate-spin" />
+          <span>Importing calendar</span>
         {:else}
-          <Upload size={12} strokeWidth={2.25} />
-          <span>Import</span>
+          <Upload size={11} strokeWidth={2.25} />
+          <span>Import calendar</span>
         {/if}
       </button>
     </div>
@@ -294,7 +288,17 @@
             <Download size={12} strokeWidth={2.25} />
             <span>Export</span>
           </button>
-          {#if cal.id !== "local"}
+          {#if cal.id === "local"}
+            <button
+              type="button"
+              disabled
+              title="The local calendar can't be deleted"
+              aria-label="Local calendar can't be deleted"
+              class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-md border border-border/60 bg-muted/30 text-muted-foreground/35"
+            >
+              <Trash2 size={12} strokeWidth={2.25} />
+            </button>
+          {:else}
             <button
               type="button"
               onclick={() => handleDelete(cal)}

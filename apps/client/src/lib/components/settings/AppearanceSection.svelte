@@ -41,14 +41,14 @@
 <div class="flex flex-col gap-6">
   <ThemeList />
 
-  <section class="flex flex-col gap-2">
+  <section class="flex flex-col gap-4">
     <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Zoom</h2>
     <div
       class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
     >
       <StepperControl
         label="App zoom"
-        description="Scales the whole interface. Shortcut: Ctrl +, Ctrl -, Ctrl 0."
+        description="Scales the whole interface. Shortcut: Ctrl +, Ctrl -, Ctrl 0"
         displayValue={`${zoom.percent}%`}
         canIncrement={zoom.canZoomIn}
         canDecrement={zoom.canZoomOut}
@@ -59,7 +59,7 @@
       />
       <StepperControl
         label="Calendar zoom (5min / 10min / 15min / 30min)"
-        description="Hour row height. Finer rows enable smaller slot snapping."
+        description="Hour row height. Finer rows enable smaller slot snapping"
         displayValue={`${calZoom.zoomPercent}% (${calZoom.gridMinutes}min)`}
         canIncrement={calZoom.canZoomIn}
         canDecrement={calZoom.canZoomOut}
@@ -71,14 +71,14 @@
     </div>
   </section>
 
-  <section class="flex flex-col gap-2">
+  <section class="flex flex-col gap-4">
     <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Text</h2>
     <div
       class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
     >
       <CustomSelect
         label="Font family"
-        description="Resolves through system or installed fonts."
+        description="Resolves through system or installed fonts"
         value={preferences.fontFamilyId}
         options={fontFamilyOptions}
         onChange={(id) => preferences.setFontFamily(id)}
@@ -87,7 +87,7 @@
       />
       <StepperControl
         label="Text size"
-        description="Multiplies the base text size across the app."
+        description="Multiplies the base text size across the app"
         displayValue={`${Math.round(preferences.fontScale * 100)}%`}
         canIncrement={preferences.fontScale < FONT_SCALE_MAX}
         canDecrement={preferences.fontScale > FONT_SCALE_MIN}

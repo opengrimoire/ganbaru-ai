@@ -1,15 +1,12 @@
 <script lang="ts">
-  import Plus from "@lucide/svelte/icons/plus";
-  import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
+  import Upload from "@lucide/svelte/icons/upload";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import X from "@lucide/svelte/icons/x";
   import { invoke } from "@tauri-apps/api/core";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import type { ThemeId } from "$lib/stores/themes";
-  import type { ThemePreset } from "$lib/data/themePresets";
   import ThemeRow from "./ThemeRow.svelte";
-  import ThemePresetPicker from "./ThemePresetPicker.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const themeStore = getTheme();
@@ -19,7 +16,6 @@
   let importOpen = $state(false);
   let importDraft = $state("");
   let importErrors = $state<string[]>([]);
-  let presetPickerOpen = $state(false);
   let toast = $state<string | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -43,12 +39,11 @@
     themeStore.setTheme(id);
   }
 
-  // Fresh themes (New, Duplicate and edit) open with the edited theme as
-  // the active one so the floating panel reflects changes live. Editing an
-  // existing user theme also activates it for the same reason and captures
-  // a JSON snapshot so cancel can roll back the edits. Built-ins carry no
-  // snapshot: they cannot be mutated while the editor is open, so there is
-  // nothing to restore.
+  // Duplicated themes open with the edited theme as the active one so the
+  // floating panel reflects changes live. Editing an existing user theme also
+  // activates it for the same reason and captures a JSON snapshot so cancel can
+  // roll back the edits. Built-ins carry no snapshot: they cannot be mutated
+  // while the editor is open, so there is nothing to restore.
   async function handleDuplicate(id: ThemeId) {
     const previousActiveId = themeStore.id;
     const newId = await themeStore.duplicateTheme(id);
@@ -63,35 +58,6 @@
     const snapshot = isBuiltin ? undefined : themeStore.exportTheme(id);
     if (themeStore.id !== id) themeStore.setTheme(id);
     themeEditor.open(id, { snapshot, previousActiveId });
-  }
-
-  function handleNew() {
-    presetPickerOpen = true;
-  }
-
-  async function openEditorForNew(preset?: ThemePreset) {
-    const previousActiveId = themeStore.id;
-    const newId = await themeStore.createTheme();
-    if (preset) {
-      await themeStore.applyPreset(newId, preset);
-      await themeStore.renameTheme(newId, preset.displayName);
-    }
-    themeStore.setTheme(newId);
-    themeEditor.open(newId, { createdFresh: true, previousActiveId });
-  }
-
-  function handlePresetPicked(preset: ThemePreset) {
-    presetPickerOpen = false;
-    void openEditorForNew(preset);
-  }
-
-  function handlePresetBlank() {
-    presetPickerOpen = false;
-    void openEditorForNew();
-  }
-
-  function handlePresetClose() {
-    presetPickerOpen = false;
   }
 
   function handleImportToggle() {
@@ -167,27 +133,15 @@
   <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
       <h2 class="text-[0.866667rem] font-semibold text-foreground">Themes</h2>
-      <p class="mt-0.5 text-[0.8rem] text-muted-foreground">
-        Apply, duplicate, or edit themes. Built-in themes are read-only; use
-        Duplicate to fork one into an editable copy.
-      </p>
     </div>
     <div class="flex shrink-0 items-center gap-1.5 max-[520px]:w-full max-[520px]:justify-end">
       <button
         type="button"
         onclick={handleImportToggle}
-        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+        class="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border bg-primary px-2 text-[0.733333rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
-        <ClipboardPaste size={12} strokeWidth={2.25} />
-        <span>Import</span>
-      </button>
-      <button
-        type="button"
-        onclick={handleNew}
-        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-      >
-        <Plus size={12} strokeWidth={2.25} />
-        <span>New theme</span>
+        <Upload size={11} strokeWidth={2.25} />
+        <span>Import theme</span>
       </button>
     </div>
   </header>
@@ -288,13 +242,5 @@
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmDelete}
     onCancel={cancelDelete}
-  />
-{/if}
-
-{#if presetPickerOpen}
-  <ThemePresetPicker
-    onPick={handlePresetPicked}
-    onStartBlank={handlePresetBlank}
-    onClose={handlePresetClose}
   />
 {/if}
