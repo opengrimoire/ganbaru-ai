@@ -49,8 +49,8 @@
 
 <div
   class={cn(
-    "flex items-center justify-between gap-4 px-4 py-3 transition-colors max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-3 max-[520px]:px-3",
-    isActive ? "bg-accent/50" : "hover:bg-accent/30",
+    "flex items-center justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-3",
+    !isActive && "hover:text-foreground",
   )}
 >
   <button
@@ -100,7 +100,7 @@
     </div>
   </button>
 
-  <div class="flex shrink-0 items-center justify-end gap-1 max-[520px]:border-t max-[520px]:border-border/60 max-[520px]:pt-2">
+  <div class="flex shrink-0 items-center justify-end gap-1">
     <button
       type="button"
       onclick={onDuplicate}

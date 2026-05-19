@@ -27,7 +27,7 @@
   } = $props();
 </script>
 
-<div class="flex items-center justify-between gap-4 px-4 py-3 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2 max-[480px]:px-3">
+<div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
   <div class="min-w-0 flex-1">
     <div class="text-[0.866667rem] text-foreground">{label}</div>
     {#if description}

@@ -225,7 +225,7 @@
 
   {#if isImporting && importProgress}
     <div
-      class="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-[0.8rem] text-muted-foreground"
+      class="flex items-center gap-2 px-1 py-1 text-[0.8rem] text-muted-foreground"
     >
       <LoaderCircle size={12} strokeWidth={2.25} class="animate-spin" />
       <span class="truncate">
@@ -237,20 +237,18 @@
     </div>
   {/if}
 
-  <div
-    class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-  >
+  <div class="flex flex-col gap-3">
     {#each calendarsStore.list as cal (cal.id)}
       {@const displayName = calendarDisplayName(cal)}
       {@const importDate = calendarImportDate(cal)}
-      <div class="flex items-center gap-3 px-3 py-2.5 max-[520px]:flex-col max-[520px]:items-stretch">
+      <div class="flex items-center gap-3 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <span class="truncate text-[0.866667rem] font-medium text-foreground">
               {displayName}
             </span>
             <span
-              class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
+              class="shrink-0 text-[0.733333rem] font-medium uppercase tracking-wide text-muted-foreground"
             >
               {cal.source}
             </span>
@@ -295,12 +293,12 @@
         </div>
       </div>
     {/each}
-    <div class="px-3 py-2.5">
+    <div class="px-1 py-1">
       <button
         type="button"
         onclick={handleImport}
         disabled={isImporting}
-        class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-dashed border-border bg-card text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
+        class="flex h-7 w-fit items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       >
         {#if isImporting}
           <LoaderCircle size={13} strokeWidth={2.25} class="animate-spin" />

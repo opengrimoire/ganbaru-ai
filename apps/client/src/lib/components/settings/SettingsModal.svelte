@@ -143,7 +143,7 @@
       <!-- Sidebar -->
       <aside
         class={cn(
-          "flex shrink-0 flex-col gap-3 border-r border-border bg-background/40 dark:bg-black/20",
+          "flex shrink-0 flex-col gap-3 bg-background/40 dark:bg-black/20",
           useIconRail ? "w-14 px-1 py-3" : "w-60 px-2 py-4",
         )}
       >

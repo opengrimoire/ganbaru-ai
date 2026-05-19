@@ -1,11 +1,11 @@
 const STORAGE_KEY = "ganbaruai-calendar-zoom";
 export const CALENDAR_ZOOM_FRAME_EVENT = "ganbaruai-calendar-zoom-frame";
 const DEFAULT_HOUR_HEIGHT = 50;
-const ZOOM_PERCENT_LEVELS = [50, 75, 100, 125, 150, 200, 300, 400] as const;
-const ZOOM_LEVELS: readonly number[] = ZOOM_PERCENT_LEVELS.map(
+export const CALENDAR_ZOOM_PERCENT_LEVELS = [50, 75, 100, 125, 150, 200, 300, 400] as const;
+const ZOOM_LEVELS: readonly number[] = CALENDAR_ZOOM_PERCENT_LEVELS.map(
   (percent) => (DEFAULT_HOUR_HEIGHT * percent) / 100,
 );
-const DEFAULT_INDEX = ZOOM_PERCENT_LEVELS.indexOf(100);
+const DEFAULT_INDEX = CALENDAR_ZOOM_PERCENT_LEVELS.indexOf(100);
 const LEGACY_DEFAULT_HOUR_HEIGHT = 45;
 const LEGACY_ZOOM_LEVELS = [30, 45, 67, 100, 150, 200] as const;
 const ANIM_DURATION = 150; // ms for smooth zoom animation
@@ -33,7 +33,7 @@ function isLegacyZoomHeight(height: number): boolean {
 
 function legacyHeightToCurrentHeight(height: number): number {
   const legacyPercent = (height / LEGACY_DEFAULT_HOUR_HEIGHT) * 100;
-  return ZOOM_LEVELS[findClosestIndexIn(ZOOM_PERCENT_LEVELS, legacyPercent)];
+  return ZOOM_LEVELS[findClosestIndexIn(CALENDAR_ZOOM_PERCENT_LEVELS, legacyPercent)];
 }
 
 function loadSaved(): number {
@@ -51,6 +51,10 @@ function deriveGridMinutes(h: number): number {
   if (h >= 60) return 10;
   if (h >= 40) return 15;
   return 30;
+}
+
+export function calendarZoomGridMinutesForPercent(percent: number): number {
+  return deriveGridMinutes((DEFAULT_HOUR_HEIGHT * percent) / 100);
 }
 
 function easeOutCubic(t: number): number {
@@ -181,6 +185,23 @@ function getRenderedHourHeight(sc: HTMLElement): number {
   return Number.isFinite(currentH) && currentH > 0 ? currentH : hourHeight;
 }
 
+function setZoomIndex(targetIndex: number): void {
+  if (targetIndex === levelIndex) return;
+
+  levelIndex = targetIndex;
+  const newH = ZOOM_LEVELS[targetIndex];
+  persist(newH);
+
+  if (scrollRef) {
+    gestureActive = true;
+    startOrRetargetAnimation(newH);
+    clearTimeout(commitTimer);
+    commitTimer = window.setTimeout(commitZoom, ANIM_DURATION + 50);
+  } else {
+    hourHeight = newH;
+  }
+}
+
 export function getCalendarZoom() {
   return {
     get hourHeight() {
@@ -235,26 +256,16 @@ export function getCalendarZoom() {
     get zoomPercent() {
       return Math.round((hourHeight / ZOOM_LEVELS[DEFAULT_INDEX]) * 100);
     },
+    setZoomPercent(percent: number) {
+      setZoomIndex(findClosestIndexIn(CALENDAR_ZOOM_PERCENT_LEVELS, percent));
+    },
     /** Zoom one level with smooth animation. */
     zoomStep(direction: 1 | -1) {
       const targetIndex = Math.max(
         0,
         Math.min(ZOOM_LEVELS.length - 1, levelIndex + direction),
       );
-      if (targetIndex === levelIndex) return;
-
-      levelIndex = targetIndex;
-      const newH = ZOOM_LEVELS[targetIndex];
-      persist(newH);
-
-      if (scrollRef) {
-        gestureActive = true;
-        startOrRetargetAnimation(newH);
-        clearTimeout(commitTimer);
-        commitTimer = window.setTimeout(commitZoom, ANIM_DURATION + 50);
-      } else {
-        hourHeight = newH;
-      }
+      setZoomIndex(targetIndex);
     },
   };
 }

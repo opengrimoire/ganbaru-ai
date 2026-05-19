@@ -112,7 +112,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="flex items-center justify-between gap-4 px-4 py-3 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2 max-[480px]:px-3">
+<div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
   {#if label}
     <div class="min-w-0 flex-1">
       <div class="text-[0.866667rem] text-foreground">{label}</div>
@@ -129,7 +129,7 @@
         onclick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        class="flex h-7 w-42 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
+        class="flex h-7 w-44 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
       >
         <span class="truncate" style={current?.style}>{current?.label ?? value}</span>
         <ChevronDown

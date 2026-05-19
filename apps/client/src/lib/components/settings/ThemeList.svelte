@@ -137,9 +137,7 @@
   </header>
 
   {#if importOpen}
-    <div
-      class="flex flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 dark:bg-background"
-    >
+    <div class="flex flex-col gap-2 px-1">
       <div class="flex items-center justify-between gap-2">
         <span class="text-[0.8rem] font-medium text-foreground">
           Paste theme JSON
@@ -198,9 +196,7 @@
     </div>
   {/if}
 
-  <div
-    class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
-  >
+  <div class="flex flex-col gap-3">
     {#each orderedThemes as t (t.id)}
       <ThemeRow
         theme={t}
@@ -212,11 +208,11 @@
         onDelete={() => handleDelete(t.id)}
       />
     {/each}
-    <div class="px-3 py-2.5">
+    <div class="px-1 py-1">
       <button
         type="button"
         onclick={handleImportToggle}
-        class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-dashed border-border bg-card text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+        class="flex h-7 w-fit items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <Upload size={13} strokeWidth={2.25} />
         <span>Import theme</span>

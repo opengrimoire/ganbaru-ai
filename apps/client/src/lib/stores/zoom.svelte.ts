@@ -8,16 +8,16 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
  */
 
 const STORAGE_KEY = "ganbaruai-zoom";
-const ZOOM_LEVELS: readonly number[] = Object.freeze([
+export const APP_ZOOM_LEVELS: readonly number[] = Object.freeze([
   0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3,
 ]);
-const DEFAULT_INDEX = ZOOM_LEVELS.indexOf(1);
+const DEFAULT_INDEX = APP_ZOOM_LEVELS.indexOf(1);
 
 function findClosestIndex(level: number): number {
   let best = 0;
-  let bestDist = Math.abs(ZOOM_LEVELS[0] - level);
-  for (let i = 1; i < ZOOM_LEVELS.length; i++) {
-    const dist = Math.abs(ZOOM_LEVELS[i] - level);
+  let bestDist = Math.abs(APP_ZOOM_LEVELS[0] - level);
+  for (let i = 1; i < APP_ZOOM_LEVELS.length; i++) {
+    const dist = Math.abs(APP_ZOOM_LEVELS[i] - level);
     if (dist < bestDist) {
       best = i;
       bestDist = dist;
@@ -39,30 +39,30 @@ const initialIndex = loadSavedIndex();
 let index = $state<number>(initialIndex);
 
 function applyZoom() {
-  getCurrentWebviewWindow().setZoom(ZOOM_LEVELS[index]);
+  getCurrentWebviewWindow().setZoom(APP_ZOOM_LEVELS[index]);
 }
 
 function persist() {
   if (typeof localStorage === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, String(ZOOM_LEVELS[index]));
+  localStorage.setItem(STORAGE_KEY, String(APP_ZOOM_LEVELS[index]));
 }
 
 // Apply saved zoom at module load so there's no flash at the default level.
 // Read the const, not the $state, to keep this outside Svelte reactivity.
 if (initialIndex !== DEFAULT_INDEX) {
-  getCurrentWebviewWindow().setZoom(ZOOM_LEVELS[initialIndex]);
+  getCurrentWebviewWindow().setZoom(APP_ZOOM_LEVELS[initialIndex]);
 }
 
 export function getZoom() {
   return {
     get level(): number {
-      return ZOOM_LEVELS[index];
+      return APP_ZOOM_LEVELS[index];
     },
     get percent(): number {
-      return Math.round(ZOOM_LEVELS[index] * 100);
+      return Math.round(APP_ZOOM_LEVELS[index] * 100);
     },
     get canZoomIn(): boolean {
-      return index < ZOOM_LEVELS.length - 1;
+      return index < APP_ZOOM_LEVELS.length - 1;
     },
     get canZoomOut(): boolean {
       return index > 0;
@@ -71,7 +71,7 @@ export function getZoom() {
       return index === DEFAULT_INDEX;
     },
     zoomIn() {
-      if (index >= ZOOM_LEVELS.length - 1) return;
+      if (index >= APP_ZOOM_LEVELS.length - 1) return;
       index++;
       persist();
       applyZoom();
@@ -84,6 +84,13 @@ export function getZoom() {
     },
     reset() {
       index = DEFAULT_INDEX;
+      persist();
+      applyZoom();
+    },
+    setLevel(level: number) {
+      const nextIndex = findClosestIndex(level);
+      if (nextIndex === index) return;
+      index = nextIndex;
       persist();
       applyZoom();
     },

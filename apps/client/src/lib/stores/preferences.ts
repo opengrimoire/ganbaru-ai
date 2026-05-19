@@ -57,6 +57,15 @@ export const DEFAULT_FONT_FAMILY_ID: FontFamilyId = "inter";
 export const FONT_SCALE_MIN = 0.85;
 export const FONT_SCALE_MAX = 1.3;
 export const DEFAULT_FONT_SCALE = 1.0;
+export const FONT_SCALE_STEP = 0.05;
+export const FONT_SCALE_LEVELS: readonly number[] = Object.freeze(
+  Array.from(
+    {
+      length: Math.round((FONT_SCALE_MAX - FONT_SCALE_MIN) / FONT_SCALE_STEP) + 1,
+    },
+    (_, index) => Number((FONT_SCALE_MIN + index * FONT_SCALE_STEP).toFixed(2)),
+  ),
+);
 
 export const TITLE_BAR_CONTROL_IDS = [
   "pomodoro",
