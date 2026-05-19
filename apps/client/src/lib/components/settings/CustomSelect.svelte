@@ -1,9 +1,15 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Check from "@lucide/svelte/icons/check";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
+  import {
+    pickSelectPopoverGeometry,
+    type SelectPopoverGeometry,
+    type SelectPopoverRect,
+  } from "./customSelectPosition";
 
   interface Option {
     value: string;
@@ -32,43 +38,92 @@
     class?: string;
   } = $props();
 
-  const VIEWPORT_MARGIN = 8;
   const ESTIMATED_DROPDOWN_HEIGHT = 240;
+  const DEFAULT_POPOVER_GEOMETRY: SelectPopoverGeometry = {
+    top: 0,
+    left: 0,
+    minWidth: 0,
+    maxWidth: 0,
+    maxHeight: 0,
+    placement: "below",
+  };
 
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
   let popoverEl: HTMLDivElement | undefined = $state();
-  let popoverPos = $state({ top: 0, right: 0, minWidth: 0 });
+  let popoverGeometry = $state<SelectPopoverGeometry>(DEFAULT_POPOVER_GEOMETRY);
+  let popoverReady = $state(false);
 
   const current = $derived(options.find((o) => o.value === value));
 
-  function computePosition() {
-    if (!triggerEl) return;
-    const rect = triggerEl.getBoundingClientRect();
-    const viewportHeight = window.innerHeight;
-    let top = rect.bottom + 4;
-    if (
-      top + ESTIMATED_DROPDOWN_HEIGHT + VIEWPORT_MARGIN > viewportHeight
-    ) {
-      top = Math.max(
-        VIEWPORT_MARGIN,
-        rect.top - ESTIMATED_DROPDOWN_HEIGHT - 4,
-      );
-    }
-    popoverPos = {
-      top,
-      right: Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.right),
-      minWidth: rect.width,
+  function toRect(rect: DOMRect): SelectPopoverRect {
+    return {
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
     };
   }
 
-  function toggle() {
+  function getBoundaryRect(): SelectPopoverRect {
+    if (!triggerEl) {
+      return {
+        top: 0,
+        right: window.innerWidth,
+        bottom: window.innerHeight,
+        left: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
+    }
+    const boundaryEl =
+      triggerEl.closest<HTMLElement>("[data-settings-content]")
+      ?? triggerEl.closest<HTMLElement>("[data-settings-modal-panel]");
+    const viewportRect: SelectPopoverRect = {
+      top: 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight,
+      left: 0,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
+    if (!boundaryEl) return viewportRect;
+    const boundary = boundaryEl.getBoundingClientRect();
+    const top = Math.max(viewportRect.top, boundary.top);
+    const right = Math.min(viewportRect.right, boundary.right);
+    const bottom = Math.min(viewportRect.bottom, boundary.bottom);
+    const left = Math.max(viewportRect.left, boundary.left);
+    return {
+      top,
+      right,
+      bottom,
+      left,
+      width: Math.max(0, right - left),
+      height: Math.max(0, bottom - top),
+    };
+  }
+
+  function computePosition() {
+    if (!triggerEl) return;
+    popoverGeometry = pickSelectPopoverGeometry({
+      triggerRect: toRect(triggerEl.getBoundingClientRect()),
+      boundaryRect: getBoundaryRect(),
+      contentHeight: popoverEl?.scrollHeight ?? ESTIMATED_DROPDOWN_HEIGHT,
+    });
+    popoverReady = true;
+  }
+
+  async function toggle() {
     if (open) {
       open = false;
       return;
     }
-    computePosition();
+    popoverReady = false;
     open = true;
+    await tick();
+    computePosition();
   }
 
   function select(next: string) {
@@ -93,7 +148,8 @@
       if (popoverEl?.contains(target)) return;
       open = false;
     }
-    function handleScroll() {
+    function handleScroll(e: Event) {
+      if (e.target instanceof Node && popoverEl?.contains(e.target)) return;
       open = false;
     }
     function handleResize() {
@@ -143,8 +199,8 @@
           bind:this={popoverEl}
           use:portal
           role="listbox"
-          class="fixed z-80 max-h-[60vh] overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-lg"
-          style="top: {popoverPos.top}px; right: {popoverPos.right}px; min-width: {popoverPos.minWidth}px;"
+          class="fixed z-80 overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-lg"
+          style="top: {popoverGeometry.top}px; left: {popoverGeometry.left}px; min-width: {popoverGeometry.minWidth}px; max-width: {popoverGeometry.maxWidth}px; max-height: {popoverGeometry.maxHeight}px; visibility: {popoverReady ? 'visible' : 'hidden'};"
         >
           {#each options as option}
             {@const isActive = option.value === value}

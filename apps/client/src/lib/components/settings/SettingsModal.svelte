@@ -98,6 +98,7 @@
 >
   <div class="absolute inset-0 bg-black/50"></div>
   <div
+    data-settings-modal-panel
     class={cn(
       "relative z-10 flex overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
       useTopNav
@@ -193,6 +194,7 @@
 
     <!-- Content -->
     <section
+      data-settings-content
       class={cn(
         "min-h-0 flex-1 overflow-y-auto bg-background/40 dark:bg-black/20",
         useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
