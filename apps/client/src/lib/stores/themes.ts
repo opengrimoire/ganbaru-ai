@@ -275,7 +275,7 @@ function eventPaletteFallback(base: "light" | "dark"): EventPaletteHexes {
 export const lightTheme: BuiltinTheme = Object.freeze({
   kind: "builtin",
   id: "light",
-  displayName: "Light",
+  displayName: "Light default",
   base: "light",
   iconLabel: "light",
   eventPalette: LIGHT_EVENT_PALETTE,
@@ -285,7 +285,7 @@ export const lightTheme: BuiltinTheme = Object.freeze({
 export const darkTheme: BuiltinTheme = Object.freeze({
   kind: "builtin",
   id: "dark",
-  displayName: "Dark",
+  displayName: "Dark default",
   base: "dark",
   iconLabel: "dark",
   eventPalette: DARK_EVENT_PALETTE,
