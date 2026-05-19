@@ -66,15 +66,18 @@
   type SettingsModalComponent = typeof import("$lib/components/settings/SettingsModal.svelte").default;
   type FloatingThemeEditorComponent = typeof import("$lib/components/settings/FloatingThemeEditor.svelte").default;
   type HelpShortcutsModalComponent = typeof import("$lib/components/HelpShortcutsModal.svelte").default;
+  type ThemeQuickSwitcherComponent = typeof import("$lib/components/ThemeQuickSwitcher.svelte").default;
 
   let PerformancePopover = $state<PerformancePopoverComponent | null>(null);
   let SettingsModal = $state<SettingsModalComponent | null>(null);
   let FloatingThemeEditor = $state<FloatingThemeEditorComponent | null>(null);
   let HelpShortcutsModal = $state<HelpShortcutsModalComponent | null>(null);
+  let ThemeQuickSwitcher = $state<ThemeQuickSwitcherComponent | null>(null);
   let loadingPerformancePopover: Promise<void> | null = null;
   let loadingSettingsModal: Promise<void> | null = null;
   let loadingFloatingThemeEditor: Promise<void> | null = null;
   let loadingHelpShortcutsModal: Promise<void> | null = null;
+  let loadingThemeQuickSwitcher: Promise<void> | null = null;
 
   function loadPerformancePopover(): Promise<void> {
     if (PerformancePopover) return Promise.resolve();
@@ -124,6 +127,18 @@
     return loadingHelpShortcutsModal;
   }
 
+  function loadThemeQuickSwitcher(): Promise<void> {
+    if (ThemeQuickSwitcher) return Promise.resolve();
+    loadingThemeQuickSwitcher ??= import("$lib/components/ThemeQuickSwitcher.svelte")
+      .then((module) => {
+        ThemeQuickSwitcher = module.default;
+      })
+      .finally(() => {
+        loadingThemeQuickSwitcher = null;
+      });
+    return loadingThemeQuickSwitcher;
+  }
+
   function togglePerfMenu() {
     showPerfMenu = !showPerfMenu;
     showUtilityOverflowMenu = false;
@@ -134,6 +149,17 @@
     if (lockedByThemeEditor) return;
     showUtilityOverflowMenu = false;
     theme.toggle();
+  }
+
+  let showThemeQuickSwitcher = $state(false);
+
+  function openThemeQuickSwitcher() {
+    if (lockedByThemeEditor) return;
+    showPerfMenu = false;
+    showTitleBarMenu = false;
+    showUtilityOverflowMenu = false;
+    showThemeQuickSwitcher = true;
+    void loadThemeQuickSwitcher();
   }
 
   function openSettings() {
@@ -334,6 +360,14 @@
       e.preventDefault();
       e.stopPropagation();
       toggleTheme();
+      return;
+    }
+
+    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "t") {
+      if (isEditableKeyboardTarget(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openThemeQuickSwitcher();
       return;
     }
 
@@ -887,6 +921,11 @@
 {#if showHelpShortcuts && HelpShortcutsModal}
   {@const ShortcutsModal = HelpShortcutsModal}
   <ShortcutsModal onClose={() => { showHelpShortcuts = false; }} />
+{/if}
+
+{#if showThemeQuickSwitcher && ThemeQuickSwitcher}
+  {@const Switcher = ThemeQuickSwitcher}
+  <Switcher onClose={() => { showThemeQuickSwitcher = false; }} />
 {/if}
 
 {#if settingsLauncher.isOpen}

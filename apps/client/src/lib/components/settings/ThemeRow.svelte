@@ -7,11 +7,8 @@
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import { cn } from "$lib/utils";
-  import {
-    resolveAppTokens,
-    resolveCalendarTokens,
-    type Theme,
-  } from "$lib/stores/themes";
+  import type { Theme } from "$lib/stores/themes";
+  import ThemeMiniPreview from "./ThemeMiniPreview.svelte";
 
   let {
     theme,
@@ -31,20 +28,7 @@
     onDelete: () => void;
   } = $props();
 
-  // Sampled palette indices for the gradient strip inside the preview.
-  // Picked across the spectrum so the strip reads as a quick visual summary
-  // of the palette without needing all 32 swatches.
-  const PREVIEW_INDICES: readonly number[] = [2, 5, 8, 11, 14, 17, 20, 23, 27, 31];
-
   const BaseIcon = $derived(theme.iconLabel === "dark" ? Moon : Sun);
-  const appTokens = $derived(resolveAppTokens(theme));
-  const calTokens = $derived(resolveCalendarTokens(theme));
-
-  const previewGradient = $derived(
-    `linear-gradient(to right, ${PREVIEW_INDICES.map(
-      (i) => theme.eventPalette[i],
-    ).join(", ")})`,
-  );
 </script>
 
 <div
@@ -73,31 +57,7 @@
         {/if}
       </div>
     </div>
-    <div
-      class="flex shrink-0 flex-col gap-0.5 rounded-md p-1 ring-1 ring-black/10 dark:ring-white/10"
-      style="background: {appTokens['--background']}; width: 96px;"
-      aria-hidden="true"
-    >
-      <div
-        class="flex h-3 items-center gap-1 rounded-sm px-1"
-        style="background: {appTokens['--card']};"
-      >
-        <span
-          class="flex-1 truncate text-[0.533333rem] font-bold leading-none"
-          style="color: {appTokens['--foreground']};"
-        >
-          Aa
-        </span>
-        <span
-          class="h-1.5 w-1.5 shrink-0 rounded-full"
-          style="background: {appTokens['--primary']};"
-        ></span>
-      </div>
-      <div
-        class="h-2 w-full rounded-sm"
-        style="background-color: {calTokens['--cal-bg']}; background-image: {previewGradient};"
-      ></div>
-    </div>
+    <ThemeMiniPreview {theme} />
   </button>
 
   <div class="flex shrink-0 items-center justify-end gap-1">

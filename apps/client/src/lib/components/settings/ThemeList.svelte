@@ -23,6 +23,7 @@
   let toast = $state<string | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   const quickToggleShortcuts = ["Ctrl + Shift + L"] as const;
+  const themePickerShortcuts = ["Ctrl + Shift + T"] as const;
 
   const orderedThemes = $derived.by(() => {
     const all = Object.values(themeStore.registry);
@@ -198,10 +199,13 @@
     </div>
   </section>
 
-  <section class="flex flex-col gap-4">
-    <h3 class="px-1 text-[0.866667rem] font-normal text-foreground">All themes</h3>
+  <section class="flex flex-col gap-3">
+    <div class="px-1">
+      <h3 class="text-[0.866667rem] font-normal text-foreground">All themes</h3>
+      <ShortcutDescription shortcuts={themePickerShortcuts} />
+    </div>
 
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-2">
       {#each orderedThemes as t (t.id)}
         <ThemeRow
           theme={t}

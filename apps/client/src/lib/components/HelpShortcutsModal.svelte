@@ -32,6 +32,7 @@
         { keys: ["Ctrl + M"], action: "Open music" },
         { keys: ["Ctrl + ,"], action: "Open settings" },
         { keys: ["Ctrl + Shift + L"], action: "Toggle light/dark mode" },
+        { keys: ["Ctrl + Shift + T"], action: "Open theme picker" },
         { keys: ["Ctrl + Shift + P"], action: "Toggle performance panel" },
         { keys: ["F1"], action: "Open help" },
         { keys: ["Ctrl + Tab"], action: "Next view" },
