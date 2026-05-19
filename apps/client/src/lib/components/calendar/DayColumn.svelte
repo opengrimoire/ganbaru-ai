@@ -572,7 +572,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative z-2 min-w-0 {hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+  class="relative z-2 min-w-0 {hoverResizeBlockId !== null ? 'cursor-ns-resize' : 'cursor-default'}"
   style="
     height: calc(24 * var(--hour-h) * 1px);
     contain: layout style;
@@ -638,7 +638,7 @@
 
   <div
     bind:this={columnEl}
-    class="absolute top-0 right-0 bottom-0 {draggingEventId ? 'pointer-events-none' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : panelOpen ? '' : 'cursor-crosshair'}"
+    class="absolute top-0 right-0 bottom-0 {draggingEventId ? 'pointer-events-none' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : 'cursor-default'}"
     style="left: {railWidth + 4}px;"
     onpointerdown={handleColumnAreaPointerDown}
   >

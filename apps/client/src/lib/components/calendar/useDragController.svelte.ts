@@ -444,7 +444,7 @@ export function useDragController(config: DragControllerConfig) {
     };
 
     lastPointerEvent = e;
-    lockCursor("crosshair");
+    lockCursor("ns-resize");
     window.addEventListener("pointermove", handleCreateMove);
     window.addEventListener("pointerup", handleCreateEnd);
     createHoldTimer = window.setTimeout(() => {
