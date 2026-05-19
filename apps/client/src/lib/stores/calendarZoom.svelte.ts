@@ -1,14 +1,20 @@
 const STORAGE_KEY = "ganbaruai-calendar-zoom";
 export const CALENDAR_ZOOM_FRAME_EVENT = "ganbaruai-calendar-zoom-frame";
-const ZOOM_LEVELS = [30, 45, 67, 100, 150, 200];
-const DEFAULT_INDEX = 1; // 45px, 15min grid
+const DEFAULT_HOUR_HEIGHT = 50;
+const ZOOM_PERCENT_LEVELS = [50, 75, 100, 125, 150, 200, 300, 400] as const;
+const ZOOM_LEVELS: readonly number[] = ZOOM_PERCENT_LEVELS.map(
+  (percent) => (DEFAULT_HOUR_HEIGHT * percent) / 100,
+);
+const DEFAULT_INDEX = ZOOM_PERCENT_LEVELS.indexOf(100);
+const LEGACY_DEFAULT_HOUR_HEIGHT = 45;
+const LEGACY_ZOOM_LEVELS = [30, 45, 67, 100, 150, 200] as const;
 const ANIM_DURATION = 150; // ms for smooth zoom animation
 
-function findClosestIndex(height: number): number {
+function findClosestIndexIn(values: readonly number[], target: number): number {
   let best = 0;
-  let bestDist = Math.abs(ZOOM_LEVELS[0] - height);
-  for (let i = 1; i < ZOOM_LEVELS.length; i++) {
-    const dist = Math.abs(ZOOM_LEVELS[i] - height);
+  let bestDist = Math.abs(values[0] - target);
+  for (let i = 1; i < values.length; i++) {
+    const dist = Math.abs(values[i] - target);
     if (dist < bestDist) {
       best = i;
       bestDist = dist;
@@ -17,12 +23,26 @@ function findClosestIndex(height: number): number {
   return best;
 }
 
+function findClosestIndex(height: number): number {
+  return findClosestIndexIn(ZOOM_LEVELS, height);
+}
+
+function isLegacyZoomHeight(height: number): boolean {
+  return LEGACY_ZOOM_LEVELS.some((level) => Math.abs(level - height) < 0.001);
+}
+
+function legacyHeightToCurrentHeight(height: number): number {
+  const legacyPercent = (height / LEGACY_DEFAULT_HOUR_HEIGHT) * 100;
+  return ZOOM_LEVELS[findClosestIndexIn(ZOOM_PERCENT_LEVELS, legacyPercent)];
+}
+
 function loadSaved(): number {
   if (typeof localStorage === "undefined") return ZOOM_LEVELS[DEFAULT_INDEX];
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return ZOOM_LEVELS[DEFAULT_INDEX];
   const parsed = parseFloat(saved);
   if (Number.isNaN(parsed)) return ZOOM_LEVELS[DEFAULT_INDEX];
+  if (isLegacyZoomHeight(parsed)) return legacyHeightToCurrentHeight(parsed);
   return parsed;
 }
 

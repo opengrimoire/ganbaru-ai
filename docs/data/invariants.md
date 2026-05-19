@@ -12,7 +12,7 @@ A focus fill band on the rail can only exist for a segment with `actual_start` i
 
 **What would break:** the user could be misled into thinking they have already focused, leading them to skip a session they meant to do. Analytics derived from green time would inflate.
 
-**Enforced by:** segment fetch (no future timestamps from the database), the active-segment renderer (clamps to `now`), the projected-band renderer (emits break marks only, never green), and a single time-to-pixel transform shared by the `now` indicator and any green band. That transform must stay correct under every viewport state: scroll position, calendar zoom (30 to 200 px/hour), and app or OS scaling. A green pixel past the `now` line under any zoom or scroll combination is a real violation, not a rounding artifact to ignore.
+**Enforced by:** segment fetch (no future timestamps from the database), the active-segment renderer (clamps to `now`), the projected-band renderer (emits break marks only, never green), and a single time-to-pixel transform shared by the `now` indicator and any green band. That transform must stay correct under every viewport state: scroll position, calendar zoom (25 to 200 px/hour), and app or OS scaling. A green pixel past the `now` line under any zoom or scroll combination is a real violation, not a rounding artifact to ignore.
 
 ## 2. Exactly one segment is `active` at a time
 
