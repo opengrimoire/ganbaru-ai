@@ -134,6 +134,24 @@
     flashToast("Theme imported");
   }
 
+  async function handleExport(id: ThemeId) {
+    const contents = themeStore.exportTheme(id);
+    if (!contents) {
+      flashToast("Could not export theme");
+      return;
+    }
+    try {
+      const saved = await invoke<boolean>("vault_pick_and_write_theme_json", {
+        defaultName: `${id}.json`,
+        contents,
+      });
+      if (saved) flashToast("Theme exported");
+    } catch (err) {
+      console.error("theme export failed", err);
+      flashToast("Could not export theme");
+    }
+  }
+
   function handleDelete(id: ThemeId) {
     pendingDelete = id;
   }
@@ -205,7 +223,7 @@
       <ShortcutDescription shortcuts={themePickerShortcuts} />
     </div>
 
-    <div class="flex flex-col gap-2">
+    <div class="flex flex-col">
       {#each orderedThemes as t (t.id)}
         <ThemeRow
           theme={t}
@@ -214,11 +232,12 @@
           onApply={() => handleApply(t.id)}
           onOpen={() => handleOpen(t.id)}
           onDuplicate={() => handleDuplicate(t.id)}
+          onExport={() => handleExport(t.id)}
           onDelete={() => handleDelete(t.id)}
         />
       {/each}
-      <div class="px-1 py-1">
-        {#if importOpen}
+      {#if importOpen}
+        <div class="px-1 py-1">
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between gap-2">
               <span class="text-[0.8rem] font-medium text-foreground">
@@ -228,6 +247,7 @@
                 type="button"
                 onclick={handleImportToggle}
                 aria-label="Close import"
+                data-app-tooltip-disabled="true"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <X size={13} strokeWidth={2} />
@@ -276,17 +296,21 @@
               </button>
             </div>
           </div>
-        {:else}
-          <button
-            type="button"
-            onclick={handleImportToggle}
-            class="flex h-7 w-fit items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <Upload size={13} strokeWidth={2.25} />
-            <span>Import theme</span>
-          </button>
-        {/if}
-      </div>
+        </div>
+      {:else}
+        <button
+          type="button"
+          onclick={handleImportToggle}
+          class="flex w-full min-w-0 items-center gap-2 rounded-md px-1 py-1 text-[0.866667rem] text-foreground transition-colors hover:bg-accent/25 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          <Upload
+            size={13}
+            strokeWidth={1.75}
+            class="shrink-0 text-muted-foreground"
+          />
+          <span>Import theme</span>
+        </button>
+      {/if}
     </div>
   </section>
 

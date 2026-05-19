@@ -189,15 +189,22 @@ fn pick_save_path(
     default_name: &str,
     filter_name: &str,
     extensions: &[&str],
+    start_directory: Option<PathBuf>,
 ) -> Result<Option<PathBuf>, String> {
-    app.dialog()
+    let mut picker = app
+        .dialog()
         .file()
         .set_title(title)
         .set_file_name(default_name)
-        .add_filter(filter_name, extensions)
-        .blocking_save_file()
-        .map(dialog_path)
-        .transpose()
+        .add_filter(filter_name, extensions);
+    if let Some(directory) = start_directory {
+        picker = picker.set_directory(directory);
+    }
+    picker.blocking_save_file().map(dialog_path).transpose()
+}
+
+fn existing_downloads_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path().download_dir().ok().filter(|path| path.is_dir())
 }
 
 /// Hard cap on the number of entries we will inspect inside a single zip.
@@ -403,6 +410,7 @@ pub async fn vault_pick_and_write_ics_export(
         &default_name,
         "iCalendar",
         &["ics"],
+        None,
     )?
     else {
         return Ok(false);
@@ -432,7 +440,14 @@ pub async fn vault_pick_and_write_theme_json(
     contents: String,
 ) -> Result<bool, String> {
     let default_name = default_file_name(&default_name, "theme", "json");
-    let Some(path) = pick_save_path(&app, "Export theme", &default_name, "Theme JSON", &["json"])?
+    let Some(path) = pick_save_path(
+        &app,
+        "Export theme",
+        &default_name,
+        "Theme JSON",
+        &["json"],
+        existing_downloads_directory(&app),
+    )?
     else {
         return Ok(false);
     };

@@ -4,6 +4,7 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import Eye from "@lucide/svelte/icons/eye";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Download from "@lucide/svelte/icons/download";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import { cn } from "$lib/utils";
@@ -17,6 +18,7 @@
     onApply,
     onOpen,
     onDuplicate,
+    onExport,
     onDelete,
   }: {
     theme: Theme;
@@ -25,25 +27,51 @@
     onApply: () => void;
     onOpen: () => void;
     onDuplicate: () => void;
+    onExport: () => void;
     onDelete: () => void;
   } = $props();
 
   const BaseIcon = $derived(theme.iconLabel === "dark" ? Moon : Sun);
+  let hovering = $state(false);
+  let suppressHover = $state(false);
+
+  function handlePointerEnter() {
+    hovering = true;
+    suppressHover = false;
+  }
+
+  function handlePointerLeave() {
+    hovering = false;
+    suppressHover = false;
+  }
+
+  function handlePointerDown() {
+    suppressHover = true;
+  }
 </script>
 
 <div
+  role="group"
+  aria-label={theme.displayName}
+  onpointerenter={handlePointerEnter}
+  onpointerleave={handlePointerLeave}
+  onpointerdown={handlePointerDown}
   class={cn(
-    "flex items-center justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-3",
+    "relative flex items-center justify-between gap-1 rounded-md px-1 py-1 transition-colors max-[520px]:flex-col max-[520px]:items-stretch",
     !isActive && "hover:text-foreground",
+    hovering && !suppressHover && "bg-accent/25",
   )}
 >
   <button
     type="button"
     onclick={onApply}
-    class="flex min-w-0 flex-1 items-center gap-3 text-left"
+    data-app-tooltip-disabled="true"
+    class="absolute inset-0 rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default"
     disabled={isActive}
     aria-label={isActive ? `${theme.displayName} is active` : `Apply ${theme.displayName}`}
-  >
+  ></button>
+
+  <div class="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center gap-3 text-left">
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2 text-[0.866667rem] text-foreground">
         <BaseIcon
@@ -58,9 +86,9 @@
       </div>
     </div>
     <ThemeMiniPreview {theme} />
-  </button>
+  </div>
 
-  <div class="flex shrink-0 items-center justify-end gap-1">
+  <div class="relative z-20 flex shrink-0 items-center justify-end gap-1">
     <button
       type="button"
       onclick={onDuplicate}
@@ -83,6 +111,15 @@
       {:else}
         <Pencil size={13} strokeWidth={2} />
       {/if}
+    </button>
+    <button
+      type="button"
+      onclick={onExport}
+      aria-label="Export theme JSON"
+      data-app-tooltip-disabled="true"
+      class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+    >
+      <Download size={13} strokeWidth={2} />
     </button>
     <button
       type="button"

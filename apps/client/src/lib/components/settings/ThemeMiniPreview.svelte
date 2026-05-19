@@ -19,7 +19,7 @@
 </script>
 
 <div
-  class="flex shrink-0 flex-col gap-0.5 rounded-md p-1 ring-1 ring-black/10 dark:ring-white/10"
+  class="flex shrink-0 flex-col gap-0.5 rounded-md p-1 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
   style="background: {appTokens['--background']}; width: 96px;"
   aria-hidden="true"
 >
