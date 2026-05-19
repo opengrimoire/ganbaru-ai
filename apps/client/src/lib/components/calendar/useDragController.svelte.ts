@@ -242,7 +242,7 @@ export function useDragController(config: DragControllerConfig) {
       lockCursor("grabbing");
     }
 
-    dragInteractionActive = dragState.type === "resize-top" || dragState.type === "resize-bottom";
+    dragInteractionActive = false;
     grabbingId = eventId; // Show contour immediately on grab
     lastPointerEvent = e;
     window.addEventListener("pointermove", handleDragMove);
