@@ -669,7 +669,7 @@
     {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     {@const dragIndicators = getEventIndicatorState(dragPreview.event)}
     <div
-      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
+      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[12px] leading-tight"
       style="
         top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
         height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
@@ -685,16 +685,16 @@
         {#if dragIndicators.iconCount > 0}
           <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {dragIconColor};">
             {#if dragIndicators.hasRepeat}
-              <Repeat size={8} class="shrink-0" />
+              <Repeat size={9} class="shrink-0" />
             {/if}
             {#if dragIndicators.hasCallLink}
-              <Video size={8} class="shrink-0" />
+              <Video size={9} class="shrink-0" />
             {/if}
             {#if dragIndicators.hasLocation}
-              <MapPin size={8} class="shrink-0" />
+              <MapPin size={9} class="shrink-0" />
             {/if}
             {#if dragIndicators.hasGenericMeeting}
-              <Users size={8} class="shrink-0" />
+              <Users size={9} class="shrink-0" />
             {/if}
           </div>
         {/if}
@@ -705,13 +705,13 @@
         >
           {#if dragPreview.event.title}{dragPreview.event.title}{:else}(No title){/if}
         </div>
-        {#if dragH > 28}
+        {#if dragH > 32}
           {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
           {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
           <div class="truncate" style="color: {dragTimeColor};">{st} - {et}</div>
         {/if}
-        {#if dragH > 44 && dragPreview.event.location}
-          <div class="truncate text-[9px]" style="color: {dragLocationColor};">{dragPreview.event.location}</div>
+        {#if dragH > 48 && dragPreview.event.location}
+          <div class="truncate text-[10px]" style="color: {dragLocationColor};">{dragPreview.event.location}</div>
         {/if}
       </div>
     </div>
@@ -725,7 +725,7 @@
     {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     <div
       data-create-preview
-      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[11px] leading-tight"
+      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[12px] leading-tight"
       style="
         top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
         height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
@@ -741,7 +741,7 @@
         <div class="truncate font-medium">
           {#if createPreview.event.title}{createPreview.event.title}{:else}(No title){/if}
         </div>
-        {#if createH > 28}
+        {#if createH > 32}
           {@const st = createPreview.event.start.split(" ")[1] ?? ""}
           {@const et = createPreview.event.end.split(" ")[1] ?? ""}
           <div class="truncate" style="color: {createTimeColor};">{st} - {et}</div>

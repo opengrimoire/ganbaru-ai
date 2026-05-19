@@ -99,7 +99,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {statusPatternClass} {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[12px] leading-tight select-none {statusPatternClass} {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -127,16 +127,16 @@
     {#if hasIcons}
       <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">
         {#if indicators.hasRepeat}
-          <Repeat size={8} class="shrink-0" />
+          <Repeat size={9} class="shrink-0" />
         {/if}
         {#if indicators.hasCallLink}
-          <Video size={8} class="shrink-0" />
+          <Video size={9} class="shrink-0" />
         {/if}
         {#if indicators.hasLocation}
-          <MapPin size={8} class="shrink-0" />
+          <MapPin size={9} class="shrink-0" />
         {/if}
         {#if indicators.hasGenericMeeting}
-          <Users size={8} class="shrink-0" />
+          <Users size={9} class="shrink-0" />
         {/if}
       </div>
     {/if}
@@ -150,7 +150,7 @@
     </div>
     <div class="event-time truncate" style="color: {timeColor};">{startTime} - {endTime}</div>
     {#if positioned.event.location}
-      <div class="event-location truncate text-[9px]" style="color: {locationColor};">{positioned.event.location}</div>
+      <div class="event-location truncate text-[10px]" style="color: {locationColor};">{positioned.event.location}</div>
     {/if}
   </div>
 
@@ -233,15 +233,15 @@
     .event-title { display: block; }
   }
 
-  @container event-block (min-height: 16px) {
+  @container event-block (min-height: 17px) {
     .event-icons { display: flex; }
   }
 
-  @container event-block (min-height: 28px) {
+  @container event-block (min-height: 32px) {
     .event-time { display: block; }
   }
 
-  @container event-block (min-height: 44px) {
+  @container event-block (min-height: 48px) {
     .event-location { display: block; }
   }
 
