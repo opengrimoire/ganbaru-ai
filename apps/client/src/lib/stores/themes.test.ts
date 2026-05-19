@@ -14,6 +14,7 @@ import {
   isBuiltinThemeId,
   isThemeCalendarDark,
   isThemeDark,
+  pickQuickToggleTarget,
   resolveCalCanvas,
   resolveCanvas,
   themeIds,
@@ -236,6 +237,49 @@ describe("getThemeById", () => {
     expect(getThemeById("toString")).toBeUndefined();
     expect(getThemeById("__proto__")).toBeUndefined();
     expect(getThemeById("constructor")).toBeUndefined();
+  });
+});
+
+describe("pickQuickToggleTarget", () => {
+  it("switches from the configured light target to the configured dark target", () => {
+    expect(
+      pickQuickToggleTarget({
+        activeId: "light-custom",
+        activeIsDark: false,
+        lightId: "light-custom",
+        darkId: "dark-custom",
+      }),
+    ).toBe("dark-custom");
+  });
+
+  it("switches from the configured dark target to the configured light target", () => {
+    expect(
+      pickQuickToggleTarget({
+        activeId: "dark-custom",
+        activeIsDark: true,
+        lightId: "light-custom",
+        darkId: "dark-custom",
+      }),
+    ).toBe("light-custom");
+  });
+
+  it("uses current luminance when the active theme is neither configured target", () => {
+    expect(
+      pickQuickToggleTarget({
+        activeId: "neutral",
+        activeIsDark: true,
+        lightId: "light-custom",
+        darkId: "dark-custom",
+      }),
+    ).toBe("light-custom");
+    expect(
+      pickQuickToggleTarget({
+        activeId: "neutral",
+        activeIsDark: false,
+        lightId: "light-custom",
+        darkId: "dark-custom",
+      }),
+    ).toBe("dark-custom");
   });
 });
 

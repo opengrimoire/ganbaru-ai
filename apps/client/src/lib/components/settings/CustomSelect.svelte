@@ -5,6 +5,7 @@
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
+  import ShortcutDescription from "./ShortcutDescription.svelte";
   import {
     pickSelectPopoverGeometry,
     type SelectPopoverGeometry,
@@ -25,6 +26,7 @@
     label,
     description,
     descriptionShortcuts = [],
+    ariaLabel,
     canReset = false,
     onReset,
     class: className = "",
@@ -35,6 +37,7 @@
     label?: string;
     description?: string;
     descriptionShortcuts?: readonly string[];
+    ariaLabel?: string;
     canReset?: boolean;
     onReset?: () => void;
     class?: string;
@@ -57,10 +60,6 @@
   let popoverReady = $state(false);
 
   const current = $derived(options.find((o) => o.value === value));
-
-  function shortcutParts(shortcut: string): string[] {
-    return shortcut.split(" + ");
-  }
 
   function toRect(rect: DOMRect): SelectPopoverRect {
     return {
@@ -179,25 +178,7 @@
     <div class="min-w-0 flex-1">
       <div class="text-[0.866667rem] text-foreground">{label}</div>
       {#if descriptionShortcuts.length > 0}
-        <div
-          class="mt-0.5 flex min-h-4 items-center gap-4 overflow-hidden whitespace-nowrap text-muted-foreground"
-        >
-          <span class="text-[0.666667rem] leading-4">Shortcuts:</span>
-          {#each descriptionShortcuts as shortcut}
-            <span class="inline-flex items-center gap-0.5">
-              {#each shortcutParts(shortcut) as part, partIndex}
-                {#if partIndex > 0}
-                  <span class="text-[0.666667rem] leading-4 text-muted-foreground">+</span>
-                {/if}
-                <kbd
-                  class="inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-background px-1 font-mono text-[0.666667rem] leading-none text-foreground shadow-sm"
-                >
-                  {part}
-                </kbd>
-              {/each}
-            </span>
-          {/each}
-        </div>
+        <ShortcutDescription shortcuts={descriptionShortcuts} />
       {:else if description}
         <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{description}</div>
       {/if}
@@ -211,6 +192,7 @@
         onclick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={ariaLabel ?? label}
         class="flex h-7 w-44 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
       >
         <span class="truncate" style={current?.style}>{current?.label ?? value}</span>

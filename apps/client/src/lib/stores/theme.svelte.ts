@@ -14,6 +14,7 @@ import {
   isBuiltinThemeId,
   isSemanticSignalAppToken,
   isThemeDark,
+  pickQuickToggleTarget,
   generateThemeId,
   normalizeSemanticSignalAppIsolated,
   serializeTheme,
@@ -51,11 +52,15 @@ import {
 } from "../api/themes";
 
 const ACTIVE_KEY = "theme.activeId";
+const QUICK_TOGGLE_LIGHT_KEY = "theme.quickToggleLightId";
+const QUICK_TOGGLE_DARK_KEY = "theme.quickToggleDarkId";
 const LEGACY_CUSTOM_KEY = "themes.user";
 
 let customThemes = $state<Record<ThemeId, UserTheme>>({});
 let dismissals = $state<Record<ThemeId, number>>({});
 let activeId = $state<ThemeId>(DEFAULT_THEME_ID);
+let quickToggleLightId = $state<ThemeId>(lightTheme.id);
+let quickToggleDarkId = $state<ThemeId>(darkTheme.id);
 let appliedTokenKeys = new Set<string>();
 let hydrated = false;
 
@@ -86,6 +91,16 @@ function loadActiveIdFromConfig(): ThemeId {
   const saved = getConfigKey<string | undefined>(ACTIVE_KEY, undefined);
   if (saved && getThemeById(saved, combinedRegistry())) return saved;
   return DEFAULT_THEME_ID;
+}
+
+function validThemeId(id: ThemeId, fallback: ThemeId): ThemeId {
+  return getThemeById(id, combinedRegistry()) ? id : fallback;
+}
+
+function loadQuickToggleIdFromConfig(key: string, fallback: ThemeId): ThemeId {
+  const saved = getConfigKey<string | undefined>(key, undefined);
+  if (saved && getThemeById(saved, combinedRegistry())) return saved;
+  return fallback;
 }
 
 function resolveActive(): Theme {
@@ -141,6 +156,14 @@ export async function hydrateUserThemes(): Promise<void> {
     if (row.engine_version > prev) dismissals[row.theme_id] = row.engine_version;
   }
   activeId = loadActiveIdFromConfig();
+  quickToggleLightId = loadQuickToggleIdFromConfig(
+    QUICK_TOGGLE_LIGHT_KEY,
+    lightTheme.id,
+  );
+  quickToggleDarkId = loadQuickToggleIdFromConfig(
+    QUICK_TOGGLE_DARK_KEY,
+    darkTheme.id,
+  );
   hydrated = true;
   applyThemeToDom();
 }
@@ -480,6 +503,29 @@ function setTheme(id: ThemeId): void {
   setConfigKey(ACTIVE_KEY, id);
 }
 
+function setQuickToggleTheme(slot: "light" | "dark", id: ThemeId): boolean {
+  if (!getThemeById(id, combinedRegistry())) return false;
+  if (slot === "light") {
+    quickToggleLightId = id;
+    setConfigKey(QUICK_TOGGLE_LIGHT_KEY, id);
+  } else {
+    quickToggleDarkId = id;
+    setConfigKey(QUICK_TOGGLE_DARK_KEY, id);
+  }
+  return true;
+}
+
+function resetQuickToggleThemeReference(id: ThemeId): void {
+  if (quickToggleLightId === id) {
+    quickToggleLightId = lightTheme.id;
+    setConfigKey(QUICK_TOGGLE_LIGHT_KEY, quickToggleLightId);
+  }
+  if (quickToggleDarkId === id) {
+    quickToggleDarkId = darkTheme.id;
+    setConfigKey(QUICK_TOGGLE_DARK_KEY, quickToggleDarkId);
+  }
+}
+
 function existingDisplayNames(): string[] {
   return Object.values(combinedRegistry()).map((t) => t.displayName);
 }
@@ -519,6 +565,7 @@ function discardFreshTheme(id: ThemeId): void {
   delete dismissals[id];
   freshThemes.delete(id);
   pendingDismissals.delete(id);
+  resetQuickToggleThemeReference(id);
   if (id === activeId) {
     activeId = DEFAULT_THEME_ID;
     applyThemeToDom();
@@ -591,6 +638,7 @@ async function deleteTheme(id: ThemeId): Promise<boolean> {
   pendingDismissals.delete(id);
   delete customThemes[id];
   delete dismissals[id];
+  resetQuickToggleThemeReference(id);
   if (id === activeId) {
     activeId = DEFAULT_THEME_ID;
     applyThemeToDom();
@@ -1133,6 +1181,12 @@ export function getTheme() {
     get id(): ThemeId {
       return activeId;
     },
+    get quickToggleLightId(): ThemeId {
+      return validThemeId(quickToggleLightId, lightTheme.id);
+    },
+    get quickToggleDarkId(): ThemeId {
+      return validThemeId(quickToggleDarkId, darkTheme.id);
+    },
     get isDark(): boolean {
       return isThemeDark(resolveActive());
     },
@@ -1149,6 +1203,7 @@ export function getTheme() {
     },
     shouldOfferRebake,
     setTheme,
+    setQuickToggleTheme,
     duplicateTheme,
     renameTheme,
     deleteTheme,
@@ -1174,12 +1229,13 @@ export function getTheme() {
     persistThemeToDb,
     discardFreshTheme,
     restoreThemeFromSnapshot,
-    /**
-     * Cycle between the two built-in themes. Used by the title bar
-     * sun/moon toggle. For the full multi-theme selector, use setTheme.
-     */
     toggle() {
-      const nextId = activeId === lightTheme.id ? darkTheme.id : lightTheme.id;
+      const nextId = pickQuickToggleTarget({
+        activeId,
+        activeIsDark: isThemeDark(resolveActive()),
+        lightId: validThemeId(quickToggleLightId, lightTheme.id),
+        darkId: validThemeId(quickToggleDarkId, darkTheme.id),
+      });
       setTheme(nextId);
     },
   };

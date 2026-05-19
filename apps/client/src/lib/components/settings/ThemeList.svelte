@@ -2,11 +2,15 @@
   import Upload from "@lucide/svelte/icons/upload";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import X from "@lucide/svelte/icons/x";
+  import Sun from "@lucide/svelte/icons/sun";
+  import Moon from "@lucide/svelte/icons/moon";
   import { invoke } from "@tauri-apps/api/core";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import type { ThemeId } from "$lib/stores/themes";
   import ThemeRow from "./ThemeRow.svelte";
+  import CustomSelect from "./CustomSelect.svelte";
+  import ShortcutDescription from "./ShortcutDescription.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const themeStore = getTheme();
@@ -18,6 +22,7 @@
   let importErrors = $state<string[]>([]);
   let toast = $state<string | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  const quickToggleShortcuts = ["Ctrl + Shift + L"] as const;
 
   const orderedThemes = $derived.by(() => {
     const all = Object.values(themeStore.registry);
@@ -26,6 +31,12 @@
       ...all.filter((t) => !themeStore.isBuiltin(t.id)),
     ];
   });
+  const themeOptions = $derived(
+    orderedThemes.map((theme) => ({
+      value: theme.id,
+      label: theme.displayName,
+    })),
+  );
 
   function flashToast(message: string) {
     toast = message;
@@ -37,6 +48,14 @@
 
   function handleApply(id: ThemeId) {
     themeStore.setTheme(id);
+  }
+
+  function handleQuickToggleLight(id: string) {
+    themeStore.setQuickToggleTheme("light", id);
+  }
+
+  function handleQuickToggleDark(id: string) {
+    themeStore.setQuickToggleTheme("dark", id);
   }
 
   // Duplicated themes open with the edited theme as the active one so the
@@ -136,89 +155,136 @@
     </div>
   </header>
 
-  {#if importOpen}
-    <div class="flex flex-col gap-2 px-1">
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-[0.8rem] font-medium text-foreground">
-          Paste theme JSON
-        </span>
-        <button
-          type="button"
-          onclick={handleImportToggle}
-          aria-label="Close import"
-          class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X size={13} strokeWidth={2} />
-        </button>
+  <section
+    class="flex items-center justify-between gap-4 px-1 py-1 max-[640px]:flex-col max-[640px]:items-stretch max-[640px]:gap-2"
+  >
+    <div class="min-w-0 flex-1">
+      <h3 class="text-[0.866667rem] font-normal text-foreground">Quick toggle</h3>
+      <ShortcutDescription shortcuts={quickToggleShortcuts} />
+    </div>
+    <div
+      class="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 max-[640px]:justify-start"
+    >
+      <div class="flex items-center gap-1.5">
+        <Sun
+          size={13}
+          strokeWidth={1.75}
+          class="shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <CustomSelect
+          ariaLabel="Light mode quick toggle theme"
+          value={themeStore.quickToggleLightId}
+          options={themeOptions}
+          onChange={handleQuickToggleLight}
+          class="w-36"
+        />
       </div>
-      <textarea
-        bind:value={importDraft}
-        placeholder={'{\n  "id": "midnight",\n  "displayName": "Midnight",\n  ...\n}'}
-        rows={8}
-        spellcheck={false}
-        class="w-full resize-y rounded-md border border-border bg-background p-2 text-[0.733333rem] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-      ></textarea>
-      {#if importErrors.length > 0}
-        <ul
-          class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[0.733333rem] text-destructive"
-        >
-          {#each importErrors as err}
-            <li>{err}</li>
-          {/each}
-        </ul>
-      {/if}
-      <div class="flex items-center justify-between gap-2 max-[520px]:flex-col max-[520px]:items-stretch">
-        <div class="flex items-center gap-1.5 max-[520px]:flex-wrap">
-          <button
-            type="button"
-            onclick={handlePasteFromClipboard}
-            class="rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-          >
-            Paste from clipboard
-          </button>
-          <button
-            type="button"
-            onclick={handleImportFromFile}
-            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-          >
-            <FolderOpen size={11} strokeWidth={2.25} />
-            <span>Open file</span>
-          </button>
-        </div>
-        <button
-          type="button"
-          onclick={handleImport}
-          class="rounded-md border border-border bg-primary px-3 py-1 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 max-[520px]:self-end"
-        >
-          Import
-        </button>
+      <div class="flex items-center gap-1.5">
+        <Moon
+          size={13}
+          strokeWidth={1.75}
+          class="shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <CustomSelect
+          ariaLabel="Dark mode quick toggle theme"
+          value={themeStore.quickToggleDarkId}
+          options={themeOptions}
+          onChange={handleQuickToggleDark}
+          class="w-36"
+        />
       </div>
     </div>
-  {/if}
+  </section>
 
-  <div class="flex flex-col gap-3">
-    {#each orderedThemes as t (t.id)}
-      <ThemeRow
-        theme={t}
-        isActive={t.id === themeStore.id}
-        isBuiltin={themeStore.isBuiltin(t.id)}
-        onApply={() => handleApply(t.id)}
-        onOpen={() => handleOpen(t.id)}
-        onDuplicate={() => handleDuplicate(t.id)}
-        onDelete={() => handleDelete(t.id)}
-      />
-    {/each}
-    <div class="px-1 py-1">
-      <button
-        type="button"
-        onclick={handleImportToggle}
-        class="flex h-7 w-fit items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus:ring-1 focus:ring-ring"
-      >
-        <Upload size={13} strokeWidth={2.25} />
-        <span>Import theme</span>
-      </button>
+  <section class="flex flex-col gap-4">
+    <h3 class="px-1 text-[0.866667rem] font-normal text-foreground">All themes</h3>
+
+    <div class="flex flex-col gap-3">
+      {#each orderedThemes as t (t.id)}
+        <ThemeRow
+          theme={t}
+          isActive={t.id === themeStore.id}
+          isBuiltin={themeStore.isBuiltin(t.id)}
+          onApply={() => handleApply(t.id)}
+          onOpen={() => handleOpen(t.id)}
+          onDuplicate={() => handleDuplicate(t.id)}
+          onDelete={() => handleDelete(t.id)}
+        />
+      {/each}
+      <div class="px-1 py-1">
+        {#if importOpen}
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[0.8rem] font-medium text-foreground">
+                Paste theme JSON
+              </span>
+              <button
+                type="button"
+                onclick={handleImportToggle}
+                aria-label="Close import"
+                class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X size={13} strokeWidth={2} />
+              </button>
+            </div>
+            <textarea
+              bind:value={importDraft}
+              placeholder={'{\n  "id": "midnight",\n  "displayName": "Midnight",\n  ...\n}'}
+              rows={8}
+              spellcheck={false}
+              class="w-full resize-y rounded-md border border-border bg-background p-2 text-[0.733333rem] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            ></textarea>
+            {#if importErrors.length > 0}
+              <ul
+                class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[0.733333rem] text-destructive"
+              >
+                {#each importErrors as err}
+                  <li>{err}</li>
+                {/each}
+              </ul>
+            {/if}
+            <div class="flex items-center justify-between gap-2 max-[520px]:flex-col max-[520px]:items-stretch">
+              <div class="flex items-center gap-1.5 max-[520px]:flex-wrap">
+                <button
+                  type="button"
+                  onclick={handlePasteFromClipboard}
+                  class="rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+                >
+                  Paste from clipboard
+                </button>
+                <button
+                  type="button"
+                  onclick={handleImportFromFile}
+                  class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+                >
+                  <FolderOpen size={11} strokeWidth={2.25} />
+                  <span>Open file</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                onclick={handleImport}
+                class="rounded-md border border-border bg-primary px-3 py-1 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 max-[520px]:self-end"
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        {:else}
+          <button
+            type="button"
+            onclick={handleImportToggle}
+            class="flex h-7 w-fit items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <Upload size={13} strokeWidth={2.25} />
+            <span>Import theme</span>
+          </button>
+        {/if}
+      </div>
     </div>
-  </div>
+  </section>
 
   {#if toast}
     <div

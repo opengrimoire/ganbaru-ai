@@ -309,6 +309,22 @@ export const BUILTIN_THEME_REGISTRY: Readonly<Record<ThemeId, BuiltinTheme>> =
  */
 export const DEFAULT_THEME_ID: ThemeId = darkTheme.id;
 
+export function pickQuickToggleTarget({
+  activeId,
+  activeIsDark,
+  lightId,
+  darkId,
+}: {
+  activeId: ThemeId;
+  activeIsDark: boolean;
+  lightId: ThemeId;
+  darkId: ThemeId;
+}): ThemeId {
+  if (activeId === lightId) return darkId;
+  if (activeId === darkId) return lightId;
+  return activeIsDark ? lightId : darkId;
+}
+
 /**
  * Returns true when the given ID matches a theme that ships with the app.
  * Used to guard mutators (built-in themes are immutable; "edit" duplicates
