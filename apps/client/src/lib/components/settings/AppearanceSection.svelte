@@ -92,7 +92,7 @@
     <div class="flex flex-col gap-3">
       <CustomSelect
         label="App zoom"
-        description="Scales the whole interface. Shortcut: Ctrl +, Ctrl -, Ctrl 0"
+        descriptionShortcuts={["Ctrl + +", "Ctrl + -", "Ctrl + 0"]}
         value={percentString(zoom.percent)}
         options={appZoomOptions}
         onChange={handleAppZoomChange}
@@ -101,7 +101,7 @@
       />
       <CustomSelect
         label="Calendar zoom (5min / 10min / 15min / 30min)"
-        description="Hour row height. Finer rows enable smaller slot snapping"
+        descriptionShortcuts={["Shift + +", "Shift + -", "Shift + 0"]}
         value={percentString(calZoom.zoomPercent)}
         options={calendarZoomOptions}
         onChange={handleCalendarZoomChange}

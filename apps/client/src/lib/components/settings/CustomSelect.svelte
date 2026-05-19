@@ -24,6 +24,7 @@
     onChange,
     label,
     description,
+    descriptionShortcuts = [],
     canReset = false,
     onReset,
     class: className = "",
@@ -33,6 +34,7 @@
     onChange: (value: string) => void;
     label?: string;
     description?: string;
+    descriptionShortcuts?: readonly string[];
     canReset?: boolean;
     onReset?: () => void;
     class?: string;
@@ -55,6 +57,10 @@
   let popoverReady = $state(false);
 
   const current = $derived(options.find((o) => o.value === value));
+
+  function shortcutParts(shortcut: string): string[] {
+    return shortcut.split(" + ");
+  }
 
   function toRect(rect: DOMRect): SelectPopoverRect {
     return {
@@ -172,7 +178,27 @@
   {#if label}
     <div class="min-w-0 flex-1">
       <div class="text-[0.866667rem] text-foreground">{label}</div>
-      {#if description}
+      {#if descriptionShortcuts.length > 0}
+        <div
+          class="mt-0.5 flex min-h-4 items-center gap-4 overflow-hidden whitespace-nowrap text-muted-foreground"
+        >
+          <span class="text-[0.666667rem] leading-4">Shortcuts:</span>
+          {#each descriptionShortcuts as shortcut}
+            <span class="inline-flex items-center gap-0.5">
+              {#each shortcutParts(shortcut) as part, partIndex}
+                {#if partIndex > 0}
+                  <span class="text-[0.666667rem] leading-4 text-muted-foreground">+</span>
+                {/if}
+                <kbd
+                  class="inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-background px-1 font-mono text-[0.666667rem] leading-none text-foreground shadow-sm"
+                >
+                  {part}
+                </kbd>
+              {/each}
+            </span>
+          {/each}
+        </div>
+      {:else if description}
         <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{description}</div>
       {/if}
     </div>
