@@ -100,8 +100,6 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
-  plugins/media-player: {}
-
 packages:
 
   '@asamuzakjp/css-color@5.1.11':

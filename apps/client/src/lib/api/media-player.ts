@@ -47,43 +47,43 @@ export interface MediaPlayerErrorPayload {
 }
 
 export function probeLocalMedia(path: string): Promise<MediaProbe> {
-  return invoke("plugin:media-player|probe", { path });
+  return invoke("media_player_probe", { path });
 }
 
 export function loadLocalMedia(request: LocalLoadRequest): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|load", { request });
+  return invoke("media_player_load", { request });
 }
 
 export function playLocalMedia(): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|play");
+  return invoke("media_player_play");
 }
 
 export function pauseLocalMedia(): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|pause");
+  return invoke("media_player_pause");
 }
 
 export function stopLocalMedia(): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|stop");
+  return invoke("media_player_stop");
 }
 
 export function seekLocalMedia(positionMs: number): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|seek", { positionMs });
+  return invoke("media_player_seek", { positionMs });
 }
 
 export function setLocalVolume(volume: number): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|set_volume", { volume });
+  return invoke("media_player_set_volume", { volume });
 }
 
 export function setLocalMuted(muted: boolean): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|set_muted", { muted });
+  return invoke("media_player_set_muted", { muted });
 }
 
 export function setLocalRate(rate: number): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|set_rate", { rate });
+  return invoke("media_player_set_rate", { rate });
 }
 
 export function getLocalSnapshot(): Promise<LocalPlayerSnapshot> {
-  return invoke("plugin:media-player|snapshot");
+  return invoke("media_player_snapshot");
 }
 
 export function mediaPlayerErrorMessage(error: unknown): string {

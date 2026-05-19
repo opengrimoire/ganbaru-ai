@@ -64,15 +64,13 @@ apps/
     static/: static assets (fonts, icons, sounds)
     scripts/: repo-owned maintenance and diagnostics scripts
     src-tauri/: Rust backend
-      src/: main.rs (entry), lib.rs (commands), mobile.rs (mobile logic)
+      src/: main.rs (entry), lib.rs (commands), media_player.rs (Rust local audio playback and media probing), mobile.rs (mobile logic)
       gen/: auto-generated mobile projects
       capabilities/: permission declarations (desktop/mobile)
       icons/: app icons
       tauri.conf.json, Cargo.toml
     index.html, package.json, svelte.config.js, vite.config.ts, tsconfig.json
   server/: (planned) Hocuspocus sync server (self-hostable)
-plugins/
-  media-player/: LGPL 2.1 Tauri plugin (Rust crate + npm API)
 packages/
   shared-types/: TypeScript types shared across workspaces
 extensions/: (planned)
@@ -111,7 +109,7 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - **Monorepo orchestration:** Turborepo on top of pnpm workspaces
 - **Frontend:** plain Svelte 5 with runes (not SvelteKit)
 - **Desktop/mobile shell:** Tauri v2
-- **License:** AGPL 3.0 for the app, LGPL 2.1 for the media player plugin
+- **License:** AGPL 3.0
 - **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, future to-do tasks, workspace configs, pomodoro sessions) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
 - **AI integration:** three paths. (1) Integrated terminal (xterm.js) running Codex or another CLI coding agent, with calendar-driven session switching, per-project conversation threads, and task context passed through the agent prompt or standard input. (2) BYOK chat widget for non-developer users (OpenAI API, OpenAI-compatible API, Ollama for local models, and other user-configured providers). (3) MCP for external AI clients only (ChatGPT, teammate agents, etc.), not for internal agent interaction.
 - **Agent data bridge:** a `ganbaruai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and GanbaruAI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.

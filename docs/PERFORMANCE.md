@@ -251,7 +251,7 @@ The title-bar performance panel is a diagnostic tool. It can copy live RAM, star
 
 The panel itself is lazy-loaded. Live memory polling starts only while the panel is mounted. The startup RAM snapshot is captured before the panel needs to be opened, so it remains useful for quick local diagnosis even if it is not the canonical record.
 
-For local music memory checks, use the live RAM panel while testing an installed release build. Capture Backend, Frontend, Network, and Total before playback, during native audio playback, after switching tracks, and after stop or unload. Native audio playback should raise the Backend bucket for the Rodio and Symphonia pipeline without creating the extra local WebView audio element, video surface, or Web Audio graph used by the old fallback. These manual samples are diagnostics only; record canonical rows here only after a benchmark harness scenario exists for local music playback.
+For local music memory checks, use the live RAM panel while testing an installed release build. Capture Backend, Frontend, Network, and Total before playback, during Rust-backed audio playback, after switching tracks, and after stop or unload. Rust-backed audio playback should raise the Backend bucket for the Rodio and Symphonia pipeline without creating the extra local WebView audio element, video surface, or Web Audio graph used by the old fallback. These manual samples are diagnostics only; record canonical rows here only after a benchmark harness scenario exists for local music playback.
 
 ### Current architecture notes
 

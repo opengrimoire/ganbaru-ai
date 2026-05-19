@@ -16,7 +16,18 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 ammonia = "4.1.2"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
-tauri-plugin-media-player = { path = "../../../plugins/media-player" }
+rodio = { version = "0.22.2", default-features = false, features = [
+  "playback",
+  "symphonia-flac",
+  "symphonia-mp3",
+  "symphonia-isomp4",
+  "symphonia-aac",
+  "symphonia-alac",
+  "symphonia-ogg",
+  "symphonia-vorbis",
+  "symphonia-wav",
+  "symphonia-pcm",
+] }
 sqlx-core = { version = "0.8", default-features = false, features = ["_rt-tokio", "json", "migrate", "offline"] }
 sqlx-sqlite = { version = "0.8", default-features = false, features = ["bundled", "json"] }
 serde = { version = "1", features = ["derive"] }

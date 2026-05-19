@@ -34,6 +34,7 @@ mod calendar_reads;
 mod calendars;
 mod db;
 mod db_path;
+mod media_player;
 mod music;
 mod notification;
 mod pomodoro;
@@ -600,8 +601,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(db_path::DatabaseState::default())
+        .manage(media_player::MediaPlayerState::default())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_media_player::init())
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
             notification::show_event_notification,
@@ -616,6 +617,16 @@ pub fn run() {
             music::music_register_media_file,
             music::music_save_playback_state,
             music::music_youtube_host_url,
+            media_player::media_player_probe,
+            media_player::media_player_load,
+            media_player::media_player_play,
+            media_player::media_player_pause,
+            media_player::media_player_stop,
+            media_player::media_player_seek,
+            media_player::media_player_set_volume,
+            media_player::media_player_set_muted,
+            media_player::media_player_set_rate,
+            media_player::media_player_snapshot,
             tray::update_music_tray,
             tray::update_tray,
             force_quit,

@@ -1362,6 +1362,7 @@ dependencies = [
  "gdk",
  "gtk",
  "notify-rust",
+ "rodio",
  "serde",
  "serde_json",
  "sqlx-core",
@@ -1369,7 +1370,6 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
- "tauri-plugin-media-player",
  "windows",
  "zip",
 ]
@@ -4581,16 +4581,6 @@ dependencies = [
  "thiserror 2.0.18",
  "toml 1.0.6+spec-1.1.0",
  "url",
-]
-
-[[package]]
-name = "tauri-plugin-media-player"
-version = "0.1.0"
-dependencies = [
- "rodio",
- "serde",
- "tauri",
- "tauri-plugin",
 ]
 
 [[package]]

@@ -120,12 +120,12 @@ The experience measurement engine, skill tree rewards, and contract system. Cons
 
 ## Phase 6: music player
 
-Local-first media playback integrated into the productivity workflow, licensed separately as LGPL 2.1.
+Local-first media playback integrated into the productivity workflow.
 
 **Includes:**
 
-- Tauri plugin structure: Rust crate (publishable to crates.io) + npm package (publishable to npm), separate from the AGPL app
-- Local file playback: native Rodio and Symphonia backend for common local audio, platform WebView media playback for local video, broader native audio fallback candidates for unsupported codecs, lower audio-only memory overhead, and VLC-class transport latency
+- Internal Rust media player module for Rodio/Symphonia audio playback, app-command IPC, and frontend integration
+- Local file playback: Rodio and Symphonia backend for common local audio, platform WebView media playback for local video, broader audio fallback candidates for unsupported codecs, lower audio-only memory overhead, and VLC-class transport latency
 - YouTube IFrame API integration: load videos by ID/URL, start/end timestamps, volume and speed control, seek, desktop WebView client identity through a loopback HTTP player host plus referrer policy, `origin`, and `widget_referrer`, playback position persistence in SQLite, ad-compatible (YouTube Premium removes ads if user is logged in)
 - Playlist management: definitions stored in SQLite (track paths, ordering, environment associations), create/edit/delete playlists, assign playlists to work environment templates and session blocks
 - Session block integration: automatic playlist start when block activates, focus/break playlist switching on Pomodoro phase change

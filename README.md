@@ -92,7 +92,7 @@ Contributions are welcome, but keep in mind:
 
 ## License
 
-[AGPL-3.0](LICENSE) for the app. The media player plugin (planned) will be licensed under [LGPL-2.1](https://www.gnu.org/licenses/lgpl-2.1.html).
+GanbaruAI is licensed under [AGPL-3.0](LICENSE).
 
 ## Funding
 

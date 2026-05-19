@@ -9,14 +9,11 @@ use std::{
 
 use rodio::{cpal::BufferSize, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use serde::{Deserialize, Serialize};
-use tauri::{
-    plugin::{Builder as PluginBuilder, TauriPlugin},
-    Manager, Runtime, State,
-};
+use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum BackendKind {
+pub(crate) enum BackendKind {
     None,
     Rodio,
     Webview,
@@ -24,7 +21,7 @@ pub enum BackendKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum MediaKind {
+pub(crate) enum MediaKind {
     Audio,
     Video,
     Unknown,
@@ -32,7 +29,7 @@ pub enum MediaKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum PlayerStatus {
+pub(crate) enum PlayerStatus {
     Idle,
     Ready,
     Playing,
@@ -43,7 +40,7 @@ pub enum PlayerStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct LocalMediaSource {
+pub(crate) struct LocalMediaSource {
     pub kind: String,
     pub path: String,
     pub identity: String,
@@ -52,7 +49,7 @@ pub struct LocalMediaSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct LoadRequest {
+pub(crate) struct LoadRequest {
     pub source: LocalMediaSource,
     pub start_ms: Option<u64>,
     pub volume: Option<f64>,
@@ -61,7 +58,7 @@ pub struct LoadRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct MediaProbe {
+pub(crate) struct MediaProbe {
     pub path: String,
     pub title: String,
     pub file_size_bytes: u64,
@@ -72,7 +69,7 @@ pub struct MediaProbe {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct PlayerSnapshot {
+pub(crate) struct PlayerSnapshot {
     pub status: PlayerStatus,
     pub source_identity: Option<String>,
     pub title: Option<String>,
@@ -108,7 +105,7 @@ impl Default for PlayerSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct MediaPlayerError {
+pub(crate) struct MediaPlayerError {
     pub code: String,
     pub message: String,
 }
@@ -152,7 +149,7 @@ impl MediaPlayerError {
     fn backend_thread() -> Self {
         Self {
             code: "backendThread".to_string(),
-            message: "The native media player backend is temporarily unavailable.".to_string(),
+            message: "The Rust media player backend is temporarily unavailable.".to_string(),
         }
     }
 }
@@ -565,17 +562,17 @@ fn playback_worker(receiver: mpsc::Receiver<BackendMessage>, mut core: PlayerCor
 }
 
 #[derive(Debug, Default)]
-struct MediaPlayerState {
+pub(crate) struct MediaPlayerState {
     controller: PlaybackController,
 }
 
 #[tauri::command]
-fn probe(path: String) -> Result<MediaProbe, MediaPlayerError> {
+pub(crate) fn media_player_probe(path: String) -> Result<MediaProbe, MediaPlayerError> {
     probe_local_file(&path)
 }
 
 #[tauri::command]
-fn load(
+pub(crate) fn media_player_load(
     state: State<'_, MediaPlayerState>,
     request: LoadRequest,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
@@ -587,22 +584,28 @@ fn load(
 }
 
 #[tauri::command]
-fn play(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
+pub(crate) fn media_player_play(
+    state: State<'_, MediaPlayerState>,
+) -> Result<PlayerSnapshot, MediaPlayerError> {
     state.controller.dispatch(BackendCommand::Play)
 }
 
 #[tauri::command]
-fn pause(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
+pub(crate) fn media_player_pause(
+    state: State<'_, MediaPlayerState>,
+) -> Result<PlayerSnapshot, MediaPlayerError> {
     state.controller.dispatch(BackendCommand::Pause)
 }
 
 #[tauri::command]
-fn stop(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
+pub(crate) fn media_player_stop(
+    state: State<'_, MediaPlayerState>,
+) -> Result<PlayerSnapshot, MediaPlayerError> {
     state.controller.dispatch(BackendCommand::Stop)
 }
 
 #[tauri::command]
-fn seek(
+pub(crate) fn media_player_seek(
     state: State<'_, MediaPlayerState>,
     position_ms: u64,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
@@ -610,7 +613,7 @@ fn seek(
 }
 
 #[tauri::command]
-fn set_volume(
+pub(crate) fn media_player_set_volume(
     state: State<'_, MediaPlayerState>,
     volume: f64,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
@@ -618,7 +621,7 @@ fn set_volume(
 }
 
 #[tauri::command]
-fn set_muted(
+pub(crate) fn media_player_set_muted(
     state: State<'_, MediaPlayerState>,
     muted: bool,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
@@ -626,7 +629,7 @@ fn set_muted(
 }
 
 #[tauri::command]
-fn set_rate(
+pub(crate) fn media_player_set_rate(
     state: State<'_, MediaPlayerState>,
     rate: f64,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
@@ -634,26 +637,16 @@ fn set_rate(
 }
 
 #[tauri::command]
-fn snapshot(state: State<'_, MediaPlayerState>) -> Result<PlayerSnapshot, MediaPlayerError> {
+pub(crate) fn media_player_snapshot(
+    state: State<'_, MediaPlayerState>,
+) -> Result<PlayerSnapshot, MediaPlayerError> {
     state.controller.dispatch(BackendCommand::Snapshot)
-}
-
-pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    PluginBuilder::new("media-player")
-        .invoke_handler(tauri::generate_handler![
-            probe, load, play, pause, stop, seek, set_volume, set_muted, set_rate, snapshot,
-        ])
-        .setup(|app, _api| {
-            app.manage(MediaPlayerState::default());
-            Ok(())
-        })
-        .build()
 }
 
 fn validate_load_request(request: &LoadRequest) -> Result<(), MediaPlayerError> {
     if request.source.kind != "local-file" {
         return Err(MediaPlayerError::invalid_source(
-            "The native media plugin only accepts local-file sources.",
+            "The Rust media player module only accepts local-file sources.",
         ));
     }
     if request.source.identity.trim().is_empty() {

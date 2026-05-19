@@ -12,7 +12,7 @@ Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v
 
 ### Rust
 
-The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, native local audio playback through the media player plugin, the local video loopback fallback, and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
+The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, Rust-backed local audio playback through the internal media player module, the local video loopback fallback, and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
 
 On mobile, Rust still runs as the Tauri core but OS-level features like process management, global mouse events, and desktop activity monitoring are unavailable or sandboxed. The mobile Rust layer focuses on file system access, SQLite, the Yjs persistence layer, and audio playback.
 
@@ -71,9 +71,9 @@ Development uses Node.js for the Svelte, Vite, TypeScript, Tailwind, Vitest, pnp
 
 ### Turborepo
 
-The monorepo task runner. Sits on top of pnpm workspaces and handles build orchestration, task dependency resolution, and local/remote build caching across all packages. When iterating on the Svelte frontend without touching the media player package, Turborepo skips the media player build entirely via cache. Task dependencies are declared in `turbo.json`. For example, the Tauri app's `build` task depends on the media player npm package being built first, and Turborepo ensures the correct execution order and parallelization.
+The monorepo task runner. Sits on top of pnpm workspaces and handles build orchestration, task dependency resolution, and local/remote build caching across all packages. Task dependencies are declared in `turbo.json`, and Turborepo ensures the correct execution order and parallelization across the app and shared packages.
 
-Turborepo does not replace Tauri's build pipeline; it invokes `tauri build`/`tauri dev` as a task. The cargo workspace and pnpm workspace coexist at the repo root: Turborepo orchestrates JS/TS tasks across pnpm workspace members, while Cargo handles Rust builds. The Tauri CLI invokes cargo for `apps/client/src-tauri`, and the media player plugin is a cargo workspace member that Tauri resolves as a dependency at build time.
+Turborepo does not replace Tauri's build pipeline; it invokes `tauri build`/`tauri dev` as a task. The cargo workspace and pnpm workspace coexist at the repo root: Turborepo orchestrates JS/TS tasks across pnpm workspace members, while Cargo handles Rust builds. The Tauri CLI invokes cargo for `apps/client/src-tauri`.
 
 ---
 
@@ -401,19 +401,19 @@ The protocol connecting the browser extension to the Tauri backend via stdin/std
 
 ## Music / media player
 
-A local-first media player licensed separately under LGPL 2.1 and integrated directly into the AGPL 3.0 app. Structured as a Tauri plugin pattern with both a Rust crate (publishable to crates.io) and an npm package, so the media engine is reusable independently of GanbaruAI. Supports two sources: local files (primary) and YouTube via the official IFrame API (secondary).
+A local-first media player integrated directly into the AGPL 3.0 app. Rodio/Symphonia audio playback and local media probing live in the internal Rust media player module at `apps/client/src-tauri/src/media_player.rs`; playlist data, media registration, YouTube host URLs, and local video loopback hosting remain in `apps/client/src-tauri/src/music.rs`. Supports two sources: local files (primary) and YouTube via the official IFrame API (secondary).
 
 ### Current local playback path
 
-Desktop local audio playback is Rust-controlled through `plugins/media-player` with Rodio and Symphonia. Desktop local video uses the browser media element inside the Tauri WebView with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
+Desktop local audio playback is Rust-controlled through `apps/client/src-tauri/src/media_player.rs` with Rodio and Symphonia. Desktop local video uses the browser media element inside the Tauri WebView with file access provided by a token-gated Rust loopback media host on `127.0.0.1`. The Rust side validates the file path, scans user-selected folders outside the UI thread, registers only selected files, and streams byte-range responses with media content types.
 
 The WebView path is the intentional local video path. It can play only the formats and codecs supported by the user's platform WebView, but it delegates video decoding and rendering to the media stack that Tauri already ships on each platform. On Linux this is WebKitGTK, which uses GStreamer internally for web media. On Windows this is WebView2. On macOS and iOS this is WKWebView. On Android this is Android WebView.
 
-Local audio volume, mute, pause, seek, rate, duration, and position snapshots are native plugin operations. Local audio, local video, and YouTube volume are capped at normal `100%`. Local video uses the media element directly and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes if it was playing.
+Local audio volume, mute, pause, seek, rate, duration, and position snapshots are internal Rust media player operations. Local audio, local video, and YouTube volume are capped at normal `100%`. Local video uses the WebView media element directly and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes if it was playing.
 
-### Native media backend target
+### Rust audio backend target
 
-The production local backend is Rust-controlled through `plugins/media-player`. Rodio with default features disabled remains the default local audio target, with only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend owns local audio decoding, transport controls, native volume, native mute, seeking, rate changes, duration, position snapshots, and audio device output. Metadata and artwork extraction still use the existing Rust music commands.
+The production local audio backend is Rust-controlled through `apps/client/src-tauri/src/media_player.rs`. Rodio with default features disabled remains the default local audio target, with only playback plus the needed Symphonia decoding features enabled for common local music files. This gives the app a small audio-only path before it initializes any video-capable multimedia framework. The backend owns local audio decoding, transport controls, volume, mute, seeking, rate changes, duration, position snapshots, and audio device output. Metadata and artwork extraction still use the existing Rust music commands.
 
 Rodio is the first target because it is a RustAudio playback crate, uses CPAL for cross-platform audio output, supports player controls such as play, pause, seek, volume, and speed, and uses Symphonia as the default decoder backend for common file types. The approved dependency shape is `rodio` with `default-features = false` and features limited to `playback`, `symphonia-flac`, `symphonia-mp3`, `symphonia-isomp4`, `symphonia-aac`, `symphonia-alac`, `symphonia-ogg`, `symphonia-vorbis`, `symphonia-wav`, and `symphonia-pcm`.
 
@@ -421,9 +421,9 @@ Native video is not part of the shipped local playback path. An app-owned video 
 
 ### Rodio and Symphonia audio path
 
-Rodio is the selected first native local audio playback target. Rodio provides the playback controller and audio output path through CPAL. Symphonia provides decoding for common music containers and codecs. This path replaces the WebView audio element for normal local music playback and is optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
+Rodio is the selected first Rust-backed local audio playback target. Rodio provides the playback controller and audio output path through CPAL. Symphonia provides decoding for common music containers and codecs. This path replaces the WebView audio element for normal local music playback and is optimized for instant pause, instant resume, bounded buffering, and low audio-only RAM usage.
 
-The native audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG Vorbis, and WAV/PCM. Opus, WMA, APE, AIFF, and other unsupported audio formats should either fail explicitly or use a later broad native multimedia fallback. They should not silently reintroduce the hidden WebView audio element as the normal audio path.
+The Rodio/Symphonia audio feature set supports MP3, FLAC, M4A/MP4 with AAC or ALAC, OGG Vorbis, and WAV/PCM. Opus, WMA, APE, AIFF, and other unsupported audio formats should either fail explicitly or use a later broad multimedia fallback. They should not silently reintroduce the hidden WebView audio element as the normal audio path.
 
 ### WebView video path
 
@@ -431,11 +431,11 @@ Local video is hosted through the app's loopback media server and rendered by a 
 
 ### FFmpeg or libav fallback role
 
-FFmpeg or libav is a fallback candidate for broader native media support, not part of the current shipped local playback path. If it is added later, it must stay lazy and separate from the Rodio and Symphonia audio-only path so normal local music does not initialize a video-capable backend.
+FFmpeg or libav is a fallback candidate for broader local media support, not part of the current shipped local playback path. If it is added later, it must stay lazy and separate from the Rodio and Symphonia audio-only path so normal local music does not initialize a video-capable backend.
 
 ### Symphonia decoder role
 
-A pure-Rust audio decoding library. Used through the first native audio backend when only audio playback is needed, such as Pomodoro playlists, background music, and morning alarm audio. Avoids initializing a full video-capable stack for audio-only sessions, reducing the memory footprint during typical productivity use. Broader backends can still handle video or unsupported audio formats later.
+A pure-Rust audio decoding library. Used through the first Rust-backed audio backend when only audio playback is needed, such as Pomodoro playlists, background music, and morning alarm audio. Avoids initializing a full video-capable stack for audio-only sessions, reducing the memory footprint during typical productivity use. Broader backends can still handle video or unsupported audio formats later.
 
 ### YouTube integration (IFrame API)
 

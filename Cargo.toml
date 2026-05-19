@@ -2,5 +2,4 @@
 resolver = "2"
 members = [
   "apps/client/src-tauri",
-  "plugins/media-player",
 ]
