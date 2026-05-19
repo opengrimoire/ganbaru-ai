@@ -340,7 +340,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={triggerEl}
-  class="timezone-trigger relative grid cursor-pointer self-stretch rounded text-[13px] transition-colors hover:bg-accent"
+  class="timezone-trigger relative grid cursor-pointer self-stretch rounded text-[0.866667rem] transition-colors hover:bg-accent"
   style="color: var(--foreground); grid-column: span {tzCount}; grid-template-columns: subgrid;"
   onclick={toggleOpen}
   role="button"
@@ -366,10 +366,10 @@
     <div class="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
       <div class="flex flex-col">
         <p class="text-xs font-semibold text-foreground">Timezones</p>
-        <p class="text-[10px] text-muted-foreground">Device: {localTz}</p>
+        <p class="text-[0.666667rem] text-muted-foreground">Device: {localTz}</p>
       </div>
       <div
-        class="flex items-center gap-0.5 rounded border border-border bg-background p-0.5 text-[10px]"
+        class="flex items-center gap-0.5 rounded border border-border bg-background p-0.5 text-[0.666667rem]"
         role="group"
         aria-label="Timezone label format"
       >
@@ -485,7 +485,7 @@
           class="tz-results min-h-0 flex-1 overflow-y-auto px-2 pb-3 pr-3"
         >
           {#if filtered.length === 0}
-            <p class="px-2 py-3 text-center text-[11px] text-muted-foreground">
+            <p class="px-2 py-3 text-center text-[0.733333rem] text-muted-foreground">
               No matches.
             </p>
           {:else}
@@ -501,7 +501,7 @@
                   <span class="inline-block w-18 font-medium tabular-nums">{info.offsetUtc}</span>
                   <span class="ml-1">{info.longName}</span>
                 </div>
-                <div class="truncate text-[10.5px] text-muted-foreground">
+                <div class="truncate text-[0.7rem] text-muted-foreground">
                   {info.city}{#if info.region}, {info.region}{/if}
                 </div>
               </button>
@@ -523,7 +523,7 @@
         </div>
       </div>
     {:else}
-      <p class="px-3 pt-1 pb-3 text-[10px] text-muted-foreground">Maximum {MAX_TIMEZONES} timezones</p>
+      <p class="px-3 pt-1 pb-3 text-[0.666667rem] text-muted-foreground">Maximum {MAX_TIMEZONES} timezones</p>
     {/if}
   </div>
 {/if}

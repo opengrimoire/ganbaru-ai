@@ -42,7 +42,37 @@
   <ThemeList />
 
   <section class="flex flex-col gap-2">
-    <h2 class="px-1 text-[13px] font-semibold text-foreground">Text and zoom</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Zoom</h2>
+    <div
+      class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
+    >
+      <StepperControl
+        label="App zoom"
+        description="Scales the whole interface. Shortcut: Ctrl +, Ctrl -, Ctrl 0."
+        displayValue={`${zoom.percent}%`}
+        canIncrement={zoom.canZoomIn}
+        canDecrement={zoom.canZoomOut}
+        canReset={!zoom.isDefault}
+        onIncrement={() => zoom.zoomIn()}
+        onDecrement={() => zoom.zoomOut()}
+        onReset={() => zoom.reset()}
+      />
+      <StepperControl
+        label="Calendar zoom (5min / 10min / 15min / 30min)"
+        description="Hour row height. Finer rows enable smaller slot snapping."
+        displayValue={`${calZoom.zoomPercent}% (${calZoom.gridMinutes}min)`}
+        canIncrement={calZoom.canZoomIn}
+        canDecrement={calZoom.canZoomOut}
+        canReset={!calZoom.isDefault}
+        onIncrement={() => calZoom.zoomStep(1)}
+        onDecrement={() => calZoom.zoomStep(-1)}
+        onReset={() => calZoom.reset()}
+      />
+    </div>
+  </section>
+
+  <section class="flex flex-col gap-2">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Text</h2>
     <div
       class="divide-y divide-border overflow-hidden rounded-lg bg-card dark:bg-background"
     >
@@ -65,28 +95,6 @@
         onIncrement={incrementFontScale}
         onDecrement={decrementFontScale}
         onReset={() => preferences.resetFontScale()}
-      />
-      <StepperControl
-        label="App zoom"
-        description="Scales the whole interface. Shortcut: Ctrl +, Ctrl -, Ctrl 0."
-        displayValue={`${zoom.percent}%`}
-        canIncrement={zoom.canZoomIn}
-        canDecrement={zoom.canZoomOut}
-        canReset={!zoom.isDefault}
-        onIncrement={() => zoom.zoomIn()}
-        onDecrement={() => zoom.zoomOut()}
-        onReset={() => zoom.reset()}
-      />
-      <StepperControl
-        label="Calendar zoom (5min / 10min / 15min / 30min)"
-        description="Hour row height. Finer rows enable smaller slot snapping."
-        displayValue={`${calZoom.zoomPercent}% (${calZoom.gridMinutes}min)`}
-        canIncrement={calZoom.canZoomIn}
-        canDecrement={calZoom.canZoomOut}
-        canReset={!calZoom.isDefault}
-        onIncrement={() => calZoom.zoomStep(1)}
-        onDecrement={() => calZoom.zoomStep(-1)}
-        onReset={() => calZoom.reset()}
       />
     </div>
   </section>

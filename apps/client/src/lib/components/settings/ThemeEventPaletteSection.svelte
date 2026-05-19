@@ -67,10 +67,10 @@
 
 <section class="flex flex-col gap-2 py-2.5">
   <header class="px-1">
-    <h2 class="text-[13px] font-semibold text-foreground">
+    <h2 class="text-[0.866667rem] font-semibold text-foreground">
       Event palette
     </h2>
-    <div class="text-[11px] text-muted-foreground">
+    <div class="text-[0.733333rem] text-muted-foreground">
       32 color slots, each one has a faded variant for past events, blended
       toward Calendar background
     </div>
@@ -92,7 +92,7 @@
             {@render palettePreviewSwatch(past, `Past ${past}`)}
             {@render palettePreviewSwatch(base, `Normal ${base}`)}
             <span
-              class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground"
+              class="min-w-0 flex-1 truncate font-mono text-[0.8rem] text-foreground"
             >
               {base}
             </span>

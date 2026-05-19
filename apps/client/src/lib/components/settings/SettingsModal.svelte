@@ -118,7 +118,7 @@
                 activeSection = section.id;
               }}
               class={cn(
-                "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[12px] font-medium transition-colors",
+                "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[0.8rem] font-medium transition-colors",
                 activeSection === section.id
                   ? "bg-accent text-accent-foreground"
                   : "text-foreground hover:bg-accent/60",
@@ -149,7 +149,7 @@
       >
         <div class={cn("flex items-center", useIconRail ? "justify-center" : "justify-between")}>
           {#if !useIconRail}
-            <span class="flex h-7 min-w-0 items-center gap-2.5 px-3 text-[13px] font-semibold text-muted-foreground">
+            <span class="flex h-7 min-w-0 items-center gap-2.5 px-3 text-[0.866667rem] font-semibold text-muted-foreground">
               <SettingsIcon size={15} strokeWidth={1.75} class="shrink-0" />
               <span class="truncate">Settings</span>
             </span>
@@ -174,7 +174,7 @@
               aria-label={section.label}
               data-app-tooltip-disabled="true"
               class={cn(
-                "flex items-center rounded-md text-left text-[13px] font-medium transition-colors",
+                "flex items-center rounded-md text-left text-[0.866667rem] font-medium transition-colors",
                 useIconRail ? "h-9 justify-center px-0" : "gap-2.5 px-3 py-1.5",
                 activeSection === section.id
                   ? "bg-accent text-accent-foreground"

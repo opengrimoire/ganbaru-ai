@@ -61,7 +61,7 @@
     aria-label={isActive ? `${theme.displayName} is active` : `Apply ${theme.displayName}`}
   >
     <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-2 text-[13px] text-foreground">
+      <div class="flex items-center gap-2 text-[0.866667rem] text-foreground">
         <BaseIcon
           size={13}
           strokeWidth={1.75}
@@ -83,7 +83,7 @@
         style="background: {appTokens['--card']};"
       >
         <span
-          class="flex-1 truncate text-[8px] font-bold leading-none"
+          class="flex-1 truncate text-[0.533333rem] font-bold leading-none"
           style="color: {appTokens['--foreground']};"
         >
           Aa
@@ -106,7 +106,7 @@
       onclick={onDuplicate}
       aria-label="Duplicate and edit theme"
       data-app-tooltip-disabled="true"
-      class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+      class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
       <Copy size={13} strokeWidth={2} />
       <span class="max-[380px]:hidden">Duplicate and edit</span>

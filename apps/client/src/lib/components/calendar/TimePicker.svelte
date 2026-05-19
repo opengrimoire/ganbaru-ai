@@ -63,12 +63,12 @@
     {@const durLabel = getDurationLabel(slot)}
     <button onclick={() => onselect(slot)}
       data-time={slot}
-      class="flex w-full items-center px-2 py-1 text-left text-[12px] transition-colors hover:bg-black/5 dark:hover:bg-black/15
+      class="flex w-full items-center px-2 py-1 text-left text-[0.8rem] transition-colors hover:bg-black/5 dark:hover:bg-black/15
         {selected ? 'bg-accent' : ''}"
       style="font-weight: {isNow ? 600 : selected ? 500 : 400}; color: {isNow || selected ? 'var(--foreground)' : 'var(--muted-foreground)'};">
       <span>{slot}</span>
       {#if durLabel}
-        <span class="ml-1.5 text-[10px]" style="color: var(--muted-foreground); font-weight: 400;">({durLabel})</span>
+        <span class="ml-1.5 text-[0.666667rem]" style="color: var(--muted-foreground); font-weight: 400;">({durLabel})</span>
       {/if}
     </button>
   {/each}

@@ -15,7 +15,7 @@
 </script>
 
 <section
-  class="theme-contrast-notice absolute z-30 flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] shadow-xl dark:bg-background"
+  class="theme-contrast-notice absolute z-30 flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-[0.733333rem] shadow-xl dark:bg-background"
 >
   <div class="theme-contrast-message flex shrink-0 items-center gap-2 text-foreground">
     <AlertTriangle
@@ -33,7 +33,7 @@
       onclick={onJump}
       aria-label="Jump to next failing contrast row"
       title="Scroll to the next row below its contrast target (cycles through the list). Muted surfaces target 3:1; everything else targets 4.5:1."
-      class="flex h-6 items-center gap-1 rounded-md border border-border bg-card px-2 text-[10px] font-medium text-foreground transition-colors hover:bg-accent"
+      class="flex h-6 items-center gap-1 rounded-md border border-border bg-card px-2 text-[0.666667rem] font-medium text-foreground transition-colors hover:bg-accent"
     >
       <ArrowDown size={11} strokeWidth={2.25} />
       <span>Jump to next</span>
@@ -43,7 +43,7 @@
       onclick={onFixAll}
       aria-label="Auto-fix every failing contrast row"
       title="Pick a legible text color for every pair below its target"
-      class="flex h-6 items-center gap-1 rounded-md border border-primary bg-primary px-2 text-[10px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      class="flex h-6 items-center gap-1 rounded-md border border-primary bg-primary px-2 text-[0.666667rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
     >
       <Wand2 size={11} strokeWidth={2.25} />
       <span>Fix all</span>

@@ -281,7 +281,7 @@
         <button
           type="button"
           onclick={onCancel}
-          class="flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
+          class="flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[0.733333rem] font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
         >
           <ArrowLeft size={11} strokeWidth={2.25} />
           <span>Cancel</span>
@@ -296,7 +296,7 @@
               ? "Restore every value to the clone-time snapshot"
               : "Nothing has changed since this theme was cloned"}
             class={cn(
-              "theme-editor-reset-all flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground transition-colors",
+              "theme-editor-reset-all flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[0.733333rem] font-medium text-destructive-foreground transition-colors",
               canResetToSeed
                 ? "hover:bg-destructive/90"
                 : "cursor-not-allowed",
@@ -310,7 +310,7 @@
       <button
         type="button"
         onclick={onCommit}
-        class="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        class="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1 text-[0.733333rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         <Check size={11} strokeWidth={2.25} />
         <span>{isBuiltin ? "Apply and return" : "Save and apply"}</span>

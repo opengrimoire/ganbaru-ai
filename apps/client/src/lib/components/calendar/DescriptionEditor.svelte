@@ -243,10 +243,10 @@
           <input bind:this={linkInputEl}
             type="text" bind:value={linkUrl} placeholder="https://..."
             onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { linkPopoverOpen = false; } }}
-            class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-event-panel-input-text outline-none placeholder:text-muted-foreground"
+            class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[0.733333rem] text-event-panel-input-text outline-none placeholder:text-muted-foreground"
           />
           <button onclick={applyLink}
-            class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">
+            class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">
             Apply
           </button>
         </div>
@@ -277,7 +277,7 @@
         <div
           bind:this={editorEl}
           contenteditable={!readOnly}
-          class="desc-editor desc-content max-h-20 overflow-y-auto text-[11px] leading-3.75 text-foreground outline-none"
+          class="desc-editor desc-content max-h-20 overflow-y-auto text-[0.733333rem] leading-3.75 text-foreground outline-none"
           class:desc-editing={!readOnly}
           oninput={handleEditorInput}
           onpaste={handleEditorPaste}
@@ -287,11 +287,11 @@
         ></div>
       {:else if descPreview}
         <div
-          class="desc-preview max-h-11.25 overflow-hidden text-[11px] leading-3.75 text-foreground"
+          class="desc-preview max-h-11.25 overflow-hidden text-[0.733333rem] leading-3.75 text-foreground"
           title={descPreview}
         >{descPreview}</div>
       {:else}
-        <span class="text-[11px] text-muted-foreground/40">Add description</span>
+        <span class="text-[0.733333rem] text-muted-foreground/40">Add description</span>
       {/if}
     </div>
   </div>

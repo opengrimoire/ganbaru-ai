@@ -258,6 +258,7 @@
   const TITLE_BAR_ICON_COLOR_CLASS = "text-foreground/68 dark:text-white/76";
   const TITLE_BAR_ICON_STROKE_WIDTH = 1.5;
   const TITLE_BAR_ICON_SIZE = 14;
+  const POMODORO_RING_SIZE = 16;
   const POMODORO_RING_STROKE_WIDTH = 2.15;
 
   const autoCompactTabs = $derived(
@@ -383,6 +384,7 @@
 
   let tabEls: HTMLButtonElement[] = $state([]);
   let indicatorStyle = $state("");
+  let indicatorFrame = 0;
 
   function updateIndicator() {
     const idx = tabs.findIndex((t) => t.view === nav.current);
@@ -401,11 +403,27 @@
     indicatorStyle = `left: ${elRect.left - parentRect.left}px; width: ${elRect.width}px;`;
   }
 
+  function scheduleIndicatorUpdate() {
+    if (indicatorFrame) cancelAnimationFrame(indicatorFrame);
+    indicatorFrame = requestAnimationFrame(() => {
+      indicatorFrame = 0;
+      updateIndicator();
+    });
+  }
+
   $effect(() => {
     void nav.current;
     void autoCompactTabs;
     void activeTabOnly;
-    requestAnimationFrame(updateIndicator);
+    void preferences.fontFamilyId;
+    void preferences.fontScale;
+    scheduleIndicatorUpdate();
+    return () => {
+      if (indicatorFrame) {
+        cancelAnimationFrame(indicatorFrame);
+        indicatorFrame = 0;
+      }
+    };
   });
 
   let tabWheelCooldown = false;
@@ -501,10 +519,10 @@
         bind:this={tabEls[i]}
         onclick={() => nav.navigate(tab.view)}
         class={cn(
-          "titlebar-tab relative z-1 flex h-8 items-center rounded-md text-sm font-medium transition-colors",
+          "titlebar-tab relative z-1 flex items-center rounded-md text-sm font-medium transition-colors",
           activeTabOnly && nav.current !== tab.view ? "hidden" : "",
           autoCompactTabs
-            ? "w-8 justify-center"
+            ? "titlebar-tab-compact justify-center"
             : "gap-1.5 px-3",
           nav.current === tab.view
             ? "text-foreground dark:text-white"
@@ -530,10 +548,10 @@
       <div class="relative">
         <button
           onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
-          class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
+          class="titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
           title={pomodoro.isRunning ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
         >
-          <svg viewBox="0 0 20 20" class="h-4 w-4">
+          <svg viewBox="0 0 20 20" width={POMODORO_RING_SIZE} height={POMODORO_RING_SIZE}>
             <circle
               cx="10"
               cy="10"
@@ -599,7 +617,7 @@
         type="button"
         onclick={() => nav.navigate("music")}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
           nav.current === "music"
             ? "bg-background text-foreground dark:bg-accent dark:text-white"
             : `${TITLE_BAR_ICON_COLOR_CLASS} hover:bg-sidebar-accent`,
@@ -617,7 +635,7 @@
         onclick={toggleTheme}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
           TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
@@ -642,7 +660,7 @@
       <div class="relative">
         <button
           onclick={togglePerfMenu}
-          class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+          class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
           title="Performance (Ctrl + Shift + P)"
         >
           <CircleGauge size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -656,7 +674,7 @@
         onclick={() => { showResetConfirm = true; }}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
           TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
@@ -673,7 +691,7 @@
         onclick={openHelpShortcuts}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
           TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
@@ -692,7 +710,7 @@
         onclick={openSettings}
         disabled={lockedByThemeEditor}
         class={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
           TITLE_BAR_ICON_COLOR_CLASS,
           lockedByThemeEditor
             ? "cursor-not-allowed opacity-40"
@@ -709,7 +727,7 @@
       <div class="relative">
         <button
           onclick={() => { showUtilityOverflowMenu = !showUtilityOverflowMenu; showPerfMenu = false; }}
-          class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+          class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
           aria-label="More controls"
           data-app-tooltip-disabled="true"
         >
@@ -748,7 +766,7 @@
   <div class="flex shrink-0 items-center gap-0.5 pr-1.5">
     <button
       onclick={() => win.minimize()}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+      class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
       aria-label="Minimize"
       data-app-tooltip-disabled="true"
     >
@@ -756,7 +774,7 @@
     </button>
     <button
       onclick={() => win.toggleMaximize()}
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+      class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
       aria-label={isMaximized ? "Restore" : "Maximize"}
       data-app-tooltip-disabled="true"
     >
@@ -770,7 +788,7 @@
       onclick={handleClose}
       disabled={lockedByBenchmark}
       class={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+        "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
         TITLE_BAR_ICON_COLOR_CLASS,
         lockedByBenchmark
           ? "cursor-not-allowed opacity-40"
@@ -894,6 +912,19 @@
 {/if}
 
 <style>
+  .titlebar-tab {
+    height: 32px;
+  }
+
+  .titlebar-tab-compact,
+  .titlebar-icon-button {
+    width: 32px;
+  }
+
+  .titlebar-icon-button {
+    height: 32px;
+  }
+
   .tab-indicator {
     transition: none;
   }

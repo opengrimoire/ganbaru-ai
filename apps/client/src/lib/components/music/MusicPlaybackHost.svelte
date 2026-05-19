@@ -280,7 +280,7 @@
   {/if}
   {#if hasVisualSurface}
     {#if hostIsFullscreen && volumeFeedbackVisible}
-      <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white">
+      <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[0.866667rem] font-medium text-white">
         {player.volumeFeedbackLabel}
       </div>
     {/if}

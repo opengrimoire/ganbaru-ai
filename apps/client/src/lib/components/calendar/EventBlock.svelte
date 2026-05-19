@@ -99,7 +99,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[12px] leading-tight select-none {statusPatternClass} {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -150,7 +150,7 @@
     </div>
     <div class="event-time truncate" style="color: {timeColor};">{startTime} - {endTime}</div>
     {#if positioned.event.location}
-      <div class="event-location truncate text-[10px]" style="color: {locationColor};">{positioned.event.location}</div>
+      <div class="event-location truncate text-[0.666667rem]" style="color: {locationColor};">{positioned.event.location}</div>
     {/if}
   </div>
 

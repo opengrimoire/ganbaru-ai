@@ -219,8 +219,8 @@
 <div class="flex flex-col gap-6">
   <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
-      <h2 class="text-[13px] font-semibold text-foreground">Calendars</h2>
-      <p class="mt-0.5 text-[12px] text-muted-foreground">
+      <h2 class="text-[0.866667rem] font-semibold text-foreground">Calendars</h2>
+      <p class="mt-0.5 text-[0.8rem] text-muted-foreground">
         Import a Google Calendar or Outlook export (.ics, or the .zip bundle
         Google ships with one .ics per calendar) as a separate calendar you
         can delete in one click. Re-importing the same file deduplicates by
@@ -232,7 +232,7 @@
         type="button"
         onclick={handleImport}
         disabled={isImporting}
-        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
       >
         {#if isImporting}
           <LoaderCircle size={12} strokeWidth={2.25} class="animate-spin" />
@@ -247,7 +247,7 @@
 
   {#if isImporting && importProgress}
     <div
-      class="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground"
+      class="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-[0.8rem] text-muted-foreground"
     >
       <LoaderCircle size={12} strokeWidth={2.25} class="animate-spin" />
       <span class="truncate">
@@ -268,16 +268,16 @@
       <div class="flex items-center gap-3 px-3 py-2.5 max-[520px]:flex-col max-[520px]:items-stretch">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <span class="truncate text-[13px] font-medium text-foreground">
+            <span class="truncate text-[0.866667rem] font-medium text-foreground">
               {displayName}
             </span>
             <span
-              class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+              class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
             >
               {cal.source}
             </span>
           </div>
-          <div class="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <div class="mt-0.5 flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
             <span>{counts[cal.id] ?? 0} event{counts[cal.id] === 1 ? "" : "s"}</span>
             {#if importDate}
               <span>imported {importDate}</span>
@@ -289,7 +289,7 @@
             type="button"
             onclick={() => handleExport(cal)}
             disabled={(counts[cal.id] ?? 0) === 0}
-            class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
+            class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
           >
             <Download size={12} strokeWidth={2.25} />
             <span>Export</span>
@@ -311,7 +311,7 @@
 
   {#if toast}
     <div
-      class="pointer-events-none fixed bottom-6 left-1/2 z-80 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-1.5 text-[12px] text-foreground shadow-lg"
+      class="pointer-events-none fixed bottom-6 left-1/2 z-80 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-1.5 text-[0.8rem] text-foreground shadow-lg"
     >
       {toast}
     </div>

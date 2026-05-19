@@ -669,7 +669,7 @@
     {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     {@const dragIndicators = getEventIndicatorState(dragPreview.event)}
     <div
-      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[12px] leading-tight"
+      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[0.8rem] leading-tight"
       style="
         top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
         height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
@@ -711,7 +711,7 @@
           <div class="truncate" style="color: {dragTimeColor};">{st} - {et}</div>
         {/if}
         {#if dragH > 48 && dragPreview.event.location}
-          <div class="truncate text-[10px]" style="color: {dragLocationColor};">{dragPreview.event.location}</div>
+          <div class="truncate text-[0.666667rem]" style="color: {dragLocationColor};">{dragPreview.event.location}</div>
         {/if}
       </div>
     </div>
@@ -725,7 +725,7 @@
     {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     <div
       data-create-preview
-      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[12px] leading-tight"
+      class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[0.8rem] leading-tight"
       style="
         top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
         height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);

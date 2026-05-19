@@ -406,13 +406,13 @@
       <button
         type="button"
         onclick={openPlaylistBuilder}
-        class="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        class="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[0.8rem] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         aria-label="Playlist builder"
       >
         <ListPlus size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         <span>Playlist builder</span>
       </button>
-      <div class="hidden min-w-0 overflow-hidden whitespace-nowrap text-[12px] font-medium text-foreground min-[720px]:block">
+      <div class="hidden min-w-0 overflow-hidden whitespace-nowrap text-[0.8rem] font-medium text-foreground min-[720px]:block">
         {#if topBarMediaTitle}
           <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
         {/if}
@@ -428,14 +428,14 @@
         <input
           id="music-source"
           bind:value={player.sourceInput}
-          class="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
+          class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
           placeholder="Add a local file path or YouTube link"
           autocomplete="off"
           spellcheck="false"
         />
       </div>
       {#if player.parseError || player.playerError}
-        <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[11px] text-destructive min-[680px]:flex">
+        <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[0.733333rem] text-destructive min-[680px]:flex">
           <AlertCircle class="shrink-0" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           <span class="truncate">{player.parseError ?? player.playerError}</span>
         </div>
@@ -445,7 +445,7 @@
           type="button"
           onclick={() => { void player.loadFolder(); }}
           disabled={player.sourceActionBusy}
-          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[0.8rem] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
         >
           <FolderOpen size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           <span class="hidden min-[420px]:inline">Folder</span>
@@ -453,7 +453,7 @@
         <button
           type="submit"
           disabled={player.sourceActionBusy}
-          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
           {#if player.sourceActionBusy}
             <LoaderCircle class="animate-spin" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -498,7 +498,7 @@
         onwheel={(event) => player.handleVolumeWheel(event)}
       >
         {#if mediaSurfaceFullscreen && volumeFeedbackVisible}
-          <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[13px] font-medium text-white">
+          <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[0.866667rem] font-medium text-white">
             {player.volumeFeedbackLabel}
           </div>
         {/if}
@@ -515,7 +515,7 @@
               />
             {/if}
             {#if player.snapshot.error}
-              <div class="flex max-w-[80%] flex-col items-center gap-2 text-center text-[12px]">
+              <div class="flex max-w-[80%] flex-col items-center gap-2 text-center text-[0.8rem]">
                 <AlertCircle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
                 <span class="max-w-full truncate">{player.snapshot.error ?? player.loadedTitle}</span>
               </div>
@@ -529,17 +529,17 @@
       <aside id="music-playlist" class="min-h-0" style="background-color: var(--cal-bg);">
         <div class="flex h-full min-h-0 flex-col">
           <div class="flex items-center justify-between gap-2 px-4 py-3">
-            <div class="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+            <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
               <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
               Playlist
             </div>
             {#if player.queue.length > 0}
-              <div class="text-[11px] text-muted-foreground">{player.queue.length} tracks</div>
+              <div class="text-[0.733333rem] text-muted-foreground">{player.queue.length} tracks</div>
             {/if}
           </div>
 
           {#if player.folderScanTruncated}
-            <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] text-warning">
+            <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[0.733333rem] text-warning">
               Showing the first 5000 media files.
             </div>
           {/if}
@@ -551,7 +551,7 @@
               data-music-scrollable="true"
             >
               {#if player.queue.length === 0}
-                <div class="p-3 text-[12px] text-muted-foreground">
+                <div class="p-3 text-[0.8rem] text-muted-foreground">
                   Add a source or pick a folder to start a playlist.
                 </div>
               {:else}
@@ -562,7 +562,7 @@
                       data-playlist-index={index}
                       onclick={() => { void player.playQueueItem(index); }}
                       class={cn(
-                        "flex w-full min-w-0 items-center px-2 py-2 text-left text-[12px] first:rounded-t-md last:rounded-b-md",
+                        "flex w-full min-w-0 items-center px-2 py-2 text-left text-[0.8rem] first:rounded-t-md last:rounded-b-md",
                         player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
                       )}
                     >
@@ -583,7 +583,7 @@
       style="background-color: var(--cal-bg);"
     >
       {#key player.currentSource?.identity ?? "empty"}
-        <div class="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+        <div class="flex items-center gap-2 text-[0.733333rem] tabular-nums text-muted-foreground">
           <span class="shrink-0 text-left">{formatPlaybackTime(player.snapshot.positionMs)}</span>
           <input
             type="range"
@@ -656,7 +656,7 @@
 
         <div class="flex flex-wrap items-center gap-2">
           <div
-            class="flex items-center gap-2 text-[12px] text-muted-foreground"
+            class="flex items-center gap-2 text-[0.8rem] text-muted-foreground"
             data-music-volume-control="true"
             onwheel={(event) => player.handleVolumeWheel(event)}
           >
@@ -712,7 +712,7 @@
                     <button
                       type="button"
                       onclick={() => { void applySpeed(preset); }}
-                      class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[12px] hover:bg-accent hover:text-accent-foreground"
+                      class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
                     >
                       <span>{preset}x</span>
                       {#if Math.abs(player.snapshot.rate - preset) < 0.001}
@@ -723,7 +723,7 @@
                   <button
                     type="button"
                     onclick={openCustomSpeed}
-                    class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[12px] hover:bg-accent hover:text-accent-foreground"
+                    class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
                   >
                     <span>Custom</span>
                     {#if !activeSpeedIsPreset}
@@ -738,7 +738,7 @@
                       min="0.25"
                       max="2"
                       step="0.05"
-                      class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[12px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       aria-label="Custom playback speed"
                     />
                     <button

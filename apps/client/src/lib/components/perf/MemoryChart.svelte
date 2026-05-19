@@ -125,7 +125,7 @@
 <div style="width: {width}px;">
   {#if samples.length < 2}
     <div
-      class="flex w-full items-center justify-center text-[10px] text-muted-foreground"
+      class="flex w-full items-center justify-center text-[0.666667rem] text-muted-foreground"
       style="height: {height}px;"
     >
       Collecting samples...
@@ -161,7 +161,7 @@
           y={height - 2}
           text-anchor={tickAnchor(i, xTicks.length)}
           class="fill-muted-foreground"
-          style="font-size: 9px;"
+          style="font-size: 0.6rem;"
         >{tick.label}</text>
       {/each}
       {#if hoverSample}
@@ -198,7 +198,7 @@
           y={height - 3}
           text-anchor="middle"
           class="fill-background"
-          style="font-size: 9px;"
+          style="font-size: 0.6rem;"
         >{formatElapsed(hoverSample.t)}</text>
       {/if}
     </svg>

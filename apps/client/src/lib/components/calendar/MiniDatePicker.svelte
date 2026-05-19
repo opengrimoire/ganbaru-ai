@@ -64,7 +64,7 @@
   const yearPageYears = $derived(Array.from({ length: 12 }, (_, i) => yearPageStart + i));
   const days = $derived.by(() => buildCalendarGrid(year, month, selectedDate));
 
-  const textSize = $derived(small ? "text-[11px]" : "text-[12px]");
+  const textSize = $derived(small ? "text-[0.733333rem]" : "text-[0.8rem]");
   const todayStr = $derived.by(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -185,7 +185,7 @@
   {/if}
 
   <button onclick={handleHeaderClick}
-    class="rounded-md px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-accent">
+    class="rounded-md px-2 py-0.5 text-[0.733333rem] font-medium text-foreground hover:bg-accent">
     {#if pickerMode === "days"}
       {monthLabel}
     {:else if pickerMode === "months"}
@@ -219,7 +219,7 @@
   {#if pickerMode === "days"}
     <div class="grid grid-cols-7 gap-x-0 text-center">
       {#each DAY_LETTERS as letter}
-        <span class="py-0.5 text-[9px] text-muted-foreground">{letter}</span>
+        <span class="py-0.5 text-[0.6rem] text-muted-foreground">{letter}</span>
       {/each}
     </div>
     <div class="grid grid-cols-7 gap-x-0 text-center">

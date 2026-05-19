@@ -1036,7 +1036,7 @@
           <button
             onclick={() => handleScopeClick(val as RecurringScope)}
             disabled={controlsDisabled}
-            class="flex-1 rounded px-2 py-1 text-[10px] font-medium
+            class="flex-1 rounded px-2 py-1 text-[0.666667rem] font-medium
               {scope === val
                 ? 'bg-action-confirm text-action-confirm-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'}"
@@ -1054,7 +1054,7 @@
           bind:value={title}
           placeholder="Session title..."
           disabled={controlsDisabled}
-          class="w-full bg-transparent py-0.5 text-[14px] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
+          class="w-full bg-transparent py-0.5 text-[0.933333rem] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
           oninput={emitChange}
           onkeydown={inputKeydown}
         />
@@ -1067,7 +1067,7 @@
 
     <!-- Date + time -->
     <div
-      class="date-time-grid relative -mt-1 px-1 text-[12px]"
+      class="date-time-grid relative -mt-1 px-1 text-[0.8rem]"
       data-stacked={stackedDateTime || undefined}
     >
       <!-- Start date -->
@@ -1103,7 +1103,7 @@
           onclick={() => openTimePicker("start")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
-          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
+          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
         <span class="text-muted-foreground/60">-</span>
@@ -1112,7 +1112,7 @@
           onclick={() => openTimePicker("end")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
-          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[12px] outline-none text-event-panel-input-text
+          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={inputKeydown} />
 
@@ -1160,7 +1160,7 @@
 
     <!-- All-day / Availability / Visibility -->
     <div
-      class="-mt-1 flex w-full items-center justify-evenly rounded-none px-0.5 text-[10px] leading-none"
+      class="-mt-1 flex w-full items-center justify-evenly rounded-none px-0.5 text-[0.666667rem] leading-none"
       style="background-color: var(--panel-contrast);"
     >
       <!-- All day -->
@@ -1306,11 +1306,11 @@
           <button onclick={() => handleExpand("music")}
             disabled={controlsDisabled}
             class="flex flex-1 items-center px-2.5 py-2 text-left">
-            <span class="translate-y-[1.13px] text-[11px] text-muted-foreground">Music</span>
+            <span class="translate-y-[1.13px] text-[0.733333rem] text-muted-foreground">Music</span>
           </button>
         </div>
         {#if openSection === "music"}
-          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3 py-3 text-center text-[12px] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3 py-3 text-center text-[0.8rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
         {/if}
       </div>
   </div>
@@ -1325,7 +1325,7 @@
     style="background-color: var(--panel-bg);"
   >
     {#if readOnly}
-      <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[11px] text-muted-foreground/60"
+      <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[0.733333rem] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
         Read-only
       </div>
@@ -1336,7 +1336,7 @@
             bind:this={confirmDeleteBtn}
             onclick={() => { deleteArmed = false; handleDeleteClick(); }}
             disabled={controlsDisabled}
-            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px] text-action-danger-armed-foreground bg-action-danger-armed">
+            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.8rem] text-action-danger-armed-foreground bg-action-danger-armed">
             <Trash2 size={13} strokeWidth={1.8} />
             <span>Click again to delete (Ctrl + D)</span>
           </button>
@@ -1351,7 +1351,7 @@
           {/if}
           <button onclick={handleSave}
             disabled={controlsDisabled}
-            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[12px]
+            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.8rem]
               {saving || saveReady
                 ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'
                 : 'text-muted-foreground cursor-not-allowed'}"

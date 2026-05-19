@@ -217,16 +217,16 @@
     <button onclick={onexpand}
       disabled={readOnly}
       class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
+      <span class="translate-y-[1.13px] text-[0.733333rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
       {#if enabled && summary}
-        <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
+        <span class="ml-auto translate-y-[1.13px] truncate text-[0.666667rem] text-muted-foreground">{summary}</span>
       {/if}
     </button>
   </div>
   {#if expanded}
     <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="meeting" class="flex flex-col gap-2.5 px-3 pt-3 pb-3" style="background-color: var(--panel-bg);">
       <!-- URL -->
-      <div class="flex items-center gap-2.5 text-[11px] leading-none">
+      <div class="flex items-center gap-2.5 text-[0.733333rem] leading-none">
         <Video size={13} class="shrink-0 text-foreground" />
         <input bind:this={urlInput} type="url" bind:value={url} placeholder="Add call link"
           disabled={readOnly}
@@ -234,14 +234,14 @@
           oninput={onchange} onkeydown={panelInputKeydown} />
       </div>
       <!-- Location -->
-      <div class="flex items-center gap-2.5 text-[11px] leading-none">
+      <div class="flex items-center gap-2.5 text-[0.733333rem] leading-none">
         <MapPin size={13} class="shrink-0 text-foreground" />
         <input type="text" bind:value={location} placeholder="Add location"
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={onchange} onkeydown={panelInputKeydown} />
         {#if geo}
-          <span class="shrink-0 text-[10px] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
+          <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
         {/if}
       </div>
       <!-- Description -->
@@ -251,7 +251,7 @@
       <!-- Guests -->
       <div class="flex flex-col">
         <div class="flex items-center gap-2 pb-1">
-          <span class="text-[9px] uppercase tracking-wider text-muted-foreground">Guests</span>
+          <span class="text-[0.6rem] uppercase tracking-wider text-muted-foreground">Guests</span>
           {#if canEditGuests && guestAttendees.length > 0}
             <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
               {#each [
@@ -263,19 +263,19 @@
                   class="flex items-center gap-1 rounded px-1 py-0.5 active:scale-95
                     {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
                   <perm.icon size={11} strokeWidth={2} />
-                  <span class="text-[9px] max-[320px]:hidden">{perm.label}</span>
+                  <span class="text-[0.6rem] max-[320px]:hidden">{perm.label}</span>
                 </button>
               {/each}
             </div>
           {/if}
         </div>
         {#if organizer}
-          <div class="flex items-center gap-2 py-0.5 text-[11px]">
+          <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
             <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={10} strokeWidth={2.5} class="block text-status-accepted-foreground" /></span>
             <span class="min-w-0 flex-1 truncate text-foreground">
               {isOrganizerSelf ? `You (${organizer.email})` : organizer.name ?? organizer.email}
             </span>
-            <span class="shrink-0 text-[10px] text-muted-foreground/60">organizer</span>
+            <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">organizer</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
@@ -300,13 +300,13 @@
           {@const selfFg = selfStatus === "accepted" ? "text-status-accepted-foreground" : selfStatus === "tentative" ? "text-status-tentative-foreground" : selfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
           {@const SelfIcon = selfStatus === "accepted" ? Check : selfStatus === "tentative" ? CircleHelp : selfStatus === "declined" ? X : Minus}
           {@const selfStatusLabel = attendeeStatusLabel(selfStatus)}
-          <div class="flex items-center gap-2 py-0.5 text-[11px]">
+          <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
             <span
               class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {selfBg}">
               <SelfIcon size={10} strokeWidth={2.5} class="block {selfFg}" />
             </span>
             <span class="min-w-0 flex-1 truncate text-foreground">You ({selfAttendee.email})</span>
-            <span class="shrink-0 text-[10px] text-muted-foreground/60">{selfStatusLabel}</span>
+            <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">{selfStatusLabel}</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
@@ -330,7 +330,7 @@
           {@const localSelfFg = effectiveLocalSelfStatus === "accepted" ? "text-status-accepted-foreground" : effectiveLocalSelfStatus === "tentative" ? "text-status-tentative-foreground" : effectiveLocalSelfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
           {@const LocalSelfIcon = effectiveLocalSelfStatus === "accepted" ? Check : effectiveLocalSelfStatus === "tentative" ? CircleHelp : effectiveLocalSelfStatus === "declined" ? X : Minus}
           {@const localSelfStatusLabel = attendeeStatusLabel(effectiveLocalSelfStatus)}
-          <div class="flex items-center gap-2 py-0.5 text-[11px]">
+          <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
             <button
               type="button"
               onclick={toggleLocalSelfRsvp}
@@ -341,7 +341,7 @@
               <LocalSelfIcon size={10} strokeWidth={2.5} class="block {localSelfFg}" />
             </button>
             <span class="min-w-0 flex-1 truncate text-foreground">You (Local, no email provided)</span>
-            <span class="shrink-0 text-[10px] text-muted-foreground/60">{localSelfStatusLabel}</span>
+            <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">{localSelfStatusLabel}</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
@@ -374,15 +374,15 @@
               {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
               {@const statusLabel = attendeeStatusLabel(att.status)}
               {@const guestActionsDisabled = !canEditGuests}
-              <div class="flex items-center gap-2 py-0.5 text-[11px]">
+              <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
                 <span
                   class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}">
                   <StatusIcon size={10} strokeWidth={2.5} class="block {sqFg}" />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>
-                <span class="shrink-0 text-[10px] text-muted-foreground/60">{statusLabel}</span>
+                <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">{statusLabel}</span>
                 {#if att.role === "opt-participant"}
-                  <span class="shrink-0 text-[10px] text-muted-foreground/60 italic">(optional)</span>
+                  <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60 italic">(optional)</span>
                 {/if}
                 <div class="flex shrink-0 items-center gap-0.5">
                   <button onclick={() => toggleAttendeeOptional(att.id)}
@@ -409,7 +409,7 @@
             <span class="h-3.5 w-3.5 shrink-0"></span>
             <input type="email" bind:value={attendeeInput}
               placeholder="Add email..."
-              class="min-w-0 flex-1 bg-transparent text-[11px] leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
+              class="min-w-0 flex-1 bg-transparent text-[0.733333rem] leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
               onkeydown={(e) => {
                 e.stopPropagation();
                 if (e.key === "Enter") { e.preventDefault(); addAttendee(); }

@@ -696,7 +696,7 @@
     class="theme-editor-chrome relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-border bg-sidebar px-3 py-2"
   >
     <div
-      class="flex h-9 min-w-0 items-center overflow-hidden rounded-md border border-border bg-card text-[11px] text-muted-foreground dark:bg-background"
+      class="flex h-9 min-w-0 items-center overflow-hidden rounded-md border border-border bg-card text-[0.733333rem] text-muted-foreground dark:bg-background"
     >
       {#if isBuiltin}
         <span
@@ -739,7 +739,7 @@
     </div>
     {#if userTheme}
       <div
-        class="theme-editor-nav-shell relative h-9 overflow-hidden rounded-lg border border-border bg-card text-[11px] dark:bg-background"
+        class="theme-editor-nav-shell relative h-9 overflow-hidden rounded-lg border border-border bg-card text-[0.733333rem] dark:bg-background"
         data-can-scroll-left={navCanScrollLeft}
         data-can-scroll-right={navCanScrollRight}
         onwheel={handleThemeNavWheel}
@@ -844,7 +844,7 @@
           }}
           aria-label="Isolated edit {ariaLabel}"
           title="Edit this color independently of its source"
-          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Pencil size={10} strokeWidth={2.25} />
           <span>Isolated edit</span>
@@ -858,7 +858,7 @@
           }}
           aria-label="Link back {ariaLabel} to its source"
           title="Re-link this color to its source"
-          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
         >
           <Link2 size={10} strokeWidth={2.25} />
           <span>Link back</span>
@@ -890,8 +890,8 @@
     {@const info = tokenInfo(row)}
     <div class="theme-control-row flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="text-[12px] text-foreground">{info.title}</div>
-        <div class="text-[11px] text-muted-foreground">{info.description}</div>
+        <div class="text-[0.8rem] text-foreground">{info.title}</div>
+        <div class="text-[0.733333rem] text-muted-foreground">{info.description}</div>
       </div>
       {@render tokenEditor(row.key, row.scope, info.title)}
     </div>
@@ -916,8 +916,8 @@
         : canResetCalToken(row.key)}
     <div class="theme-control-row flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
-        <div class="text-[13px] font-semibold text-foreground">{info.title}</div>
-        <div class="text-[11px] text-muted-foreground">{info.description}</div>
+        <div class="text-[0.866667rem] font-semibold text-foreground">{info.title}</div>
+        <div class="text-[0.733333rem] text-muted-foreground">{info.description}</div>
       </div>
       <div class="theme-row-controls flex shrink-0 items-center gap-1.5">
         <ColorField
@@ -949,7 +949,7 @@
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
-          <span class="text-[12px] text-foreground">{row.title}</span>
+          <span class="text-[0.8rem] text-foreground">{row.title}</span>
           {#if !contrast.passes}
             <button
               type="button"
@@ -958,7 +958,7 @@
               title="Contrast {contrast.ratio.toFixed(2)}:1. This pair targets {contrast.target}:1{contrast.target >= 4.5
                 ? ' (AA body text)'
                 : ' (AA large/UI)'}. Click to auto-pick a legible text color."
-              class="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+              class="flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
             >
               <AlertTriangle size={11} strokeWidth={2.25} />
               <span>{contrast.ratio.toFixed(1)}:1</span>
@@ -966,12 +966,12 @@
             </button>
           {/if}
         </div>
-        <div class="text-[11px] text-muted-foreground">{row.description}</div>
+        <div class="text-[0.733333rem] text-muted-foreground">{row.description}</div>
       </div>
       <div class="theme-pair-controls flex shrink-0 flex-col items-end gap-2">
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Bg
           </span>
@@ -979,7 +979,7 @@
         </div>
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Text
           </span>
@@ -997,7 +997,7 @@
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
-          <span class="text-[13px] font-semibold text-foreground">
+          <span class="text-[0.866667rem] font-semibold text-foreground">
             {row.title}
           </span>
           {#if !contrast.passes}
@@ -1008,7 +1008,7 @@
               title="Contrast {contrast.ratio.toFixed(2)}:1. This pair targets {contrast.target}:1{contrast.target >= 4.5
                 ? ' (AA body text)'
                 : ' (AA large/UI)'}. Click to auto-pick a legible text color."
-              class="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+              class="flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
             >
               <AlertTriangle size={11} strokeWidth={2.25} />
               <span>{contrast.ratio.toFixed(1)}:1</span>
@@ -1016,12 +1016,12 @@
             </button>
           {/if}
         </div>
-        <div class="text-[11px] text-muted-foreground">{row.description}</div>
+        <div class="text-[0.733333rem] text-muted-foreground">{row.description}</div>
       </div>
       <div class="theme-pair-controls flex shrink-0 flex-col items-end gap-2">
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Bg
           </span>
@@ -1029,7 +1029,7 @@
         </div>
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
-            class="theme-pair-label w-8.5 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
             Text
           </span>
@@ -1054,10 +1054,10 @@
       {:else}
         <header class="theme-group-header flex items-center justify-between gap-3 px-1 py-2.5">
           <div class="min-w-0 flex-1">
-            <div class="text-[13px] font-semibold text-foreground">
+            <div class="text-[0.866667rem] font-semibold text-foreground">
               {group.title}
             </div>
-            <div class="text-[11px] text-muted-foreground">
+            <div class="text-[0.733333rem] text-muted-foreground">
               {group.description}
             </div>
           </div>
@@ -1083,7 +1083,7 @@
                 aria-label="{isCollapsed
                   ? 'Expand'
                   : 'Collapse'} {group.title} options"
-                class="theme-token-action theme-collapse-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+                class="theme-token-action theme-collapse-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
               >
                 {#if isCollapsed}
                   <ChevronDown class="theme-collapse-action-icon" size={11} strokeWidth={2.25} />
@@ -1133,10 +1133,10 @@
     <section class="flex flex-col gap-2 px-1 py-2.5">
       <header>
         <div class="min-w-0 flex-1">
-          <h2 class="text-[13px] font-semibold text-foreground">
+          <h2 class="text-[0.866667rem] font-semibold text-foreground">
             Color defaults
           </h2>
-          <div class="text-[11px] text-muted-foreground">
+          <div class="text-[0.733333rem] text-muted-foreground">
             Surface, palette, and details
           </div>
         </div>
@@ -1148,7 +1148,7 @@
             onclick={() => applyCalendarDefault(option.mode)}
             aria-pressed={userTheme?.calendarDefaultMode === option.mode}
             class={cn(
-              "min-h-7 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              "min-h-7 rounded-md border px-2.5 py-1 text-[0.733333rem] font-medium transition-colors",
               userTheme?.calendarDefaultMode === option.mode
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground",
@@ -1196,12 +1196,12 @@
       class="theme-section-header flex scroll-mt-4 items-center gap-3 px-1 pt-1"
       data-theme-nav-target={target}
     >
-      <h2 class="shrink-0 text-[13px] font-semibold uppercase text-foreground">
+      <h2 class="shrink-0 text-[0.866667rem] font-semibold uppercase text-foreground">
         {THEME_SECTION_LABELS[target]}
       </h2>
       <div class="h-px min-w-4 flex-1 bg-border" aria-hidden="true"></div>
       {#if note}
-        <span class="shrink-0 text-[11px] text-muted-foreground">
+        <span class="shrink-0 text-[0.733333rem] text-muted-foreground">
           {note}
         </span>
       {/if}

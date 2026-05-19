@@ -63,8 +63,8 @@
     </button>
     <button onclick={onexpand}
       class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
-      <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
+      <span class="translate-y-[1.13px] text-[0.733333rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
+      <span class="ml-auto translate-y-[1.13px] truncate text-[0.666667rem] text-muted-foreground">{summary}</span>
     </button>
   </div>
   {#if expanded}
@@ -72,18 +72,18 @@
       {#each Object.entries(POMO_PRESETS) as [key, val]}
         <button
           onclick={() => applyPreset(key as PomodoroPreset)}
-          class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px]
+          class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[0.733333rem]
             {preset === key
               ? 'bg-black/5 dark:bg-black/15 text-foreground'
               : 'text-foreground'}"
         >
           <span>{val.label}</span>
-          <span class="ml-auto text-[10px] {preset === key ? 'text-muted-foreground' : 'text-muted-foreground'}">{val.desc}</span>
+          <span class="ml-auto text-[0.666667rem] {preset === key ? 'text-muted-foreground' : 'text-muted-foreground'}">{val.desc}</span>
         </button>
       {/each}
       <button
         onclick={() => applyPreset("custom")}
-        class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[11px]
+        class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[0.733333rem]
           {preset === 'custom'
             ? 'bg-black/5 dark:bg-black/15 text-foreground'
             : 'text-foreground'}"
@@ -97,11 +97,11 @@
             { label: "Short break", value: shortBreak, set: (v: number) => { shortBreak = v; onchange(); }, min: 1, max: 30 },
             { label: "Long break", value: longBreak, set: (v: number) => { longBreak = v; onchange(); }, min: 1, max: 60 },
           ] as field}
-            <label class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <label class="flex items-center gap-1.5 text-[0.666667rem] text-muted-foreground">
               <span class="w-16">{field.label}</span>
               <input type="number" value={field.value} min={field.min} max={field.max}
                 oninput={(e) => field.set(parseInt(e.currentTarget.value, 10) || field.min)}
-                class="num-input w-8 rounded bg-black/5 dark:bg-black/15 px-0.5 py-0.5 text-center text-[10px] text-event-panel-input-text outline-none"
+                class="num-input w-8 rounded bg-black/5 dark:bg-black/15 px-0.5 py-0.5 text-center text-[0.666667rem] text-event-panel-input-text outline-none"
                 onkeydown={(e) => e.stopPropagation()} />
               <span class="text-muted-foreground">min</span>
             </label>
@@ -111,7 +111,7 @@
       <div class="border-t border-border/40 mt-1 pt-0.5 px-0">
         <button
           onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; onchange(); }}
-          class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] w-full text-foreground"
+          class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[0.733333rem] w-full text-foreground"
         >
           <div class="size-2.75 shrink-0
             {idleTimeoutEnabled ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">

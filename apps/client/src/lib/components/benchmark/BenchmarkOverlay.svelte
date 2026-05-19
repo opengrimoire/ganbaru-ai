@@ -9,7 +9,7 @@
 
   const runner = getBenchmarkRunner();
   const tableWrapClass = "overflow-x-auto rounded-md border border-border";
-  const tableClass = "min-w-full border-collapse text-left text-[12px]";
+  const tableClass = "min-w-full border-collapse text-left text-[0.8rem]";
   const thClass = "sticky top-0 whitespace-nowrap border-b border-border bg-muted px-3 py-2 font-medium text-muted-foreground";
   const tdClass = "whitespace-nowrap border-b border-border/70 px-3 py-2 text-foreground";
 
@@ -87,12 +87,12 @@
     >
       <div class="flex items-center gap-2.5">
         <LoaderCircle size={16} strokeWidth={2.25} class="animate-spin text-primary" />
-        <h2 class="text-[14px] font-semibold text-foreground">
+        <h2 class="text-[0.933333rem] font-semibold text-foreground">
           Running benchmark: {runner.running.scenarioLabel}
         </h2>
       </div>
 
-      <div class="text-[13px] text-foreground">
+      <div class="text-[0.866667rem] text-foreground">
         {#if runner.running.suite}
           Benchmark {runner.running.suite.index + 1}/{runner.running.suite.total}.
         {/if}
@@ -104,7 +104,7 @@
         {/if}
       </div>
 
-      <p class="text-[12px] text-muted-foreground">
+      <p class="text-[0.8rem] text-muted-foreground">
         Avoid interacting with the app: clicks and key presses can skew the measurements.
         Your real calendar lives on a separate database and stays untouched even if the run is
         interrupted, the app is force-closed, or the system shuts down. Cancel discards the
@@ -115,7 +115,7 @@
         <button
           type="button"
           onclick={() => void runner.cancel()}
-          class="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          class="rounded-md border border-border bg-card px-3 py-1.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
           Cancel
         </button>
@@ -134,15 +134,15 @@
     >
       <header class="flex items-center justify-between border-b border-border px-5 py-3">
         <div>
-          <h2 class="text-[14px] font-semibold text-foreground">Benchmark complete</h2>
-          <p class="mt-0.5 text-[12px] text-muted-foreground">
+          <h2 class="text-[0.933333rem] font-semibold text-foreground">Benchmark complete</h2>
+          <p class="mt-0.5 text-[0.8rem] text-muted-foreground">
             Review the tables, then copy markdown for an agent to place carefully in the performance record.
           </p>
         </div>
         <button
           type="button"
           onclick={copyMarkdown}
-          class="flex items-center gap-1.5 rounded-md border border-border bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          class="flex items-center gap-1.5 rounded-md border border-border bg-primary px-3 py-1.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           {#if copied}
             <Check size={12} strokeWidth={2.25} />
@@ -157,7 +157,7 @@
       <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4">
         {#if summaryPreview}
           <section class="space-y-2">
-            <h3 class="text-[13px] font-semibold text-foreground">Run metadata</h3>
+            <h3 class="text-[0.866667rem] font-semibold text-foreground">Run metadata</h3>
             <div class={tableWrapClass}>
               <table class={tableClass}>
                 <thead>
@@ -186,7 +186,7 @@
 
           {#each summaryPreview.sections as section, sectionIndex (section.id + sectionIndex)}
             <section class="space-y-2">
-              <h3 class="text-[13px] font-semibold text-foreground">{section.title}</h3>
+              <h3 class="text-[0.866667rem] font-semibold text-foreground">{section.title}</h3>
               <div class={section.kind === "startup" ? tableWrapClass : "space-y-3"}>
                 {#if section.kind === "startup"}
                   <table class={tableClass}>
@@ -336,7 +336,7 @@
                     </div>
                   {/if}
                   {#if section.latencyRows.length === 0 && section.scalarRows.length === 0}
-                    <p class="text-[12px] text-muted-foreground">No primary metrics were captured.</p>
+                    <p class="text-[0.8rem] text-muted-foreground">No primary metrics were captured.</p>
                   {/if}
                 {/if}
               </div>
@@ -349,7 +349,7 @@
         <button
           type="button"
           onclick={() => runner.closeSummary()}
-          class="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          class="rounded-md border border-border bg-card px-3 py-1.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
           Return to your data
         </button>
@@ -366,15 +366,15 @@
     <div
       class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
     >
-      <h2 class="text-[14px] font-semibold text-destructive">Benchmark failed</h2>
-      <p class="text-[12px] text-foreground">
+      <h2 class="text-[0.933333rem] font-semibold text-destructive">Benchmark failed</h2>
+      <p class="text-[0.8rem] text-foreground">
         {runner.errorMessage ?? "Unknown error."}
       </p>
       <div class="flex justify-end">
         <button
           type="button"
           onclick={() => runner.closeSummary()}
-          class="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          class="rounded-md border border-border bg-card px-3 py-1.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
           Return to your data
         </button>

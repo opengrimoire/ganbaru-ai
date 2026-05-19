@@ -272,7 +272,7 @@
             </span>
             <span class="truncate text-sm text-foreground">{displayName}</span>
             {#if cal.readOnly}
-              <span class="ml-auto text-[9px] text-muted-foreground/60">read-only</span>
+              <span class="ml-auto text-[0.6rem] text-muted-foreground/60">read-only</span>
             {/if}
           </button>
         {/each}

@@ -439,7 +439,7 @@
   onwheel={(e) => e.stopPropagation()}
 >
   <div class="flex items-center justify-between gap-2">
-    <div class="flex min-w-0 flex-1 items-center gap-1.5 text-[10px] uppercase tracking-wider">
+    <div class="flex min-w-0 flex-1 items-center gap-1.5 text-[0.666667rem] uppercase tracking-wider">
       <button
         onclick={() => { perfLive = true; }}
         class={cn(
@@ -484,9 +484,9 @@
       <div class="flex items-baseline justify-between">
         <span class="text-xs text-muted-foreground">{row.label}</span>
         {#if row.mb === null}
-          <span class="min-w-14 text-right text-[11px] tabular-nums text-muted-foreground/50">...</span>
+          <span class="min-w-14 text-right text-[0.733333rem] tabular-nums text-muted-foreground/50">...</span>
         {:else}
-          <span class={cn("min-w-14 text-right text-[11px] tabular-nums text-foreground", showingHoveredSample && "italic")}>{row.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+          <span class={cn("min-w-14 text-right text-[0.733333rem] tabular-nums text-foreground", showingHoveredSample && "italic")}>{row.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
         {/if}
       </div>
     {/each}
@@ -505,7 +505,7 @@
       <button
         onclick={copyLiveRam}
         disabled={liveReport === null}
-        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {#if copiedId === "live-ram"}
           <Check size={11} />
@@ -518,7 +518,7 @@
       <button
         onclick={copyChart}
         disabled={memorySamples.length === 0}
-        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {#if copiedId === "chart"}
           <Check size={11} />
@@ -532,7 +532,7 @@
   {:else if startupMemorySnapshot.status === "ready"}
     <button
       onclick={copyStartupRam}
-      class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+      class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
     >
       {#if copiedId === "startup-ram"}
         <Check size={11} />
@@ -550,9 +550,9 @@
       onclick={() => (launchExpanded = !launchExpanded)}
       class="flex w-full items-center justify-between rounded text-left transition-colors hover:bg-accent"
     >
-      <span class="text-[10px] uppercase tracking-wider text-foreground">Launch time</span>
+      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">Launch time</span>
       <span class="flex items-center gap-1.5">
-        <span class="text-[11px] tabular-nums text-foreground">{launchMs.toLocaleString("en")} ms</span>
+        <span class="text-[0.733333rem] tabular-nums text-foreground">{launchMs.toLocaleString("en")} ms</span>
         <ChevronDown
           size={11}
           class={cn("text-muted-foreground transition-transform", launchExpanded && "rotate-180")}
@@ -561,7 +561,7 @@
     </button>
     {#if launchExpanded}
       {#if bootRows.length > 0}
-        <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
+        <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[0.666667rem] leading-tight">
           {#each bootRows as row (row.label)}
             <div class="flex min-w-0 justify-between gap-2 text-muted-foreground tabular-nums">
               <span class="min-w-0 truncate">{row.label}</span>
@@ -570,11 +570,11 @@
           {/each}
         </div>
       {:else}
-        <div class="mt-1.5 text-[10px] text-muted-foreground/60">No boot marks captured.</div>
+        <div class="mt-1.5 text-[0.666667rem] text-muted-foreground/60">No boot marks captured.</div>
       {/if}
       <button
         onclick={copyLaunchTable}
-        class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+        class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
       >
         {#if copiedId === "launch"}
           <Check size={11} />
@@ -589,14 +589,14 @@
 
   <div class={sectionDividerClass}></div>
   <div class="flex items-center justify-between">
-    <span class="text-[10px] uppercase tracking-wider text-foreground">
+    <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">
       Speed log ({actionChains.length})
     </span>
     <div class="flex items-center gap-2">
       <button
         onclick={() => setTracking(!perfLog.tracking)}
         class={cn(
-          "text-[10px] uppercase tracking-wider transition-colors",
+          "text-[0.666667rem] uppercase tracking-wider transition-colors",
           perfLog.tracking ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
         )}
         title={perfLog.tracking
@@ -606,12 +606,12 @@
       <button
         onclick={clearPerfLog}
         disabled={!hasSpeedLogEntries}
-        class="text-[10px] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
+        class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
       >Clear</button>
     </div>
   </div>
   {#if actionChains.length > 0}
-    <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[10px] leading-tight">
+    <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[0.666667rem] leading-tight">
       {#each actionChains as row, i (i)}
         <div class="min-w-0 text-muted-foreground tabular-nums">
           <div class="flex min-w-0 justify-between gap-2">
@@ -630,7 +630,7 @@
   <button
     onclick={copySpeedLog}
     disabled={actionChains.length === 0}
-    class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+    class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
   >
     {#if copiedId === "speed-log"}
       <Check size={11} />
@@ -643,13 +643,13 @@
 
   <div class={sectionDividerClass}></div>
   <div class="flex items-center justify-between gap-2">
-    <span class="min-w-0 text-[10px] uppercase tracking-wider text-foreground">
+    <span class="min-w-0 text-[0.666667rem] uppercase tracking-wider text-foreground">
       Calendar scroll
     </span>
     <button
       onclick={startCalendarScrollSample}
       class={cn(
-        "flex h-6 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-[10px] font-medium uppercase tracking-wider transition-colors",
+        "flex h-6 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-[0.666667rem] font-medium uppercase tracking-wider transition-colors",
         calendarScrollCapture
           ? "border border-border bg-card text-foreground hover:bg-accent dark:bg-transparent"
           : "bg-primary text-primary-foreground hover:bg-primary/90",
@@ -665,13 +665,13 @@
     </button>
   </div>
   {#if calendarScrollError}
-    <div class="mt-1.5 text-[10px] text-destructive">{calendarScrollError}</div>
+    <div class="mt-1.5 text-[0.666667rem] text-destructive">{calendarScrollError}</div>
   {:else if calendarScrollCapture}
-    <div class="mt-1.5 text-[10px] text-muted-foreground/70">
+    <div class="mt-1.5 text-[0.666667rem] text-muted-foreground/70">
       Recording, {CALENDAR_SCROLL_SAMPLE_MIN_MS / 1000}-{CALENDAR_SCROLL_SAMPLE_MAX_MS / 1000} s target.
     </div>
   {:else if calendarScrollSample}
-    <div class="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] leading-tight">
+    <div class="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[0.666667rem] leading-tight">
       <div class="text-muted-foreground">Duration</div>
       <div class="text-right tabular-nums text-foreground">{formatMs(calendarScrollSample.durationMs)}</div>
       <div class="text-muted-foreground">Frame P95</div>
@@ -691,7 +691,7 @@
     </div>
     <button
       onclick={copyCalendarScrollSample}
-      class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+      class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
     >
       {#if copiedId === "calendar-scroll"}
         <Check size={11} />
@@ -702,14 +702,14 @@
       {/if}
     </button>
   {:else}
-    <div class="mt-1.5 text-[10px] text-muted-foreground/60">No scroll sample captured.</div>
+    <div class="mt-1.5 text-[0.666667rem] text-muted-foreground/60">No scroll sample captured.</div>
   {/if}
 
   {#if BENCHMARK_SUITES.length > 0}
     <div class={sectionDividerClass}></div>
     <div class="flex items-center justify-between">
-      <span class="text-[10px] uppercase tracking-wider text-foreground">Benchmarks</span>
-      <span class="text-[10px] uppercase tracking-wider text-muted-foreground/60"
+      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">Benchmarks</span>
+      <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60"
         >restarts app</span
       >
     </div>
@@ -720,7 +720,7 @@
             <button
               onclick={() => void requestBenchmarkSuite(suite)}
               disabled={benchmarkStatus.status !== "idle"}
-              class="flex h-6 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md bg-primary px-2 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              class="flex h-6 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md bg-primary px-2 text-[0.733333rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               title={suite.description}
             >
               <Play size={12} class="shrink-0" />
@@ -746,7 +746,7 @@
                 <button
                   onclick={() => void requestBenchmark(scenario.id)}
                   disabled={benchmarkStatus.status !== "idle"}
-                  class="flex h-6 w-full min-w-0 items-center justify-start gap-1.5 rounded-md bg-muted/70 px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  class="flex h-6 w-full min-w-0 items-center justify-start gap-1.5 rounded-md bg-muted/70 px-2 text-[0.733333rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   title={scenario.description}
                 >
                   <Play size={11} class="shrink-0" />

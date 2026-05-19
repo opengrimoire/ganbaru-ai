@@ -131,7 +131,7 @@
     onclick={(e) => e.stopPropagation()}
   >
     <header class="flex shrink-0 items-center justify-between gap-3 px-5 pb-2 pt-4">
-      <h2 class="truncate text-[15px] font-semibold text-foreground">Keyboard shortcuts</h2>
+      <h2 class="truncate text-[1rem] font-semibold text-foreground">Keyboard shortcuts</h2>
       <button
         bind:this={closeButton}
         onclick={onClose}
@@ -149,7 +149,7 @@
         <div class="flex flex-col gap-5">
           {#each SHORTCUT_GROUPS as group}
             <section class="min-w-0">
-              <h3 class="mb-2 text-[12px] font-semibold text-muted-foreground">{group.title}</h3>
+              <h3 class="mb-2 text-[0.8rem] font-semibold text-muted-foreground">{group.title}</h3>
               <div class="flex flex-col divide-y divide-border/70">
                 {#each group.items as item}
                   <div class="grid grid-cols-[14rem_12.5rem] gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
@@ -164,11 +164,11 @@
                         <span class="flex flex-wrap items-center gap-1">
                           {#each shortcutParts(key) as part, i}
                             {#if i > 0}
-                              <span class="text-[11px] leading-5 text-muted-foreground">+</span>
+                              <span class="text-[0.733333rem] leading-5 text-muted-foreground">+</span>
                             {/if}
                             {@const ArrowIcon = arrowIconForKey(part)}
                             <kbd
-                              class="inline-flex min-h-6 items-center justify-center rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] leading-5 text-foreground shadow-sm"
+                              class="inline-flex min-h-6 items-center justify-center rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[0.733333rem] leading-5 text-foreground shadow-sm"
                               aria-label={ArrowIcon ? part : undefined}
                               title={ArrowIcon ? part : undefined}
                             >

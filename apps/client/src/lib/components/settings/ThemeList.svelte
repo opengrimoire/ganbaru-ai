@@ -166,8 +166,8 @@
 <div class="flex flex-col gap-4">
   <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
-      <h2 class="text-[13px] font-semibold text-foreground">Themes</h2>
-      <p class="mt-0.5 text-[12px] text-muted-foreground">
+      <h2 class="text-[0.866667rem] font-semibold text-foreground">Themes</h2>
+      <p class="mt-0.5 text-[0.8rem] text-muted-foreground">
         Apply, duplicate, or edit themes. Built-in themes are read-only; use
         Duplicate to fork one into an editable copy.
       </p>
@@ -176,7 +176,7 @@
       <button
         type="button"
         onclick={handleImportToggle}
-        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
       >
         <ClipboardPaste size={12} strokeWidth={2.25} />
         <span>Import</span>
@@ -184,7 +184,7 @@
       <button
         type="button"
         onclick={handleNew}
-        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         <Plus size={12} strokeWidth={2.25} />
         <span>New theme</span>
@@ -197,7 +197,7 @@
       class="flex flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 dark:bg-background"
     >
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[12px] font-medium text-foreground">
+        <span class="text-[0.8rem] font-medium text-foreground">
           Paste theme JSON
         </span>
         <button
@@ -214,11 +214,11 @@
         placeholder={'{\n  "id": "midnight",\n  "displayName": "Midnight",\n  ...\n}'}
         rows={8}
         spellcheck={false}
-        class="w-full resize-y rounded-md border border-border bg-background p-2 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        class="w-full resize-y rounded-md border border-border bg-background p-2 text-[0.733333rem] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
       ></textarea>
       {#if importErrors.length > 0}
         <ul
-          class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive"
+          class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[0.733333rem] text-destructive"
         >
           {#each importErrors as err}
             <li>{err}</li>
@@ -230,14 +230,14 @@
           <button
             type="button"
             onclick={handlePasteFromClipboard}
-            class="rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            class="rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
           >
             Paste from clipboard
           </button>
           <button
             type="button"
             onclick={handleImportFromFile}
-            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
           >
             <FolderOpen size={11} strokeWidth={2.25} />
             <span>Open file</span>
@@ -246,7 +246,7 @@
         <button
           type="button"
           onclick={handleImport}
-          class="rounded-md border border-border bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 max-[520px]:self-end"
+          class="rounded-md border border-border bg-primary px-3 py-1 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 max-[520px]:self-end"
         >
           Import
         </button>
@@ -272,7 +272,7 @@
 
   {#if toast}
     <div
-      class="pointer-events-none fixed bottom-6 left-1/2 z-80 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-1.5 text-[12px] text-foreground shadow-lg"
+      class="pointer-events-none fixed bottom-6 left-1/2 z-80 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-1.5 text-[0.8rem] text-foreground shadow-lg"
     >
       {toast}
     </div>

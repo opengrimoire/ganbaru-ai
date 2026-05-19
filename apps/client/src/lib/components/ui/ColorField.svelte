@@ -449,7 +449,7 @@
       }
     }}
     class={cn(
-      "h-7 rounded-md border border-border bg-card px-2 text-[12px] leading-6.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+      "h-7 rounded-md border border-border bg-card px-2 text-[0.8rem] leading-6.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
       fluid ? "min-w-0 flex-1" : "w-19",
       readOnly && "cursor-not-allowed opacity-60",
     )}
@@ -541,7 +541,7 @@
         ></div>
       </div>
 
-      <div class="relative mt-3 flex items-center gap-2 text-[11px]">
+      <div class="relative mt-3 flex items-center gap-2 text-[0.733333rem]">
         <div bind:this={formatMenuEl} class="relative shrink-0">
           <button
             type="button"
@@ -595,7 +595,7 @@
               }
             }}
             aria-label="Hex color value"
-            class="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-[12px] leading-6.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            class="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-[0.8rem] leading-6.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         {:else if activeFormat === "rgb"}
           <div class="grid min-w-0 flex-1 grid-cols-3 gap-1.5">

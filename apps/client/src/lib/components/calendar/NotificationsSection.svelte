@@ -115,8 +115,8 @@
     </button>
     <button onclick={onexpand}
       class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[11px] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
-      <span class="ml-auto translate-y-[1.13px] truncate text-[10px] text-muted-foreground">{summary}</span>
+      <span class="translate-y-[1.13px] text-[0.733333rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
+      <span class="ml-auto translate-y-[1.13px] truncate text-[0.666667rem] text-muted-foreground">{summary}</span>
     </button>
   </div>
   {#if expanded}
@@ -125,7 +125,7 @@
         {#each NOTIF_PRESETS as opt}
           <button
             onclick={() => toggleNotif(opt.value)}
-            class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[11px] text-foreground"
+            class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[0.733333rem] text-foreground"
           >
             <div class="size-2.75 shrink-0
               {selected.has(opt.value) ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
@@ -138,16 +138,16 @@
         <div class="flex items-center gap-1.5 px-2">
           <input type="number" value={cn.amount} min={1} max={999}
             oninput={(e) => updateCustomNotif(idx, parseInt(e.currentTarget.value, 10) || 1, cn.unit)}
-            class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[11px] text-event-panel-input-text outline-none"
+            class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none"
             onkeydown={(e) => e.stopPropagation()} />
           <button bind:this={dropdownBtns[idx]}
             onclick={() => { dropdownIdx = dropdownIdx === idx ? null : idx; }}
-            class="rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[11px]
+            class="rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[0.733333rem]
               {dropdownIdx === idx ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}
               text-event-panel-input-text">
             {CUSTOM_UNITS.find((u) => u.value === cn.unit)?.label ?? "minutes"}
           </button>
-          <span class="text-[11px] text-muted-foreground">before</span>
+          <span class="text-[0.733333rem] text-muted-foreground">before</span>
           <button onclick={() => { removeCustomNotif(idx); dropdownIdx = null; }}
             class="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
             <X size={12} />
@@ -162,7 +162,7 @@
               use:positionDropdown={idx}>
               {#each CUSTOM_UNITS as u}
                 <button onclick={() => { updateCustomNotif(idx, cn.amount, u.value); dropdownIdx = null; }}
-                  class="flex w-full items-center px-3 py-1.5 text-left text-[11px]
+                  class="flex w-full items-center px-3 py-1.5 text-left text-[0.733333rem]
                     {cn.unit === u.value
                       ? 'bg-black/5 dark:bg-black/15 text-foreground'
                       : 'text-foreground hover:bg-black/5 dark:hover:bg-black/15'}">
@@ -175,7 +175,7 @@
       {/each}
       {#if customNotifs.length < 2}
         <button onclick={addCustomNotif}
-          class="flex items-center gap-1 self-start rounded-none px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15">
+          class="flex items-center gap-1 self-start rounded-none px-2 py-1 text-[0.733333rem] text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-black/15">
           <Plus size={12} /> <span>Custom</span>
         </button>
       {/if}

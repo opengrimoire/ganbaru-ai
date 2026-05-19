@@ -470,7 +470,7 @@
               role="button"
               tabindex="-1"
             >
-              <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+              <span class="text-[0.866667rem]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
                 {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}
               </span>
             </div>
@@ -570,7 +570,7 @@
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div
-                class="absolute z-3 flex cursor-pointer items-center px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                class="absolute z-3 flex cursor-pointer items-center px-1.5 text-[0.666667rem] text-muted-foreground hover:text-foreground"
                 style="
                   left: {(i / 7) * 100}%;
                   width: {(1 / 7) * 100}%;
@@ -603,7 +603,7 @@
             "
           >
           <div
-            class="allday-drag-preview min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-5"
+            class="allday-drag-preview min-w-0 flex-1 select-none truncate rounded px-1.5 text-[0.666667rem] leading-5"
             style="
               background-color: {dpColor.bg};
               color: {dpColor.text};

@@ -130,7 +130,7 @@
           bind:this={headerCells[i]}
           class="flex items-center justify-center"
         >
-          <span class="text-[13px]" style="color: var(--foreground);">
+          <span class="text-[0.866667rem]" style="color: var(--foreground);">
             {formatDayName(day, dayFormat)}
           </span>
         </div>
@@ -188,7 +188,7 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="month-event-surface relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[10px] {evtStatusPatternClass}"
+                class="month-event-surface relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[0.666667rem] {evtStatusPatternClass}"
                 style="
                   background-color: {evtColors.bg};
                   color: {evtColors.text};
@@ -202,7 +202,7 @@
             {/each}
 
             {#if dayEvts.length > maxVisible}
-              <span class="relative z-2 mt-px text-center text-[10px]" style="color: {moreColor};">
+              <span class="relative z-2 mt-px text-center text-[0.666667rem]" style="color: {moreColor};">
                 +{dayEvts.length - maxVisible} more
               </span>
             {/if}

@@ -72,7 +72,7 @@
 <div
   bind:this={chipEl}
   data-event-id={event.id}
-  class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-5 {statusPatternClass}
+  class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[0.666667rem] leading-5 {statusPatternClass}
     {editing || preview || grabbing ? 'chip-editing' : ''}"
   style="
     background-color: {activeColors.bg};

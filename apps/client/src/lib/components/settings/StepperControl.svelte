@@ -29,9 +29,9 @@
 
 <div class="flex items-center justify-between gap-4 px-4 py-3 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2 max-[480px]:px-3">
   <div class="min-w-0 flex-1">
-    <div class="text-[13px] text-foreground">{label}</div>
+    <div class="text-[0.866667rem] text-foreground">{label}</div>
     {#if description}
-      <div class="mt-0.5 text-[12px] text-muted-foreground">{description}</div>
+      <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{description}</div>
     {/if}
   </div>
   <div class="flex items-center justify-end gap-1.5 max-[480px]:justify-between">
@@ -53,7 +53,7 @@
         <Minus size={13} strokeWidth={2.5} />
       </button>
       <div
-        class="flex h-7 w-28 max-w-[42vw] items-center justify-center border-x border-border bg-card px-2 text-[12px] font-medium tabular-nums text-foreground dark:bg-transparent"
+        class="flex h-7 w-28 max-w-[42vw] select-none items-center justify-center border-x border-border bg-card px-2 text-[0.8rem] font-medium tabular-nums text-foreground dark:bg-transparent"
       >
         {displayValue}
       </div>

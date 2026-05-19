@@ -31,8 +31,8 @@
 
 <section class="flex flex-col">
   <header class="px-1 py-2.5">
-    <h2 class="text-[13px] font-semibold text-foreground">Schema</h2>
-    <div class="text-[11px] text-muted-foreground">
+    <h2 class="text-[0.866667rem] font-semibold text-foreground">Schema</h2>
+    <div class="text-[0.733333rem] text-muted-foreground">
       {isBuiltin
         ? "Read-only representation of the theme"
         : "Edit directly, apply to commit changes"}
@@ -45,11 +45,11 @@
       readonly={isBuiltin}
       spellcheck={false}
       rows={12}
-      class="w-full resize-y rounded-md border border-border bg-background p-2 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      class="w-full resize-y rounded-md border border-border bg-background p-2 text-[0.733333rem] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
     ></textarea>
     {#if jsonErrors.length > 0}
       <ul
-        class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive"
+        class="flex flex-col gap-0.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[0.733333rem] text-destructive"
       >
         {#each jsonErrors as err}
           <li>{err}</li>
@@ -61,7 +61,7 @@
         <button
           type="button"
           onclick={onCopy}
-          class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent"
+          class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent"
         >
           <Copy size={11} strokeWidth={2.25} />
           <span>Copy JSON</span>
@@ -69,7 +69,7 @@
         <button
           type="button"
           onclick={onSave}
-          class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-accent"
+          class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent"
         >
           <Download size={11} strokeWidth={2.25} />
           <span>Save to file</span>
@@ -82,7 +82,7 @@
             onclick={onReset}
             disabled={!jsonDirty}
             class={cn(
-              "flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] transition-colors",
+              "flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] transition-colors",
               jsonDirty
                 ? "text-foreground hover:bg-accent"
                 : "cursor-not-allowed text-muted-foreground opacity-60",
@@ -96,7 +96,7 @@
             onclick={onApply}
             disabled={!jsonDirty}
             class={cn(
-              "rounded-md border border-border px-3 py-1 text-[11px] font-medium transition-colors",
+              "rounded-md border border-border px-3 py-1 text-[0.733333rem] font-medium transition-colors",
               jsonDirty
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "cursor-not-allowed bg-card text-muted-foreground opacity-60",
@@ -108,7 +108,7 @@
       {/if}
     </div>
     {#if jsonNotice}
-      <div class="text-[11px] text-muted-foreground">{jsonNotice}</div>
+      <div class="text-[0.733333rem] text-muted-foreground">{jsonNotice}</div>
     {/if}
   </div>
 </section>

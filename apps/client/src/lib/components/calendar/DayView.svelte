@@ -375,7 +375,7 @@
           role="button"
           tabindex="-1"
         >
-          <span class="text-[13px]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
+          <span class="text-[0.866667rem]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
             {dayLabel}
           </span>
         </div>
@@ -419,7 +419,7 @@
         {/each}
         {#if allDayCollapsible && !allDayExpanded}
           <button
-            class="flex items-center px-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+            class="flex items-center px-0.5 text-[0.666667rem] text-muted-foreground hover:text-foreground"
             style="height: {ALL_DAY_ROW_H}px;"
             onclick={(e) => { e.stopPropagation(); allDayExpanded = true; }}
           >

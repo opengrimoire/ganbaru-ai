@@ -74,22 +74,22 @@
   >
     <div class="mb-5 text-left">
       {#if title}
-        <h2 class="mb-1 text-[15px] font-semibold text-foreground">{title}</h2>
-        <p class="text-[13px] text-foreground whitespace-pre-line">{message}</p>
+        <h2 class="mb-1 text-[1rem] font-semibold text-foreground">{title}</h2>
+        <p class="text-[0.866667rem] text-foreground whitespace-pre-line">{message}</p>
       {:else}
-        <p class="text-[15px] font-semibold text-foreground whitespace-pre-line">{message}</p>
+        <p class="text-[1rem] font-semibold text-foreground whitespace-pre-line">{message}</p>
       {/if}
     </div>
     <div class="flex items-center justify-start gap-2">
       <button
         onclick={onCancel}
-        class="rounded-md border border-border bg-card px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
+        class="rounded-md border border-border bg-card px-3.5 py-2 text-[0.866667rem] font-medium text-foreground transition-colors hover:bg-accent"
       >
         {cancelLabel}
       </button>
       <button
         onclick={onConfirm}
-        class="rounded-md border border-border bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        class="rounded-md border border-border bg-primary px-3.5 py-2 text-[0.866667rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         {confirmLabel}
       </button>

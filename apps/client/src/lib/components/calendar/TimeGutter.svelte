@@ -30,7 +30,7 @@
         >
           {#if hour > 0}
             <span
-              class="absolute top-[-0.45em] text-[11px] leading-none antialiased"
+              class="absolute top-[-0.45em] text-[0.733333rem] leading-none antialiased"
               style="color: var(--cal-time-label);"
             >
               {getHourInTimezone(anchorDate, hour, tz)}

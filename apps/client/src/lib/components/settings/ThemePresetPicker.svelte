@@ -72,10 +72,10 @@
   >
     <header class="flex items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
-        <h2 class="text-[14px] font-semibold text-foreground">
+        <h2 class="text-[0.933333rem] font-semibold text-foreground">
           Pick a starting preset
         </h2>
-        <p class="mt-1 text-[12px] text-muted-foreground">
+        <p class="mt-1 text-[0.8rem] text-muted-foreground">
           Every preset is pre-validated for AA contrast. Pick one to start,
           then tweak in the editor.
         </p>
@@ -146,10 +146,10 @@
           </div>
           <!-- Label -->
           <div class="flex flex-col gap-0.5">
-            <span class="text-[11px] font-semibold text-foreground">
+            <span class="text-[0.733333rem] font-semibold text-foreground">
               {preset.displayName}
             </span>
-            <span class="line-clamp-2 text-[10px] text-muted-foreground">
+            <span class="line-clamp-2 text-[0.666667rem] text-muted-foreground">
               {preset.description}
             </span>
           </div>
@@ -158,13 +158,13 @@
     </div>
 
     <div class="flex items-center justify-between gap-3 border-t border-border pt-3 max-[520px]:flex-col max-[520px]:items-stretch">
-      <span class="text-[11px] text-muted-foreground">
+      <span class="text-[0.733333rem] text-muted-foreground">
         Prefer to start from your current theme?
       </span>
       <button
         type="button"
         onclick={onStartBlank}
-        class="rounded-md border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent max-[520px]:self-end"
+        class="rounded-md border border-border bg-card px-3 py-1.5 text-[0.733333rem] font-medium text-foreground transition-colors hover:bg-accent max-[520px]:self-end"
       >
         Start blank
       </button>

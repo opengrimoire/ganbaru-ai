@@ -15,7 +15,7 @@
     <button
       type="button"
       onclick={onBack}
-      class="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[12px] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      class="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[0.8rem] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       aria-label="Back to music player"
     >
       <ArrowLeft size={musicIconSize} strokeWidth={musicIconStrokeWidth} />

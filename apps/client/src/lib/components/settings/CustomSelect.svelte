@@ -115,9 +115,9 @@
 <div class="flex items-center justify-between gap-4 px-4 py-3 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2 max-[480px]:px-3">
   {#if label}
     <div class="min-w-0 flex-1">
-      <div class="text-[13px] text-foreground">{label}</div>
+      <div class="text-[0.866667rem] text-foreground">{label}</div>
       {#if description}
-        <div class="mt-0.5 text-[12px] text-muted-foreground">{description}</div>
+        <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{description}</div>
       {/if}
     </div>
   {/if}
@@ -129,7 +129,7 @@
         onclick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        class="flex h-7 w-42 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
+        class="flex h-7 w-42 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
       >
         <span class="truncate" style={current?.style}>{current?.label ?? value}</span>
         <ChevronDown
@@ -154,7 +154,7 @@
               aria-selected={isActive}
               onclick={() => select(option.value)}
               class={cn(
-                "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left text-[12px] transition-colors",
+                "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left text-[0.8rem] transition-colors",
                 isActive
                   ? "bg-accent/60 text-foreground"
                   : "text-foreground hover:bg-accent/40",
