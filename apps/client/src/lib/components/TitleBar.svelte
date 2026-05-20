@@ -351,21 +351,23 @@
       togglePerfMenu();
       return;
     }
-
-    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "w") {
-      e.preventDefault();
-      e.stopPropagation();
-      if (lockedByBenchmark) {
-        void ensureBenchmarkOverlay();
-        return;
-      }
-      void handleClose();
-    }
   }
 
-  // Capture zoom shortcuts early to prevent native webview handling
+  // Capture shell shortcuts early so focused views and modals cannot intercept them.
   $effect(() => {
-    function handleZoom(e: KeyboardEvent) {
+    function handleGlobalShellShortcut(e: KeyboardEvent) {
+      if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (lockedByBenchmark) {
+          void ensureBenchmarkOverlay();
+          return;
+        }
+        void handleClose();
+        return;
+      }
+
       if (hasOnlyShortcutModifier(e)) {
         if (e.key === "=" || e.key === "+") {
           e.preventDefault();
@@ -385,8 +387,8 @@
         }
       }
     }
-    window.addEventListener("keydown", handleZoom, { capture: true });
-    return () => window.removeEventListener("keydown", handleZoom, { capture: true });
+    window.addEventListener("keydown", handleGlobalShellShortcut, { capture: true });
+    return () => window.removeEventListener("keydown", handleGlobalShellShortcut, { capture: true });
   });
 
   let tabEls: HTMLButtonElement[] = $state([]);
