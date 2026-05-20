@@ -40,7 +40,7 @@ describe("shortcut search", () => {
       "Reset zoom",
       "Toggle light/dark mode",
       "Open theme picker",
-      "Toggle performance panel",
+      "Toggle diagnostics panel",
       "Open shortcuts",
       "Close app",
     ]);
@@ -81,7 +81,7 @@ describe("shortcut search", () => {
     const ctrlShiftActions = expect.arrayContaining([
       "Toggle light/dark mode",
       "Open theme picker",
-      "Toggle performance panel",
+      "Toggle diagnostics panel",
       "Previous view",
       "Close app",
     ]);
@@ -110,17 +110,22 @@ describe("shortcut search", () => {
     expect(matchingActions("ctrl p")).toEqual(
       expect.arrayContaining([
         "Show or hide playlist",
-        "Toggle performance panel",
       ]),
     );
     expect(matchingActions("ctrl + p")).toEqual(
       expect.arrayContaining([
         "Show or hide playlist",
-        "Toggle performance panel",
       ]),
     );
+    expect(matchingActions("ctrl d")).toEqual(
+      expect.arrayContaining([
+        "Toggle diagnostics panel",
+        "Delete event",
+      ]),
+    );
+    expect(matchingActions("ctrl + shift + d")).toContain("Toggle diagnostics panel");
     expect(matchingActions("ctrl p")).not.toContain("Zoom in");
-    expect(matchingActions("ctrl+ +")).not.toContain("Toggle performance panel");
+    expect(matchingActions("ctrl+ +")).not.toContain("Toggle diagnostics panel");
     expect(matchingActions("ctrl+ +")).not.toContain("Open theme picker");
   });
 
@@ -195,7 +200,7 @@ describe("shortcut search", () => {
       expect.arrayContaining([
         "Toggle light/dark mode",
         "Open theme picker",
-        "Toggle performance panel",
+        "Toggle diagnostics panel",
         "Previous view",
         "Close app",
       ]),
@@ -204,7 +209,7 @@ describe("shortcut search", () => {
       expect.arrayContaining([
         "Toggle light/dark mode",
         "Open theme picker",
-        "Toggle performance panel",
+        "Toggle diagnostics panel",
         "Previous view",
         "Close app",
       ]),

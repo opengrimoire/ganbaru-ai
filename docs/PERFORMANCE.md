@@ -15,15 +15,15 @@ This file is the canonical performance record for GanbaruAI. It exists so future
 
 ## How to capture new results
 
-Use benchmark-generated output as the source of truth. Manual copies from the performance panel are diagnostic only, because they can mix real user data, warm boots, open diagnostics UI, and human timing.
+Use benchmark-generated output as the source of truth. Manual copies from the diagnostics panel are diagnostic only, because they can mix real user data, warm boots, open diagnostics UI, and human timing.
 
-The performance panel also includes a manual calendar scroll diagnostic for investigating platform-specific scroll smoothness. It records requestAnimationFrame timing, wheel events, scroll events, and scroll distance during a 5 to 10 second hand-driven sample. Treat the copied markdown as debugging evidence only; it is not a canonical benchmark record.
+The diagnostics panel also includes a manual calendar scroll diagnostic for investigating platform-specific scroll smoothness. It records requestAnimationFrame timing, wheel events, scroll events, and scroll distance during a 5 to 10 second hand-driven sample. Treat the copied markdown as debugging evidence only; it is not a canonical benchmark record.
 
 To capture a comparable run:
 
 1. Build and install a release package.
 2. Open GanbaruAI from the installed app, not `pnpm tauri dev`. This is important because Tauri uses more resources in dev mode.
-3. Open the title-bar performance panel.
+3. Open the title-bar diagnostics panel.
 4. Under Benchmarks, click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks` depending on the change being measured.
 5. Do not interact with the app while the overlay is running.
 6. When the summary appears, review the readable tables, copy the markdown, and send it to an agent for careful placement here.
@@ -245,9 +245,9 @@ Linux currently reads PSS from `/proc/{pid}/smaps_rollup`. Windows uses Working 
 
 The frontend number includes the browser engine. It cannot be split cleanly into "WebKit baseline" and "GanbaruAI app code" at runtime.
 
-### Performance panel
+### Diagnostics panel
 
-The title-bar performance panel is a diagnostic tool. It can copy live RAM, startup RAM, charts, speed logs, and benchmark summaries. Only benchmark summaries should become canonical rows in this file.
+The title-bar diagnostics panel is a diagnostic tool. It can copy live RAM, startup RAM, charts, speed logs, and benchmark summaries. Only benchmark summaries should become canonical rows in this file.
 
 The panel itself is lazy-loaded. Live memory polling starts only while the panel is mounted. The startup RAM snapshot is captured before the panel needs to be opened, so it remains useful for quick local diagnosis even if it is not the canonical record.
 

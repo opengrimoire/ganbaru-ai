@@ -41,7 +41,7 @@ function clearSampleTimeout(id: TimeoutId): void {
  * Read one memory snapshot from the backend. Maps the Rust report into the
  * `SamplePoint` shape (backend / frontend / network split). Process names
  * come from `lib.rs`, while category mapping is shared with the live
- * performance panel so both surfaces agree.
+ * diagnostics panel so both surfaces agree.
  */
 export async function readMemorySample(
   label: SampleLabel,

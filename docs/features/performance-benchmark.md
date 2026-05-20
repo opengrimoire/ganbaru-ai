@@ -8,13 +8,13 @@ Harness and dataset versions are tied to recorded rows, not local iteration. Do 
 
 ## User flow
 
-The performance panel shows compact grouped suite buttons. Each suite row has a primary run button and a square expand button that reveals individual scenario buttons.
+The diagnostics panel shows compact grouped suite buttons. Each suite row has a primary run button and a square expand button that reveals individual scenario buttons.
 
 Recommended flow:
 
 1. Build and install a release package.
 2. Open the installed app.
-3. Open the title-bar performance panel.
+3. Open the title-bar diagnostics panel.
 4. Click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks`.
 5. Leave the app alone while the overlay runs.
 6. Review the readable summary tables.

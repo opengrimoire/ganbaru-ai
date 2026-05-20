@@ -226,7 +226,7 @@
   // While the floating theme editor is open, the buttons that would navigate
   // away from or disrupt the edit session (theme toggle flips base; settings
   // modal reopens behind the panel; reset is destructive) are
-  // disabled. Window controls, pomodoro, and the performance monitor stay
+  // disabled. Window controls, pomodoro, and the diagnostics monitor stay
   // live because they do not interfere with the edit session.
   const lockedByThemeEditor = $derived(!!themeEditor.editingId);
 
@@ -243,7 +243,7 @@
     { id: "pomodoro", label: "Pomodoro" },
     { id: "music", label: "Music" },
     { id: "theme", label: "Theme toggle" },
-    { id: "performance", label: "Performance" },
+    { id: "performance", label: "Diagnostics" },
     { id: "reset", label: "Reset database" },
     { id: "settings", label: "Settings" },
   ];
@@ -321,6 +321,13 @@
       return;
     }
 
+    if (showPerfMenu && e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      showPerfMenu = false;
+      return;
+    }
+
     if (e.key === "F1") {
       e.preventDefault();
       e.stopPropagation();
@@ -344,7 +351,7 @@
       return;
     }
 
-    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "p") {
+    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "d") {
       if (isEditableKeyboardTarget(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -664,13 +671,13 @@
       </button>
     {/if}
 
-    <!-- Performance monitor -->
+    <!-- Diagnostics monitor -->
     {#if titleBarControlVisible("performance")}
       <div class="relative">
         <button
           onclick={togglePerfMenu}
           class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
-          title={`Performance (${formatShortcut("Mod + Shift + P")})`}
+          title={`Diagnostics (${formatShortcut("Mod + Shift + D")})`}
         >
           <CircleGauge size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         </button>

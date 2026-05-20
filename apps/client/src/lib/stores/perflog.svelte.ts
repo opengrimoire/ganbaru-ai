@@ -1,7 +1,7 @@
 /**
  * Diagnostic ring buffer for performance instrumentation.
  *
- * Capped, in-memory log of timing marks. The performance panel reads
+ * Capped, in-memory log of timing marks. The diagnostics panel reads
  * `entries` reactively and renders the most recent slice; the copy button
  * serializes the buffer to clipboard so users on a release `.deb` (where
  * DevTools is disabled) can capture traces without a terminal.
