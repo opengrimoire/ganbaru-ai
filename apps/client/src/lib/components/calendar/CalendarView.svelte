@@ -15,12 +15,13 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
   import WeekView from "./WeekView.svelte";
   import DayView from "./DayView.svelte";
   import MonthView from "./MonthView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import X from "@lucide/svelte/icons/x";
   import { createEditSession } from "./edit-session.svelte";
   import type { PanelAnchor } from "./edit-session.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
@@ -668,28 +669,53 @@
     timezones = next;
   }
 
-  // Event undo/redo (capped at 20)
-  const UNDO_LIMIT = 20;
-  type UndoAction =
-    | { type: "add"; event: CalendarEvent }
-    | { type: "delete"; event: CalendarEvent }
-    | { type: "update"; before: CalendarEvent; after: CalendarEvent };
-  let undoStack: UndoAction[] = $state([]);
-  let redoStack: UndoAction[] = $state([]);
+  const DELETE_UNDO_TIMEOUT_MS = 5_000;
 
-  function pushUndo(action: UndoAction) {
-    undoStack = [...undoStack, action].slice(-UNDO_LIMIT);
+  interface DeleteUndoToast {
+    id: string;
+    restore: () => Promise<void>;
   }
 
-  /**
-   * Recreate an event from a captured undo/redo snapshot. The snapshot is the
-   * full event (heavy fields included) captured at action push time, so a
-   * restored event keeps its description, attendees, organizer, etc.
-   */
-  function recreateBlockFromAction(e: CalendarEvent) {
-    return calendarStore.addBlock({
+  let deleteUndoToast: DeleteUndoToast | null = $state(null);
+  let deleteUndoTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function clearDeleteUndoTimer(): void {
+    if (deleteUndoTimer) {
+      clearTimeout(deleteUndoTimer);
+      deleteUndoTimer = undefined;
+    }
+  }
+
+  function dismissDeleteUndoToast(): void {
+    clearDeleteUndoTimer();
+    deleteUndoToast = null;
+  }
+
+  function showDeleteUndoToast(restore: () => Promise<void>): void {
+    clearDeleteUndoTimer();
+    const id = crypto.randomUUID();
+    deleteUndoToast = { id, restore };
+    deleteUndoTimer = setTimeout(() => {
+      if (deleteUndoToast?.id === id) deleteUndoToast = null;
+      deleteUndoTimer = undefined;
+    }, DELETE_UNDO_TIMEOUT_MS);
+  }
+
+  async function undoDeletedEvent(): Promise<void> {
+    const toast = deleteUndoToast;
+    if (!toast) return;
+    dismissDeleteUndoToast();
+    try {
+      await toast.restore();
+    } catch (e) {
+      console.error("[calendar] failed to restore deleted event:", e);
+    }
+  }
+
+  async function restoreDeletedBlock(e: CalendarEvent): Promise<void> {
+    await calendarStore.addBlock({
       id: e.id, title: e.title, start: e.start, end: e.end,
-      calendarId: e.calendarId, color: e.color,
+      timezone: e.timezone, calendarId: e.calendarId, color: e.color,
       description: e.description, recurrence: e.recurrence,
       notifications: e.notifications, pomodoroConfig: e.pomodoroConfig,
       allDay: e.allDay, location: e.location, url: e.url,
@@ -704,6 +730,10 @@
       guestPermissions: e.guestPermissions,
     });
   }
+
+  onDestroy(() => {
+    clearDeleteUndoTimer();
+  });
 
   // Confirmation dialog
   let confirmAction: (() => Promise<void>) | null = $state(null);
@@ -744,61 +774,6 @@
     confirmTitle = undefined;
     confirmMessage = "";
     confirmExtraShortcut = undefined;
-  }
-
-  function requestUndo() {
-    const action = undoStack[undoStack.length - 1];
-    if (!action) return;
-    let title = "", message = "";
-    if (action.type === "add") {
-      title = "Undo creating this event?";
-      message = `"${action.event.title}" will be removed.`;
-    } else if (action.type === "delete") {
-      title = "Undo delete?";
-      message = `"${action.event.title}" will be restored.`;
-    } else {
-      title = "Undo move?";
-      message = `"${action.after.title}" will return to its previous time.`;
-    }
-    requestConfirm(message, async () => {
-      undoStack = undoStack.slice(0, -1);
-      if (action.type === "add") {
-        await calendarStore.deleteBlock(action.event.id);
-      } else if (action.type === "delete") {
-        await recreateBlockFromAction(action.event);
-      } else {
-        await calendarStore.updateBlock(action.before);
-      }
-      redoStack = [...redoStack, action];
-      closeSession();
-    }, { title });
-  }
-
-  function requestRedo() {
-    const action = redoStack[redoStack.length - 1];
-    if (!action) return;
-    let title = "", message = "";
-    if (action.type === "add") {
-      title = "Redo creating this event?";
-      message = `"${action.event.title}" will be recreated.`;
-    } else if (action.type === "delete") {
-      title = "Redo delete?";
-      message = `"${action.event.title}" will be removed again.`;
-    } else {
-      title = "Redo move?";
-      message = `"${action.after.title}" will move again.`;
-    }
-    requestConfirm(message, async () => {
-      redoStack = redoStack.slice(0, -1);
-      if (action.type === "add") {
-        await recreateBlockFromAction(action.event);
-      } else if (action.type === "delete") {
-        await calendarStore.deleteBlock(action.event.id);
-      } else {
-        await calendarStore.updateBlock(action.after);
-      }
-      pushUndo(action);
-    }, { title });
   }
 
   let containerEl: HTMLDivElement | undefined = $state();
@@ -946,13 +921,7 @@
         return;
       }
 
-      if (hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        requestUndo();
-      } else if (hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        requestRedo();
-      } else if (e.key === "Escape" && session.state.mode !== "closed") {
+      if (e.key === "Escape" && session.state.mode !== "closed") {
         e.preventDefault();
         handlePanelClose();
       } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
@@ -1282,13 +1251,7 @@
     if (template && template.start === event.start && template.end === event.end) {
       return;
     }
-    const before = template ? { ...template } : undefined;
     await calendarStore.updateBlock(event);
-    if (before) {
-      const after = calendarStore.getTemplate(event) ?? event;
-      pushUndo({ type: "update", before, after: { ...after } });
-      redoStack = [];
-    }
   }
 
   function handlePanelChange(data: Partial<CalendarEvent>) {
@@ -1407,7 +1370,7 @@
 
     try {
     if (s.mode === "create") {
-      const event = await calendarStore.addBlock({
+      await calendarStore.addBlock({
         title: data.title, start: data.start, end: data.end,
         color: data.color, description: data.description,
         recurrence: data.recurrence, notifications: data.notifications,
@@ -1419,11 +1382,6 @@
         localParticipationStatus: data.localParticipationStatus,
         guestPermissions: data.guestPermissions,
       });
-      // Capture the full event (heavy fields included) so redo can restore
-      // description, attendees, organizer, etc.
-      const full = await calendarStore.loadFullEvent(event.id);
-      pushUndo({ type: "add", event: full ?? { ...event } });
-      redoStack = [];
     } else if (s.mode === "edit") {
       const instanceEvent = s.instanceEvent;
       const isRec = isRecurring(s.originalEvent);
@@ -1449,18 +1407,8 @@
         });
         saveRefreshedVisibleWindow = recurrencePlan.requiresCanonicalRefresh;
       } else {
-        // Non-recurring edit. Snapshot the full row before mutating so undo can
-        // revert heavy fields (description, attendees, etc.) the user just
-        // edited; without this, slim-only undo would leave heavy edits stuck.
-        const fullBefore = await calendarStore.loadFullEvent(s.originalEvent.id);
-        const before = fullBefore
-          ?? calendarStore.getTemplate(s.originalEvent)
-          ?? s.originalEvent;
         const updated: CalendarEvent = { ...s.originalEvent, ...data };
         await calendarStore.updateBlock(updated);
-        const after: CalendarEvent = { ...before, ...data };
-        pushUndo({ type: "update", before, after });
-        redoStack = [];
       }
 
     }
@@ -1503,17 +1451,30 @@
     }
 
     const s = session.state;
+    let restoreDeleted: (() => Promise<void>) | undefined;
 
     if (scope && s.mode === "edit") {
       const instanceEvent = s.instanceEvent;
       const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
       if (scope === "this") {
+        const template = calendarStore.getTemplate(instanceEvent);
+        const full = await calendarStore.loadFullEvent(parentId);
+        const snapshot = full ?? (template ? { ...template } : undefined);
         const instanceDate = instanceEvent.start.split(" ")[0];
         await calendarStore.addException(parentId, instanceDate);
+        if (snapshot) {
+          restoreDeleted = () => calendarStore.updateBlock(snapshot);
+        }
       } else if (scope === "following") {
+        const template = calendarStore.getTemplate(instanceEvent);
+        const full = await calendarStore.loadFullEvent(parentId);
+        const snapshot = full ?? (template ? { ...template } : undefined);
         const instanceDate = instanceEvent.start.split(" ")[0];
         const dayBefore = shiftDateStr(instanceDate, -1);
         await calendarStore.setRepeatUntil(parentId, dayBefore);
+        if (snapshot) {
+          restoreDeleted = () => calendarStore.updateBlock(snapshot);
+        }
       } else {
         // "all" delete: past instances are immutable
         const template = calendarStore.getTemplate(instanceEvent);
@@ -1529,30 +1490,31 @@
 
         if (templateStartDate && templateStartDate < splitDate) {
           // Series has past instances: cap at splitDate, keep past frozen
+          const full = await calendarStore.loadFullEvent(parentId);
+          const snapshot = full ?? (template ? { ...template } : undefined);
           const dayBefore = shiftDateStr(splitDate, -1);
           await calendarStore.setRepeatUntil(parentId, dayBefore);
+          if (snapshot) {
+            restoreDeleted = () => calendarStore.updateBlock(snapshot);
+          }
         } else {
-          // No past instances: delete the whole series. Snapshot the full
-          // template (heavy fields included) before delete so undo can
-          // restore description, attendees, etc.
           if (template) {
             const full = await calendarStore.loadFullEvent(template.id);
-            pushUndo({ type: "delete", event: full ?? { ...template } });
-            redoStack = [];
+            const snapshot = full ?? { ...template };
+            await calendarStore.deleteBlock(parentId);
+            restoreDeleted = () => restoreDeletedBlock(snapshot);
+          } else {
+            await calendarStore.deleteBlock(parentId);
           }
-          await calendarStore.deleteBlock(parentId);
         }
       }
     } else {
-      // Non-recurring: delete directly. Snapshot the full event before delete
-      // so undo can restore heavy fields (description, attendees, etc.).
       const event = calendarStore.getTemplate({ id } as CalendarEvent) ?? visibleEvents.find((e) => e.id === id);
       const full = event ? await calendarStore.loadFullEvent(event.id) : undefined;
       await calendarStore.deleteBlock(id);
       const snapshot = full ?? (event ? { ...event } : undefined);
       if (snapshot) {
-        pushUndo({ type: "delete", event: snapshot });
-        redoStack = [];
+        restoreDeleted = () => restoreDeletedBlock(snapshot);
       }
     }
 
@@ -1561,6 +1523,7 @@
       sessionStopPending = false;
     }
     closeSession();
+    if (restoreDeleted) showDeleteUndoToast(restoreDeleted);
   }
 
   function handleDayClickFromMonth(date: Date) {
@@ -1697,6 +1660,31 @@
       onScopeChange={handleScopeChange}
       onSurfaceStatusChange={handlePanelSurfaceStatusChange}
     />
+  {/if}
+
+  {#if deleteUndoToast}
+    <div
+      role="status"
+      aria-live="polite"
+      class="fixed bottom-4 left-1/2 z-70 flex w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 items-center gap-3 rounded-md border border-border bg-popover px-3 py-2 text-[0.866667rem] text-popover-foreground shadow-lg"
+    >
+      <span class="min-w-0 flex-1 truncate">Event deleted</span>
+      <button
+        type="button"
+        class="rounded-sm px-2 py-1 text-[0.8rem] font-medium text-popover-foreground underline decoration-popover-foreground/40 underline-offset-2 transition-colors hover:bg-accent hover:text-accent-foreground hover:no-underline focus:outline-none focus:ring-1 focus:ring-ring"
+        onclick={undoDeletedEvent}
+      >
+        Undo
+      </button>
+      <button
+        type="button"
+        class="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        onclick={dismissDeleteUndoToast}
+      >
+        <span class="sr-only">Dismiss deleted event notification</span>
+        <X size={14} strokeWidth={2} aria-hidden="true" />
+      </button>
+    </div>
   {/if}
 
 </div>

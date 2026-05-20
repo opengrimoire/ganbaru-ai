@@ -370,8 +370,8 @@ function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
  * Load slim per-instance overrides in one unfiltered query and group by
  * parent id. Heavy override columns (description, location, url,
  * extended_properties, visibility) stay in the DB and ride along with the
- * parent through the panel / full-event loaders when EventPanel, undo, or
- * ICS export needs them.
+ * parent through the panel / full-event loaders when EventPanel, delete undo,
+ * or ICS export needs them.
  */
 function mapOverrides(
   rows: DbOverride[],
@@ -874,8 +874,8 @@ export function getCalendar() {
     /**
      * Fetch the full DB row for one event id and return a fully populated
      * `CalendarEvent`. The render path holds only a slim subset of columns in
-     * the current window; this is what ICS export and undo / redo call when they
-     * need every heavy field, including alarms and override mirrors.
+     * the current window; this is what ICS export and delete undo call when
+     * they need every heavy field, including alarms and override mirrors.
      */
     async loadFullEvent(id: string): Promise<CalendarEvent | undefined> {
       const renderZone = localTimezone();
@@ -919,6 +919,7 @@ export function getCalendar() {
       start: string;
       end: string;
       id?: string;
+      timezone?: string;
       calendarId?: string;
       color?: EventColor;
       description?: string;
@@ -953,7 +954,7 @@ export function getCalendar() {
 
       const id = opts.id ?? crypto.randomUUID();
       const now = nowLocal();
-      const timezone = localTimezone();
+      const timezone = opts.timezone ?? localTimezone();
       const calendarId = opts.calendarId ?? "local";
       const description = sanitizeCalendarDescriptionHtml(opts.description ?? "");
       const meetingEnabled = opts.meetingEnabled ?? hasMeetingState(opts);

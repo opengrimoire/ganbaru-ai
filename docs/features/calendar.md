@@ -55,6 +55,7 @@ The day and week views support direct manipulation:
 - **Drag the top or bottom edge** resizes from that side. The opposite edge stays put.
 - **Esc, click outside, or pressing Save** closes the edit panel.
 - **Right-click** opens a context menu (delete, archive, duplicate). Past events show archive instead of delete.
+- **Delete event** removes the event immediately and shows a bottom `Event deleted` toast with `Undo` for 5 seconds. Closing the toast, letting it expire, or closing the app makes the delete permanent.
 
 In month view, click on a day cell to switch to day view focused on that date. Click on an event row to open the edit panel.
 

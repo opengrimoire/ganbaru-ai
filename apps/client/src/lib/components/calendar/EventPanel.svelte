@@ -912,9 +912,8 @@
   }
 
   /**
-   * Local keydown handler for input/textarea elements. Stops propagation so
-   * keys like Mod+Z (undo text) don't leak into CalendarView's global
-   * shortcut handler, while explicitly letting the panel's own shortcuts
+   * Local keydown handler for input/textarea elements. It stops propagation
+   * for normal text editing while explicitly letting the panel's own shortcuts
    * (Mod+Enter save, Mod+D delete, Escape close) bubble up to the
    * window-level listeners.
    */

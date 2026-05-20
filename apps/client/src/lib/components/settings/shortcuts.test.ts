@@ -170,6 +170,13 @@ describe("shortcut search", () => {
     ]);
   });
 
+  it("does not list calendar edit undo or redo shortcuts", () => {
+    expect(matchingActions("undo calendar")).toEqual([]);
+    expect(matchingActions("redo calendar")).toEqual([]);
+    expect(matchingActions("ctrl z")).not.toContain("Undo calendar edit");
+    expect(matchingActions("ctrl y")).not.toContain("Redo calendar edit");
+  });
+
   it("allows modifier prefix searches to show matching shortcuts", () => {
     const actions = matchingActions("ctrl");
     expect(actions).toContain("Zoom in");
