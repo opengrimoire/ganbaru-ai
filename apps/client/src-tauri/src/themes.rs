@@ -237,6 +237,15 @@ pub async fn theme_insert<R: Runtime>(
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
+    let existing = sqlx::query_scalar::<_, i64>("SELECT 1 FROM themes WHERE id = ? LIMIT 1")
+        .bind(&write.id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| format!("check theme id availability: {e}"))?;
+    if existing.is_some() {
+        return Err(format!("theme id '{}' already exists", write.id));
+    }
+
     sqlx::query(
         "INSERT INTO themes
             (id, display_name, icon_label, seed_icon_label, blend_canvas,
@@ -260,7 +269,14 @@ pub async fn theme_insert<R: Runtime>(
     .bind(now)
     .execute(&mut *tx)
     .await
-    .map_err(|e| format!("insert theme: {e}"))?;
+    .map_err(|e| {
+        let message = e.to_string();
+        if message.contains("UNIQUE constraint failed: themes.id") {
+            format!("theme id '{}' already exists", write.id)
+        } else {
+            format!("insert theme: {e}")
+        }
+    })?;
 
     insert_token_rows(
         &mut tx,
@@ -1079,10 +1095,27 @@ fn validate_theme_id(id: &str) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err("theme id cannot be empty".to_string());
     }
+    if !is_valid_theme_slug(id) {
+        return Err(
+            "theme id must be a slug (lowercase letters, digits, and hyphens; must start with a letter or digit)"
+                .to_string(),
+        );
+    }
     if matches!(id, "light" | "dark") {
         return Err(format!("theme id '{id}' is reserved"));
     }
     Ok(())
+}
+
+fn is_valid_theme_slug(id: &str) -> bool {
+    let mut chars = id.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 fn validate_token_identity(kind: &str, key: &str, field: &str) -> Result<(), String> {
@@ -1232,6 +1265,15 @@ mod tests {
         assert!(validate_theme_id("light").is_err());
         assert!(validate_theme_id("dark").is_err());
         assert!(validate_theme_id("").is_err());
+    }
+
+    #[test]
+    fn rejects_non_slug_theme_ids() {
+        assert!(validate_theme_id("custom-theme-2").is_ok());
+        assert!(validate_theme_id("Custom").is_err());
+        assert!(validate_theme_id("-custom").is_err());
+        assert!(validate_theme_id("custom theme").is_err());
+        assert!(validate_theme_id("custom_theme").is_err());
     }
 
     #[test]

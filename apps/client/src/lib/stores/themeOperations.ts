@@ -105,6 +105,32 @@ export function cloneTheme(
   };
 }
 
+/**
+ * Return a user-theme-shaped snapshot for surfaces that need the full
+ * editable schema without registering or mutating a theme. Built-ins do not
+ * store sources or token snapshots, so they are projected through the same
+ * clone path used by Duplicate and edit.
+ */
+export function toUserThemeSnapshot(source: Theme): UserTheme {
+  if (source.kind === "user") return source;
+  return cloneTheme(source, source.id, source.displayName);
+}
+
+/**
+ * Return the import-blocking error for a theme id that already belongs to
+ * the current registry. New imports must not silently shadow or rename
+ * either built-in or user-authored themes.
+ */
+export function themeIdCollisionError(
+  id: ThemeId,
+  registry: Readonly<Record<ThemeId, Theme>>,
+): string | undefined {
+  const existing = registry[id];
+  if (!existing) return undefined;
+  if (existing.kind === "builtin") return "id must not collide with a built-in theme";
+  return `id "${id}" is already used by another theme`;
+}
+
 function pickTokenSnapshot(
   source: Readonly<Record<string, string>>,
   keys: readonly string[],

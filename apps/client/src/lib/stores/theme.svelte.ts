@@ -36,6 +36,8 @@ import {
   mergeThemePatch,
   nextUniqueDisplayName,
   normalizeDisplayName,
+  themeIdCollisionError,
+  toUserThemeSnapshot,
 } from "./themeOperations";
 import { flushConfig, getConfigKey, setConfigKey } from "../vault/config";
 import {
@@ -1098,20 +1100,24 @@ async function importTheme(json: string): Promise<ImportThemeResult> {
   if (!result.ok) return result;
   const registry = combinedRegistry();
   const incomingId = result.theme.id;
-  const finalId =
-    isBuiltinThemeId(incomingId) || Object.hasOwn(registry, incomingId)
-      ? generateThemeId(registry, incomingId)
-      : incomingId;
-  const next: UserTheme = { ...result.theme, id: finalId };
-  await dbInsertTheme(userThemeToWrite(next));
-  customThemes[finalId] = next;
-  return { ok: true, id: finalId };
+  const collisionError = themeIdCollisionError(incomingId, registry);
+  if (collisionError) return { ok: false, errors: [collisionError] };
+  try {
+    await dbInsertTheme(userThemeToWrite(result.theme));
+  } catch (err) {
+    return {
+      ok: false,
+      errors: [err instanceof Error ? err.message : String(err)],
+    };
+  }
+  customThemes[incomingId] = result.theme;
+  return { ok: true, id: incomingId };
 }
 
 function exportTheme(id: ThemeId): string | undefined {
   const theme = combinedRegistry()[id];
   if (!theme) return undefined;
-  return serializeTheme(theme);
+  return serializeTheme(toUserThemeSnapshot(theme));
 }
 
 export type ReplaceThemeResult =

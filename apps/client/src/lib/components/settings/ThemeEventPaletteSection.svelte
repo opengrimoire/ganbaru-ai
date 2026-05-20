@@ -15,11 +15,11 @@
 
   let {
     theme,
-    isBuiltin,
+    readOnly,
     onSetSlot,
   }: {
     theme: Theme;
-    isBuiltin: boolean;
+    readOnly: boolean;
     onSetSlot: (index: number, hex: string) => void;
   } = $props();
 
@@ -87,28 +87,19 @@
           calendarBg,
           isThemeCalendarDark(theme) ? 0.5 : 0.3,
         )}
-        {#if isBuiltin}
-          <div class="flex min-w-0 items-center gap-1.5">
-            {@render palettePreviewSwatch(past, `Past ${past}`)}
-            {@render palettePreviewSwatch(base, `Normal ${base}`)}
-            <span
-              class="min-w-0 flex-1 truncate font-mono text-[0.8rem] text-foreground"
-            >
-              {base}
-            </span>
-          </div>
-        {:else}
-          <div class="flex min-w-0 items-center gap-1.5">
-            {@render palettePreviewSwatch(past, `Past variant ${past}`)}
-            <ColorField
-              value={base}
-              onChange={(hex) => onSetSlot(index, hex)}
-              fluid
-              swatchSize={22}
-              class="min-w-0 flex-1"
-            />
-          </div>
-        {/if}
+        <div class="flex min-w-0 items-center gap-1.5">
+          {@render palettePreviewSwatch(past, `Past variant ${past}`)}
+          <ColorField
+            value={base}
+            onChange={(hex) => {
+              if (!readOnly) onSetSlot(index, hex);
+            }}
+            {readOnly}
+            fluid
+            swatchSize={22}
+            class="min-w-0 flex-1"
+          />
+        </div>
       {/each}
     </div>
   </div>

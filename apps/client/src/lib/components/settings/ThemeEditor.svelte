@@ -25,6 +25,7 @@
     type UserTheme,
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { toUserThemeSnapshot } from "$lib/stores/themeOperations";
   import ColorField from "$lib/components/ui/ColorField.svelte";
   import ThemeContrastNotice from "./ThemeContrastNotice.svelte";
   import ThemeEventPaletteSection from "./ThemeEventPaletteSection.svelte";
@@ -61,9 +62,11 @@
   ]);
 
   const isBuiltin = $derived(theme.kind === "builtin");
+  const readOnly = $derived(theme.kind === "builtin");
   const userTheme = $derived(
     theme.kind === "user" ? (theme as UserTheme) : undefined,
   );
+  const viewTheme = $derived.by(() => toUserThemeSnapshot(theme));
   // The iconLabel icon is purely decorative ("was this for me to use on day
   // or night?"). It does not drive the runtime `.dark` class or palette
   // pick. Built-ins peg the icon to their pinned iconLabel; user themes
@@ -207,6 +210,7 @@
   }
 
   function setName(next: string) {
+    if (readOnly) return;
     void themeStore.renameTheme(theme.id, next);
   }
 
@@ -440,32 +444,39 @@
   }
 
   function setSlot(index: number, hex: string) {
+    if (readOnly) return;
     void themeStore.setPaletteSlot(theme.id, index, hex);
   }
 
   function setAppToken(key: string, hex: string) {
+    if (readOnly) return;
     void themeStore.setTokenValue(theme.id, "app", key, hex);
   }
 
   function setCalToken(key: string, hex: string) {
+    if (readOnly) return;
     void themeStore.setTokenValue(theme.id, "calendar", key, hex);
   }
 
   function setSource(key: keyof ThemeSources, hex: string) {
+    if (readOnly) return;
     void themeStore.updateSourceValue(theme.id, key, hex);
   }
 
   function applyCalendarDefault(mode: CalendarColorDefaultMode) {
+    if (readOnly) return;
     if (!userTheme) return;
     void themeStore.applyCalendarDefault(theme.id, mode);
   }
 
   function setCalendarDefaultCustom(hex: string) {
+    if (readOnly) return;
     if (!userTheme) return;
     void themeStore.applyCalendarDefault(theme.id, "custom", hex);
   }
 
   function resetCalendarDefault() {
+    if (readOnly) return;
     if (!userTheme) return;
     void themeStore.resetCalendarDefaultToSeed(theme.id);
   }
@@ -476,18 +487,22 @@
   // does not change at the moment of pinning; the snapshot already holds
   // the auto-derived value.
   function isolateAppToken(key: string) {
+    if (readOnly) return;
     void themeStore.isolateToken(theme.id, "app", key);
   }
 
   function isolateCalToken(key: string) {
+    if (readOnly) return;
     void themeStore.isolateToken(theme.id, "calendar", key);
   }
 
   function relinkAppToken(key: string) {
+    if (readOnly) return;
     void themeStore.relinkToken(theme.id, "app", key);
   }
 
   function relinkCalToken(key: string) {
+    if (readOnly) return;
     void themeStore.relinkToken(theme.id, "calendar", key);
   }
 
@@ -501,6 +516,7 @@
   }
 
   function resetSource(key: keyof ThemeSources) {
+    if (readOnly) return;
     if (!userTheme) return;
     void themeStore.resetTokenToSeed(theme.id, "source", key);
   }
@@ -514,6 +530,7 @@
   }
 
   function resetAppToken(key: string) {
+    if (readOnly) return;
     void themeStore.resetTokenToSeed(theme.id, "app", key);
   }
 
@@ -531,6 +548,7 @@
   }
 
   function resetCalToken(key: string) {
+    if (readOnly) return;
     void themeStore.resetTokenToSeed(theme.id, "calendar", key);
   }
 
@@ -554,12 +572,12 @@
     return row.target ?? AA_BODY_TARGET;
   }
 
-  // Resolve a token's rendered value from the theme. For user themes the
-  // snapshot is the source of truth; built-ins return BASE. We re-read on
-  // every call so the live editor reflects whatever the user just changed
-  // without a roundtrip through the DOM.
-  const resolvedApp = $derived(resolveAppTokens(theme));
-  const resolvedCal = $derived(resolveCalendarTokens(theme));
+  // Resolve a token's rendered value from the inspected theme. User themes
+  // read their stored snapshot; built-ins use a read-only projected snapshot.
+  // We re-read on every call so the live editor reflects whatever the user
+  // just changed without a roundtrip through the DOM.
+  const resolvedApp = $derived(resolveAppTokens(viewTheme));
+  const resolvedCal = $derived(resolveCalendarTokens(viewTheme));
 
   function effectiveColor(key: string, scope: "app" | "cal"): string {
     return scope === "app" ? resolvedApp[key] : resolvedCal[key];
@@ -574,7 +592,20 @@
     return { ratio, passes: ratio >= target, target };
   }
 
+  function contrastTargetSuffix(target: number): string {
+    return target >= 4.5 ? " (AA body text)" : " (AA large/UI)";
+  }
+
+  function contrastTitle(contrast: PairContrast): string {
+    const summary =
+      `Contrast ${contrast.ratio.toFixed(2)}:1. ` +
+      `This pair targets ${contrast.target}:1${contrastTargetSuffix(contrast.target)}.`;
+    if (readOnly) return summary;
+    return `${summary} Click to auto-pick a legible text color.`;
+  }
+
   function autoFixPair(row: GroupContrastRow) {
+    if (readOnly) return;
     const bg = effectiveColor(row.bg, row.scope);
     const ink = resolvedApp["--foreground"];
     const canvas = resolvedApp["--background"];
@@ -637,6 +668,7 @@
   }
 
   function fixAllFailingPairs() {
+    if (readOnly) return;
     for (const { row } of failingPairs) autoFixPair(row);
     nextPairCursor = 0;
   }
@@ -698,78 +730,77 @@
     <div
       class="flex h-9 min-w-0 items-center overflow-hidden rounded-md border border-border bg-card text-[0.733333rem] text-muted-foreground dark:bg-background"
     >
-      {#if isBuiltin}
-        <span
-          class="flex h-full w-9 shrink-0 items-center justify-center"
-        >
-          <BaseIcon
-            size={12}
-            strokeWidth={1.75}
-            aria-label={theme.iconLabel === "dark" ? "Dark theme" : "Light theme"}
-          />
-        </span>
-        <span class="h-5 border-r border-border" aria-hidden="true"></span>
-        <span class="min-w-0 flex-1 truncate px-3 font-medium">
-          {theme.displayName}
-        </span>
-      {:else}
-        <button
-          type="button"
-          onclick={() =>
+      <button
+        type="button"
+        onclick={() => {
+          if (!readOnly) {
             themeStore.setThemeIconLabel(
               theme.id,
               theme.iconLabel === "dark" ? "light" : "dark",
-            )}
-          aria-label={`Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"} (decorative, click to flip)`}
-          title={`Decorative tag for ${theme.iconLabel === "dark" ? "night" : "day"} use. Click to flip.`}
-          class="flex h-full w-9 shrink-0 items-center justify-center transition-colors hover:bg-accent focus:outline-none"
-        >
-          <BaseIcon size={12} strokeWidth={1.75} />
-        </button>
-        <span class="h-5 border-r border-border" aria-hidden="true"></span>
-        <input
-          type="text"
-          value={theme.displayName}
-          oninput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
-          maxlength={60}
-          aria-label="Theme name"
-          class="h-full min-w-0 flex-1 bg-transparent px-3 font-medium text-muted-foreground focus:outline-none"
-        />
-      {/if}
-    </div>
-    {#if userTheme}
-      <div
-        class="theme-editor-nav-shell relative h-9 overflow-hidden rounded-lg border border-border bg-card text-[0.733333rem] dark:bg-background"
-        data-can-scroll-left={navCanScrollLeft}
-        data-can-scroll-right={navCanScrollRight}
-        onwheel={handleThemeNavWheel}
+            );
+          }
+        }}
+        disabled={readOnly}
+        aria-label={readOnly
+          ? `Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"}`
+          : `Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"} (decorative, click to flip)`}
+        title={readOnly
+          ? "Built-in theme icon tag"
+          : `Decorative tag for ${theme.iconLabel === "dark" ? "night" : "day"} use. Click to flip.`}
+        class={cn(
+          "flex h-full w-9 shrink-0 items-center justify-center transition-colors focus:outline-none",
+          readOnly
+            ? "cursor-not-allowed"
+            : "hover:bg-accent",
+        )}
       >
-        <nav
-          bind:this={themeNav}
-          class="theme-editor-nav grid h-full grid-cols-5 items-center gap-1 overflow-hidden px-1"
-          aria-label="Theme editor sections"
-        >
-          {#each THEME_NAV_ITEMS as item}
-            <button
-              type="button"
-              data-theme-nav-button={item.target}
-              onclick={() => scrollToThemeSection(item.target)}
-              aria-current={activeThemeSection === item.target
-                ? "location"
-                : undefined}
-              class={cn(
-                "flex h-7 min-w-0 items-center justify-center rounded-md px-2 text-center font-medium transition-colors",
-                activeThemeSection === item.target
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              <span class="min-w-0 truncate uppercase">{item.label}</span>
-            </button>
-          {/each}
-        </nav>
-      </div>
-    {/if}
+        <BaseIcon size={12} strokeWidth={1.75} />
+      </button>
+      <span class="h-5 border-r border-border" aria-hidden="true"></span>
+      <input
+        type="text"
+        value={theme.displayName}
+        oninput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
+        readonly={readOnly}
+        maxlength={60}
+        aria-label="Theme name"
+        class={cn(
+          "h-full min-w-0 flex-1 bg-transparent px-3 font-medium text-muted-foreground focus:outline-none",
+          readOnly && "cursor-default",
+        )}
+      />
+    </div>
+    <div
+      class="theme-editor-nav-shell relative h-9 overflow-hidden rounded-lg border border-border bg-card text-[0.733333rem] dark:bg-background"
+      data-can-scroll-left={navCanScrollLeft}
+      data-can-scroll-right={navCanScrollRight}
+      onwheel={handleThemeNavWheel}
+    >
+      <nav
+        bind:this={themeNav}
+        class="theme-editor-nav grid h-full grid-cols-5 items-center gap-1 overflow-hidden px-1"
+        aria-label="Theme editor sections"
+      >
+        {#each THEME_NAV_ITEMS as item}
+          <button
+            type="button"
+            data-theme-nav-button={item.target}
+            onclick={() => scrollToThemeSection(item.target)}
+            aria-current={activeThemeSection === item.target
+              ? "location"
+              : undefined}
+            class={cn(
+              "flex h-7 min-w-0 items-center justify-center rounded-md px-2 text-center font-medium transition-colors",
+              activeThemeSection === item.target
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground",
+            )}
+          >
+            <span class="min-w-0 truncate uppercase">{item.label}</span>
+          </button>
+        {/each}
+      </nav>
+    </div>
   </section>
 
   {#snippet resetIconButton(
@@ -802,16 +833,16 @@
     scope: "app" | "cal",
     ariaLabel: string,
   )}
-    {@const isolatedSet = userTheme
+    {@const isolatedSet = viewTheme
       ? scope === "app"
-        ? userTheme.appIsolated
-        : userTheme.calendarIsolated
+        ? viewTheme.appIsolated
+        : viewTheme.calendarIsolated
       : undefined}
     {@const isLinked = !(isolatedSet?.has(key) ?? false)}
-    {@const snapshot = userTheme
+    {@const snapshot = viewTheme
       ? scope === "app"
-        ? userTheme.appTokens
-        : userTheme.calendarTokens
+        ? viewTheme.appTokens
+        : viewTheme.calendarTokens
       : undefined}
     {@const displayVal = snapshot?.[key] ?? ""}
     {@const canResetRow =
@@ -824,7 +855,7 @@
           if (scope === "app") setAppToken(key, hex);
           else setCalToken(key, hex);
         }}
-        readOnly={isLinked}
+        readOnly={readOnly || isLinked}
         label={ariaLabel}
       />
       {@render resetIconButton(
@@ -839,12 +870,21 @@
         <button
           type="button"
           onclick={() => {
+            if (readOnly) return;
             if (scope === "app") isolateAppToken(key);
             else isolateCalToken(key);
           }}
+          disabled={readOnly}
           aria-label="Isolated edit {ariaLabel}"
-          title="Edit this color independently of its source"
-          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          title={readOnly
+            ? "Built-in themes are read-only"
+            : "Edit this color independently of its source"}
+          class={cn(
+            "theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors",
+            readOnly
+              ? "cursor-not-allowed opacity-60"
+              : "hover:border-foreground/30 hover:bg-accent hover:text-foreground",
+          )}
         >
           <Pencil size={10} strokeWidth={2.25} />
           <span>Isolated edit</span>
@@ -853,12 +893,21 @@
         <button
           type="button"
           onclick={() => {
+            if (readOnly) return;
             if (scope === "app") relinkAppToken(key);
             else relinkCalToken(key);
           }}
+          disabled={readOnly}
           aria-label="Link back {ariaLabel} to its source"
-          title="Re-link this color to its source"
-          class="theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
+          title={readOnly
+            ? "Built-in themes are read-only"
+            : "Re-link this color to its source"}
+          class={cn(
+            "theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors",
+            readOnly
+              ? "cursor-not-allowed opacity-60"
+              : "hover:border-foreground/30 hover:bg-accent hover:text-foreground",
+          )}
         >
           <Link2 size={10} strokeWidth={2.25} />
           <span>Link back</span>
@@ -873,8 +922,9 @@
   )}
     <div class="theme-source-editor flex items-center gap-1.5">
       <ColorField
-        value={userTheme?.sources[key] ?? ""}
+        value={viewTheme.sources[key]}
         onChange={(hex) => setSource(key, hex)}
+        {readOnly}
         label={ariaLabel}
       />
       {@render resetIconButton(
@@ -899,15 +949,15 @@
 
   <!-- Peer-styled sub-row for single-row groups (Ink, Primary action).
        Mirrors the source header layout so the driven token reads as a peer
-       of the source it tints. Always editable: writing to it creates or
-       updates the override; reset falls back through the seed per the
-       shared per-row reset semantics. -->
+       of the source it tints. User themes can write to it to create or
+       update the override; reset falls back through the seed per the shared
+       per-row reset semantics. -->
   {#snippet groupHeaderStyleRow(row: GroupSingleRow)}
     {@const info = tokenInfo(row)}
-    {@const snapshot = userTheme
+    {@const snapshot = viewTheme
       ? row.scope === "app"
-        ? userTheme.appTokens
-        : userTheme.calendarTokens
+        ? viewTheme.appTokens
+        : viewTheme.calendarTokens
       : undefined}
     {@const displayVal = snapshot?.[row.key] ?? ""}
     {@const canResetRow =
@@ -926,6 +976,7 @@
             if (row.scope === "app") setAppToken(row.key, hex);
             else setCalToken(row.key, hex);
           }}
+          {readOnly}
           label={info.title}
         />
         {@render resetIconButton(
@@ -953,16 +1004,26 @@
           {#if !contrast.passes}
             <button
               type="button"
-              onclick={() => autoFixPair(row)}
-              aria-label="Auto-fix {row.title} text contrast"
-              title="Contrast {contrast.ratio.toFixed(2)}:1. This pair targets {contrast.target}:1{contrast.target >= 4.5
-                ? ' (AA body text)'
-                : ' (AA large/UI)'}. Click to auto-pick a legible text color."
-              class="flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+              onclick={() => {
+                if (!readOnly) autoFixPair(row);
+              }}
+              disabled={readOnly}
+              aria-label={readOnly
+                ? `${row.title} text contrast is ${contrast.ratio.toFixed(2)}:1`
+                : `Auto-fix ${row.title} text contrast`}
+              title={contrastTitle(contrast)}
+              class={cn(
+                "flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors dark:text-amber-400",
+                readOnly
+                  ? "cursor-not-allowed opacity-75"
+                  : "hover:bg-amber-500/10",
+              )}
             >
               <AlertTriangle size={11} strokeWidth={2.25} />
               <span>{contrast.ratio.toFixed(1)}:1</span>
-              <Wand2 size={10} strokeWidth={2.25} />
+              {#if !readOnly}
+                <Wand2 size={10} strokeWidth={2.25} />
+              {/if}
             </button>
           {/if}
         </div>
@@ -1003,16 +1064,26 @@
           {#if !contrast.passes}
             <button
               type="button"
-              onclick={() => autoFixPair(row)}
-              aria-label="Auto-fix {row.title} text contrast"
-              title="Contrast {contrast.ratio.toFixed(2)}:1. This pair targets {contrast.target}:1{contrast.target >= 4.5
-                ? ' (AA body text)'
-                : ' (AA large/UI)'}. Click to auto-pick a legible text color."
-              class="flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+              onclick={() => {
+                if (!readOnly) autoFixPair(row);
+              }}
+              disabled={readOnly}
+              aria-label={readOnly
+                ? `${row.title} text contrast is ${contrast.ratio.toFixed(2)}:1`
+                : `Auto-fix ${row.title} text contrast`}
+              title={contrastTitle(contrast)}
+              class={cn(
+                "flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors dark:text-amber-400",
+                readOnly
+                  ? "cursor-not-allowed opacity-75"
+                  : "hover:bg-amber-500/10",
+              )}
             >
               <AlertTriangle size={11} strokeWidth={2.25} />
               <span>{contrast.ratio.toFixed(1)}:1</span>
-              <Wand2 size={10} strokeWidth={2.25} />
+              {#if !readOnly}
+                <Wand2 size={10} strokeWidth={2.25} />
+              {/if}
             </button>
           {/if}
         </div>
@@ -1062,11 +1133,12 @@
             </div>
           </div>
           <div class="theme-group-controls flex shrink-0 items-center gap-1.5">
-            {#if group.sourceKey !== null && userTheme}
+            {#if group.sourceKey !== null}
               {@const sourceKey = group.sourceKey}
               <ColorField
-                value={userTheme.sources[sourceKey]}
+                value={viewTheme.sources[sourceKey]}
                 onChange={(hex) => setSource(sourceKey, hex)}
+                {readOnly}
                 label="{group.title} source"
               />
               {@render resetIconButton(
@@ -1143,24 +1215,32 @@
       </header>
       <div class="theme-calendar-default-row flex min-w-0 flex-wrap items-center gap-1.5">
         {#each CALENDAR_DEFAULT_OPTIONS as option}
+          {@const selected = viewTheme.calendarDefaultMode === option.mode}
           <button
             type="button"
-            onclick={() => applyCalendarDefault(option.mode)}
-            aria-pressed={userTheme?.calendarDefaultMode === option.mode}
+            onclick={() => {
+              if (!readOnly) applyCalendarDefault(option.mode);
+            }}
+            disabled={readOnly}
+            aria-pressed={selected}
             class={cn(
               "min-h-7 rounded-md border px-2.5 py-1 text-[0.733333rem] font-medium transition-colors",
-              userTheme?.calendarDefaultMode === option.mode
+              selected
                 ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground",
+                : readOnly
+                  ? "border-border bg-card text-muted-foreground opacity-60"
+                  : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground",
+              readOnly && "cursor-not-allowed",
             )}
           >
             {option.label}
           </button>
         {/each}
-        {#if userTheme?.calendarDefaultMode === "custom"}
+        {#if viewTheme.calendarDefaultMode === "custom"}
           <ColorField
-            value={userTheme.calendarDefaultCustom}
+            value={viewTheme.calendarDefaultCustom}
             onChange={setCalendarDefaultCustom}
+            {readOnly}
             label="Custom calendar default"
           />
         {/if}
@@ -1168,7 +1248,7 @@
           {@render resetIconButton(
             resetCalendarDefault,
             "Color defaults",
-            themeStore.canResetCalendarDefault(theme.id),
+            !readOnly && themeStore.canResetCalendarDefault(theme.id),
           )}
         </div>
       </div>
@@ -1181,8 +1261,8 @@
       {#each CALENDAR_GROUPS as group (group.id)}
         {#if group.id === "calendar-details"}
           <ThemeEventPaletteSection
-            {theme}
-            {isBuiltin}
+            theme={viewTheme}
+            {readOnly}
             onSetSlot={setSlot}
           />
         {/if}
@@ -1224,97 +1304,88 @@
         bind:this={scrollContent}
         class={cn(
           "theme-editor-content flex flex-col gap-6 px-5 pt-6",
-          userTheme && failingPairs.length > 0
+          !readOnly && userTheme && failingPairs.length > 0
             ? "theme-editor-content-with-notice pb-16"
             : "pb-4",
         )}
       >
-  <!-- Body: grouped editor for user themes, JSON-only readout for built-ins. -->
-  {#if userTheme}
-    {#if offerRebake}
-      <ThemeRebakeBanner
-        savedVersion={userTheme.derivationEngineVersion}
-        currentVersion={DERIVATION_ENGINE_VERSION}
-        onDismiss={dismissRebake}
-        onRebake={rebake}
+        <!-- Body: grouped editor for user themes and read-only built-in views. -->
+        {#if userTheme && offerRebake}
+          <ThemeRebakeBanner
+            savedVersion={userTheme.derivationEngineVersion}
+            currentVersion={DERIVATION_ENGINE_VERSION}
+            onDismiss={dismissRebake}
+            onRebake={rebake}
+          />
+        {/if}
+
+        {#each SOURCE_GROUPS as group (group.id)}
+          {#if isCalendarGroup(group)}
+            {#if group.id === "calendar-surface"}
+              <div class="flex flex-col gap-2">
+                {@render sectionHeader("calendar")}
+                {@render calendarSection()}
+              </div>
+            {/if}
+          {:else if isTextActionGroup(group)}
+            {#if group.id === "ink"}
+              <div class="flex flex-col gap-2">
+                {@render sectionHeader("signals")}
+                {@render textActionsSection()}
+              </div>
+            {/if}
+          {:else if group.navTarget}
+            <div class="flex flex-col gap-2">
+              {@render sectionHeader(group.navTarget)}
+              {@render groupSection(group)}
+            </div>
+          {:else}
+            {@render groupSection(group)}
+          {/if}
+        {/each}
+
+        <!-- JSON -->
+        <div class="flex flex-col gap-2">
+          {@render sectionHeader("json")}
+          <ThemeJsonSection
+            {isBuiltin}
+            {jsonDraft}
+            {jsonDirty}
+            {jsonErrors}
+            {jsonNotice}
+            onCopy={copyJsonToClipboard}
+            onSave={saveJsonToFile}
+            onApply={applyJsonChanges}
+            onReset={resetJsonDraft}
+            onInput={onJsonInput}
+          />
+        </div>
+      </div>
+      <div
+        bind:this={scrollTrack}
+        class="theme-editor-scrollbar-track absolute right-0 top-1 bottom-1 z-20 w-2 select-none"
+        onpointerdown={handleEditorScrollbarPointerDown}
+        aria-hidden="true"
+      >
+        {#if showEditorScrollbar}
+          <div
+            class={cn(
+              "theme-editor-scrollbar-thumb pointer-events-none absolute left-0.5 right-0.5 rounded-full",
+              draggingEditorScrollbar && "is-dragging",
+            )}
+            style="top: {editorScrollThumbTop}px; height: {editorScrollThumbHeight}px;"
+          ></div>
+        {/if}
+      </div>
+    </div>
+    {#if !readOnly && userTheme && failingPairs.length > 0}
+      <ThemeContrastNotice
+        count={failingPairs.length}
+        onJump={jumpToNextFailingPair}
+        onFixAll={fixAllFailingPairs}
       />
     {/if}
-
-    {#each SOURCE_GROUPS as group (group.id)}
-      {#if isCalendarGroup(group)}
-        {#if group.id === "calendar-surface"}
-          <div class="flex flex-col gap-2">
-            {@render sectionHeader("calendar")}
-            {@render calendarSection()}
-          </div>
-        {/if}
-      {:else if isTextActionGroup(group)}
-        {#if group.id === "ink"}
-          <div class="flex flex-col gap-2">
-            {@render sectionHeader("signals")}
-            {@render textActionsSection()}
-          </div>
-        {/if}
-      {:else if group.navTarget}
-        <div class="flex flex-col gap-2">
-          {@render sectionHeader(group.navTarget)}
-          {@render groupSection(group)}
-        </div>
-      {:else}
-        {@render groupSection(group)}
-      {/if}
-    {/each}
-
-  {:else}
-    <ThemeEventPaletteSection
-      {theme}
-      {isBuiltin}
-      onSetSlot={setSlot}
-    />
-  {/if}
-
-  <!-- JSON -->
-  <div class="flex flex-col gap-2">
-    {@render sectionHeader("json")}
-    <ThemeJsonSection
-      {isBuiltin}
-      {jsonDraft}
-      {jsonDirty}
-      {jsonErrors}
-      {jsonNotice}
-      onCopy={copyJsonToClipboard}
-      onSave={saveJsonToFile}
-      onApply={applyJsonChanges}
-      onReset={resetJsonDraft}
-      onInput={onJsonInput}
-    />
-</div>
-</div>
-<div
-  bind:this={scrollTrack}
-  class="theme-editor-scrollbar-track absolute right-0 top-1 bottom-1 z-20 w-2 select-none"
-  onpointerdown={handleEditorScrollbarPointerDown}
-  aria-hidden="true"
->
-  {#if showEditorScrollbar}
-    <div
-      class={cn(
-        "theme-editor-scrollbar-thumb pointer-events-none absolute left-0.5 right-0.5 rounded-full",
-        draggingEditorScrollbar && "is-dragging",
-      )}
-      style="top: {editorScrollThumbTop}px; height: {editorScrollThumbHeight}px;"
-    ></div>
-  {/if}
-</div>
-</div>
-{#if userTheme && failingPairs.length > 0}
-  <ThemeContrastNotice
-    count={failingPairs.length}
-    onJump={jumpToNextFailingPair}
-    onFixAll={fixAllFailingPairs}
-  />
-{/if}
-</div>
+  </div>
 </div>
 
 <style>

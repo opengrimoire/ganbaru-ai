@@ -5,9 +5,12 @@ import {
   mergeThemePatch,
   nextUniqueDisplayName,
   normalizeDisplayName,
+  themeIdCollisionError,
+  toUserThemeSnapshot,
 } from "./themeOperations";
 import {
   APP_TOKEN_KEYS,
+  BUILTIN_THEME_REGISTRY,
   BASE_APP_TOKENS,
   BASE_CALENDAR_TOKENS,
   CALENDAR_TOKEN_KEYS,
@@ -15,6 +18,7 @@ import {
   darkTheme,
   isSemanticSignalAppToken,
   lightTheme,
+  serializeTheme,
   type BuiltinTheme,
   type ThemeSources,
   type UserTheme,
@@ -301,6 +305,49 @@ describe("cloneTheme", () => {
     expect(fromDark.calendarDefaultCustom).toBe(
       BASE_APP_TOKENS.dark["--background"],
     );
+  });
+});
+
+describe("toUserThemeSnapshot", () => {
+  it("projects built-ins into the full user-theme export shape", () => {
+    const snapshot = toUserThemeSnapshot(lightTheme);
+    const parsed = JSON.parse(serializeTheme(snapshot)) as Record<string, unknown>;
+
+    expect(snapshot.kind).toBe("user");
+    expect(snapshot.id).toBe(lightTheme.id);
+    expect(snapshot.displayName).toBe(lightTheme.displayName);
+    expect(parsed.schemaVersion).toBe(2);
+    expect(Object.keys(parsed.appTokens as Record<string, unknown>)).toEqual(
+      APP_TOKEN_KEYS,
+    );
+    expect(Object.keys(parsed.calendarTokens as Record<string, unknown>)).toEqual(
+      CALENDAR_TOKEN_KEYS,
+    );
+  });
+
+  it("returns existing user themes without cloning", () => {
+    const theme = makeUserTheme();
+    expect(toUserThemeSnapshot(theme)).toBe(theme);
+  });
+});
+
+describe("themeIdCollisionError", () => {
+  it("rejects ids that belong to built-in themes", () => {
+    expect(themeIdCollisionError("light", BUILTIN_THEME_REGISTRY)).toBe(
+      "id must not collide with a built-in theme",
+    );
+  });
+
+  it("rejects ids that belong to user themes", () => {
+    const custom = makeUserTheme({ id: "focus" });
+    const registry = { ...BUILTIN_THEME_REGISTRY, [custom.id]: custom };
+    expect(themeIdCollisionError("focus", registry)).toBe(
+      'id "focus" is already used by another theme',
+    );
+  });
+
+  it("allows ids absent from the current registry", () => {
+    expect(themeIdCollisionError("new-theme", BUILTIN_THEME_REGISTRY)).toBeUndefined();
   });
 });
 

@@ -251,7 +251,7 @@ If a synthetic ID no longer expands (e.g. an UNTIL cap removed the instance and 
 
 ## Themes
 
-User-authored themes persist as a normalized snapshot across six tables. Built-in light and dark stay code-pinned in `apps/client/src/lib/stores/themes.ts` and never appear in the database; the schema's `CHECK (id NOT IN ('light', 'dark'))` on `themes.id` defends against any import collision. The full feature design lives in `features/themes.md`.
+User-authored themes persist as a normalized snapshot across six tables. Built-in light and dark stay code-pinned in `apps/client/src/lib/stores/themes.ts` and never appear in the database; the schema's `CHECK (id NOT IN ('light', 'dark'))` on `themes.id` defends against built-in import collisions, while the primary key prevents duplicate user-theme IDs. The full feature design lives in `features/themes.md`.
 
 Boot order matters: `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app. The hydrate helper runs an idempotent one-time migration that walks the legacy `themes.user` blob from `vault/config.json`, runs the current derivation engine to produce missing tokens, writes one transaction per theme, then removes `themes.user` from the config so subsequent boots load purely from SQLite.
 
@@ -261,7 +261,7 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | text | Primary key. `CHECK (id NOT IN ('light', 'dark'))` so an import cannot shadow a built-in. |
+| `id` | text | Primary key. `CHECK (id NOT IN ('light', 'dark'))` so an import cannot shadow a built-in. Duplicate user-theme IDs are rejected by the primary key. |
 | `display_name` | text | User-visible name. Trimmed and length-capped at 60 chars by the client. |
 | `icon_label` | text or null | `'light'` or `'dark'`. Purely decorative sun/moon tag ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or calendar contrast behavior. Nullable for backward compatibility (rows from before migration v5 are filled in on hydrate via canvas luminance). Previously named `scheme`; renamed to `icon_label` in migration v7 to make clear it is a label, not a rendering switch. The dropped `base` column previously played the same role for legacy imports, but the snapshot model derives any required fallback from canvas luminance at hydrate time, so it was removed in migration v6. |
 | `seed_icon_label` | text or null | Clone-time snapshot of `icon_label` for "Reset all". Nullable on the same grounds. |
