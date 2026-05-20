@@ -6,7 +6,7 @@
     isToday,
   } from "./utils";
   import { getCalendars } from "$lib/stores/calendars.svelte";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -29,6 +29,7 @@
 
   // Mini calendar popover state
   let showMiniCalendar = $state(false);
+  let miniCalendarButton: HTMLButtonElement | undefined = $state();
 
   let {
     anchorDate,
@@ -110,8 +111,14 @@
     showMiniCalendar = !showMiniCalendar;
   }
 
-  function closeMiniCalendar() {
+  async function focusMiniCalendarButton() {
+    await tick();
+    miniCalendarButton?.focus();
+  }
+
+  function closeMiniCalendar(source?: "keyboard" | "pointer") {
     showMiniCalendar = false;
+    if (source === "keyboard") void focusMiniCalendarButton();
   }
 
   // Wheel navigation on the header row mirrors the arrow controls.
@@ -129,10 +136,10 @@
     setTimeout(() => { wheelCooldown = false; }, 300);
   }
 
-  function selectPickerDay(dateStr: string) {
+  function selectPickerDay(dateStr: string, source?: "keyboard" | "pointer") {
     const [year, month, day] = dateStr.split("-").map(Number);
     onDaySelect(new Date(year, month - 1, day));
-    closeMiniCalendar();
+    closeMiniCalendar(source);
   }
 </script>
 
@@ -155,6 +162,7 @@
   <!-- Month/year label with mini calendar popover -->
   <div class="relative">
     <button
+      bind:this={miniCalendarButton}
       onclick={handleHeaderClick}
       class="flex h-7 items-center rounded-md px-1.5 text-sm font-semibold leading-none text-foreground transition-colors {showMiniCalendar ? 'bg-accent' : 'hover:bg-accent'}"
     >
@@ -164,7 +172,7 @@
     {#if showMiniCalendar}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="fixed inset-0 z-40" onclick={closeMiniCalendar}></div>
+      <div class="fixed inset-0 z-40" onclick={() => closeMiniCalendar("pointer")}></div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg"
@@ -174,6 +182,7 @@
           selectedDate={anchorDateStr}
           highlightMode={pickerHighlightMode}
           onselect={selectPickerDay}
+          oncancel={closeMiniCalendar}
         />
       </div>
     {/if}

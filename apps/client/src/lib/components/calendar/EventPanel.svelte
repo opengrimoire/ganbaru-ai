@@ -202,8 +202,26 @@
   // ─── Date pickers ──────────────────────────────────────────────
   let datepickerOpen = $state(false);
   let endDatepickerOpen = $state(false);
+  let startDateButton: HTMLButtonElement | undefined = $state();
+  let endDateButton: HTMLButtonElement | undefined = $state();
 
-  function selectDpDay(dateStr: string) {
+  async function focusDateButton(target: "start" | "end") {
+    await tick();
+    if (target === "start") startDateButton?.focus();
+    else endDateButton?.focus();
+  }
+
+  function cancelDpDay(source?: "keyboard" | "pointer") {
+    datepickerOpen = false;
+    if (source === "keyboard") void focusDateButton("start");
+  }
+
+  function cancelEdpDay(source?: "keyboard" | "pointer") {
+    endDatepickerOpen = false;
+    if (source === "keyboard") void focusDateButton("end");
+  }
+
+  function selectDpDay(dateStr: string, source?: "keyboard" | "pointer") {
     if (startDate && endDate) {
       const [oy, om, od] = startDate.split("-").map(Number);
       const [ey, em, ed] = endDate.split("-").map(Number);
@@ -219,12 +237,14 @@
     startDate = dateStr;
     datepickerOpen = false;
     emitChange();
+    if (source === "keyboard") void focusDateButton("start");
   }
 
-  function selectEdpDay(dateStr: string) {
+  function selectEdpDay(dateStr: string, source?: "keyboard" | "pointer") {
     endDate = dateStr;
     endDatepickerOpen = false;
     emitChange();
+    if (source === "keyboard") void focusDateButton("end");
   }
 
   function toggleDatepicker() {
@@ -1086,7 +1106,8 @@
     >
       <!-- Start date -->
       <div class="relative z-1 min-w-0 justify-self-start">
-        <button onclick={toggleDatepicker}
+        <button bind:this={startDateButton}
+          onclick={toggleDatepicker}
           class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
@@ -1100,7 +1121,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-19" onclick={() => { datepickerOpen = false; }}></div>
           <div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
-            <MiniDatePicker selectedDate={startDate} onselect={selectDpDay} />
+            <MiniDatePicker selectedDate={startDate} onselect={selectDpDay} oncancel={cancelDpDay} />
           </div>
         {/if}
       </div>
@@ -1150,7 +1171,8 @@
 
       <!-- End date -->
       <div class="relative z-1 min-w-0 justify-self-end text-right">
-        <button onclick={toggleEndDatepicker}
+        <button bind:this={endDateButton}
+          onclick={toggleEndDatepicker}
           class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
@@ -1162,7 +1184,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-19" onclick={() => { endDatepickerOpen = false; }}></div>
           <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
-            <MiniDatePicker selectedDate={endDate} minDate={startDate} onselect={selectEdpDay} />
+            <MiniDatePicker selectedDate={endDate} minDate={startDate} onselect={selectEdpDay} oncancel={cancelEdpDay} />
           </div>
         {/if}
       </div>

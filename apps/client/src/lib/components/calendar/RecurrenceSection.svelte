@@ -2,6 +2,7 @@
   import type { RecurrenceConfig, RecurrenceFrequency, Weekday } from "./types";
   import { formatRecurrenceLabel } from "./rrule";
   import MiniDatePicker from "./MiniDatePicker.svelte";
+  import { tick } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Repeat from "@lucide/svelte/icons/repeat";
@@ -180,9 +181,20 @@
     return { destroy() {} };
   }
 
-  function selectCalDay(dateStr: string) {
+  async function focusDateInput() {
+    await tick();
+    dateBtn?.focus();
+  }
+
+  function cancelCalDay(source?: "keyboard" | "pointer") {
+    pickerOpen = false;
+    if (source === "keyboard") void focusDateInput();
+  }
+
+  function selectCalDay(dateStr: string, source?: "keyboard" | "pointer") {
     updateEndDate(dateStr);
     pickerOpen = false;
+    if (source === "keyboard") void focusDateInput();
   }
 </script>
 
@@ -304,7 +316,7 @@
               <div class="fixed inset-0 z-60" onclick={() => { pickerOpen = false; }}></div>
               <div class="fixed z-61 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
                 use:positionPicker>
-                <MiniDatePicker selectedDate={recEndDate || defaultUntilDate()} small onselect={selectCalDay} />
+                <MiniDatePicker selectedDate={recEndDate || defaultUntilDate()} small onselect={selectCalDay} oncancel={cancelCalDay} />
               </div>
             {/if}
           </div>
