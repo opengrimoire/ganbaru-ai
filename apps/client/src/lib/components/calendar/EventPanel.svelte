@@ -883,6 +883,13 @@
     if (!parked && event && onDelete) onDelete(event.id, isRecurring ? scope : undefined);
   }
 
+  function confirmArmedDelete() {
+    if (!deleteArmed) return false;
+    deleteArmed = false;
+    handleDeleteClick();
+    return true;
+  }
+
   function armOrConfirmDelete() {
     if (mode !== "edit" || !event || !onDelete) return;
     // For deletes that would stop the active pomodoro session, skip the
@@ -893,12 +900,7 @@
       handleDeleteClick();
       return;
     }
-    if (deleteArmed) {
-      deleteArmed = false;
-      handleDeleteClick();
-    } else {
-      deleteArmed = true;
-    }
+    if (!confirmArmedDelete()) deleteArmed = true;
   }
 
   function handlePanelClick(e: MouseEvent) {
@@ -974,6 +976,18 @@
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
       if (parked) return;
+      if (
+        deleteArmed
+        && e.key === "Enter"
+        && !e.altKey
+        && !e.ctrlKey
+        && !e.metaKey
+        && !e.shiftKey
+      ) {
+        e.preventDefault();
+        confirmArmedDelete();
+        return;
+      }
       // Mod + Enter: save. Chosen over plain Enter so typing newlines
       // in the description textarea still works.
       if (e.key === "Enter" && hasShortcutModifier(e)) {
@@ -1299,10 +1313,10 @@
 
       <!-- 5) Music -->
       <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="flex items-stretch">
-          <button class="flex w-9 shrink-0 items-center justify-center text-muted-foreground/50">
+        <div class="section-header flex items-stretch">
+          <div aria-hidden="true" class="flex w-9 shrink-0 items-center justify-center text-muted-foreground/50">
             <Music size={13} />
-          </button>
+          </div>
           <button onclick={() => handleExpand("music")}
             disabled={controlsDisabled}
             class="flex flex-1 items-center px-2.5 py-2 text-left">
@@ -1330,7 +1344,7 @@
         Read-only
       </div>
     {:else}
-      <div class="flex">
+      <div class="panel-footer-actions flex">
         {#if deleteArmed && mode === "edit" && onDelete && event}
           <button
             bind:this={confirmDeleteBtn}
@@ -1338,7 +1352,7 @@
             disabled={controlsDisabled}
             class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.8rem] text-action-danger-armed-foreground bg-action-danger-armed">
             <Trash2 size={13} strokeWidth={1.8} />
-            <span>Click again to delete ({formatShortcut("Mod + D")})</span>
+            <span>Press again to delete ({formatShortcut("Mod + D")})</span>
           </button>
         {:else}
           {#if mode === "edit" && onDelete && event}
@@ -1424,6 +1438,20 @@
 
   .title-wrapper:not(:focus-within)::after {
     opacity: 1;
+  }
+
+  :global(html[data-focus-intent="keyboard"]) .panel-root :global(.section-header button:focus) {
+    position: relative;
+    z-index: 1;
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+
+  :global(html[data-focus-intent="keyboard"]) .panel-root :global(.panel-footer-actions button:focus) {
+    position: relative;
+    z-index: 1;
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
   }
 
   /* Kill all interactivity below the drag-handle bar when readOnly */
