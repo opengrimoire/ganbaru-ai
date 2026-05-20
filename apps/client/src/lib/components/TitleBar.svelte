@@ -141,7 +141,7 @@
 
   function openThemeQuickSwitcher() {
     if (lockedByThemeEditor) return;
-    showPerfMenu = false;
+    if (!perfPinned) showPerfMenu = false;
     showTitleBarMenu = false;
     showUtilityOverflowMenu = false;
     showThemeQuickSwitcher = true;

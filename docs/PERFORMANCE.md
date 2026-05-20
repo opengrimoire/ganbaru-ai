@@ -17,8 +17,6 @@ This file is the canonical performance record for GanbaruAI. It exists so future
 
 Use benchmark-generated output as the source of truth. Manual copies from the diagnostics panel are diagnostic only, because they can mix real user data, warm boots, open diagnostics UI, and human timing.
 
-The diagnostics panel also includes a manual calendar scroll diagnostic for investigating platform-specific scroll smoothness. It records requestAnimationFrame timing, wheel events, scroll events, and scroll distance during a 5 to 10 second hand-driven sample. Treat the copied markdown as debugging evidence only; it is not a canonical benchmark record.
-
 To capture a comparable run:
 
 1. Build and install a release package.
