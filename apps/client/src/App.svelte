@@ -13,6 +13,7 @@
   import { hydrateCalendarEventTimezones } from "$lib/stores/timezone-migration";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
@@ -160,7 +161,7 @@
     }, 10_000);
 
     // Prevent native webview scaling from modified wheel input.
-    const blockNativeWheelScale = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    const blockNativeWheelScale = (e: WheelEvent) => { if (hasShortcutModifier(e)) e.preventDefault(); };
     document.addEventListener("wheel", blockNativeWheelScale, { passive: false, capture: true });
 
     const root = document.documentElement;
@@ -247,7 +248,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.ctrlKey && e.key === ",") {
+    if (hasOnlyShortcutModifier(e) && e.key === ",") {
       e.preventDefault();
       if (settingsLauncher.isOpen) {
         settingsLauncher.close();
@@ -257,17 +258,17 @@
       return;
     }
 
-    if (e.ctrlKey && (e.key === "=" || e.key === "+")) {
+    if (hasOnlyShortcutModifier(e) && (e.key === "=" || e.key === "+")) {
       e.preventDefault();
       zoom.zoomIn();
       return;
     }
-    if (e.ctrlKey && e.key === "-") {
+    if (hasOnlyShortcutModifier(e) && e.key === "-") {
       e.preventDefault();
       zoom.zoomOut();
       return;
     }
-    if (e.ctrlKey && e.key === "0") {
+    if (hasOnlyShortcutModifier(e) && e.key === "0") {
       e.preventDefault();
       zoom.reset();
       return;
@@ -281,21 +282,21 @@
       return;
     }
 
-    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && e.key.toLowerCase() === "m") {
+    if (hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "m") {
       if (isEditableKeyboardTarget(e.target)) return;
       e.preventDefault();
       nav.navigate("music");
       return;
     }
 
-    if (e.ctrlKey && e.code === "Tab") {
+    if (hasShortcutModifier(e) && !e.altKey && e.code === "Tab") {
       e.preventDefault();
       if (e.shiftKey) navigatePrev();
       else navigateNext();
       return;
     }
 
-    if (e.ctrlKey && (e.key === "PageDown" || e.key === "PageUp")) {
+    if (hasOnlyShortcutModifier(e) && (e.key === "PageDown" || e.key === "PageUp")) {
       e.preventDefault();
       if (e.key === "PageUp") navigatePrev();
       else navigateNext();

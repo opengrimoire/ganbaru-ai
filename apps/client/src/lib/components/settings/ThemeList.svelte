@@ -22,8 +22,8 @@
   let importErrors = $state<string[]>([]);
   let toast = $state<string | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
-  const quickToggleShortcuts = ["Ctrl + Shift + L"] as const;
-  const themePickerShortcuts = ["Ctrl + Shift + T"] as const;
+  const quickToggleShortcuts = ["Mod + Shift + L"] as const;
+  const themePickerShortcuts = ["Mod + Shift + T"] as const;
 
   const orderedThemes = $derived.by(() => {
     const all = Object.values(themeStore.registry);

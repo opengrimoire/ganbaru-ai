@@ -17,6 +17,7 @@
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
+  import { formatShortcut, hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import {
     EVENT_PANEL_EDGE_MARGIN,
     EVENT_PANEL_MAX_WIDTH,
@@ -912,14 +913,14 @@
 
   /**
    * Local keydown handler for input/textarea elements. Stops propagation so
-   * keys like Ctrl+Z (undo text) don't leak into CalendarView's global
+   * keys like Mod+Z (undo text) don't leak into CalendarView's global
    * shortcut handler, while explicitly letting the panel's own shortcuts
-   * (Ctrl+Enter save, Ctrl+D delete, Escape close) bubble up to the
+   * (Mod+Enter save, Mod+D delete, Escape close) bubble up to the
    * window-level listeners.
    */
   function inputKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) return;
-    if ((e.key === "d" || e.key === "D") && (e.ctrlKey || e.metaKey) && !e.shiftKey) return;
+    if (e.key === "Enter" && hasShortcutModifier(e)) return;
+    if ((e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e)) return;
     if (e.key === "Escape") return;
     e.stopPropagation();
   }
@@ -974,17 +975,17 @@
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
       if (parked) return;
-      // Ctrl/Cmd + Enter: save. Chosen over plain Enter so typing newlines
+      // Mod + Enter: save. Chosen over plain Enter so typing newlines
       // in the description textarea still works.
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      if (e.key === "Enter" && hasShortcutModifier(e)) {
         e.preventDefault();
         handleSave();
         return;
       }
-      // Ctrl/Cmd + D: arm delete; press again to confirm. If the target is
+      // Mod + D: arm delete; press again to confirm. If the target is
       // the active pomodoro block, the first press goes straight to the
       // modal (see armOrConfirmDelete).
-      if ((e.key === "d" || e.key === "D") && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      if ((e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e)) {
         e.preventDefault();
         armOrConfirmDelete();
         return;
@@ -1338,14 +1339,14 @@
             disabled={controlsDisabled}
             class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.8rem] text-action-danger-armed-foreground bg-action-danger-armed">
             <Trash2 size={13} strokeWidth={1.8} />
-            <span>Click again to delete (Ctrl + D)</span>
+            <span>Click again to delete ({formatShortcut("Mod + D")})</span>
           </button>
         {:else}
           {#if mode === "edit" && onDelete && event}
             <button onclick={armOrConfirmDelete}
               disabled={controlsDisabled}
               class="flex w-9 shrink-0 items-center justify-center bg-black/6 dark:bg-black/30 text-foreground hover:text-destructive"
-              title="Delete (Ctrl + D)">
+              title={`Delete (${formatShortcut("Mod + D")})`}>
               <Trash2 size={13} strokeWidth={1.8} />
             </button>
           {/if}
@@ -1360,7 +1361,7 @@
               <CircleCheck size={13} />
               <span>Saved</span>
             {:else}
-              <span>Save (Ctrl + Enter)</span>
+              <span>Save ({formatShortcut("Mod + Enter")})</span>
             {/if}
           </button>
         {/if}

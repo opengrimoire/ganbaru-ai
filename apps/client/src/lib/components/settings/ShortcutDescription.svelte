@@ -1,13 +1,11 @@
 <script lang="ts">
+  import { shortcutParts } from "$lib/keyboard-shortcuts";
+
   let {
     shortcuts,
   }: {
     shortcuts: readonly string[];
   } = $props();
-
-  function shortcutParts(shortcut: string): string[] {
-    return shortcut.split(" + ");
-  }
 </script>
 
 <div

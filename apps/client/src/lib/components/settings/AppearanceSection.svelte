@@ -92,7 +92,7 @@
     <div class="flex flex-col gap-3">
       <CustomSelect
         label="App zoom"
-        descriptionShortcuts={["Ctrl + +", "Ctrl + -", "Ctrl + 0"]}
+        descriptionShortcuts={["Mod + +", "Mod + -", "Mod + 0"]}
         value={percentString(zoom.percent)}
         options={appZoomOptions}
         onChange={handleAppZoomChange}

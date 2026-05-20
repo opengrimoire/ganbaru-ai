@@ -29,6 +29,7 @@
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
   import type { SectionId } from "$lib/components/settings/types";
+  import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
 
   let {
     shellStartupMs = null,
@@ -327,7 +328,7 @@
       return;
     }
 
-    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "l") {
+    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "l") {
       if (isEditableKeyboardTarget(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -335,7 +336,7 @@
       return;
     }
 
-    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "t") {
+    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "t") {
       if (isEditableKeyboardTarget(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -343,7 +344,7 @@
       return;
     }
 
-    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "p") {
+    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "p") {
       if (isEditableKeyboardTarget(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -351,7 +352,7 @@
       return;
     }
 
-    if (e.ctrlKey && e.shiftKey && e.key === "W") {
+    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "w") {
       e.preventDefault();
       e.stopPropagation();
       if (lockedByBenchmark) {
@@ -365,7 +366,7 @@
   // Capture zoom shortcuts early to prevent native webview handling
   $effect(() => {
     function handleZoom(e: KeyboardEvent) {
-      if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+      if (hasOnlyShortcutModifier(e)) {
         if (e.key === "=" || e.key === "+") {
           e.preventDefault();
           e.stopPropagation();
@@ -628,7 +629,7 @@
             ? "bg-background text-foreground dark:bg-accent dark:text-white"
             : `${TITLE_BAR_ICON_COLOR_CLASS} hover:bg-sidebar-accent`,
         )}
-        title="Music (Ctrl + M)"
+        title={`Music (${formatShortcut("Mod + M")})`}
         aria-label="Music"
       >
         <Music size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -650,8 +651,8 @@
         title={lockedByThemeEditor
           ? "Disabled while editing a theme"
           : theme.isDark
-            ? "Switch to light mode (Ctrl + Shift + L)"
-            : "Switch to dark mode (Ctrl + Shift + L)"}
+            ? `Switch to light mode (${formatShortcut("Mod + Shift + L")})`
+            : `Switch to dark mode (${formatShortcut("Mod + Shift + L")})`}
       >
         {#if theme.isDark}
           <Sun size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -667,7 +668,7 @@
         <button
           onclick={togglePerfMenu}
           class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
-          title="Performance (Ctrl + Shift + P)"
+          title={`Performance (${formatShortcut("Mod + Shift + P")})`}
         >
           <CircleGauge size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         </button>
@@ -704,7 +705,7 @@
             ? "cursor-not-allowed opacity-40"
             : "hover:bg-sidebar-accent",
         )}
-        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Settings (Ctrl + ,)"}
+        title={lockedByThemeEditor ? "Disabled while editing a theme" : `Settings (${formatShortcut("Mod + ,")})`}
         aria-label="Settings"
       >
         <Settings size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -782,7 +783,7 @@
           ? "cursor-not-allowed opacity-40"
           : "hover:bg-destructive hover:text-destructive-foreground",
       )}
-      title={lockedByBenchmark ? "Disabled while a benchmark is active" : "Close app (Ctrl + Shift + W)"}
+      title={lockedByBenchmark ? "Disabled while a benchmark is active" : `Close app (${formatShortcut("Mod + Shift + W")})`}
       aria-label="Close"
     >
       <X size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />

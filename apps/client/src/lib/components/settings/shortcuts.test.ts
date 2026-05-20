@@ -26,6 +26,26 @@ describe("shortcut search", () => {
     expect(matchingActions("=")).toEqual([]);
   });
 
+  it("orders general shortcuts by navigation, opening, zooming, then other actions", () => {
+    expect(SHORTCUT_GROUPS[0]?.title).toBe("General");
+    expect(SHORTCUT_GROUPS[0]?.items.map((item) => item.action)).toEqual([
+      "Next view",
+      "Previous view",
+      "Open calendar",
+      "Open to-do",
+      "Open music",
+      "Open or close settings",
+      "Zoom in",
+      "Zoom out",
+      "Reset zoom",
+      "Toggle light/dark mode",
+      "Open theme picker",
+      "Toggle performance panel",
+      "Open shortcuts",
+      "Close app",
+    ]);
+  });
+
   it("matches action text with or without spaces", () => {
     expect(matchingActions("theme picker")).toContain("Open theme picker");
     expect(matchingActions("themepicker")).toContain("Open theme picker");
@@ -110,9 +130,44 @@ describe("shortcut search", () => {
         "Reset zoom",
         "Go to today",
         "Reset calendar timeline zoom",
-        "Jump to 0% through 90%",
+        "Jump to playback position",
       ]),
     );
+  });
+
+  it("lists both shuffle shortcut keys", () => {
+    const musicItems = SHORTCUT_GROUPS.find((group) => group.title === "Music")?.items ?? [];
+
+    expect(musicItems.find((item) => item.action === "Toggle shuffle")?.keys).toEqual([
+      "S",
+      "R",
+    ]);
+    expect(matchingActions("r")).toContain("Toggle shuffle");
+  });
+
+  it("uses contiguous number shortcuts for calendar views", () => {
+    const calendarItems = SHORTCUT_GROUPS.find((group) => group.title === "Calendar")?.items ?? [];
+    expect(calendarItems.slice(0, 4).map((item) => item.keys)).toEqual([
+      ["0", "T"],
+      ["1", "D"],
+      ["2", "W"],
+      ["3", "M"],
+    ]);
+    expect(matchingActions("1")).toContain("Day view");
+    expect(matchingActions("2")).toContain("Week view");
+    expect(matchingActions("3")).toContain("Month view");
+    expect(matchingActions("7")).not.toContain("Week view");
+    expect(matchingActions("9")).not.toContain("Month view");
+  });
+
+  it("keeps event editor shortcuts at the end of calendar shortcuts", () => {
+    const calendarItems = SHORTCUT_GROUPS.find((group) => group.title === "Calendar")?.items ?? [];
+
+    expect(SHORTCUT_GROUPS.some((group) => group.title === "Event editor")).toBe(false);
+    expect(calendarItems.slice(-2)).toEqual([
+      { keys: ["Mod + Enter"], action: "Save event" },
+      { keys: ["Mod + D"], action: "Delete event" },
+    ]);
   });
 
   it("allows modifier prefix searches to show matching shortcuts", () => {
@@ -125,6 +180,8 @@ describe("shortcut search", () => {
     expect(matchingActions("Ctrl")).toEqual(actions);
     expect(matchingActions("Ctrl ")).toEqual(actions);
     expect(matchingActions("Control")).toEqual(actions);
+    expect(matchingActions("Cmd")).toEqual(actions);
+    expect(matchingActions("Command")).toEqual(actions);
     expect(matchingActions("ctrl +")).toEqual(actions);
     expect(matchingActions("Ctrl + ")).toEqual(actions);
     expect(matchingActions("ctrl shift")).toEqual(
@@ -150,15 +207,14 @@ describe("shortcut search", () => {
   it("matches either side of slash-separated modifiers", () => {
     expect(matchingActions("ctrl enter")).toContain("Save event");
     expect(matchingActions("cmd enter")).toContain("Save event");
-    expect(matchingActions("option left")).toContain("Back in calendar history");
+    expect(matchingActions("option left")).toEqual([]);
   });
 
   it("matches arrow shortcuts by arrow name or direction", () => {
     expect(matchingActions("arrow right")).toEqual(
       expect.arrayContaining([
-        "Next date range",
-        "Forward in calendar history",
-        "Seek backward or forward",
+        "Previous or next date range",
+        "Jump 10 seconds",
         "Next track",
       ]),
     );
@@ -172,8 +228,8 @@ describe("shortcut search", () => {
   });
 
   it("creates searchable variants for shortcut alternatives", () => {
-    expect(normalizedShortcutVariants("Ctrl/Cmd + Enter")).toEqual(
-      expect.arrayContaining(["ctrlcmdenter", "ctrlenter", "cmdenter"]),
+    expect(normalizedShortcutVariants("Mod + Enter")).toEqual(
+      expect.arrayContaining(["ctrlenter", "cmdenter"]),
     );
   });
 });

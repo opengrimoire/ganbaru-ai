@@ -10,6 +10,7 @@
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
+  import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import type { SectionId } from "./types";
 
   let {
@@ -81,13 +82,13 @@
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
-      if (e.ctrlKey && e.key === ",") {
+      if (hasOnlyShortcutModifier(e) && e.key === ",") {
         e.preventDefault();
         e.stopPropagation();
         onClose();
         return;
       }
-      if (activeSection === "shortcuts" && e.ctrlKey && e.key.toLowerCase() === "f") {
+      if (activeSection === "shortcuts" && hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         e.stopPropagation();
         focusShortcutsSearch();

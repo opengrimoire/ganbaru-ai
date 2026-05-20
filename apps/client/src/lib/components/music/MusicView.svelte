@@ -19,6 +19,7 @@
   import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { cn } from "$lib/utils";
+  import { formatShortcut, hasShortcutModifier } from "$lib/keyboard-shortcuts";
 
   const player = getMusicPlayer();
 
@@ -162,9 +163,11 @@
 
   function handleKeydown(event: KeyboardEvent): void {
     if (musicPage !== "player") return;
-    if (event.altKey || event.metaKey) return;
+    if (event.altKey) return;
     if (isEditableTarget(event.target)) return;
-    if (event.ctrlKey) {
+    const shortcutModifier = hasShortcutModifier(event);
+    if ((event.ctrlKey || event.metaKey) && !shortcutModifier) return;
+    if (shortcutModifier) {
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         void player.playPreviousTrack();
@@ -232,7 +235,7 @@
       void player.adjustVolume(-volumeShortcutStep);
       return;
     }
-    if (event.key === "s" || event.key === "S") {
+    if (event.key.toLowerCase() === "s" || event.key.toLowerCase() === "r") {
       event.preventDefault();
       if (player.queue.length >= 2) {
         player.toggleShuffle();
@@ -609,7 +612,7 @@
             onclick={() => { void player.playPreviousTrack(); }}
             disabled={!player.canPlayPreviousTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Last track (Ctrl + ←)"
+            title={`Last track (${formatShortcut("Mod + ←")})`}
             aria-label="Last track"
           >
             <SkipBack size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -633,7 +636,7 @@
             onclick={() => { void player.playNextTrack(); }}
             disabled={!player.canPlayNextTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title="Next track (Ctrl + →)"
+            title={`Next track (${formatShortcut("Mod + →")})`}
             aria-label="Next track"
           >
             <SkipForward size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -646,7 +649,7 @@
               "inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
               !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
-            title={player.shuffleEnabled ? "Shuffle on (S key)" : "Shuffle off (S key)"}
+            title={player.shuffleEnabled ? "Shuffle on (S or R key)" : "Shuffle off (S or R key)"}
             aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
             aria-pressed={player.shuffleEnabled}
           >

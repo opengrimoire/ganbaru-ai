@@ -1,3 +1,5 @@
+import { shortcutParts as platformShortcutParts } from "$lib/keyboard-shortcuts";
+
 export interface ShortcutItem {
   keys: string[];
   action: string;
@@ -11,83 +13,73 @@ export interface ShortcutGroup {
 
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = Object.freeze([
   {
-    title: "App",
+    title: "General",
     items: [
-      { keys: ["Ctrl + +"], action: "Zoom in" },
-      { keys: ["Ctrl + -"], action: "Zoom out" },
-      { keys: ["Ctrl + 0"], action: "Reset zoom" },
+      { keys: ["Mod + Tab"], action: "Next view" },
+      { keys: ["Mod + Shift + Tab"], action: "Previous view" },
       { keys: ["Alt + 1"], action: "Open calendar" },
       { keys: ["Alt + 2"], action: "Open to-do" },
-      { keys: ["Ctrl + M"], action: "Open music" },
-      { keys: ["Ctrl + ,"], action: "Open or close settings" },
-      { keys: ["Ctrl + Shift + L"], action: "Toggle light/dark mode" },
-      { keys: ["Ctrl + Shift + T"], action: "Open theme picker" },
-      { keys: ["Ctrl + Shift + P"], action: "Toggle performance panel" },
+      { keys: ["Mod + M"], action: "Open music" },
+      { keys: ["Mod + ,"], action: "Open or close settings" },
+      { keys: ["Mod + +"], action: "Zoom in" },
+      { keys: ["Mod + -"], action: "Zoom out" },
+      { keys: ["Mod + 0"], action: "Reset zoom" },
+      { keys: ["Mod + Shift + L"], action: "Toggle light/dark mode" },
+      { keys: ["Mod + Shift + T"], action: "Open theme picker" },
+      { keys: ["Mod + Shift + P"], action: "Toggle performance panel" },
       { keys: ["F1"], action: "Open shortcuts" },
-      { keys: ["Ctrl + Tab"], action: "Next view" },
-      { keys: ["Ctrl + Shift + Tab"], action: "Previous view" },
-      { keys: ["Ctrl + Shift + W"], action: "Close app" },
+      { keys: ["Mod + Shift + W"], action: "Close app" },
     ],
   },
   {
     title: "Calendar",
     items: [
-      { keys: ["T", "0"], action: "Go to today" },
-      { keys: ["D", "1"], action: "Day view" },
-      { keys: ["W", "7"], action: "Week view" },
-      { keys: ["M", "9"], action: "Month view" },
-      { keys: ["Arrow left"], action: "Previous date range" },
-      { keys: ["Arrow right"], action: "Next date range" },
+      { keys: ["0", "T"], action: "Go to today" },
+      { keys: ["1", "D"], action: "Day view" },
+      { keys: ["2", "W"], action: "Week view" },
+      { keys: ["3", "M"], action: "Month view" },
+      { keys: ["Arrow left", "Arrow right"], action: "Previous or next date range" },
       {
         keys: ["Arrow up", "Arrow down"],
         action: "Scroll timeline",
-        context: "Day and week views",
       },
-      {
-        keys: ["Arrow up", "Arrow down"],
-        action: "Previous or next date range",
-        context: "Month view",
-      },
-      { keys: ["Alt + Arrow left"], action: "Back in calendar history" },
-      { keys: ["Alt + Arrow right"], action: "Forward in calendar history" },
-      { keys: ["Ctrl + Z"], action: "Undo calendar edit" },
-      { keys: ["Ctrl + Y"], action: "Redo calendar edit" },
+      { keys: ["Mod + Z"], action: "Undo calendar edit" },
+      { keys: ["Mod + Y"], action: "Redo calendar edit" },
       { keys: ["Shift + +", "+"], action: "Zoom in the calendar timeline" },
       { keys: ["Shift + -", "-"], action: "Zoom out the calendar timeline" },
       { keys: ["Shift + 0"], action: "Reset calendar timeline zoom" },
+      { keys: ["Mod + Enter"], action: "Save event" },
+      { keys: ["Mod + D"], action: "Delete event" },
     ],
   },
   {
     title: "Music",
     items: [
       { keys: ["Spacebar"], action: "Play or pause" },
-      { keys: ["P", "L", "Ctrl + P", "Ctrl + L"], action: "Show or hide playlist" },
+      { keys: ["P", "L", "Mod + P", "Mod + L"], action: "Show or hide playlist" },
       { keys: ["M"], action: "Mute or unmute" },
-      { keys: ["S"], action: "Toggle shuffle" },
-      { keys: ["0-9"], action: "Jump to 0% through 90%" },
-      { keys: ["Arrow left", "Arrow right"], action: "Seek backward or forward" },
+      { keys: ["S", "R"], action: "Toggle shuffle" },
+      { keys: ["0-9"], action: "Jump to playback position" },
+      { keys: ["Arrow left", "Arrow right"], action: "Jump 10 seconds" },
       { keys: ["Arrow up", "Arrow down"], action: "Adjust volume" },
       {
-        keys: ["Ctrl + Arrow left", "Ctrl + Shift + Arrow left", "Shift + Arrow left"],
+        keys: ["Mod + Arrow left", "Mod + Shift + Arrow left", "Shift + Arrow left"],
         action: "Last track",
       },
       {
-        keys: ["Ctrl + Arrow right", "Ctrl + Shift + Arrow right", "Shift + Arrow right"],
+        keys: ["Mod + Arrow right", "Mod + Shift + Arrow right", "Shift + Arrow right"],
         action: "Next track",
       },
       { keys: ["+", "-"], action: "Adjust playback speed" },
     ],
   },
-  {
-    title: "Event editor",
-    items: [
-      { keys: ["Ctrl/Cmd + Enter"], action: "Save event" },
-      { keys: ["Ctrl/Cmd + D"], action: "Arm or confirm delete" },
-    ],
-  },
 ]);
 
 export function shortcutParts(shortcut: string): string[] {
+  return platformShortcutParts(shortcut);
+}
+
+function rawShortcutParts(shortcut: string): string[] {
   return shortcut.split(" + ");
 }
 
@@ -122,6 +114,10 @@ function normalizeKeyPart(part: string): string {
 
 function keyPartVariants(part: string): string[] {
   const trimmed = part.trim();
+  if (trimmed === "Mod") {
+    return ["ctrl", "cmd"];
+  }
+
   if (trimmed.includes("/")) {
     return unique([
       normalizeKeyPart(trimmed),
@@ -161,12 +157,12 @@ function combinePartVariants(parts: readonly string[][]): string[][] {
 export function normalizedShortcutVariants(shortcut: string): string[] {
   return unique([
     normalizeText(shortcut),
-    ...combineVariants(shortcutParts(shortcut).map(keyPartVariants)),
+    ...combineVariants(rawShortcutParts(shortcut).map(keyPartVariants)),
   ]);
 }
 
 function shortcutPartSequences(shortcut: string): string[][] {
-  return combinePartVariants(shortcutParts(shortcut).map(keyPartVariants));
+  return combinePartVariants(rawShortcutParts(shortcut).map(keyPartVariants));
 }
 
 const MODIFIER_KEYS = new Set(["ctrl", "cmd", "alt", "shift"]);

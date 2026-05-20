@@ -73,22 +73,24 @@
       </div>
     {/if}
 
-    <div class="flex flex-col gap-6">
+    <div class="flex flex-col pb-3 pt-1">
       {#each filteredGroups as group, index}
-        {#if index > 0}
-          <div class="h-px bg-border/70" aria-hidden="true"></div>
-        {/if}
-        <section class="flex flex-col gap-4">
+        <section
+          class={[
+            "flex flex-col gap-4",
+            index > 0 ? "pt-7" : "",
+          ]}
+        >
           <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{group.title}</h2>
           <div class="flex flex-col divide-y divide-border/70">
             {#each group.items as item}
               <div
-                class="grid grid-cols-[minmax(0,1fr)_minmax(8rem,13rem)] gap-x-3 gap-y-1 px-1 py-2.5 first:pt-0 last:pb-0 max-[560px]:grid-cols-1"
+                class="grid grid-cols-[minmax(0,1fr)_minmax(8rem,13rem)] gap-x-3 gap-y-1 px-1 py-2.5 first:pt-0 max-[560px]:grid-cols-1"
               >
-                <div class="min-w-0 text-[0.866667rem] leading-5 text-foreground">
-                  <div>{item.action}</div>
+                <div class="min-w-0 text-[0.866667rem] text-foreground">
+                  <div class="min-h-6 leading-6">{item.action}</div>
                   {#if item.context}
-                    <div class="text-[0.733333rem] text-muted-foreground">{item.context}</div>
+                    <div class="text-[0.733333rem] leading-4 text-muted-foreground">{item.context}</div>
                   {/if}
                 </div>
                 <div class="flex min-w-0 flex-col items-start gap-1.5 overflow-hidden">
@@ -118,6 +120,9 @@
             {/each}
           </div>
         </section>
+        {#if index < filteredGroups.length - 1}
+          <div class="h-px bg-border/70" aria-hidden="true"></div>
+        {/if}
       {/each}
     </div>
   </div>

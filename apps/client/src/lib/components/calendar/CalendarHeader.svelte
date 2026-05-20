@@ -45,11 +45,11 @@
   } = $props();
 
   const viewOptions: { mode: CalendarViewMode; label: string; shortcuts: string[] }[] = [
-    { mode: "day", label: "1d", shortcuts: ["D", "1"] },
-    { mode: "week", label: "7d", shortcuts: ["W", "7"] },
-    { mode: "month", label: "31d", shortcuts: ["M", "9"] },
+    { mode: "day", label: "1d", shortcuts: ["1"] },
+    { mode: "week", label: "7d", shortcuts: ["2"] },
+    { mode: "month", label: "31d", shortcuts: ["3"] },
   ];
-  const todayShortcuts = ["T", "0"] as const;
+  const todayShortcuts = ["0"] as const;
 
   function shortcutTitle(shortcuts: readonly string[]): string {
     const labels = shortcuts.map((shortcut) => `${shortcut} key`);
@@ -83,13 +83,13 @@
           break;
         case "w":
         case "W":
-        case "7":
+        case "2":
           e.preventDefault();
           onViewChange("week");
           break;
         case "m":
         case "M":
-        case "9":
+        case "3":
           e.preventDefault();
           onViewChange("month");
           break;

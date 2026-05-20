@@ -25,6 +25,7 @@
   import type { PanelAnchor } from "./edit-session.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
+  import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import { getCalendarNavHandle } from "./nav-handle.svelte";
   import {
     HeldNavigationController,
@@ -945,16 +946,10 @@
         return;
       }
 
-      if (e.altKey && e.key === "ArrowLeft") {
-        e.preventDefault();
-        historyBack();
-      } else if (e.altKey && e.key === "ArrowRight") {
-        e.preventDefault();
-        historyForward();
-      } else if (e.ctrlKey && e.key === "z") {
+      if (hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         requestUndo();
-      } else if (e.ctrlKey && e.key === "y") {
+      } else if (hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "y") {
         e.preventDefault();
         requestRedo();
       } else if (e.key === "Escape" && session.state.mode !== "closed") {
@@ -1498,10 +1493,10 @@
         },
         {
           title: "Delete and stop?",
-          yesLabel: "Stop and delete (Ctrl + D)",
+          yesLabel: `Stop and delete (${formatShortcut("Mod + D")})`,
           noLabel: "Keep editing (Esc)",
           extraConfirmShortcut: (e) =>
-            (e.key === "d" || e.key === "D") && (e.ctrlKey || e.metaKey) && !e.shiftKey,
+            (e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e),
         },
       );
       return;
