@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
+  import { moveRovingIndex } from "./event-panel-utils";
   import Bold from "@lucide/svelte/icons/bold";
   import Italic from "@lucide/svelte/icons/italic";
   import Underline from "@lucide/svelte/icons/underline";
@@ -29,7 +31,10 @@
   let descOpen = $state(false);
   let editorEl: HTMLDivElement | undefined = $state();
   let descAreaEl: HTMLDivElement | undefined = $state();
+  let toolbarEl: HTMLDivElement | undefined = $state();
+  let toolbarFocusIndex = $state(0);
   const sanitizedDescription = $derived(sanitizeCalendarDescriptionHtml(description));
+  const TOOLBAR_ITEM_COUNT = 8;
 
   function openDescEditor() {
     if (readOnly) return;
@@ -72,6 +77,36 @@
     handleEditorInput();
   }
 
+  async function focusToolbarButton(index: number) {
+    await tick();
+    toolbarEl
+      ?.querySelector<HTMLButtonElement>(`[data-description-toolbar-index="${index}"]`)
+      ?.focus();
+  }
+
+  function handleToolbarButtonKeydown(e: KeyboardEvent, index: number, action?: () => void) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+
+    if (action && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      e.stopPropagation();
+      action();
+      return;
+    }
+
+    const nextIndex = moveRovingIndex({
+      currentIndex: index,
+      itemCount: TOOLBAR_ITEM_COUNT,
+      key: e.key,
+      orientation: "horizontal",
+    });
+    if (nextIndex === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    toolbarFocusIndex = nextIndex;
+    void focusToolbarButton(nextIndex);
+  }
+
   function plainTextToHtml(value: string): string {
     const wrapper = document.createElement("div");
     const lines = value.replaceAll("\r\n", "\n").split("\n");
@@ -83,18 +118,31 @@
   }
 
   let linkPopoverOpen = $state(false);
+  let linkPopoverSource: "keyboard" | "pointer" = $state("pointer");
   let linkUrl = $state("https://");
   let linkBtnEl: HTMLButtonElement | undefined = $state();
   let linkInputEl: HTMLInputElement | undefined = $state();
   let savedSelection: Range | null = null;
 
-  function openLinkPopover() {
+  async function focusLinkButton() {
+    await tick();
+    linkBtnEl?.focus();
+  }
+
+  function closeLinkPopover(source: "keyboard" | "pointer" = linkPopoverSource) {
+    linkPopoverOpen = false;
+    savedSelection = null;
+    if (source === "keyboard") void focusLinkButton();
+  }
+
+  function openLinkPopover(source: "keyboard" | "pointer" = "pointer") {
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
       savedSelection = sel.getRangeAt(0).cloneRange();
     }
     const selectedText = sel?.toString() ?? "";
     linkUrl = isSafeCalendarDescriptionUrl(selectedText) ? selectedText : "https://";
+    linkPopoverSource = source;
     linkPopoverOpen = true;
     requestAnimationFrame(() => {
       linkInputEl?.focus();
@@ -130,11 +178,10 @@
     sanitizeEditorDom();
   }
 
-  function applyLink() {
-    if (!linkUrl || linkUrl === "https://") { linkPopoverOpen = false; return; }
+  function applyLink(source: "keyboard" | "pointer" = linkPopoverSource) {
+    if (!linkUrl || linkUrl === "https://") { closeLinkPopover(source); return; }
     if (!isSafeCalendarDescriptionUrl(linkUrl)) {
-      linkPopoverOpen = false;
-      savedSelection = null;
+      closeLinkPopover(source);
       return;
     }
     if (savedSelection) {
@@ -143,7 +190,8 @@
       sel?.addRange(savedSelection);
     }
     document.execCommand("createLink", false, linkUrl);
-    editorEl?.focus();
+    if (source === "keyboard") void focusLinkButton();
+    else editorEl?.focus();
     sanitizeEditorDom();
     linkPopoverOpen = false;
     savedSelection = null;
@@ -159,6 +207,15 @@
       return;
     }
     if (!descOpen) openDescEditor();
+  }
+
+  function handleDescriptionRowKeydown(event: KeyboardEvent) {
+    if (readOnly || descOpen) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    openDescEditor();
   }
 
   function positionLinkPopover(node: HTMLElement) {
@@ -200,16 +257,20 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={descAreaEl}>
   {#if descOpen}
-    <div transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1" style="padding-left: 23px;">
+    <div bind:this={toolbarEl} transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1" style="padding-left: 23px;">
       {#each [
         { icon: Bold, cmd: "bold", title: "Bold" },
         { icon: Italic, cmd: "italic", title: "Italic" },
         { icon: Underline, cmd: "underline", title: "Underline" },
-      ] as btn}
+      ] as btn, index}
         {@const Icon = btn.icon}
         <button
           onmousedown={(e) => e.preventDefault()}
           onclick={() => execFormat(btn.cmd)}
+          onfocus={() => { toolbarFocusIndex = index; }}
+          onkeydown={(e) => handleToolbarButtonKeydown(e, index)}
+          data-description-toolbar-index={index}
+          tabindex={toolbarFocusIndex === index ? 0 : -1}
           class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
           title={btn.title}
         ><Icon size={13} /></button>
@@ -218,11 +279,16 @@
       {#each [
         { icon: ListOrdered, cmd: "insertOrderedList", title: "Numbered list" },
         { icon: List, cmd: "insertUnorderedList", title: "Bulleted list" },
-      ] as btn}
+      ] as btn, index}
         {@const Icon = btn.icon}
+        {@const toolbarIndex = index + 3}
         <button
           onmousedown={(e) => e.preventDefault()}
           onclick={() => execFormat(btn.cmd)}
+          onfocus={() => { toolbarFocusIndex = toolbarIndex; }}
+          onkeydown={(e) => handleToolbarButtonKeydown(e, toolbarIndex)}
+          data-description-toolbar-index={toolbarIndex}
+          tabindex={toolbarFocusIndex === toolbarIndex ? 0 : -1}
           class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
           title={btn.title}
         ><Icon size={13} /></button>
@@ -230,22 +296,26 @@
       <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
       <button bind:this={linkBtnEl}
         onmousedown={(e) => e.preventDefault()}
-        onclick={openLinkPopover}
+        onclick={() => openLinkPopover("pointer")}
+        onfocus={() => { toolbarFocusIndex = 5; }}
+        onkeydown={(e) => handleToolbarButtonKeydown(e, 5, () => openLinkPopover("keyboard"))}
+        data-description-toolbar-index="5"
+        tabindex={toolbarFocusIndex === 5 ? 0 : -1}
         class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
         title="Insert link"
       ><Link size={13} /></button>
       {#if linkPopoverOpen}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="fixed inset-0 z-60" onclick={() => { linkPopoverOpen = false; }}></div>
+        <div class="fixed inset-0 z-60" onclick={() => closeLinkPopover("pointer")}></div>
         <div class="fixed z-61 flex items-center gap-1.5 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
           use:positionLinkPopover>
           <input bind:this={linkInputEl}
             type="text" bind:value={linkUrl} placeholder="https://..."
-            onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { linkPopoverOpen = false; } }}
+            onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink("keyboard"); } if (e.key === "Escape") { e.preventDefault(); closeLinkPopover("keyboard"); } }}
             class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[0.733333rem] text-event-panel-input-text outline-none placeholder:text-muted-foreground"
           />
-          <button onclick={applyLink}
+          <button onclick={() => applyLink(linkPopoverSource)}
             class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">
             Apply
           </button>
@@ -254,21 +324,33 @@
       <button
         onmousedown={(e) => e.preventDefault()}
         onclick={() => execFormat("removeFormat")}
+        onfocus={() => { toolbarFocusIndex = 6; }}
+        onkeydown={(e) => handleToolbarButtonKeydown(e, 6)}
+        data-description-toolbar-index="6"
+        tabindex={toolbarFocusIndex === 6 ? 0 : -1}
         class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
         title="Remove formatting"
       ><RemoveFormatting size={13} /></button>
       <button
         onmousedown={(e) => e.preventDefault()}
         onclick={closeDescEditor}
+        onfocus={() => { toolbarFocusIndex = 7; }}
+        onkeydown={(e) => handleToolbarButtonKeydown(e, 7)}
+        data-description-toolbar-index="7"
+        tabindex={toolbarFocusIndex === 7 ? 0 : -1}
         class="ml-auto flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
         title="Done"
       ><Check size={13} /></button>
     </div>
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
+    role={!descOpen && !readOnly ? "button" : undefined}
+    tabindex={!descOpen && !readOnly ? 0 : undefined}
     class="flex items-center gap-2.5 leading-none {!descOpen && !readOnly ? 'cursor-text' : ''}"
     onclick={handleDescriptionRowClick}
+    onkeydown={handleDescriptionRowKeydown}
   >
     <AlignLeft size={13} class="shrink-0 text-foreground" />
     <div class="min-w-0 flex-1">
@@ -283,7 +365,16 @@
           onpaste={handleEditorPaste}
           ondrop={handleEditorDrop}
           onblur={sanitizeEditorDom}
-          onkeydown={(e) => { if (descOpen) e.stopPropagation(); }}
+          onkeydown={(e) => {
+            if (!descOpen) return;
+            if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              closeDescEditor();
+              return;
+            }
+            e.stopPropagation();
+          }}
         ></div>
       {:else if descPreview}
         <div

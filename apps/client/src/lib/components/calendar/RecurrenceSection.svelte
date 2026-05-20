@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { RecurrenceConfig, RecurrenceFrequency, Weekday } from "./types";
   import { formatRecurrenceLabel } from "./rrule";
+  import { commitIntegerDraft, moveRovingIndex, panelInputKeydown } from "./event-panel-utils";
   import MiniDatePicker from "./MiniDatePicker.svelte";
   import { tick } from "svelte";
   import { slide } from "svelte/transition";
@@ -57,6 +58,30 @@
     return 13;
   });
   const label = $derived(recurrence ? formatRecurrenceLabel(recurrence) : "");
+  let sectionEl: HTMLDivElement | undefined = $state();
+  let intervalDraft = $state("1");
+  let endCountDraft = $state("13");
+  let frequencyFocusIndex = $state(0);
+  let weekdayFocusIndex = $state(0);
+  let monthlyModeFocusIndex = $state(0);
+  let endTypeFocusIndex = $state(0);
+
+  $effect(() => {
+    intervalDraft = String(recInterval);
+  });
+
+  $effect(() => {
+    endCountDraft = String(recEndCount);
+  });
+
+  $effect(() => {
+    const frequencyIndex = FREQ_OPTIONS.findIndex((option) => option.value === recFrequency);
+    if (frequencyIndex >= 0) frequencyFocusIndex = frequencyIndex;
+  });
+
+  $effect(() => {
+    endTypeFocusIndex = recEndType === "never" ? 0 : recEndType === "until" ? 1 : 2;
+  });
 
   function defaultUntilDate(): string {
     const [y, m, d] = startDate.split("-").map(Number);
@@ -144,6 +169,73 @@
     onchange();
   }
 
+  async function focusRovingButton(group: string, index: number) {
+    await tick();
+    sectionEl
+      ?.querySelector<HTMLButtonElement>(`[data-recurrence-roving="${group}"][data-roving-index="${index}"]`)
+      ?.focus();
+  }
+
+  function setRovingIndex(group: "frequency" | "weekday" | "monthly" | "end", index: number) {
+    if (group === "frequency") frequencyFocusIndex = index;
+    else if (group === "weekday") weekdayFocusIndex = index;
+    else if (group === "monthly") monthlyModeFocusIndex = index;
+    else endTypeFocusIndex = index;
+  }
+
+  function handleRovingKeydown(
+    e: KeyboardEvent,
+    group: "frequency" | "weekday" | "monthly" | "end",
+    index: number,
+    itemCount: number,
+    orientation: "horizontal" | "vertical" | "grid",
+    columns?: number,
+  ) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const nextIndex = moveRovingIndex({
+      currentIndex: index,
+      itemCount,
+      key: e.key,
+      orientation,
+      columns,
+    });
+    if (nextIndex === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setRovingIndex(group, nextIndex);
+    void focusRovingButton(group, nextIndex);
+  }
+
+  function commitIntervalDraft() {
+    const result = commitIntegerDraft(intervalDraft, recInterval, 1, 99);
+    intervalDraft = String(result.value);
+    if (result.committed) updateInterval(result.value);
+  }
+
+  function commitEndCountDraft() {
+    const result = commitIntegerDraft(endCountDraft, recEndCount, 1, 999);
+    endCountDraft = String(result.value);
+    if (result.committed) updateEndCount(result.value);
+  }
+
+  function handleNumberDraftKeydown(e: KeyboardEvent, commit: () => void, restore: () => void) {
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        commit();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        restore();
+        return;
+      }
+    }
+    panelInputKeydown(e);
+  }
+
   // ─── End date picker ──────────────────────────────────────────
   let pickerOpen = $state(false);
   let dateBtn: HTMLInputElement | undefined = $state();
@@ -163,6 +255,27 @@
       updateEndDate(iso);
     }
     syncDateText();
+  }
+
+  function handleDateInputKeydown(e: KeyboardEvent) {
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        parseDateInput();
+        pickerOpen = false;
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        pickerOpen = false;
+        syncDateText();
+        void focusDateInput();
+        return;
+      }
+    }
+    panelInputKeydown(e);
   }
 
   $effect(() => {
@@ -198,7 +311,7 @@
   }
 </script>
 
-<div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+<div bind:this={sectionEl} class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={ontoggle}
       class="flex w-9 shrink-0 items-center justify-center
@@ -216,14 +329,20 @@
       <!-- Every N [frequency] -->
       <div class="flex flex-wrap items-center gap-2">
         <span class="shrink-0 text-[0.733333rem] text-muted-foreground">Every</span>
-        <input type="number" value={recInterval}
-          oninput={(e) => updateInterval(parseInt(e.currentTarget.value, 10) || 1)}
+        <input type="number" value={intervalDraft}
+          oninput={(e) => { intervalDraft = e.currentTarget.value; }}
+          onblur={commitIntervalDraft}
           min={1} max={99}
           class="num-input w-10 shrink-0 rounded-none bg-black/5 px-1 py-1 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15"
-          onkeydown={(e) => e.stopPropagation()} />
+          onkeydown={(e) => handleNumberDraftKeydown(e, commitIntervalDraft, () => { intervalDraft = String(recInterval); })} />
         <div class="flex min-w-0 flex-1 flex-wrap gap-1">
-          {#each FREQ_OPTIONS as opt}
+          {#each FREQ_OPTIONS as opt, index}
             <button onclick={() => updateFrequency(opt.value)}
+              onfocus={() => { frequencyFocusIndex = index; }}
+              onkeydown={(e) => handleRovingKeydown(e, "frequency", index, FREQ_OPTIONS.length, "horizontal")}
+              data-recurrence-roving="frequency"
+              data-roving-index={index}
+              tabindex={frequencyFocusIndex === index ? 0 : -1}
               class="min-w-0 flex-1 rounded-none px-2 py-1 text-[0.733333rem]
                 {recFrequency === opt.value
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
@@ -238,8 +357,13 @@
         <div class="flex flex-col gap-1.5">
           <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
           <div class="grid grid-cols-7 gap-1">
-            {#each ALL_WEEKDAYS as wd}
+            {#each ALL_WEEKDAYS as wd, index}
               <button onclick={() => toggleWeekday(wd.value)}
+                onfocus={() => { weekdayFocusIndex = index; }}
+                onkeydown={(e) => handleRovingKeydown(e, "weekday", index, ALL_WEEKDAYS.length, "grid", 7)}
+                data-recurrence-roving="weekday"
+                data-roving-index={index}
+                tabindex={weekdayFocusIndex === index ? 0 : -1}
                 class="flex h-7 items-center justify-center rounded-none text-[0.666667rem]
                   {recWeekdays.has(wd.value)
                     ? 'bg-black/5 dark:bg-black/15 text-foreground'
@@ -256,6 +380,11 @@
           <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
           <div class="flex flex-wrap gap-1.5">
             <button onclick={() => setMonthlyMode("day")}
+              onfocus={() => { monthlyModeFocusIndex = 0; }}
+              onkeydown={(e) => handleRovingKeydown(e, "monthly", 0, 2, "horizontal")}
+              data-recurrence-roving="monthly"
+              data-roving-index="0"
+              tabindex={monthlyModeFocusIndex === 0 ? 0 : -1}
               class="flex min-w-0 items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]
                 {monthlyMode === 'day'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
@@ -266,6 +395,11 @@
               <span class="truncate">Day {getEventDayOfMonth()}</span>
             </button>
             <button onclick={() => setMonthlyMode("ordinal")}
+              onfocus={() => { monthlyModeFocusIndex = 1; }}
+              onkeydown={(e) => handleRovingKeydown(e, "monthly", 1, 2, "horizontal")}
+              data-recurrence-roving="monthly"
+              data-roving-index="1"
+              tabindex={monthlyModeFocusIndex === 1 ? 0 : -1}
               class="flex min-w-0 items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]
                 {monthlyMode === 'ordinal'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
@@ -284,6 +418,11 @@
         <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Ends</span>
 
         <button onclick={() => updateEndType("never")}
+          onfocus={() => { endTypeFocusIndex = 0; }}
+          onkeydown={(e) => handleRovingKeydown(e, "end", 0, 3, "vertical")}
+          data-recurrence-roving="end"
+          data-roving-index="0"
+          tabindex={endTypeFocusIndex === 0 ? 0 : -1}
           class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem] text-foreground">
           <div class="size-2.75 shrink-0 rounded-full
             {recEndType === 'never' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
@@ -293,6 +432,11 @@
 
         <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]">
           <button onclick={() => updateEndType("until")}
+            onfocus={() => { endTypeFocusIndex = 1; }}
+            onkeydown={(e) => handleRovingKeydown(e, "end", 1, 3, "vertical")}
+            data-recurrence-roving="end"
+            data-roving-index="1"
+            tabindex={endTypeFocusIndex === 1 ? 0 : -1}
             class="flex w-12 items-center gap-2 text-foreground">
             <div class="size-2.75 shrink-0 rounded-full
               {recEndType === 'until' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
@@ -305,7 +449,7 @@
               bind:value={dateText}
               onclick={() => { if (recEndType !== "until") updateEndType("until"); pickerOpen = !pickerOpen; }}
               onblur={parseDateInput}
-              onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); parseDateInput(); pickerOpen = false; } }}
+              onkeydown={handleDateInputKeydown}
               class="w-27.5 rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[0.733333rem] outline-none
                 {recEndType === 'until' ? 'text-event-panel-input-text' : 'text-muted-foreground'}
                 {pickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}" />
@@ -324,6 +468,11 @@
 
         <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]">
           <button onclick={() => updateEndType("count")}
+            onfocus={() => { endTypeFocusIndex = 2; }}
+            onkeydown={(e) => handleRovingKeydown(e, "end", 2, 3, "vertical")}
+            data-recurrence-roving="end"
+            data-roving-index="2"
+            tabindex={endTypeFocusIndex === 2 ? 0 : -1}
             class="flex w-12 items-center gap-2 text-foreground">
             <div class="size-2.75 shrink-0 rounded-full
               {recEndType === 'count' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
@@ -331,13 +480,15 @@
             <span>After</span>
           </button>
           <div class="flex items-center gap-1.5">
-            <input type="number" value={recEndCount}
+            <input type="number" value={endCountDraft}
               onfocus={() => { if (recEndType !== "count") updateEndType("count"); }}
-              oninput={(e) => updateEndCount(parseInt(e.currentTarget.value, 10) || 1)}
+              oninput={(e) => { endCountDraft = e.currentTarget.value; }}
+              onblur={commitEndCountDraft}
               min={1} max={999}
               class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[0.733333rem] outline-none
                 {recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}"
-              onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} />
+              onclick={(e) => e.stopPropagation()}
+              onkeydown={(e) => handleNumberDraftKeydown(e, commitEndCountDraft, () => { endCountDraft = String(recEndCount); })} />
             <span class="{recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}">times</span>
           </div>
         </div>

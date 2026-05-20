@@ -18,6 +18,7 @@
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import { formatShortcut, hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
+  import { commitTimeDraft, moveRovingIndex, restoreTimeDraft } from "./event-panel-utils";
   import {
     EVENT_PANEL_EDGE_MARGIN,
     EVENT_PANEL_MAX_WIDTH,
@@ -122,6 +123,8 @@
   let title = $state("");
   let startTime = $state("");
   let endTime = $state("");
+  let startTimeDraft = $state("");
+  let endTimeDraft = $state("");
   let startDate = $state("");
   let endDate = $state("");
   let color: EventColor | undefined = $state(undefined);
@@ -247,41 +250,132 @@
     if (source === "keyboard") void focusDateButton("end");
   }
 
-  function toggleDatepicker() {
+  function toggleDatepicker(source: "keyboard" | "pointer" = "pointer") {
     if (controlsDisabled) return;
     timePickerTarget = null;
+    timePickerKeyboardOpen = false;
     endDatepickerOpen = false;
-    datepickerOpen = !datepickerOpen;
+    datepickerOpen = source === "keyboard" ? true : !datepickerOpen;
   }
 
-  function toggleEndDatepicker() {
+  function toggleEndDatepicker(source: "keyboard" | "pointer" = "pointer") {
     if (controlsDisabled) return;
     timePickerTarget = null;
+    timePickerKeyboardOpen = false;
     datepickerOpen = false;
-    endDatepickerOpen = !endDatepickerOpen;
+    endDatepickerOpen = source === "keyboard" ? true : !endDatepickerOpen;
+  }
+
+  function handleDateButtonKeydown(e: KeyboardEvent, target: "start" | "end") {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (target === "start") toggleDatepicker("keyboard");
+    else toggleEndDatepicker("keyboard");
   }
 
   // ─── Time picker ─────────────────────────────────────────────
   let timePickerTarget: "start" | "end" | null = $state(null);
+  let timePickerKeyboardOpen = $state(false);
+  let startTimeInput: HTMLInputElement | undefined = $state();
+  let endTimeInput: HTMLInputElement | undefined = $state();
 
+  async function focusTimeInput(target: "start" | "end") {
+    await tick();
+    if (target === "start") startTimeInput?.focus();
+    else endTimeInput?.focus();
+  }
 
-  function openTimePicker(target: "start" | "end") {
+  function closeTimePicker(source?: "keyboard" | "pointer") {
+    const target = timePickerTarget;
+    timePickerTarget = null;
+    timePickerKeyboardOpen = false;
+    if (source === "keyboard" && target) void focusTimeInput(target);
+  }
+
+  function openTimePicker(target: "start" | "end", source: "keyboard" | "pointer" = "pointer") {
     if (controlsDisabled) return;
     datepickerOpen = false;
     endDatepickerOpen = false;
+    timePickerKeyboardOpen = source === "keyboard";
     timePickerTarget = target;
   }
 
-  function selectTime(time: string) {
+  function setTimeDraft(target: "start" | "end", value: string) {
+    if (target === "start") startTimeDraft = value;
+    else endTimeDraft = value;
+  }
+
+  function syncTimeDrafts() {
+    startTimeDraft = startTime;
+    endTimeDraft = endTime;
+  }
+
+  function commitTimeInput(target: "start" | "end"): boolean {
+    const previous = target === "start" ? startTime : endTime;
+    const draft = target === "start" ? startTimeDraft : endTimeDraft;
+    const result = commitTimeDraft(draft, previous);
+    setTimeDraft(target, result.value);
+    if (!result.committed) return false;
+
+    if (target === "start") startTime = result.value;
+    else endTime = result.value;
+    syncEndDateFromTimes();
+    emitChange();
+    return true;
+  }
+
+  function restoreTimeInput(target: "start" | "end") {
+    setTimeDraft(target, restoreTimeDraft(target === "start" ? startTime : endTime));
+  }
+
+  function selectTime(time: string, source?: "keyboard" | "pointer") {
     if (timePickerTarget === "start") {
       startTime = time;
+      startTimeDraft = time;
       syncEndDateFromTimes();
     } else if (timePickerTarget === "end") {
       endTime = time;
+      endTimeDraft = time;
       syncEndDateFromTimes();
     }
-    timePickerTarget = null;
+    closeTimePicker(source);
     emitChange();
+  }
+
+  function cancelTimePicker(source?: "keyboard" | "pointer") {
+    closeTimePicker(source);
+  }
+
+  function handleTimeInputKeydown(e: KeyboardEvent, target: "start" | "end") {
+    if (e.key === "Enter" && hasShortcutModifier(e)) return;
+    if ((e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e)) return;
+
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        commitTimeInput(target);
+        openTimePicker(target, "keyboard");
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        restoreTimeInput(target);
+        if (timePickerTarget) closeTimePicker("keyboard");
+        return;
+      }
+      if (PANEL_ARROW_KEYS.has(e.key)) return;
+    }
+
+    e.stopPropagation();
   }
 
   /** When times change, set endDate = startDate + 1 day if end < start, else same day. */
@@ -473,6 +567,7 @@
       startTime = event.start.split(" ")[1] ?? "";
       endDate = event.end.split(" ")[0] ?? "";
       endTime = event.end.split(" ")[1] ?? "";
+      syncTimeDrafts();
       color = event.color;
       recurrence = event.recurrence ? { ...event.recurrence } : undefined;
       allDay = event.allDay ?? false;
@@ -538,6 +633,7 @@
       startTime = (start ?? "").split(" ")[1] ?? "";
       endDate = (end ?? "").split(" ")[0] ?? "";
       endTime = (end ?? "").split(" ")[1] ?? "";
+      syncTimeDrafts();
       color = undefined;
       description = "";
       recurrence = undefined;
@@ -570,6 +666,7 @@
     datepickerOpen = false;
     endDatepickerOpen = false;
     timePickerTarget = null;
+    timePickerKeyboardOpen = false;
     openSection = null;
     scope = "this";
     dragOffset = { x: 0, y: 0 };
@@ -634,11 +731,13 @@
       startTime = event.start.split(" ")[1] ?? "";
       endDate = event.end.split(" ")[0] ?? "";
       endTime = event.end.split(" ")[1] ?? "";
+      syncTimeDrafts();
     } else if (mode === "create") {
       startDate = (start ?? "").split(" ")[0] ?? "";
       startTime = (start ?? "").split(" ")[1] ?? "";
       endDate = (end ?? "").split(" ")[0] ?? "";
       endTime = (end ?? "").split(" ")[1] ?? "";
+      syncTimeDrafts();
     }
   });
 
@@ -933,6 +1032,154 @@
     }
   }
 
+  const PANEL_ARROW_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
+  const PANEL_FOCUSABLE_SELECTOR = [
+    "button",
+    "input",
+    "textarea",
+    "[contenteditable='true']",
+    "[role='button']",
+    "[tabindex]",
+  ].join(",");
+
+  interface PanelNavCandidate {
+    el: HTMLElement;
+    rect: DOMRect;
+    centerX: number;
+    centerY: number;
+  }
+
+  function isElementVisibleForPanelNav(el: HTMLElement): boolean {
+    if (el.closest("[aria-hidden='true']")) return false;
+    if (el.getClientRects().length === 0) return false;
+    const style = getComputedStyle(el);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }
+
+  function isEditablePanelNavTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const input = target.closest("input, textarea");
+    if (input instanceof HTMLTextAreaElement) return true;
+    if (!(input instanceof HTMLInputElement)) return false;
+    if (input.dataset.panelArrowNav === "true") return false;
+    return true;
+  }
+
+  function panelNavTarget(target: EventTarget | null): HTMLElement | null {
+    if (!(target instanceof HTMLElement)) return null;
+    return target.closest<HTMLElement>(PANEL_FOCUSABLE_SELECTOR);
+  }
+
+  function panelNavCandidates(): PanelNavCandidate[] {
+    if (!panelEl) return [];
+    return Array.from(panelEl.querySelectorAll<HTMLElement>(PANEL_FOCUSABLE_SELECTOR))
+      .filter((el) => {
+        if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+          if (el.disabled) return false;
+        }
+        return isElementVisibleForPanelNav(el);
+      })
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          el,
+          rect,
+          centerX: rect.left + rect.width / 2,
+          centerY: rect.top + rect.height / 2,
+        };
+      });
+  }
+
+  function sortPanelNavCandidates(candidates: PanelNavCandidate[]): PanelNavCandidate[] {
+    return [...candidates].sort((a, b) => {
+      const rowDelta = a.centerY - b.centerY;
+      if (Math.abs(rowDelta) > 10) return rowDelta;
+      return a.centerX - b.centerX;
+    });
+  }
+
+  function panelNavRows(candidates: PanelNavCandidate[]): PanelNavCandidate[][] {
+    const rows: PanelNavCandidate[][] = [];
+    for (const candidate of sortPanelNavCandidates(candidates)) {
+      const previousRow = rows.at(-1);
+      const rowCenter = previousRow
+        ? previousRow.reduce((sum, item) => sum + item.centerY, 0) / previousRow.length
+        : 0;
+      const sameRowThreshold = Math.max(10, candidate.rect.height * 0.65);
+      if (previousRow && Math.abs(candidate.centerY - rowCenter) <= sameRowThreshold) {
+        previousRow.push(candidate);
+      } else {
+        rows.push([candidate]);
+      }
+    }
+    return rows.map((row) => row.sort((a, b) => a.centerX - b.centerX));
+  }
+
+  function rowAndIndexFor(
+    rows: PanelNavCandidate[][],
+    current: HTMLElement,
+  ): { rowIndex: number; itemIndex: number } | null {
+    for (const [rowIndex, row] of rows.entries()) {
+      const itemIndex = row.findIndex((candidate) => candidate.el === current);
+      if (itemIndex >= 0) return { rowIndex, itemIndex };
+    }
+    return null;
+  }
+
+  function closestCandidateByX(row: PanelNavCandidate[], x: number): PanelNavCandidate | undefined {
+    let best: { candidate: PanelNavCandidate; distance: number } | undefined;
+    for (const candidate of row) {
+      const distance = Math.abs(candidate.centerX - x);
+      if (!best || distance < best.distance) best = { candidate, distance };
+    }
+    return best?.candidate;
+  }
+
+  function nextPanelArrowTarget(current: HTMLElement, key: string): HTMLElement | null {
+    const rows = panelNavRows(panelNavCandidates());
+    const currentPosition = rowAndIndexFor(rows, current);
+    if (!currentPosition) return null;
+
+    const currentRow = rows[currentPosition.rowIndex];
+    const currentCandidate = currentRow[currentPosition.itemIndex];
+    if (!currentCandidate) return null;
+
+    if (key === "ArrowRight") {
+      return currentRow[currentPosition.itemIndex + 1]?.el
+        ?? rows[currentPosition.rowIndex + 1]?.[0]?.el
+        ?? null;
+    }
+
+    if (key === "ArrowLeft") {
+      return currentRow[currentPosition.itemIndex - 1]?.el
+        ?? rows[currentPosition.rowIndex - 1]?.at(-1)?.el
+        ?? null;
+    }
+
+    const targetRow = key === "ArrowDown"
+      ? rows[currentPosition.rowIndex + 1]
+      : rows[currentPosition.rowIndex - 1];
+    return targetRow ? closestCandidateByX(targetRow, currentCandidate.centerX)?.el ?? null : null;
+  }
+
+  function handlePanelArrowKeydown(e: KeyboardEvent) {
+    if (e.defaultPrevented || parked) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (!PANEL_ARROW_KEYS.has(e.key)) return;
+    if (isEditablePanelNavTarget(e.target)) return;
+
+    const current = panelNavTarget(e.target);
+    if (!current || !panelEl?.contains(current)) return;
+    const next = nextPanelArrowTarget(current, e.key);
+    if (!next) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    next.focus();
+    next.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
   /**
    * Local keydown handler for input/textarea elements. It stops propagation
    * for normal text editing while explicitly letting the panel's own shortcuts
@@ -954,11 +1201,52 @@
     );
   }
 
+  let scopeFocusIndex = $state(0);
+  let metadataFocusIndex = $state(0);
+  const metadataItemCount = $derived(showHeavySections ? 3 : 2);
+
+  $effect(() => {
+    if (metadataFocusIndex >= metadataItemCount) metadataFocusIndex = Math.max(0, metadataItemCount - 1);
+  });
+
+  async function focusPanelRovingButton(group: string, index: number) {
+    await tick();
+    panelEl
+      ?.querySelector<HTMLButtonElement>(`[data-panel-roving="${group}"][data-roving-index="${index}"]`)
+      ?.focus();
+  }
+
+  function setPanelRovingIndex(group: "scope" | "metadata", index: number) {
+    if (group === "scope") scopeFocusIndex = index;
+    else metadataFocusIndex = index;
+  }
+
+  function handlePanelRovingKeydown(
+    e: KeyboardEvent,
+    group: "scope" | "metadata",
+    index: number,
+    itemCount: number,
+  ) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const nextIndex = moveRovingIndex({
+      currentIndex: index,
+      itemCount,
+      key: e.key,
+      orientation: "horizontal",
+    });
+    if (nextIndex === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setPanelRovingIndex(group, nextIndex);
+    void focusPanelRovingButton(group, nextIndex);
+  }
+
   function toggleTransparency() {
     if (controlsDisabled) return;
     datepickerOpen = false;
     endDatepickerOpen = false;
     timePickerTarget = null;
+    timePickerKeyboardOpen = false;
     transparency = transparency === "transparent" ? "opaque" : "transparent";
     emitChange();
   }
@@ -968,6 +1256,7 @@
     datepickerOpen = false;
     endDatepickerOpen = false;
     timePickerTarget = null;
+    timePickerKeyboardOpen = false;
     visibility = visibility === "public" ? "private" : "public";
     emitChange();
   }
@@ -1041,6 +1330,7 @@
   aria-hidden={parked || undefined}
   style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {parked ? parkedPanelStyle : panelStyle} background-color: var(--panel-bg); visibility: {initialized && !parked ? 'visible' : 'hidden'};"
   onclick={handlePanelClick}
+  onkeydown={handlePanelArrowKeydown}
 >
   <!-- Drag handle bar -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1066,9 +1356,14 @@
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
       <div class="flex min-w-0 rounded-none p-0.5" style="background-color: var(--panel-contrast);">
-        {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl]}
+        {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
           <button
             onclick={() => handleScopeClick(val as RecurringScope)}
+            onfocus={() => { scopeFocusIndex = index; }}
+            onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, 3)}
+            data-panel-roving="scope"
+            data-roving-index={index}
+            tabindex={scopeFocusIndex === index ? 0 : -1}
             disabled={controlsDisabled}
             class="flex-1 rounded px-2 py-1 text-[0.666667rem] font-medium
               {scope === val
@@ -1107,7 +1402,8 @@
       <!-- Start date -->
       <div class="relative z-1 min-w-0 justify-self-start">
         <button bind:this={startDateButton}
-          onclick={toggleDatepicker}
+          onclick={() => toggleDatepicker("pointer")}
+          onkeydown={(e) => handleDateButtonKeydown(e, "start")}
           class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
@@ -1133,29 +1429,35 @@
         class:pointer-events-none={allDay}
         aria-hidden={allDay}
       >
-        <input type="text" bind:value={startTime}
-          oninput={emitChange}
-          onclick={() => openTimePicker("start")}
+        <input bind:this={startTimeInput}
+          type="text" value={startTimeDraft}
+          data-panel-arrow-nav="true"
+          oninput={(e) => { startTimeDraft = e.currentTarget.value; }}
+          onblur={() => commitTimeInput("start")}
+          onclick={() => openTimePicker("start", "pointer")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
           class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-          onkeydown={inputKeydown} />
+          onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
         <span class="text-muted-foreground/60">-</span>
-        <input type="text" bind:value={endTime}
-          oninput={emitChange}
-          onclick={() => openTimePicker("end")}
+        <input bind:this={endTimeInput}
+          type="text" value={endTimeDraft}
+          data-panel-arrow-nav="true"
+          oninput={(e) => { endTimeDraft = e.currentTarget.value; }}
+          onblur={() => commitTimeInput("end")}
+          onclick={() => openTimePicker("end", "pointer")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
           class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-          onkeydown={inputKeydown} />
+          onkeydown={(e) => handleTimeInputKeydown(e, "end")} />
 
         <!-- Floating time picker -->
         {#if timePickerTarget}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-19" onclick={() => { timePickerTarget = null; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => closeTimePicker("pointer")}></div>
           {@const isEnd = timePickerTarget === 'end'}
           {@const startMins = (() => { const [h, m] = (startTime || "0:0").split(":").map(Number); return h * 60 + m; })()}
           <div class="absolute top-full z-20 mt-1 rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
@@ -1164,7 +1466,9 @@
               currentTime={isEnd ? endTime : startTime}
               {isEnd}
               startMinutes={startMins}
-              onselect={selectTime} />
+              focusOnOpen={timePickerKeyboardOpen}
+              onselect={selectTime}
+              oncancel={cancelTimePicker} />
           </div>
         {/if}
       </div>
@@ -1172,7 +1476,8 @@
       <!-- End date -->
       <div class="relative z-1 min-w-0 justify-self-end text-right">
         <button bind:this={endDateButton}
-          onclick={toggleEndDatepicker}
+          onclick={() => toggleEndDatepicker("pointer")}
+          onkeydown={(e) => handleDateButtonKeydown(e, "end")}
           class="date-chip max-w-full rounded py-1 text-event-panel-input-text
             {controlsDisabled ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
@@ -1203,18 +1508,21 @@
       <button
         onclick={() => {
           timePickerTarget = null;
+          timePickerKeyboardOpen = false;
           allDay = !allDay;
           if (allDay) {
             stashedStartTime = startTime;
             stashedEndTime = endTime;
             startTime = "00:00";
             endTime = "00:00";
+            syncTimeDrafts();
           } else if (stashedStartTime && stashedStartTime !== "00:00") {
             startTime = stashedStartTime;
             endTime = stashedEndTime;
             stashedStartTime = "";
             stashedEndTime = "";
             syncEndDateFromTimes();
+            syncTimeDrafts();
           } else {
             const now = new Date();
             const m = Math.ceil(now.getMinutes() / 15) * 15;
@@ -1227,9 +1535,15 @@
             stashedStartTime = "";
             stashedEndTime = "";
             syncEndDateFromTimes();
+            syncTimeDrafts();
           }
           emitChange();
         }}
+        onfocus={() => { metadataFocusIndex = 0; }}
+        onkeydown={(e) => handlePanelRovingKeydown(e, "metadata", 0, metadataItemCount)}
+        data-panel-roving="metadata"
+        data-roving-index="0"
+        tabindex={metadataFocusIndex === 0 ? 0 : -1}
         disabled={controlsDisabled}
         class={cn(
           "flex min-w-0 max-w-full items-center justify-center gap-1 rounded-none px-2 py-2",
@@ -1245,6 +1559,11 @@
       <!-- Show as -->
       <button
         onclick={toggleTransparency}
+        onfocus={() => { metadataFocusIndex = 1; }}
+        onkeydown={(e) => handlePanelRovingKeydown(e, "metadata", 1, metadataItemCount)}
+        data-panel-roving="metadata"
+        data-roving-index="1"
+        tabindex={metadataFocusIndex === 1 ? 0 : -1}
         disabled={controlsDisabled}
         class={metadataButtonClass()}
         title="Show as"
@@ -1260,6 +1579,11 @@
       {#if showHeavySections}
         <button
           onclick={toggleVisibility}
+          onfocus={() => { metadataFocusIndex = 2; }}
+          onkeydown={(e) => handlePanelRovingKeydown(e, "metadata", 2, metadataItemCount)}
+          data-panel-roving="metadata"
+          data-roving-index="2"
+          tabindex={metadataFocusIndex === 2 ? 0 : -1}
           disabled={controlsDisabled}
           class={metadataButtonClass("capitalize")}
           title="Visibility"

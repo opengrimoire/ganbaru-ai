@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
+  import { commitIntegerDraft, moveRovingIndex, panelInputKeydown } from "./event-panel-utils";
   import Bell from "@lucide/svelte/icons/bell";
   import X from "@lucide/svelte/icons/x";
   import Plus from "@lucide/svelte/icons/plus";
@@ -41,6 +43,14 @@
 
   let dropdownIdx = $state<number | null>(null);
   let dropdownBtns: (HTMLButtonElement | undefined)[] = $state([]);
+  let sectionEl: HTMLDivElement | undefined = $state();
+  let presetFocusIndex = $state(0);
+  let unitFocusIndex = $state(0);
+  let customAmountDrafts = $state<string[]>([]);
+
+  $effect(() => {
+    customAmountDrafts = customNotifs.map((notif) => String(notif.amount));
+  });
 
   function toggleNotif(minutes: number) {
     const next = new Set(selected);
@@ -64,6 +74,151 @@
   function updateCustomNotif(idx: number, amount: number, unit: number) {
     customNotifs = customNotifs.map((n, i) => i === idx ? { amount, unit } : n);
     onchange();
+  }
+
+  async function focusPresetButton(index: number) {
+    await tick();
+    sectionEl
+      ?.querySelector<HTMLButtonElement>(`[data-notification-roving="preset"][data-roving-index="${index}"]`)
+      ?.focus();
+  }
+
+  async function focusDropdownButton(idx: number) {
+    await tick();
+    dropdownBtns[idx]?.focus();
+  }
+
+  async function focusUnitButton(index: number) {
+    await tick();
+    sectionEl
+      ?.querySelector<HTMLButtonElement>(`[data-notification-unit-index="${index}"]`)
+      ?.focus();
+  }
+
+  function handlePresetKeydown(e: KeyboardEvent, index: number) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const nextIndex = moveRovingIndex({
+      currentIndex: index,
+      itemCount: NOTIF_PRESETS.length,
+      key: e.key,
+      orientation: "vertical",
+    });
+    if (nextIndex === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    presetFocusIndex = nextIndex;
+    void focusPresetButton(nextIndex);
+  }
+
+  function selectedUnitIndex(unit: number): number {
+    return Math.max(0, CUSTOM_UNITS.findIndex((option) => option.value === unit));
+  }
+
+  function openDropdown(idx: number, source: "keyboard" | "pointer") {
+    dropdownIdx = idx;
+    unitFocusIndex = selectedUnitIndex(customNotifs[idx]?.unit ?? 1);
+    if (source === "keyboard") void focusUnitButton(unitFocusIndex);
+  }
+
+  function closeDropdown(source: "keyboard" | "pointer") {
+    const idx = dropdownIdx;
+    dropdownIdx = null;
+    if (source === "keyboard" && idx !== null) void focusDropdownButton(idx);
+  }
+
+  function toggleDropdown(idx: number) {
+    if (dropdownIdx === idx) closeDropdown("pointer");
+    else openDropdown(idx, "pointer");
+  }
+
+  function selectUnit(idx: number, amount: number, unit: number, source: "keyboard" | "pointer") {
+    updateCustomNotif(idx, amount, unit);
+    closeDropdown(source);
+  }
+
+  function handleDropdownButtonKeydown(e: KeyboardEvent, idx: number) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    openDropdown(idx, "keyboard");
+  }
+
+  function handleUnitKeydown(e: KeyboardEvent, idx: number, optionIndex: number, amount: number, unit: number) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeDropdown("keyboard");
+      return;
+    }
+
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      selectUnit(idx, amount, unit, "keyboard");
+      return;
+    }
+
+    const nextIndex = moveRovingIndex({
+      currentIndex: optionIndex,
+      itemCount: CUSTOM_UNITS.length,
+      key: e.key,
+      orientation: "vertical",
+    });
+    if (nextIndex === optionIndex) return;
+    e.preventDefault();
+    e.stopPropagation();
+    unitFocusIndex = nextIndex;
+    void focusUnitButton(nextIndex);
+  }
+
+  function commitCustomAmountDraft(idx: number) {
+    const current = customNotifs[idx];
+    if (!current) return;
+    const result = commitIntegerDraft(customAmountDrafts[idx] ?? "", current.amount, 1, 999);
+    const nextDrafts = [...customAmountDrafts];
+    nextDrafts[idx] = String(result.value);
+    customAmountDrafts = nextDrafts;
+    if (result.committed) updateCustomNotif(idx, result.value, current.unit);
+  }
+
+  function restoreCustomAmountDraft(idx: number) {
+    const current = customNotifs[idx];
+    if (!current) return;
+    const nextDrafts = [...customAmountDrafts];
+    nextDrafts[idx] = String(current.amount);
+    customAmountDrafts = nextDrafts;
+  }
+
+  function setCustomAmountDraft(idx: number, value: string) {
+    const nextDrafts = [...customAmountDrafts];
+    nextDrafts[idx] = value;
+    customAmountDrafts = nextDrafts;
+  }
+
+  function handleNumberDraftKeydown(e: KeyboardEvent, idx: number) {
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        commitCustomAmountDraft(idx);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        restoreCustomAmountDraft(idx);
+        return;
+      }
+    }
+    panelInputKeydown(e);
   }
 
   function positionDropdown(node: HTMLElement, idx: number) {
@@ -106,7 +261,7 @@
   });
 </script>
 
-<div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+<div bind:this={sectionEl} class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={ontoggle}
       class="flex w-9 shrink-0 items-center justify-center
@@ -122,9 +277,14 @@
   {#if expanded}
     <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="notifications" class="flex flex-col gap-1.5 p-2.5" style="background-color: var(--panel-bg);">
       <div class="flex flex-col gap-0.5">
-        {#each NOTIF_PRESETS as opt}
+        {#each NOTIF_PRESETS as opt, index}
           <button
             onclick={() => toggleNotif(opt.value)}
+            onfocus={() => { presetFocusIndex = index; }}
+            onkeydown={(e) => handlePresetKeydown(e, index)}
+            data-notification-roving="preset"
+            data-roving-index={index}
+            tabindex={presetFocusIndex === index ? 0 : -1}
             class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[0.733333rem] text-foreground"
           >
             <div class="size-2.75 shrink-0
@@ -136,12 +296,14 @@
       </div>
       {#each customNotifs as cn, idx}
         <div class="flex items-center gap-1.5 px-2">
-          <input type="number" value={cn.amount} min={1} max={999}
-            oninput={(e) => updateCustomNotif(idx, parseInt(e.currentTarget.value, 10) || 1, cn.unit)}
+          <input type="number" value={customAmountDrafts[idx] ?? String(cn.amount)} min={1} max={999}
+            oninput={(e) => setCustomAmountDraft(idx, e.currentTarget.value)}
+            onblur={() => commitCustomAmountDraft(idx)}
             class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none"
-            onkeydown={(e) => e.stopPropagation()} />
+            onkeydown={(e) => handleNumberDraftKeydown(e, idx)} />
           <button bind:this={dropdownBtns[idx]}
-            onclick={() => { dropdownIdx = dropdownIdx === idx ? null : idx; }}
+            onclick={() => toggleDropdown(idx)}
+            onkeydown={(e) => handleDropdownButtonKeydown(e, idx)}
             class="rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[0.733333rem]
               {dropdownIdx === idx ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}
               text-event-panel-input-text">
@@ -157,11 +319,15 @@
           {#if dropdownIdx === idx}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0 z-60" onclick={() => { dropdownIdx = null; }}></div>
+            <div class="fixed inset-0 z-60" onclick={() => closeDropdown("pointer")}></div>
             <div class="fixed z-61 rounded-lg bg-popover py-1 shadow-lg ring-1 ring-border/60"
               use:positionDropdown={idx}>
-              {#each CUSTOM_UNITS as u}
-                <button onclick={() => { updateCustomNotif(idx, cn.amount, u.value); dropdownIdx = null; }}
+              {#each CUSTOM_UNITS as u, unitIndex}
+                <button onclick={() => selectUnit(idx, cn.amount, u.value, "pointer")}
+                  data-notification-unit-index={unitIndex}
+                  tabindex={unitFocusIndex === unitIndex ? 0 : -1}
+                  onfocus={() => { unitFocusIndex = unitIndex; }}
+                  onkeydown={(e) => handleUnitKeydown(e, idx, unitIndex, cn.amount, u.value)}
                   class="flex w-full items-center px-3 py-1.5 text-left text-[0.733333rem]
                     {cn.unit === u.value
                       ? 'bg-black/5 dark:bg-black/15 text-foreground'
