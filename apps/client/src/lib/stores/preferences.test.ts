@@ -133,14 +133,21 @@ describe("title bar visibility helpers", () => {
     expect(Object.keys(DEFAULT_TITLE_BAR_VISIBILITY).sort()).toEqual(
       [...TITLE_BAR_CONTROL_IDS].sort(),
     );
+    expect(DEFAULT_TITLE_BAR_VISIBILITY.performance).toBe(false);
   });
 
   it("parses stored booleans and fills missing values with defaults", () => {
-    expect(parseTitleBarVisibility({ compactTabs: true, music: false, performance: false })).toEqual({
+    expect(
+      parseTitleBarVisibility({
+        compactTabs: true,
+        music: false,
+        performance: true,
+      }),
+    ).toEqual({
       ...DEFAULT_TITLE_BAR_VISIBILITY,
       compactTabs: true,
       music: false,
-      performance: false,
+      performance: true,
     });
   });
 

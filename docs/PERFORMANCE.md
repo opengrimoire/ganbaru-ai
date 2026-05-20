@@ -21,7 +21,7 @@ To capture a comparable run:
 
 1. Build and install a release package.
 2. Open GanbaruAI from the installed app, not `pnpm tauri dev`. This is important because Tauri uses more resources in dev mode.
-3. Open the title-bar diagnostics panel.
+3. Open diagnostics with `Ctrl + Shift + D` or the optional title-bar button.
 4. Under Benchmarks, click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks` depending on the change being measured.
 5. Do not interact with the app while the overlay is running.
 6. When the summary appears, review the readable tables, copy the markdown, and send it to an agent for careful placement here.
@@ -253,7 +253,7 @@ The frontend number includes the browser engine. It cannot be split cleanly into
 
 ### Diagnostics panel
 
-The title-bar diagnostics panel is a diagnostic tool. It can copy live RAM, startup RAM, charts, speed logs, and benchmark summaries. Only benchmark summaries should become canonical rows in this file.
+The diagnostics panel is a diagnostic tool. It can copy live RAM, startup RAM, charts, speed logs, and benchmark summaries. Only benchmark summaries should become canonical rows in this file.
 
 The panel itself is lazy-loaded. Live memory polling starts only while the panel is mounted. The startup RAM snapshot is captured before the panel needs to be opened, so it remains useful for quick local diagnosis even if it is not the canonical record.
 

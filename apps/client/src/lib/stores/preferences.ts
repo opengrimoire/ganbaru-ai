@@ -83,7 +83,7 @@ export const DEFAULT_TITLE_BAR_VISIBILITY: TitleBarVisibility = Object.freeze({
   pomodoro: true,
   music: true,
   theme: true,
-  performance: true,
+  performance: false,
   settings: true,
   compactTabs: false,
 });

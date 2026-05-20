@@ -14,7 +14,7 @@ Recommended flow:
 
 1. Build and install a release package.
 2. Open the installed app.
-3. Open the title-bar diagnostics panel.
+3. Open diagnostics with `Ctrl + Shift + D` or the optional title-bar button.
 4. Click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks`.
 5. Leave the app alone while the overlay runs.
 6. Review the readable summary tables.
@@ -247,7 +247,7 @@ The summary overlay has two outputs:
 - A readable on-screen preview rendered from `BenchmarkResult` data as normal HTML tables.
 - A `Copy markdown` action that copies plain canonical markdown. This markdown is agent input for placing rows in `docs/PERFORMANCE.md`, not HTML, not raw scenario diagnostics, and not a dump of every collected metric.
 
-While the benchmark overlay is active, in-app close affordances are blocked, including the title-bar close button, `Ctrl+Shift+W`, and Tauri close requests. A forced OS process kill cannot be blocked; the `*-running` state handles that case on the next boot.
+While the benchmark overlay is active, in-app close affordances are blocked, including the title-bar close button and Tauri close requests. The hidden reset shortcut also routes back to the overlay instead of advancing its sequence. A forced OS process kill cannot be blocked; the `*-running` state handles that case on the next boot.
 
 During memory scenarios, the running overlay labels the scenario action first, then `Memory observation` while the 30 second sample window runs. Idle memory has no fake action window; observation starts after the anchored calendar window is ready. Held navigation still performs the fixed real right-arrow hold first, then observes post-navigation memory after key release.
 
