@@ -17,6 +17,7 @@ import {
   syncSemanticSignalAppTokens,
   type Theme,
   type ThemeId,
+  type ThemeTokenKind,
   type ThemeSources,
   type UserTheme,
 } from "./themes";
@@ -129,6 +130,39 @@ export function themeIdCollisionError(
   if (!existing) return undefined;
   if (existing.kind === "builtin") return "id must not collide with a built-in theme";
   return `id "${id}" is already used by another theme`;
+}
+
+/**
+ * Decide whether a single editor row has its own reset action available.
+ * Linked app/calendar rows follow their source, so source-driven value drift
+ * must not make a child row independently resettable.
+ */
+export function canResetTokenToSeed(
+  theme: UserTheme,
+  kind: ThemeTokenKind,
+  key: string,
+): boolean {
+  if (kind === "source") {
+    const sourceKey = key as keyof ThemeSources;
+    return theme.sources[sourceKey] !== theme.seedSources[sourceKey];
+  }
+
+  const liveIsolated =
+    kind === "app"
+      ? theme.appIsolated.has(key)
+      : theme.calendarIsolated.has(key);
+  const seedIsolated =
+    kind === "app"
+      ? theme.seedAppIsolated.has(key)
+      : theme.seedCalendarIsolated.has(key);
+  if (liveIsolated !== seedIsolated) return true;
+  if (!liveIsolated) return false;
+
+  const liveValue =
+    kind === "app" ? theme.appTokens[key] : theme.calendarTokens[key];
+  const seedValue =
+    kind === "app" ? theme.seedAppTokens[key] : theme.seedCalendarTokens[key];
+  return liveValue !== seedValue;
 }
 
 function pickTokenSnapshot(

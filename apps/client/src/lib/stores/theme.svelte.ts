@@ -32,6 +32,7 @@ import {
   type CalendarColorDefaultMode,
 } from "./themes";
 import {
+  canResetTokenToSeed,
   cloneTheme,
   mergeThemePatch,
   nextUniqueDisplayName,
@@ -817,6 +818,7 @@ function resetTokenToSeed(
 ): boolean {
   const current = customThemes[id];
   if (!current) return false;
+  if (!canResetTokenToSeed(current, kind, key)) return false;
   if (kind === "source") {
     const seedValue = current.seedSources[key as keyof ThemeSources];
     if (seedValue === undefined) return true;
@@ -830,6 +832,7 @@ function resetTokenToSeed(
   const nextValue = seedSnapshot[key];
   if (nextValue === undefined) return true;
   const nextIsolatedFlag = seedIsolatedSet.has(key);
+  if (!nextIsolatedFlag) return relinkToken(id, kind, key);
   const liveSnapshot =
     kind === "app"
       ? { ...current.appTokens, [key]: nextValue }

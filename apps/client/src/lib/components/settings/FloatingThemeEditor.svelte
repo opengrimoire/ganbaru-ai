@@ -290,6 +290,7 @@
           <button
             type="button"
             onclick={onResetAllToSeed}
+            disabled={!canResetToSeed}
             aria-disabled={!canResetToSeed}
             aria-label="Reset every source, override, palette slot, and icon tag to its clone-time value"
             title={canResetToSeed
@@ -299,7 +300,7 @@
               "theme-editor-reset-all flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[0.733333rem] font-medium text-destructive-foreground transition-colors",
               canResetToSeed
                 ? "hover:bg-destructive/90"
-                : "cursor-not-allowed",
+                : "cursor-not-allowed opacity-40",
             )}
           >
             <RotateCcw size={11} strokeWidth={2.25} />

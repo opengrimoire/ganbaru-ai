@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
+  canResetTokenToSeed,
   cloneTheme,
   mergeThemePatch,
   nextUniqueDisplayName,
@@ -348,6 +349,67 @@ describe("themeIdCollisionError", () => {
 
   it("allows ids absent from the current registry", () => {
     expect(themeIdCollisionError("new-theme", BUILTIN_THEME_REGISTRY)).toBeUndefined();
+  });
+});
+
+describe("canResetTokenToSeed", () => {
+  it("keeps linked app tokens reset through their source", () => {
+    const theme = makeUserTheme({
+      appTokens: {
+        ...BASE_APP_TOKENS.dark,
+        "--card": "#333333",
+      },
+      seedAppTokens: {
+        ...BASE_APP_TOKENS.dark,
+        "--card": "#202020",
+      },
+      appIsolated: new Set(),
+      seedAppIsolated: new Set(),
+    });
+
+    expect(canResetTokenToSeed(theme, "app", "--card")).toBe(false);
+  });
+
+  it("allows isolated app tokens to reset their own value", () => {
+    const isolated = new Set(["--card"]);
+    const theme = makeUserTheme({
+      appTokens: {
+        ...BASE_APP_TOKENS.dark,
+        "--card": "#333333",
+      },
+      seedAppTokens: {
+        ...BASE_APP_TOKENS.dark,
+        "--card": "#202020",
+      },
+      appIsolated: isolated,
+      seedAppIsolated: isolated,
+    });
+
+    expect(canResetTokenToSeed(theme, "app", "--card")).toBe(true);
+  });
+
+  it("allows rows linked after a seed-isolated clone to reset their isolation", () => {
+    const theme = makeUserTheme({
+      appIsolated: new Set(),
+      seedAppIsolated: new Set(["--card"]),
+    });
+
+    expect(canResetTokenToSeed(theme, "app", "--card")).toBe(true);
+  });
+
+  it("allows source rows to reset when the source changed", () => {
+    const theme = makeUserTheme({
+      sources: {
+        ...DEFAULT_SOURCES_DARK,
+        canvas: "#333333",
+      },
+      seedSources: {
+        ...DEFAULT_SOURCES_DARK,
+        canvas: "#101010",
+      },
+    });
+
+    expect(canResetTokenToSeed(theme, "source", "canvas")).toBe(true);
   });
 });
 

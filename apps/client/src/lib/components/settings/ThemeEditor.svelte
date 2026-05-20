@@ -25,7 +25,10 @@
     type UserTheme,
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import { toUserThemeSnapshot } from "$lib/stores/themeOperations";
+  import {
+    canResetTokenToSeed,
+    toUserThemeSnapshot,
+  } from "$lib/stores/themeOperations";
   import ColorField from "$lib/components/ui/ColorField.svelte";
   import ThemeContrastNotice from "./ThemeContrastNotice.svelte";
   import ThemeEventPaletteSection from "./ThemeEventPaletteSection.svelte";
@@ -512,7 +515,7 @@
   // value and the pinned-state.
   function canResetSource(key: keyof ThemeSources): boolean {
     if (!userTheme) return false;
-    return userTheme.sources[key] !== userTheme.seedSources[key];
+    return canResetTokenToSeed(userTheme, "source", key);
   }
 
   function resetSource(key: keyof ThemeSources) {
@@ -523,10 +526,7 @@
 
   function canResetAppToken(key: string): boolean {
     if (!userTheme) return false;
-    if (userTheme.appTokens[key] !== userTheme.seedAppTokens[key]) return true;
-    return (
-      userTheme.appIsolated.has(key) !== userTheme.seedAppIsolated.has(key)
-    );
+    return canResetTokenToSeed(userTheme, "app", key);
   }
 
   function resetAppToken(key: string) {
@@ -536,15 +536,7 @@
 
   function canResetCalToken(key: string): boolean {
     if (!userTheme) return false;
-    if (
-      userTheme.calendarTokens[key] !== userTheme.seedCalendarTokens[key]
-    ) {
-      return true;
-    }
-    return (
-      userTheme.calendarIsolated.has(key) !==
-      userTheme.seedCalendarIsolated.has(key)
-    );
+    return canResetTokenToSeed(userTheme, "calendar", key);
   }
 
   function resetCalToken(key: string) {
@@ -807,21 +799,23 @@
     onClick: () => void,
     label: string,
     canReset: boolean,
+    disabledTitle = "Already at original value",
   )}
     <button
       type="button"
+      disabled={!canReset}
       onclick={() => {
         if (!canReset) return;
         onClick();
       }}
       aria-disabled={!canReset}
       aria-label="Reset {label} to its original value"
-      title={canReset ? "Restore original value" : "Already at original value"}
+      title={canReset ? "Restore original value" : disabledTitle}
       class={cn(
-        "flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-border bg-card transition-colors",
+        "flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors",
         canReset
-          ? "text-foreground hover:border-foreground/30 hover:bg-accent"
-          : "cursor-not-allowed text-muted-foreground",
+          ? "hover:bg-accent hover:text-accent-foreground"
+          : "cursor-not-allowed opacity-40",
       )}
     >
       <RotateCcw size={11} strokeWidth={2.25} />
@@ -865,6 +859,11 @@
         },
         ariaLabel,
         canResetRow,
+        readOnly
+          ? "Built-in themes are read-only"
+          : isLinked
+            ? "Linked colors reset through their source"
+            : "Already at original value",
       )}
       {#if isLinked}
         <button
@@ -931,6 +930,7 @@
         () => resetSource(key),
         ariaLabel,
         canResetSource(key),
+        readOnly ? "Built-in themes are read-only" : "Already at original value",
       )}
       <div class="theme-token-action-spacer min-w-27 shrink-0" aria-hidden="true"></div>
     </div>
@@ -949,46 +949,16 @@
 
   <!-- Peer-styled sub-row for single-row groups (Ink, Primary action).
        Mirrors the source header layout so the driven token reads as a peer
-       of the source it tints. User themes can write to it to create or
-       update the override; reset falls back through the seed per the shared
-       per-row reset semantics. -->
+       of the source it tints. It still uses the normal token editor, so
+       linked rows stay read-only until the user chooses Isolated edit. -->
   {#snippet groupHeaderStyleRow(row: GroupSingleRow)}
     {@const info = tokenInfo(row)}
-    {@const snapshot = viewTheme
-      ? row.scope === "app"
-        ? viewTheme.appTokens
-        : viewTheme.calendarTokens
-      : undefined}
-    {@const displayVal = snapshot?.[row.key] ?? ""}
-    {@const canResetRow =
-      row.scope === "app"
-        ? canResetAppToken(row.key)
-        : canResetCalToken(row.key)}
     <div class="theme-control-row flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[0.866667rem] font-semibold text-foreground">{info.title}</div>
         <div class="text-[0.733333rem] text-muted-foreground">{info.description}</div>
       </div>
-      <div class="theme-row-controls flex shrink-0 items-center gap-1.5">
-        <ColorField
-          value={displayVal}
-          onChange={(hex) => {
-            if (row.scope === "app") setAppToken(row.key, hex);
-            else setCalToken(row.key, hex);
-          }}
-          {readOnly}
-          label={info.title}
-        />
-        {@render resetIconButton(
-          () => {
-            if (row.scope === "app") resetAppToken(row.key);
-            else resetCalToken(row.key);
-          },
-          info.title,
-          canResetRow,
-        )}
-        <div class="theme-token-action-spacer min-w-27 shrink-0" aria-hidden="true"></div>
-      </div>
+      {@render tokenEditor(row.key, row.scope, info.title)}
     </div>
   {/snippet}
 
@@ -1145,6 +1115,9 @@
                 () => resetSource(sourceKey),
                 group.title,
                 canResetSource(sourceKey),
+                readOnly
+                  ? "Built-in themes are read-only"
+                  : "Already at original value",
               )}
             {/if}
             {#if isCollapsible}
@@ -1249,6 +1222,9 @@
             resetCalendarDefault,
             "Color defaults",
             !readOnly && themeStore.canResetCalendarDefault(theme.id),
+            readOnly
+              ? "Built-in themes are read-only"
+              : "Already at original value",
           )}
         </div>
       </div>
