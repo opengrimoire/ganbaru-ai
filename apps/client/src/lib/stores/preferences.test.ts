@@ -120,6 +120,7 @@ describe("title bar visibility helpers", () => {
     expect(isTitleBarControlId("music")).toBe(true);
     expect(isTitleBarControlId("settings")).toBe(true);
     expect(isTitleBarControlId("compactTabs")).toBe(true);
+    expect(isTitleBarControlId("reset")).toBe(false);
     expect(isTitleBarControlId("help")).toBe(false);
     expect(isTitleBarControlId("calendarTab")).toBe(false);
     expect(isTitleBarControlId("todoTab")).toBe(false);
@@ -157,6 +158,7 @@ describe("title bar visibility helpers", () => {
     expect(
       parseTitleBarVisibility({
         compactTabs: "true",
+        reset: true,
         settings: false,
         unknown: false,
       }),

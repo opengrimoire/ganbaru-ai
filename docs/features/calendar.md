@@ -167,7 +167,7 @@ What remains lossy in the normalized projection or generated export: arbitrary E
 
 The code-backed current support matrix is tracked in `docs/interop/icalendar/conformance-checklist.md`.
 
-The mental model: an `.ics` import is a separate calendar that the user can delete in one click. The title-bar reset-database button still wipes everything, including imported calendars. Re-importing the same file is always safe.
+The mental model: an `.ics` import is a separate calendar that the user can delete in one click. The reset-database command still wipes everything, including imported calendars. Re-importing the same file is always safe.
 
 ## What this doc does not cover
 

@@ -16,7 +16,6 @@
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import Settings from "@lucide/svelte/icons/settings";
-  import CircleX from "@lucide/svelte/icons/circle-x";
   import Check from "@lucide/svelte/icons/check";
   import MoreHorizontal from "@lucide/svelte/icons/more-horizontal";
   import Minus from "@lucide/svelte/icons/minus";
@@ -53,6 +52,7 @@
   let isMaximized = $state(false);
   let showCloseConfirm = $state(false);
   let showPomodoroMenu = $state(false);
+  let showResetSequenceConfirm = $state(false);
   let showResetConfirm = $state(false);
   let showPerfMenu = $state(false);
   let showTitleBarMenu = $state(false);
@@ -175,8 +175,6 @@
       theme.toggle();
     } else if (id === "performance") {
       togglePerfMenu();
-    } else if (id === "reset") {
-      showResetConfirm = true;
     } else if (id === "settings") {
       openSettings();
     }
@@ -225,9 +223,9 @@
 
   // While the floating theme editor is open, the buttons that would navigate
   // away from or disrupt the edit session (theme toggle flips base; settings
-  // modal reopens behind the panel; reset is destructive) are
-  // disabled. Window controls, pomodoro, and the diagnostics monitor stay
-  // live because they do not interfere with the edit session.
+  // modal reopens behind the panel) are disabled. Window controls,
+  // pomodoro, and the diagnostics monitor stay live because they do not
+  // interfere with the edit session.
   const lockedByThemeEditor = $derived(!!themeEditor.editingId);
 
   const isActive = $derived(
@@ -244,7 +242,6 @@
     { id: "music", label: "Music" },
     { id: "theme", label: "Theme toggle" },
     { id: "performance", label: "Diagnostics" },
-    { id: "reset", label: "Reset database" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -252,7 +249,6 @@
   const MENU_EDGE_GAP = 8;
   const themeEditorLockedControlIds = new Set<TitleBarControlId>([
     "theme",
-    "reset",
     "settings",
   ]);
   const TITLE_BAR_ICON_COLOR_CLASS = "text-foreground/68 dark:text-white/76";
@@ -260,6 +256,10 @@
   const TITLE_BAR_ICON_SIZE = 14;
   const POMODORO_RING_SIZE = 16;
   const POMODORO_RING_STROKE_WIDTH = 2.15;
+  const RESET_SHORTCUT_REQUIRED_PRESSES = 10;
+  const RESET_SHORTCUT_WINDOW_MS = 8_000;
+  let resetShortcutPresses = 0;
+  let resetShortcutTimer: ReturnType<typeof setTimeout> | undefined;
 
   const autoCompactTabs = $derived(
     preferences.titleBarVisibility.compactTabs || viewport.below("regular"),
@@ -270,7 +270,6 @@
     if (viewport.below("regular")) {
       ids.add("theme");
       ids.add("performance");
-      ids.add("reset");
     }
     return ids;
   });
@@ -287,6 +286,31 @@
 
   function overflowControlDisabled(id: TitleBarControlId): boolean {
     return lockedByThemeEditor && themeEditorLockedControlIds.has(id);
+  }
+
+  function clearResetShortcutSequence() {
+    resetShortcutPresses = 0;
+    if (resetShortcutTimer) clearTimeout(resetShortcutTimer);
+    resetShortcutTimer = undefined;
+  }
+
+  function registerResetShortcutPress() {
+    if (lockedByBenchmark) {
+      void ensureBenchmarkOverlay();
+      return;
+    }
+    if (lockedByThemeEditor) return;
+    if (resetShortcutTimer) clearTimeout(resetShortcutTimer);
+    resetShortcutPresses += 1;
+    if (resetShortcutPresses >= RESET_SHORTCUT_REQUIRED_PRESSES) {
+      clearResetShortcutSequence();
+      showResetSequenceConfirm = true;
+      return;
+    }
+    resetShortcutTimer = setTimeout(
+      clearResetShortcutSequence,
+      RESET_SHORTCUT_WINDOW_MS,
+    );
   }
 
   $effect(() => {
@@ -307,6 +331,7 @@
     return () => {
       cleanupResize?.();
       cleanupClose?.();
+      clearResetShortcutSequence();
     };
   });
 
@@ -367,11 +392,9 @@
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (lockedByBenchmark) {
-          void ensureBenchmarkOverlay();
-          return;
+        if (!e.repeat && !isEditableKeyboardTarget(e.target)) {
+          registerResetShortcutPress();
         }
-        void handleClose();
         return;
       }
 
@@ -684,24 +707,6 @@
       </div>
     {/if}
 
-    <!-- Reset database -->
-    {#if titleBarControlVisible("reset")}
-      <button
-        onclick={() => { showResetConfirm = true; }}
-        disabled={lockedByThemeEditor}
-        class={cn(
-          "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
-          TITLE_BAR_ICON_COLOR_CLASS,
-          lockedByThemeEditor
-            ? "cursor-not-allowed opacity-40"
-            : "hover:bg-sidebar-accent",
-        )}
-        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Reset database"}
-      >
-        <CircleX size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
-      </button>
-    {/if}
-
     <!-- Settings -->
     {#if titleBarControlVisible("settings")}
       <button
@@ -792,7 +797,7 @@
           ? "cursor-not-allowed opacity-40"
           : "hover:bg-destructive hover:text-destructive-foreground",
       )}
-      title={lockedByBenchmark ? "Disabled while a benchmark is active" : `Close app (${formatShortcut("Mod + Shift + W")})`}
+      title={lockedByBenchmark ? "Disabled while a benchmark is active" : "Close app"}
       aria-label="Close"
     >
       <X size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -858,6 +863,20 @@
       </button>
     </div>
   </div>
+{/if}
+
+{#if showResetSequenceConfirm}
+  <ConfirmDialog
+    title="Open reset confirmation?"
+    message="You pressed the hidden reset shortcut 10 times. Continue only if you meant to erase the app data."
+    confirmLabel="Continue (Enter)"
+    cancelLabel="Cancel (Esc)"
+    onConfirm={() => {
+      showResetSequenceConfirm = false;
+      showResetConfirm = true;
+    }}
+    onCancel={() => { showResetSequenceConfirm = false; }}
+  />
 {/if}
 
 {#if showResetConfirm}

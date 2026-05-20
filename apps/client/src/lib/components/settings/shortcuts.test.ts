@@ -42,7 +42,6 @@ describe("shortcut search", () => {
       "Open theme picker",
       "Toggle diagnostics panel",
       "Open shortcuts",
-      "Close app",
     ]);
   });
 
@@ -83,7 +82,6 @@ describe("shortcut search", () => {
       "Open theme picker",
       "Toggle diagnostics panel",
       "Previous view",
-      "Close app",
     ]);
     expect(matchingActions("ctrl sh")).toEqual(ctrlShiftActions);
     expect(matchingActions("ctrl + sh")).toEqual(ctrlShiftActions);
@@ -202,7 +200,6 @@ describe("shortcut search", () => {
         "Open theme picker",
         "Toggle diagnostics panel",
         "Previous view",
-        "Close app",
       ]),
     );
     expect(matchingActions("ctrl + shift +")).toEqual(
@@ -211,7 +208,6 @@ describe("shortcut search", () => {
         "Open theme picker",
         "Toggle diagnostics panel",
         "Previous view",
-        "Close app",
       ]),
     );
   });

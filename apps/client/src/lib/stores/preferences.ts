@@ -72,7 +72,6 @@ export const TITLE_BAR_CONTROL_IDS = [
   "music",
   "theme",
   "performance",
-  "reset",
   "settings",
   "compactTabs",
 ] as const;
@@ -85,7 +84,6 @@ export const DEFAULT_TITLE_BAR_VISIBILITY: TitleBarVisibility = Object.freeze({
   music: true,
   theme: true,
   performance: true,
-  reset: true,
   settings: true,
   compactTabs: false,
 });
