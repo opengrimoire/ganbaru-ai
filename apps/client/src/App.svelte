@@ -249,7 +249,11 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.ctrlKey && e.key === ",") {
       e.preventDefault();
-      settingsLauncher.open();
+      if (settingsLauncher.isOpen) {
+        settingsLauncher.close();
+      } else {
+        settingsLauncher.open();
+      }
       return;
     }
 

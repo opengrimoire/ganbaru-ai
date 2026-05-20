@@ -73,7 +73,6 @@ export const TITLE_BAR_CONTROL_IDS = [
   "theme",
   "performance",
   "reset",
-  "help",
   "settings",
   "compactTabs",
 ] as const;
@@ -87,7 +86,6 @@ export const DEFAULT_TITLE_BAR_VISIBILITY: TitleBarVisibility = Object.freeze({
   theme: true,
   performance: true,
   reset: true,
-  help: true,
   settings: true,
   compactTabs: false,
 });
@@ -147,4 +145,16 @@ export function parseTitleBarVisibility(value: unknown): TitleBarVisibility {
     }
   }
   return visibility;
+}
+
+export function shouldNormalizeTitleBarVisibility(value: unknown): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return true;
+
+  const validIds = new Set<string>(TITLE_BAR_CONTROL_IDS);
+  const record = value as Record<string, unknown>;
+  for (const [key, stored] of Object.entries(record)) {
+    if (!validIds.has(key) || typeof stored !== "boolean") return true;
+  }
+  return false;
 }

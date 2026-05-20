@@ -3,9 +3,11 @@
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import Keyboard from "@lucide/svelte/icons/keyboard";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import X from "@lucide/svelte/icons/x";
   import AppearanceSection from "./AppearanceSection.svelte";
+  import ShortcutsSection from "./ShortcutsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import type { SectionId } from "./types";
@@ -35,6 +37,7 @@
   const SECTIONS: SectionMeta[] = [
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "calendars", label: "Calendars", icon: CalendarDays },
+    { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   ];
 
   let activeSection = $state<SectionId>("appearance");
@@ -68,8 +71,34 @@
     if (activeSection === "calendars") void loadCalendarsSection();
   });
 
+  function focusShortcutsSearch(): void {
+    const input = document.querySelector<HTMLInputElement>(
+      "[data-shortcuts-search-input]",
+    );
+    input?.focus();
+    input?.select();
+  }
+
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
+      if (e.ctrlKey && e.key === ",") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (activeSection === "shortcuts" && e.ctrlKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        e.stopPropagation();
+        focusShortcutsSearch();
+        return;
+      }
+      if (e.key === "F1") {
+        e.preventDefault();
+        e.stopPropagation();
+        activeSection = "shortcuts";
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -196,7 +225,8 @@
     <section
       data-settings-content
       class={cn(
-        "min-h-0 flex-1 overflow-y-auto bg-background/40 dark:bg-black/20",
+        "min-h-0 flex-1 bg-background/40 dark:bg-black/20",
+        activeSection === "shortcuts" ? "overflow-hidden" : "overflow-y-auto",
         useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
       )}
     >
@@ -207,6 +237,8 @@
           {@const Section = CalendarsSection}
           <Section />
         {/if}
+      {:else if activeSection === "shortcuts"}
+        <ShortcutsSection />
       {/if}
     </section>
   </div>

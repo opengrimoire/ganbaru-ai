@@ -12,6 +12,7 @@ import {
   isTitleBarControlId,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
+  shouldNormalizeTitleBarVisibility,
 } from "./preferences";
 
 describe("FONT_FAMILIES registry", () => {
@@ -119,6 +120,7 @@ describe("title bar visibility helpers", () => {
     expect(isTitleBarControlId("music")).toBe(true);
     expect(isTitleBarControlId("settings")).toBe(true);
     expect(isTitleBarControlId("compactTabs")).toBe(true);
+    expect(isTitleBarControlId("help")).toBe(false);
     expect(isTitleBarControlId("calendarTab")).toBe(false);
     expect(isTitleBarControlId("todoTab")).toBe(false);
     expect(isTitleBarControlId("tabs")).toBe(false);
@@ -162,6 +164,17 @@ describe("title bar visibility helpers", () => {
       ...DEFAULT_TITLE_BAR_VISIBILITY,
       settings: false,
     });
+  });
+
+  it("normalizes obsolete or malformed stored title bar visibility", () => {
+    expect(shouldNormalizeTitleBarVisibility(undefined)).toBe(false);
+    expect(shouldNormalizeTitleBarVisibility({
+      settings: false,
+      compactTabs: true,
+    })).toBe(false);
+    expect(shouldNormalizeTitleBarVisibility({ help: true })).toBe(true);
+    expect(shouldNormalizeTitleBarVisibility({ settings: "false" })).toBe(true);
+    expect(shouldNormalizeTitleBarVisibility(null)).toBe(true);
   });
 
   it("falls back to defaults for malformed stored values", () => {

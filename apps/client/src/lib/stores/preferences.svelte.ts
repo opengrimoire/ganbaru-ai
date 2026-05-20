@@ -11,6 +11,7 @@ import {
   isTitleBarControlId,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
+  shouldNormalizeTitleBarVisibility,
 } from "./preferences";
 import { getConfigKey, setConfigKey } from "../vault/config";
 
@@ -41,9 +42,12 @@ function loadSavedEventTzDisplay(): EventTimezoneDisplay {
 }
 
 function loadSavedTitleBarVisibility(): TitleBarVisibility {
-  return parseTitleBarVisibility(
-    getConfigKey<unknown>(TITLE_BAR_VISIBILITY_CONFIG_KEY, undefined),
-  );
+  const saved = getConfigKey<unknown>(TITLE_BAR_VISIBILITY_CONFIG_KEY, undefined);
+  const parsed = parseTitleBarVisibility(saved);
+  if (shouldNormalizeTitleBarVisibility(saved)) {
+    setConfigKey(TITLE_BAR_VISIBILITY_CONFIG_KEY, parsed);
+  }
+  return parsed;
 }
 
 let fontFamilyId = $state<FontFamilyId>(loadSavedFontFamilyId());

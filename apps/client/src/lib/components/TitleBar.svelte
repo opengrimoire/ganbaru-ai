@@ -15,7 +15,6 @@
   import Music from "@lucide/svelte/icons/music";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
-  import CircleHelp from "@lucide/svelte/icons/circle-help";
   import Settings from "@lucide/svelte/icons/settings";
   import CircleX from "@lucide/svelte/icons/circle-x";
   import Check from "@lucide/svelte/icons/check";
@@ -29,6 +28,7 @@
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
+  import type { SectionId } from "$lib/components/settings/types";
 
   let {
     shellStartupMs = null,
@@ -65,18 +65,15 @@
   type PerformancePopoverComponent = typeof import("$lib/components/perf/PerformancePopover.svelte").default;
   type SettingsModalComponent = typeof import("$lib/components/settings/SettingsModal.svelte").default;
   type FloatingThemeEditorComponent = typeof import("$lib/components/settings/FloatingThemeEditor.svelte").default;
-  type HelpShortcutsModalComponent = typeof import("$lib/components/HelpShortcutsModal.svelte").default;
   type ThemeQuickSwitcherComponent = typeof import("$lib/components/ThemeQuickSwitcher.svelte").default;
 
   let PerformancePopover = $state<PerformancePopoverComponent | null>(null);
   let SettingsModal = $state<SettingsModalComponent | null>(null);
   let FloatingThemeEditor = $state<FloatingThemeEditorComponent | null>(null);
-  let HelpShortcutsModal = $state<HelpShortcutsModalComponent | null>(null);
   let ThemeQuickSwitcher = $state<ThemeQuickSwitcherComponent | null>(null);
   let loadingPerformancePopover: Promise<void> | null = null;
   let loadingSettingsModal: Promise<void> | null = null;
   let loadingFloatingThemeEditor: Promise<void> | null = null;
-  let loadingHelpShortcutsModal: Promise<void> | null = null;
   let loadingThemeQuickSwitcher: Promise<void> | null = null;
 
   function loadPerformancePopover(): Promise<void> {
@@ -115,18 +112,6 @@
     return loadingFloatingThemeEditor;
   }
 
-  function loadHelpShortcutsModal(): Promise<void> {
-    if (HelpShortcutsModal) return Promise.resolve();
-    loadingHelpShortcutsModal ??= import("$lib/components/HelpShortcutsModal.svelte")
-      .then((module) => {
-        HelpShortcutsModal = module.default;
-      })
-      .finally(() => {
-        loadingHelpShortcutsModal = null;
-      });
-    return loadingHelpShortcutsModal;
-  }
-
   function loadThemeQuickSwitcher(): Promise<void> {
     if (ThemeQuickSwitcher) return Promise.resolve();
     loadingThemeQuickSwitcher ??= import("$lib/components/ThemeQuickSwitcher.svelte")
@@ -162,18 +147,10 @@
     void loadThemeQuickSwitcher();
   }
 
-  function openSettings() {
+  function openSettings(section?: SectionId) {
     showUtilityOverflowMenu = false;
-    settingsLauncher.open();
+    settingsLauncher.open(section);
     void loadSettingsModal();
-  }
-
-  let showHelpShortcuts = $state(false);
-
-  function openHelpShortcuts() {
-    showUtilityOverflowMenu = false;
-    showHelpShortcuts = true;
-    void loadHelpShortcutsModal();
   }
 
   $effect(() => {
@@ -199,8 +176,6 @@
       togglePerfMenu();
     } else if (id === "reset") {
       showResetConfirm = true;
-    } else if (id === "help") {
-      openHelpShortcuts();
     } else if (id === "settings") {
       openSettings();
     }
@@ -249,7 +224,7 @@
 
   // While the floating theme editor is open, the buttons that would navigate
   // away from or disrupt the edit session (theme toggle flips base; settings
-  // modal reopens behind the panel; help/reset are destructive or noisy) are
+  // modal reopens behind the panel; reset is destructive) are
   // disabled. Window controls, pomodoro, and the performance monitor stay
   // live because they do not interfere with the edit session.
   const lockedByThemeEditor = $derived(!!themeEditor.editingId);
@@ -269,7 +244,6 @@
     { id: "theme", label: "Theme toggle" },
     { id: "performance", label: "Performance" },
     { id: "reset", label: "Reset database" },
-    { id: "help", label: "Help" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -278,7 +252,6 @@
   const themeEditorLockedControlIds = new Set<TitleBarControlId>([
     "theme",
     "reset",
-    "help",
     "settings",
   ]);
   const TITLE_BAR_ICON_COLOR_CLASS = "text-foreground/68 dark:text-white/76";
@@ -297,7 +270,6 @@
       ids.add("theme");
       ids.add("performance");
       ids.add("reset");
-      ids.add("help");
     }
     return ids;
   });
@@ -351,7 +323,7 @@
     if (e.key === "F1") {
       e.preventDefault();
       e.stopPropagation();
-      if (!lockedByThemeEditor) openHelpShortcuts();
+      if (!lockedByThemeEditor) openSettings("shortcuts");
       return;
     }
 
@@ -720,28 +692,10 @@
       </button>
     {/if}
 
-    {#if titleBarControlVisible("help")}
-      <button
-        onclick={openHelpShortcuts}
-        disabled={lockedByThemeEditor}
-        class={cn(
-          "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
-          TITLE_BAR_ICON_COLOR_CLASS,
-          lockedByThemeEditor
-            ? "cursor-not-allowed opacity-40"
-            : "hover:bg-sidebar-accent",
-        )}
-        title={lockedByThemeEditor ? "Disabled while editing a theme" : "Help (F1 key)"}
-        aria-label="Help"
-      >
-        <CircleHelp size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
-      </button>
-    {/if}
-
     <!-- Settings -->
     {#if titleBarControlVisible("settings")}
       <button
-        onclick={openSettings}
+        onclick={() => openSettings()}
         disabled={lockedByThemeEditor}
         class={cn(
           "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
@@ -916,11 +870,6 @@
     onConfirm={confirmClose}
     onCancel={cancelClose}
   />
-{/if}
-
-{#if showHelpShortcuts && HelpShortcutsModal}
-  {@const ShortcutsModal = HelpShortcutsModal}
-  <ShortcutsModal onClose={() => { showHelpShortcuts = false; }} />
 {/if}
 
 {#if showThemeQuickSwitcher && ThemeQuickSwitcher}
