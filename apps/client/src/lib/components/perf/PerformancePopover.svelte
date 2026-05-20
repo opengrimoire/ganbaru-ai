@@ -8,6 +8,7 @@
   import Play from "@lucide/svelte/icons/play";
   import Square from "@lucide/svelte/icons/square";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { cn } from "$lib/utils";
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import {
@@ -53,6 +54,7 @@
 
   const benchmarkStatus = getBenchmarkStatus();
   const sectionDividerClass = "mx-0 my-3 h-px bg-border";
+  const isDevMode = import.meta.env.DEV;
 
   let perfLive = $state(true);
   // One slot for the most recently copied button so each one can flash a
@@ -472,6 +474,15 @@
       {/if}
     </button>
   </div>
+
+  {#if isDevMode}
+    <div class="mt-2 flex w-full items-center justify-between gap-2 text-[0.666667rem] text-warning">
+      <span class="flex min-w-0 items-center gap-1.5">
+        <TriangleAlert size={11} class="shrink-0" />
+        <span class="truncate">Dev mode uses more resources!</span>
+      </span>
+    </div>
+  {/if}
 
   {#if !perfLive && startupMemorySnapshot.status === "pending"}
     <div class="mt-2 text-xs text-muted-foreground">Startup snapshot pending...</div>
