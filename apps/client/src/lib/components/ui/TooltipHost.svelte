@@ -301,7 +301,9 @@
     };
 
     const handlePointerDown = (event: PointerEvent) => {
-      suppressedPointerTarget = findTooltipTarget(event.target);
+      const target = findTooltipTarget(event.target);
+      if (target?.dataset.appTooltipKeepOnClick === "true") return;
+      suppressedPointerTarget = target;
       hideTooltip();
     };
 

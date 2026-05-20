@@ -256,15 +256,31 @@ struct ProcessMemory {
     mb: f64,
 }
 
+#[derive(serde::Serialize, Clone)]
+struct MemoryMetric {
+    name: String,
+    slug: String,
+    description: String,
+}
+
 #[derive(serde::Serialize)]
 struct MemoryReport {
     processes: Vec<ProcessMemory>,
     total_mb: f64,
     platform: String,
+    metric: MemoryMetric,
 }
 
 fn platform_label() -> String {
     PLATFORM_LABEL.get_or_init(detect_platform_label).clone()
+}
+
+fn memory_metric(name: &str, slug: &str, description: &str) -> MemoryMetric {
+    MemoryMetric {
+        name: name.to_string(),
+        slug: slug.to_string(),
+        description: description.to_string(),
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -335,7 +351,12 @@ fn detect_platform_label() -> String {
 fn get_memory_report() -> MemoryReport {
     #[cfg(target_os = "linux")]
     {
-        fn read_pss_kb(pid: &str) -> f64 {
+        struct LinuxMemoryReading {
+            kb: f64,
+            is_pss: bool,
+        }
+
+        fn read_linux_memory_kb(pid: &str) -> LinuxMemoryReading {
             // smaps_rollup gives PSS (Proportional Set Size): private memory
             // plus a fair share of shared memory. Avoids double-counting shared
             // libraries across processes.
@@ -343,30 +364,39 @@ fn get_memory_report() -> MemoryReport {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 for line in content.lines() {
                     if let Some(val) = line.strip_prefix("Pss:") {
-                        return val
-                            .trim()
-                            .trim_end_matches(" kB")
-                            .trim()
-                            .parse::<f64>()
-                            .unwrap_or(0.0);
+                        return LinuxMemoryReading {
+                            kb: val
+                                .trim()
+                                .trim_end_matches(" kB")
+                                .trim()
+                                .parse::<f64>()
+                                .unwrap_or(0.0),
+                            is_pss: true,
+                        };
                     }
                 }
             }
-            // Fallback to VmRSS if smaps_rollup is unavailable
+            // Fallback to VmRSS if smaps_rollup is unavailable.
             let path = format!("/proc/{pid}/status");
             if let Ok(content) = std::fs::read_to_string(path) {
                 for line in content.lines() {
                     if let Some(val) = line.strip_prefix("VmRSS:") {
-                        return val
-                            .trim()
-                            .trim_end_matches(" kB")
-                            .trim()
-                            .parse::<f64>()
-                            .unwrap_or(0.0);
+                        return LinuxMemoryReading {
+                            kb: val
+                                .trim()
+                                .trim_end_matches(" kB")
+                                .trim()
+                                .parse::<f64>()
+                                .unwrap_or(0.0),
+                            is_pss: false,
+                        };
                     }
                 }
             }
-            0.0
+            LinuxMemoryReading {
+                kb: 0.0,
+                is_pss: false,
+            }
         }
 
         fn process_label(pid: &str) -> String {
@@ -384,12 +414,25 @@ fn get_memory_report() -> MemoryReport {
             format!("PID {pid}")
         }
 
+        fn process_memory(name: String, pid: &str, all_pss: &mut bool) -> ProcessMemory {
+            let reading = read_linux_memory_kb(pid);
+            if !reading.is_pss {
+                *all_pss = false;
+            }
+            ProcessMemory {
+                name,
+                mb: reading.kb / 1024.0,
+            }
+        }
+
         let my_pid = std::process::id();
         let my_pid_str = my_pid.to_string();
-        let mut processes = vec![ProcessMemory {
-            name: "Backend".to_string(),
-            mb: read_pss_kb(&my_pid_str) / 1024.0,
-        }];
+        let mut all_pss = true;
+        let mut processes = vec![process_memory(
+            "Backend".to_string(),
+            &my_pid_str,
+            &mut all_pss,
+        )];
 
         // Walk /proc to find child processes (WebKitWebProcess, WebKitNetworkProcess, etc.)
         if let Ok(entries) = std::fs::read_dir("/proc") {
@@ -411,10 +454,11 @@ fn get_memory_report() -> MemoryReport {
                         // fields[0] = state, fields[1] = ppid
                         if let Some(ppid) = fields.get(1) {
                             if *ppid == my_pid_str {
-                                processes.push(ProcessMemory {
-                                    name: process_label(&fname_str),
-                                    mb: read_pss_kb(&fname_str) / 1024.0,
-                                });
+                                processes.push(process_memory(
+                                    process_label(&fname_str),
+                                    &fname_str,
+                                    &mut all_pss,
+                                ));
                             }
                         }
                     }
@@ -429,6 +473,19 @@ fn get_memory_report() -> MemoryReport {
             processes,
             total_mb,
             platform: platform_label(),
+            metric: if all_pss {
+                memory_metric(
+                    "PSS",
+                    "pss",
+                    "Proportional Set Size, private memory plus a fair share of shared memory.",
+                )
+            } else {
+                memory_metric(
+                    "PSS/RSS",
+                    "pss_rss",
+                    "PSS where available, with RSS fallback for processes that cannot report PSS.",
+                )
+            },
         }
     }
     #[cfg(target_os = "windows")]
@@ -457,6 +514,11 @@ fn get_memory_report() -> MemoryReport {
                         processes: vec![],
                         total_mb: 0.0,
                         platform: platform_label(),
+                        metric: memory_metric(
+                            "Working Set",
+                            "working_set",
+                            "Resident pages currently in physical memory. Shared pages may be counted per process.",
+                        ),
                     };
                 }
             }
@@ -553,6 +615,11 @@ fn get_memory_report() -> MemoryReport {
             processes,
             total_mb,
             platform: platform_label(),
+            metric: memory_metric(
+                "Working Set",
+                "working_set",
+                "Resident pages currently in physical memory. Shared pages may be counted per process.",
+            ),
         }
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
@@ -561,6 +628,11 @@ fn get_memory_report() -> MemoryReport {
             processes: vec![],
             total_mb: 0.0,
             platform: platform_label(),
+            metric: memory_metric(
+                "Unavailable",
+                "unavailable",
+                "Memory reporting is not implemented for this platform yet.",
+            ),
         }
     }
 }

@@ -9,6 +9,7 @@
   import Square from "@lucide/svelte/icons/square";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import CircleHelp from "@lucide/svelte/icons/circle-help";
   import { cn } from "$lib/utils";
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import {
@@ -80,6 +81,7 @@
         processes: chartHoverSample.processes.map((p) => ({ name: p.name, mb: p.mb })),
         total_mb: chartHoverSample.totalMb,
         platform: liveReport.platform,
+        metric: liveReport.metric,
       };
     }
     if (perfLive) return liveReport;
@@ -296,12 +298,36 @@
 
   function ramReportLines(report: MemoryReport, label: string): string[] {
     const lines: string[] = [`${label} (${report.platform})`, ""];
+    const totalLabel = report.metric.slug === "unavailable"
+      ? "Total"
+      : `Total ${report.metric.name}`;
+    lines.push(`Metric: ${report.metric.name}`);
+    lines.push("");
     lines.push("RAM by process:");
     for (const p of report.processes) {
       lines.push(`  ${p.name}: ${p.mb.toFixed(1)} MB`);
     }
-    lines.push(`  Total PSS: ${Math.round(report.total_mb)} MB`);
+    lines.push(`  ${totalLabel}: ${Math.round(report.total_mb)} MB`);
     return lines;
+  }
+
+  function totalMemoryTooltip(report: MemoryReport | null): string {
+    if (!report) return "Waiting for the memory report.";
+
+    if (report.metric.slug === "pss" || report.metric.slug === "pss_rss") {
+      const fallback = report.metric.slug === "pss_rss"
+        ? " Some processes used RSS fallback because PSS was unavailable."
+        : "";
+      return `In Linux, 'Total' uses PSS for GanbaruAI plus WebKit.${fallback} PSS shares common RAM fairly, so it is closer to the real app cost. To compare with another app, measure that app's PSS too. If you use System Monitor's RSS, compare RSS with RSS, but as I said, that is less accurate.`;
+    }
+    if (report.metric.slug === "working_set") {
+      return "In Windows, 'Total' uses Working Set for GanbaruAI plus WebView2. Working Set includes private and shared RAM currently in memory. Task Manager's Memory shows private working set, so it leaves shared RAM out. To compare with another app, measure that app's Working Set too. If you use Task Manager's Memory, compare Task Manager with Task Manager, but as I said, that is less accurate.";
+    }
+    if (report.metric.slug === "unavailable") {
+      return "In macOS, 'Total' should be the physical footprint sum for GanbaruAI plus WebView processes. It is not implemented yet.";
+    }
+
+    return `${report.metric.name}: ${report.metric.description}`;
   }
 
   function speedLogLines(): string[] {
@@ -336,7 +362,7 @@
   }
 
   function copyChart() {
-    copyToClipboard("chart", samplesToCSV(memorySamples));
+    copyToClipboard("chart", samplesToCSV(memorySamples, liveReport?.metric.slug));
   }
 
   function copySpeedLog() {
@@ -493,11 +519,26 @@
   <div class="mt-2 space-y-1.5" aria-busy={displayReport === null}>
     {#each memoryRows as row (row.label)}
       <div class="flex items-baseline justify-between">
-        <span class="text-xs text-muted-foreground">{row.label}</span>
+        <span class="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <span>{row.label}</span>
+        </span>
         {#if row.mb === null}
           <span class="min-w-14 text-right text-[0.733333rem] tabular-nums text-muted-foreground/50">...</span>
         {:else}
-          <span class={cn("min-w-14 text-right text-[0.733333rem] tabular-nums text-foreground", showingHoveredSample && "italic")}>{row.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+          <span class="flex min-w-0 items-baseline justify-end gap-1.5">
+            {#if row.label === "Total"}
+            <button
+              type="button"
+              class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded bg-transparent p-0 text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              data-app-tooltip={totalMemoryTooltip(displayReport)}
+              data-app-tooltip-keep-on-click="true"
+              aria-label={totalMemoryTooltip(displayReport)}
+            >
+              <CircleHelp size={10} strokeWidth={2} />
+            </button>
+            {/if}
+            <span class={cn("min-w-14 text-right text-[0.733333rem] tabular-nums text-foreground", showingHoveredSample && "italic")}>{row.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+          </span>
         {/if}
       </div>
     {/each}

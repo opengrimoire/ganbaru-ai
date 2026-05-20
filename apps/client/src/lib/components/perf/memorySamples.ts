@@ -14,9 +14,9 @@ export interface ProcessMemoryEntry {
 export interface MemorySample {
   /** Milliseconds since the first sample of the session. */
   t: number;
-  /** Sum of the per-process PSS values in MB. */
+  /** Sum of the per-process memory metric values in MB. */
   totalMb: number;
-  /** Per-process PSS breakdown. Names match what the Rust side emits. */
+  /** Per-process memory breakdown. Names match what the Rust side emits. */
   processes: ProcessMemoryEntry[];
 }
 
@@ -63,12 +63,12 @@ export function pickTicks(tMin: number, tMax: number, innerWidth: number): numbe
 }
 
 /**
- * Render the buffered samples as CSV. Columns are `t_ms`, `total_mb`, and
- * one column per process name observed across the buffer (sorted, lowercased
- * to match the snake_case style of the fixed columns). Missing values emit
- * as empty cells so spreadsheet imports keep alignment.
+ * Render the buffered samples as CSV. Columns are `t_ms`, a metric-specific
+ * total column, and one column per process name observed across the buffer
+ * (sorted, lowercased to match the snake_case style of the fixed columns).
+ * Missing values emit as empty cells so spreadsheet imports keep alignment.
  */
-export function samplesToCSV(samples: MemorySample[]): string {
+export function samplesToCSV(samples: MemorySample[], metricSlug?: string): string {
   if (samples.length === 0) return "";
   const procNames = new Set<string>();
   for (const s of samples) {
@@ -76,7 +76,10 @@ export function samplesToCSV(samples: MemorySample[]): string {
   }
   // ASCII sort (uppercase before lowercase) so column order is locale-independent.
   const names = Array.from(procNames).sort();
-  const header = ["t_ms", "total_mb", ...names.map((n) => n.toLowerCase())].join(",");
+  const totalColumn = metricSlug
+    ? `total_${metricSlug.replace(/[^a-z0-9_]+/gi, "_").toLowerCase()}_mb`
+    : "total_mb";
+  const header = ["t_ms", totalColumn, ...names.map((n) => n.toLowerCase())].join(",");
   const rows = samples.map((s) => {
     const map = new Map<string, number>();
     for (const p of s.processes) map.set(p.name, p.mb);

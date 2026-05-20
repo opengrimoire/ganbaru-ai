@@ -25,6 +25,11 @@ interface MemoryReport {
   processes: MemoryReportProcess[];
   total_mb: number;
   platform: string;
+  metric: {
+    name: string;
+    slug: string;
+    description: string;
+  };
 }
 
 type TimeoutId = ReturnType<typeof setTimeout>;

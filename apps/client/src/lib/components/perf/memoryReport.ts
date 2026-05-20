@@ -7,6 +7,13 @@ export interface MemoryReport {
   processes: ProcessMemory[];
   total_mb: number;
   platform: string;
+  metric: MemoryMetric;
+}
+
+export interface MemoryMetric {
+  name: string;
+  slug: string;
+  description: string;
 }
 
 export type MemoryProcessCategory = "Backend" | "Frontend" | "Network";

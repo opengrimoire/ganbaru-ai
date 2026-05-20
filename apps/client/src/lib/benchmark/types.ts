@@ -119,7 +119,7 @@ export function resolveBenchmarkAnchorDate(now: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Single memory reading at one sample point. MB units, PSS on Linux, RSS on Windows. */
+/** Single memory reading at one sample point. MB units, metric depends on platform. */
 export interface SamplePoint {
   label: SampleLabel;
   /** Milliseconds since the current sampling window started. */

@@ -29,6 +29,11 @@ describe("memoryDisplayRows", () => {
     const report: MemoryReport = {
       platform: "Linux",
       total_mb: 42,
+      metric: {
+        name: "PSS",
+        slug: "pss",
+        description: "Proportional Set Size",
+      },
       processes: [
         { name: "Backend", mb: 10 },
         { name: "Frontend", mb: 20 },

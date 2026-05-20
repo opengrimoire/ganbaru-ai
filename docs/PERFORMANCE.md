@@ -98,7 +98,7 @@ Use `Launch median ms` as the headline app-open comparison value. `Usable paint 
 
 ### Idle memory
 
-Memory is PSS on Linux. On platforms that cannot report PSS, record the metric used in the run notes. The harness samples idle memory once per second for 30 seconds after the anchored calendar window is ready. `Min` and `Max` are the lowest and highest values observed during that window. `End` is the final sample.
+Memory uses the best implemented platform metric: PSS on Linux and Working Set on Windows. macOS memory rows must not be recorded until physical footprint sampling is implemented. Record the metric in run notes whenever it is not obvious from the platform. The harness samples idle memory once per second for 30 seconds after the anchored calendar window is ready. `Min` and `Max` are the lowest and highest values observed during that window. `End` is the final sample.
 
 | Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
 |---|---|---|---:|---:|---:|---:|
@@ -214,7 +214,7 @@ General rules:
 - Measure release builds, not dev mode.
 - Keep benchmark data isolated from the user's real database.
 - Compare runs on the same machine, OS, WebKit or WebView2 version, window state, and power mode.
-- Prefer PSS for memory when available.
+- Prefer the platform metric that best matches real app RAM cost. Use PSS on Linux, Working Set on Windows, and physical footprint on macOS once implemented.
 - Treat startup, idle memory, navigation memory, interaction speed, and operation speed as different questions. Do not let one benchmark stand in for all of them.
 - Prefer fixing real cost over hiding warnings or increasing thresholds.
 - Lazy-load inactive surfaces by default.
@@ -232,8 +232,16 @@ General rules:
 | USS | Private memory only | Useful for process internals, undercounts app cost |
 | PSS | Private memory plus fair share of shared libraries | Preferred total on Linux |
 | RSS | Private memory plus full shared libraries per process | Often available, overcounts shared libraries |
+| Working Set | Resident pages currently in physical memory | Current Windows metric through Win32 APIs |
+| Physical footprint | macOS memory-pressure footprint | Target macOS metric, not implemented yet |
 
-Linux currently reads PSS from `/proc/{pid}/smaps_rollup`. Windows uses Working Set through Win32 APIs, which is closer to RSS. macOS memory reporting is not implemented yet.
+Linux currently reads PSS from `/proc/{pid}/smaps_rollup`. If that is unavailable for a process, the app falls back to `VmRSS` and reports the copied metric as `PSS/RSS`.
+
+Windows uses Working Set through Win32 `GetProcessMemoryInfo`. This reflects resident physical pages and is useful for user-facing RAM checks, but shared pages may be counted for each process. Do not compare Windows Working Set numbers directly against Linux PSS as if they were the same metric.
+
+macOS should use physical footprint through Mach task information because that is the closest fit for what users experience as app memory pressure. Until that is implemented for the app process and its WebView-related processes, macOS reports memory as unavailable instead of emitting misleading zero or RSS-based numbers.
+
+Copied diagnostics output includes the metric name, and chart CSV exports use a metric-specific total column such as `total_pss_mb` or `total_working_set_mb`.
 
 ### Process buckets
 

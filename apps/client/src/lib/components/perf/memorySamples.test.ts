@@ -75,6 +75,15 @@ describe("samplesToCSV", () => {
     expect(row2).toBe("5000,260.00,82.00,158.00");
   });
 
+  it("names the total column after the memory metric when provided", () => {
+    const csv = samplesToCSV([
+      sample(0, 250.5, [{ name: "Backend", mb: 250.5 }]),
+    ], "working_set");
+    const [header] = csv.split("\n");
+
+    expect(header).toBe("t_ms,total_working_set_mb,backend");
+  });
+
   it("leaves a missing process cell empty when only some samples include it", () => {
     const csv = samplesToCSV([
       sample(0, 100, [{ name: "Backend", mb: 100 }]),

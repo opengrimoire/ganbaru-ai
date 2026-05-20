@@ -25,6 +25,11 @@ function memoryReport(totalMb: number) {
     ],
     total_mb: totalMb,
     platform: "Linux",
+    metric: {
+      name: "PSS",
+      slug: "pss",
+      description: "Proportional Set Size",
+    },
   };
 }
 
