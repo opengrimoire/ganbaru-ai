@@ -40,8 +40,10 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Music from "@lucide/svelte/icons/music";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
-  import CircleSlash from "@lucide/svelte/icons/circle-slash";
-  import Sun from "@lucide/svelte/icons/sun";
+  import Calendar1 from "@lucide/svelte/icons/calendar-1";
+  import Clock4 from "@lucide/svelte/icons/clock-4";
+  import OctagonX from "@lucide/svelte/icons/octagon-x";
+  import Smile from "@lucide/svelte/icons/smile";
   import Eye from "@lucide/svelte/icons/eye";
   import Lock from "@lucide/svelte/icons/lock";
 
@@ -1748,13 +1750,16 @@
         disabled={controlsDisabled}
         class={cn(
           "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-2.5 py-2",
-          allDay
-            ? "text-foreground"
-            : "text-muted-foreground/40",
+          "text-foreground",
         )}
       >
-        <Sun size={13} class="shrink-0" />
-        <span class="truncate">All day</span>
+        {#if allDay}
+          <Calendar1 size={13} class="shrink-0" />
+          <span class="truncate">All day</span>
+        {:else}
+          <Clock4 size={13} class="shrink-0" />
+          <span class="truncate">Timed</span>
+        {/if}
       </button>
 
       <!-- Show as -->
@@ -1771,9 +1776,9 @@
         title="Show as"
       >
         {#if transparency === "transparent"}
-          <CircleCheck size={13} class="shrink-0" />
+          <Smile size={13} class="shrink-0" />
         {:else}
-          <CircleSlash size={13} class="shrink-0" />
+          <OctagonX size={13} class="shrink-0" />
         {/if}
         <span class="truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
       </button>
