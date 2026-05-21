@@ -29,11 +29,22 @@
       && typeof document !== "undefined"
       && document.fullscreenElement === hostElement,
   ));
-  const hostStyle = $derived(hostIsFullscreen && hasVisualSurface
+  const hasFullscreenAudioArtwork = $derived(Boolean(
+    hostIsFullscreen
+      && player.currentSource?.kind === "local-file"
+      && !player.localHasVideo
+      && player.currentArtworkUrl
+      && !player.snapshot.error,
+  ));
+  const hostStyle = $derived(hostIsFullscreen
     ? "left: 0; top: 0; width: 100vw; height: 100vh; background-color: #000;"
     : surfaceRect && hasHostSurface
       ? `left: ${surfaceRect.left}px; top: ${surfaceRect.top}px; width: ${surfaceRect.width}px; height: ${surfaceRect.height}px; background-color: var(--cal-bg);`
       : "left: -10000px; top: -10000px; width: 1px; height: 1px; background-color: var(--cal-bg);");
+  const hostVisualFrameStyle = $derived(hostIsFullscreen
+    ? "background-color: #000;"
+    : "background-color: var(--cal-bg);");
+  const hostHasHitTarget = $derived(hasVisualSurface || (hostIsFullscreen && hasFullscreenSurface));
 
   onMount(() => {
     player.init();
@@ -142,8 +153,7 @@
 
   function fullscreenTargetElement(): HTMLElement | null {
     if (!hasFullscreenSurface) return null;
-    if (hasVisualSurface && hostElement) return hostElement;
-    return player.surfaceElement;
+    return hostElement ?? player.surfaceElement;
   }
 
   $effect(() => {
@@ -226,7 +236,7 @@
   class="music-playback-host pointer-events-none fixed z-20 overflow-hidden"
   style={hostStyle}
   tabindex="-1"
-  aria-hidden={!hasHostSurface}
+  aria-hidden={!hasHostSurface && !hostIsFullscreen}
   onkeydown={handleFullscreenSurfaceKeydown}
 >
   {#if player.currentSource && player.isYouTubeActive}
@@ -265,10 +275,25 @@
       {/key}
     {/if}
   {/if}
+  {#if hasFullscreenAudioArtwork}
+    <div
+      class="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"
+      style={hostVisualFrameStyle}
+    >
+      <img
+        src={player.currentArtworkUrl ?? ""}
+        alt=""
+        class="h-full w-full object-contain"
+        draggable="false"
+        onload={() => player.handleArtworkLoaded()}
+        onerror={() => player.handleArtworkError()}
+      />
+    </div>
+  {/if}
   {#if player.staleVisual}
     <div
       class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"
-      style="background-color: var(--cal-bg);"
+      style={hostVisualFrameStyle}
     >
       <img
         src={player.staleVisual.url}
@@ -278,7 +303,7 @@
       />
     </div>
   {/if}
-  {#if hasVisualSurface}
+  {#if hostHasHitTarget}
     {#if hostIsFullscreen && volumeFeedbackVisible}
       <div class="music-volume-feedback pointer-events-none absolute bottom-4 right-4 z-20 select-none text-[0.866667rem] font-medium text-white">
         {player.volumeFeedbackLabel}
@@ -301,6 +326,12 @@
 
 <style>
   :global(.music-media-surface:fullscreen) {
+    width: 100vw;
+    height: 100vh;
+    background-color: #000 !important;
+  }
+
+  :global(.music-playback-host:fullscreen) {
     width: 100vw;
     height: 100vh;
     background-color: #000 !important;
