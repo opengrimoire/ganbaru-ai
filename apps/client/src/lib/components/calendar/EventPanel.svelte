@@ -42,7 +42,7 @@
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import Calendar1 from "@lucide/svelte/icons/calendar-1";
   import Clock4 from "@lucide/svelte/icons/clock-4";
-  import OctagonX from "@lucide/svelte/icons/octagon-x";
+  import Ban from "@lucide/svelte/icons/ban";
   import Smile from "@lucide/svelte/icons/smile";
   import Eye from "@lucide/svelte/icons/eye";
   import Lock from "@lucide/svelte/icons/lock";
@@ -1546,7 +1546,7 @@
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
-      <div class="mb-2 grid grid-cols-3 overflow-hidden rounded-sm bg-event-panel-contrast p-0.5 text-[0.733333rem]"
+      <div class="mb-2 grid translate-y-0.5 grid-cols-3 overflow-hidden rounded-sm bg-event-panel-contrast p-0.5 text-[0.733333rem]"
         role="radiogroup"
         aria-label="Apply changes to">
         {#each SCOPE_OPTIONS as option, index}
@@ -1561,7 +1561,7 @@
             tabindex={scopeFocusIndex === index ? 0 : -1}
             disabled={controlsDisabled}
             class={cn(
-              "flex min-w-0 items-center justify-center rounded px-2 py-1.5 text-center",
+              "flex min-w-0 items-center justify-center rounded px-2 py-1 text-center font-semibold",
               scope === option.value
                 ? "bg-action-confirm text-action-confirm-foreground"
                 : "text-event-panel-input-text/70",
@@ -1574,7 +1574,7 @@
     {/if}
 
     <!-- Title + color circle -->
-    <div class="flex items-center gap-2.5 px-1">
+    <div class="flex translate-y-0.5 items-center gap-2.5 px-1">
       <div class="title-wrapper relative min-w-0 flex-1">
         <input
           bind:this={titleInput}
@@ -1804,7 +1804,7 @@
         {#if transparency === "transparent"}
           <Smile size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
         {:else}
-          <OctagonX size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
+          <Ban size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
         {/if}
         <span class="translate-y-[1.13px] truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
       </button>
@@ -1837,54 +1837,7 @@
   <!-- Feature sections -->
   <div class="shrink-0 flex flex-col gap-1.5 px-4 py-1.5">
 
-      <!-- 1) Pomodoro -->
-      <PomodoroSection
-        enabled={pomodoroEnabled}
-        bind:preset={pomodoroPreset}
-        bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
-        expanded={openSection === "pomodoro"}
-        ontoggle={() => handleToggle("pomodoro")}
-        onexpand={() => handleExpand("pomodoro")}
-        onchange={emitChange} />
-
-      <!-- 2) Notifications -->
-      <NotificationsSection
-        enabled={notifEnabled}
-        bind:selected={notifSelected}
-        bind:customNotifs
-        expanded={openSection === "notifications"}
-        ontoggle={() => handleToggle("notifications")}
-        onexpand={() => handleExpand("notifications")}
-        onchange={emitChange} />
-
-      <!-- 3) Repeat -->
-      <RecurrenceSection
-        bind:recurrence
-        {startDate}
-        {rdate}
-        expanded={openSection === "repeat"}
-        ontoggle={() => handleToggle("repeat")}
-        onexpand={() => handleExpand("repeat")}
-        onchange={emitChange} />
-
-      <!-- 4) Music -->
-      <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="section-header flex items-stretch">
-          <div aria-hidden="true" class="flex w-10 shrink-0 items-center justify-center text-muted-foreground/50">
-            <Music size={14} />
-          </div>
-          <button onclick={() => handleExpand("music")}
-            disabled={controlsDisabled}
-            class="flex flex-1 items-center px-3 py-2 text-left">
-            <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
-          </button>
-        </div>
-        {#if openSection === "music"}
-          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
-        {/if}
-      </div>
-
-      <!-- 5) Meeting -->
+      <!-- 1) Meeting -->
       {#if showHeavySections}
         <MeetingSection
           enabled={meetingEnabled}
@@ -1907,6 +1860,53 @@
           onchange={emitChange}
           ondescriptionchange={(html) => { description = html; emitChange(); }} />
       {/if}
+
+      <!-- 2) Pomodoro -->
+      <PomodoroSection
+        enabled={pomodoroEnabled}
+        bind:preset={pomodoroPreset}
+        bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
+        expanded={openSection === "pomodoro"}
+        ontoggle={() => handleToggle("pomodoro")}
+        onexpand={() => handleExpand("pomodoro")}
+        onchange={emitChange} />
+
+      <!-- 3) Notifications -->
+      <NotificationsSection
+        enabled={notifEnabled}
+        bind:selected={notifSelected}
+        bind:customNotifs
+        expanded={openSection === "notifications"}
+        ontoggle={() => handleToggle("notifications")}
+        onexpand={() => handleExpand("notifications")}
+        onchange={emitChange} />
+
+      <!-- 4) Repeat -->
+      <RecurrenceSection
+        bind:recurrence
+        {startDate}
+        {rdate}
+        expanded={openSection === "repeat"}
+        ontoggle={() => handleToggle("repeat")}
+        onexpand={() => handleExpand("repeat")}
+        onchange={emitChange} />
+
+      <!-- 5) Music -->
+      <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+        <div class="section-header flex items-stretch">
+          <div aria-hidden="true" class="flex w-10 shrink-0 items-center justify-center text-muted-foreground/50">
+            <Music size={14} />
+          </div>
+          <button onclick={() => handleExpand("music")}
+            disabled={controlsDisabled}
+            class="flex flex-1 items-center px-3 py-2 text-left">
+            <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
+          </button>
+        </div>
+        {#if openSection === "music"}
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+        {/if}
+      </div>
   </div>
   </div>
 
