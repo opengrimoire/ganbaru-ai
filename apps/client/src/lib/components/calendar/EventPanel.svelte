@@ -1695,7 +1695,7 @@
       <!-- Scope selector (recurring events only) -->
       {#if isRecurring}
         <div class="flex min-w-0 items-center justify-start gap-4 rounded-none">
-          <span class="shrink-0 text-[0.866667rem] text-foreground">Apply changes to:</span>
+          <span class="shrink-0 text-[0.866667rem] text-event-panel-input-text">Apply changes to:</span>
           {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
             <button
               onclick={() => handleScopeClick(val as RecurringScope)}
@@ -1707,8 +1707,8 @@
               disabled={controlsDisabled}
               class="scope-button rounded-none py-1 text-[0.866667rem]
                 {scope === val
-                  ? 'text-foreground'
-                  : 'text-foreground/45'}"
+                  ? 'text-event-panel-input-text'
+                  : 'text-event-panel-input-text/45'}"
             >{lbl}</button>
           {/each}
         </div>
