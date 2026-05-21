@@ -285,13 +285,45 @@
 
   function positionPicker(node: HTMLElement) {
     if (!dateBtn) return { destroy() {} };
-    const r = dateBtn.getBoundingClientRect();
-    const pw = 224;
-    let left = r.left + r.width / 2 - pw / 2;
-    left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
-    node.style.left = `${left}px`;
-    node.style.top = `${r.bottom + 4}px`;
-    return { destroy() {} };
+    const margin = 8;
+    const gap = 4;
+    const pickerWidth = 224;
+
+    function updatePosition() {
+      if (!dateBtn) return;
+      node.style.maxHeight = `${Math.max(96, window.innerHeight - margin * 2)}px`;
+      node.style.overflowY = "auto";
+
+      const inputRect = dateBtn.getBoundingClientRect();
+      const pickerRect = node.getBoundingClientRect();
+      const pickerHeight = pickerRect.height;
+
+      let left = inputRect.left + inputRect.width / 2 - pickerWidth / 2;
+      left = Math.max(margin, Math.min(window.innerWidth - pickerWidth - margin, left));
+
+      const belowTop = inputRect.bottom + gap;
+      const aboveTop = inputRect.top - pickerHeight - gap;
+      const belowFits = belowTop + pickerHeight <= window.innerHeight - margin;
+      const aboveFits = aboveTop >= margin;
+      const top = belowFits || (!aboveFits && belowTop <= window.innerHeight - pickerHeight - margin)
+        ? belowTop
+        : Math.max(margin, aboveTop);
+
+      node.style.left = `${left}px`;
+      node.style.top = `${Math.min(top, window.innerHeight - pickerHeight - margin)}px`;
+    }
+
+    const frame = requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return {
+      destroy() {
+        cancelAnimationFrame(frame);
+        window.removeEventListener("resize", updatePosition);
+        window.removeEventListener("scroll", updatePosition, true);
+      },
+    };
   }
 
   async function focusDateInput() {
@@ -460,7 +492,14 @@
               <div class="fixed inset-0 z-60" onclick={() => { pickerOpen = false; }}></div>
               <div class="fixed z-61 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
                 use:positionPicker>
-                <MiniDatePicker selectedDate={recEndDate || defaultUntilDate()} small onselect={selectCalDay} oncancel={cancelCalDay} />
+                <MiniDatePicker
+                  selectedDate={recEndDate || defaultUntilDate()}
+                  small
+                  highlightToday={false}
+                  activeHighlight="primary"
+                  onselect={selectCalDay}
+                  oncancel={cancelCalDay}
+                />
               </div>
             {/if}
           </div>

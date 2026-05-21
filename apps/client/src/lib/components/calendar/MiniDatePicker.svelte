@@ -14,6 +14,8 @@
     minDate,
     small = false,
     highlightMode = "day",
+    highlightToday = true,
+    activeHighlight = "accent",
     onselect,
     oncancel,
   }: {
@@ -21,6 +23,8 @@
     minDate?: string;
     small?: boolean;
     highlightMode?: "day" | "week" | "none";
+    highlightToday?: boolean;
+    activeHighlight?: "accent" | "primary";
     onselect: (dateStr: string, source?: "keyboard" | "pointer") => void;
     oncancel?: (source?: "keyboard" | "pointer") => void;
   } = $props();
@@ -339,6 +343,12 @@
       && day.dateStr <= selectedWeekRange.end;
   }
 
+  function activeDayStyle(): string {
+    return activeHighlight === "primary"
+      ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
+      : "background-color: var(--accent); color: var(--foreground); font-weight: 600;";
+  }
+
   function selectDay(day: DatePickerDay) {
     if (minDate && day.dateStr < minDate) return;
     activeDateStr = day.dateStr;
@@ -395,7 +405,8 @@
   <button bind:this={headerButtonEl}
     onclick={handleHeaderClick}
     onkeydown={handlePickerKeydown}
-    class="rounded-md px-2 py-0.5 text-[0.733333rem] font-medium text-foreground hover:bg-accent">
+    class="rounded-md px-2 py-0.5 text-[0.733333rem] font-medium text-foreground outline-none hover:bg-accent
+      {activeHighlight === 'primary' ? 'focus:bg-primary focus:text-primary-foreground' : 'focus:bg-accent'}">
     {#if pickerMode === "days"}
       {monthLabel}
     {:else if pickerMode === "months"}
@@ -451,10 +462,10 @@
           onclick={() => selectDay(day)}
           class="flex h-6 w-full items-center justify-center rounded-sm {textSize}
             {belowMin ? 'cursor-not-allowed' : 'hover:bg-accent'}"
-          style={day.today
+          style={highlightToday && day.today
             ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
             : dayIsSelected(day)
-              ? "background-color: var(--accent); color: var(--foreground); font-weight: 600;"
+              ? activeDayStyle()
             : dayIsInWeek(day)
               ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
               : belowMin

@@ -1568,7 +1568,13 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-19" onclick={() => { datepickerOpen = false; }}></div>
           <div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
-            <MiniDatePicker selectedDate={startDate} onselect={selectDpDay} oncancel={cancelDpDay} />
+            <MiniDatePicker
+              selectedDate={startDate}
+              highlightToday={false}
+              activeHighlight="primary"
+              onselect={selectDpDay}
+              oncancel={cancelDpDay}
+            />
           </div>
         {/if}
       </div>
@@ -1646,7 +1652,14 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-19" onclick={() => { endDatepickerOpen = false; }}></div>
           <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
-            <MiniDatePicker selectedDate={endDate} minDate={startDate} onselect={selectEdpDay} oncancel={cancelEdpDay} />
+            <MiniDatePicker
+              selectedDate={endDate}
+              minDate={startDate}
+              highlightToday={false}
+              activeHighlight="primary"
+              onselect={selectEdpDay}
+              oncancel={cancelEdpDay}
+            />
           </div>
         {/if}
       </div>
