@@ -37,7 +37,7 @@
   // branch in the content switch below.
   const SECTIONS: SectionMeta[] = [
     { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "calendars", label: "Calendars", icon: CalendarDays },
+    { id: "calendars", label: "Calendar", icon: CalendarDays },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   ];
 
