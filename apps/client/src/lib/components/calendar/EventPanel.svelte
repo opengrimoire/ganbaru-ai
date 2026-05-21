@@ -1379,12 +1379,14 @@
 
   function metadataButtonClass(extra?: string): string {
     return cn(
-      "flex min-w-0 max-w-full items-center justify-center gap-2.5 rounded-none px-3 py-2",
-      "event-panel-on-surface text-foreground",
+      "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-0 py-1.5",
+      "text-foreground",
       extra,
     );
   }
 
+  const METADATA_ICON_SIZE = 11;
+  const METADATA_ICON_CLASS = "shrink-0 translate-y-[0.5px]";
   let scopeFocusIndex = $state(0);
   let metadataFocusIndex = $state(0);
   const metadataItemCount = $derived(showHeavySections ? 3 : 2);
@@ -1695,7 +1697,7 @@
       <!-- Scope selector (recurring events only) -->
       {#if isRecurring}
         <div class="flex min-w-0 items-center justify-start gap-4 rounded-none">
-          <span class="shrink-0 text-[0.866667rem] text-event-panel-input-text">Apply changes to:</span>
+          <span class="shrink-0 text-[0.733333rem] text-event-panel-input-text">Apply changes to:</span>
           {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
             <button
               onclick={() => handleScopeClick(val as RecurringScope)}
@@ -1705,7 +1707,7 @@
               data-roving-index={index}
               tabindex={0}
               disabled={controlsDisabled}
-              class="scope-button rounded-none py-1 text-[0.866667rem]
+              class="scope-button rounded-none py-1 text-[0.733333rem]
                 {scope === val
                   ? 'text-event-panel-input-text'
                   : 'text-event-panel-input-text/45'}"
@@ -1720,12 +1722,7 @@
   <div class="flex flex-col gap-3 px-4 pb-0 pt-1.5">
 
     <!-- All-day / Availability / Visibility -->
-    <div
-      class={cn(
-        "grid w-full gap-1.5 text-[0.8rem]",
-        showHeavySections ? "grid-cols-3" : "grid-cols-2",
-      )}
-    >
+    <div class="flex w-full items-center justify-evenly overflow-hidden rounded-none bg-event-panel-contrast text-[0.733333rem]">
       <!-- All day -->
       <button
         onclick={() => {
@@ -1770,10 +1767,10 @@
         class={metadataButtonClass()}
       >
         {#if allDay}
-          <Calendar1 size={14} class="shrink-0" />
+          <Calendar1 size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
           <span class="translate-y-[1.13px] truncate">All day</span>
         {:else}
-          <Clock4 size={14} class="shrink-0" />
+          <Clock4 size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
           <span class="translate-y-[1.13px] truncate">Timed</span>
         {/if}
       </button>
@@ -1792,9 +1789,9 @@
         title="Show as"
       >
         {#if transparency === "transparent"}
-          <Smile size={14} class="shrink-0" />
+          <Smile size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
         {:else}
-          <OctagonX size={14} class="shrink-0" />
+          <OctagonX size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
         {/if}
         <span class="translate-y-[1.13px] truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
       </button>
@@ -1813,9 +1810,9 @@
           title="Visibility"
         >
           {#if visibility === "public"}
-            <Eye size={14} class="shrink-0" />
+            <Eye size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
           {:else}
-            <Lock size={14} class="shrink-0" />
+            <Lock size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
           {/if}
           <span class="translate-y-[1.13px] truncate">{visibility}</span>
         </button>
@@ -1827,7 +1824,54 @@
   <!-- Feature sections -->
   <div class="shrink-0 flex flex-col gap-1.5 px-4 py-1.5">
 
-      <!-- 1) Meeting -->
+      <!-- 1) Pomodoro -->
+      <PomodoroSection
+        enabled={pomodoroEnabled}
+        bind:preset={pomodoroPreset}
+        bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
+        expanded={openSection === "pomodoro"}
+        ontoggle={() => handleToggle("pomodoro")}
+        onexpand={() => handleExpand("pomodoro")}
+        onchange={emitChange} />
+
+      <!-- 2) Notifications -->
+      <NotificationsSection
+        enabled={notifEnabled}
+        bind:selected={notifSelected}
+        bind:customNotifs
+        expanded={openSection === "notifications"}
+        ontoggle={() => handleToggle("notifications")}
+        onexpand={() => handleExpand("notifications")}
+        onchange={emitChange} />
+
+      <!-- 3) Repeat -->
+      <RecurrenceSection
+        bind:recurrence
+        {startDate}
+        {rdate}
+        expanded={openSection === "repeat"}
+        ontoggle={() => handleToggle("repeat")}
+        onexpand={() => handleExpand("repeat")}
+        onchange={emitChange} />
+
+      <!-- 4) Music -->
+      <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+        <div class="section-header flex items-stretch">
+          <div aria-hidden="true" class="flex w-10 shrink-0 items-center justify-center text-muted-foreground/50">
+            <Music size={14} />
+          </div>
+          <button onclick={() => handleExpand("music")}
+            disabled={controlsDisabled}
+            class="flex flex-1 items-center px-3 py-2 text-left">
+            <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
+          </button>
+        </div>
+        {#if openSection === "music"}
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+        {/if}
+      </div>
+
+      <!-- 5) Meeting -->
       {#if showHeavySections}
         <MeetingSection
           enabled={meetingEnabled}
@@ -1850,53 +1894,6 @@
           onchange={emitChange}
           ondescriptionchange={(html) => { description = html; emitChange(); }} />
       {/if}
-
-      <!-- 2) Pomodoro -->
-      <PomodoroSection
-        enabled={pomodoroEnabled}
-        bind:preset={pomodoroPreset}
-        bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
-        expanded={openSection === "pomodoro"}
-        ontoggle={() => handleToggle("pomodoro")}
-        onexpand={() => handleExpand("pomodoro")}
-        onchange={emitChange} />
-
-      <!-- 3) Notifications -->
-      <NotificationsSection
-        enabled={notifEnabled}
-        bind:selected={notifSelected}
-        bind:customNotifs
-        expanded={openSection === "notifications"}
-        ontoggle={() => handleToggle("notifications")}
-        onexpand={() => handleExpand("notifications")}
-        onchange={emitChange} />
-
-      <!-- 4) Repeat -->
-      <RecurrenceSection
-        bind:recurrence
-        {startDate}
-        {rdate}
-        expanded={openSection === "repeat"}
-        ontoggle={() => handleToggle("repeat")}
-        onexpand={() => handleExpand("repeat")}
-        onchange={emitChange} />
-
-      <!-- 5) Music -->
-      <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="section-header flex items-stretch">
-          <div aria-hidden="true" class="flex w-10 shrink-0 items-center justify-center text-muted-foreground/50">
-            <Music size={14} />
-          </div>
-          <button onclick={() => handleExpand("music")}
-            disabled={controlsDisabled}
-            class="flex flex-1 items-center px-3 py-2 text-left">
-            <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
-          </button>
-        </div>
-        {#if openSection === "music"}
-          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
-        {/if}
-      </div>
   </div>
   </div>
 
@@ -2040,13 +2037,11 @@
     opacity: 1;
   }
 
-  .event-panel-on-surface,
   .event-panel-delete-icon-button {
     background-color: var(--panel-contrast);
     background-image: linear-gradient(rgb(0 0 0 / 3%), rgb(0 0 0 / 3%));
   }
 
-  :global(.dark) .event-panel-on-surface,
   :global(.dark) .event-panel-delete-icon-button {
     background-image: linear-gradient(rgb(0 0 0 / 30%), rgb(0 0 0 / 30%));
   }
@@ -2059,6 +2054,13 @@
   }
 
   :global(html[data-focus-intent="keyboard"]) .panel-root :global(.panel-footer-actions button:focus) {
+    position: relative;
+    z-index: 1;
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+
+  :global(html[data-focus-intent="keyboard"]) .panel-root :global([data-panel-roving="metadata"]:focus) {
     position: relative;
     z-index: 1;
     outline: none;
