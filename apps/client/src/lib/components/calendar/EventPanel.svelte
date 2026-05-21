@@ -1387,6 +1387,11 @@
 
   const METADATA_ICON_SIZE = 11;
   const METADATA_ICON_CLASS = "shrink-0 translate-y-[0.5px]";
+  const SCOPE_OPTIONS: ReadonlyArray<{ value: RecurringScope; label: string }> = [
+    { value: "this", label: "Only this" },
+    { value: "following", label: "Following" },
+    { value: "all", label: "All" },
+  ];
   let scopeFocusIndex = $state(0);
   let metadataFocusIndex = $state(0);
   const metadataItemCount = $derived(showHeavySections ? 3 : 2);
@@ -1538,6 +1543,35 @@
   <div class="event-panel-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
   <!-- Main editor: title + date -->
   <div class="shrink-0 px-4 pt-2.5">
+
+    <!-- Scope selector (recurring events only) -->
+    {#if isRecurring}
+      <div class="mb-2 grid grid-cols-3 overflow-hidden rounded-sm bg-event-panel-contrast p-0.5 text-[0.733333rem]"
+        role="radiogroup"
+        aria-label="Apply changes to">
+        {#each SCOPE_OPTIONS as option, index}
+          <button
+            role="radio"
+            aria-checked={scope === option.value}
+            onclick={() => handleScopeClick(option.value)}
+            onfocus={() => { scopeFocusIndex = index; }}
+            onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, SCOPE_OPTIONS.length)}
+            data-panel-roving="scope"
+            data-roving-index={index}
+            tabindex={scopeFocusIndex === index ? 0 : -1}
+            disabled={controlsDisabled}
+            class={cn(
+              "flex min-w-0 items-center justify-center rounded px-2 py-1.5 text-center",
+              scope === option.value
+                ? "bg-action-confirm text-action-confirm-foreground"
+                : "text-event-panel-input-text/70",
+            )}
+          >
+            <span class="translate-y-[0.5px]">{option.label}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <!-- Title + color circle -->
     <div class="flex items-center gap-2.5 px-1">
@@ -1694,27 +1728,6 @@
       </div>
       </div>
 
-      <!-- Scope selector (recurring events only) -->
-      {#if isRecurring}
-        <div class="flex min-w-0 items-center justify-start gap-4 rounded-none">
-          <span class="shrink-0 text-[0.733333rem] text-event-panel-input-text">Apply changes to:</span>
-          {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
-            <button
-              onclick={() => handleScopeClick(val as RecurringScope)}
-              onfocus={() => { scopeFocusIndex = index; }}
-              onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, 3)}
-              data-panel-roving="scope"
-              data-roving-index={index}
-              tabindex={0}
-              disabled={controlsDisabled}
-              class="scope-button rounded-none py-1 text-[0.733333rem]
-                {scope === val
-                  ? 'text-event-panel-input-text'
-                  : 'text-event-panel-input-text/45'}"
-            >{lbl}</button>
-          {/each}
-        </div>
-      {/if}
     </div>
   </div>
 
@@ -2060,7 +2073,8 @@
     box-shadow: inset 0 0 0 2px var(--ring);
   }
 
-  :global(html[data-focus-intent="keyboard"]) .panel-root :global([data-panel-roving="metadata"]:focus) {
+  :global(html[data-focus-intent="keyboard"]) .panel-root :global([data-panel-roving="metadata"]:focus),
+  :global(html[data-focus-intent="keyboard"]) .panel-root :global([data-panel-roving="scope"]:focus) {
     position: relative;
     z-index: 1;
     outline: none;
