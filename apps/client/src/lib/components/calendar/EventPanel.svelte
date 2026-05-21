@@ -354,6 +354,12 @@
     return formatTimeLabel(canonical || draft, preferences.calendarTimeFormat, "compact");
   }
 
+  function timeInputMirrorValue(target: "start" | "end"): string {
+    const displayValue = timeInputDisplayValue(target);
+    if (displayValue) return displayValue;
+    return preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM";
+  }
+
   function timePickerWidth(isEnd: boolean): string {
     if (preferences.calendarTimeFormat === "24h") return isEnd ? "124px" : "80px";
     return isEnd ? "148px" : "98px";
@@ -1613,39 +1619,47 @@
         class:pointer-events-none={allDay}
         aria-hidden={allDay}
       >
-        <input bind:this={startTimeInput}
-          type="text"
-          data-panel-arrow-nav="true"
-          inputmode={preferences.calendarTimeFormat === "12h" ? "text" : "numeric"}
-          onbeforeinput={handleTimeBeforeInput}
-          oninput={(e) => handleTimeDraftInput(e, "start")}
-          onblur={() => commitTimeInput("start")}
-          onclick={() => handleTimeInputClick("start")}
-          disabled={controlsDisabled || allDay}
-          maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
-          placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
-          class="time-input rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
-            {preferences.calendarTimeFormat === '12h' ? 'w-14 text-[0.8rem]' : 'w-11 text-[0.866667rem]'}
+        <span
+          class="time-input-shell rounded text-center text-event-panel-input-text
+            {preferences.calendarTimeFormat === '12h' ? 'text-[0.8rem]' : 'text-[0.866667rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-          value={timeInputDisplayValue("start")}
-          onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
+          data-value={timeInputMirrorValue("start")}>
+          <input bind:this={startTimeInput}
+            type="text"
+            data-panel-arrow-nav="true"
+            inputmode={preferences.calendarTimeFormat === "12h" ? "text" : "numeric"}
+            onbeforeinput={handleTimeBeforeInput}
+            oninput={(e) => handleTimeDraftInput(e, "start")}
+            onblur={() => commitTimeInput("start")}
+            onclick={() => handleTimeInputClick("start")}
+            disabled={controlsDisabled || allDay}
+            maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
+            placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
+            class="time-input bg-transparent px-0 py-0.5 text-center outline-none"
+            value={timeInputDisplayValue("start")}
+            onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
+        </span>
         <span class="text-muted-foreground/60">-</span>
-        <input bind:this={endTimeInput}
-          type="text"
-          data-panel-arrow-nav="true"
-          inputmode={preferences.calendarTimeFormat === "12h" ? "text" : "numeric"}
-          onbeforeinput={handleTimeBeforeInput}
-          oninput={(e) => handleTimeDraftInput(e, "end")}
-          onblur={() => commitTimeInput("end")}
-          onclick={() => handleTimeInputClick("end")}
-          disabled={controlsDisabled || allDay}
-          maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
-          placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
-          class="time-input rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
-            {preferences.calendarTimeFormat === '12h' ? 'w-14 text-[0.8rem]' : 'w-11 text-[0.866667rem]'}
+        <span
+          class="time-input-shell rounded text-center text-event-panel-input-text
+            {preferences.calendarTimeFormat === '12h' ? 'text-[0.8rem]' : 'text-[0.866667rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
-          value={timeInputDisplayValue("end")}
-          onkeydown={(e) => handleTimeInputKeydown(e, "end")} />
+          data-value={timeInputMirrorValue("end")}>
+          <input bind:this={endTimeInput}
+            type="text"
+            data-panel-arrow-nav="true"
+            inputmode={preferences.calendarTimeFormat === "12h" ? "text" : "numeric"}
+            onbeforeinput={handleTimeBeforeInput}
+            oninput={(e) => handleTimeDraftInput(e, "end")}
+            onblur={() => commitTimeInput("end")}
+            onclick={() => handleTimeInputClick("end")}
+            disabled={controlsDisabled || allDay}
+            maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
+            placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
+            class="time-input bg-transparent px-0 py-0.5 text-center outline-none"
+            value={timeInputDisplayValue("end")}
+            onkeydown={(e) => handleTimeInputKeydown(e, "end")} />
+        </span>
 
         <!-- Floating time picker -->
         {#if timePickerTarget}
@@ -1981,6 +1995,32 @@
 
   .time-input::placeholder {
     font-size: 0.68rem;
+  }
+
+  .time-input-shell {
+    position: relative;
+    display: inline-block;
+  }
+
+  .time-input-shell::after {
+    content: attr(data-value);
+    display: block;
+    font: inherit;
+    letter-spacing: inherit;
+    padding-block: 0.125rem;
+    visibility: hidden;
+    white-space: pre;
+    pointer-events: none;
+  }
+
+  .time-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
   }
 
   .title-wrapper::after {
