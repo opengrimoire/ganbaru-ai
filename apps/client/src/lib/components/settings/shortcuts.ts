@@ -27,6 +27,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = Object.freeze([
       { keys: ["Mod + Shift + L"], action: "Toggle light/dark mode" },
       { keys: ["Mod + Shift + T"], action: "Open theme picker" },
       { keys: ["Mod + Shift + D"], action: "Toggle diagnostics panel" },
+      { keys: ["Mod + Shift + W"], action: "Close app" },
       { keys: ["F1"], action: "Open shortcuts" },
     ],
   },

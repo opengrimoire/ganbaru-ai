@@ -29,6 +29,10 @@
   import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
   import type { SectionId } from "$lib/components/settings/types";
   import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
+  import {
+    recordResetShortcutPress,
+    type ResetShortcutSequenceState,
+  } from "$lib/components/titlebar-shortcuts";
 
   let {
     shellStartupMs = null,
@@ -190,10 +194,12 @@
   }
 
   async function handleClose() {
+    if (showResetSequenceConfirm || showResetConfirm) return;
     if (await benchmarkBlocksClose()) {
       void ensureBenchmarkOverlay();
       return;
     }
+    if (showResetSequenceConfirm || showResetConfirm) return;
     showCloseConfirm = true;
   }
 
@@ -258,7 +264,10 @@
   const POMODORO_RING_STROKE_WIDTH = 2.15;
   const RESET_SHORTCUT_REQUIRED_PRESSES = 10;
   const RESET_SHORTCUT_WINDOW_MS = 8_000;
-  let resetShortcutPresses = 0;
+  let resetShortcutSequence = $state<ResetShortcutSequenceState>({
+    pressCount: 0,
+    lastPressAtMs: null,
+  });
   let resetShortcutTimer: ReturnType<typeof setTimeout> | undefined;
 
   const autoCompactTabs = $derived(
@@ -289,28 +298,39 @@
   }
 
   function clearResetShortcutSequence() {
-    resetShortcutPresses = 0;
+    resetShortcutSequence = { pressCount: 0, lastPressAtMs: null };
     if (resetShortcutTimer) clearTimeout(resetShortcutTimer);
     resetShortcutTimer = undefined;
   }
 
-  function registerResetShortcutPress() {
+  function registerResetShortcutPress(): boolean {
     if (lockedByBenchmark) {
       void ensureBenchmarkOverlay();
-      return;
+      return false;
     }
-    if (lockedByThemeEditor) return;
+    if (lockedByThemeEditor) return false;
     if (resetShortcutTimer) clearTimeout(resetShortcutTimer);
-    resetShortcutPresses += 1;
-    if (resetShortcutPresses >= RESET_SHORTCUT_REQUIRED_PRESSES) {
+    const result = recordResetShortcutPress(
+      resetShortcutSequence,
+      performance.now(),
+      {
+        requiredPresses: RESET_SHORTCUT_REQUIRED_PRESSES,
+        maxGapMs: RESET_SHORTCUT_WINDOW_MS,
+      },
+    );
+    resetShortcutSequence = result.state;
+    if (result.resetTriggered) {
       clearResetShortcutSequence();
+      showCloseConfirm = false;
+      showResetConfirm = false;
       showResetSequenceConfirm = true;
-      return;
+      return true;
     }
     resetShortcutTimer = setTimeout(
       clearResetShortcutSequence,
       RESET_SHORTCUT_WINDOW_MS,
     );
+    return false;
   }
 
   $effect(() => {
@@ -392,8 +412,12 @@
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (!e.repeat && !isEditableKeyboardTarget(e.target)) {
-          registerResetShortcutPress();
+        const resetTriggered =
+          !e.repeat
+          && !isEditableKeyboardTarget(e.target)
+          && registerResetShortcutPress();
+        if (!resetTriggered) {
+          void handleClose();
         }
         return;
       }

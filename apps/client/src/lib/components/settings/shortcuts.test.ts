@@ -41,6 +41,7 @@ describe("shortcut search", () => {
       "Toggle light/dark mode",
       "Open theme picker",
       "Toggle diagnostics panel",
+      "Close app",
       "Open shortcuts",
     ]);
   });
@@ -82,6 +83,7 @@ describe("shortcut search", () => {
       "Open theme picker",
       "Toggle diagnostics panel",
       "Previous view",
+      "Close app",
     ]);
     expect(matchingActions("ctrl sh")).toEqual(ctrlShiftActions);
     expect(matchingActions("ctrl + sh")).toEqual(ctrlShiftActions);
