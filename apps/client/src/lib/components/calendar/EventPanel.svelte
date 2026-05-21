@@ -1703,7 +1703,7 @@
               onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, 3)}
               data-panel-roving="scope"
               data-roving-index={index}
-              tabindex={scopeFocusIndex === index ? 0 : -1}
+              tabindex={0}
               disabled={controlsDisabled}
               class="scope-button rounded-none py-1 text-[0.866667rem]
                 {scope === val
