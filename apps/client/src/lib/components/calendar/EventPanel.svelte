@@ -1535,7 +1535,7 @@
 
   <div class="event-panel-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
   <!-- Main editor: title + date -->
-  <div class="shrink-0 flex flex-col gap-2.5 px-4 pt-2.5">
+  <div class="shrink-0 px-4 pt-2.5">
 
     <!-- Title + color circle -->
     <div class="flex items-center gap-2.5 px-1">
@@ -1555,13 +1555,14 @@
         <ColorPicker {color} theme={theme.current} onselect={(c) => { color = c; emitChange(); }} />
       {/if}
     </div>
-    <hr class="border-event-panel-divider -mt-2 mx-1" />
+    <hr class="border-event-panel-divider mx-1 mt-0.5" />
 
-    <!-- Date + time -->
-    <div
-      class="date-time-grid relative -mt-1 px-1 text-[0.866667rem] leading-none"
-      data-stacked={stackedDateTime || undefined}
-    >
+    <div class="mt-1.5 flex flex-col gap-px px-1">
+      <!-- Date + time -->
+      <div
+        class="date-time-grid relative text-[0.866667rem] leading-none"
+        data-stacked={stackedDateTime || undefined}
+      >
       <!-- Start date -->
       <div class="relative z-1 min-w-0 justify-self-start">
         <button bind:this={startDateButton}
@@ -1689,29 +1690,30 @@
           </div>
         {/if}
       </div>
-    </div>
-
-    <!-- Scope selector (recurring events only) -->
-    {#if isRecurring}
-      <div class="-mt-2 flex min-w-0 items-center justify-start gap-4 rounded-none px-1">
-        <span class="shrink-0 text-[0.866667rem] text-foreground">Apply changes to:</span>
-        {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
-          <button
-            onclick={() => handleScopeClick(val as RecurringScope)}
-            onfocus={() => { scopeFocusIndex = index; }}
-            onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, 3)}
-            data-panel-roving="scope"
-            data-roving-index={index}
-            tabindex={scopeFocusIndex === index ? 0 : -1}
-            disabled={controlsDisabled}
-            class="scope-button rounded-none py-1 text-[0.866667rem]
-              {scope === val
-                ? 'text-foreground'
-                : 'text-foreground/45'}"
-          >{lbl}</button>
-        {/each}
       </div>
-    {/if}
+
+      <!-- Scope selector (recurring events only) -->
+      {#if isRecurring}
+        <div class="flex min-w-0 items-center justify-start gap-4 rounded-none">
+          <span class="shrink-0 text-[0.866667rem] text-foreground">Apply changes to:</span>
+          {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
+            <button
+              onclick={() => handleScopeClick(val as RecurringScope)}
+              onfocus={() => { scopeFocusIndex = index; }}
+              onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, 3)}
+              data-panel-roving="scope"
+              data-roving-index={index}
+              tabindex={scopeFocusIndex === index ? 0 : -1}
+              disabled={controlsDisabled}
+              class="scope-button rounded-none py-1 text-[0.866667rem]
+                {scope === val
+                  ? 'text-foreground'
+                  : 'text-foreground/45'}"
+            >{lbl}</button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
 
   <!-- Metadata strip -->
@@ -1721,7 +1723,6 @@
     <div
       class={cn(
         "grid w-full gap-1.5 text-[0.8rem]",
-        isRecurring ? "" : "-mt-1",
         showHeavySections ? "grid-cols-3" : "grid-cols-2",
       )}
     >
