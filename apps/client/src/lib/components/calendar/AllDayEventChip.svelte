@@ -6,6 +6,7 @@
     getPastEventColor,
     isEventSurfaceCancelled,
   } from "./utils";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import { getEventIndicatorState } from "./event-indicators";
   import Repeat from "@lucide/svelte/icons/repeat";
@@ -37,12 +38,15 @@
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
+  const preferences = getPreferences();
   const isDark = $derived(isThemeCalendarDark(theme));
   const indicators = $derived(getEventIndicatorState(event));
   const hasIcons = $derived(indicators.iconCount > 0);
   const isCancelled = $derived(isEventSurfaceCancelled(event));
 
-  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const usePastColors = $derived(
+    preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
+  );
   const statusPatternClass = $derived(getEventStatusPatternClass(event));
   const activeColors = $derived(
     usePastColors

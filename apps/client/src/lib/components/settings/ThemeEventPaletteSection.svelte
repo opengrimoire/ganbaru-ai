@@ -71,8 +71,8 @@
       Event palette
     </h2>
     <div class="text-[0.733333rem] text-muted-foreground">
-      32 color slots, each one has a faded variant for past events, blended
-      toward Calendar background
+      32 color slots, each one has a faded variant for optional past-event
+      dimming, blended toward Calendar background
     </div>
   </header>
   <div

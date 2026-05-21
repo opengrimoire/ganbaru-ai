@@ -12,6 +12,7 @@
     formatDayName,
     formatDatePart,
   } from "./utils";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import type { Theme } from "$lib/stores/themes";
   import { resolveAppTokens, resolveCalendarTokens } from "$lib/stores/themes";
   import { dayNumberShade } from "$lib/components/ui/colorMath";
@@ -33,6 +34,8 @@
     onEventPrefetch?: (event: CalendarEvent) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
   } = $props();
+
+  const preferences = getPreferences();
 
   /** Stable empty fallback for days with no events. */
   const EMPTY_DAY: CalendarEvent[] = [];
@@ -178,7 +181,7 @@
             </span>
 
             {#each dayEvts.slice(0, maxVisible) as evt}
-              {@const evtColors = past
+              {@const evtColors = preferences.calendarDimPastEvents && past
                 ? getPastEventColor(evt.color, theme)
                 : !inMonth
                   ? getOutsideMonthEventColor(evt.color, theme)

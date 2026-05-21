@@ -5,8 +5,8 @@
  *
  * Date arithmetic runs on `Temporal.PlainDate` (zone-free) so day-counting
  * never drifts across DST transitions, and the wall-clock time-of-day
- * (`HH:MM`) is reattached verbatim. That keeps "9 AM daily" anchored to
- * 9 AM through spring-forward and fall-back: the UTC instant shifts, but
+ * (`HH:MM`) is reattached verbatim. That keeps "9 am daily" anchored to
+ * 9 am through spring-forward and fall-back: the UTC instant shifts, but
  * the stored wall clock in the home zone does not.
  */
 

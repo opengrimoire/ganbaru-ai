@@ -15,6 +15,7 @@
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import { formatShortcut, hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
@@ -25,6 +26,7 @@
     restoreTimeDraft,
     sanitizeTimeDraftInput,
   } from "./event-panel-utils";
+  import { formatTimeLabel } from "./utils";
   import {
     EVENT_PANEL_EDGE_MARGIN,
     EVENT_PANEL_MAX_WIDTH,
@@ -45,6 +47,7 @@
 
 
   const theme = getTheme();
+  const preferences = getPreferences();
   const viewport = getViewport();
 
   const PANEL_MAX_WIDTH = EVENT_PANEL_MAX_WIDTH;
@@ -339,6 +342,18 @@
 
   function isTimeInputEditing(target: "start" | "end"): boolean {
     return timeInputEditTarget === target;
+  }
+
+  function timeInputDisplayValue(target: "start" | "end"): string {
+    const draft = target === "start" ? startTimeDraft : endTimeDraft;
+    const canonical = target === "start" ? startTime : endTime;
+    if (isTimeInputEditing(target) || isTimeDraftEdited(target)) return draft;
+    return formatTimeLabel(canonical || draft, preferences.calendarTimeFormat, "compact");
+  }
+
+  function timePickerWidth(isEnd: boolean): string {
+    if (preferences.calendarTimeFormat === "24h") return isEnd ? "115px" : "72px";
+    return isEnd ? "136px" : "90px";
   }
 
   function enterTimeInputEditMode(target: "start" | "end") {
@@ -1587,7 +1602,7 @@
         aria-hidden={allDay}
       >
         <input bind:this={startTimeInput}
-          type="text" value={startTimeDraft}
+          type="text"
           data-panel-arrow-nav="true"
           inputmode="numeric"
           onbeforeinput={handleTimeBeforeInput}
@@ -1596,12 +1611,14 @@
           onclick={() => handleTimeInputClick("start")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
-          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
+          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
+            {preferences.calendarTimeFormat === '12h' && !isTimeInputEditing('start') && !startTimeDraftEdited ? 'text-[0.733333rem]' : 'text-[0.8rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+          value={timeInputDisplayValue("start")}
           onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
         <span class="text-muted-foreground/60">-</span>
         <input bind:this={endTimeInput}
-          type="text" value={endTimeDraft}
+          type="text"
           data-panel-arrow-nav="true"
           inputmode="numeric"
           onbeforeinput={handleTimeBeforeInput}
@@ -1610,8 +1627,10 @@
           onclick={() => handleTimeInputClick("end")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
-          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
+          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
+            {preferences.calendarTimeFormat === '12h' && !isTimeInputEditing('end') && !endTimeDraftEdited ? 'text-[0.733333rem]' : 'text-[0.8rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+          value={timeInputDisplayValue("end")}
           onkeydown={(e) => handleTimeInputKeydown(e, "end")} />
 
         <!-- Floating time picker -->
@@ -1622,7 +1641,7 @@
           {@const isEnd = timePickerTarget === 'end'}
           {@const startMins = (() => { const [h, m] = (startTime || "0:0").split(":").map(Number); return h * 60 + m; })()}
           <div class="absolute top-full z-20 mt-1 rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
-            style="left: {isEnd ? '50%' : '0'}; width: {isEnd ? '115px' : '72px'};">
+            style="left: {isEnd ? '50%' : '0'}; width: {timePickerWidth(isEnd)};">
             <TimePicker
               currentTime={isEnd ? endTime : startTime}
               {isEnd}

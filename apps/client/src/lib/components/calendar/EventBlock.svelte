@@ -4,9 +4,11 @@
     getEventColor,
     getEventStatusPatternClass,
     getPastEventColor,
+    formatTimeRange,
     isEventSurfaceCancelled,
   } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import { getEventIndicatorState } from "./event-indicators";
   import Repeat from "@lucide/svelte/icons/repeat";
@@ -15,6 +17,7 @@
   import Users from "@lucide/svelte/icons/users";
 
   const calZoom = getCalendarZoom();
+  const preferences = getPreferences();
 
   let {
     positioned,
@@ -47,14 +50,22 @@
   // Events with IDs starting with __ are temporary (preview/pending) and should never animate
   const isTemporaryEvent = $derived(positioned.event.id.startsWith("__"));
 
-  const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
-  const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
+  const timeRange = $derived(
+    formatTimeRange(
+      positioned.event.start.split(" ")[1] ?? "",
+      positioned.event.end.split(" ")[1] ?? "",
+      preferences.calendarTimeFormat,
+      "compact",
+    ),
+  );
   const indicators = $derived(getEventIndicatorState(positioned.event));
   const hasIcons = $derived(indicators.iconCount > 0);
   const isCancelled = $derived(isEventSurfaceCancelled(positioned.event));
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
-  const usePastColors = $derived(isPast && !editing && !preview && !grabbing);
+  const usePastColors = $derived(
+    preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
+  );
   const statusPatternClass = $derived(getEventStatusPatternClass(positioned.event));
   const activeColors = $derived(
     usePastColors
@@ -98,7 +109,7 @@
   data-event-id={positioned.event.id}
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
-  title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
+  title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${timeRange}` : undefined}
   class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
@@ -148,7 +159,7 @@
     >
       {#if positioned.event.title}{positioned.event.title}{:else}(No title){/if}
     </div>
-    <div class="event-time truncate" style="color: {timeColor};">{startTime} - {endTime}</div>
+    <div class="event-time truncate" style="color: {timeColor};">{timeRange}</div>
     {#if positioned.event.location}
       <div class="event-location truncate text-[0.666667rem]" style="color: {locationColor};">{positioned.event.location}</div>
     {/if}

@@ -5,10 +5,13 @@ import {
   FONT_SCALE_MIN,
   FONT_SCALE_MAX,
   DEFAULT_FONT_SCALE,
+  DEFAULT_CALENDAR_DIM_PAST_EVENTS,
+  DEFAULT_CALENDAR_TIME_FORMAT,
   DEFAULT_TITLE_BAR_VISIBILITY,
   TITLE_BAR_CONTROL_IDS,
   clampFontScale,
   getFontFamilyById,
+  isCalendarTimeFormat,
   isTitleBarControlId,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
@@ -111,6 +114,21 @@ describe("resolveFontFamilyStack", () => {
     );
     expect(resolveFontFamilyStack(null)).toBe(defaultOption!.cssStack);
     expect(resolveFontFamilyStack(undefined)).toBe(defaultOption!.cssStack);
+  });
+});
+
+describe("calendar appearance preferences", () => {
+  it("defaults to 24-hour time and normal past event colors", () => {
+    expect(DEFAULT_CALENDAR_TIME_FORMAT).toBe("24h");
+    expect(DEFAULT_CALENDAR_DIM_PAST_EVENTS).toBe(false);
+  });
+
+  it("accepts supported calendar time formats only", () => {
+    expect(isCalendarTimeFormat("24h")).toBe(true);
+    expect(isCalendarTimeFormat("12h")).toBe(true);
+    expect(isCalendarTimeFormat("24-hour")).toBe(false);
+    expect(isCalendarTimeFormat(true)).toBe(false);
+    expect(isCalendarTimeFormat(undefined)).toBe(false);
   });
 });
 

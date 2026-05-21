@@ -1,7 +1,8 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { moveRovingIndex } from "./event-panel-utils";
-  import { createSmoothScroll } from "./utils";
+  import { createSmoothScroll, formatTimeLabel } from "./utils";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
 
   export interface TimePickerInputNavigation {
     key: "ArrowUp" | "ArrowDown";
@@ -27,6 +28,8 @@
     oncancel?: (source?: "keyboard" | "pointer") => void;
     ontypedigit?: (digit: string) => void;
   } = $props();
+
+  const preferences = getPreferences();
 
   const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
     const h = Math.floor(i / 2);
@@ -183,7 +186,7 @@
       class="flex w-full items-center px-2 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-black/5 focus-visible:bg-black/5 dark:hover:bg-black/15 dark:focus-visible:bg-black/15
         {selected ? 'bg-accent' : active ? 'bg-black/5 dark:bg-black/15' : ''}"
       style="font-weight: {active || isNow ? 600 : selected ? 500 : 400}; color: {active || isNow || selected ? 'var(--foreground)' : 'var(--muted-foreground)'};">
-      <span>{slot}</span>
+      <span>{formatTimeLabel(slot, preferences.calendarTimeFormat)}</span>
       {#if durLabel}
         <span class="ml-1.5 text-[0.666667rem]" style="color: var(--muted-foreground); font-weight: 400;">({durLabel})</span>
       {/if}

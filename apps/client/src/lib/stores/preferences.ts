@@ -67,6 +67,11 @@ export const FONT_SCALE_LEVELS: readonly number[] = Object.freeze(
   ),
 );
 
+export type CalendarTimeFormat = "24h" | "12h";
+
+export const DEFAULT_CALENDAR_TIME_FORMAT: CalendarTimeFormat = "24h";
+export const DEFAULT_CALENDAR_DIM_PAST_EVENTS = false;
+
 export const TITLE_BAR_CONTROL_IDS = [
   "pomodoro",
   "music",
@@ -125,6 +130,10 @@ export function resolveFontFamilyStack(id: FontFamilyId | undefined | null): str
 export function isTitleBarControlId(value: unknown): value is TitleBarControlId {
   return typeof value === "string"
     && TITLE_BAR_CONTROL_IDS.includes(value as TitleBarControlId);
+}
+
+export function isCalendarTimeFormat(value: unknown): value is CalendarTimeFormat {
+  return value === "24h" || value === "12h";
 }
 
 /**

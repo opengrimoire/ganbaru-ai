@@ -7,11 +7,13 @@
     getCalendarZoom,
   } from "$lib/stores/calendarZoom.svelte";
   import {
+    DEFAULT_CALENDAR_TIME_FORMAT,
     DEFAULT_FONT_SCALE,
     DEFAULT_FONT_FAMILY_ID,
     FONT_SCALE_LEVELS,
   } from "$lib/stores/preferences";
   import CustomSelect from "./CustomSelect.svelte";
+  import ToggleSetting from "./ToggleSetting.svelte";
   import ThemeList from "./ThemeList.svelte";
 
   const preferences = getPreferences();
@@ -46,6 +48,11 @@
     const percent = Math.round(level * 100);
     return { value: percentString(percent), label: `${percent}%` };
   });
+
+  const timeFormatOptions: readonly SelectOption[] = [
+    { value: "24h", label: "24-hour" },
+    { value: "12h", label: "12-hour (am/pm)" },
+  ];
 
   const calendarZoomOptions: readonly SelectOption[] = CALENDAR_ZOOM_PERCENT_LEVELS.map(
     (percent) => ({
@@ -99,15 +106,6 @@
         canReset={!zoom.isDefault}
         onReset={() => zoom.reset()}
       />
-      <CustomSelect
-        label="Calendar zoom (5min / 10min / 15min / 30min)"
-        descriptionShortcuts={["Shift + +", "Shift + -", "Shift + 0"]}
-        value={percentString(calZoom.zoomPercent)}
-        options={calendarZoomOptions}
-        onChange={handleCalendarZoomChange}
-        canReset={!calZoom.isDefault}
-        onReset={() => calZoom.reset()}
-      />
     </div>
   </section>
 
@@ -133,6 +131,40 @@
         onChange={handleFontScaleChange}
         canReset={preferences.fontScale !== DEFAULT_FONT_SCALE}
         onReset={() => preferences.resetFontScale()}
+      />
+    </div>
+  </section>
+
+  <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Calendar</h2>
+    <div class="flex flex-col gap-3">
+      <CustomSelect
+        label="Calendar zoom (5min / 10min / 15min / 30min)"
+        descriptionShortcuts={["Shift + +", "Shift + -", "Shift + 0"]}
+        value={percentString(calZoom.zoomPercent)}
+        options={calendarZoomOptions}
+        onChange={handleCalendarZoomChange}
+        canReset={!calZoom.isDefault}
+        onReset={() => calZoom.reset()}
+      />
+      <CustomSelect
+        label="Time format"
+        description="Changes calendar labels only. Event times stay stored as 24-hour values."
+        value={preferences.calendarTimeFormat}
+        options={timeFormatOptions}
+        onChange={(value) => {
+          if (value === "24h" || value === "12h") preferences.setCalendarTimeFormat(value);
+        }}
+        canReset={preferences.calendarTimeFormat !== DEFAULT_CALENDAR_TIME_FORMAT}
+        onReset={() => preferences.resetCalendarTimeFormat()}
+      />
+      <ToggleSetting
+        label="Dim past event colors"
+        description="Use faded event colors for past events"
+        checked={preferences.calendarDimPastEvents}
+        onChange={(checked) => preferences.setCalendarDimPastEvents(checked)}
       />
     </div>
   </section>

@@ -12,6 +12,10 @@ import {
   type SmoothScrollFn,
 } from "./timeline-scroll";
 import { blendHex } from "$lib/components/ui/colorMath";
+import {
+  DEFAULT_CALENDAR_TIME_FORMAT,
+  type CalendarTimeFormat,
+} from "$lib/stores/preferences";
 
 export { blendHex };
 
@@ -56,7 +60,7 @@ export function isUtcIso(value: string): boolean {
  * Convert a wall clock string ("YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS")
  * interpreted in `zone` to a UTC ISO 8601 instant ending in Z. DST ambiguity
  * resolves with `disambiguation: "compatible"`: in fall-back ambiguity (the
- * 1:30 AM that happens twice) pick the earlier instant; in spring-forward
+ * 1:30 am that happens twice) pick the earlier instant; in spring-forward
  * gaps shift forward by the gap. Matches RFC 5545 conventions.
  */
 export function wallClockToUtcIso(wallClock: string, zone: string): string {
@@ -265,8 +269,66 @@ export function durationMinutes(start: string, end: string): number {
   return Math.max(0, (e.getTime() - s.getTime()) / 60000);
 }
 
-export function formatHour(hour: number): string {
-  return `${String(hour).padStart(2, "0")}:00`;
+function parseClockTime(value: string): { hour: number; minute: number } | undefined {
+  const timePart = value.includes(" ") ? value.split(" ")[1] : value;
+  const match = timePart.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return undefined;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return undefined;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return undefined;
+  return { hour, minute };
+}
+
+export function formatTimeLabel(
+  value: string,
+  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
+  variant: "short" | "compact" = "short",
+): string {
+  const parsed = parseClockTime(value);
+  if (!parsed) return value;
+
+  if (timeFormat === "24h") {
+    return `${String(parsed.hour).padStart(2, "0")}:${String(parsed.minute).padStart(2, "0")}`;
+  }
+
+  const period = parsed.hour < 12 ? "am" : "pm";
+  const displayHour = parsed.hour % 12 === 0 ? 12 : parsed.hour % 12;
+  const minute = String(parsed.minute).padStart(2, "0");
+  if (variant === "compact") {
+    if (parsed.minute === 0) return `${displayHour}${period}`;
+    return `${displayHour}:${minute}${period}`;
+  }
+  if (parsed.minute === 0) return `${displayHour} ${period}`;
+  return `${displayHour}:${minute} ${period}`;
+}
+
+export function formatTimeRange(
+  start: string,
+  end: string,
+  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
+  variant: "short" | "compact" = "short",
+): string {
+  const startLabel = formatTimeLabel(start, timeFormat, variant);
+  const endLabel = formatTimeLabel(end, timeFormat, variant);
+  if (timeFormat !== "12h" || variant !== "compact") return `${startLabel} - ${endLabel}`;
+
+  const startTime = parseClockTime(start);
+  const endTime = parseClockTime(end);
+  if (!startTime || !endTime) return `${startLabel} - ${endLabel}`;
+
+  const startPeriod = startTime.hour < 12 ? "am" : "pm";
+  const endPeriod = endTime.hour < 12 ? "am" : "pm";
+  if (startPeriod !== endPeriod) return `${startLabel} - ${endLabel}`;
+
+  return `${startLabel.slice(0, -startPeriod.length)} - ${endLabel}`;
+}
+
+export function formatHour(
+  hour: number,
+  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
+): string {
+  return formatTimeLabel(`${String(hour).padStart(2, "0")}:00`, timeFormat);
 }
 
 export function formatMonthYear(date: Date): string {
@@ -303,15 +365,20 @@ export function getHourInTimezone(
   baseDate: Date,
   hour: number,
   tz: string,
+  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
+  variant: "short" | "compact" = "short",
 ): string {
   const d = new Date(baseDate);
   d.setHours(hour, 0, 0, 0);
-  return new Intl.DateTimeFormat("en-US", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-  }).format(d);
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const timeHour = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return formatTimeLabel(`${timeHour === "24" ? "00" : timeHour}:${minute}`, timeFormat, variant);
 }
 
 export function getTimezoneOffset(tz: string, date?: Date): string {

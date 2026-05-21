@@ -8,6 +8,7 @@
     snapToGrid,
     clampMinute,
     getEventColor,
+    formatTimeRange,
   } from "./utils";
   import { computeDayTimelineBands } from "$lib/utils/pomodoro-segments";
   import { PENDING_CREATE_ID } from "./display-events";
@@ -18,6 +19,7 @@
   import EventBlock from "./EventBlock.svelte";
   import { getEventIndicatorState } from "./event-indicators";
   import { CALENDAR_ZOOM_FRAME_EVENT, getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Video from "@lucide/svelte/icons/video";
@@ -71,6 +73,7 @@
   } = $props();
 
   const isDark = $derived(isThemeCalendarDark(theme));
+  const preferences = getPreferences();
 
   const TIMED_RENDER_BUFFER_MINUTES = 1440;
   const panelOpen = $derived(!!editingId);
@@ -708,7 +711,7 @@
         {#if dragH > 32}
           {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
           {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
-          <div class="truncate" style="color: {dragTimeColor};">{st} - {et}</div>
+          <div class="truncate" style="color: {dragTimeColor};">{formatTimeRange(st, et, preferences.calendarTimeFormat, "compact")}</div>
         {/if}
         {#if dragH > 48 && dragPreview.event.location}
           <div class="truncate text-[0.666667rem]" style="color: {dragLocationColor};">{dragPreview.event.location}</div>
@@ -744,7 +747,7 @@
         {#if createH > 32}
           {@const st = createPreview.event.start.split(" ")[1] ?? ""}
           {@const et = createPreview.event.end.split(" ")[1] ?? ""}
-          <div class="truncate" style="color: {createTimeColor};">{st} - {et}</div>
+          <div class="truncate" style="color: {createTimeColor};">{formatTimeRange(st, et, preferences.calendarTimeFormat, "compact")}</div>
         {/if}
       </div>
     </div>

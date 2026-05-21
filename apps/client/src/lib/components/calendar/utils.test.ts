@@ -20,6 +20,9 @@ import {
   effectiveMinuteRange,
   minuteOffsetToDateStr,
   formatHour,
+  formatTimeLabel,
+  formatTimeRange,
+  getHourInTimezone,
   isValidCalendarTime,
   sanitizeCalendarTime,
   normalizeEventColor,
@@ -249,6 +252,49 @@ describe("formatHour", () => {
     expect(formatHour(0)).toBe("00:00");
     expect(formatHour(9)).toBe("09:00");
     expect(formatHour(14)).toBe("14:00");
+  });
+
+  it("formats hour labels in 12-hour time", () => {
+    expect(formatHour(0, "12h")).toBe("12 am");
+    expect(formatHour(12, "12h")).toBe("12 pm");
+    expect(formatHour(14, "12h")).toBe("2 pm");
+  });
+});
+
+describe("formatTimeLabel", () => {
+  it("keeps 24-hour labels canonical", () => {
+    expect(formatTimeLabel("9:05", "24h")).toBe("09:05");
+    expect(formatTimeLabel("2026-05-21 16:30", "24h")).toBe("16:30");
+  });
+
+  it("formats 12-hour labels with meridiem", () => {
+    expect(formatTimeLabel("00:00", "12h")).toBe("12 am");
+    expect(formatTimeLabel("09:30", "12h")).toBe("9:30 am");
+    expect(formatTimeLabel("16:45", "12h")).toBe("4:45 pm");
+  });
+
+  it("supports compact meridiem for narrow controls", () => {
+    expect(formatTimeLabel("00:00", "12h", "compact")).toBe("12am");
+    expect(formatTimeLabel("16:45", "12h", "compact")).toBe("4:45pm");
+  });
+
+  it("formats time ranges", () => {
+    expect(formatTimeRange("09:00", "17:30", "12h")).toBe("9 am - 5:30 pm");
+    expect(formatTimeRange("07:00", "09:30", "12h", "compact")).toBe("7 - 9:30am");
+    expect(formatTimeRange("09:30", "12:30", "12h", "compact")).toBe("9:30am - 12:30pm");
+    expect(formatTimeRange("13:00", "17:30", "12h", "compact")).toBe("1 - 5:30pm");
+  });
+
+  it("leaves malformed labels unchanged", () => {
+    expect(formatTimeLabel("bad", "12h")).toBe("bad");
+    expect(formatTimeLabel("24:00", "12h")).toBe("24:00");
+  });
+});
+
+describe("getHourInTimezone", () => {
+  it("uses the selected calendar time format", () => {
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(getHourInTimezone(new Date(2026, 4, 21), 13, localTz, "12h")).toBe("1 pm");
   });
 });
 
