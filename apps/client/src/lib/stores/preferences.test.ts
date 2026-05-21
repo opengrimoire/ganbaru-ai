@@ -118,9 +118,9 @@ describe("resolveFontFamilyStack", () => {
 });
 
 describe("calendar appearance preferences", () => {
-  it("defaults to 24-hour time and normal past event colors", () => {
+  it("defaults to 24-hour time and dimmed past event colors", () => {
     expect(DEFAULT_CALENDAR_TIME_FORMAT).toBe("24h");
-    expect(DEFAULT_CALENDAR_DIM_PAST_EVENTS).toBe(false);
+    expect(DEFAULT_CALENDAR_DIM_PAST_EVENTS).toBe(true);
   });
 
   it("accepts supported calendar time formats only", () => {

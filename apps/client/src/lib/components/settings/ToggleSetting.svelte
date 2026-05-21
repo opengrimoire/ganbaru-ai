@@ -28,7 +28,7 @@
     aria-label={label}
     onclick={() => onChange(!checked)}
     class={cn(
-      "relative h-6 w-10 shrink-0 rounded-full border transition-colors",
+      "inline-flex h-6 w-10 shrink-0 items-center rounded-full border p-0.5 transition-colors",
       checked
         ? "border-primary bg-primary"
         : "border-border bg-secondary",
@@ -36,8 +36,8 @@
   >
     <span
       class={cn(
-        "absolute top-0.5 h-4.5 w-4.5 rounded-full bg-background shadow-sm transition-transform",
-        checked ? "translate-x-4.5" : "translate-x-0.5",
+        "block h-4.5 w-4.5 rounded-full bg-background shadow-sm transition-transform",
+        checked ? "translate-x-4.5" : "translate-x-0",
       )}
     ></span>
   </button>

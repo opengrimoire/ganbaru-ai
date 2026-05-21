@@ -27,6 +27,20 @@ describe("normalizeTimeDraft", () => {
     expect(normalizeTimeDraft("2360")).toBeNull();
     expect(normalizeTimeDraft("nope")).toBeNull();
   });
+
+  it("normalizes 12-hour drafts with explicit meridiem", () => {
+    expect(normalizeTimeDraft("7am", "12h", "08:00")).toBe("07:00");
+    expect(normalizeTimeDraft("7:30pm", "12h", "08:00")).toBe("19:30");
+    expect(normalizeTimeDraft("12am", "12h", "08:00")).toBe("00:00");
+    expect(normalizeTimeDraft("12:30pm", "12h", "08:00")).toBe("12:30");
+  });
+
+  it("normalizes 12-hour drafts without meridiem to the nearest period", () => {
+    expect(normalizeTimeDraft("6", "12h", "17:30")).toBe("18:00");
+    expect(normalizeTimeDraft("10", "12h", "09:30")).toBe("10:00");
+    expect(normalizeTimeDraft("12:30", "12h", "09:30")).toBe("12:30");
+    expect(normalizeTimeDraft("12", "12h", "00:30")).toBe("00:00");
+  });
 });
 
 describe("sanitizeTimeDraftInput", () => {
@@ -34,6 +48,12 @@ describe("sanitizeTimeDraftInput", () => {
     expect(sanitizeTimeDraftInput("1a2b:3c4")).toBe("12:34");
     expect(sanitizeTimeDraftInput("a9-3p0")).toBe("930");
     expect(sanitizeTimeDraftInput("1::2")).toBe("1:2");
+  });
+
+  it("optionally keeps a normalized meridiem suffix", () => {
+    expect(sanitizeTimeDraftInput("7:30 pm", true)).toBe("7:30pm");
+    expect(sanitizeTimeDraftInput("7p", true)).toBe("7pm");
+    expect(sanitizeTimeDraftInput("p", true)).toBe("pm");
   });
 });
 
@@ -67,6 +87,13 @@ describe("displayTimeDraft", () => {
     expect(displayTimeDraft("1a2b:3c4")).toBe("12:34");
     expect(displayTimeDraft("abc")).toBe("");
   });
+
+  it("formats 12-hour editable drafts with meridiem suffixes", () => {
+    expect(displayTimeDraft("730pm", false, "12h")).toBe("7:30pm");
+    expect(displayTimeDraft("13", false, "12h")).toBe("1:3");
+    expect(displayTimeDraft("26", false, "12h")).toBe("2:06");
+    expect(displayTimeDraft("12:30am", false, "12h")).toBe("12:30am");
+  });
 });
 
 describe("commitTimeDraft", () => {
@@ -75,8 +102,15 @@ describe("commitTimeDraft", () => {
     expect(commitTimeDraft("24:00", "08:00")).toEqual({ value: "08:00", committed: false });
   });
 
+  it("commits 12-hour drafts and infers missing meridiem from the previous time", () => {
+    expect(commitTimeDraft("6:30", "17:30", "12h")).toEqual({ value: "18:30", committed: true });
+    expect(commitTimeDraft("6:30am", "17:30", "12h")).toEqual({ value: "06:30", committed: true });
+  });
+
   it("restores the canonical value when editing is cancelled", () => {
     expect(restoreTimeDraft("14:30")).toBe("14:30");
+    expect(restoreTimeDraft("14:30", "12h")).toBe("2:30pm");
+    expect(restoreTimeDraft("00:00", "12h")).toBe("12am");
   });
 });
 

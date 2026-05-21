@@ -356,7 +356,14 @@
     return isEnd ? "136px" : "90px";
   }
 
+  function editableTimeDraft(target: "start" | "end"): string {
+    return restoreTimeDraft(target === "start" ? startTime : endTime, preferences.calendarTimeFormat);
+  }
+
   function enterTimeInputEditMode(target: "start" | "end") {
+    if (timeInputEditTarget !== target && !isTimeDraftEdited(target)) {
+      setTimeDraft(target, editableTimeDraft(target));
+    }
     timeInputEditTarget = target;
   }
 
@@ -367,7 +374,7 @@
   function handleTimeDraftInput(e: Event & { currentTarget: HTMLInputElement }, target: "start" | "end") {
     const inputType = "inputType" in e && typeof e.inputType === "string" ? e.inputType : "";
     const formatShortCompact = inputType !== "insertText" && inputType !== "deleteContentBackward";
-    setTimeDraft(target, displayTimeDraft(e.currentTarget.value, formatShortCompact));
+    setTimeDraft(target, displayTimeDraft(e.currentTarget.value, formatShortCompact, preferences.calendarTimeFormat));
     setTimeDraftEdited(target, true);
     enterTimeInputEditMode(target);
     if (timePickerTarget === target) {
@@ -379,7 +386,9 @@
   function handleTimeBeforeInput(e: InputEvent) {
     if (e.inputType !== "insertText") return;
     const text = e.data ?? "";
-    if (sanitizeTimeDraftInput(text) === text) return;
+    const allowMeridiem = preferences.calendarTimeFormat === "12h";
+    const sanitized = sanitizeTimeDraftInput(text, allowMeridiem);
+    if (allowMeridiem ? sanitized.length > 0 : sanitized === text) return;
     e.preventDefault();
   }
 
@@ -394,7 +403,7 @@
   function commitTimeInput(target: "start" | "end"): boolean {
     const previous = target === "start" ? startTime : endTime;
     const draft = target === "start" ? startTimeDraft : endTimeDraft;
-    const result = commitTimeDraft(draft, previous);
+    const result = commitTimeDraft(draft, previous, preferences.calendarTimeFormat);
     setTimeDraft(target, result.value);
     setTimeDraftEdited(target, false);
     leaveTimeInputEditMode(target);
@@ -408,7 +417,7 @@
   }
 
   function restoreTimeInput(target: "start" | "end") {
-    setTimeDraft(target, restoreTimeDraft(target === "start" ? startTime : endTime));
+    setTimeDraft(target, restoreTimeDraft(target === "start" ? startTime : endTime, preferences.calendarTimeFormat));
     setTimeDraftEdited(target, false);
     leaveTimeInputEditMode(target);
   }
@@ -440,7 +449,7 @@
     if (!target || controlsDisabled || allDay) return;
     timePickerTarget = null;
     timePickerKeyboardOpen = false;
-    setTimeDraft(target, displayTimeDraft(digit));
+    setTimeDraft(target, displayTimeDraft(digit, false, preferences.calendarTimeFormat));
     setTimeDraftEdited(target, true);
     enterTimeInputEditMode(target);
     void focusTimeInput(target, true);
@@ -458,7 +467,7 @@
   }
 
   function beginTimeTypingFromNavigation(target: "start" | "end", text: string) {
-    const draft = displayTimeDraft(text);
+    const draft = displayTimeDraft(text, false, preferences.calendarTimeFormat);
     if (!draft) return;
     if (timePickerTarget === target) {
       timePickerTarget = null;
@@ -1604,15 +1613,16 @@
         <input bind:this={startTimeInput}
           type="text"
           data-panel-arrow-nav="true"
-          inputmode="numeric"
+          inputmode={preferences.calendarTimeFormat === "12h" ? "text" : "numeric"}
           onbeforeinput={handleTimeBeforeInput}
           oninput={(e) => handleTimeDraftInput(e, "start")}
           onblur={() => commitTimeInput("start")}
           onclick={() => handleTimeInputClick("start")}
           disabled={controlsDisabled || allDay}
-          maxlength={5} placeholder="HH:MM"
-          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
-            {preferences.calendarTimeFormat === '12h' && !isTimeInputEditing('start') && !startTimeDraftEdited ? 'text-[0.733333rem]' : 'text-[0.8rem]'}
+          maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
+          placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
+          class="time-input rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
+            {preferences.calendarTimeFormat === '12h' ? 'w-13.5 text-[0.733333rem]' : 'w-10.5 text-[0.8rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           value={timeInputDisplayValue("start")}
           onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
@@ -1620,15 +1630,16 @@
         <input bind:this={endTimeInput}
           type="text"
           data-panel-arrow-nav="true"
-          inputmode="numeric"
+          inputmode={preferences.calendarTimeFormat === "12h" ? "text" : "numeric"}
           onbeforeinput={handleTimeBeforeInput}
           oninput={(e) => handleTimeDraftInput(e, "end")}
           onblur={() => commitTimeInput("end")}
           onclick={() => handleTimeInputClick("end")}
           disabled={controlsDisabled || allDay}
-          maxlength={5} placeholder="HH:MM"
-          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
-            {preferences.calendarTimeFormat === '12h' && !isTimeInputEditing('end') && !endTimeDraftEdited ? 'text-[0.733333rem]' : 'text-[0.8rem]'}
+          maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
+          placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
+          class="time-input rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
+            {preferences.calendarTimeFormat === '12h' ? 'w-13.5 text-[0.733333rem]' : 'w-10.5 text-[0.8rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           value={timeInputDisplayValue("end")}
           onkeydown={(e) => handleTimeInputKeydown(e, "end")} />
