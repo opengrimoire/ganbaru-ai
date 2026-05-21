@@ -5,7 +5,7 @@
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import MiniDatePicker from "./MiniDatePicker.svelte";
-  import TimePicker from "./TimePicker.svelte";
+  import TimePicker, { type TimePickerInputNavigation } from "./TimePicker.svelte";
   import ColorPicker from "./ColorPicker.svelte";
   import MeetingSection from "./MeetingSection.svelte";
   import PomodoroSection from "./PomodoroSection.svelte";
@@ -294,6 +294,8 @@
   let startTimeDraftEdited = $state(false);
   let endTimeDraftEdited = $state(false);
   let timeInputEditTarget: "start" | "end" | null = $state(null);
+  let timePickerInputNavigation: TimePickerInputNavigation | null = $state(null);
+  let timePickerInputNavigationSequence = 0;
 
   async function focusTimeInput(target: "start" | "end", moveCaretToEnd = false) {
     await tick();
@@ -317,6 +319,7 @@
     datepickerOpen = false;
     endDatepickerOpen = false;
     timePickerKeyboardOpen = source === "keyboard";
+    timePickerInputNavigation = null;
     timePickerTarget = target;
   }
 
@@ -452,6 +455,17 @@
     void focusTimeInput(target, true);
   }
 
+  function moveOpenTimePickerFromInput(target: "start" | "end", key: "ArrowUp" | "ArrowDown") {
+    if (timePickerTarget !== target) return false;
+    timePickerKeyboardOpen = true;
+    timePickerInputNavigation = {
+      key,
+      sequence: timePickerInputNavigationSequence + 1,
+    };
+    timePickerInputNavigationSequence += 1;
+    return true;
+  }
+
   function handleTimeInputKeydown(e: KeyboardEvent, target: "start" | "end") {
     if (e.key === "Enter" && hasShortcutModifier(e)) return;
     if ((e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e)) return;
@@ -483,6 +497,11 @@
           timePickerTarget = null;
           timePickerKeyboardOpen = false;
         }
+        e.stopPropagation();
+        return;
+      }
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && moveOpenTimePickerFromInput(target, e.key)) {
+        e.preventDefault();
         e.stopPropagation();
         return;
       }
@@ -1603,6 +1622,7 @@
               {isEnd}
               startMinutes={startMins}
               focusOnOpen={timePickerKeyboardOpen}
+              inputNavigation={timePickerInputNavigation}
               onselect={selectTime}
               oncancel={cancelTimePicker}
               ontypedigit={beginTimeTypingFromPicker} />
