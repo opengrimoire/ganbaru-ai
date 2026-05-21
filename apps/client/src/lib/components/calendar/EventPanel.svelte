@@ -1373,8 +1373,8 @@
 
   function metadataButtonClass(extra?: string): string {
     return cn(
-      "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-2.5 py-2",
-      "text-foreground",
+      "flex min-w-0 max-w-full items-center justify-center gap-2.5 rounded-none px-3 py-2",
+      "bg-black/3 text-foreground dark:bg-black/30",
       extra,
     );
   }
@@ -1704,8 +1704,10 @@
 
     <!-- All-day / Availability / Visibility -->
     <div
-      class="-mt-1 flex w-full items-center justify-evenly rounded-none px-1 text-[0.733333rem] leading-none"
-      style="background-color: var(--panel-contrast);"
+      class={cn(
+        "-mt-1 grid w-full gap-1.5 text-[0.8rem] leading-none",
+        showHeavySections ? "grid-cols-3" : "grid-cols-2",
+      )}
     >
       <!-- All day -->
       <button
@@ -1749,15 +1751,15 @@
         tabindex={metadataFocusIndex === 0 ? 0 : -1}
         disabled={controlsDisabled}
         class={cn(
-          "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-2.5 py-2",
-          "text-foreground",
+          "flex min-w-0 max-w-full items-center justify-center gap-2.5 rounded-none px-3 py-2",
+          "bg-black/3 text-foreground dark:bg-black/30",
         )}
       >
         {#if allDay}
-          <Calendar1 size={13} class="shrink-0" />
+          <Calendar1 size={14} class="shrink-0" />
           <span class="truncate">All day</span>
         {:else}
-          <Clock4 size={13} class="shrink-0" />
+          <Clock4 size={14} class="shrink-0" />
           <span class="truncate">Timed</span>
         {/if}
       </button>
@@ -1776,9 +1778,9 @@
         title="Show as"
       >
         {#if transparency === "transparent"}
-          <Smile size={13} class="shrink-0" />
+          <Smile size={14} class="shrink-0" />
         {:else}
-          <OctagonX size={13} class="shrink-0" />
+          <OctagonX size={14} class="shrink-0" />
         {/if}
         <span class="truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
       </button>
@@ -1797,9 +1799,9 @@
           title="Visibility"
         >
           {#if visibility === "public"}
-            <Eye size={13} class="shrink-0" />
+            <Eye size={14} class="shrink-0" />
           {:else}
-            <Lock size={13} class="shrink-0" />
+            <Lock size={14} class="shrink-0" />
           {/if}
           <span class="truncate">{visibility}</span>
         </button>
