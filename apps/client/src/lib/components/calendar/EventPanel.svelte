@@ -1876,7 +1876,7 @@
           {#if mode === "edit" && onDelete && event}
             <button onclick={armOrConfirmDelete}
               disabled={controlsDisabled}
-              class="flex w-9 shrink-0 items-center justify-center bg-black/6 dark:bg-black/30 text-foreground hover:text-destructive"
+              class="event-panel-delete-icon-button flex w-9 shrink-0 items-center justify-center text-foreground"
               title={`Delete (${formatShortcut("Mod + D")})`}>
               <Trash2 size={13} strokeWidth={1.8} />
             </button>
@@ -1960,6 +1960,14 @@
 
   .title-wrapper:not(:focus-within)::after {
     opacity: 1;
+  }
+
+  .event-panel-delete-icon-button {
+    background-color: color-mix(in srgb, var(--panel-contrast) 97%, black);
+  }
+
+  :global(.dark) .event-panel-delete-icon-button {
+    background-color: color-mix(in srgb, var(--panel-contrast) 70%, black);
   }
 
   :global(html[data-focus-intent="keyboard"]) .panel-root :global(.section-header button:focus) {
