@@ -257,7 +257,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={descAreaEl}>
   {#if descOpen}
-    <div bind:this={toolbarEl} transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-0.5 py-1" style="padding-left: 23px;">
+    <div bind:this={toolbarEl} transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-1 py-1" style="padding-left: 26px;">
       {#each [
         { icon: Bold, cmd: "bold", title: "Bold" },
         { icon: Italic, cmd: "italic", title: "Italic" },
@@ -271,11 +271,11 @@
           onkeydown={(e) => handleToolbarButtonKeydown(e, index)}
           data-description-toolbar-index={index}
           tabindex={toolbarFocusIndex === index ? 0 : -1}
-          class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+          class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
           title={btn.title}
-        ><Icon size={13} /></button>
+        ><Icon size={14} /></button>
       {/each}
-      <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
+      <div class="mx-0.5 h-4 w-px bg-border/60"></div>
       {#each [
         { icon: ListOrdered, cmd: "insertOrderedList", title: "Numbered list" },
         { icon: List, cmd: "insertUnorderedList", title: "Bulleted list" },
@@ -289,11 +289,11 @@
           onkeydown={(e) => handleToolbarButtonKeydown(e, toolbarIndex)}
           data-description-toolbar-index={toolbarIndex}
           tabindex={toolbarFocusIndex === toolbarIndex ? 0 : -1}
-          class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+          class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
           title={btn.title}
-        ><Icon size={13} /></button>
+        ><Icon size={14} /></button>
       {/each}
-      <div class="mx-0.5 h-3.5 w-px bg-border/60"></div>
+      <div class="mx-0.5 h-4 w-px bg-border/60"></div>
       <button bind:this={linkBtnEl}
         onmousedown={(e) => e.preventDefault()}
         onclick={() => openLinkPopover("pointer")}
@@ -301,22 +301,22 @@
         onkeydown={(e) => handleToolbarButtonKeydown(e, 5, () => openLinkPopover("keyboard"))}
         data-description-toolbar-index="5"
         tabindex={toolbarFocusIndex === 5 ? 0 : -1}
-        class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+        class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
         title="Insert link"
-      ><Link size={13} /></button>
+      ><Link size={14} /></button>
       {#if linkPopoverOpen}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="fixed inset-0 z-60" onclick={() => closeLinkPopover("pointer")}></div>
-        <div class="fixed z-61 flex items-center gap-1.5 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
+        <div class="fixed z-61 flex items-center gap-2 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
           use:positionLinkPopover>
           <input bind:this={linkInputEl}
             type="text" bind:value={linkUrl} placeholder="https://..."
             onkeydown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyLink("keyboard"); } if (e.key === "Escape") { e.preventDefault(); closeLinkPopover("keyboard"); } }}
-            class="w-40 rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[0.733333rem] text-event-panel-input-text outline-none placeholder:text-muted-foreground"
+            class="w-44 rounded bg-black/5 px-2.5 py-1 text-[0.8rem] text-event-panel-input-text outline-none placeholder:text-muted-foreground dark:bg-black/15"
           />
           <button onclick={() => applyLink(linkPopoverSource)}
-            class="rounded bg-black/5 dark:bg-black/15 px-2 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-black/10 dark:hover:bg-black/25">
+            class="rounded bg-black/5 px-2.5 py-1 text-[0.8rem] text-foreground transition-colors hover:bg-black/10 dark:bg-black/15 dark:hover:bg-black/25">
             Apply
           </button>
         </div>
@@ -328,9 +328,9 @@
         onkeydown={(e) => handleToolbarButtonKeydown(e, 6)}
         data-description-toolbar-index="6"
         tabindex={toolbarFocusIndex === 6 ? 0 : -1}
-        class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+        class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
         title="Remove formatting"
-      ><RemoveFormatting size={13} /></button>
+      ><RemoveFormatting size={14} /></button>
       <button
         onmousedown={(e) => e.preventDefault()}
         onclick={closeDescEditor}
@@ -338,9 +338,9 @@
         onkeydown={(e) => handleToolbarButtonKeydown(e, 7)}
         data-description-toolbar-index="7"
         tabindex={toolbarFocusIndex === 7 ? 0 : -1}
-        class="ml-auto flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-black/15 hover:text-foreground"
+        class="ml-auto flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
         title="Done"
-      ><Check size={13} /></button>
+      ><Check size={14} /></button>
     </div>
   {/if}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -348,18 +348,18 @@
   <div
     role={!descOpen && !readOnly ? "button" : undefined}
     tabindex={!descOpen && !readOnly ? 0 : undefined}
-    class="flex items-center gap-2.5 leading-none {!descOpen && !readOnly ? 'cursor-text' : ''}"
+    class="flex items-center gap-3 leading-none {!descOpen && !readOnly ? 'cursor-text' : ''}"
     onclick={handleDescriptionRowClick}
     onkeydown={handleDescriptionRowKeydown}
   >
-    <AlignLeft size={13} class="shrink-0 text-foreground" />
+    <AlignLeft size={14} class="shrink-0 text-foreground" />
     <div class="min-w-0 flex-1">
       {#if descOpen}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           bind:this={editorEl}
           contenteditable={!readOnly}
-          class="desc-editor desc-content max-h-20 overflow-y-auto text-[0.733333rem] leading-3.75 text-foreground outline-none"
+          class="desc-editor desc-content max-h-24 overflow-y-auto text-[0.8rem] leading-4 text-foreground outline-none"
           class:desc-editing={!readOnly}
           oninput={handleEditorInput}
           onpaste={handleEditorPaste}
@@ -378,11 +378,11 @@
         ></div>
       {:else if descPreview}
         <div
-          class="desc-preview max-h-11.25 overflow-hidden text-[0.733333rem] leading-3.75 text-foreground"
+          class="desc-preview max-h-12 overflow-hidden text-[0.8rem] leading-4 text-foreground"
           title={descPreview}
         >{descPreview}</div>
       {:else}
-        <span class="text-[0.733333rem] text-muted-foreground/40">Add description</span>
+        <span class="text-[0.8rem] text-muted-foreground/40">Add description</span>
       {/if}
     </div>
   </div>

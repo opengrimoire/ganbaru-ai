@@ -287,7 +287,7 @@
     if (!dateBtn) return { destroy() {} };
     const margin = 8;
     const gap = 4;
-    const pickerWidth = 224;
+    const pickerWidth = 240;
 
     function updatePosition() {
       if (!dateBtn) return;
@@ -346,28 +346,28 @@
 <div bind:this={sectionEl} class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={ontoggle}
-      class="flex w-9 shrink-0 items-center justify-center
+      class="flex w-10 shrink-0 items-center justify-center
         {recurrence ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
-      <Repeat size={13} />
+      <Repeat size={14} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[0.733333rem] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
-      <span class="ml-auto translate-y-[1.13px] truncate text-[0.666667rem] text-muted-foreground">{recurrence ? label : ""}</span>
+      class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
+      <span class="translate-y-[1.13px] text-[0.8rem] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
+      <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{recurrence ? label : ""}</span>
     </button>
   </div>
   {#if expanded && recurrence}
     <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="repeat" class="flex flex-col gap-2.5 p-2.5" style="background-color: var(--panel-bg);">
       <!-- Every N [frequency] -->
       <div class="flex flex-wrap items-center gap-2">
-        <span class="shrink-0 text-[0.733333rem] text-muted-foreground">Every</span>
+        <span class="shrink-0 text-[0.8rem] text-muted-foreground">Every</span>
         <input type="number" value={intervalDraft}
           oninput={(e) => { intervalDraft = e.currentTarget.value; }}
           onblur={commitIntervalDraft}
           min={1} max={99}
-          class="num-input w-10 shrink-0 rounded-none bg-black/5 px-1 py-1 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15"
+          class="num-input w-11 shrink-0 rounded-none bg-black/5 px-1 py-0.5 text-center text-[0.8rem] text-event-panel-input-text outline-none dark:bg-black/15"
           onkeydown={(e) => handleNumberDraftKeydown(e, commitIntervalDraft, () => { intervalDraft = String(recInterval); })} />
-        <div class="flex min-w-0 flex-1 flex-wrap gap-1">
+        <div class="flex min-w-0 flex-1 flex-wrap gap-1.5">
           {#each FREQ_OPTIONS as opt, index}
             <button onclick={() => updateFrequency(opt.value)}
               onfocus={() => { frequencyFocusIndex = index; }}
@@ -375,7 +375,7 @@
               data-recurrence-roving="frequency"
               data-roving-index={index}
               tabindex={frequencyFocusIndex === index ? 0 : -1}
-              class="min-w-0 flex-1 rounded-none px-2 py-1 text-[0.733333rem]
+              class="min-w-0 flex-1 rounded-none px-2.5 py-1 text-[0.8rem]
                 {recFrequency === opt.value
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-muted-foreground'}"
@@ -387,7 +387,7 @@
       <!-- Weekday picker (weekly) -->
       {#if recFrequency === "weekly"}
         <div class="flex flex-col gap-1.5">
-          <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
+          <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
           <div class="grid grid-cols-7 gap-1">
             {#each ALL_WEEKDAYS as wd, index}
               <button onclick={() => toggleWeekday(wd.value)}
@@ -396,7 +396,7 @@
                 data-recurrence-roving="weekday"
                 data-roving-index={index}
                 tabindex={weekdayFocusIndex === index ? 0 : -1}
-                class="flex h-7 items-center justify-center rounded-none text-[0.666667rem]
+                class="flex h-7 items-center justify-center rounded-none text-[0.733333rem]
                   {recWeekdays.has(wd.value)
                     ? 'bg-black/5 dark:bg-black/15 text-foreground'
                     : 'bg-black/2 dark:bg-black/6 text-muted-foreground'}"
@@ -409,7 +409,7 @@
       <!-- Monthly sub-options -->
       {#if recFrequency === "monthly"}
         <div class="flex flex-col gap-1.5">
-          <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
+          <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
           <div class="flex flex-wrap gap-1.5">
             <button onclick={() => setMonthlyMode("day")}
               onfocus={() => { monthlyModeFocusIndex = 0; }}
@@ -417,11 +417,11 @@
               data-recurrence-roving="monthly"
               data-roving-index="0"
               tabindex={monthlyModeFocusIndex === 0 ? 0 : -1}
-              class="flex min-w-0 items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]
+              class="flex min-w-0 items-center gap-2.5 rounded-none px-2.5 py-1.5 text-[0.8rem]
                 {monthlyMode === 'day'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
-              <div class="size-2.75 shrink-0 rounded-full
+              <div class="size-3 shrink-0 rounded-full
                 {monthlyMode === 'day' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
               <span class="truncate">Day {getEventDayOfMonth()}</span>
@@ -432,11 +432,11 @@
               data-recurrence-roving="monthly"
               data-roving-index="1"
               tabindex={monthlyModeFocusIndex === 1 ? 0 : -1}
-              class="flex min-w-0 items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]
+              class="flex min-w-0 items-center gap-2.5 rounded-none px-2.5 py-1.5 text-[0.8rem]
                 {monthlyMode === 'ordinal'
                   ? 'bg-black/5 dark:bg-black/15 text-foreground'
                   : 'text-foreground'}">
-              <div class="size-2.75 shrink-0 rounded-full
+              <div class="size-3 shrink-0 rounded-full
                 {monthlyMode === 'ordinal' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
               <span class="truncate">{getEventOrdinalWeekday().label}</span>
@@ -447,7 +447,7 @@
 
       <!-- Ends -->
       <div class="flex flex-col gap-1.5">
-        <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Ends</span>
+        <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">Ends</span>
 
         <button onclick={() => updateEndType("never")}
           onfocus={() => { endTypeFocusIndex = 0; }}
@@ -455,22 +455,22 @@
           data-recurrence-roving="end"
           data-roving-index="0"
           tabindex={endTypeFocusIndex === 0 ? 0 : -1}
-          class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem] text-foreground">
-          <div class="size-2.75 shrink-0 rounded-full
+          class="flex items-center gap-2.5 rounded-none px-2.5 py-1.5 text-[0.8rem] text-foreground">
+          <div class="size-3 shrink-0 rounded-full
             {recEndType === 'never' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
           </div>
           <span>Never</span>
         </button>
 
-        <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]">
+        <div class="flex items-center gap-2.5 rounded-none px-2.5 py-1.5 text-[0.8rem]">
           <button onclick={() => updateEndType("until")}
             onfocus={() => { endTypeFocusIndex = 1; }}
             onkeydown={(e) => handleRovingKeydown(e, "end", 1, 3, "vertical")}
             data-recurrence-roving="end"
             data-roving-index="1"
             tabindex={endTypeFocusIndex === 1 ? 0 : -1}
-            class="flex w-12 items-center gap-2 text-foreground">
-            <div class="size-2.75 shrink-0 rounded-full
+            class="flex w-14 items-center gap-2.5 text-foreground">
+            <div class="size-3 shrink-0 rounded-full
               {recEndType === 'until' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>On</span>
@@ -482,7 +482,7 @@
               onclick={() => { if (recEndType !== "until") updateEndType("until"); pickerOpen = !pickerOpen; }}
               onblur={parseDateInput}
               onkeydown={handleDateInputKeydown}
-              class="w-27.5 rounded bg-black/5 dark:bg-black/15 px-2 py-0.5 text-[0.733333rem] outline-none
+              class="w-31 rounded bg-black/5 px-2.5 py-0.5 text-[0.8rem] outline-none dark:bg-black/15
                 {recEndType === 'until' ? 'text-event-panel-input-text' : 'text-muted-foreground'}
                 {pickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}" />
 
@@ -490,7 +490,7 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="fixed inset-0 z-60" onclick={() => { pickerOpen = false; }}></div>
-              <div class="fixed z-61 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
+              <div class="fixed z-61 w-60 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60"
                 use:positionPicker>
                 <MiniDatePicker
                   selectedDate={recEndDate || defaultUntilDate()}
@@ -505,26 +505,26 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2 rounded-none px-2 py-1.5 text-[0.733333rem]">
+        <div class="flex items-center gap-2.5 rounded-none px-2.5 py-1.5 text-[0.8rem]">
           <button onclick={() => updateEndType("count")}
             onfocus={() => { endTypeFocusIndex = 2; }}
             onkeydown={(e) => handleRovingKeydown(e, "end", 2, 3, "vertical")}
             data-recurrence-roving="end"
             data-roving-index="2"
             tabindex={endTypeFocusIndex === 2 ? 0 : -1}
-            class="flex w-12 items-center gap-2 text-foreground">
-            <div class="size-2.75 shrink-0 rounded-full
+            class="flex w-14 items-center gap-2.5 text-foreground">
+            <div class="size-3 shrink-0 rounded-full
               {recEndType === 'count' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
             <span>After</span>
           </button>
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-2">
             <input type="number" value={endCountDraft}
               onfocus={() => { if (recEndType !== "count") updateEndType("count"); }}
               oninput={(e) => { endCountDraft = e.currentTarget.value; }}
               onblur={commitEndCountDraft}
               min={1} max={999}
-              class="num-input w-10 rounded bg-black/5 dark:bg-black/15 px-1 py-0.5 text-center text-[0.733333rem] outline-none
+              class="num-input w-11 rounded bg-black/5 px-1 py-0.5 text-center text-[0.8rem] outline-none dark:bg-black/15
                 {recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}"
               onclick={(e) => e.stopPropagation()}
               onkeydown={(e) => handleNumberDraftKeydown(e, commitEndCountDraft, () => { endCountDraft = String(recEndCount); })} />
@@ -535,7 +535,7 @@
 
       <!-- RDATE indicator -->
       {#if rdate && rdate.length > 0}
-        <span class="text-[0.666667rem] italic text-muted-foreground">+ {rdate.length} additional date{rdate.length > 1 ? "s" : ""}</span>
+        <span class="text-[0.733333rem] italic text-muted-foreground">+ {rdate.length} additional date{rdate.length > 1 ? "s" : ""}</span>
       {/if}
     </div>
   {/if}

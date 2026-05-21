@@ -122,7 +122,7 @@
     bind:this={buttonEl}
     onclick={togglePalette}
     onkeydown={handleButtonKeydown}
-    class="size-4 shrink-0 rounded-sm"
+    class="size-4.5 shrink-0 rounded-sm"
     style="background-color: {colorEntry.bg};"
     title="Event color"
     data-app-tooltip-focus-disabled="true"
@@ -133,9 +133,9 @@
     <div class="fixed inset-0 z-60" onclick={() => closePalette("pointer")}></div>
     <div
       bind:this={paletteEl}
-      class="absolute right-0 top-full z-61 mt-1 grid gap-1.5 rounded-lg p-2.5 shadow-lg ring-1"
+      class="absolute right-0 top-full z-61 mt-1 grid gap-2 rounded-lg p-2.5 shadow-lg ring-1"
       style="
-        grid-template-columns: repeat(4, 1.25rem);
+        grid-template-columns: repeat(4, 1.375rem);
         background-color: {pickerBg};
         color: {pickerText};
         --selection-border: {selectionBorder};
@@ -150,7 +150,7 @@
           onclick={() => { selectColor(c, "pointer"); }}
           onfocus={() => { activeIndex = index; }}
           onkeydown={(e) => handleSwatchKeydown(e, index, c)}
-          class="calendar-color-swatch size-5 rounded-[3px]"
+          class="calendar-color-swatch size-5.5 rounded-[3px]"
           class:swatch-selected={selectedColor === c}
           style={swatchStyle(entry.bg)}
           title={entry.bg}

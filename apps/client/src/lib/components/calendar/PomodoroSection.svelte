@@ -151,14 +151,14 @@
 <div bind:this={sectionEl} class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={ontoggle}
-      class="flex w-9 shrink-0 items-center justify-center
+      class="flex w-10 shrink-0 items-center justify-center
         {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
-      <Timer size={13} />
+      <Timer size={14} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[0.733333rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
-      <span class="ml-auto translate-y-[1.13px] truncate text-[0.666667rem] text-muted-foreground">{summary}</span>
+      class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
+      <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
+      <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{summary}</span>
     </button>
   </div>
   {#if expanded}
@@ -171,13 +171,13 @@
           data-pomodoro-roving="preset"
           data-roving-index={index}
           tabindex={presetFocusIndex === index ? 0 : -1}
-          class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[0.733333rem]
+          class="flex items-center gap-2.5 rounded-none px-3 py-1.5 text-left text-[0.8rem]
             {preset === key
               ? 'bg-black/5 dark:bg-black/15 text-foreground'
               : 'text-foreground'}"
         >
           <span>{val.label}</span>
-          <span class="ml-auto text-[0.666667rem] {preset === key ? 'text-muted-foreground' : 'text-muted-foreground'}">{val.desc}</span>
+          <span class="ml-auto text-[0.733333rem] {preset === key ? 'text-muted-foreground' : 'text-muted-foreground'}">{val.desc}</span>
         </button>
       {/each}
       <button
@@ -187,7 +187,7 @@
         data-pomodoro-roving="preset"
         data-roving-index={POMO_PRESET_ENTRIES.length}
         tabindex={presetFocusIndex === POMO_PRESET_ENTRIES.length ? 0 : -1}
-        class="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-left text-[0.733333rem]
+        class="flex items-center gap-2.5 rounded-none px-3 py-1.5 text-left text-[0.8rem]
           {preset === 'custom'
             ? 'bg-black/5 dark:bg-black/15 text-foreground'
             : 'text-foreground'}"
@@ -195,30 +195,30 @@
         <span>Custom</span>
       </button>
       {#if preset === "custom"}
-        <div class="flex flex-col gap-1.5 px-2.5 pt-1">
+        <div class="flex flex-col gap-1.5 px-3 pt-1">
           {#each [
             { label: "Focus", value: focusDurationDraft, setDraft: (v: string) => { focusDurationDraft = v; }, commit: commitFocusDurationDraft, restore: () => { focusDurationDraft = String(focusDuration); }, min: 1, max: 120 },
             { label: "Short break", value: shortBreakDraft, setDraft: (v: string) => { shortBreakDraft = v; }, commit: commitShortBreakDraft, restore: () => { shortBreakDraft = String(shortBreak); }, min: 1, max: 30 },
             { label: "Long break", value: longBreakDraft, setDraft: (v: string) => { longBreakDraft = v; }, commit: commitLongBreakDraft, restore: () => { longBreakDraft = String(longBreak); }, min: 1, max: 60 },
           ] as field}
-            <label class="flex items-center gap-1.5 text-[0.666667rem] text-muted-foreground">
-              <span class="w-16">{field.label}</span>
+            <label class="flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
+              <span class="w-18">{field.label}</span>
               <input type="number" value={field.value} min={field.min} max={field.max}
                 oninput={(e) => field.setDraft(e.currentTarget.value)}
                 onblur={field.commit}
-                class="num-input w-8 rounded bg-black/5 dark:bg-black/15 px-0.5 py-0.5 text-center text-[0.666667rem] text-event-panel-input-text outline-none"
+                class="num-input w-9 rounded bg-black/5 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15"
                 onkeydown={(e) => handleNumberDraftKeydown(e, field.commit, field.restore)} />
               <span class="text-muted-foreground">min</span>
             </label>
           {/each}
         </div>
       {/if}
-      <div class="border-t border-border/40 mt-1 pt-0.5 px-0">
+      <div class="mt-1 border-t border-border/40 px-0 pt-0.5">
         <button
           onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; onchange(); }}
-          class="flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[0.733333rem] w-full text-foreground"
+          class="flex w-full items-center gap-2.5 rounded-none px-2.5 py-1.5 text-left text-[0.8rem] text-foreground"
         >
-          <div class="size-2.75 shrink-0
+          <div class="size-3 shrink-0
             {idleTimeoutEnabled ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
           </div>
           <span>Pause on inactivity</span>

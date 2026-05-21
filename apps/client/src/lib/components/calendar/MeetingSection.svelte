@@ -210,48 +210,48 @@
   <div class="section-header flex items-stretch">
     <button onclick={ontoggle}
       disabled={readOnly}
-      class="flex w-9 shrink-0 items-center justify-center
+      class="flex w-10 shrink-0 items-center justify-center
         {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
-      <Users size={13} />
+      <Users size={14} />
     </button>
     <button onclick={onexpand}
       disabled={readOnly}
-      class="flex flex-1 items-center gap-2 px-2.5 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[0.733333rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
+      class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
+      <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
       {#if enabled && summary}
-        <span class="ml-auto translate-y-[1.13px] truncate text-[0.666667rem] text-muted-foreground">{summary}</span>
+        <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{summary}</span>
       {/if}
     </button>
   </div>
   {#if expanded}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="meeting" class="flex flex-col gap-2.5 px-3 pt-3 pb-3" style="background-color: var(--panel-bg);">
+    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="meeting" class="flex flex-col gap-2.5 px-3.5 pb-3 pt-3" style="background-color: var(--panel-bg);">
       <!-- URL -->
-      <div class="flex items-center gap-2.5 text-[0.733333rem] leading-none">
-        <Video size={13} class="shrink-0 text-foreground" />
+      <div class="flex items-center gap-3 text-[0.8rem] leading-none">
+        <Video size={14} class="shrink-0 text-foreground" />
         <input bind:this={urlInput} type="url" bind:value={url} placeholder="Add call link"
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={onchange} onkeydown={panelInputKeydown} />
       </div>
       <!-- Location -->
-      <div class="flex items-center gap-2.5 text-[0.733333rem] leading-none">
-        <MapPin size={13} class="shrink-0 text-foreground" />
+      <div class="flex items-center gap-3 text-[0.8rem] leading-none">
+        <MapPin size={14} class="shrink-0 text-foreground" />
         <input type="text" bind:value={location} placeholder="Add location"
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={onchange} onkeydown={panelInputKeydown} />
         {#if geo}
-          <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
+          <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
         {/if}
       </div>
       <!-- Description -->
       <DescriptionEditor {description} {readOnly} onchange={ondescriptionchange} />
       <!-- Guests divider -->
-      <div class="-mx-3 border-t border-border/40"></div>
+      <div class="-mx-3.5 border-t border-border/40"></div>
       <!-- Guests -->
       <div class="flex flex-col">
         <div class="flex items-center gap-2 pb-1">
-          <span class="text-[0.6rem] uppercase tracking-wider text-muted-foreground">Guests</span>
+          <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Guests</span>
           {#if canEditGuests && guestAttendees.length > 0}
             <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
               {#each [
@@ -260,36 +260,36 @@
                 { icon: Eye, label: "See list", title: "See guest list", get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; onchange(); } },
               ] as perm}
                 <button onclick={() => perm.set(!perm.get())}
-                  class="flex items-center gap-1 rounded px-1 py-0.5 active:scale-95
+                  class="flex items-center gap-1 rounded px-1.5 py-0.5 active:scale-95
                     {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
-                  <perm.icon size={11} strokeWidth={2} />
-                  <span class="text-[0.6rem] max-[320px]:hidden">{perm.label}</span>
+                  <perm.icon size={12} strokeWidth={2} />
+                  <span class="text-[0.666667rem] max-[320px]:hidden">{perm.label}</span>
                 </button>
               {/each}
             </div>
           {/if}
         </div>
         {#if organizer}
-          <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
-            <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={10} strokeWidth={2.5} class="block text-status-accepted-foreground" /></span>
+          <div class="flex items-center gap-2.5 py-0.5 text-[0.8rem]">
+            <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={11} strokeWidth={2.5} class="block text-status-accepted-foreground" /></span>
             <span class="min-w-0 flex-1 truncate text-foreground">
               {isOrganizerSelf ? `You (${organizer.email})` : organizer.name ?? organizer.email}
             </span>
-            <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">organizer</span>
+            <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">organizer</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
                 title="Organizer cannot be marked optional"
                 aria-label="Organizer cannot be marked optional"
                 class={optionalActionClass(true, false)}>
-                <Flag size={11} />
+                <Flag size={12} />
               </button>
               <button
                 disabled
                 title="Organizer cannot be removed"
                 aria-label="Organizer cannot be removed"
                 class={removeActionClass(true)}>
-                <X size={11} />
+                <X size={12} />
               </button>
             </div>
           </div>
@@ -300,27 +300,27 @@
           {@const selfFg = selfStatus === "accepted" ? "text-status-accepted-foreground" : selfStatus === "tentative" ? "text-status-tentative-foreground" : selfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
           {@const SelfIcon = selfStatus === "accepted" ? Check : selfStatus === "tentative" ? CircleHelp : selfStatus === "declined" ? X : Minus}
           {@const selfStatusLabel = attendeeStatusLabel(selfStatus)}
-          <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
+          <div class="flex items-center gap-2.5 py-0.5 text-[0.8rem]">
             <span
-              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {selfBg}">
-              <SelfIcon size={10} strokeWidth={2.5} class="block {selfFg}" />
+              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] {selfBg}">
+              <SelfIcon size={11} strokeWidth={2.5} class="block {selfFg}" />
             </span>
             <span class="min-w-0 flex-1 truncate text-foreground">You ({selfAttendee.email})</span>
-            <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">{selfStatusLabel}</span>
+            <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{selfStatusLabel}</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
                 title="Your imported attendee row cannot be marked optional yet"
                 aria-label="Your imported attendee row cannot be marked optional yet"
                 class={optionalActionClass(true, selfAttendee.role === "opt-participant")}>
-                <Flag size={11} />
+                <Flag size={12} />
               </button>
               <button
                 disabled
                 title="Your imported attendee row cannot be removed yet"
                 aria-label="Your imported attendee row cannot be removed yet"
                 class={removeActionClass(true)}>
-                <X size={11} />
+                <X size={12} />
               </button>
             </div>
           </div>
@@ -330,32 +330,32 @@
           {@const localSelfFg = effectiveLocalSelfStatus === "accepted" ? "text-status-accepted-foreground" : effectiveLocalSelfStatus === "tentative" ? "text-status-tentative-foreground" : effectiveLocalSelfStatus === "declined" ? "text-status-declined-foreground" : "text-foreground"}
           {@const LocalSelfIcon = effectiveLocalSelfStatus === "accepted" ? Check : effectiveLocalSelfStatus === "tentative" ? CircleHelp : effectiveLocalSelfStatus === "declined" ? X : Minus}
           {@const localSelfStatusLabel = attendeeStatusLabel(effectiveLocalSelfStatus)}
-          <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
+          <div class="flex items-center gap-2.5 py-0.5 text-[0.8rem]">
             <button
               type="button"
               onclick={toggleLocalSelfRsvp}
               disabled={readOnly}
-              class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {localSelfBg} {readOnly ? 'cursor-not-allowed opacity-60' : 'active:scale-90'}"
+              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] {localSelfBg} {readOnly ? 'cursor-not-allowed opacity-60' : 'active:scale-90'}"
               title={`Toggle local RSVP: ${localSelfStatusLabel}`}
               aria-label={`Toggle local RSVP: ${localSelfStatusLabel}`}>
-              <LocalSelfIcon size={10} strokeWidth={2.5} class="block {localSelfFg}" />
+              <LocalSelfIcon size={11} strokeWidth={2.5} class="block {localSelfFg}" />
             </button>
             <span class="min-w-0 flex-1 truncate text-foreground">You (Local, no email provided)</span>
-            <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">{localSelfStatusLabel}</span>
+            <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{localSelfStatusLabel}</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
                 title="Local user cannot be marked optional until an email is configured"
                 aria-label="Local user cannot be marked optional until an email is configured"
                 class={optionalActionClass(true, false)}>
-                <Flag size={11} />
+                <Flag size={12} />
               </button>
               <button
                 disabled
                 title="Local user cannot be removed"
                 aria-label="Local user cannot be removed"
                 class={removeActionClass(true)}>
-                <X size={11} />
+                <X size={12} />
               </button>
             </div>
           </div>
@@ -374,15 +374,15 @@
               {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
               {@const statusLabel = attendeeStatusLabel(att.status)}
               {@const guestActionsDisabled = !canEditGuests}
-              <div class="flex items-center gap-2 py-0.5 text-[0.733333rem]">
+              <div class="flex items-center gap-2.5 py-0.5 text-[0.8rem]">
                 <span
-                  class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] {sqBg}">
-                  <StatusIcon size={10} strokeWidth={2.5} class="block {sqFg}" />
+                  class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] {sqBg}">
+                  <StatusIcon size={11} strokeWidth={2.5} class="block {sqFg}" />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>
-                <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60">{statusLabel}</span>
+                <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{statusLabel}</span>
                 {#if att.role === "opt-participant"}
-                  <span class="shrink-0 text-[0.666667rem] text-muted-foreground/60 italic">(optional)</span>
+                  <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60 italic">(optional)</span>
                 {/if}
                 <div class="flex shrink-0 items-center gap-0.5">
                   <button onclick={() => toggleAttendeeOptional(att.id)}
@@ -390,14 +390,14 @@
                     title={guestActionsDisabled ? "Attendee roles are read-only for this event" : att.role === "opt-participant" ? "Mark required" : "Mark optional"}
                     aria-label={guestActionsDisabled ? "Attendee roles are read-only for this event" : att.role === "opt-participant" ? "Mark required" : "Mark optional"}
                     class={optionalActionClass(guestActionsDisabled, att.role === "opt-participant")}>
-                    <Flag size={11} />
+                    <Flag size={12} />
                   </button>
                   <button onclick={() => removeAttendee(att.id)}
                     disabled={guestActionsDisabled}
                     title={guestActionsDisabled ? "Attendees cannot be removed from this event" : "Remove attendee"}
                     aria-label={guestActionsDisabled ? "Attendees cannot be removed from this event" : "Remove attendee"}
                     class={removeActionClass(guestActionsDisabled)}>
-                    <X size={11} />
+                    <X size={12} />
                   </button>
                 </div>
               </div>
@@ -405,11 +405,11 @@
           </div>
         {/if}
         {#if canEditGuests}
-          <div class="flex items-center gap-2 py-1">
-            <span class="h-3.5 w-3.5 shrink-0"></span>
+          <div class="flex items-center gap-2.5 py-1">
+            <span class="h-4 w-4 shrink-0"></span>
             <input type="email" bind:value={attendeeInput}
               placeholder="Add email..."
-              class="min-w-0 flex-1 bg-transparent text-[0.733333rem] leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
+              class="min-w-0 flex-1 bg-transparent text-[0.8rem] leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
               onkeydown={(e) => {
                 e.stopPropagation();
                 if (e.key === "Enter") { e.preventDefault(); addAttendee(); }
@@ -417,7 +417,7 @@
             {#if attendeeInput.trim()}
               <button onclick={addAttendee}
                 class="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground">
-                <Plus size={11} />
+                <Plus size={12} />
               </button>
             {/if}
           </div>

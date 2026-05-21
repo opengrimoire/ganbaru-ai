@@ -183,12 +183,12 @@
       tabindex={activeIndex === index ? 0 : -1}
       onfocus={() => { activeIndex = index; }}
       onkeydown={(e) => handleSlotKeydown(e, index, slot)}
-      class="flex w-full items-center px-2 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-black/5 focus-visible:bg-black/5 dark:hover:bg-black/15 dark:focus-visible:bg-black/15
+      class="flex w-full items-center px-2.5 py-1 text-left text-[0.866667rem] outline-none transition-colors hover:bg-black/5 focus-visible:bg-black/5 dark:hover:bg-black/15 dark:focus-visible:bg-black/15
         {selected ? 'bg-accent' : active ? 'bg-black/5 dark:bg-black/15' : ''}"
       style="font-weight: {active || isNow ? 600 : selected ? 500 : 400}; color: {active || isNow || selected ? 'var(--foreground)' : 'var(--muted-foreground)'};">
       <span>{formatTimeLabel(slot, preferences.calendarTimeFormat)}</span>
       {#if durLabel}
-        <span class="ml-1.5 text-[0.666667rem]" style="color: var(--muted-foreground); font-weight: 400;">({durLabel})</span>
+        <span class="ml-2 text-[0.733333rem]" style="color: var(--muted-foreground); font-weight: 400;">({durLabel})</span>
       {/if}
     </button>
   {/each}

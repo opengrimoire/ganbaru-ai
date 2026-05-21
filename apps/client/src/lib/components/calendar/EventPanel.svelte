@@ -50,7 +50,8 @@
   const preferences = getPreferences();
   const viewport = getViewport();
 
-  const PANEL_MAX_WIDTH = EVENT_PANEL_MAX_WIDTH;
+  const DEFAULT_PANEL_HEIGHT = 540;
+  const PANEL_MAX_WIDTH = Math.round(EVENT_PANEL_MAX_WIDTH * 1.08);
   const PANEL_GAP = EVENT_PANEL_EDGE_MARGIN;
   const TITLE_BAR_HEIGHT = EVENT_PANEL_TITLE_BAR_HEIGHT;
 
@@ -352,8 +353,8 @@
   }
 
   function timePickerWidth(isEnd: boolean): string {
-    if (preferences.calendarTimeFormat === "24h") return isEnd ? "115px" : "72px";
-    return isEnd ? "136px" : "90px";
+    if (preferences.calendarTimeFormat === "24h") return isEnd ? "124px" : "80px";
+    return isEnd ? "148px" : "98px";
   }
 
   function editableTimeDraft(target: "start" | "end"): string {
@@ -931,7 +932,7 @@
       return;
     }
     if (userDragged) return;
-    const ph = untrack(() => panelHeight) || 520;
+    const ph = untrack(() => panelHeight) || DEFAULT_PANEL_HEIGHT;
     const availableHeight = Math.max(
       96,
       getEventPanelUsableHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP),
@@ -1053,7 +1054,7 @@
       getEventPanelUsableHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP),
     );
     const layout = panelLayout;
-    const ph = panelHeight || 520;
+    const ph = panelHeight || DEFAULT_PANEL_HEIGHT;
     const visibleHeight = Math.min(ph, availableHeight);
 
     if (layout === "fullscreen") {
@@ -1370,7 +1371,7 @@
 
   function metadataButtonClass(extra?: string): string {
     return cn(
-      "flex min-w-0 max-w-full items-center justify-center gap-1 rounded-none px-2 py-2",
+      "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-2.5 py-2",
       "text-foreground",
       extra,
     );
@@ -1511,7 +1512,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class={cn(
-      "sticky top-0 z-10 flex items-center pl-3.5 pr-1.5",
+      "sticky top-0 z-10 flex items-center pl-4 pr-2",
       panelCanDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default",
     )}
     style="background-color: var(--sidebar);"
@@ -1520,13 +1521,13 @@
     onpointerup={handleDragEnd}
   >
     <div class="flex flex-1 items-center justify-center py-2.5">
-      <div class="h-[1.5px] w-8 bg-muted-foreground/50"></div>
+      <div class="h-[1.5px] w-9 bg-muted-foreground/50"></div>
     </div>
   </div>
 
   <div class="event-panel-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
   <!-- Main editor: title + date -->
-  <div class="shrink-0 flex flex-col gap-2.5 px-3.5 pt-2.5">
+  <div class="shrink-0 flex flex-col gap-2.5 px-4 pt-2.5">
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
@@ -1540,7 +1541,7 @@
             data-roving-index={index}
             tabindex={scopeFocusIndex === index ? 0 : -1}
             disabled={controlsDisabled}
-            class="flex-1 rounded px-2 py-1 text-[0.666667rem] font-medium
+            class="flex-1 rounded px-2.5 py-1 text-[0.733333rem] font-medium
               {scope === val
                 ? 'bg-action-confirm text-action-confirm-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'}"
@@ -1550,7 +1551,7 @@
     {/if}
 
     <!-- Title + color circle -->
-    <div class="flex items-center gap-2 px-1">
+    <div class="flex items-center gap-2.5 px-1">
       <div class="title-wrapper relative min-w-0 flex-1">
         <input
           bind:this={titleInput}
@@ -1558,7 +1559,7 @@
           bind:value={title}
           placeholder="Session title..."
           disabled={controlsDisabled}
-          class="w-full bg-transparent py-0.5 text-[0.933333rem] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
+          class="w-full bg-transparent py-0.5 text-[1rem] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
           oninput={emitChange}
           onkeydown={inputKeydown}
         />
@@ -1571,7 +1572,7 @@
 
     <!-- Date + time -->
     <div
-      class="date-time-grid relative -mt-1 px-1 text-[0.8rem]"
+      class="date-time-grid relative -mt-1 px-1 text-[0.866667rem]"
       data-stacked={stackedDateTime || undefined}
     >
       <!-- Start date -->
@@ -1591,7 +1592,7 @@
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-19" onclick={() => { datepickerOpen = false; }}></div>
-          <div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
+          <div class="absolute left-0 top-full z-20 mt-1 w-60 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
             <MiniDatePicker
               selectedDate={startDate}
               highlightToday={false}
@@ -1605,7 +1606,7 @@
 
       <!-- Time group, visually hidden when all-day so the date grid keeps its shape. -->
       <div
-        class="time-group relative z-2 flex items-center justify-center gap-1 py-1"
+        class="time-group relative z-2 flex items-center justify-center gap-1.5 py-1"
         class:invisible={allDay}
         class:pointer-events-none={allDay}
         aria-hidden={allDay}
@@ -1622,7 +1623,7 @@
           maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
           placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
           class="time-input rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
-            {preferences.calendarTimeFormat === '12h' ? 'w-13.5 text-[0.733333rem]' : 'w-10.5 text-[0.8rem]'}
+            {preferences.calendarTimeFormat === '12h' ? 'w-14 text-[0.8rem]' : 'w-11 text-[0.866667rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           value={timeInputDisplayValue("start")}
           onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
@@ -1639,7 +1640,7 @@
           maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
           placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
           class="time-input rounded bg-transparent px-0.5 py-0.5 text-center outline-none text-event-panel-input-text
-            {preferences.calendarTimeFormat === '12h' ? 'w-13.5 text-[0.733333rem]' : 'w-10.5 text-[0.8rem]'}
+            {preferences.calendarTimeFormat === '12h' ? 'w-14 text-[0.8rem]' : 'w-11 text-[0.866667rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           value={timeInputDisplayValue("end")}
           onkeydown={(e) => handleTimeInputKeydown(e, "end")} />
@@ -1681,7 +1682,7 @@
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-19" onclick={() => { endDatepickerOpen = false; }}></div>
-          <div class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
+          <div class="absolute right-0 top-full z-20 mt-1 w-60 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
             <MiniDatePicker
               selectedDate={endDate}
               minDate={startDate}
@@ -1697,11 +1698,11 @@
   </div>
 
   <!-- Metadata strip -->
-  <div class="flex flex-col gap-3 px-3.5 pb-0 pt-1.5">
+  <div class="flex flex-col gap-3 px-4 pb-0 pt-1.5">
 
     <!-- All-day / Availability / Visibility -->
     <div
-      class="-mt-1 flex w-full items-center justify-evenly rounded-none px-0.5 text-[0.666667rem] leading-none"
+      class="-mt-1 flex w-full items-center justify-evenly rounded-none px-1 text-[0.733333rem] leading-none"
       style="background-color: var(--panel-contrast);"
     >
       <!-- All day -->
@@ -1746,13 +1747,13 @@
         tabindex={metadataFocusIndex === 0 ? 0 : -1}
         disabled={controlsDisabled}
         class={cn(
-          "flex min-w-0 max-w-full items-center justify-center gap-1 rounded-none px-2 py-2",
+          "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-2.5 py-2",
           allDay
             ? "text-foreground"
             : "text-muted-foreground/40",
         )}
       >
-        <Sun size={12} class="shrink-0" />
+        <Sun size={13} class="shrink-0" />
         <span class="truncate">All day</span>
       </button>
 
@@ -1770,9 +1771,9 @@
         title="Show as"
       >
         {#if transparency === "transparent"}
-          <CircleCheck size={12} class="shrink-0" />
+          <CircleCheck size={13} class="shrink-0" />
         {:else}
-          <CircleSlash size={12} class="shrink-0" />
+          <CircleSlash size={13} class="shrink-0" />
         {/if}
         <span class="truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
       </button>
@@ -1791,9 +1792,9 @@
           title="Visibility"
         >
           {#if visibility === "public"}
-            <Eye size={12} class="shrink-0" />
+            <Eye size={13} class="shrink-0" />
           {:else}
-            <Lock size={12} class="shrink-0" />
+            <Lock size={13} class="shrink-0" />
           {/if}
           <span class="truncate">{visibility}</span>
         </button>
@@ -1803,7 +1804,7 @@
   </div>
 
   <!-- Feature sections -->
-  <div class="shrink-0 flex flex-col gap-1.5 px-3.5 py-1.5">
+  <div class="shrink-0 flex flex-col gap-1.5 px-4 py-1.5">
 
       <!-- 1) Meeting -->
       {#if showHeavySections}
@@ -1862,17 +1863,17 @@
       <!-- 5) Music -->
       <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
         <div class="section-header flex items-stretch">
-          <div aria-hidden="true" class="flex w-9 shrink-0 items-center justify-center text-muted-foreground/50">
-            <Music size={13} />
+          <div aria-hidden="true" class="flex w-10 shrink-0 items-center justify-center text-muted-foreground/50">
+            <Music size={14} />
           </div>
           <button onclick={() => handleExpand("music")}
             disabled={controlsDisabled}
-            class="flex flex-1 items-center px-2.5 py-2 text-left">
-            <span class="translate-y-[1.13px] text-[0.733333rem] text-muted-foreground">Music</span>
+            class="flex flex-1 items-center px-3 py-2 text-left">
+            <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
           </button>
         </div>
         {#if openSection === "music"}
-          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3 py-3 text-center text-[0.8rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
         {/if}
       </div>
   </div>
@@ -1881,13 +1882,13 @@
   <!-- Save (pinned outside scroll) -->
   <div
     class={cn(
-      "shrink-0 px-3.5",
+      "shrink-0 px-4",
       panelLayout === "fullscreen" ? "pb-2 pt-1" : "pb-3.5 pt-1.5",
     )}
     style="background-color: var(--panel-bg);"
   >
     {#if readOnly}
-      <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[0.733333rem] text-muted-foreground/60"
+      <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[0.8rem] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
         Read-only
       </div>
@@ -1898,28 +1899,28 @@
             bind:this={confirmDeleteBtn}
             onclick={() => { deleteArmed = false; handleDeleteClick(); }}
             disabled={controlsDisabled}
-            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.8rem] text-action-danger-armed-foreground bg-action-danger-armed">
-            <Trash2 size={13} strokeWidth={1.8} />
+            class="flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-action-danger-armed-foreground bg-action-danger-armed">
+            <Trash2 size={14} strokeWidth={1.8} />
             <span>Press again to delete ({formatShortcut("Mod + D")})</span>
           </button>
         {:else}
           {#if mode === "edit" && onDelete && event}
             <button onclick={armOrConfirmDelete}
               disabled={controlsDisabled}
-              class="event-panel-delete-icon-button flex w-9 shrink-0 items-center justify-center text-foreground"
+              class="event-panel-delete-icon-button flex w-10 shrink-0 items-center justify-center text-foreground"
               title={`Delete (${formatShortcut("Mod + D")})`}>
-              <Trash2 size={13} strokeWidth={1.8} />
+              <Trash2 size={14} strokeWidth={1.8} />
             </button>
           {/if}
           <button onclick={handleSave}
             disabled={controlsDisabled}
-            class="flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[0.8rem]
+            class="flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem]
               {saving || saveReady
                 ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'
                 : 'text-muted-foreground cursor-not-allowed'}"
             style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
             {#if saving}
-              <CircleCheck size={13} />
+              <CircleCheck size={14} />
               <span>Saved</span>
             {:else}
               <span>Save ({formatShortcut("Mod + Enter")})</span>
