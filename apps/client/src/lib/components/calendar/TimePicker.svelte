@@ -10,6 +10,7 @@
     focusOnOpen = false,
     onselect,
     oncancel,
+    ontypedigit,
   }: {
     currentTime: string;
     isEnd?: boolean;
@@ -17,6 +18,7 @@
     focusOnOpen?: boolean;
     onselect: (time: string, source?: "keyboard" | "pointer") => void;
     oncancel?: (source?: "keyboard" | "pointer") => void;
+    ontypedigit?: (digit: string) => void;
   } = $props();
 
   const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
@@ -85,6 +87,13 @@
       e.preventDefault();
       e.stopPropagation();
       onselect(slot, "keyboard");
+      return;
+    }
+
+    if (/^\d$/.test(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+      ontypedigit?.(e.key);
       return;
     }
 

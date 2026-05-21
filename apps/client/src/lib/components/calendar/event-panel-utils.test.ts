@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   commitTimeDraft,
+  displayTimeDraft,
   moveRovingIndex,
   normalizeTimeDraft,
   restoreTimeDraft,
+  sanitizeTimeDraftInput,
 } from "./event-panel-utils";
 
 describe("normalizeTimeDraft", () => {
@@ -12,16 +14,58 @@ describe("normalizeTimeDraft", () => {
     expect(normalizeTimeDraft("09")).toBe("09:00");
     expect(normalizeTimeDraft("930")).toBe("09:30");
     expect(normalizeTimeDraft("0930")).toBe("09:30");
+    expect(normalizeTimeDraft("93")).toBe("09:30");
     expect(normalizeTimeDraft("9:30")).toBe("09:30");
+    expect(normalizeTimeDraft("9:3")).toBe("09:30");
     expect(normalizeTimeDraft("2359")).toBe("23:59");
   });
 
   it("rejects empty, partial, impossible, and nonnumeric drafts", () => {
     expect(normalizeTimeDraft("")).toBeNull();
-    expect(normalizeTimeDraft("9:3")).toBeNull();
+    expect(normalizeTimeDraft("12:")).toBeNull();
     expect(normalizeTimeDraft("24:00")).toBeNull();
     expect(normalizeTimeDraft("2360")).toBeNull();
     expect(normalizeTimeDraft("nope")).toBeNull();
+  });
+});
+
+describe("sanitizeTimeDraftInput", () => {
+  it("keeps only digits and one colon", () => {
+    expect(sanitizeTimeDraftInput("1a2b:3c4")).toBe("12:34");
+    expect(sanitizeTimeDraftInput("a9-3p0")).toBe("930");
+    expect(sanitizeTimeDraftInput("1::2")).toBe("1:2");
+  });
+});
+
+describe("displayTimeDraft", () => {
+  it("adds the visual colon as soon as the typed prefix identifies the split", () => {
+    expect(displayTimeDraft("12")).toBe("12");
+    expect(displayTimeDraft("93")).toBe("9:3");
+    expect(displayTimeDraft("25")).toBe("2:5");
+    expect(displayTimeDraft("26")).toBe("02:06");
+    expect(displayTimeDraft("125")).toBe("12:5");
+    expect(displayTimeDraft("126")).toBe("1:26");
+    expect(displayTimeDraft("236")).toBe("2:36");
+    expect(displayTimeDraft("1200")).toBe("12:00");
+    expect(displayTimeDraft("2359")).toBe("23:59");
+  });
+
+  it("treats compact pasted values as complete when possible", () => {
+    expect(displayTimeDraft("930")).toBe("9:30");
+    expect(displayTimeDraft("930", true)).toBe("9:30");
+    expect(displayTimeDraft("125", true)).toBe("1:25");
+    expect(displayTimeDraft("12")).toBe("12");
+  });
+
+  it("preserves explicitly typed colon drafts", () => {
+    expect(displayTimeDraft("9:30")).toBe("9:30");
+    expect(displayTimeDraft("12:")).toBe("12:");
+  });
+
+  it("ignores non-time characters before formatting", () => {
+    expect(displayTimeDraft("9p3")).toBe("9:3");
+    expect(displayTimeDraft("1a2b:3c4")).toBe("12:34");
+    expect(displayTimeDraft("abc")).toBe("");
   });
 });
 

@@ -125,6 +125,7 @@
     class="size-4 shrink-0 rounded-sm"
     style="background-color: {colorEntry.bg};"
     title="Event color"
+    data-app-tooltip-focus-disabled="true"
   ></button>
   {#if open}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -153,6 +154,7 @@
           class:swatch-selected={selectedColor === c}
           style={swatchStyle(entry.bg)}
           title={entry.bg}
+          data-app-tooltip-focus-disabled="true"
         ></button>
       {/each}
     </div>

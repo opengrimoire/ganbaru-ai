@@ -33,6 +33,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function isValidHour(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 23;
+}
+
+function isValidMinute(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 59;
+}
+
+function canStartMinute(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 5;
+}
+
 /**
  * Move a roving focus index for one-dimensional lists and fixed-column grids.
  */
@@ -65,32 +77,82 @@ export function moveRovingIndex(input: RovingMoveInput): number {
 }
 
 export function normalizeTimeDraft(value: string): string | null {
-  const draft = value.trim();
+  const draft = displayTimeDraft(value, true);
   if (!draft) return null;
 
-  let hoursText = "";
-  let minutesText = "";
-  const colonMatch = /^(\d{1,2}):(\d{2})$/.exec(draft);
+  const colonMatch = /^(\d{1,2}):(\d{1,2})$/.exec(draft);
   if (colonMatch) {
-    hoursText = colonMatch[1];
-    minutesText = colonMatch[2];
-  } else if (/^\d{1,4}$/.test(draft)) {
-    if (draft.length <= 2) {
-      hoursText = draft;
-      minutesText = "00";
-    } else {
-      hoursText = draft.slice(0, -2);
-      minutesText = draft.slice(-2);
-    }
-  } else {
+    const hours = Number(colonMatch[1]);
+    const minutes = colonMatch[2].length === 1
+      ? Number(colonMatch[2]) * 10
+      : Number(colonMatch[2]);
+    if (!isValidHour(hours) || !isValidMinute(minutes)) return null;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  }
+
+  if (!/^\d{1,2}$/.test(draft)) {
     return null;
   }
 
-  const hours = Number(hoursText);
-  const minutes = Number(minutesText);
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  const hours = Number(draft);
+  if (!isValidHour(hours)) return null;
+  return `${String(hours).padStart(2, "0")}:00`;
+}
+
+export function sanitizeTimeDraftInput(value: string): string {
+  let result = "";
+  let colonUsed = false;
+
+  for (const char of value) {
+    if (/^\d$/.test(char)) {
+      result += char;
+    } else if (char === ":" && !colonUsed) {
+      result += char;
+      colonUsed = true;
+    }
+  }
+
+  return result;
+}
+
+export function displayTimeDraft(value: string, formatShortCompact = false): string {
+  const draft = sanitizeTimeDraftInput(value);
+  if (!draft) return "";
+
+  const explicitColon = /^(\d{0,2}):(\d*)$/.exec(draft);
+  if (explicitColon) {
+    return `${explicitColon[1]}:${explicitColon[2].slice(0, 2)}`;
+  }
+
+  if (/^\d+$/.test(draft)) {
+    const digits = draft.slice(0, 4);
+    const digitAt = (index: number) => Number(digits[index]);
+    const firstTwo = digits.length >= 2 ? Number(digits.slice(0, 2)) : Number.NaN;
+    const trailingTwo = digits.length >= 3 ? Number(digits.slice(1, 3)) : Number.NaN;
+
+    if (digits.length === 2) {
+      if (isValidHour(firstTwo)) return digits;
+      if (canStartMinute(digitAt(1))) return `${digits[0]}:${digits[1]}`;
+      return `0${digits[0]}:0${digits[1]}`;
+    }
+
+    if (digits.length === 3) {
+      if (formatShortCompact && isValidMinute(trailingTwo)) return `${digits[0]}:${digits.slice(1)}`;
+      if (isValidHour(firstTwo) && canStartMinute(digitAt(2))) return `${digits.slice(0, 2)}:${digits[2]}`;
+      if (isValidMinute(trailingTwo)) return `${digits[0]}:${digits.slice(1)}`;
+      return digits;
+    }
+
+    if (digits.length === 4) {
+      const hours = Number(digits.slice(0, 2));
+      const minutes = Number(digits.slice(2));
+      if (isValidHour(hours) && isValidMinute(minutes)) return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+    }
+
+    return digits;
+  }
+
+  return draft;
 }
 
 export function commitTimeDraft(draft: string, previous: string): DraftCommit<string> {

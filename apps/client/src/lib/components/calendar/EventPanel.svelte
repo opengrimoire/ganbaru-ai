@@ -18,7 +18,13 @@
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import { formatShortcut, hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
-  import { commitTimeDraft, moveRovingIndex, restoreTimeDraft } from "./event-panel-utils";
+  import {
+    commitTimeDraft,
+    displayTimeDraft,
+    moveRovingIndex,
+    restoreTimeDraft,
+    sanitizeTimeDraftInput,
+  } from "./event-panel-utils";
   import {
     EVENT_PANEL_EDGE_MARGIN,
     EVENT_PANEL_MAX_WIDTH,
@@ -285,11 +291,18 @@
   let timePickerKeyboardOpen = $state(false);
   let startTimeInput: HTMLInputElement | undefined = $state();
   let endTimeInput: HTMLInputElement | undefined = $state();
+  let startTimeDraftEdited = $state(false);
+  let endTimeDraftEdited = $state(false);
+  let timeInputEditTarget: "start" | "end" | null = $state(null);
 
-  async function focusTimeInput(target: "start" | "end") {
+  async function focusTimeInput(target: "start" | "end", moveCaretToEnd = false) {
     await tick();
-    if (target === "start") startTimeInput?.focus();
-    else endTimeInput?.focus();
+    const input = target === "start" ? startTimeInput : endTimeInput;
+    input?.focus();
+    if (moveCaretToEnd && input) {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    }
   }
 
   function closeTimePicker(source?: "keyboard" | "pointer") {
@@ -312,9 +325,52 @@
     else endTimeDraft = value;
   }
 
+  function setTimeDraftEdited(target: "start" | "end", value: boolean) {
+    if (target === "start") startTimeDraftEdited = value;
+    else endTimeDraftEdited = value;
+  }
+
+  function isTimeDraftEdited(target: "start" | "end"): boolean {
+    return target === "start" ? startTimeDraftEdited : endTimeDraftEdited;
+  }
+
+  function isTimeInputEditing(target: "start" | "end"): boolean {
+    return timeInputEditTarget === target;
+  }
+
+  function enterTimeInputEditMode(target: "start" | "end") {
+    timeInputEditTarget = target;
+  }
+
+  function leaveTimeInputEditMode(target?: "start" | "end") {
+    if (!target || timeInputEditTarget === target) timeInputEditTarget = null;
+  }
+
+  function handleTimeDraftInput(e: Event & { currentTarget: HTMLInputElement }, target: "start" | "end") {
+    const inputType = "inputType" in e && typeof e.inputType === "string" ? e.inputType : "";
+    const formatShortCompact = inputType !== "insertText" && inputType !== "deleteContentBackward";
+    setTimeDraft(target, displayTimeDraft(e.currentTarget.value, formatShortCompact));
+    setTimeDraftEdited(target, true);
+    enterTimeInputEditMode(target);
+    if (timePickerTarget === target) {
+      timePickerTarget = null;
+      timePickerKeyboardOpen = false;
+    }
+  }
+
+  function handleTimeBeforeInput(e: InputEvent) {
+    if (e.inputType !== "insertText") return;
+    const text = e.data ?? "";
+    if (sanitizeTimeDraftInput(text) === text) return;
+    e.preventDefault();
+  }
+
   function syncTimeDrafts() {
     startTimeDraft = startTime;
     endTimeDraft = endTime;
+    startTimeDraftEdited = false;
+    endTimeDraftEdited = false;
+    leaveTimeInputEditMode();
   }
 
   function commitTimeInput(target: "start" | "end"): boolean {
@@ -322,6 +378,8 @@
     const draft = target === "start" ? startTimeDraft : endTimeDraft;
     const result = commitTimeDraft(draft, previous);
     setTimeDraft(target, result.value);
+    setTimeDraftEdited(target, false);
+    leaveTimeInputEditMode(target);
     if (!result.committed) return false;
 
     if (target === "start") startTime = result.value;
@@ -333,16 +391,22 @@
 
   function restoreTimeInput(target: "start" | "end") {
     setTimeDraft(target, restoreTimeDraft(target === "start" ? startTime : endTime));
+    setTimeDraftEdited(target, false);
+    leaveTimeInputEditMode(target);
   }
 
   function selectTime(time: string, source?: "keyboard" | "pointer") {
     if (timePickerTarget === "start") {
       startTime = time;
       startTimeDraft = time;
+      startTimeDraftEdited = false;
+      leaveTimeInputEditMode("start");
       syncEndDateFromTimes();
     } else if (timePickerTarget === "end") {
       endTime = time;
       endTimeDraft = time;
+      endTimeDraftEdited = false;
+      leaveTimeInputEditMode("end");
       syncEndDateFromTimes();
     }
     closeTimePicker(source);
@@ -353,6 +417,41 @@
     closeTimePicker(source);
   }
 
+  function beginTimeTypingFromPicker(digit: string) {
+    const target = timePickerTarget;
+    if (!target || controlsDisabled || allDay) return;
+    timePickerTarget = null;
+    timePickerKeyboardOpen = false;
+    setTimeDraft(target, displayTimeDraft(digit));
+    setTimeDraftEdited(target, true);
+    enterTimeInputEditMode(target);
+    void focusTimeInput(target, true);
+  }
+
+  function selectTimeInputText(target: "start" | "end") {
+    const input = target === "start" ? startTimeInput : endTimeInput;
+    input?.select();
+  }
+
+  function handleTimeInputClick(target: "start" | "end") {
+    openTimePicker(target, "pointer");
+    enterTimeInputEditMode(target);
+    selectTimeInputText(target);
+  }
+
+  function beginTimeTypingFromNavigation(target: "start" | "end", text: string) {
+    const draft = displayTimeDraft(text);
+    if (!draft) return;
+    if (timePickerTarget === target) {
+      timePickerTarget = null;
+      timePickerKeyboardOpen = false;
+    }
+    setTimeDraft(target, draft);
+    setTimeDraftEdited(target, true);
+    enterTimeInputEditMode(target);
+    void focusTimeInput(target, true);
+  }
+
   function handleTimeInputKeydown(e: KeyboardEvent, target: "start" | "end") {
     if (e.key === "Enter" && hasShortcutModifier(e)) return;
     if ((e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e)) return;
@@ -361,7 +460,13 @@
       if (e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
+        const commitOnly = isTimeDraftEdited(target);
         commitTimeInput(target);
+        if (commitOnly) {
+          if (timePickerTarget === target) closeTimePicker("keyboard");
+          leaveTimeInputEditMode(target);
+          return;
+        }
         openTimePicker(target, "keyboard");
         return;
       }
@@ -372,7 +477,22 @@
         if (timePickerTarget) closeTimePicker("keyboard");
         return;
       }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        if (!isTimeInputEditing(target)) return;
+        if (timePickerTarget === target) {
+          timePickerTarget = null;
+          timePickerKeyboardOpen = false;
+        }
+        e.stopPropagation();
+        return;
+      }
       if (PANEL_ARROW_KEYS.has(e.key)) return;
+      if (/^[\d:]$/.test(e.key) && !isTimeInputEditing(target)) {
+        e.preventDefault();
+        e.stopPropagation();
+        beginTimeTypingFromNavigation(target, e.key);
+        return;
+      }
     }
 
     e.stopPropagation();
@@ -1163,6 +1283,18 @@
     return targetRow ? closestCandidateByX(targetRow, currentCandidate.centerX)?.el ?? null : null;
   }
 
+  function focusPanelArrowTarget(target: HTMLElement) {
+    target.focus();
+
+    if (target === startTimeInput) {
+      leaveTimeInputEditMode("start");
+      startTimeInput.select();
+    } else if (target === endTimeInput) {
+      leaveTimeInputEditMode("end");
+      endTimeInput.select();
+    }
+  }
+
   function handlePanelArrowKeydown(e: KeyboardEvent) {
     if (e.defaultPrevented || parked) return;
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -1176,7 +1308,7 @@
 
     e.preventDefault();
     e.stopPropagation();
-    next.focus();
+    focusPanelArrowTarget(next);
     next.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
@@ -1432,24 +1564,28 @@
         <input bind:this={startTimeInput}
           type="text" value={startTimeDraft}
           data-panel-arrow-nav="true"
-          oninput={(e) => { startTimeDraft = e.currentTarget.value; }}
+          inputmode="numeric"
+          onbeforeinput={handleTimeBeforeInput}
+          oninput={(e) => handleTimeDraftInput(e, "start")}
           onblur={() => commitTimeInput("start")}
-          onclick={() => openTimePicker("start", "pointer")}
+          onclick={() => handleTimeInputClick("start")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
-          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
+          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
         <span class="text-muted-foreground/60">-</span>
         <input bind:this={endTimeInput}
           type="text" value={endTimeDraft}
           data-panel-arrow-nav="true"
-          oninput={(e) => { endTimeDraft = e.currentTarget.value; }}
+          inputmode="numeric"
+          onbeforeinput={handleTimeBeforeInput}
+          oninput={(e) => handleTimeDraftInput(e, "end")}
           onblur={() => commitTimeInput("end")}
-          onclick={() => openTimePicker("end", "pointer")}
+          onclick={() => handleTimeInputClick("end")}
           disabled={controlsDisabled || allDay}
           maxlength={5} placeholder="HH:MM"
-          class="w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
+          class="time-input w-10.5 rounded bg-transparent px-0.5 py-0.5 text-center text-[0.8rem] outline-none text-event-panel-input-text
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           onkeydown={(e) => handleTimeInputKeydown(e, "end")} />
 
@@ -1468,7 +1604,8 @@
               startMinutes={startMins}
               focusOnOpen={timePickerKeyboardOpen}
               onselect={selectTime}
-              oncancel={cancelTimePicker} />
+              oncancel={cancelTimePicker}
+              ontypedigit={beginTimeTypingFromPicker} />
           </div>
         {/if}
       </div>
@@ -1563,6 +1700,7 @@
         onkeydown={(e) => handlePanelRovingKeydown(e, "metadata", 1, metadataItemCount)}
         data-panel-roving="metadata"
         data-roving-index="1"
+        data-app-tooltip-focus-disabled="true"
         tabindex={metadataFocusIndex === 1 ? 0 : -1}
         disabled={controlsDisabled}
         class={metadataButtonClass()}
@@ -1583,6 +1721,7 @@
           onkeydown={(e) => handlePanelRovingKeydown(e, "metadata", 2, metadataItemCount)}
           data-panel-roving="metadata"
           data-roving-index="2"
+          data-app-tooltip-focus-disabled="true"
           tabindex={metadataFocusIndex === 2 ? 0 : -1}
           disabled={controlsDisabled}
           class={metadataButtonClass("capitalize")}
@@ -1767,6 +1906,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .time-input::placeholder {
+    font-size: 0.68rem;
   }
 
   .title-wrapper::after {
