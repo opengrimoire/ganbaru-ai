@@ -1380,7 +1380,7 @@
   function metadataButtonClass(extra?: string): string {
     return cn(
       "flex min-w-0 max-w-full items-center justify-center gap-2.5 rounded-none px-3 py-2",
-      "bg-black/3 text-foreground dark:bg-black/30",
+      "event-panel-on-surface text-foreground",
       extra,
     );
   }
@@ -1537,27 +1537,6 @@
   <!-- Main editor: title + date -->
   <div class="shrink-0 flex flex-col gap-2.5 px-4 pt-2.5">
 
-    <!-- Scope selector (recurring events only) -->
-    {#if isRecurring}
-      <div class="flex min-w-0 rounded-none p-0.5" style="background-color: var(--panel-contrast);">
-        {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
-          <button
-            onclick={() => handleScopeClick(val as RecurringScope)}
-            onfocus={() => { scopeFocusIndex = index; }}
-            onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, 3)}
-            data-panel-roving="scope"
-            data-roving-index={index}
-            tabindex={scopeFocusIndex === index ? 0 : -1}
-            disabled={controlsDisabled}
-            class="flex-1 rounded px-2.5 py-1 text-[0.733333rem] font-medium
-              {scope === val
-                ? 'bg-action-confirm text-action-confirm-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'}"
-          >{lbl}</button>
-        {/each}
-      </div>
-    {/if}
-
     <!-- Title + color circle -->
     <div class="flex items-center gap-2.5 px-1">
       <div class="title-wrapper relative min-w-0 flex-1">
@@ -1580,7 +1559,7 @@
 
     <!-- Date + time -->
     <div
-      class="date-time-grid relative -mt-1 px-1 text-[0.866667rem]"
+      class="date-time-grid relative -mt-1 px-1 text-[0.866667rem] leading-none"
       data-stacked={stackedDateTime || undefined}
     >
       <!-- Start date -->
@@ -1588,7 +1567,7 @@
         <button bind:this={startDateButton}
           onclick={() => toggleDatepicker("pointer")}
           onkeydown={(e) => handleDateButtonKeydown(e, "start")}
-          class="date-chip max-w-full rounded py-1 text-event-panel-input-text
+          class="date-chip max-w-full rounded py-0.5 text-event-panel-input-text
             {controlsDisabled ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortDate}
         </button>
@@ -1614,7 +1593,7 @@
 
       <!-- Time group, visually hidden when all-day so the date grid keeps its shape. -->
       <div
-        class="time-group relative z-2 flex items-center justify-center gap-1.5 py-1"
+        class="time-group relative z-2 flex items-center justify-center gap-1.5 py-0.5"
         class:invisible={allDay}
         class:pointer-events-none={allDay}
         aria-hidden={allDay}
@@ -1688,7 +1667,7 @@
         <button bind:this={endDateButton}
           onclick={() => toggleEndDatepicker("pointer")}
           onkeydown={(e) => handleDateButtonKeydown(e, "end")}
-          class="date-chip max-w-full rounded py-1 text-event-panel-input-text
+          class="date-chip max-w-full rounded py-0.5 text-event-panel-input-text
             {controlsDisabled ? '' : endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
         </button>
@@ -1711,6 +1690,28 @@
         {/if}
       </div>
     </div>
+
+    <!-- Scope selector (recurring events only) -->
+    {#if isRecurring}
+      <div class="-mt-2 flex min-w-0 items-center justify-start gap-4 rounded-none px-1">
+        <span class="shrink-0 text-[0.866667rem] text-foreground">Apply changes to:</span>
+        {#each [["this", "Only this"], ["following", "Following"], ["all", "All"]] as [val, lbl], index}
+          <button
+            onclick={() => handleScopeClick(val as RecurringScope)}
+            onfocus={() => { scopeFocusIndex = index; }}
+            onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, 3)}
+            data-panel-roving="scope"
+            data-roving-index={index}
+            tabindex={scopeFocusIndex === index ? 0 : -1}
+            disabled={controlsDisabled}
+            class="scope-button rounded-none py-1 text-[0.866667rem]
+              {scope === val
+                ? 'text-foreground'
+                : 'text-foreground/45'}"
+          >{lbl}</button>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   <!-- Metadata strip -->
@@ -1719,7 +1720,8 @@
     <!-- All-day / Availability / Visibility -->
     <div
       class={cn(
-        "-mt-1 grid w-full gap-1.5 text-[0.8rem] leading-none",
+        "grid w-full gap-1.5 text-[0.8rem]",
+        isRecurring ? "" : "-mt-1",
         showHeavySections ? "grid-cols-3" : "grid-cols-2",
       )}
     >
@@ -1764,17 +1766,14 @@
         data-roving-index="0"
         tabindex={metadataFocusIndex === 0 ? 0 : -1}
         disabled={controlsDisabled}
-        class={cn(
-          "flex min-w-0 max-w-full items-center justify-center gap-2.5 rounded-none px-3 py-2",
-          "bg-black/3 text-foreground dark:bg-black/30",
-        )}
+        class={metadataButtonClass()}
       >
         {#if allDay}
           <Calendar1 size={14} class="shrink-0" />
-          <span class="truncate">All day</span>
+          <span class="translate-y-[1.13px] truncate">All day</span>
         {:else}
           <Clock4 size={14} class="shrink-0" />
-          <span class="truncate">Timed</span>
+          <span class="translate-y-[1.13px] truncate">Timed</span>
         {/if}
       </button>
 
@@ -1796,7 +1795,7 @@
         {:else}
           <OctagonX size={14} class="shrink-0" />
         {/if}
-        <span class="truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
+        <span class="translate-y-[1.13px] truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
       </button>
 
       {#if showHeavySections}
@@ -1817,7 +1816,7 @@
           {:else}
             <Lock size={14} class="shrink-0" />
           {/if}
-          <span class="truncate">{visibility}</span>
+          <span class="translate-y-[1.13px] truncate">{visibility}</span>
         </button>
       {/if}
     </div>
@@ -2040,12 +2039,15 @@
     opacity: 1;
   }
 
+  .event-panel-on-surface,
   .event-panel-delete-icon-button {
-    background-color: color-mix(in srgb, var(--panel-contrast) 97%, black);
+    background-color: var(--panel-contrast);
+    background-image: linear-gradient(rgb(0 0 0 / 3%), rgb(0 0 0 / 3%));
   }
 
+  :global(.dark) .event-panel-on-surface,
   :global(.dark) .event-panel-delete-icon-button {
-    background-color: color-mix(in srgb, var(--panel-contrast) 70%, black);
+    background-image: linear-gradient(rgb(0 0 0 / 30%), rgb(0 0 0 / 30%));
   }
 
   :global(html[data-focus-intent="keyboard"]) .panel-root :global(.section-header button:focus) {
