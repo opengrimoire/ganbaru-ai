@@ -1398,25 +1398,40 @@ pub fn play_alert_sound() {
 }
 
 #[tauri::command]
-pub fn show_event_notification(app: tauri::AppHandle, title: String, body: String) {
+pub fn show_event_notification(
+    app: tauri::AppHandle,
+    title: String,
+    body: String,
+    open_calendar: Option<bool>,
+) {
     std::thread::spawn(move || {
         let summary = notification_summary(&title);
         let body = escape_notification_markup(&body);
+        let opens_calendar = open_calendar.unwrap_or(false);
+        let action_label = if opens_calendar {
+            "Open calendar"
+        } else {
+            "Open GanbaruAI"
+        };
         let result = Notification::new()
             .appname("GanbaruAI")
             .summary(&summary)
             .body(&body)
-            .action("open_calendar", "Open calendar")
+            .action("open", action_label)
             .timeout(15_000)
             .hint(Hint::Category("calendar".into()))
             .hint(Hint::DesktopEntry("ganbaruai".into()))
+            .hint(Hint::Transient(true))
             .hint(Hint::SoundName("message-new-instant".into()))
             .show();
 
         match result {
             Ok(handle) => {
                 handle.wait_for_action(|action| {
-                    if action == "open_calendar" || action == "default" {
+                    if action == "open" || action == "default" {
+                        if opens_calendar {
+                            let _ = app.emit("calendar-notification-open", ());
+                        }
                         focus_main_window(app.clone());
                     }
                 });
@@ -1566,9 +1581,27 @@ fn focus_main_window(app: tauri::AppHandle) {
     let app_for_lookup = app.clone();
     let _ = app.run_on_main_thread(move || {
         if let Some(window) = app_for_lookup.get_webview_window("main") {
+            if let Err(e) = window.show() {
+                eprintln!("Failed to show main window from notification: {e}");
+            }
             if let Err(e) = window.unminimize() {
                 eprintln!("Failed to unminimize main window from notification: {e}");
             }
+            if let Err(e) = window.set_always_on_top(true) {
+                eprintln!("Failed to raise main window from notification: {e}");
+            }
+            let reset_app = app_for_lookup.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let app_for_reset = reset_app.clone();
+                let _ = reset_app.run_on_main_thread(move || {
+                    if let Some(window) = app_for_reset.get_webview_window("main") {
+                        if let Err(e) = window.set_always_on_top(false) {
+                            eprintln!("Failed to restore main window stacking mode: {e}");
+                        }
+                    }
+                });
+            });
             if let Err(e) = window.set_focus() {
                 eprintln!("Failed to focus main window from notification: {e}");
             }

@@ -20,6 +20,7 @@
   import { Temporal } from "@js-temporal/polyfill";
   import { hydrateCalendarEventTimezones } from "$lib/stores/timezone-migration";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import TitleBar from "$lib/components/TitleBar.svelte";
@@ -52,6 +53,7 @@
   const settingsLauncher = getSettingsLauncher();
   const viewport = getViewport();
   const detachedWindows = getDetachedWindows();
+  let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
 
   let isMaximized = $state(true);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
@@ -146,6 +148,16 @@
 
   onMount(() => {
     perfMark("boot.app-mount");
+    if (isMainWindow) {
+      listen("calendar-notification-open", () => {
+        nav.navigate("calendar");
+      })
+        .then((unlisten) => {
+          unlistenCalendarNotificationOpen = unlisten;
+        })
+        .catch((e) => console.error("Failed to listen for calendar notification opens:", e));
+    }
+
     // Valid benchmark boots are claimed before normal calendar hydration so
     // the measured window is the scenario anchor, not today's normal window.
     startBenchmarkOrNormalCalendarBoot().catch((e) =>
@@ -214,6 +226,8 @@
     const zoneIntervalId = setInterval(checkZone, 60_000);
 
     return () => {
+      unlistenCalendarNotificationOpen?.();
+      unlistenCalendarNotificationOpen = null;
       document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
       document.removeEventListener("contextmenu", blockNativeContextMenu, { capture: true });
       document.removeEventListener("pointerdown", markPointerFocus, { capture: true });
@@ -498,7 +512,7 @@
           notifiedEvents.add(notifKey);
           const title = event.title.trim() || "Calendar event";
           const body = formatEventNotificationBody(event, now);
-          invoke("show_event_notification", { title, body }).catch((e) =>
+          invoke("show_event_notification", { title, body, openCalendar: true }).catch((e) =>
             console.error("[notifications] failed:", e),
           );
         }
