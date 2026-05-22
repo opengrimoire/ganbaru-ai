@@ -576,7 +576,7 @@
     {#if indicatorStyle}
       <div
         class="tab-indicator absolute top-0 h-full rounded-md bg-background dark:bg-accent"
-        style="{indicatorStyle} box-shadow: 0 0 0 1px {theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.1)'};"
+        style={indicatorStyle}
       ></div>
     {/if}
     {#each tabs as tab, i}
