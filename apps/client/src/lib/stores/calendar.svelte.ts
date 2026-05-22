@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
 import { Temporal } from "@js-temporal/polyfill";
 import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import type {
@@ -37,6 +38,11 @@ import {
 import type { IcsImportSummary, IcsPreservationPayload } from "$lib/calendar/ics/types";
 import { deriveIcalendarProjectionState } from "$lib/calendar/ics/projection-state";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
+import {
+  createWindowSyncEnvelope,
+  isForeignWindowSyncEnvelope,
+  isWindowSyncEnvelope,
+} from "$lib/window-sync";
 
 export { expandRecurring, parseYMD, fmtYMD };
 
@@ -80,6 +86,14 @@ type CalendarUpdateField =
 type PomodoroConfigPatch =
   | { action: "set"; value: PomodoroConfig }
   | { action: "clear" };
+
+const CALENDAR_WINDOW_SYNC_EVENT = "calendar-window-sync";
+
+interface CalendarWindowSyncPayload {
+  kind: "data-changed";
+}
+
+let calendarSyncInitialized = false;
 
 function nowLocal(): string {
   const d = new Date();
@@ -694,6 +708,32 @@ async function reloadWindowFromDb(
   await loadWindowIntoState(windowStart, windowEnd, false, true);
 }
 
+function isCalendarWindowSyncPayload(value: unknown): value is CalendarWindowSyncPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return record.kind === "data-changed";
+}
+
+function publishCalendarWindowSync(): void {
+  emit(
+    CALENDAR_WINDOW_SYNC_EVENT,
+    createWindowSyncEnvelope<CalendarWindowSyncPayload>({ kind: "data-changed" }),
+  ).catch((err) => console.warn("calendar window sync failed", err));
+}
+
+function initCalendarWindowSync(): void {
+  if (calendarSyncInitialized) return;
+  calendarSyncInitialized = true;
+  listen<unknown>(CALENDAR_WINDOW_SYNC_EVENT, (event) => {
+    const envelope = event.payload;
+    if (!isWindowSyncEnvelope(envelope, isCalendarWindowSyncPayload)) return;
+    if (!isForeignWindowSyncEnvelope(envelope)) return;
+    reloadCurrentWindowFromDb().catch((err) => {
+      console.warn("calendar window sync reload failed", err);
+    });
+  }).catch((err) => console.warn("calendar window sync listener failed", err));
+}
+
 /**
  * Build a slim copy of `e` containing only the keys the in-memory render,
  * expansion, and notification scheduler care about. Used at the boundary
@@ -728,6 +768,7 @@ function slimEvent(e: CalendarEvent): CalendarEvent {
 }
 
 export function getCalendar() {
+  initCalendarWindowSync();
   const store = {
     /**
      * View-scoped expansion. Pass the visible date range; the underlying
@@ -1025,6 +1066,7 @@ export function getCalendar() {
       rawBlocks = [...rawBlocks, event];
       totalEventCount++;
       invalidate();
+      publishCalendarWindowSync();
       return event;
     },
 
@@ -1273,6 +1315,7 @@ export function getCalendar() {
           : b,
       );
       invalidate();
+      publishCalendarWindowSync();
     },
 
     async deleteBlock(id: string) {
@@ -1282,6 +1325,7 @@ export function getCalendar() {
       rawBlocks = rawBlocks.filter((b) => b.id !== parentId);
       totalEventCount = Math.max(0, totalEventCount - 1);
       invalidate();
+      publishCalendarWindowSync();
     },
 
     /**
@@ -1353,6 +1397,7 @@ export function getCalendar() {
       rawBlocks = [...rawBlocks, standalone];
       totalEventCount++;
       invalidate();
+      publishCalendarWindowSync();
       return standalone;
     },
 
@@ -1380,6 +1425,7 @@ export function getCalendar() {
         b.id === parentId ? { ...b, exceptions } : b,
       );
       invalidate();
+      publishCalendarWindowSync();
     },
 
     /**
@@ -1413,6 +1459,7 @@ export function getCalendar() {
         b.id === parentId ? { ...b, recurrence: updatedRecurrence } : b,
       );
       invalidate();
+      publishCalendarWindowSync();
     },
 
     /**
@@ -1533,6 +1580,7 @@ export function getCalendar() {
       rawBlocks = [];
       totalEventCount = 0;
       invalidate();
+      publishCalendarWindowSync();
     },
 
     /**
@@ -1586,6 +1634,7 @@ export function getCalendar() {
       if (opts.refreshWindow ?? true) {
         await reloadCurrentWindowFromDb();
       }
+      publishCalendarWindowSync();
 
       return {
         added: result.added,

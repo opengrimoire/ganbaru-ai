@@ -150,7 +150,9 @@
     startBenchmarkOrNormalCalendarBoot().catch((e) =>
       console.error("calendar boot failed:", e),
     );
-    pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
+    if (isMainWindow) {
+      pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
+    }
     appWindow.isMaximized().then((v) => (isMaximized = v));
     invoke<number>("get_startup_elapsed_ms").then((ms) => {
       const scriptStartMs = firstMarkTime("boot.script-start") ?? 0;
@@ -360,6 +362,7 @@
   let trackedBlockSnapshot: CalendarEvent | null = null;
 
   function checkActiveBlock() {
+    if (!isMainWindow) return;
     if (showStopConfirm || reverting || suspendInfo || idleInfo) return;
 
     const activeBlock = findActiveBlock();
@@ -460,6 +463,7 @@
   const notifiedEvents = new Set<string>();
 
   function checkEventNotifications() {
+    if (!isMainWindow) return;
     const now = new Date();
     const today = Temporal.Now.plainDateISO();
     const events = calendar.eventsInWindow(

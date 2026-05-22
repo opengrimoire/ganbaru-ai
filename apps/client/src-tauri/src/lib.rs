@@ -49,6 +49,15 @@ static PLATFORM_LABEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 const DELAYED_RELAUNCH_MS_ENV: &str = "GANBARUAI_DELAYED_RELAUNCH_MS";
 const DELAYED_RELAUNCH_MAX_MS: u64 = 10 * 60 * 1000;
 
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+fn focus_main_window_for_second_launch(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 #[tauri::command]
 fn get_startup_elapsed_ms() -> u64 {
     PROCESS_START
@@ -672,6 +681,9 @@ pub fn run() {
     PROCESS_START.set(std::time::Instant::now()).ok();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            focus_main_window_for_second_launch(app);
+        }))
         .manage(db_path::DatabaseState::default())
         .manage(media_player::MediaPlayerState::default())
         .plugin(tauri_plugin_dialog::init())

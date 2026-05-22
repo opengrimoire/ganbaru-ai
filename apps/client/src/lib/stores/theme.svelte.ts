@@ -41,6 +41,7 @@ import {
   toUserThemeSnapshot,
 } from "./themeOperations";
 import { flushConfig, getConfigKey, setConfigKey } from "../vault/config";
+import { emit, listen } from "@tauri-apps/api/event";
 import {
   backfillIconLabel,
   deleteTheme as dbDeleteTheme,
@@ -53,11 +54,23 @@ import {
   type UserThemeRead,
   type UserThemeWrite,
 } from "../api/themes";
+import {
+  createWindowSyncEnvelope,
+  isForeignWindowSyncEnvelope,
+  isWindowSyncEnvelope,
+} from "$lib/window-sync";
 
 const ACTIVE_KEY = "theme.activeId";
 const QUICK_TOGGLE_LIGHT_KEY = "theme.quickToggleLightId";
 const QUICK_TOGGLE_DARK_KEY = "theme.quickToggleDarkId";
 const LEGACY_CUSTOM_KEY = "themes.user";
+const THEME_WINDOW_SYNC_EVENT = "theme-window-sync";
+
+interface ThemeWindowSyncPayload {
+  activeId: ThemeId;
+  quickToggleLightId: ThemeId;
+  quickToggleDarkId: ThemeId;
+}
 
 let customThemes = $state<Record<ThemeId, UserTheme>>({});
 let dismissals = $state<Record<ThemeId, number>>({});
@@ -66,6 +79,7 @@ let quickToggleLightId = $state<ThemeId>(lightTheme.id);
 let quickToggleDarkId = $state<ThemeId>(darkTheme.id);
 let appliedTokenKeys = new Set<string>();
 let hydrated = false;
+let themeSyncInitialized = false;
 
 /**
  * Themes that exist in memory but have not been written to SQLite yet.
@@ -124,6 +138,52 @@ function applyThemeToDom(): void {
   appliedTokenKeys = applied;
 }
 
+function isThemeWindowSyncPayload(value: unknown): value is ThemeWindowSyncPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.activeId === "string" &&
+    typeof record.quickToggleLightId === "string" &&
+    typeof record.quickToggleDarkId === "string"
+  );
+}
+
+function currentThemeSyncPayload(): ThemeWindowSyncPayload {
+  return {
+    activeId,
+    quickToggleLightId,
+    quickToggleDarkId,
+  };
+}
+
+function applyThemeSyncPayload(payload: ThemeWindowSyncPayload): void {
+  activeId = validThemeId(payload.activeId, activeId);
+  quickToggleLightId = validThemeId(payload.quickToggleLightId, lightTheme.id);
+  quickToggleDarkId = validThemeId(payload.quickToggleDarkId, darkTheme.id);
+  applyThemeToDom();
+  setConfigKey(ACTIVE_KEY, activeId);
+  setConfigKey(QUICK_TOGGLE_LIGHT_KEY, quickToggleLightId);
+  setConfigKey(QUICK_TOGGLE_DARK_KEY, quickToggleDarkId);
+}
+
+function publishThemeSync(): void {
+  emit(
+    THEME_WINDOW_SYNC_EVENT,
+    createWindowSyncEnvelope(currentThemeSyncPayload()),
+  ).catch((err) => console.warn("theme window sync failed", err));
+}
+
+function initThemeSync(): void {
+  if (themeSyncInitialized) return;
+  themeSyncInitialized = true;
+  listen<unknown>(THEME_WINDOW_SYNC_EVENT, (event) => {
+    const envelope = event.payload;
+    if (!isWindowSyncEnvelope(envelope, isThemeWindowSyncPayload)) return;
+    if (!isForeignWindowSyncEnvelope(envelope)) return;
+    applyThemeSyncPayload(envelope.payload);
+  }).catch((err) => console.warn("theme window sync listener failed", err));
+}
+
 /**
  * Boot-time hydration: load user themes from SQLite, run the one-time vault
  * migration if a legacy `themes.user` blob is present, resolve the active
@@ -169,6 +229,7 @@ export async function hydrateUserThemes(): Promise<void> {
   );
   hydrated = true;
   applyThemeToDom();
+  initThemeSync();
 }
 
 /**
@@ -504,6 +565,7 @@ function setTheme(id: ThemeId): void {
   activeId = id;
   applyThemeToDom();
   setConfigKey(ACTIVE_KEY, id);
+  publishThemeSync();
 }
 
 function setQuickToggleTheme(slot: "light" | "dark", id: ThemeId): boolean {
@@ -515,6 +577,7 @@ function setQuickToggleTheme(slot: "light" | "dark", id: ThemeId): boolean {
     quickToggleDarkId = id;
     setConfigKey(QUICK_TOGGLE_DARK_KEY, id);
   }
+  publishThemeSync();
   return true;
 }
 

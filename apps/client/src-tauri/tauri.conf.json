@@ -62,6 +62,9 @@
         "conflicts": ["ganbaru-ai"],
         "replaces": ["ganbaru-ai"],
         "desktopTemplate": "deb.desktop.hbs"
+      },
+      "rpm": {
+        "desktopTemplate": "deb.desktop.hbs"
       }
     },
     "icon": [
