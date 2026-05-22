@@ -170,6 +170,7 @@
   function openThemeQuickSwitcher() {
     if (lockedByThemeEditor) return;
     if (!perfPinned) showPerfMenu = false;
+    settingsLauncher.close();
     showTitleBarMenu = false;
     showUtilityOverflowMenu = false;
     showThemeQuickSwitcher = true;
@@ -450,22 +451,6 @@
       return;
     }
 
-    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "l") {
-      if (isEditableKeyboardTarget(e.target)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      toggleTheme();
-      return;
-    }
-
-    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "t") {
-      if (isEditableKeyboardTarget(e.target)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      openThemeQuickSwitcher();
-      return;
-    }
-
     if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "d") {
       if (isEditableKeyboardTarget(e.target)) return;
       e.preventDefault();
@@ -489,6 +474,24 @@
         if (!resetTriggered) {
           void handleClose();
         }
+        return;
+      }
+
+      if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "l") {
+        if (isEditableKeyboardTarget(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        toggleTheme();
+        return;
+      }
+
+      if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "t") {
+        if (isEditableKeyboardTarget(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        openThemeQuickSwitcher();
         return;
       }
 
@@ -1021,8 +1024,8 @@
       title={lockedByBenchmark
         ? "Disabled while a benchmark is active"
         : isMainWindow
-          ? "Close app"
-          : "Close window"}
+          ? `Close app (${formatShortcut("Mod + Shift + W")})`
+          : `Close window (${formatShortcut("Mod + Shift + W")})`}
       aria-label="Close"
     >
       <X size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
