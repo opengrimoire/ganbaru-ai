@@ -2,7 +2,7 @@
 
 The music player is the audio side of the work environment. Playlists are tied to session blocks and to environments, so the right audio plays automatically when a block activates. Two sources are supported: local files and YouTube. Spotify is explicitly out of scope.
 
-The main app opens the Music area from the title bar music icon. It is not part of the primary Calendar / To-do tab cycle.
+The main app opens the Music area from the title bar music icon. It is not part of the primary Calendar / Projects / Notes tab cycle.
 
 Playback is owned by a persistent app-level player host, not by the Music route. Leaving the Music view hides the visible media surface but keeps local and YouTube playback, playlist state, volume, rate, shuffle mode, and resume persistence alive.
 

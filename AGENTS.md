@@ -5,7 +5,7 @@ GanbaruAI is an anti-procrastination project manager for life and work. Free, lo
 Features a highly interconnected:
 - Calendar
 - Pomodoro
-- To-do (pending)
+- Projects (pending)
 - Mindless browsing stopper (pending)
 - Note-taking (pending)
 - Sleep alarm (pending)
@@ -42,7 +42,7 @@ apps/
       lib/: shared frontend code
         components/: reusable Svelte components
           calendar/: calendar wrappers, session block rendering
-          todo/: (planned) task and planning surfaces
+          projects/: (planned) project and task planning surfaces
           pomodoro/: timer display, break screen, idle overlay
           notes/: (planned) Tiptap editor wrapper, slash commands
           diary/: (planned) morning/evening entry forms
@@ -110,7 +110,7 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - **Frontend:** plain Svelte 5 with runes (not SvelteKit)
 - **Desktop/mobile shell:** Tauri v2
 - **License:** AGPL 3.0
-- **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, future to-do tasks, workspace configs, pomodoro sessions) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
+- **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, future project tasks, workspace configs, pomodoro sessions) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
 - **AI integration:** three paths. (1) Integrated terminal (xterm.js) running Codex or another CLI coding agent, with calendar-driven session switching, per-project conversation threads, and task context passed through the agent prompt or standard input. (2) BYOK chat widget for non-developer users (OpenAI API, OpenAI-compatible API, Ollama for local models, and other user-configured providers). (3) MCP for external AI clients only (ChatGPT, teammate agents, etc.), not for internal agent interaction.
 - **Agent data bridge:** a `ganbaruai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and GanbaruAI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager

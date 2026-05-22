@@ -216,7 +216,7 @@
     return () => cleanup?.();
   });
 
-  const views: View[] = ["calendar", "todo"];
+  const views: View[] = ["calendar", "projects", "notes"];
   let showStopConfirm = $state(false);
   let savedBlockState: CalendarEvent | null = null;
   let reverting = false;
@@ -483,7 +483,9 @@
     <main class="content-panel flex-1 min-h-0 overflow-hidden bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />
-      {:else if nav.current === "todo"}
+      {:else if nav.current === "projects"}
+        <div class="h-full"></div>
+      {:else if nav.current === "notes"}
         <div class="h-full"></div>
       {:else if nav.current === "music"}
         <MusicView />

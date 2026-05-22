@@ -10,7 +10,7 @@ This doc is a placeholder. Deeper design comes in a later pass.
 
 An xterm.js terminal embedded in the app, running Codex or another CLI coding agent with full capabilities (file editing, bash, subagents). The user installs the agent separately and signs in with their own account or API key. GanbaruAI provides:
 
-- **Context injection** through the launch prompt or standard input, populated from the active project, current to-do tasks, recent progress, calendar events, and related notes.
+- **Context injection** through the launch prompt or standard input, populated from the active project, current project tasks, recent progress, calendar events, and related notes.
 - **Per-project conversation threads** persisted in SQLite. When a calendar event starts, the terminal saves the current conversation and resumes the conversation for the new event's project.
 - **Background agents** for delegated or parallel work, run through the selected agent's documented non-interactive mode. Codex uses `codex exec`.
 - **Workflow phase prompts** that adapt the agent's behavior to the current project phase (brainstorming, evaluation, planning, execution).
@@ -26,11 +26,11 @@ A chat interface that connects to the user's chosen LLM provider. Three provider
 - **Ollama** for local models (Llama, Mistral, Gemma) running on the user's machine, no API key needed.
 - Other provider APIs when users supply their own credentials and the integration is implemented explicitly.
 
-The chat widget can read and write GanbaruAI data (calendar events, to-do tasks, notes) via the same CLI bridge the terminal uses. It cannot edit arbitrary files or run arbitrary bash commands; the developer path is the surface for those capabilities.
+The chat widget can read and write GanbaruAI data (calendar events, project tasks, notes) via the same CLI bridge the terminal uses. It cannot edit arbitrary files or run arbitrary bash commands; the developer path is the surface for those capabilities.
 
 ### 3. MCP (external clients only)
 
-GanbaruAI exposes calendar, to-do, and notes data via an MCP server for use by external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients on a different machine). MCP is also consumed for integrations with external systems (email, external calendars).
+GanbaruAI exposes calendar, project, and notes data via an MCP server for use by external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients on a different machine). MCP is also consumed for integrations with external systems (email, external calendars).
 
 MCP is **not** the path for internal agent interaction. Internal agents (the embedded terminal, background agents) use the CLI directly, which is faster, simpler, and avoids the JSON-RPC overhead.
 
@@ -41,7 +41,7 @@ The `ganbaruai` CLI is a Rust binary that reads the same SQLite database the app
 ```
 ganbaruai task list --project foo --status in_progress
 ganbaruai event create --start 2026-04-20T14:00 --duration 90m --project foo
-ganbaruai export todo --project foo
+ganbaruai export projects --project foo
 ```
 
 This is the bridge between AI agents and GanbaruAI's data. It works with any agent that can run a shell command (Codex, Cursor, custom scripts), with no plugin or MCP server required for the local case.

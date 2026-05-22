@@ -9,8 +9,9 @@
   import { getViewport } from "$lib/stores/viewport.svelte";
   import type { TitleBarControlId } from "$lib/stores/preferences";
   import { cn, isEditableKeyboardTarget } from "$lib/utils";
-  import CalendarDays from "@lucide/svelte/icons/calendar-days";
-  import LayoutList from "@lucide/svelte/icons/layout-list";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import Folder from "@lucide/svelte/icons/folder";
+  import Book from "@lucide/svelte/icons/book";
   import CircleGauge from "@lucide/svelte/icons/circle-gauge";
   import Music from "@lucide/svelte/icons/music";
   import Sun from "@lucide/svelte/icons/sun";
@@ -238,9 +239,10 @@
     pomodoro.isRunning || pomodoro.remainingSeconds < pomodoro.totalSecondsForPhase,
   );
 
-  const tabs: { view: View; label: string; icon: typeof CalendarDays }[] = [
-    { view: "calendar", label: "Calendar", icon: CalendarDays },
-    { view: "todo", label: "To-do", icon: LayoutList },
+  const tabs: { view: View; label: string; icon: typeof Calendar }[] = [
+    { view: "calendar", label: "Calendar", icon: Calendar },
+    { view: "projects", label: "Projects", icon: Folder },
+    { view: "notes", label: "Notes", icon: Book },
   ];
 
   const titleBarControls: { id: TitleBarControlId; label: string }[] = [

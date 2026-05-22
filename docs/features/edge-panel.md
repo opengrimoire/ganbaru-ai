@@ -20,10 +20,10 @@ Detection uses global mouse position via Rust (`rdev` or platform-specific APIs)
 
 | Section | Purpose |
 |---------|---------|
-| Quick-access icons | Calendar, To-do, Notes, Music, Settings. One click switches to that module. |
+| Quick-access icons | Calendar, Projects, Notes, Music, Settings. One click switches to that module. |
 | Pomodoro timer | Current focus countdown as a small circular progress indicator (matches the title bar ring; see `features/pomodoro-progress-displays.md`). |
 | Active environment name | Shows which work environment is currently active. |
-| Quick-add task | Single text field; types a title and presses Enter to create a to-do task in the current project. |
+| Quick-add task | Single text field; types a title and presses Enter to create a project task in the current project. |
 | Current session tasks | Checkboxes for tasks linked to the active session block. Click to mark done. |
 | Music controls | Play/pause, skip, volume. |
 
@@ -37,6 +37,6 @@ Mobile does not have the screen real estate, the always-on-top window concept, o
 
 - **Pomodoro:** mirrors the focus countdown.
 - **Calendar:** the active session block determines what is shown.
-- **To-do:** the linked tasks populate the checkbox list.
+- **Projects:** the linked tasks populate the checkbox list.
 - **Music:** controls the active player.
 - **Work environments:** the active environment name is displayed.

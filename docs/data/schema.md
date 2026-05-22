@@ -369,7 +369,7 @@ Music files remain outside the vault. SQLite stores playlist definitions, source
 
 These tables are designed but their detailed shape is filled in when the feature ships. Each feature doc owns the deeper definition.
 
-- **To-do task tables:** deferred until the future task design is settled.
+- **Project task tables:** deferred until the future task design is settled.
 - **`work_environments`:** id, name, apps_to_open (JSON), browser_tabs (JSON), playlist_id, blocker_ruleset_id.
 - **`notes_index`:** path, title, modified_at, tags, backlinks. Source of truth is the markdown file under `vault/notes/`.
 - **`diary_index`:** date, type (morning/evening), mood, energy, sleep_hours, path. Source of truth is the markdown file under `vault/diary/`.

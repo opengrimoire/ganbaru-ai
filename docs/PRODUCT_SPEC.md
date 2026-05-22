@@ -410,7 +410,7 @@ The integrated AI panel (terminal and BYOK chat) provides the foundation. These 
 2. **Automated measurement:** productivity metrics come from real tracked behavior, not self-reporting.
 3. **Interconnection over isolation:** every module feeds data to and receives data from other modules. The value of the app comes from the connections, not any single feature.
 4. **Progressive disclosure:** new users see a guided, constrained experience. Complexity reveals itself as confidence grows.
-5. **Gamification as structure (planned):** the gamification layer (Will, Contracts, skill tree, NPCs) is designed to be structurally integrated into how the app measures and motivates productivity, not as a skin on a to-do list.
+5. **Gamification as structure (planned):** the gamification layer (Will, Contracts, skill tree, NPCs) is designed to be structurally integrated into how the app measures and motivates productivity, not as a skin on a task list.
 6. **AI as infrastructure, not afterthought:** the integrated AI panel is a core module, not a post-MVP add-on. Calendar-driven session switching, context injection, and workflow phase prompts make AI assistance seamless. The terminal and BYOK chat are two interfaces to the same session management architecture.
 7. **Minimal friction:** the edge panel, automatic environment switching, calendar-driven automation, and 10-second diary entries all serve the same goal: reducing the number of decisions and clicks required to stay productive.
 8. **Ethical engagement (planned):** gacha-inspired mechanics (Skill Capsules) will use earned currency only, never real money. Loss aversion (skill decay, Contract penalties) will be visible but not punitive.

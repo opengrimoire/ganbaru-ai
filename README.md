@@ -24,7 +24,7 @@ Anti-procrastination project manager for life and work. Free, local, open-source
 |---|---|---|
 | **Calendar** | 100% custom-built with Svelte 5. Session blocks with drag-and-drop creation/resizing, day/week/month views, full RFC 5545 RRULE recurrence, auto-environment activation on block start | Available |
 | **Pomodoro timer** | Focus/break phases, configurable cycle durations, timeline rail visualization, idle detection, suspend/wake handling, pre-break notifications | Available |
-| **Kanban board** | Backlog/todo/in-progress/done columns, priority tiers (easy/medium/hard/epic), estimated pomodoro count, task-to-session linking | Available |
+| **Kanban board** | Backlog/planned/in-progress/done columns, priority tiers (easy/medium/hard/epic), estimated pomodoro count, task-to-session linking | Available |
 | **Note-taking** | Tiptap block editor with slash commands, markdown storage on disk, bidirectional backlinks indexed in SQLite | Planned |
 | **Daily diary** | Morning and evening entry forms, mood/energy/sleep tracking, personal baselines for AI suggestions | Planned |
 | **Procrastination stopper** | Browser extension (Chrome, Firefox) with URL blocking and content-aware filtering; mobile app-level blocking | Planned |

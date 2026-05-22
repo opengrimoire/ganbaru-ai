@@ -32,7 +32,8 @@ describe("shortcut search", () => {
       "Next view",
       "Previous view",
       "Open calendar",
-      "Open to-do",
+      "Open projects",
+      "Open notes",
       "Open music",
       "Open or close settings",
       "Zoom in",
@@ -56,7 +57,8 @@ describe("shortcut search", () => {
     expect(openActions).toEqual(
       expect.arrayContaining([
         "Open calendar",
-        "Open to-do",
+        "Open projects",
+        "Open notes",
         "Open music",
         "Open shortcuts",
         "Open theme picker",
