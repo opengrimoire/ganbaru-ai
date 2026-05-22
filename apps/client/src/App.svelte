@@ -173,7 +173,11 @@
 
     // Prevent native webview scaling from modified wheel input.
     const blockNativeWheelScale = (e: WheelEvent) => { if (hasShortcutModifier(e)) e.preventDefault(); };
+    const blockNativeContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
     document.addEventListener("wheel", blockNativeWheelScale, { passive: false, capture: true });
+    document.addEventListener("contextmenu", blockNativeContextMenu, { capture: true });
 
     const root = document.documentElement;
     const markPointerFocus = () => {
@@ -208,6 +212,7 @@
 
     return () => {
       document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
+      document.removeEventListener("contextmenu", blockNativeContextMenu, { capture: true });
       document.removeEventListener("pointerdown", markPointerFocus, { capture: true });
       document.removeEventListener("keydown", markKeyboardFocus, { capture: true });
       document.removeEventListener("visibilitychange", onVisibility);
