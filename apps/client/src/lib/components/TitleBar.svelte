@@ -612,6 +612,10 @@
   let tabWheelCooldown = false;
 
   function handleTabWheel(e: WheelEvent) {
+    if (showPomodoroMenu) {
+      handleTitleBarVolumeWheel(e);
+      return;
+    }
     e.preventDefault();
     if (tabWheelCooldown) return;
     if (Math.abs(e.deltaY) < 5) return;
@@ -947,6 +951,7 @@
             class="fixed inset-0 z-40"
             onclick={() => { showPomodoroMenu = false; }}
             onkeydown={(e) => { if (e.key === "Escape") showPomodoroMenu = false; }}
+            onwheel={handleTitleBarVolumeWheel}
           ></div>
           <div
             class="absolute right-0 top-9 z-50 w-60 max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-popover py-1 shadow-lg"
@@ -1036,6 +1041,7 @@
               {/if}
             </button>
             {#if isMainWindow}
+              <div class="mx-3 my-1.5 h-px bg-border"></div>
               <div class="px-3 pb-1.5 pt-2 text-xs text-muted-foreground">
                 <span class="block truncate">{musicStatusText}</span>
               </div>
