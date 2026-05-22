@@ -264,30 +264,24 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         *stored = Some(music_status.clone());
     }
 
-    let mut builder = MenuBuilder::new(app).item(&pomodoro_status);
-    if pomodoro_active(&state.pomodoro) {
-        let pause_resume_label = if state.pomodoro.is_running {
-            "Pause pomodoro"
-        } else {
-            "Resume pomodoro"
-        };
-        let pause_resume_item = MenuItemBuilder::with_id("pause_resume", pause_resume_label)
-            .build(app)
-            .map_err(|e| e.to_string())?;
-        builder = builder.item(&pause_resume_item);
-        if state.pomodoro.can_add_focus_time {
-            let add_focus_time_item =
-                MenuItemBuilder::with_id("add_focus_time", "Extend focus 3 minutes")
-                    .build(app)
-                    .map_err(|e| e.to_string())?;
-            builder = builder.item(&add_focus_time_item);
-        }
-        let skip_item =
-            MenuItemBuilder::with_id("skip", phase_advance_label(&state.pomodoro.phase))
-                .build(app)
-                .map_err(|e| e.to_string())?;
-        builder = builder.item(&skip_item);
-    }
+    let pomodoro_active = pomodoro_active(&state.pomodoro);
+    let pause_resume_label = if state.pomodoro.is_running {
+        "Pause pomodoro"
+    } else {
+        "Resume pomodoro"
+    };
+    let pause_resume_item = MenuItemBuilder::with_id("pause_resume", pause_resume_label)
+        .enabled(pomodoro_active)
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let add_focus_time_item = MenuItemBuilder::with_id("add_focus_time", "Extend focus 3 minutes")
+        .enabled(state.pomodoro.can_add_focus_time)
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let skip_item = MenuItemBuilder::with_id("skip", phase_advance_label(&state.pomodoro.phase))
+        .enabled(pomodoro_active)
+        .build(app)
+        .map_err(|e| e.to_string())?;
 
     let separator = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
     let play_pause_label = if state.music.status == "playing" {
@@ -311,7 +305,11 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         .build(app)
         .map_err(|e| e.to_string())?;
 
-    builder
+    MenuBuilder::new(app)
+        .item(&pomodoro_status)
+        .item(&pause_resume_item)
+        .item(&add_focus_time_item)
+        .item(&skip_item)
         .item(&separator)
         .item(&music_status)
         .item(&play_pause_item)

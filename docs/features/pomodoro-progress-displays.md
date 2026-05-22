@@ -41,7 +41,7 @@ What it does not show:
 
 The tray ring is the most ambient surface: it sits in the user's peripheral vision constantly. The pixel-level rendering (RGBA, not SVG) is necessary because tray icons on most platforms accept only raster images, not vector ones. The icon redraws every few seconds, fine-grained enough to feel alive without burning CPU.
 
-When clicked, the tray icon opens or focuses the main window. The tray menu offers session controls without needing the main window: `Pause pomodoro` or `Resume pomodoro`, `Extend focus 3 minutes` once per focus period when the event window has room, `Go to break now` during focus, and `Start focus now` during breaks. The tray music status shows only the active media title when one is loaded, without redundant status or category prefixes. Shuffle remains controlled from the Music view rather than from the tray menu.
+When clicked, the tray icon opens or focuses the main window. The tray menu offers session controls without needing the main window: `Pause pomodoro` or `Resume pomodoro`, `Extend focus 3 minutes` once per focus period when the event window has room, `Go to break now` during focus, and `Start focus now` during breaks. Those Pomodoro actions stay visible but disabled when no session is active, matching the Music controls. The tray music status shows only the active media title when one is loaded, without redundant status or category prefixes. Shuffle remains controlled from the Music view rather than from the tray menu.
 
 ## Vertical timeline rail (calendar day and week views)
 
