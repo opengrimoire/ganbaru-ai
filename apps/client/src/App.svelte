@@ -29,6 +29,7 @@
   import MusicView from "$lib/components/music/MusicView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
+  import { formatEventNotificationBody } from "$lib/components/calendar/event-notifications";
   import {
     firstMarkTime,
     mark as perfMark,
@@ -495,13 +496,9 @@
         // Fire if within a 90-second window (covers 30s polling interval with margin)
         if (diff >= 0 && diff < 90_000) {
           notifiedEvents.add(notifKey);
-          const minutesUntil = Math.round((startTime.getTime() - now.getTime()) / 60_000);
-          let body: string;
-          if (minutesUntil <= 0) body = "Starting now";
-          else if (minutesUntil === 1) body = "Starts in 1 minute";
-          else if (minutesUntil < 60) body = `Starts in ${minutesUntil} minutes`;
-          else body = `Starts in ${Math.round(minutesUntil / 60)} hour(s)`;
-          invoke("show_event_notification", { title: event.title, body }).catch((e) =>
+          const title = event.title.trim() || "Calendar event";
+          const body = formatEventNotificationBody(event, now);
+          invoke("show_event_notification", { title, body }).catch((e) =>
             console.error("[notifications] failed:", e),
           );
         }

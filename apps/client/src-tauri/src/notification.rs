@@ -1398,15 +1398,33 @@ pub fn play_alert_sound() {
 }
 
 #[tauri::command]
-pub fn show_event_notification(title: String, body: String) {
+pub fn show_event_notification(app: tauri::AppHandle, title: String, body: String) {
     std::thread::spawn(move || {
-        let _ = Notification::new()
-            .summary(&title)
+        let summary = notification_summary(&title);
+        let body = escape_notification_markup(&body);
+        let result = Notification::new()
+            .appname("GanbaruAI")
+            .summary(&summary)
             .body(&body)
-            .timeout(10_000)
-            .hint(Hint::Transient(true))
+            .action("open_calendar", "Open calendar")
+            .timeout(15_000)
+            .hint(Hint::Category("calendar".into()))
+            .hint(Hint::DesktopEntry("ganbaruai".into()))
             .hint(Hint::SoundName("message-new-instant".into()))
             .show();
+
+        match result {
+            Ok(handle) => {
+                handle.wait_for_action(|action| {
+                    if action == "open_calendar" || action == "default" {
+                        focus_main_window(app.clone());
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("Failed to show event notification: {e}");
+            }
+        }
     });
 }
 
@@ -1556,6 +1574,22 @@ fn focus_main_window(app: tauri::AppHandle) {
             }
         }
     });
+}
+
+fn escape_notification_markup(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+fn notification_summary(value: &str) -> String {
+    let summary = value.lines().next().unwrap_or("").trim();
+    if summary.is_empty() {
+        "Calendar event".to_string()
+    } else {
+        escape_notification_markup(summary)
+    }
 }
 
 #[tauri::command]

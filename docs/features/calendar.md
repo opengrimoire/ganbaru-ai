@@ -45,6 +45,8 @@ A calendar event is a structured record (see `data/schema.md` for the table). Th
 
 Events without a pomodoro config are still first-class citizens. They appear in the calendar, drive notifications, and trigger work-environment activation. They simply do not show a rail and do not contribute to focus stats.
 
+Event notifications are native desktop notifications, not sound-only alerts. The notification title is the event title, and the body includes the lead time, time range or all-day label, and location when available. Clicking the notification or its Open calendar action focuses the main window.
+
 ## Interactions
 
 The day and week views support direct manipulation:
