@@ -1,13 +1,28 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { invoke } from "@tauri-apps/api/core";
-  import { getNavigation, type View } from "$lib/stores/navigation.svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { getNavigation } from "$lib/stores/navigation.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import type { TitleBarControlId } from "$lib/stores/preferences";
+  import { firstMainView, mainTabViews, type DetachableTabView } from "$lib/navigation";
+  import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
+  import {
+    DETACHED_VIEW_DRAG_MIME,
+    DETACHED_VIEW_REATTACH_REQUESTED_EVENT,
+    detachableTabViewFromWindowLabel,
+    focusMainWindow,
+    isDetachedViewReattachRequest,
+    notifyDetachedViewReattachRequested,
+    notifyDetachedViewWindowChanged,
+    openDetachedViewWindow,
+    parseDetachedViewDragPayload,
+    serializeDetachedViewDragPayload,
+  } from "$lib/windows/detached";
   import { cn, isEditableKeyboardTarget } from "$lib/utils";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Folder from "@lucide/svelte/icons/folder";
@@ -21,6 +36,8 @@
   import MoreHorizontal from "@lucide/svelte/icons/more-horizontal";
   import Minus from "@lucide/svelte/icons/minus";
   import Square from "@lucide/svelte/icons/square";
+  import SquareArrowLeft from "@lucide/svelte/icons/square-arrow-left";
+  import SquareArrowUpRight from "@lucide/svelte/icons/square-arrow-up-right";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import X from "@lucide/svelte/icons/x";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
@@ -46,12 +63,15 @@
   } = $props();
 
   const win = getCurrentWindow();
+  const isMainWindow = win.label === "main";
+  const detachedWindowView = detachableTabViewFromWindowLabel(win.label);
   const nav = getNavigation();
   const pomodoro = getPomodoro();
   const theme = getTheme();
   const zoom = getZoom();
   const preferences = getPreferences();
   const viewport = getViewport();
+  const detachedWindows = getDetachedWindows();
   const benchmarkStatus = getBenchmarkStatus();
 
   let isMaximized = $state(false);
@@ -61,8 +81,11 @@
   let showResetConfirm = $state(false);
   let showPerfMenu = $state(false);
   let showTitleBarMenu = $state(false);
+  let showTabContextMenu = $state(false);
   let showUtilityOverflowMenu = $state(false);
   let titleBarMenuStyle = $state("");
+  let tabContextMenuStyle = $state("");
+  let tabContextView = $state<DetachableTabView | null>(null);
   const settingsLauncher = getSettingsLauncher();
   const themeEditor = getThemeEditor();
   let perfPinned = $state(false);
@@ -195,6 +218,19 @@
   }
 
   async function handleClose() {
+    if (detachedWindowView) {
+      detachedWindows.markAttached(detachedWindowView);
+      try {
+        await notifyDetachedViewWindowChanged({
+          view: detachedWindowView,
+          detached: false,
+        });
+      } catch (error) {
+        console.error("Failed to publish detached window close:", error);
+      }
+      await win.destroy();
+      return;
+    }
     if (showResetSequenceConfirm || showResetConfirm) return;
     if (await benchmarkBlocksClose()) {
       void ensureBenchmarkOverlay();
@@ -239,11 +275,18 @@
     pomodoro.isRunning || pomodoro.remainingSeconds < pomodoro.totalSecondsForPhase,
   );
 
-  const tabs: { view: View; label: string; icon: typeof Calendar }[] = [
+  const tabs: { view: DetachableTabView; label: string; icon: typeof Calendar }[] = [
     { view: "calendar", label: "Calendar", icon: Calendar },
     { view: "projects", label: "Projects", icon: Folder },
     { view: "notes", label: "Notes", icon: Book },
   ];
+  const visibleTabs = $derived.by(() => {
+    if (detachedWindowView) {
+      return tabs.filter((tab) => tab.view === detachedWindowView);
+    }
+    const visibleViews = new Set(mainTabViews(detachedWindows.views));
+    return tabs.filter((tab) => visibleViews.has(tab.view));
+  });
 
   const titleBarControls: { id: TitleBarControlId; label: string }[] = [
     { id: "pomodoro", label: "Pomodoro" },
@@ -254,6 +297,7 @@
   ];
 
   const TITLE_BAR_MENU_WIDTH = 224;
+  const TAB_CONTEXT_MENU_MAX_WIDTH = 260;
   const MENU_EDGE_GAP = 8;
   const themeEditorLockedControlIds = new Set<TitleBarControlId>([
     "theme",
@@ -357,9 +401,33 @@
     };
   });
 
+  $effect(() => {
+    if (!detachedWindowView) return;
+    let cleanup: UnlistenFn | undefined;
+    listen<unknown>(DETACHED_VIEW_REATTACH_REQUESTED_EVENT, (event) => {
+      if (
+        isDetachedViewReattachRequest(event.payload)
+        && event.payload.view === detachedWindowView
+      ) {
+        void reattachDetachedTab();
+      }
+    }).then((unlisten) => {
+      cleanup = unlisten;
+    }).catch((error) => {
+      console.error("Failed to listen for detached tab reattach:", error);
+    });
+    return () => cleanup?.();
+  });
+
   function handleModalKeydown(e: KeyboardEvent) {
     if (showUtilityOverflowMenu && e.key === "Escape") {
       showUtilityOverflowMenu = false;
+      return;
+    }
+
+    if (showTabContextMenu && e.key === "Escape") {
+      showTabContextMenu = false;
+      tabContextView = null;
       return;
     }
 
@@ -452,7 +520,7 @@
   let indicatorFrame = 0;
 
   function updateIndicator() {
-    const idx = tabs.findIndex((t) => t.view === nav.current);
+    const idx = visibleTabs.findIndex((t) => t.view === nav.current);
     const el = tabEls[idx];
     if (!el) {
       indicatorStyle = "";
@@ -478,6 +546,7 @@
 
   $effect(() => {
     void nav.current;
+    void visibleTabs;
     void autoCompactTabs;
     void activeTabOnly;
     void preferences.fontFamilyId;
@@ -497,12 +566,13 @@
     e.preventDefault();
     if (tabWheelCooldown) return;
     if (Math.abs(e.deltaY) < 5) return;
+    if (visibleTabs.length === 0) return;
     tabWheelCooldown = true;
-    const currentIndex = tabs.findIndex((t) => t.view === nav.current);
+    const currentIndex = Math.max(0, visibleTabs.findIndex((t) => t.view === nav.current));
     const delta = e.deltaY > 0 ? 1 : -1;
-    const nextIndex = Math.max(0, Math.min(tabs.length - 1, currentIndex + delta));
+    const nextIndex = Math.max(0, Math.min(visibleTabs.length - 1, currentIndex + delta));
     if (nextIndex !== currentIndex) {
-      nav.navigate(tabs[nextIndex].view);
+      nav.navigate(visibleTabs[nextIndex].view);
     }
     setTimeout(() => { tabWheelCooldown = false; }, 300);
   }
@@ -510,6 +580,8 @@
   function openTitleBarMenu(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    showTabContextMenu = false;
+    tabContextView = null;
 
     const left = Math.min(
       Math.max(MENU_EDGE_GAP, e.clientX),
@@ -523,6 +595,124 @@
       `max-height: calc(100vh - ${top + MENU_EDGE_GAP}px)`,
     ].join("; ");
     showTitleBarMenu = true;
+  }
+
+  function openTabContextMenu(e: MouseEvent, view: DetachableTabView) {
+    e.preventDefault();
+    e.stopPropagation();
+    showTitleBarMenu = false;
+    showUtilityOverflowMenu = false;
+    showTabContextMenu = true;
+    tabContextView = view;
+
+    const left = Math.min(
+      Math.max(MENU_EDGE_GAP, e.clientX),
+      Math.max(MENU_EDGE_GAP, window.innerWidth - TAB_CONTEXT_MENU_MAX_WIDTH - MENU_EDGE_GAP),
+    );
+    const top = Math.max(MENU_EDGE_GAP, e.clientY);
+    tabContextMenuStyle = [
+      `left: ${left}px`,
+      `top: ${top}px`,
+      "width: max-content",
+      "min-width: 196px",
+      `max-width: min(${TAB_CONTEXT_MENU_MAX_WIDTH}px, calc(100vw - ${MENU_EDGE_GAP * 2}px))`,
+      `max-height: calc(100vh - ${top + MENU_EDGE_GAP}px)`,
+    ].join("; ");
+  }
+
+  function detachedViewDragPayload(event: DragEvent): ReturnType<typeof parseDetachedViewDragPayload> {
+    const transfer = event.dataTransfer;
+    if (!transfer) return undefined;
+    const customPayload = transfer.getData(DETACHED_VIEW_DRAG_MIME);
+    if (customPayload) return parseDetachedViewDragPayload(customPayload);
+    const plainPayload = transfer.getData("text/plain");
+    return plainPayload ? parseDetachedViewDragPayload(plainPayload) : undefined;
+  }
+
+  function hasDetachedViewDragPayload(event: DragEvent): boolean {
+    const types = Array.from(event.dataTransfer?.types ?? []);
+    return types.includes(DETACHED_VIEW_DRAG_MIME);
+  }
+
+  function handleTabDragStart(event: DragEvent, view: DetachableTabView): void {
+    if (!detachedWindowView || view !== detachedWindowView || !event.dataTransfer) return;
+    const payload = serializeDetachedViewDragPayload(view, win.label);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(DETACHED_VIEW_DRAG_MIME, payload);
+    event.dataTransfer.setData("text/plain", payload);
+  }
+
+  function handleTitleBarDragOver(event: DragEvent): void {
+    if (!isMainWindow || !hasDetachedViewDragPayload(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleTitleBarDrop(event: DragEvent): void {
+    if (!isMainWindow) return;
+    const payload = detachedViewDragPayload(event);
+    if (!payload) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void requestDetachedTabReattach(payload.view);
+  }
+
+  async function moveTabToNewWindow(): Promise<void> {
+    if (!tabContextView) return;
+    const view = tabContextView;
+    showTabContextMenu = false;
+    tabContextView = null;
+    try {
+      await openDetachedViewWindow(view);
+      detachedWindows.markDetached(view);
+      if (nav.current === view) {
+        nav.navigate(firstMainView(detachedWindows.views));
+      }
+    } catch (error) {
+      console.error("Failed to move tab to a new window:", error);
+    }
+  }
+
+  async function requestDetachedTabReattach(view: DetachableTabView): Promise<void> {
+    detachedWindows.markAttached(view);
+    nav.navigate(view);
+    try {
+      await notifyDetachedViewWindowChanged({ view, detached: false });
+    } catch (error) {
+      console.error("Failed to publish detached window restore:", error);
+    }
+    try {
+      await notifyDetachedViewReattachRequested({ view });
+    } catch (error) {
+      console.error("Failed to request detached window restore:", error);
+    }
+  }
+
+  async function reattachDetachedTab(): Promise<void> {
+    if (!detachedWindowView) return;
+    const view = detachedWindowView;
+    detachedWindows.markAttached(view);
+    try {
+      await notifyDetachedViewWindowChanged({ view, detached: false });
+    } catch (error) {
+      console.error("Failed to publish detached window restore:", error);
+    }
+    try {
+      await focusMainWindow();
+    } catch (error) {
+      console.error("Failed to focus main window after tab restore:", error);
+    }
+    await win.destroy();
+  }
+
+  function activateTabContextAction(): void {
+    if (detachedWindowView) {
+      showTabContextMenu = false;
+      tabContextView = null;
+      void reattachDetachedTab();
+      return;
+    }
+    void moveTabToNewWindow();
   }
 
   function toggleTitleBarControl(id: TitleBarControlId) {
@@ -570,6 +760,8 @@
   style="height: var(--titlebar-h);"
   onwheel={handleTabWheel}
   oncontextmenu={openTitleBarMenu}
+  ondragover={handleTitleBarDragOver}
+  ondrop={handleTitleBarDrop}
 >
   <!-- Navigation tabs -->
   <div class="relative flex min-w-0 items-center gap-0.5 overflow-hidden pl-1.5">
@@ -579,10 +771,13 @@
         style={indicatorStyle}
       ></div>
     {/if}
-    {#each tabs as tab, i}
+    {#each visibleTabs as tab, i}
       <button
         bind:this={tabEls[i]}
         onclick={() => nav.navigate(tab.view)}
+        oncontextmenu={(e) => openTabContextMenu(e, tab.view)}
+        draggable={!!detachedWindowView}
+        ondragstart={(e) => handleTabDragStart(e, tab.view)}
         class={cn(
           "titlebar-tab relative z-1 flex items-center rounded-md text-sm font-medium transition-colors",
           activeTabOnly && nav.current !== tab.view ? "hidden" : "",
@@ -677,7 +872,7 @@
       </div>
     {/if}
 
-    {#if titleBarControlVisible("music")}
+    {#if isMainWindow && titleBarControlVisible("music")}
       <button
         type="button"
         onclick={() => nav.navigate("music")}
@@ -823,7 +1018,11 @@
           ? "cursor-not-allowed opacity-40"
           : "hover:bg-destructive hover:text-destructive-foreground",
       )}
-      title={lockedByBenchmark ? "Disabled while a benchmark is active" : "Close app"}
+      title={lockedByBenchmark
+        ? "Disabled while a benchmark is active"
+        : isMainWindow
+          ? "Close app"
+          : "Close window"}
       aria-label="Close"
     >
       <X size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -832,6 +1031,37 @@
 </div>
 
 {@render performancePopover()}
+
+{#if showTabContextMenu && tabContextView}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-40"
+    onclick={() => { showTabContextMenu = false; tabContextView = null; }}
+    oncontextmenu={(e) => { e.preventDefault(); showTabContextMenu = false; tabContextView = null; }}
+  ></div>
+  <div
+    class="fixed z-50 overflow-hidden rounded-lg border border-border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-xl"
+    style={tabContextMenuStyle}
+    role="menu"
+  >
+    <div class="p-1">
+      <button
+        role="menuitem"
+        onclick={activateTabContextAction}
+        class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent"
+      >
+        {#if detachedWindowView}
+          <SquareArrowLeft size={15} strokeWidth={2.2} />
+          <span class="shrink-0 whitespace-nowrap">Move back to main window</span>
+        {:else}
+          <SquareArrowUpRight size={15} strokeWidth={2.2} />
+          <span class="shrink-0 whitespace-nowrap">Move to new window</span>
+        {/if}
+      </button>
+    </div>
+  </div>
+{/if}
 
 {#if showTitleBarMenu}
   <!-- svelte-ignore a11y_click_events_have_key_events -->

@@ -1,11 +1,19 @@
 <script lang="ts">
   import { getNavigation, type View } from "$lib/stores/navigation.svelte";
+  import {
+    firstMainView,
+    isDetachableTabView,
+    mainTabViews,
+    type DetachableTabView,
+  } from "$lib/navigation";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
+  import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
+  import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
   import { ensureDbUrl } from "$lib/api/db";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
@@ -33,6 +41,8 @@
   perfMark("boot.script-start");
 
   const appWindow = getCurrentWindow();
+  const isMainWindow = appWindow.label === "main";
+  const detachedWindowView = detachableTabViewFromWindowLabel(appWindow.label);
   const nav = getNavigation();
   const calendar = getCalendar();
   const calendars = getCalendars();
@@ -40,6 +50,7 @@
   const zoom = getZoom();
   const settingsLauncher = getSettingsLauncher();
   const viewport = getViewport();
+  const detachedWindows = getDetachedWindows();
 
   let isMaximized = $state(true);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
@@ -216,19 +227,28 @@
     return () => cleanup?.();
   });
 
-  const views: View[] = ["calendar", "projects", "notes"];
+  const visibleTabViews = $derived.by<DetachableTabView[]>(() => {
+    if (detachedWindowView) return [detachedWindowView];
+    return mainTabViews(detachedWindows.views);
+  });
+  const keyboardViews = $derived.by<View[]>(() => {
+    if (!isMainWindow) return visibleTabViews;
+    return [...visibleTabViews, "music"];
+  });
   let showStopConfirm = $state(false);
   let savedBlockState: CalendarEvent | null = null;
   let reverting = false;
 
   function navigatePrev() {
-    const i = views.indexOf(nav.current);
-    nav.navigate(views[(i - 1 + views.length) % views.length]);
+    if (keyboardViews.length === 0) return;
+    const i = Math.max(0, keyboardViews.indexOf(nav.current));
+    nav.navigate(keyboardViews[(i - 1 + keyboardViews.length) % keyboardViews.length]);
   }
 
   function navigateNext() {
-    const i = views.indexOf(nav.current);
-    nav.navigate(views[(i + 1) % views.length]);
+    if (keyboardViews.length === 0) return;
+    const i = Math.max(0, keyboardViews.indexOf(nav.current));
+    nav.navigate(keyboardViews[(i + 1) % keyboardViews.length]);
   }
 
   const suspendInfo = $derived(pomodoro.suspendedAway);
@@ -276,13 +296,13 @@
 
     if (showStopConfirm || suspendInfo || idleInfo) return;
 
-    if (e.altKey && e.key >= "1" && e.key <= String(views.length)) {
+    if (e.altKey && e.key >= "1" && e.key <= String(visibleTabViews.length)) {
       e.preventDefault();
-      nav.navigate(views[parseInt(e.key) - 1]);
+      nav.navigate(visibleTabViews[parseInt(e.key) - 1]);
       return;
     }
 
-    if (hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "m") {
+    if (isMainWindow && hasOnlyShortcutModifier(e) && e.key.toLowerCase() === "m") {
       if (isEditableKeyboardTarget(e.target)) return;
       e.preventDefault();
       nav.navigate("music");
@@ -413,6 +433,16 @@
     const _v = calendar.indexVersion;
     const _expired = pomodoro.blockExpired;
     checkActiveBlock();
+  });
+
+  $effect(() => {
+    if (detachedWindowView) {
+      if (nav.current !== detachedWindowView) nav.navigate(detachedWindowView);
+      return;
+    }
+    if (isDetachableTabView(nav.current) && !visibleTabViews.includes(nav.current)) {
+      nav.navigate(firstMainView(detachedWindows.views));
+    }
   });
 
   // Also poll for time-based transitions

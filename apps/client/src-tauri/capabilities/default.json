@@ -1,11 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for app-owned windows",
+  "windows": ["main", "view-*"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "core:window:allow-create",
+    "core:window:allow-destroy",
+    "core:window:allow-get-all-windows",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",
@@ -14,8 +18,11 @@
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-focus",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
     "core:window:allow-is-fullscreen",
     "core:window:allow-internal-toggle-maximize",
+    "core:webview:allow-create-webview-window",
     "core:webview:allow-set-webview-zoom"
   ]
 }

@@ -35,6 +35,7 @@ The desktop and mobile shell. Wraps the Svelte frontend in a native window and e
 Key Tauri v2 capabilities used in this project:
 
 - **Multi-window management.** Separate windows for the main app, the edge panel, the fullscreen break overlay, and custom notifications. Each independently configured (frameless, transparent, always-on-top, positioned to screen edges or center).
+- **Detached module windows.** Primary title-bar tabs can be moved into app-owned secondary windows. While a tab is detached, the main window hides that tab and the detached window locks navigation to that view. The tab can be reattached from the detached window's context menu or by dragging it back onto the main title bar.
 - **`set_always_on_top`**. Used for the notification window and fullscreen Pomodoro overlay to appear above all other apps including the Windows taskbar.
 - **`set_fullscreen` + `set_decorations(false)` + `set_transparent`**. Combined to produce the fullscreen break screen that covers the taskbar and acts as a custom screen saver during Pomodoro breaks.
 - **`setIgnoreCursorEvents`**. Allows the custom notification window to be non-interactive when desired, so it does not interrupt work in other apps.
