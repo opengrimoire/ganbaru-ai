@@ -1,6 +1,8 @@
 import type { PomodoroPhase } from "@ganbaruai/shared-types";
 import type { PauseInterval, PersistedSegment, SegmentPhase } from "$lib/components/calendar/types";
 import { dbUrl } from "$lib/api/db";
+import { getMusicPlayer } from "$lib/stores/music-player.svelte";
+import { getPreferences } from "$lib/stores/preferences.svelte";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -97,6 +99,8 @@ let activeBlockId = $state<string | null>(null);
 let activeBlockEndMs = $state<number | null>(null);
 let dismissedBlockId = $state<string | null>(null);
 const FOCUS_EXTENSION_SECONDS = 180;
+let musicPausedByPomodoroPause = false;
+let musicPauseInFlight: Promise<void> | null = null;
 
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
@@ -522,6 +526,7 @@ function pomodoroSessionActive(nowMs: number = Date.now()): boolean {
 
 function expirePausedBlockAtDeadline(): void {
   if (activeBlockEndMs === null) return;
+  clearMusicPausedByPomodoro();
   const endIso = new Date(activeBlockEndMs).toISOString();
   stopPausedOpportunityCountdown();
   refreshPausedOpportunityRemaining(activeBlockEndMs);
@@ -1237,7 +1242,54 @@ function stopOvertime() {
   breakOvertimeSeconds = 0;
 }
 
+function clearMusicPausedByPomodoro(): void {
+  musicPausedByPomodoroPause = false;
+  musicPauseInFlight = null;
+}
+
+function pauseMusicForPomodoroPause(): void {
+  if (
+    !pomodoroCoordinator
+    || phase !== "focus"
+    || !pomodoroSessionActive()
+    || !getPreferences().musicPauseOnPomodoroPause
+  ) {
+    clearMusicPausedByPomodoro();
+    return;
+  }
+  const music = getMusicPlayer();
+  if (!music.isPlaying) {
+    clearMusicPausedByPomodoro();
+    return;
+  }
+  musicPausedByPomodoroPause = true;
+  const trackedPause = music.pausePlayback().catch((error) => {
+    console.warn("Failed to pause music with pomodoro:", error);
+  });
+  musicPauseInFlight = trackedPause;
+  void trackedPause.finally(() => {
+    if (musicPauseInFlight === trackedPause) musicPauseInFlight = null;
+  });
+}
+
+function resumeMusicFromPomodoroPause(): void {
+  if (!musicPausedByPomodoroPause) return;
+  musicPausedByPomodoroPause = false;
+  if (!pomodoroCoordinator || !getPreferences().musicPauseOnPomodoroPause) return;
+  const music = getMusicPlayer();
+  const pausePromise = musicPauseInFlight;
+  musicPauseInFlight = null;
+  void (async () => {
+    if (pausePromise) await pausePromise;
+    if (!music.currentSource || music.isPlaying || music.isBusy) return;
+    await music.playPlayback();
+  })().catch((error) => {
+    console.warn("Failed to resume music with pomodoro:", error);
+  });
+}
+
 function startFocusSession() {
+  clearMusicPausedByPomodoro();
   stopPausedOpportunityCountdown();
   if (intervalId) {
     clearInterval(intervalId);
@@ -1640,6 +1692,7 @@ function advancePhase() {
 
   // Save completed focus session before transitioning away from focus
   if (phase === "focus") {
+    clearMusicPausedByPomodoro();
     const endTime = new Date().toISOString();
     if (sessionStartTime) {
       const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
@@ -1809,6 +1862,7 @@ function startFromBlockInternal(
       return;
 
     case "new_session": {
+      clearMusicPausedByPomodoro();
       stopPausedOpportunityCountdown();
       initListeners();
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
@@ -1842,6 +1896,7 @@ function startFromBlockInternal(
 }
 
 function stopSessionInternal(): void {
+  clearMusicPausedByPomodoro();
   stopPausedOpportunityCountdown();
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
     const seg = segments[currentSegmentIndex];
@@ -1892,6 +1947,7 @@ function pauseSession(): void {
     persistSegmentToBackend(seg, "Failed to save pause:", false);
   }
   startPausedOpportunityCountdown();
+  pauseMusicForPomodoroPause();
   updateTray();
 }
 
@@ -1922,6 +1978,7 @@ function resumeSession(): void {
   intervalId = setInterval(tick, 1000);
   lastTickMs = Date.now();
   startIdleChecking();
+  resumeMusicFromPomodoroPause();
   updateTray();
 }
 

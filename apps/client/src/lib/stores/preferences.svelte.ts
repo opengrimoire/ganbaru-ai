@@ -4,6 +4,7 @@ import {
   DEFAULT_FONT_FAMILY_ID,
   DEFAULT_FONT_SCALE,
   DEFAULT_CALENDAR_DIM_PAST_EVENTS,
+  DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE,
   DEFAULT_CALENDAR_TIME_FORMAT,
   DEFAULT_TITLE_BAR_VISIBILITY,
   type CalendarTimeFormat,
@@ -24,6 +25,7 @@ const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
 const EVENT_TZ_DISPLAY_KEY = "preferences.eventTimezoneDisplay";
 const CALENDAR_TIME_FORMAT_CONFIG_KEY = "preferences.calendarTimeFormat";
 const CALENDAR_DIM_PAST_EVENTS_CONFIG_KEY = "preferences.calendarDimPastEvents";
+const MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY = "preferences.musicPauseOnPomodoroPause";
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
 
 export type EventTimezoneDisplay = "device" | "homeZone";
@@ -59,6 +61,12 @@ function loadSavedCalendarDimPastEvents(): boolean {
   return DEFAULT_CALENDAR_DIM_PAST_EVENTS;
 }
 
+function loadSavedMusicPauseOnPomodoroPause(): boolean {
+  const saved = getConfigKey<unknown>(MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY, undefined);
+  if (typeof saved === "boolean") return saved;
+  return DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE;
+}
+
 function loadSavedTitleBarVisibility(): TitleBarVisibility {
   const saved = getConfigKey<unknown>(TITLE_BAR_VISIBILITY_CONFIG_KEY, undefined);
   const parsed = parseTitleBarVisibility(saved);
@@ -73,6 +81,7 @@ let fontScale = $state<number>(loadSavedFontScale());
 let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTzDisplay());
 let calendarTimeFormat = $state<CalendarTimeFormat>(loadSavedCalendarTimeFormat());
 let calendarDimPastEvents = $state<boolean>(loadSavedCalendarDimPastEvents());
+let musicPauseOnPomodoroPause = $state<boolean>(loadSavedMusicPauseOnPomodoroPause());
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
 
 function applyPreferencesToDom(): void {
@@ -118,6 +127,11 @@ function setCalendarDimPastEvents(value: boolean): void {
   setConfigKey(CALENDAR_DIM_PAST_EVENTS_CONFIG_KEY, value);
 }
 
+function setMusicPauseOnPomodoroPause(value: boolean): void {
+  musicPauseOnPomodoroPause = value;
+  setConfigKey(MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY, value);
+}
+
 function setTitleBarControlVisible(id: TitleBarControlId, visible: boolean): void {
   if (!isTitleBarControlId(id)) return;
   titleBarVisibility = { ...titleBarVisibility, [id]: visible };
@@ -158,6 +172,9 @@ export function getPreferences() {
     get calendarDimPastEvents(): boolean {
       return calendarDimPastEvents;
     },
+    get musicPauseOnPomodoroPause(): boolean {
+      return musicPauseOnPomodoroPause;
+    },
     get titleBarVisibility(): TitleBarVisibility {
       return titleBarVisibility;
     },
@@ -166,6 +183,7 @@ export function getPreferences() {
     setEventTimezoneDisplay,
     setCalendarTimeFormat,
     setCalendarDimPastEvents,
+    setMusicPauseOnPomodoroPause,
     setTitleBarControlVisible,
     toggleTitleBarControl,
     resetFontFamily() {
@@ -182,6 +200,9 @@ export function getPreferences() {
     },
     resetCalendarDimPastEvents() {
       setCalendarDimPastEvents(DEFAULT_CALENDAR_DIM_PAST_EVENTS);
+    },
+    resetMusicPauseOnPomodoroPause() {
+      setMusicPauseOnPomodoroPause(DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE);
     },
     resetTitleBarVisibility,
   };

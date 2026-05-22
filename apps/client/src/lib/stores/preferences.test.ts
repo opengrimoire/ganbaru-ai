@@ -6,6 +6,7 @@ import {
   FONT_SCALE_MAX,
   DEFAULT_FONT_SCALE,
   DEFAULT_CALENDAR_DIM_PAST_EVENTS,
+  DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE,
   DEFAULT_CALENDAR_TIME_FORMAT,
   DEFAULT_TITLE_BAR_VISIBILITY,
   TITLE_BAR_CONTROL_IDS,
@@ -129,6 +130,12 @@ describe("calendar appearance preferences", () => {
     expect(isCalendarTimeFormat("24-hour")).toBe(false);
     expect(isCalendarTimeFormat(true)).toBe(false);
     expect(isCalendarTimeFormat(undefined)).toBe(false);
+  });
+});
+
+describe("music pomodoro preferences", () => {
+  it("pauses music on pomodoro pause by default", () => {
+    expect(DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE).toBe(true);
   });
 });
 

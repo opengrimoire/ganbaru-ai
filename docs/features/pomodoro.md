@@ -63,6 +63,8 @@ The session always begins from the current moment, never from the event's schedu
 
 The user can pause manually, the system can auto-pause for idle, and the system can register a suspend pause when the OS sleeps. All three are handled with the same data structure (a row in `pomodoro_pauses`), but their UX differs (see `features/pomodoro-idle-detection.md`). Paused time never counts as focus progress or break credit. If the event deadline becomes the limiting factor while manually paused, the title bar and tray countdown continue to show the usable focus opportunity left in the event, while the calendar rail keeps the paused interval empty.
 
+Music can follow manual focus pauses through the Music settings page. The `Pause if the focus session is paused` setting is on by default; it pauses Music only when Music was already playing and resumes Music only if Pomodoro caused that pause.
+
 **End.** A session ends for one of several reasons, each recorded in `pomodoro_runs.end_reason`:
 
 - `completed`: the event's end time was reached.

@@ -4,9 +4,11 @@
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Keyboard from "@lucide/svelte/icons/keyboard";
+  import Music from "@lucide/svelte/icons/music";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import X from "@lucide/svelte/icons/x";
   import AppearanceSection from "./AppearanceSection.svelte";
+  import MusicSection from "./MusicSection.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
@@ -38,6 +40,7 @@
   const SECTIONS: SectionMeta[] = [
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "calendars", label: "Calendar", icon: CalendarDays },
+    { id: "music", label: "Music", icon: Music },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   ];
 
@@ -238,6 +241,8 @@
           {@const Section = CalendarsSection}
           <Section />
         {/if}
+      {:else if activeSection === "music"}
+        <MusicSection />
       {:else if activeSection === "shortcuts"}
         <ShortcutsSection />
       {/if}

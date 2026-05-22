@@ -71,6 +71,7 @@ export type CalendarTimeFormat = "24h" | "12h";
 
 export const DEFAULT_CALENDAR_TIME_FORMAT: CalendarTimeFormat = "24h";
 export const DEFAULT_CALENDAR_DIM_PAST_EVENTS = true;
+export const DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE = true;
 
 export const TITLE_BAR_CONTROL_IDS = [
   "pomodoro",

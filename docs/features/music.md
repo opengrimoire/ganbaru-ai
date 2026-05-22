@@ -61,6 +61,8 @@ Volume shows one exact percent value and is capped at `100%` for local audio, lo
 
 The existing `main` tray icon and the title bar pomodoro ring menu own compact Music controls. They show the active media title when one is loaded without redundant status or category prefixes, and offer play/pause, previous, next, and opening the Music view. The title bar ring menu also includes a compact volume slider that writes through the same player setting as the Music view. Scrolling over the title bar ring menu, the pomodoro ring button, or the title bar music button adjusts the same Music volume. Shuffle remains controlled from the Music view.
 
+The Music settings page includes a Pomodoro toggle, `Pause if the focus session is paused`, enabled by default. When enabled, manually pausing an active focus phase pauses Music only if it was playing, and resuming the focus phase resumes Music only when that Pomodoro pause caused the Music pause.
+
 SQLite owns playlist definitions and playback resume state:
 
 - `music_playlists`: user playlists.
