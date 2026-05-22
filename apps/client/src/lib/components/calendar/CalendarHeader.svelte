@@ -70,26 +70,18 @@
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
       switch (e.key) {
-        case "t":
-        case "T":
         case "0":
           e.preventDefault();
           onNavigate("today");
           break;
-        case "d":
-        case "D":
         case "1":
           e.preventDefault();
           onViewChange("day");
           break;
-        case "w":
-        case "W":
         case "2":
           e.preventDefault();
           onViewChange("week");
           break;
-        case "m":
-        case "M":
         case "3":
           e.preventDefault();
           onViewChange("month");

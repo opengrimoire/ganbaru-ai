@@ -35,10 +35,10 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = Object.freeze([
   {
     title: "Calendar",
     items: [
-      { keys: ["0", "T"], action: "Go to today" },
-      { keys: ["1", "D"], action: "Day view" },
-      { keys: ["2", "W"], action: "Week view" },
-      { keys: ["3", "M"], action: "Month view" },
+      { keys: ["0"], action: "Go to today" },
+      { keys: ["1"], action: "Day view" },
+      { keys: ["2"], action: "Week view" },
+      { keys: ["3"], action: "Month view" },
       { keys: ["Arrow left", "Arrow right"], action: "Previous or next date range" },
       {
         keys: ["Arrow up", "Arrow down"],

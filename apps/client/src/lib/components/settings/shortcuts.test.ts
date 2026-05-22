@@ -155,10 +155,10 @@ describe("shortcut search", () => {
   it("uses contiguous number shortcuts for calendar views", () => {
     const calendarItems = SHORTCUT_GROUPS.find((group) => group.title === "Calendar")?.items ?? [];
     expect(calendarItems.slice(0, 4).map((item) => item.keys)).toEqual([
-      ["0", "T"],
-      ["1", "D"],
-      ["2", "W"],
-      ["3", "M"],
+      ["0"],
+      ["1"],
+      ["2"],
+      ["3"],
     ]);
     expect(matchingActions("1")).toContain("Day view");
     expect(matchingActions("2")).toContain("Week view");
