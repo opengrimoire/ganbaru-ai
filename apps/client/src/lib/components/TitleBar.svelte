@@ -314,6 +314,13 @@
   });
   const canPlayPauseMusic = $derived(Boolean(musicPlayer.currentSource) && !musicPlayer.isBusy);
   const musicPlayPauseLabel = $derived(musicPlayer.isPlaying ? "Pause music" : "Play music");
+  const musicVolumeTooltipLine = $derived(`Volume: ${musicPlayer.volumePercentLabel}`);
+  const pomodoroButtonTooltip = $derived(
+    `${isActive ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}\n${musicVolumeTooltipLine}`,
+  );
+  const musicButtonTooltip = $derived(
+    `Music (${formatShortcut("Mod + M")})\n${musicVolumeTooltipLine}`,
+  );
 
   const tabs: { view: DetachableTabView; label: string; icon: typeof Calendar }[] = [
     { view: "calendar", label: "Calendar", icon: Calendar },
@@ -917,8 +924,11 @@
         <button
           onclick={togglePomodoroMenu}
           onwheel={handleTitleBarVolumeWheel}
-          class="titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
-          title={isActive ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
+          class={cn(
+            "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
+            showPomodoroMenu ? "bg-sidebar-accent" : "hover:bg-sidebar-accent",
+          )}
+          title={pomodoroButtonTooltip}
           aria-haspopup="menu"
           aria-expanded={showPomodoroMenu}
         >
@@ -1147,7 +1157,7 @@
             ? "bg-background text-foreground dark:bg-accent dark:text-white"
             : `${TITLE_BAR_ICON_COLOR_CLASS} hover:bg-sidebar-accent`,
         )}
-        title={`Music (${formatShortcut("Mod + M")})`}
+        title={musicButtonTooltip}
         aria-label="Music"
       >
         <Music size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />

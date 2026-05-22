@@ -426,6 +426,7 @@
     font-weight: 500;
     letter-spacing: 0;
     line-height: 1.3;
+    white-space: pre-line;
     overflow-wrap: anywhere;
     opacity: 0;
     pointer-events: none;
