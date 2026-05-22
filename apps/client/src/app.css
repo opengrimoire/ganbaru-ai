@@ -216,6 +216,12 @@
   body {
     @apply text-foreground;
   }
+  html[data-theme-switching="true"],
+  html[data-theme-switching="true"] *,
+  html[data-theme-switching="true"] *::before,
+  html[data-theme-switching="true"] *::after {
+    transition: none !important;
+  }
 }
 
 .app-shell {

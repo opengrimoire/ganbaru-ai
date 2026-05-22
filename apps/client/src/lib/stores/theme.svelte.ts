@@ -80,6 +80,7 @@ let quickToggleDarkId = $state<ThemeId>(darkTheme.id);
 let appliedTokenKeys = new Set<string>();
 let hydrated = false;
 let themeSyncInitialized = false;
+let themeTransitionResetFrame: number | undefined;
 
 /**
  * Themes that exist in memory but have not been written to SQLite yet.
@@ -124,18 +125,44 @@ function resolveActive(): Theme {
   return getThemeById(activeId, combinedRegistry()) ?? darkTheme;
 }
 
+function beginInstantThemePaint(): (() => void) | undefined {
+  if (typeof document === "undefined") return undefined;
+  const root = document.documentElement;
+  root.dataset.themeSwitching = "true";
+  if (themeTransitionResetFrame !== undefined && typeof window !== "undefined") {
+    window.cancelAnimationFrame(themeTransitionResetFrame);
+    themeTransitionResetFrame = undefined;
+  }
+  return () => {
+    void root.offsetHeight;
+    if (typeof window === "undefined") {
+      delete root.dataset.themeSwitching;
+      return;
+    }
+    themeTransitionResetFrame = window.requestAnimationFrame(() => {
+      delete root.dataset.themeSwitching;
+      themeTransitionResetFrame = undefined;
+    });
+  };
+}
+
 function applyThemeToDom(): void {
   if (typeof document === "undefined") return;
+  const finishInstantPaint = beginInstantThemePaint();
   const theme = resolveActive();
   const root = document.documentElement;
-  root.classList.toggle("dark", isThemeDark(theme));
-  const { toSet, toClear, applied } = computeThemeTokenOps(
-    theme,
-    appliedTokenKeys,
-  );
-  for (const [key, value] of toSet) root.style.setProperty(key, value);
-  for (const key of toClear) root.style.removeProperty(key);
-  appliedTokenKeys = applied;
+  try {
+    root.classList.toggle("dark", isThemeDark(theme));
+    const { toSet, toClear, applied } = computeThemeTokenOps(
+      theme,
+      appliedTokenKeys,
+    );
+    for (const [key, value] of toSet) root.style.setProperty(key, value);
+    for (const key of toClear) root.style.removeProperty(key);
+    appliedTokenKeys = applied;
+  } finally {
+    finishInstantPaint?.();
+  }
 }
 
 function isThemeWindowSyncPayload(value: unknown): value is ThemeWindowSyncPayload {
