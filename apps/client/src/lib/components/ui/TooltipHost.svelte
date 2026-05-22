@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import {
+    calculateTooltipContentWidth,
     calculateTooltipPosition,
     deriveTooltipPalette,
     isVisibleCssColor,
@@ -12,6 +13,8 @@
   const tooltipId = "app-global-tooltip";
   const hoverDelayMs = 350;
   const maxSurfaceLookupDepth = 12;
+  const maxTooltipWidthRem = 18;
+  const tooltipViewportMarginPx = 8;
   const targetSelector = [
     "[data-app-tooltip]",
     "[data-tooltip]",
@@ -29,9 +32,11 @@
   let placement = $state<TooltipPlacement>("top");
   let tooltipStyle = $state("left: -9999px; top: -9999px;");
   let tooltipPaletteStyle = $state("");
+  let tooltipWidthStyle = $state("");
   let showTimer: ReturnType<typeof setTimeout> | undefined;
   let suppressedPointerTarget: HTMLElement | null = null;
   const migratingTitleElements = new WeakSet<HTMLElement>();
+  let measureCanvas: HTMLCanvasElement | undefined;
 
   function isInteractiveElement(element: HTMLElement): boolean {
     return element.matches("button, a, [role='button'], [role='menuitem']");
@@ -170,7 +175,7 @@
   }
 
   function hiddenTooltipStyle(): string {
-    return [`left: -9999px`, `top: -9999px`, tooltipPaletteStyle].filter(Boolean).join("; ");
+    return [`left: -9999px`, `top: -9999px`, tooltipWidthStyle, tooltipPaletteStyle].filter(Boolean).join("; ");
   }
 
   function refreshTooltipPalette(element: HTMLElement): void {
@@ -179,11 +184,54 @@
     );
   }
 
+  function tooltipHorizontalChromePx(element: HTMLElement): number {
+    const style = window.getComputedStyle(element);
+    return Number.parseFloat(style.paddingLeft)
+      + Number.parseFloat(style.paddingRight)
+      + Number.parseFloat(style.borderLeftWidth)
+      + Number.parseFloat(style.borderRightWidth);
+  }
+
+  function tooltipTextWidth(textToMeasure: string, font: string): number {
+    measureCanvas ??= document.createElement("canvas");
+    const context = measureCanvas.getContext("2d");
+    if (!context) return textToMeasure.length * 8;
+    context.font = font;
+    return context.measureText(textToMeasure).width;
+  }
+
+  function calculateTooltipWidthStyle(element: HTMLElement): string {
+    const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+    const cssMaxWidth = maxTooltipWidthRem * rootFontSize;
+    const viewportMaxWidth = Math.max(0, window.innerWidth - tooltipViewportMarginPx * 2);
+    const maxOuterWidth = Math.min(cssMaxWidth, viewportMaxWidth);
+    const maxContentWidth = Math.max(0, maxOuterWidth - tooltipHorizontalChromePx(element));
+    const font = window.getComputedStyle(element).font;
+    const naturalWidth = tooltipTextWidth(text, font);
+    if (naturalWidth <= maxContentWidth) return "";
+
+    const width = calculateTooltipContentWidth(text, {
+      maxContentWidth,
+      minContentWidth: 96,
+      maxLines: 2,
+      measureText: (value) => tooltipTextWidth(value, font),
+    });
+    return width > 0 ? `width: ${width}px` : "";
+  }
+
   async function positionTooltip(): Promise<void> {
     if (!anchor || !tooltipEl || !visible) return;
     if (!document.documentElement.contains(anchor)) {
       hideTooltip();
       return;
+    }
+
+    const nextWidthStyle = calculateTooltipWidthStyle(tooltipEl);
+    tooltipWidthStyle = nextWidthStyle;
+    if (nextWidthStyle) {
+      tooltipStyle = hiddenTooltipStyle();
+      await tick();
+      if (!anchor || !tooltipEl || !visible) return;
     }
 
     const position = calculateTooltipPosition(
@@ -195,6 +243,7 @@
     tooltipStyle = [
       `left: ${position.left}px`,
       `top: ${position.top}px`,
+      tooltipWidthStyle,
       `--app-tooltip-arrow-left: ${position.arrowLeft}px`,
       tooltipPaletteStyle,
     ].join("; ");
@@ -216,6 +265,7 @@
     anchor = element;
     text = nextText;
     ready = false;
+    tooltipWidthStyle = "";
     refreshTooltipPalette(element);
     tooltipStyle = hiddenTooltipStyle();
 
@@ -238,6 +288,7 @@
     visible = false;
     ready = false;
     text = "";
+    tooltipWidthStyle = "";
     tooltipStyle = hiddenTooltipStyle();
   }
 

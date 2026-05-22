@@ -1546,7 +1546,7 @@
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
-      <div class="mb-2 grid translate-y-0.5 grid-cols-3 overflow-hidden rounded-sm bg-event-panel-contrast p-0.5 text-[0.733333rem]"
+      <div class="relative top-0.5 mb-2 grid grid-cols-3 overflow-hidden rounded-sm bg-event-panel-contrast p-0.5 text-[0.733333rem]"
         role="radiogroup"
         aria-label="Apply changes to">
         {#each SCOPE_OPTIONS as option, index}
@@ -1574,7 +1574,7 @@
     {/if}
 
     <!-- Title + color circle -->
-    <div class="flex translate-y-0.5 items-center gap-2.5 px-1">
+    <div class="relative top-0.5 flex items-center gap-2.5 px-1">
       <div class="title-wrapper relative min-w-0 flex-1">
         <input
           bind:this={titleInput}
@@ -1799,7 +1799,7 @@
         tabindex={metadataFocusIndex === 1 ? 0 : -1}
         disabled={controlsDisabled}
         class={metadataButtonClass()}
-        title="Show as"
+        title="Busy tells others you are unavailable for meetings."
       >
         {#if transparency === "transparent"}
           <Smile size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
@@ -1820,7 +1820,7 @@
           tabindex={metadataFocusIndex === 2 ? 0 : -1}
           disabled={controlsDisabled}
           class={metadataButtonClass("capitalize")}
-          title="Visibility"
+          title="Private hides event details from other calendar viewers."
         >
           {#if visibility === "public"}
             <Eye size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />

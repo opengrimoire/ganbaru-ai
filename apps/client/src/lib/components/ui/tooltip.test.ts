@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateTooltipContentWidth,
   calculateTooltipPosition,
   deriveTooltipPalette,
   parseCssColor,
@@ -82,6 +83,28 @@ describe("calculateTooltipPosition", () => {
       arrowLeft: 108,
       placement: "top",
     });
+  });
+});
+
+describe("calculateTooltipContentWidth", () => {
+  const measureText = (value: string) => value.length * 10;
+
+  it("keeps short tooltip text on one line when it fits", () => {
+    expect(
+      calculateTooltipContentWidth("Show as", {
+        maxContentWidth: 240,
+        measureText,
+      }),
+    ).toBe(70);
+  });
+
+  it("shrinks long tooltip text to the best wrapped line width", () => {
+    expect(
+      calculateTooltipContentWidth("Busy tells others you are unavailable for meetings.", {
+        maxContentWidth: 280,
+        measureText,
+      }),
+    ).toBe(251);
   });
 });
 

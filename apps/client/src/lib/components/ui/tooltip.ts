@@ -27,6 +27,13 @@ export interface TooltipPosition {
   placement: TooltipPlacement;
 }
 
+export interface TooltipContentWidthOptions {
+  maxContentWidth: number;
+  minContentWidth?: number;
+  maxLines?: number;
+  measureText: (text: string) => number;
+}
+
 export interface CssRgbColor {
   r: number;
   g: number;
@@ -55,6 +62,70 @@ function clamp(value: number, min: number, max: number): number {
 
 function roundPx(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function wordCount(line: string): number {
+  return line.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function wrappedLineCandidates(words: string[], lineCount: number): string[][] {
+  const candidates: string[][] = [];
+
+  function visit(startIndex: number, remainingLines: number, lines: string[]): void {
+    if (remainingLines === 1) {
+      candidates.push([...lines, words.slice(startIndex).join(" ")]);
+      return;
+    }
+
+    const maxEnd = words.length - remainingLines + 1;
+    for (let endIndex = startIndex + 1; endIndex <= maxEnd; endIndex += 1) {
+      visit(endIndex, remainingLines - 1, [...lines, words.slice(startIndex, endIndex).join(" ")]);
+    }
+  }
+
+  visit(0, lineCount, []);
+  return candidates;
+}
+
+export function calculateTooltipContentWidth(
+  text: string,
+  options: TooltipContentWidthOptions,
+): number {
+  const normalizedText = text.trim().replace(/\s+/g, " ");
+  const maxContentWidth = Math.max(0, options.maxContentWidth);
+  if (!normalizedText || maxContentWidth <= 0) return 0;
+
+  const fullWidth = options.measureText(normalizedText);
+  if (fullWidth <= maxContentWidth) return roundPx(fullWidth);
+
+  const words = normalizedText.split(" ");
+  const wordWidths = words.map(options.measureText);
+  const minContentWidth = Math.min(
+    maxContentWidth,
+    Math.max(options.minContentWidth ?? 0, ...wordWidths),
+  );
+  const maxLines = Math.min(options.maxLines ?? 2, words.length);
+  let best: { width: number; score: number } | undefined;
+
+  for (let lineCount = 2; lineCount <= maxLines; lineCount += 1) {
+    for (const lines of wrappedLineCandidates(words, lineCount)) {
+      const widths = lines.map(options.measureText);
+      const widestLine = Math.max(...widths, minContentWidth);
+      if (widestLine > maxContentWidth) continue;
+
+      const narrowestLine = Math.min(...widths);
+      const singleWordPenalty = lines.some((line) => wordCount(line) === 1) ? maxContentWidth * 3 : 0;
+      const lineCountPenalty = lineCount * 10;
+      const widthPenalty = widestLine * 0.08;
+      const score = (widestLine - narrowestLine) + singleWordPenalty + lineCountPenalty + widthPenalty;
+
+      if (!best || score < best.score) {
+        best = { width: widestLine, score };
+      }
+    }
+  }
+
+  return roundPx(clamp((best?.width ?? maxContentWidth) + 1, minContentWidth, maxContentWidth));
 }
 
 function parseHexColor(value: string): CssRgbColor | null {

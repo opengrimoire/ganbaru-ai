@@ -146,6 +146,7 @@
         {@const entry = getEventColor(c, theme)}
         <button
           data-color-index={index}
+          aria-label={`Select event color ${index + 1}`}
           tabindex={activeIndex === index ? 0 : -1}
           onclick={() => { selectColor(c, "pointer"); }}
           onfocus={() => { activeIndex = index; }}
@@ -153,7 +154,7 @@
           class="calendar-color-swatch size-5.5 rounded-[3px]"
           class:swatch-selected={selectedColor === c}
           style={swatchStyle(entry.bg)}
-          title={entry.bg}
+          data-app-tooltip-disabled="true"
           data-app-tooltip-focus-disabled="true"
         ></button>
       {/each}
