@@ -116,8 +116,8 @@ Within day and week views, the rail is shown for any day that has at least one p
 
 | Surface | Shown when | Hidden when |
 |---------|-----------|-------------|
-| Title bar ring | App window is open and a focus phase is active | Break phase, no active session, or session paused |
-| Tray ring | A focus phase is active, regardless of window state | Break phase, no active session |
+| Title bar ring | App window is open and a focus phase is active, including manual pause while the event window is still active | Break phase, no active session, or event deadline passed |
+| Tray ring | A focus phase is active, including manual pause while the event window is still active, regardless of window state | Break phase, no active session, or event deadline passed |
 | Rail | Day view or week view, day has at least one pomodoro event | Month view, days with no pomodoro events |
 
 The tray ring and title bar ring are deliberately the same shape and the same metric (focus countdown). The user does not have to learn two visualizations; they learn one and read it from whichever surface is convenient.
