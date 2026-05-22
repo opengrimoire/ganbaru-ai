@@ -66,6 +66,44 @@ export function phaseDurationSeconds(
   return config.longBreakMinutes * TIME_MULTIPLIER;
 }
 
+export function limitRemainingSecondsToBlockEnd(
+  remainingSeconds: number,
+  activeBlockEndMs: number | null,
+  nowMs: number,
+): number {
+  const normalizedRemaining = Math.max(0, Math.ceil(remainingSeconds));
+  if (activeBlockEndMs === null) return normalizedRemaining;
+  const blockRemainingSeconds = Math.max(
+    0,
+    Math.ceil((activeBlockEndMs - nowMs) / 1000),
+  );
+  return Math.min(normalizedRemaining, blockRemainingSeconds);
+}
+
+export interface PomodoroSessionActiveInput {
+  activeBlockId: string | null;
+  activeBlockEndMs: number | null;
+  blockExpired: boolean;
+  isRunning: boolean;
+  remainingSeconds: number;
+  totalSeconds: number;
+  nowMs: number;
+}
+
+export function isPomodoroSessionActive(
+  input: PomodoroSessionActiveInput,
+): boolean {
+  if (input.activeBlockId !== null) {
+    if (input.blockExpired) return false;
+    if (input.activeBlockEndMs !== null) {
+      return input.nowMs < input.activeBlockEndMs;
+    }
+    return input.isRunning || input.remainingSeconds < input.totalSeconds;
+  }
+
+  return input.isRunning || input.remainingSeconds < input.totalSeconds;
+}
+
 // decideTick
 
 export type TickResult =
@@ -242,6 +280,7 @@ export interface TransitionInput {
   newConfig: PomodoroConfig;
   phase: PomodoroPhase;
   remainingSeconds: number;
+  elapsedFocusSeconds?: number;
   currentCycle: number;
   totalCycles: number;
   blockExpired: boolean;
@@ -275,7 +314,10 @@ export type TransitionResult =
 export function decideTransition(input: TransitionInput): TransitionResult {
   if (input.phase === "focus") {
     const oldFocusSec = input.previousConfig.focusMinutes * TIME_MULTIPLIER;
-    const accumulatedFocusSec = Math.max(0, oldFocusSec - input.remainingSeconds);
+    const accumulatedFocusSec = Math.max(
+      0,
+      input.elapsedFocusSeconds ?? oldFocusSec - input.remainingSeconds,
+    );
     const newFocusThresholdSec = input.newConfig.focusMinutes * TIME_MULTIPLIER;
 
     if (accumulatedFocusSec >= newFocusThresholdSec) {
@@ -385,6 +427,7 @@ export function decideStartFromBlock(
 export interface ReconfigureInput {
   phase: PomodoroPhase;
   remainingSeconds: number;
+  elapsedSeconds?: number;
   currentConfig: PomodoroConfig;
   newConfig: PomodoroConfig;
   hasOvertimeInterval: boolean;
@@ -404,7 +447,10 @@ export interface ReconfigureResult {
  */
 export function decideReconfigure(input: ReconfigureInput): ReconfigureResult {
   const oldDuration = phaseDurationSeconds(input.phase, input.currentConfig);
-  const elapsed = Math.max(0, oldDuration - input.remainingSeconds);
+  const elapsed = Math.max(
+    0,
+    input.elapsedSeconds ?? oldDuration - input.remainingSeconds,
+  );
 
   const newDuration = phaseDurationSeconds(input.phase, input.newConfig);
   const newRemaining = Math.max(0, newDuration - elapsed);

@@ -12,6 +12,8 @@ import {
   TIME_MULTIPLIER,
   NOTIFICATION_THRESHOLD,
   MAX_BREAK_OVERTIME_SECONDS,
+  limitRemainingSecondsToBlockEnd,
+  isPomodoroSessionActive,
   decideTick,
   decideAdvancePhase,
   decideTransition,
@@ -32,12 +34,14 @@ const pomodoroCoordinator = getCurrentWindow().label === "main";
 interface PomodoroWindowSnapshot {
   phase: PomodoroPhase;
   remainingSeconds: number;
+  phaseTotalSeconds: number;
   currentCycle: number;
   totalCycles: number;
   isRunning: boolean;
   config: PomodoroConfig;
   completedPomodoros: number;
   activeBlockId: string | null;
+  activeBlockEndMs: number | null;
   dismissedBlockId: string | null;
   breakOvertimeSeconds: number;
   segments: PersistedSegment[];
@@ -70,11 +74,15 @@ type PomodoroWindowCommand =
 
 let phase = $state<PomodoroPhase>("focus");
 let remainingSeconds = $state(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
+let phaseTotalSeconds = $state(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
+let phaseElapsedSeconds = 0;
+let phaseWorkDurationSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
 let currentCycle = $state(1);
 let totalCycles = $state(DEFAULT_CONFIG.cyclesBeforeLongBreak);
 let isRunning = $state(false);
 let config = $state<PomodoroConfig>({ ...DEFAULT_CONFIG });
 let intervalId: ReturnType<typeof setInterval> | null = null;
+let pausedOpportunityIntervalId: ReturnType<typeof setInterval> | null = null;
 let completedPomodoros = $state(0);
 let sessionStartTime: string | null = null;
 let skipNextBreak = false;
@@ -82,9 +90,9 @@ let listenersInitialized = false;
 let windowSyncInitialized = false;
 let notificationShown = false;
 let phaseEndTime: number | null = null;
-let activeBlockId: string | null = null;
-let activeBlockEndMs: number | null = null;
-let dismissedBlockId: string | null = null;
+let activeBlockId = $state<string | null>(null);
+let activeBlockEndMs = $state<number | null>(null);
+let dismissedBlockId = $state<string | null>(null);
 
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
@@ -165,6 +173,10 @@ function isNullableString(value: unknown): value is string | null {
   return typeof value === "string" || value === null;
 }
 
+function isNullableNumber(value: unknown): value is number | null {
+  return (typeof value === "number" && Number.isFinite(value)) || value === null;
+}
+
 function isPositiveNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
@@ -243,12 +255,14 @@ function isPomodoroWindowSnapshot(value: unknown): value is PomodoroWindowSnapsh
   return (
     isPomodoroPhase(value.phase) &&
     isNonNegativeNumber(value.remainingSeconds) &&
+    isNonNegativeNumber(value.phaseTotalSeconds) &&
     isPositiveNumber(value.currentCycle) &&
     isPositiveNumber(value.totalCycles) &&
     typeof value.isRunning === "boolean" &&
     isPomodoroConfig(value.config) &&
     isNonNegativeNumber(value.completedPomodoros) &&
     isNullableString(value.activeBlockId) &&
+    isNullableNumber(value.activeBlockEndMs) &&
     isNullableString(value.dismissedBlockId) &&
     isNonNegativeNumber(value.breakOvertimeSeconds) &&
     Array.isArray(value.segments) &&
@@ -309,12 +323,14 @@ function buildWindowSnapshot(): PomodoroWindowSnapshot {
   return {
     phase,
     remainingSeconds,
+    phaseTotalSeconds,
     currentCycle,
     totalCycles,
     isRunning,
     config: { ...config },
     completedPomodoros,
     activeBlockId,
+    activeBlockEndMs,
     dismissedBlockId,
     breakOvertimeSeconds,
     segments: cloneSegmentsForWindowSync(segments),
@@ -329,12 +345,14 @@ function applyWindowSnapshot(snapshot: PomodoroWindowSnapshot): void {
   if (pomodoroCoordinator) return;
   phase = snapshot.phase;
   remainingSeconds = snapshot.remainingSeconds;
+  phaseTotalSeconds = snapshot.phaseTotalSeconds;
   currentCycle = snapshot.currentCycle;
   totalCycles = snapshot.totalCycles;
   isRunning = snapshot.isRunning;
   config = { ...snapshot.config };
   completedPomodoros = snapshot.completedPomodoros;
   activeBlockId = snapshot.activeBlockId;
+  activeBlockEndMs = snapshot.activeBlockEndMs;
   dismissedBlockId = snapshot.dismissedBlockId;
   breakOvertimeSeconds = snapshot.breakOvertimeSeconds;
   segments = cloneSegmentsForWindowSync(snapshot.segments);
@@ -398,6 +416,166 @@ interface PomodoroPauseMs {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function actualPhaseElapsedSeconds(): number {
+  return phaseElapsedSeconds;
+}
+
+function phaseWorkRemainingSeconds(): number {
+  return Math.max(0, phaseWorkDurationSeconds - phaseElapsedSeconds);
+}
+
+function setPhaseRemainingSeconds(
+  nextWorkRemainingSeconds: number,
+  elapsedSeconds: number = 0,
+  nowMs: number = Date.now(),
+): number {
+  const normalizedElapsedSeconds = Math.max(0, Math.ceil(elapsedSeconds));
+  const normalizedWorkRemainingSeconds = Math.max(0, Math.ceil(nextWorkRemainingSeconds));
+  const limitedRemaining = limitRemainingSecondsToBlockEnd(
+    normalizedWorkRemainingSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  phaseElapsedSeconds = normalizedElapsedSeconds;
+  phaseWorkDurationSeconds = normalizedElapsedSeconds + normalizedWorkRemainingSeconds;
+  remainingSeconds = limitedRemaining;
+  phaseTotalSeconds = normalizedElapsedSeconds + limitedRemaining;
+  return limitedRemaining;
+}
+
+function setVisibleRemainingForPause(
+  nextVisibleRemainingSeconds: number,
+  elapsedSeconds: number,
+  nowMs: number = Date.now(),
+): number {
+  const normalizedElapsedSeconds = Math.max(0, Math.ceil(elapsedSeconds));
+  const limitedRemaining = limitRemainingSecondsToBlockEnd(
+    nextVisibleRemainingSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  phaseElapsedSeconds = normalizedElapsedSeconds;
+  remainingSeconds = limitedRemaining;
+  phaseTotalSeconds = normalizedElapsedSeconds + limitedRemaining;
+  return limitedRemaining;
+}
+
+function refreshCurrentPhaseLimit(nowMs: number = Date.now()): void {
+  const elapsedSeconds = actualPhaseElapsedSeconds();
+  const limitedRemaining = setPhaseRemainingSeconds(
+    phaseWorkRemainingSeconds(),
+    elapsedSeconds,
+    nowMs,
+  );
+  if (isRunning) {
+    phaseEndTime = nowMs + limitedRemaining * 1000;
+  }
+}
+
+function recordRunningPhaseProgress(nextVisibleRemainingSeconds: number): void {
+  const normalizedRemainingSeconds = Math.max(0, Math.ceil(nextVisibleRemainingSeconds));
+  const elapsedDeltaSeconds = Math.max(0, remainingSeconds - normalizedRemainingSeconds);
+  phaseElapsedSeconds = Math.min(
+    phaseWorkDurationSeconds,
+    phaseElapsedSeconds + elapsedDeltaSeconds,
+  );
+  remainingSeconds = normalizedRemainingSeconds;
+}
+
+function refreshPausedOpportunityRemaining(nowMs: number = Date.now()): boolean {
+  const nextRemainingSeconds = limitRemainingSecondsToBlockEnd(
+    phaseWorkRemainingSeconds(),
+    activeBlockEndMs,
+    nowMs,
+  );
+  if (nextRemainingSeconds === remainingSeconds) return false;
+  remainingSeconds = nextRemainingSeconds;
+  return true;
+}
+
+function activeBlockDeadlineReached(nowMs: number = Date.now()): boolean {
+  return activeBlockEndMs !== null && nowMs >= activeBlockEndMs;
+}
+
+function pomodoroSessionActive(nowMs: number = Date.now()): boolean {
+  return isPomodoroSessionActive({
+    activeBlockId,
+    activeBlockEndMs,
+    blockExpired,
+    isRunning,
+    remainingSeconds,
+    totalSeconds: phaseTotalSeconds,
+    nowMs,
+  });
+}
+
+function expirePausedBlockAtDeadline(): void {
+  if (activeBlockEndMs === null) return;
+  const endIso = new Date(activeBlockEndMs).toISOString();
+  stopPausedOpportunityCountdown();
+  refreshPausedOpportunityRemaining(activeBlockEndMs);
+
+  if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+    markSegment(currentSegmentIndex, "completed", true, endIso);
+    skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+  }
+
+  if (phase === "focus" && sessionStartTime) {
+    const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
+      ? segments[currentSegmentIndex] : null;
+    saveCompletedSession(sessionStartTime, endIso, seg?.pauseLog ?? [], activeBlockId);
+    sessionStartTime = null;
+  }
+
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+  stopOvertime();
+  stopIdleChecking();
+  isRunning = false;
+  lastTickMs = null;
+  phaseEndTime = null;
+  remainingSeconds = 0;
+  blockExpired = true;
+  updateTray();
+}
+
+function stopPausedOpportunityCountdown(): void {
+  if (pausedOpportunityIntervalId !== null) {
+    clearInterval(pausedOpportunityIntervalId);
+    pausedOpportunityIntervalId = null;
+  }
+}
+
+function startPausedOpportunityCountdown(): void {
+  stopPausedOpportunityCountdown();
+  if (!activeBlockId) return;
+  if (activeBlockDeadlineReached()) {
+    expirePausedBlockAtDeadline();
+    return;
+  }
+  refreshPausedOpportunityRemaining();
+  pausedOpportunityIntervalId = setInterval(() => {
+    if (isRunning || !activeBlockId || suspendedAway || idlePaused) {
+      stopPausedOpportunityCountdown();
+      return;
+    }
+    if (activeBlockDeadlineReached()) {
+      expirePausedBlockAtDeadline();
+      return;
+    }
+    if (refreshPausedOpportunityRemaining()) updateTray();
+  }, 1000);
+}
+
+function resetPhaseProgress(defaultRemainingSeconds: number): void {
+  phaseElapsedSeconds = 0;
+  phaseWorkDurationSeconds = defaultRemainingSeconds;
+  remainingSeconds = defaultRemainingSeconds;
+  phaseTotalSeconds = defaultRemainingSeconds;
 }
 
 function addMinutesToIso(base: string, minutes: number): string {
@@ -503,16 +681,21 @@ function pauseIntervalsMs(pauseLog: PauseInterval[]): PomodoroPauseMs[] {
   }));
 }
 
-function markSegment(index: number, status: PersistedSegment["status"], setActualEnd: boolean = false) {
+function markSegment(
+  index: number,
+  status: PersistedSegment["status"],
+  setActualEnd: boolean = false,
+  actualEndIso: string = nowIso(),
+) {
   if (index < 0 || index >= segments.length) return;
   const seg = segments[index];
   seg.status = status;
-  if (setActualEnd) seg.actualEnd = nowIso();
+  if (setActualEnd) seg.actualEnd = actualEndIso;
 
   // Close any open pause interval
   const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
   if (lastPause && lastPause[1] === null) {
-    lastPause[1] = seg.actualEnd ?? nowIso();
+    lastPause[1] = seg.actualEnd ?? actualEndIso;
     seg.pauseLog = [...seg.pauseLog];
   }
 
@@ -706,11 +889,14 @@ async function reconfigureSession(
   eventEnd: string,
   eventDate: string,
 ) {
+  stopPausedOpportunityCountdown();
   activeBlockEndMs = new Date(eventEnd.replace(" ", "T")).getTime();
+  const elapsedSeconds = actualPhaseElapsedSeconds();
 
   const result = decideReconfigure({
     phase,
     remainingSeconds,
+    elapsedSeconds,
     currentConfig: config,
     newConfig,
     hasOvertimeInterval: overtimeIntervalId !== null,
@@ -718,16 +904,17 @@ async function reconfigureSession(
 
   config = newConfig;
   totalCycles = config.cyclesBeforeLongBreak;
-  remainingSeconds = result.newRemainingSeconds;
+  const nowMs = Date.now();
+  setPhaseRemainingSeconds(result.newRemainingSeconds, elapsedSeconds, nowMs);
 
   if (isRunning) {
-    phaseEndTime = Date.now() + remainingSeconds * 1000;
+    phaseEndTime = nowMs + remainingSeconds * 1000;
   } else if (result.exitOvertime) {
     stopOvertime();
     isRunning = true;
-    phaseEndTime = Date.now() + remainingSeconds * 1000;
+    phaseEndTime = nowMs + remainingSeconds * 1000;
     intervalId = setInterval(tick, 1000);
-    lastTickMs = Date.now();
+    lastTickMs = nowMs;
   }
 
   if (result.resetNotification) {
@@ -750,7 +937,9 @@ async function transitionToBlock(
   eventEnd: string,
   eventDate: string,
 ) {
+  stopPausedOpportunityCountdown();
   const previousConfig = config;
+  const elapsedSeconds = actualPhaseElapsedSeconds();
   activeBlockId = blockId;
   activeBlockEndMs = new Date(eventEnd.replace(" ", "T")).getTime();
   initListeners();
@@ -760,6 +949,7 @@ async function transitionToBlock(
     newConfig,
     phase,
     remainingSeconds,
+    elapsedFocusSeconds: phase === "focus" ? elapsedSeconds : undefined,
     currentCycle,
     totalCycles,
     blockExpired,
@@ -781,7 +971,7 @@ async function transitionToBlock(
       notificationShown = false;
 
       phase = result.breakPhase;
-      remainingSeconds = result.breakDurationSeconds;
+      setPhaseRemainingSeconds(result.breakDurationSeconds);
       currentCycle = result.nextCycle;
 
       phaseEndTime = Date.now() + remainingSeconds * 1000;
@@ -797,7 +987,7 @@ async function transitionToBlock(
     }
 
     case "continue_focus": {
-      remainingSeconds = result.remainingSeconds;
+      setPhaseRemainingSeconds(result.remainingSeconds, elapsedSeconds);
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       if (!isRunning) {
         isRunning = true;
@@ -816,7 +1006,7 @@ async function transitionToBlock(
     case "fresh_start": {
       stopOvertime();
       phase = "focus";
-      remainingSeconds = result.remainingSeconds;
+      setPhaseRemainingSeconds(result.remainingSeconds);
       currentCycle = 1;
       completedPomodoros = 0;
       notificationShown = false;
@@ -845,19 +1035,14 @@ async function transitionToBlock(
 function updateTray() {
   publishWindowSnapshot();
   if (!pomodoroCoordinator) return;
-
-  const totalSeconds =
-    phase === "focus"
-      ? config.focusMinutes * TIME_MULTIPLIER
-      : phase === "short_break"
-        ? config.shortBreakMinutes * TIME_MULTIPLIER
-        : config.longBreakMinutes * TIME_MULTIPLIER;
+  const isActive = pomodoroSessionActive();
 
   invoke("update_tray", {
     phase,
     remainingSeconds,
-    totalSeconds,
+    totalSeconds: phaseTotalSeconds,
     isRunning,
+    isActive,
   }).catch(() => {});
 }
 
@@ -972,23 +1157,10 @@ function initListeners() {
   listen("tray-pause-resume", () => {
     if (suspendedAway || idlePaused) return;
     if (isRunning) {
-      isRunning = false;
-      phaseEndTime = null;
-      lastTickMs = null;
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
+      pauseSession();
     } else {
-      isRunning = true;
-      phaseEndTime = Date.now() + remainingSeconds * 1000;
-      if (phase === "focus" && !sessionStartTime) {
-        sessionStartTime = new Date().toISOString();
-      }
-      intervalId = setInterval(tick, 1000);
-    lastTickMs = Date.now();
+      resumeSession();
     }
-    updateTray();
   }).catch((e) => console.warn("Failed to listen for tray-pause-resume:", e));
 
   listen("tray-skip", () => {
@@ -998,10 +1170,10 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for tray-skip:", e));
 
   listen<{ seconds: number }>("pomodoro-add-time", (event) => {
-    remainingSeconds += event.payload.seconds;
-    if (phaseEndTime !== null) {
-      phaseEndTime += event.payload.seconds * 1000;
-    }
+    const elapsedSeconds = actualPhaseElapsedSeconds();
+    const nextWorkRemainingSeconds = phaseWorkRemainingSeconds() + event.payload.seconds;
+    setPhaseRemainingSeconds(nextWorkRemainingSeconds, elapsedSeconds);
+    if (phaseEndTime !== null) phaseEndTime = Date.now() + remainingSeconds * 1000;
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
 }
 
@@ -1020,13 +1192,14 @@ function stopOvertime() {
 }
 
 function startFocusSession() {
+  stopPausedOpportunityCountdown();
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
   }
   stopOvertime();
   phase = "focus";
-  remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
+  setPhaseRemainingSeconds(config.focusMinutes * TIME_MULTIPLIER);
   notificationShown = false;
   isRunning = true;
   phaseEndTime = Date.now() + remainingSeconds * 1000;
@@ -1046,6 +1219,7 @@ function startFocusSession() {
 }
 
 function dismissSuspend(resume: boolean) {
+  stopPausedOpportunityCountdown();
   suspendedAway = null;
   if (resume) {
     // Clear cached end time so tick() won't auto-stop with stale data.
@@ -1081,7 +1255,7 @@ function dismissSuspend(resume: boolean) {
     idleTimeoutMs = null;
     lastTickMs = null;
     phase = "focus";
-    remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+    resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
     currentCycle = 1;
     completedPomodoros = 0;
     sessionStartTime = null;
@@ -1142,7 +1316,15 @@ async function checkIdle() {
       persistSegmentToBackend(seg, "Failed to save idle pause:", false);
     }
 
-    remainingSeconds = result.preSuspendRemainingSeconds;
+    const elapsedAtIdleStart = Math.max(
+      0,
+      actualPhaseElapsedSeconds() - result.idleSeconds,
+    );
+    setVisibleRemainingForPause(
+      result.preSuspendRemainingSeconds,
+      elapsedAtIdleStart,
+      result.idleStartMs,
+    );
     phaseEndTime = null;
 
     if (intervalId) { clearInterval(intervalId); intervalId = null; }
@@ -1165,6 +1347,7 @@ async function checkIdle() {
 }
 
 function dismissIdle(resume: boolean) {
+  stopPausedOpportunityCountdown();
   idlePaused = null;
   if (resume) {
     // Close the open pause interval
@@ -1208,7 +1391,7 @@ function dismissIdle(resume: boolean) {
     activeBlockEndMs = null;
     lastTickMs = null;
     phase = "focus";
-    remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+    resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
     currentCycle = 1;
     completedPomodoros = 0;
     sessionStartTime = null;
@@ -1277,7 +1460,11 @@ function tick() {
         seg.pauseLog = [...seg.pauseLog, [result.suspendStartIso, result.suspendEndIso]];
         persistSegmentToBackend(seg, "Failed to save suspend pause:", false);
       }
-      remainingSeconds = result.preSuspendRemainingSeconds;
+      setVisibleRemainingForPause(
+        result.preSuspendRemainingSeconds,
+        actualPhaseElapsedSeconds(),
+        timestampMs(result.suspendStartIso),
+      );
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
       isRunning = false;
       lastTickMs = null;
@@ -1304,7 +1491,11 @@ function tick() {
         seg.pauseLog = [...seg.pauseLog, [result.suspendStartIso, result.suspendEndIso]];
         persistSegmentToBackend(seg, "Failed to save suspend pause:", false);
       }
-      remainingSeconds = result.preSuspendRemainingSeconds;
+      setVisibleRemainingForPause(
+        result.preSuspendRemainingSeconds,
+        actualPhaseElapsedSeconds(),
+        timestampMs(result.suspendStartIso),
+      );
       phaseEndTime = result.newPhaseEndTime;
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
       isRunning = false;
@@ -1316,6 +1507,7 @@ function tick() {
 
     case "block_expired": {
       lastTickMs = now;
+      recordRunningPhaseProgress(0);
       markCurrentAndSkipRemaining();
       if (phase === "focus" && sessionStartTime) {
         const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
@@ -1341,6 +1533,7 @@ function tick() {
 
     case "break_finished": {
       lastTickMs = now;
+      recordRunningPhaseProgress(0);
       remainingSeconds = 0;
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
       isRunning = false;
@@ -1365,13 +1558,14 @@ function tick() {
 
     case "focus_finished": {
       lastTickMs = now;
+      recordRunningPhaseProgress(0);
       advancePhase();
       return;
     }
 
     case "countdown_with_notification": {
       lastTickMs = now;
-      remainingSeconds = result.remainingSeconds;
+      recordRunningPhaseProgress(result.remainingSeconds);
       showNotification();
       updateTray();
       return;
@@ -1379,7 +1573,7 @@ function tick() {
 
     case "countdown": {
       lastTickMs = now;
-      remainingSeconds = result.remainingSeconds;
+      recordRunningPhaseProgress(result.remainingSeconds);
       updateTray();
       return;
     }
@@ -1415,7 +1609,7 @@ function advancePhase() {
     case "skip_break_to_focus": {
       skipNextBreak = false;
       phase = "focus";
-      remainingSeconds = result.remainingSeconds;
+      setPhaseRemainingSeconds(result.remainingSeconds);
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle = result.nextCycle;
 
@@ -1440,7 +1634,7 @@ function advancePhase() {
 
     case "focus_to_long_break": {
       phase = "long_break";
-      remainingSeconds = result.remainingSeconds;
+      setPhaseRemainingSeconds(result.remainingSeconds);
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle = result.nextCycle;
 
@@ -1456,7 +1650,7 @@ function advancePhase() {
 
     case "focus_to_short_break": {
       phase = "short_break";
-      remainingSeconds = result.remainingSeconds;
+      setPhaseRemainingSeconds(result.remainingSeconds);
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle = result.nextCycle;
 
@@ -1473,7 +1667,7 @@ function advancePhase() {
     case "break_to_focus": {
       markSegment(currentSegmentIndex, "completed", true);
       phase = "focus";
-      remainingSeconds = result.remainingSeconds;
+      setPhaseRemainingSeconds(result.remainingSeconds);
       phaseEndTime = Date.now() + remainingSeconds * 1000;
 
       const nextFocus = segments.findIndex(
@@ -1503,6 +1697,7 @@ function transferBlockIdInternal(newBlockId: string, newEndTime?: string): void 
   activeBlockId = newBlockId;
   if (newEndTime) {
     activeBlockEndMs = new Date(newEndTime.replace(" ", "T")).getTime();
+    refreshCurrentPhaseLimit();
   }
   for (const seg of segments) {
     seg.eventId = newBlockId;
@@ -1546,6 +1741,7 @@ function startFromBlockInternal(
 
     case "update_end_only":
       activeBlockEndMs = decision.newEndMs;
+      refreshCurrentPhaseLimit();
       publishWindowSnapshot();
       return;
 
@@ -1555,6 +1751,7 @@ function startFromBlockInternal(
 
     case "rebuild_segments":
       activeBlockEndMs = decision.newEndMs;
+      refreshCurrentPhaseLimit();
       rebuildSegments(blockId, eventEnd!, eventDate!);
       return;
 
@@ -1563,6 +1760,7 @@ function startFromBlockInternal(
       return;
 
     case "new_session": {
+      stopPausedOpportunityCountdown();
       initListeners();
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
 
@@ -1571,7 +1769,7 @@ function startFromBlockInternal(
       config = decision.newConfig;
       totalCycles = config.cyclesBeforeLongBreak;
       phase = "focus";
-      remainingSeconds = config.focusMinutes * TIME_MULTIPLIER;
+      setPhaseRemainingSeconds(config.focusMinutes * TIME_MULTIPLIER);
       currentCycle = 1;
       completedPomodoros = 0;
       skipNextBreak = false;
@@ -1595,8 +1793,12 @@ function startFromBlockInternal(
 }
 
 function stopSessionInternal(): void {
+  stopPausedOpportunityCountdown();
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-    markSegment(currentSegmentIndex, "interrupted", true);
+    const seg = segments[currentSegmentIndex];
+    if (seg.status === "active") {
+      markSegment(currentSegmentIndex, "interrupted", true);
+    }
     skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
   }
 
@@ -1614,7 +1816,7 @@ function stopSessionInternal(): void {
   idleTimeoutMs = null;
   blockExpired = false;
   phase = "focus";
-  remainingSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
+  resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
   currentCycle = 1;
   completedPomodoros = 0;
   sessionStartTime = null;
@@ -1625,6 +1827,7 @@ function stopSessionInternal(): void {
 }
 
 function pauseSession(): void {
+  if (!isRunning) return;
   isRunning = false;
   phaseEndTime = null;
   lastTickMs = null;
@@ -1639,12 +1842,20 @@ function pauseSession(): void {
     seg.pauseLog = [...seg.pauseLog, [now, null]];
     persistSegmentToBackend(seg, "Failed to save pause:", false);
   }
+  startPausedOpportunityCountdown();
   updateTray();
 }
 
 function resumeSession(): void {
   if (isRunning) return;
   initListeners();
+  refreshPausedOpportunityRemaining();
+  if (activeBlockDeadlineReached()) {
+    expirePausedBlockAtDeadline();
+    return;
+  }
+  if (!pomodoroSessionActive()) return;
+  stopPausedOpportunityCountdown();
   isRunning = true;
   phaseEndTime = Date.now() + remainingSeconds * 1000;
   if (!sessionStartTime) {
@@ -1699,14 +1910,14 @@ export function getPomodoro() {
     get isRunning() {
       return isRunning;
     },
+    get isActive() {
+      return pomodoroSessionActive();
+    },
     get completedPomodoros() {
       return completedPomodoros;
     },
     get totalSecondsForPhase() {
-      if (phase === "focus") return config.focusMinutes * TIME_MULTIPLIER;
-      if (phase === "short_break")
-        return config.shortBreakMinutes * TIME_MULTIPLIER;
-      return config.longBreakMinutes * TIME_MULTIPLIER;
+      return phaseTotalSeconds;
     },
     get formattedTime() {
       const mins = Math.floor(remainingSeconds / 60);

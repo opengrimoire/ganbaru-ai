@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   configEquals,
   phaseDurationSeconds,
+  limitRemainingSecondsToBlockEnd,
+  isPomodoroSessionActive,
   decideTick,
   decideAdvancePhase,
   decideTransition,
@@ -97,6 +99,81 @@ describe("phaseDurationSeconds", () => {
 
   it("returns longBreakMinutes * 60 for long_break", () => {
     expect(phaseDurationSeconds("long_break", cfg)).toBe(900);
+  });
+});
+
+describe("limitRemainingSecondsToBlockEnd", () => {
+  it("keeps the phase duration when there is no block end", () => {
+    expect(limitRemainingSecondsToBlockEnd(50 * TIME_MULTIPLIER, null, NOW)).toBe(3000);
+  });
+
+  it("clips the phase duration to the active block end", () => {
+    expect(
+      limitRemainingSecondsToBlockEnd(
+        50 * TIME_MULTIPLIER,
+        NOW + 10 * TIME_MULTIPLIER * 1000,
+        NOW,
+      ),
+    ).toBe(600);
+  });
+
+  it("returns zero when the active block end is already past", () => {
+    expect(limitRemainingSecondsToBlockEnd(50 * TIME_MULTIPLIER, NOW - 1, NOW)).toBe(0);
+  });
+});
+
+describe("isPomodoroSessionActive", () => {
+  const baseInput = {
+    activeBlockId: "block-1",
+    activeBlockEndMs: NOW + 60_000,
+    blockExpired: false,
+    isRunning: false,
+    remainingSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    totalSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    nowMs: NOW,
+  };
+
+  it("keeps a paused full-length block active while its event is current", () => {
+    expect(isPomodoroSessionActive(baseInput)).toBe(true);
+  });
+
+  it("treats a block whose deadline passed as inactive", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        activeBlockEndMs: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats a block awaiting natural expiry handoff as inactive", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        blockExpired: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats the default stopped timer as inactive", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        activeBlockId: null,
+        activeBlockEndMs: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps a non-block timer active while it is running", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        activeBlockId: null,
+        activeBlockEndMs: null,
+        isRunning: true,
+      }),
+    ).toBe(true);
   });
 });
 
@@ -717,6 +794,20 @@ describe("decideTransition", () => {
         expect(result.remainingSeconds).toBe(900); // (25 - 10) * 60
       }
     });
+
+    it("uses explicit elapsed focus when displayed remaining is clipped by the event", () => {
+      const input: TransitionInput = {
+        ...baseInput,
+        remainingSeconds: 0,
+        elapsedFocusSeconds: 10 * TIME_MULTIPLIER,
+        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+      };
+      const result = decideTransition(input);
+      expect(result.kind).toBe("continue_focus");
+      if (result.kind === "continue_focus") {
+        expect(result.remainingSeconds).toBe(15 * TIME_MULTIPLIER);
+      }
+    });
   });
 
   describe("fresh start", () => {
@@ -977,6 +1068,16 @@ describe("decideReconfigure", () => {
       newConfig: { ...DEFAULT_CONFIG, focusMinutes: 50 },
     });
     expect(result.newRemainingSeconds).toBe(1800);
+  });
+
+  it("uses explicit elapsed time when displayed remaining is clipped by the event", () => {
+    const result = decideReconfigure({
+      ...baseInput,
+      remainingSeconds: 0,
+      elapsedSeconds: 10 * TIME_MULTIPLIER,
+      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+    });
+    expect(result.newRemainingSeconds).toBe(15 * TIME_MULTIPLIER);
   });
 
   it("clamps elapsed to 0 when remaining exceeds old duration", () => {

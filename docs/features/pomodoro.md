@@ -59,9 +59,9 @@ A session has three structural moments: it begins, it runs through phases, it en
 
 The session always begins from the current moment, never from the event's scheduled start. If the event was scheduled for 14:00 and the user opens the app at 14:40, the session covers 14:40 onward. The 40-minute gap is honest: the user was not working.
 
-**Run.** Once started, the session loops through phases. The first phase is always a full-length focus period (concentration is assumed broken at any session start, including restarts after a stop). After focus completes, the session enters a short break, unless the cycle count has reached `pomodoroCount`, in which case it enters a long break. Each break is followed by another focus, and the loop repeats.
+**Run.** Once started, the session loops through phases. The first phase is a full-length focus period unless the event window ends first (concentration is assumed broken at any session start, including restarts after a stop). After focus completes, the session enters a short break, unless the cycle count has reached `pomodoroCount`, in which case it enters a long break. Each break is followed by another focus, and the loop repeats.
 
-The user can pause manually, the system can auto-pause for idle, and the system can register a suspend pause when the OS sleeps. All three are handled with the same data structure (a row in `pomodoro_pauses`), but their UX differs (see `features/pomodoro-idle-detection.md`).
+The user can pause manually, the system can auto-pause for idle, and the system can register a suspend pause when the OS sleeps. All three are handled with the same data structure (a row in `pomodoro_pauses`), but their UX differs (see `features/pomodoro-idle-detection.md`). Paused time never counts as focus progress or break credit. If the event deadline becomes the limiting factor while manually paused, the title bar and tray countdown continue to show the usable focus opportunity left in the event, while the calendar rail keeps the paused interval empty.
 
 **End.** A session ends for one of several reasons, each recorded in `pomodoro_runs.end_reason`:
 

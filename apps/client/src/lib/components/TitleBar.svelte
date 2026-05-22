@@ -272,9 +272,7 @@
   // interfere with the edit session.
   const lockedByThemeEditor = $derived(!!themeEditor.editingId);
 
-  const isActive = $derived(
-    pomodoro.isRunning || pomodoro.remainingSeconds < pomodoro.totalSecondsForPhase,
-  );
+  const isActive = $derived(pomodoro.isActive);
 
   const tabs: { view: DetachableTabView; label: string; icon: typeof Calendar }[] = [
     { view: "calendar", label: "Calendar", icon: Calendar },
@@ -812,7 +810,7 @@
         <button
           onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
           class="titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
-          title={pomodoro.isRunning ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
+          title={isActive ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
         >
           <svg viewBox="0 0 20 20" width={POMODORO_RING_SIZE} height={POMODORO_RING_SIZE}>
             <circle

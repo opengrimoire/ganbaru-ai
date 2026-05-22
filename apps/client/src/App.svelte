@@ -397,6 +397,17 @@
       pomodoro.clearBlockExpired();
       trackedBlockSnapshot = null;
       pomodoro.stopSession();
+    } else if (
+      pomodoro.activeBlockId &&
+      trackedBlockSnapshot &&
+      parseCalendarDate(trackedBlockSnapshot.end).getTime() <= Date.now()
+    ) {
+      // A paused session has no tick to mark blockExpired. If the event window
+      // has naturally passed, finish it silently instead of offering an edit
+      // rollback that would not change anything useful.
+      savedBlockState = null;
+      trackedBlockSnapshot = null;
+      pomodoro.stopSession();
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
       // Block moved/deleted by user: offer revert dialog (or stop if deleted)
       const parentId = pomodoro.activeBlockId.includes("::")

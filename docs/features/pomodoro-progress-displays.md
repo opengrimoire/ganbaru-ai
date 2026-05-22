@@ -11,7 +11,8 @@ The title bar ring is a small circular progress indicator rendered as inline SVG
 What it shows:
 
 - **Focus only.** The ring fills as the current focus segment progresses. When focus ends and a break begins, the ring is hidden until the next focus starts.
-- **Time remaining until the next phase transition.** The fill represents `(focusDurationMinutes - elapsedFocusMinutes) / focusDurationMinutes`. At the start of a focus period the ring is empty, at the end it is full. The numeric label inside the ring shows minutes and seconds remaining.
+- **Time remaining until the next phase transition.** The fill represents progress through the active focus segment. If the event window is shorter than the configured focus duration, the segment is clipped to the event end. At the start of a focus period the ring is empty, at the end it is full. The numeric label inside the ring shows minutes and seconds remaining.
+- **Usable focus opportunity while paused.** Manual pause stops focus credit, but it does not stop the calendar event. While paused, the ring keeps counting down only when the event end is the limiting deadline. The calendar rail remains empty for the paused interval.
 
 What it does not show:
 

@@ -16,6 +16,7 @@ struct PomodoroTrayState {
     remaining_seconds: u32,
     total_seconds: u32,
     is_running: bool,
+    is_active: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +66,7 @@ static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
             remaining_seconds: 0,
             total_seconds: 0,
             is_running: false,
+            is_active: false,
         },
         music: MusicTrayState {
             status: "idle".to_string(),
@@ -167,7 +169,7 @@ fn music_status_label(status: &str) -> &'static str {
 }
 
 fn pomodoro_active(state: &PomodoroTrayState) -> bool {
-    state.is_running || state.remaining_seconds < state.total_seconds
+    state.is_active
 }
 
 fn pomodoro_progress(state: &PomodoroTrayState) -> f64 {
@@ -405,6 +407,7 @@ pub fn update_tray(
     remaining_seconds: u32,
     total_seconds: u32,
     is_running: bool,
+    is_active: bool,
 ) -> Result<(), String> {
     let state = {
         let mut state = TRAY_STATE.lock().unwrap();
@@ -413,6 +416,7 @@ pub fn update_tray(
             remaining_seconds,
             total_seconds,
             is_running,
+            is_active,
         };
         state.clone()
     };
