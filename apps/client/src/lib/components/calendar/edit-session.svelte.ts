@@ -6,9 +6,10 @@ export type PanelAnchor = { x: number; y: number; width: number; height: number 
 
 export type EditSessionState =
   | { mode: "closed" }
-  | { mode: "create"; start: string; end: string; anchor: PanelAnchor }
+  | { mode: "create"; sessionKey: number; start: string; end: string; anchor: PanelAnchor }
   | {
       mode: "edit";
+      sessionKey: number;
       originalEvent: CalendarEvent;
       instanceEvent: CalendarEvent;
       templateId: string;
@@ -162,6 +163,7 @@ export function createEditSession() {
   let baseline = $state<Partial<CalendarEvent>>({});
   let scope = $state<RecurringScope>("this");
   let createPreview = $state<CreatePreview | null>(null);
+  let nextSessionKey = 0;
 
   const dirty = $derived(isDirtyDiff(changes, baseline));
 
@@ -215,6 +217,7 @@ export function createEditSession() {
       const templateId = event.recurringParentId ?? event.id;
       state = {
         mode: "edit",
+        sessionKey: ++nextSessionKey,
         originalEvent: { ...event },
         instanceEvent: instanceEvent ? { ...instanceEvent } : { ...event },
         templateId,
@@ -228,7 +231,7 @@ export function createEditSession() {
     },
 
     openCreate(start: string, end: string, anchor: PanelAnchor, allDay?: boolean) {
-      state = { mode: "create", start, end, anchor };
+      state = { mode: "create", sessionKey: ++nextSessionKey, start, end, anchor };
       scope = "this";
 
       // Seed the full panel baseline before mount. This keeps create preview

@@ -26,6 +26,7 @@
     restoreTimeDraft,
     sanitizeTimeDraftInput,
   } from "./event-panel-utils";
+  import { buildEventPanelInitKey } from "./event-panel-init-key";
   import { formatTimeLabel } from "./utils";
   import {
     EVENT_PANEL_EDGE_MARGIN,
@@ -59,6 +60,7 @@
 
   let {
     mode,
+    panelSessionKey = 0,
     start,
     end,
     event,
@@ -82,6 +84,7 @@
     onSurfaceStatusChange,
   }: {
     mode: "create" | "edit";
+    panelSessionKey?: number;
     start?: string;
     end?: string;
     event?: CalendarEvent;
@@ -687,6 +690,7 @@
   // for callers that still hand over a slim event.
   let lastInitKey = "";
   let lastFullKey = "";
+  let lastHeavyAppliedKey = "";
   let initialized = $state(false);
   let fullEvent = $state<CalendarEvent | null>(null);
   let saving = $state(false);
@@ -723,11 +727,15 @@
   });
 
   $effect(() => {
-    const key = parked
-      ? `parked:${mode}:${mode === "edit" ? (event?.id ?? "") : `${start ?? ""}:${end ?? ""}:${initialAllDay ? 1 : 0}`}`
-      : mode === "edit" ? (event?.id ?? "") : `create:${start ?? ""}:${end ?? ""}:${initialAllDay ? 1 : 0}`;
+    const key = buildEventPanelInitKey({
+      parked,
+      mode,
+      panelSessionKey,
+      eventId: event?.id,
+    });
     if (key === lastInitKey) return;
     lastInitKey = key;
+    lastHeavyAppliedKey = "";
     resetExitAnimation();
     saving = false;
     deleteArmed = false;
@@ -871,7 +879,6 @@
   // does not flip dirty. Since the heavy sections are gated on `fullEvent`,
   // the user cannot have edited any of them before this runs, so overwriting
   // their state is safe.
-  let lastHeavyAppliedKey = "";
   $effect(() => {
     if (detailsLoaded || !fullEvent) return;
     if (mode !== "edit") return;

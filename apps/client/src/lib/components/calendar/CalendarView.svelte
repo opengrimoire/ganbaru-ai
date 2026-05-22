@@ -56,6 +56,7 @@
   type ParkedPanelSnapshot =
     | {
         mode: "create";
+        sessionKey: number;
         start: string;
         end: string;
         anchor: PanelAnchor;
@@ -63,6 +64,7 @@
       }
     | {
         mode: "edit";
+        sessionKey: number;
         event: CalendarEvent;
         recurringScopeEnabled: boolean;
         anchor: PanelAnchor;
@@ -74,6 +76,7 @@
     | {
         parked: boolean;
         mode: "create";
+        sessionKey: number;
         start: string;
         end: string;
         anchor: PanelAnchor;
@@ -87,6 +90,7 @@
     | {
         parked: boolean;
         mode: "edit";
+        sessionKey: number;
         start: "";
         end: "";
         anchor: PanelAnchor;
@@ -441,6 +445,7 @@
     if (s.mode === "create") {
       return {
         mode: "create",
+        sessionKey: s.sessionKey,
         start: s.start,
         end: s.end,
         anchor: s.anchor,
@@ -450,6 +455,7 @@
     if (s.mode === "edit" && panelEvent) {
       return {
         mode: "edit",
+        sessionKey: s.sessionKey,
         event: panelEvent,
         recurringScopeEnabled: isRecurring(s.originalEvent),
         anchor: s.anchor,
@@ -467,6 +473,7 @@
       return {
         parked: false,
         mode: "create",
+        sessionKey: s.sessionKey,
         start: s.start,
         end: s.end,
         anchor: s.anchor,
@@ -481,6 +488,7 @@
       return {
         parked: false,
         mode: "edit",
+        sessionKey: s.sessionKey,
         start: "",
         end: "",
         anchor: s.anchor,
@@ -498,6 +506,7 @@
       return {
         parked: true,
         mode: "create",
+        sessionKey: parkedPanelSnapshot.sessionKey,
         start: parkedPanelSnapshot.start,
         end: parkedPanelSnapshot.end,
         anchor: parkedPanelSnapshot.anchor,
@@ -511,6 +520,7 @@
     return {
       parked: true,
       mode: "edit",
+      sessionKey: parkedPanelSnapshot.sessionKey,
       start: "",
       end: "",
       anchor: parkedPanelSnapshot.anchor,
@@ -1639,6 +1649,7 @@
     <Panel
       parked={panelRender.parked}
       mode={panelRender.mode}
+      panelSessionKey={panelRender.sessionKey}
       start={panelRender.start}
       end={panelRender.end}
       event={panelRender.mode === "edit" ? panelRender.event : undefined}
