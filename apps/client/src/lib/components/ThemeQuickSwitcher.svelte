@@ -147,7 +147,7 @@
           onclick={() => commitSelection(item.id)}
           onpointerenter={() => previewTheme(item.id)}
           class={cn(
-            "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors focus:outline-none focus:ring-1 focus:ring-ring",
+            "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left focus:outline-none focus:ring-1 focus:ring-ring",
             selected ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent/50",
           )}
         >

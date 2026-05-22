@@ -177,6 +177,11 @@
     theme.toggle();
   }
 
+  function toggleThemeFromShortcut() {
+    if (lockedByThemeEditor) return;
+    theme.toggle();
+  }
+
   let showThemeQuickSwitcher = $state(false);
 
   function openThemeQuickSwitcher() {
@@ -535,7 +540,7 @@
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        toggleTheme();
+        toggleThemeFromShortcut();
         return;
       }
 
