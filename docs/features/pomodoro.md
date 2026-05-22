@@ -99,7 +99,7 @@ The system shows two notifications related to the timer, in addition to whatever
 
 **Pre-break notification.** When 60 seconds remain in the current focus period, the system shows a desktop notification reminding the user that a break is coming. The threshold is named `NOTIFICATION_THRESHOLD` (60 seconds) in the state machine. The point of the heads-up is to let the user reach a stopping point in their work rather than being yanked out of context the moment focus ends.
 
-The first pre-break notification in a focus period can offer `+3 minutes`. If the user uses that action, the timer extends the current focus opportunity, rearms the 60-second pre-break notification, and marks the extension as used for that focus period. The second pre-break notification does not offer another extension, so the user still gets a final warning without accidentally chaining extra focus time.
+The focus controls can offer `Extend focus 3 minutes` once per focus period when the current event window still has room to extend the visible timer. The action is available from the title bar ring, from the tray ring, and from the first pre-break notification. If the user uses it from any surface, the timer extends the current focus opportunity, rearms the 60-second pre-break notification, and marks the extension as used for that focus period. Later controls and notifications in the same focus period do not offer another extension, so the user still gets a final warning without accidentally chaining extra focus time.
 
 **Break-end behavior.** When a break ends, the break screen handles acknowledgement (see `features/pomodoro-break-screen.md`). No separate notification is shown.
 

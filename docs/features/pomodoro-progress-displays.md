@@ -23,6 +23,8 @@ What it does not show:
 
 The reason for the narrow scope: the title bar is a glance surface. A user who looks at it during a focus period is asking "how much longer until I can break?" not "what is my total focus today?" The latter belongs in stats. The ring being hidden during breaks reinforces this: when the user is on break, they should be on break, not watching a timer drain.
 
+The ring menu mirrors the tray menu's compact controls and adds a subdued Music volume row. Its Pomodoro section includes `Pause pomodoro` or `Resume pomodoro`, `Extend focus 3 minutes` once per focus period when the event window has room, `Go to break now` during focus, and `Start focus now` during breaks. Its Music section shows the active media title when one is loaded, without redundant status or category prefixes, and offers play/pause, previous, next, direct volume adjustment, and opening the Music view. Scrolling over the ring menu, the ring button, or the title bar music button adjusts Music volume instead of switching tabs.
+
 ## System tray RGBA ring
 
 The tray icon is an RGBA-rendered circular progress ring. It mirrors the title bar ring's semantics but lives in the OS tray (or menu bar on macOS), making it visible even when the app window is hidden, minimized, or behind other windows.
@@ -39,7 +41,7 @@ What it does not show:
 
 The tray ring is the most ambient surface: it sits in the user's peripheral vision constantly. The pixel-level rendering (RGBA, not SVG) is necessary because tray icons on most platforms accept only raster images, not vector ones. The icon redraws every few seconds, fine-grained enough to feel alive without burning CPU.
 
-When clicked, the tray icon opens or focuses the main window. The tray menu offers session controls (stop, pause, skip break) without needing the main window.
+When clicked, the tray icon opens or focuses the main window. The tray menu offers session controls without needing the main window: `Pause pomodoro` or `Resume pomodoro`, `Extend focus 3 minutes` once per focus period when the event window has room, `Go to break now` during focus, and `Start focus now` during breaks. The tray music status shows only the active media title when one is loaded, without redundant status or category prefixes. Shuffle remains controlled from the Music view rather than from the tray menu.
 
 ## Vertical timeline rail (calendar day and week views)
 

@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{LazyLock, Mutex};
 use tauri::{
     image::Image,
@@ -17,27 +17,32 @@ struct PomodoroTrayState {
     total_seconds: u32,
     is_running: bool,
     is_active: bool,
+    can_add_focus_time: bool,
 }
 
 #[derive(Debug, Clone)]
 struct MusicTrayState {
     status: String,
+    title: Option<String>,
     can_play_pause: bool,
     can_previous: bool,
     can_next: bool,
-    shuffle_enabled: bool,
-    has_queue: bool,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicTrayUpdate {
     status: String,
+    title: Option<String>,
     can_play_pause: bool,
     can_previous: bool,
     can_next: bool,
-    shuffle_enabled: bool,
-    has_queue: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AddFocusTimePayload {
+    seconds: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -51,12 +56,12 @@ struct MenuShape {
     pomodoro_active: bool,
     pomodoro_phase_id: u8,
     pomodoro_running: bool,
+    pomodoro_can_add_focus_time: bool,
     music_status: String,
+    music_title: Option<String>,
     music_can_play_pause: bool,
     music_can_previous: bool,
     music_can_next: bool,
-    music_shuffle_enabled: bool,
-    music_has_queue: bool,
 }
 
 static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
@@ -67,14 +72,14 @@ static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
             total_seconds: 0,
             is_running: false,
             is_active: false,
+            can_add_focus_time: false,
         },
         music: MusicTrayState {
             status: "idle".to_string(),
+            title: None,
             can_play_pause: false,
             can_previous: false,
             can_next: false,
-            shuffle_enabled: false,
-            has_queue: false,
         },
     })
 });
@@ -156,6 +161,14 @@ fn phase_label(phase: &str) -> &'static str {
     }
 }
 
+fn phase_advance_label(phase: &str) -> &'static str {
+    match phase {
+        "focus" => "Go to break now",
+        "short_break" | "long_break" => "Start focus now",
+        _ => "Go to break now",
+    }
+}
+
 fn music_status_label(status: &str) -> &'static str {
     match status {
         "playing" => "Playing",
@@ -182,38 +195,39 @@ fn pomodoro_progress(state: &PomodoroTrayState) -> f64 {
 
 fn pomodoro_status_text(state: &PomodoroTrayState) -> String {
     if pomodoro_active(state) {
-        format!(
-            "Pomodoro: {} left",
-            format_tray_time(state.remaining_seconds)
-        )
+        format!("{} left", format_tray_time(state.remaining_seconds))
     } else {
-        "Pomodoro: no active session".to_string()
+        "No active session".to_string()
     }
 }
 
 fn music_status_text(state: &MusicTrayState) -> String {
+    let title = state
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|title| !title.is_empty());
+    if let Some(title) = title {
+        return title.to_string();
+    }
     if state.can_play_pause || state.status != "idle" {
-        format!("Music: {}", music_status_label(&state.status))
+        music_status_label(&state.status).to_string()
     } else {
-        "Music: no music loaded".to_string()
+        "No music loaded".to_string()
     }
 }
 
 fn tray_tooltip(state: &TrayState) -> String {
     let pomodoro = if pomodoro_active(&state.pomodoro) {
         format!(
-            "Pomodoro: {} {}",
+            "{} {}",
             phase_label(&state.pomodoro.phase),
             format_tray_time(state.pomodoro.remaining_seconds)
         )
     } else {
-        "Pomodoro: no active session".to_string()
+        "No active session".to_string()
     };
-    let music = if state.music.can_play_pause || state.music.status != "idle" {
-        format!("Music: {}", music_status_label(&state.music.status))
-    } else {
-        "Music: no music loaded".to_string()
-    };
+    let music = music_status_text(&state.music);
     format!("GanbaruAI\n{pomodoro}\n{music}")
 }
 
@@ -222,12 +236,12 @@ fn menu_shape(state: &TrayState) -> MenuShape {
         pomodoro_active: pomodoro_active(&state.pomodoro),
         pomodoro_phase_id: phase_id(&state.pomodoro.phase),
         pomodoro_running: state.pomodoro.is_running,
+        pomodoro_can_add_focus_time: state.pomodoro.can_add_focus_time,
         music_status: state.music.status.clone(),
+        music_title: state.music.title.clone(),
         music_can_play_pause: state.music.can_play_pause,
         music_can_previous: state.music.can_previous,
         music_can_next: state.music.can_next,
-        music_shuffle_enabled: state.music.shuffle_enabled,
-        music_has_queue: state.music.has_queue,
     }
 }
 
@@ -260,10 +274,19 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         let pause_resume_item = MenuItemBuilder::with_id("pause_resume", pause_resume_label)
             .build(app)
             .map_err(|e| e.to_string())?;
-        let skip_item = MenuItemBuilder::with_id("skip", "Skip pomodoro")
-            .build(app)
-            .map_err(|e| e.to_string())?;
-        builder = builder.item(&pause_resume_item).item(&skip_item);
+        builder = builder.item(&pause_resume_item);
+        if state.pomodoro.can_add_focus_time {
+            let add_focus_time_item =
+                MenuItemBuilder::with_id("add_focus_time", "Extend focus 3 minutes")
+                    .build(app)
+                    .map_err(|e| e.to_string())?;
+            builder = builder.item(&add_focus_time_item);
+        }
+        let skip_item =
+            MenuItemBuilder::with_id("skip", phase_advance_label(&state.pomodoro.phase))
+                .build(app)
+                .map_err(|e| e.to_string())?;
+        builder = builder.item(&skip_item);
     }
 
     let separator = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
@@ -284,16 +307,7 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         .enabled(state.music.can_next)
         .build(app)
         .map_err(|e| e.to_string())?;
-    let shuffle_label = if state.music.shuffle_enabled {
-        "Shuffle music off"
-    } else {
-        "Shuffle music on"
-    };
-    let shuffle_item = MenuItemBuilder::with_id("music_shuffle", shuffle_label)
-        .enabled(state.music.has_queue)
-        .build(app)
-        .map_err(|e| e.to_string())?;
-    let open_music_item = MenuItemBuilder::with_id("music_open", "Open Music")
+    let open_music_item = MenuItemBuilder::with_id("music_open", "Open music")
         .build(app)
         .map_err(|e| e.to_string())?;
 
@@ -303,7 +317,6 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         .item(&play_pause_item)
         .item(&previous_item)
         .item(&next_item)
-        .item(&shuffle_item)
         .item(&open_music_item)
         .build()
         .map_err(|e| e.to_string())
@@ -377,6 +390,9 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             "skip" => {
                 let _ = app.emit("tray-skip", ());
             }
+            "add_focus_time" => {
+                let _ = app.emit("pomodoro-add-time", AddFocusTimePayload { seconds: 180 });
+            }
             "music_play_pause" => {
                 let _ = app.emit("tray-music-play-pause", ());
             }
@@ -385,9 +401,6 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             }
             "music_next" => {
                 let _ = app.emit("tray-music-next", ());
-            }
-            "music_shuffle" => {
-                let _ = app.emit("tray-music-shuffle", ());
             }
             "music_open" => {
                 let _ = app.emit("tray-music-open", ());
@@ -408,6 +421,7 @@ pub fn update_tray(
     total_seconds: u32,
     is_running: bool,
     is_active: bool,
+    can_add_focus_time: bool,
 ) -> Result<(), String> {
     let state = {
         let mut state = TRAY_STATE.lock().unwrap();
@@ -417,6 +431,7 @@ pub fn update_tray(
             total_seconds,
             is_running,
             is_active,
+            can_add_focus_time,
         };
         state.clone()
     };
@@ -430,11 +445,10 @@ pub fn update_music_tray(app: AppHandle, update: MusicTrayUpdate) -> Result<(), 
         let mut state = TRAY_STATE.lock().unwrap();
         state.music = MusicTrayState {
             status: update.status,
+            title: update.title,
             can_play_pause: update.can_play_pause,
             can_previous: update.can_previous,
             can_next: update.can_next,
-            shuffle_enabled: update.shuffle_enabled,
-            has_queue: update.has_queue,
         };
         state.clone()
     };

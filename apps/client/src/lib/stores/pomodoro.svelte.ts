@@ -47,6 +47,7 @@ interface PomodoroWindowSnapshot {
   segments: PersistedSegment[];
   segmentVersion: number;
   blockExpired: boolean;
+  focusExtensionUsed: boolean;
   suspendedAway: { awaySeconds: number } | null;
   idlePaused: { idleSeconds: number; nativeOverlay: boolean } | null;
 }
@@ -70,6 +71,7 @@ type PomodoroWindowCommand =
   | { kind: "pause" }
   | { kind: "start" }
   | { kind: "skip" }
+  | { kind: "add-focus-time"; seconds: number }
   | { kind: "cleanup-orphans" };
 
 let phase = $state<PomodoroPhase>("focus");
@@ -89,11 +91,12 @@ let skipNextBreak = false;
 let listenersInitialized = false;
 let windowSyncInitialized = false;
 let notificationShown = false;
-let preBreakExtensionUsed = false;
+let focusExtensionUsed = false;
 let phaseEndTime: number | null = null;
 let activeBlockId = $state<string | null>(null);
 let activeBlockEndMs = $state<number | null>(null);
 let dismissedBlockId = $state<string | null>(null);
+const FOCUS_EXTENSION_SECONDS = 180;
 
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
@@ -270,6 +273,7 @@ function isPomodoroWindowSnapshot(value: unknown): value is PomodoroWindowSnapsh
     value.segments.every(isPersistedSegment) &&
     isNonNegativeNumber(value.segmentVersion) &&
     typeof value.blockExpired === "boolean" &&
+    typeof value.focusExtensionUsed === "boolean" &&
     validSuspendedAway &&
     validIdlePaused
   );
@@ -286,6 +290,8 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
     case "skip":
     case "cleanup-orphans":
       return true;
+    case "add-focus-time":
+      return isPositiveNumber(value.seconds);
     case "set-dismissed-block-id":
       return isNullableString(value.id);
     case "transfer-block-id":
@@ -337,6 +343,7 @@ function buildWindowSnapshot(): PomodoroWindowSnapshot {
     segments: cloneSegmentsForWindowSync(segments),
     segmentVersion,
     blockExpired,
+    focusExtensionUsed,
     suspendedAway: suspendedAway ? { ...suspendedAway } : null,
     idlePaused: idlePaused ? { ...idlePaused } : null,
   };
@@ -360,6 +367,7 @@ function applyWindowSnapshot(snapshot: PomodoroWindowSnapshot): void {
   currentSegmentIndex = segments.findIndex((segment) => segment.status === "active");
   segmentVersion = snapshot.segmentVersion;
   blockExpired = snapshot.blockExpired;
+  focusExtensionUsed = snapshot.focusExtensionUsed;
   suspendedAway = snapshot.suspendedAway ? { ...snapshot.suspendedAway } : null;
   idlePaused = snapshot.idlePaused ? { ...snapshot.idlePaused } : null;
 }
@@ -581,7 +589,38 @@ function resetPhaseProgress(defaultRemainingSeconds: number): void {
 
 function resetFocusNotificationState(): void {
   notificationShown = false;
-  preBreakExtensionUsed = false;
+  focusExtensionUsed = false;
+}
+
+function canExtendFocusTime(addSeconds: number = FOCUS_EXTENSION_SECONDS): boolean {
+  if (phase !== "focus" || focusExtensionUsed || !pomodoroSessionActive()) return false;
+  if (addSeconds <= 0) return false;
+
+  const nowMs = Date.now();
+  const currentWorkRemainingSeconds = phaseWorkRemainingSeconds();
+  const currentVisibleRemainingSeconds = limitRemainingSecondsToBlockEnd(
+    currentWorkRemainingSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  const extendedVisibleRemainingSeconds = limitRemainingSecondsToBlockEnd(
+    currentWorkRemainingSeconds + addSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  return extendedVisibleRemainingSeconds > currentVisibleRemainingSeconds;
+}
+
+function addFocusTimeInternal(seconds: number = FOCUS_EXTENSION_SECONDS): void {
+  if (!canExtendFocusTime(seconds)) return;
+
+  const elapsedSeconds = actualPhaseElapsedSeconds();
+  const nextWorkRemainingSeconds = phaseWorkRemainingSeconds() + seconds;
+  focusExtensionUsed = true;
+  notificationShown = false;
+  setPhaseRemainingSeconds(nextWorkRemainingSeconds, elapsedSeconds);
+  if (phaseEndTime !== null) phaseEndTime = Date.now() + remainingSeconds * 1000;
+  updateTray();
 }
 
 function addMinutesToIso(base: string, minutes: number): string {
@@ -1049,6 +1088,7 @@ function updateTray() {
     totalSeconds: phaseTotalSeconds,
     isRunning,
     isActive,
+    canAddFocusTime: canExtendFocusTime(),
   }).catch(() => {});
 }
 
@@ -1095,6 +1135,9 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
       return;
     case "skip":
       skipSession();
+      return;
+    case "add-focus-time":
+      addFocusTimeInternal(command.seconds);
       return;
     case "cleanup-orphans":
       void cleanupOrphansInternal();
@@ -1176,13 +1219,7 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for tray-skip:", e));
 
   listen<{ seconds: number }>("pomodoro-add-time", (event) => {
-    if (phase !== "focus" || preBreakExtensionUsed) return;
-    const elapsedSeconds = actualPhaseElapsedSeconds();
-    const nextWorkRemainingSeconds = phaseWorkRemainingSeconds() + event.payload.seconds;
-    preBreakExtensionUsed = true;
-    notificationShown = false;
-    setPhaseRemainingSeconds(nextWorkRemainingSeconds, elapsedSeconds);
-    if (phaseEndTime !== null) phaseEndTime = Date.now() + remainingSeconds * 1000;
+    addFocusTimeInternal(event.payload.seconds);
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
 }
 
@@ -1425,7 +1462,7 @@ function showNotification() {
 
   invoke("show_pomodoro_notification", {
     remainingSeconds: NOTIFICATION_THRESHOLD,
-    allowAddTime: !preBreakExtensionUsed,
+    allowAddTime: canExtendFocusTime(),
   }).catch((e) => {
     console.warn("Failed to show notification:", e);
     notificationShown = false;
@@ -1931,6 +1968,9 @@ export function getPomodoro() {
     get totalSecondsForPhase() {
       return phaseTotalSeconds;
     },
+    get canAddFocusTime() {
+      return canExtendFocusTime();
+    },
     get formattedTime() {
       const mins = Math.floor(remainingSeconds / 60);
       const secs = remainingSeconds % 60;
@@ -2019,6 +2059,10 @@ export function getPomodoro() {
     skip() {
       if (forwardWindowCommand({ kind: "skip" })) return;
       skipSession();
+    },
+    addFocusTime(seconds: number = FOCUS_EXTENSION_SECONDS) {
+      if (forwardWindowCommand({ kind: "add-focus-time", seconds })) return;
+      addFocusTimeInternal(seconds);
     },
     /** Clean up orphaned segments from previous app sessions. Call once on startup. */
     async cleanupOrphans() {

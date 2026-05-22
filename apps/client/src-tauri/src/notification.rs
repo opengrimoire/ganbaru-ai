@@ -1637,7 +1637,7 @@ pub fn show_pomodoro_notification(
         let mut notification = Notification::new();
         notification.summary("Focus session ending in 1 minute");
         if allow_add_time.unwrap_or(true) {
-            notification.action("add_time", "+3 minutes");
+            notification.action("add_time", "Extend focus 3 minutes");
         }
         let result = notification
             .timeout(timeout_ms as i32)

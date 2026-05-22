@@ -2,7 +2,7 @@
 
 The music player is the audio side of the work environment. Playlists are tied to session blocks and to environments, so the right audio plays automatically when a block activates. Two sources are supported: local files and YouTube. Spotify is explicitly out of scope.
 
-The main app opens the Music area from the title bar music icon. It is not part of the primary Calendar / Projects / Notes tab cycle.
+The main app opens the Music area from the title bar music icon. The Music area is not part of the primary Calendar / Projects / Notes tab cycle.
 
 Playback is owned by a persistent app-level player host, not by the Music route. Leaving the Music view hides the visible media surface but keeps local and YouTube playback, playlist state, volume, rate, shuffle mode, and resume persistence alive.
 
@@ -59,7 +59,7 @@ Playback speed is chosen from presets (`0.5x`, `1x`, `1.25x`, `1.5x`, `2x`) or a
 
 Volume shows one exact percent value and is capped at `100%` for local audio, local video, and YouTube. Local video and YouTube stay on their WebView media element volume paths. Routing videos through a Web Audio gain graph is intentionally avoided because it can bind playback to stale Linux Bluetooth outputs after device changes. When the OS reports an audio device change, active local video playback recreates the media element at the current position and resumes if it was playing. Scrolling over the Music view, including a visible video surface, adjusts volume. Clicking the volume percent text toggles mute without moving the saved volume slider position.
 
-The existing `main` tray icon owns both Pomodoro and Music controls. The menu has separated Pomodoro and Music sections, shows Music status without track titles, and emits prefixed Music tray events for play/pause, previous, next, shuffle, and opening the Music view.
+The existing `main` tray icon and the title bar pomodoro ring menu own compact Music controls. They show the active media title when one is loaded without redundant status or category prefixes, and offer play/pause, previous, next, and opening the Music view. The title bar ring menu also includes a compact volume slider that writes through the same player setting as the Music view. Scrolling over the title bar ring menu, the pomodoro ring button, or the title bar music button adjusts the same Music volume. Shuffle remains controlled from the Music view.
 
 SQLite owns playlist definitions and playback resume state:
 

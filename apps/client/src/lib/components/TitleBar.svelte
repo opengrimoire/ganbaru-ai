@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getNavigation } from "$lib/stores/navigation.svelte";
+  import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
@@ -28,7 +29,14 @@
   import Folder from "@lucide/svelte/icons/folder";
   import Book from "@lucide/svelte/icons/book";
   import CircleGauge from "@lucide/svelte/icons/circle-gauge";
+  import ClockPlus from "@lucide/svelte/icons/clock-plus";
+  import Coffee from "@lucide/svelte/icons/coffee";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
   import Music from "@lucide/svelte/icons/music";
+  import PauseIcon from "@lucide/svelte/icons/pause";
+  import PlayIcon from "@lucide/svelte/icons/play";
+  import SkipBack from "@lucide/svelte/icons/skip-back";
+  import SkipForward from "@lucide/svelte/icons/skip-forward";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import Settings from "@lucide/svelte/icons/settings";
@@ -47,6 +55,7 @@
   import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
   import type { SectionId } from "$lib/components/settings/types";
   import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
+  import type { PlaybackStatus } from "$lib/music/playback";
   import {
     recordResetShortcutPress,
     type ResetShortcutSequenceState,
@@ -66,6 +75,7 @@
   const isMainWindow = win.label === "main";
   const detachedWindowView = detachableTabViewFromWindowLabel(win.label);
   const nav = getNavigation();
+  const musicPlayer = getMusicPlayer();
   const pomodoro = getPomodoro();
   const theme = getTheme();
   const zoom = getZoom();
@@ -155,12 +165,14 @@
 
   function togglePerfMenu() {
     showPerfMenu = !showPerfMenu;
+    showPomodoroMenu = false;
     showUtilityOverflowMenu = false;
     if (showPerfMenu) void loadPerformancePopover();
   }
 
   function toggleTheme() {
     if (lockedByThemeEditor) return;
+    showPomodoroMenu = false;
     showUtilityOverflowMenu = false;
     theme.toggle();
   }
@@ -171,6 +183,7 @@
     if (lockedByThemeEditor) return;
     if (!perfPinned) showPerfMenu = false;
     settingsLauncher.close();
+    showPomodoroMenu = false;
     showTitleBarMenu = false;
     showUtilityOverflowMenu = false;
     showThemeQuickSwitcher = true;
@@ -178,6 +191,7 @@
   }
 
   function openSettings(section?: SectionId) {
+    showPomodoroMenu = false;
     showUtilityOverflowMenu = false;
     settingsLauncher.open(section);
     void loadSettingsModal();
@@ -199,6 +213,7 @@
 
   function activateOverflowControl(id: TitleBarControlId) {
     if (overflowControlDisabled(id)) return;
+    showPomodoroMenu = false;
     showUtilityOverflowMenu = false;
     if (id === "theme") {
       theme.toggle();
@@ -273,6 +288,32 @@
   const lockedByThemeEditor = $derived(!!themeEditor.editingId);
 
   const isActive = $derived(pomodoro.isActive);
+  const pomodoroPauseResumeLabel = $derived(
+    isActive && !pomodoro.isRunning ? "Resume pomodoro" : "Pause pomodoro",
+  );
+  const phaseAdvanceLabel = $derived(
+    isActive
+      ? pomodoro.phase === "focus"
+        ? "Go to break now"
+        : "Start focus now"
+      : "Go to break now",
+  );
+  const canPauseResumePomodoro = $derived(isActive);
+  const canAdvancePomodoro = $derived(isActive);
+  const titleBarVolumeStep = 0.05;
+  const titleBarVolumeSliderProgress = $derived(musicPlayer.volumeMax > 0
+    ? `${Math.min(100, Math.max(0, (musicPlayer.volumeControlValue / musicPlayer.volumeMax) * 100))}%`
+    : "0%");
+  const musicStatusText = $derived.by(() => {
+    const title = musicPlayer.currentSource ? musicPlayer.loadedTitle.trim() : "";
+    if (title) return title;
+    if (musicPlayer.currentSource || musicPlayer.snapshot.status !== "idle") {
+      return musicStatusLabel(musicPlayer.snapshot.status);
+    }
+    return "No music loaded";
+  });
+  const canPlayPauseMusic = $derived(Boolean(musicPlayer.currentSource) && !musicPlayer.isBusy);
+  const musicPlayPauseLabel = $derived(musicPlayer.isPlaying ? "Pause music" : "Play music");
 
   const tabs: { view: DetachableTabView; label: string; icon: typeof Calendar }[] = [
     { view: "calendar", label: "Calendar", icon: Calendar },
@@ -305,6 +346,8 @@
   const TITLE_BAR_ICON_COLOR_CLASS = "text-foreground/68 dark:text-white/76";
   const TITLE_BAR_ICON_STROKE_WIDTH = 1.5;
   const TITLE_BAR_ICON_SIZE = 14;
+  const TITLE_BAR_MENU_ICON_SIZE = 14;
+  const TITLE_BAR_MENU_ICON_STROKE_WIDTH = 1.8;
   const POMODORO_RING_SIZE = 16;
   const POMODORO_RING_STROKE_WIDTH = 2.15;
   const RESET_SHORTCUT_REQUIRED_PRESSES = 10;
@@ -419,6 +462,11 @@
   });
 
   function handleModalKeydown(e: KeyboardEvent) {
+    if (showPomodoroMenu && e.key === "Escape") {
+      showPomodoroMenu = false;
+      return;
+    }
+
     if (showUtilityOverflowMenu && e.key === "Escape") {
       showUtilityOverflowMenu = false;
       return;
@@ -581,6 +629,7 @@
   function openTitleBarMenu(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    showPomodoroMenu = false;
     showTabContextMenu = false;
     tabContextView = null;
 
@@ -601,6 +650,7 @@
   function openTabContextMenu(e: MouseEvent, view: DetachableTabView) {
     e.preventDefault();
     e.stopPropagation();
+    showPomodoroMenu = false;
     showTitleBarMenu = false;
     showUtilityOverflowMenu = false;
     showTabContextMenu = true;
@@ -720,6 +770,59 @@
     preferences.toggleTitleBarControl(id);
     showTitleBarMenu = false;
   }
+
+  function musicStatusLabel(status: PlaybackStatus): string {
+    switch (status) {
+      case "playing":
+        return "Playing";
+      case "paused":
+        return "Paused";
+      case "loading":
+        return "Loading";
+      case "ready":
+        return "Ready";
+      case "ended":
+        return "Ended";
+      case "error":
+        return "Error";
+      case "idle":
+        return "Idle";
+    }
+    return "Idle";
+  }
+
+  function togglePomodoroMenu(): void {
+    const nextOpen = !showPomodoroMenu;
+    showPomodoroMenu = nextOpen;
+    if (!nextOpen) return;
+    showPerfMenu = false;
+    showTitleBarMenu = false;
+    showUtilityOverflowMenu = false;
+  }
+
+  function openMusicFromTitleBarMenu(): void {
+    showPomodoroMenu = false;
+    nav.navigate("music");
+  }
+
+  function snappedTitleBarVolume(value: number): number {
+    if (!Number.isFinite(value)) return musicPlayer.volumeControlValue;
+    return Number((Math.round(value / titleBarVolumeStep) * titleBarVolumeStep).toFixed(2));
+  }
+
+  function setTitleBarVolume(value: number): void {
+    void musicPlayer.setVolume(snappedTitleBarVolume(value));
+  }
+
+  function handleTitleBarVolumeWheel(event: WheelEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.ctrlKey) return;
+    const delta = event.deltaY === 0 ? -event.deltaX : event.deltaY;
+    if (delta === 0) return;
+    const direction = delta > 0 ? -1 : 1;
+    setTitleBarVolume(musicPlayer.volumeControlValue + direction * titleBarVolumeStep);
+  }
 </script>
 
 <svelte:window onkeydown={handleModalKeydown} />
@@ -808,9 +911,12 @@
     {#if titleBarControlVisible("pomodoro")}
       <div class="relative">
         <button
-          onclick={() => { showPomodoroMenu = !showPomodoroMenu; }}
+          onclick={togglePomodoroMenu}
+          onwheel={handleTitleBarVolumeWheel}
           class="titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent"
           title={isActive ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}
+          aria-haspopup="menu"
+          aria-expanded={showPomodoroMenu}
         >
           <svg viewBox="0 0 20 20" width={POMODORO_RING_SIZE} height={POMODORO_RING_SIZE}>
             <circle
@@ -842,31 +948,182 @@
             onclick={() => { showPomodoroMenu = false; }}
             onkeydown={(e) => { if (e.key === "Escape") showPomodoroMenu = false; }}
           ></div>
-          <div class="absolute right-0 top-9 z-50 min-w-36 rounded-lg border border-border bg-popover py-1 shadow-lg">
+          <div
+            class="absolute right-0 top-9 z-50 w-60 max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-popover py-1 shadow-lg"
+            onwheel={handleTitleBarVolumeWheel}
+          >
             {#if isActive}
               <div class="px-3 py-1.5 text-xs text-muted-foreground">
                 {pomodoro.formattedTime} left
               </div>
-              <div class="my-1 h-px bg-border"></div>
-              {#if pomodoro.isRunning}
-                <button
-                  onclick={() => { pomodoro.pause(); showPomodoroMenu = false; }}
-                  class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-                >Pause</button>
-              {:else}
-                <button
-                  onclick={() => { pomodoro.start(); showPomodoroMenu = false; }}
-                  class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-                >Resume</button>
-              {/if}
-              <button
-                onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
-                class="flex w-full items-center px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-              >Skip</button>
             {:else}
               <div class="px-3 py-1.5 text-xs text-muted-foreground">
                 No active session
               </div>
+            {/if}
+            <button
+              onclick={() => {
+                if (pomodoro.isRunning) {
+                  pomodoro.pause();
+                } else {
+                  pomodoro.start();
+                }
+                showPomodoroMenu = false;
+              }}
+              disabled={!canPauseResumePomodoro}
+              class={cn(
+                "flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                canPauseResumePomodoro
+                  ? "text-foreground hover:bg-accent"
+                  : "cursor-not-allowed text-muted-foreground/50",
+              )}
+            >
+              <span>{pomodoroPauseResumeLabel}</span>
+              {#if isActive && !pomodoro.isRunning}
+                <PlayIcon
+                  class="shrink-0 opacity-70"
+                  size={TITLE_BAR_MENU_ICON_SIZE}
+                  strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                />
+              {:else}
+                <PauseIcon
+                  class="shrink-0 opacity-70"
+                  size={TITLE_BAR_MENU_ICON_SIZE}
+                  strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                />
+              {/if}
+            </button>
+            <button
+              onclick={() => { pomodoro.addFocusTime(); showPomodoroMenu = false; }}
+              disabled={!pomodoro.canAddFocusTime}
+              class={cn(
+                "flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                pomodoro.canAddFocusTime
+                  ? "text-foreground hover:bg-accent"
+                  : "cursor-not-allowed text-muted-foreground/50",
+              )}
+            >
+              <span>Extend focus 3 minutes</span>
+              <ClockPlus
+                class="shrink-0 opacity-70"
+                size={TITLE_BAR_MENU_ICON_SIZE}
+                strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+              />
+            </button>
+            <button
+              onclick={() => { pomodoro.skip(); showPomodoroMenu = false; }}
+              disabled={!canAdvancePomodoro}
+              class={cn(
+                "flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                canAdvancePomodoro
+                  ? "text-foreground hover:bg-accent"
+                  : "cursor-not-allowed text-muted-foreground/50",
+              )}
+            >
+              <span>{phaseAdvanceLabel}</span>
+              {#if pomodoro.phase === "focus" || !isActive}
+                <Coffee
+                  class="shrink-0 opacity-70"
+                  size={TITLE_BAR_MENU_ICON_SIZE}
+                  strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                />
+              {:else}
+                <PlayIcon
+                  class="shrink-0 opacity-70"
+                  size={TITLE_BAR_MENU_ICON_SIZE}
+                  strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                />
+              {/if}
+            </button>
+            {#if isMainWindow}
+              <div class="px-3 pb-1.5 pt-2 text-xs text-muted-foreground">
+                <span class="block truncate">{musicStatusText}</span>
+              </div>
+              <button
+                onclick={() => { void musicPlayer.togglePlay(); showPomodoroMenu = false; }}
+                disabled={!canPlayPauseMusic}
+                class={cn(
+                  "flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                  canPlayPauseMusic
+                    ? "text-foreground hover:bg-accent"
+                    : "cursor-not-allowed text-muted-foreground/50",
+                )}
+              >
+                <span>{musicPlayPauseLabel}</span>
+                {#if musicPlayer.isPlaying}
+                  <PauseIcon
+                    class="shrink-0 opacity-70"
+                    size={TITLE_BAR_MENU_ICON_SIZE}
+                    strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                  />
+                {:else}
+                  <PlayIcon
+                    class="shrink-0 opacity-70"
+                    size={TITLE_BAR_MENU_ICON_SIZE}
+                    strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                  />
+                {/if}
+              </button>
+              <button
+                onclick={() => { void musicPlayer.playPreviousTrack(); showPomodoroMenu = false; }}
+                disabled={!musicPlayer.canPlayPreviousTrack}
+                class={cn(
+                  "flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                  musicPlayer.canPlayPreviousTrack
+                    ? "text-foreground hover:bg-accent"
+                    : "cursor-not-allowed text-muted-foreground/50",
+                )}
+              >
+                <span>Previous music</span>
+                <SkipBack
+                  class="shrink-0 opacity-70"
+                  size={TITLE_BAR_MENU_ICON_SIZE}
+                  strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                />
+              </button>
+              <button
+                onclick={() => { void musicPlayer.playNextTrack(); showPomodoroMenu = false; }}
+                disabled={!musicPlayer.canPlayNextTrack}
+                class={cn(
+                  "flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                  musicPlayer.canPlayNextTrack
+                    ? "text-foreground hover:bg-accent"
+                    : "cursor-not-allowed text-muted-foreground/50",
+                )}
+              >
+                <span>Next music</span>
+                <SkipForward
+                  class="shrink-0 opacity-70"
+                  size={TITLE_BAR_MENU_ICON_SIZE}
+                  strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                />
+              </button>
+              <div class="flex items-center gap-3 px-3 py-2 text-sm text-foreground">
+                <span class="shrink-0">Volume</span>
+                <input
+                  type="range"
+                  min="0"
+                  max={musicPlayer.volumeMax}
+                  step={titleBarVolumeStep}
+                  value={musicPlayer.volumeControlValue}
+                  class="titlebar-volume-slider min-w-0 flex-1"
+                  style={`--titlebar-volume-progress: ${titleBarVolumeSliderProgress};`}
+                  aria-label="Music volume"
+                  tabindex="-1"
+                  oninput={(event) => { setTitleBarVolume(Number(event.currentTarget.value)); }}
+                />
+              </div>
+              <button
+                onclick={openMusicFromTitleBarMenu}
+                class="flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent"
+              >
+                <span>Open music</span>
+                <ExternalLink
+                  class="shrink-0 opacity-70"
+                  size={TITLE_BAR_MENU_ICON_SIZE}
+                  strokeWidth={TITLE_BAR_MENU_ICON_STROKE_WIDTH}
+                />
+              </button>
             {/if}
           </div>
         {/if}
@@ -877,6 +1134,7 @@
       <button
         type="button"
         onclick={() => nav.navigate("music")}
+        onwheel={handleTitleBarVolumeWheel}
         class={cn(
           "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors",
           nav.current === "music"
@@ -951,7 +1209,11 @@
     {#if overflowActionControls.length > 0}
       <div class="relative">
         <button
-          onclick={() => { showUtilityOverflowMenu = !showUtilityOverflowMenu; showPerfMenu = false; }}
+          onclick={() => {
+            showUtilityOverflowMenu = !showUtilityOverflowMenu;
+            showPomodoroMenu = false;
+            showPerfMenu = false;
+          }}
           class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
           aria-label="More controls"
           data-app-tooltip-disabled="true"
@@ -1206,5 +1468,56 @@
   :global(html[data-focus-intent="keyboard"]) .titlebar-tab:focus {
     outline: none;
     box-shadow: inset 0 0 0 2px var(--ring);
+  }
+
+  .titlebar-volume-slider {
+    --titlebar-volume-thumb-size: 0.5rem;
+    --titlebar-volume-track-height: 0.125rem;
+    --titlebar-volume-track-color: color-mix(in srgb, var(--foreground) 18%, transparent);
+    --titlebar-volume-fill-color: color-mix(in srgb, var(--foreground) 58%, transparent);
+
+    height: var(--titlebar-volume-thumb-size);
+    appearance: none;
+    cursor: pointer;
+    background:
+      linear-gradient(
+        to right,
+        var(--titlebar-volume-fill-color) 0%,
+        var(--titlebar-volume-fill-color) var(--titlebar-volume-progress),
+        var(--titlebar-volume-track-color) var(--titlebar-volume-progress),
+        var(--titlebar-volume-track-color) 100%
+      )
+      center / calc(100% - var(--titlebar-volume-thumb-size)) var(--titlebar-volume-track-height) no-repeat;
+  }
+
+  .titlebar-volume-slider::-webkit-slider-runnable-track {
+    height: var(--titlebar-volume-track-height);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .titlebar-volume-slider::-webkit-slider-thumb {
+    width: var(--titlebar-volume-thumb-size);
+    height: var(--titlebar-volume-thumb-size);
+    margin-top: calc((var(--titlebar-volume-track-height) - var(--titlebar-volume-thumb-size)) / 2);
+    appearance: none;
+    border: 0;
+    border-radius: 999px;
+    background: var(--foreground);
+  }
+
+  .titlebar-volume-slider::-moz-range-track,
+  .titlebar-volume-slider::-moz-range-progress {
+    height: var(--titlebar-volume-track-height);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .titlebar-volume-slider::-moz-range-thumb {
+    width: var(--titlebar-volume-thumb-size);
+    height: var(--titlebar-volume-thumb-size);
+    border: 0;
+    border-radius: 999px;
+    background: var(--foreground);
   }
 </style>

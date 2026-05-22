@@ -1839,12 +1839,6 @@ class MusicPlayerStore {
       this.unlisteners.push(unlisten);
     }).catch((error) => console.warn("Failed to listen for tray-music-next:", error));
 
-    listen("tray-music-shuffle", () => {
-      this.toggleShuffle();
-    }).then((unlisten) => {
-      this.unlisteners.push(unlisten);
-    }).catch((error) => console.warn("Failed to listen for tray-music-shuffle:", error));
-
     listen("tray-music-open", () => {
       getNavigation().navigate("music");
     }).then((unlisten) => {
@@ -1855,8 +1849,8 @@ class MusicPlayerStore {
   private updateMusicTray(): void {
     const signature = [
       this.currentSource?.identity ?? "none",
+      this.currentSource ? this.loadedTitle : "none",
       this.snapshot.status,
-      this.shuffleEnabled ? "shuffle" : "ordered",
       this.canPlayPreviousTrack ? "prev" : "no-prev",
       this.canPlayNextTrack ? "next" : "no-next",
     ].join("|");
@@ -1865,11 +1859,10 @@ class MusicPlayerStore {
     invoke("update_music_tray", {
       update: {
         status: this.snapshot.status,
+        title: this.currentSource ? this.loadedTitle : null,
         canPlayPause: Boolean(this.currentSource) && !this.isBusy,
         canPrevious: this.canPlayPreviousTrack,
         canNext: this.canPlayNextTrack,
-        shuffleEnabled: this.shuffleEnabled,
-        hasQueue: this.queue.length > 1,
       },
     }).catch(() => {});
   }
