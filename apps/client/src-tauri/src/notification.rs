@@ -1626,13 +1626,20 @@ fn notification_summary(value: &str) -> String {
 }
 
 #[tauri::command]
-pub fn show_pomodoro_notification(app: tauri::AppHandle, remaining_seconds: u32) {
+pub fn show_pomodoro_notification(
+    app: tauri::AppHandle,
+    remaining_seconds: u32,
+    allow_add_time: Option<bool>,
+) {
     let timeout_ms = remaining_seconds * 1000;
 
     std::thread::spawn(move || {
-        let result = Notification::new()
-            .summary("Focus session ending in 1 minute")
-            .action("add_time", "+3 minutes")
+        let mut notification = Notification::new();
+        notification.summary("Focus session ending in 1 minute");
+        if allow_add_time.unwrap_or(true) {
+            notification.action("add_time", "+3 minutes");
+        }
+        let result = notification
             .timeout(timeout_ms as i32)
             .id(9001)
             .hint(Hint::Transient(true))

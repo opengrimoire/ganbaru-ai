@@ -89,6 +89,7 @@ let skipNextBreak = false;
 let listenersInitialized = false;
 let windowSyncInitialized = false;
 let notificationShown = false;
+let preBreakExtensionUsed = false;
 let phaseEndTime: number | null = null;
 let activeBlockId = $state<string | null>(null);
 let activeBlockEndMs = $state<number | null>(null);
@@ -578,6 +579,11 @@ function resetPhaseProgress(defaultRemainingSeconds: number): void {
   phaseTotalSeconds = defaultRemainingSeconds;
 }
 
+function resetFocusNotificationState(): void {
+  notificationShown = false;
+  preBreakExtensionUsed = false;
+}
+
 function addMinutesToIso(base: string, minutes: number): string {
   const d = new Date(base);
   d.setMinutes(d.getMinutes() + minutes);
@@ -1009,7 +1015,7 @@ async function transitionToBlock(
       setPhaseRemainingSeconds(result.remainingSeconds);
       currentCycle = 1;
       completedPomodoros = 0;
-      notificationShown = false;
+      resetFocusNotificationState();
       isRunning = true;
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       sessionStartTime = nowIso();
@@ -1170,8 +1176,11 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for tray-skip:", e));
 
   listen<{ seconds: number }>("pomodoro-add-time", (event) => {
+    if (phase !== "focus" || preBreakExtensionUsed) return;
     const elapsedSeconds = actualPhaseElapsedSeconds();
     const nextWorkRemainingSeconds = phaseWorkRemainingSeconds() + event.payload.seconds;
+    preBreakExtensionUsed = true;
+    notificationShown = false;
     setPhaseRemainingSeconds(nextWorkRemainingSeconds, elapsedSeconds);
     if (phaseEndTime !== null) phaseEndTime = Date.now() + remainingSeconds * 1000;
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
@@ -1200,7 +1209,7 @@ function startFocusSession() {
   stopOvertime();
   phase = "focus";
   setPhaseRemainingSeconds(config.focusMinutes * TIME_MULTIPLIER);
-  notificationShown = false;
+  resetFocusNotificationState();
   isRunning = true;
   phaseEndTime = Date.now() + remainingSeconds * 1000;
   sessionStartTime = new Date().toISOString();
@@ -1260,7 +1269,7 @@ function dismissSuspend(resume: boolean) {
     completedPomodoros = 0;
     sessionStartTime = null;
     skipNextBreak = false;
-    notificationShown = false;
+    resetFocusNotificationState();
     clearSegments();
     updateTray();
   }
@@ -1396,7 +1405,7 @@ function dismissIdle(resume: boolean) {
     completedPomodoros = 0;
     sessionStartTime = null;
     skipNextBreak = false;
-    notificationShown = false;
+    resetFocusNotificationState();
     stopIdleChecking();
     clearSegments();
     updateTray();
@@ -1416,6 +1425,7 @@ function showNotification() {
 
   invoke("show_pomodoro_notification", {
     remainingSeconds: NOTIFICATION_THRESHOLD,
+    allowAddTime: !preBreakExtensionUsed,
   }).catch((e) => {
     console.warn("Failed to show notification:", e);
     notificationShown = false;
@@ -1610,6 +1620,7 @@ function advancePhase() {
       skipNextBreak = false;
       phase = "focus";
       setPhaseRemainingSeconds(result.remainingSeconds);
+      resetFocusNotificationState();
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       currentCycle = result.nextCycle;
 
@@ -1668,6 +1679,7 @@ function advancePhase() {
       markSegment(currentSegmentIndex, "completed", true);
       phase = "focus";
       setPhaseRemainingSeconds(result.remainingSeconds);
+      resetFocusNotificationState();
       phaseEndTime = Date.now() + remainingSeconds * 1000;
 
       const nextFocus = segments.findIndex(
@@ -1773,7 +1785,7 @@ function startFromBlockInternal(
       currentCycle = 1;
       completedPomodoros = 0;
       skipNextBreak = false;
-      notificationShown = false;
+      resetFocusNotificationState();
 
       isRunning = true;
       phaseEndTime = Date.now() + remainingSeconds * 1000;
@@ -1821,7 +1833,7 @@ function stopSessionInternal(): void {
   completedPomodoros = 0;
   sessionStartTime = null;
   skipNextBreak = false;
-  notificationShown = false;
+  resetFocusNotificationState();
   clearSegments();
   updateTray();
 }
