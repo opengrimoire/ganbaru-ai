@@ -1775,7 +1775,7 @@
         onkeydown={(e) => handlePanelRovingKeydown(e, "metadata", 0, metadataItemCount)}
         data-panel-roving="metadata"
         data-roving-index="0"
-        tabindex={metadataFocusIndex === 0 ? 0 : -1}
+        tabindex={0}
         disabled={controlsDisabled}
         class={metadataButtonClass()}
       >
@@ -1796,7 +1796,7 @@
         data-panel-roving="metadata"
         data-roving-index="1"
         data-app-tooltip-focus-disabled="true"
-        tabindex={metadataFocusIndex === 1 ? 0 : -1}
+        tabindex={0}
         disabled={controlsDisabled}
         class={metadataButtonClass()}
         title="Busy tells others you are unavailable for meetings."
@@ -1817,7 +1817,7 @@
           data-panel-roving="metadata"
           data-roving-index="2"
           data-app-tooltip-focus-disabled="true"
-          tabindex={metadataFocusIndex === 2 ? 0 : -1}
+          tabindex={0}
           disabled={controlsDisabled}
           class={metadataButtonClass("capitalize")}
           title="Private hides event details from other calendar viewers."
