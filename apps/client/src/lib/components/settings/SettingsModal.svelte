@@ -49,6 +49,7 @@
   let settingsScrollEl: HTMLElement | undefined = $state();
   const useTopNav = $derived(viewport.below("compact"));
   const useIconRail = $derived(!useTopNav && viewport.below("regular"));
+  const settingsScrollbarInset = $derived(useTopNav ? 12 : useIconRail ? 16 : 24);
   type CalendarsSectionComponent = typeof import("./CalendarsSection.svelte").default;
   let CalendarsSection = $state<CalendarsSectionComponent | null>(null);
   let loadingCalendarsSection: Promise<void> | null = null;
@@ -252,7 +253,12 @@
         {/if}
       </section>
       {#if activeSection !== "shortcuts"}
-        <CalendarScrollbar scrollContainer={settingsScrollEl} wheelPassthrough />
+        <CalendarScrollbar
+          scrollContainer={settingsScrollEl}
+          stickyTop={settingsScrollbarInset}
+          stickyBottom={settingsScrollbarInset}
+          wheelPassthrough
+        />
       {/if}
     </div>
   </div>

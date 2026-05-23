@@ -9,11 +9,13 @@
   let {
     scrollContainer,
     stickyTop = 0,
+    stickyBottom = 0,
     onTimelineWheel,
     wheelPassthrough = false,
   }: {
     scrollContainer: HTMLElement | undefined;
     stickyTop?: number;
+    stickyBottom?: number;
     onTimelineWheel?: (e: WheelEvent) => void;
     wheelPassthrough?: boolean;
   } = $props();
@@ -161,7 +163,7 @@
 <div
   bind:this={trackEl}
   class="{wheelPassthrough ? 'pointer-events-none' : 'pointer-events-auto'} absolute right-0 z-48"
-  style="top: {stickyTop}px; bottom: 0; width: 8px;"
+  style="top: {stickyTop}px; bottom: {stickyBottom}px; width: 8px;"
   onpointerdown={handleTrackPointerDown}
   onpointermove={handlePointerMove}
   onpointerup={handlePointerUp}
