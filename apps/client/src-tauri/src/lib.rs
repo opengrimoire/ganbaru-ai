@@ -34,6 +34,7 @@ mod calendar_reads;
 mod calendars;
 mod db;
 mod db_path;
+mod media_controls;
 mod media_player;
 mod music;
 mod notification;
@@ -701,6 +702,7 @@ pub fn run() {
             music::music_register_media_file,
             music::music_save_playback_state,
             music::music_youtube_host_url,
+            media_controls::update_media_controls,
             media_player::media_player_probe,
             media_player::media_player_load,
             media_player::media_player_play,
@@ -783,6 +785,7 @@ pub fn run() {
         ])
         .setup(|app| {
             music::setup_youtube_host(app.handle())?;
+            media_controls::setup_media_controls(app.handle())?;
             if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {
                 eprintln!("failed to restore stale Linux shortcuts: {err}");
             }

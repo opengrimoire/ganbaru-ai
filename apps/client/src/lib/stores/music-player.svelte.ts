@@ -15,6 +15,7 @@ import {
   type LocalBackendKind,
   type LocalPlayerSnapshot,
 } from "$lib/api/media-player";
+import { updateMediaControls } from "$lib/api/media-controls";
 import {
   getPlaybackState,
   getYouTubeHostUrl,
@@ -41,6 +42,11 @@ import {
   type PlaybackSnapshot,
   type PlaybackStatus,
 } from "$lib/music/playback";
+import {
+  musicHardwareActionFromKey,
+  parseMusicHardwareControlPayload,
+  type MusicHardwareControlPayload,
+} from "$lib/music/hardware-controls";
 import {
   formatSourceKind,
   isYouTubeSource,
@@ -362,6 +368,7 @@ class MusicPlayerStore {
     this.listenersInitialized = true;
     if (typeof window !== "undefined") {
       window.addEventListener("message", this.handleWindowMessage);
+      window.addEventListener("keydown", this.handleHardwareKeydown, { capture: true });
       this.youtubeSnapshotIntervalId = window.setInterval(() => {
         if (!this.currentSource || !isYouTubeSource(this.currentSource)) return;
         this.postYouTubeCommand({ action: "snapshot" });
@@ -373,12 +380,14 @@ class MusicPlayerStore {
       }, 500);
     }
     this.listenToTrayEvents();
+    this.updateSystemMediaControls();
     this.updateMusicTray();
   }
 
   destroy(): void {
     if (typeof window !== "undefined") {
       window.removeEventListener("message", this.handleWindowMessage);
+      window.removeEventListener("keydown", this.handleHardwareKeydown, { capture: true });
       if (this.youtubeSnapshotIntervalId !== null) {
         window.clearInterval(this.youtubeSnapshotIntervalId);
         this.youtubeSnapshotIntervalId = null;
@@ -538,7 +547,7 @@ class MusicPlayerStore {
     this.youtubeOptimisticPauseUntil = 0;
     this.postYouTubeCommand({ action: "play", volume: this.effectiveYouTubeVolume() });
     this.snapshot = { ...this.snapshot, status: "playing" };
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     void this.persistCurrentPlaybackState();
     this.updateMusicTray();
   }
@@ -555,7 +564,7 @@ class MusicPlayerStore {
       this.youtubeOptimisticPauseUntil = Date.now() + YOUTUBE_OPTIMISTIC_PAUSE_MS;
       this.postYouTubeCommand({ action: "pause", volume: this.effectiveYouTubeVolume() });
       this.snapshot = { ...this.snapshot, status: "paused" };
-      this.updateMediaSession();
+      this.updateSystemMediaControls();
     }
     void this.persistCurrentPlaybackState();
     this.updateMusicTray();
@@ -590,6 +599,7 @@ class MusicPlayerStore {
       this.postYouTubeCommand({ action: "seek", positionMs: bounded });
       this.snapshot = { ...this.snapshot, positionMs: bounded };
     }
+    this.updateSystemMediaControls();
     await this.persistCurrentPlaybackState(true);
   }
 
@@ -599,7 +609,10 @@ class MusicPlayerStore {
     this.muted = false;
     this.announceVolumeFeedback();
     this.persistPlayerSettings();
-    if (!this.currentSource) return;
+    if (!this.currentSource) {
+      this.updateNativeMediaControls();
+      return;
+    }
     if (this.currentSource.kind === "local-file") {
       if (this.usesNativeLocalBackend()) {
         await this.applyNativeLocalVolume();
@@ -609,6 +622,7 @@ class MusicPlayerStore {
     } else {
       this.postYouTubeCommand({ action: "volume", volume: clampVolume(volume) });
     }
+    this.updateNativeMediaControls();
     await this.persistCurrentPlaybackState();
     this.updateMusicTray();
   }
@@ -617,7 +631,10 @@ class MusicPlayerStore {
     this.muted = !this.muted;
     this.announceVolumeFeedback();
     this.persistPlayerSettings();
-    if (!this.currentSource) return;
+    if (!this.currentSource) {
+      this.updateNativeMediaControls();
+      return;
+    }
     if (this.currentSource.kind === "local-file") {
       if (this.usesNativeLocalBackend()) {
         await this.applyNativeLocalMute();
@@ -627,6 +644,7 @@ class MusicPlayerStore {
     } else {
       this.postYouTubeCommand({ action: "volume", volume: this.effectiveYouTubeVolume() });
     }
+    this.updateNativeMediaControls();
     await this.persistCurrentPlaybackState();
   }
 
@@ -668,7 +686,10 @@ class MusicPlayerStore {
     const rate = clampRate(value);
     this.snapshot = { ...this.snapshot, rate };
     this.persistPlayerSettings();
-    if (!this.currentSource) return;
+    if (!this.currentSource) {
+      this.updateNativeMediaControls();
+      return;
+    }
     if (this.currentSource.kind === "local-file") {
       if (this.usesNativeLocalBackend()) {
         const localSnapshot = await setLocalRate(rate);
@@ -679,6 +700,7 @@ class MusicPlayerStore {
     } else {
       this.postYouTubeCommand({ action: "rate", rate });
     }
+    this.updateSystemMediaControls();
     await this.persistCurrentPlaybackState();
   }
 
@@ -703,6 +725,7 @@ class MusicPlayerStore {
     this.queueHistory = [];
     this.pendingQueueIndex = null;
     this.currentArtworkUrl = null;
+    this.updateSystemMediaControls();
     this.updateMusicTray();
   }
 
@@ -712,6 +735,7 @@ class MusicPlayerStore {
     this.shuffleOrder = [];
     this.queueHistory = [];
     this.persistPlayerSettings();
+    this.updateNativeMediaControls();
     this.updateMusicTray();
   }
 
@@ -806,7 +830,7 @@ class MusicPlayerStore {
       this.snapshot.status === "loading" ? "ready" : this.snapshot.status,
     );
     this.playerError = null;
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     void this.persistCurrentPlaybackState(true);
     this.updateMusicTray();
   }
@@ -824,6 +848,7 @@ class MusicPlayerStore {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
     this.snapshot = this.localSnapshotFromElement(element, this.snapshot.status);
+    this.updateNativeMediaControls();
     void this.persistCurrentPlaybackState();
   }
 
@@ -835,7 +860,7 @@ class MusicPlayerStore {
     this.scheduleLocalVolumeRestore(element);
     this.snapshot = this.localSnapshotFromElement(element, "playing");
     this.playerError = null;
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     void this.persistCurrentPlaybackState();
     this.updateMusicTray();
   }
@@ -849,7 +874,7 @@ class MusicPlayerStore {
     }
     if (this.snapshot.status === "idle" || element.ended) return;
     this.snapshot = this.localSnapshotFromElement(element, "paused");
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     void this.persistCurrentPlaybackState();
     this.updateMusicTray();
   }
@@ -858,7 +883,7 @@ class MusicPlayerStore {
     const element = this.localMediaElementFromEvent(event);
     if (!element || this.currentSource?.kind !== "local-file") return;
     this.snapshot = this.localSnapshotFromElement(element, "ended");
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     await this.persistCurrentPlaybackState(true);
     this.updateMusicTray();
     await this.playNextTrack();
@@ -869,7 +894,7 @@ class MusicPlayerStore {
     if (!element || this.currentSource?.kind !== "local-file") return;
     this.playerError = this.localMediaErrorMessage(element);
     this.snapshot = { ...this.localSnapshotFromElement(element, "error"), error: this.playerError };
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     void this.persistCurrentPlaybackState(true);
     this.updateMusicTray();
   }
@@ -944,7 +969,7 @@ class MusicPlayerStore {
       } else if (useVideoElement) {
         this.configureLocalMediaElement();
       }
-      this.updateMediaSession();
+      this.updateSystemMediaControls();
       await this.persistCurrentPlaybackState();
       this.updateMusicTray();
     } catch (error) {
@@ -1007,7 +1032,7 @@ class MusicPlayerStore {
       const localSnapshot = await playLocalMedia();
       this.applyLocalSnapshot(localSnapshot);
       this.playerError = null;
-      this.updateMediaSession();
+      this.updateSystemMediaControls();
     } catch (error) {
       this.playerError = mediaPlayerErrorMessage(error);
       this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
@@ -1017,11 +1042,11 @@ class MusicPlayerStore {
 
   private async pauseNativeLocalMedia(): Promise<void> {
     this.snapshot = { ...this.snapshot, status: "paused" };
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     try {
       const localSnapshot = await pauseLocalMedia();
       this.applyLocalSnapshot(localSnapshot);
-      this.updateMediaSession();
+      this.updateSystemMediaControls();
     } catch (error) {
       this.playerError = mediaPlayerErrorMessage(error);
       this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
@@ -1033,7 +1058,7 @@ class MusicPlayerStore {
       const localSnapshot = await stopLocalMedia();
       this.applyLocalSnapshot(localSnapshot);
       this.snapshot = { ...this.snapshot, status: "idle", positionMs: 0 };
-      this.updateMediaSession();
+      this.updateSystemMediaControls();
     } catch {
       this.snapshot = { ...this.snapshot, status: "idle", positionMs: 0 };
     }
@@ -1080,7 +1105,7 @@ class MusicPlayerStore {
       this.applyLocalSnapshot(localSnapshot);
       if (localSnapshot.status === "ended" && !wasEnded) {
         this.handlingNativeLocalEnded = true;
-        this.updateMediaSession();
+        this.updateSystemMediaControls();
         await this.persistCurrentPlaybackState(true);
         this.updateMusicTray();
         try {
@@ -1090,7 +1115,7 @@ class MusicPlayerStore {
         }
         return;
       }
-      this.updateMediaSession();
+      this.updateSystemMediaControls();
       void this.persistCurrentPlaybackState();
       this.updateMusicTray();
     } catch {
@@ -1123,7 +1148,7 @@ class MusicPlayerStore {
       this.scheduleLocalVolumeRestore(this.localMediaElement);
       this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "playing");
       this.playerError = null;
-      this.updateMediaSession();
+      this.updateSystemMediaControls();
     } catch (error) {
       this.playerError = error instanceof Error ? error.message : String(error);
       this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
@@ -1136,7 +1161,7 @@ class MusicPlayerStore {
     this.silenceLocalMediaElement(this.localMediaElement);
     this.localMediaElement.pause();
     this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "paused");
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
   }
 
   private stopLocalMediaElement(): void {
@@ -1149,7 +1174,7 @@ class MusicPlayerStore {
     this.localMediaElement.pause();
     this.seekMediaElement(this.localMediaElement, 0);
     this.snapshot = this.localSnapshotFromElement(this.localMediaElement, "idle");
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
   }
 
   private seekLocalMediaElement(positionMs: number): void {
@@ -1398,6 +1423,14 @@ class MusicPlayerStore {
     this.handleYouTubeHostMessage(event);
   };
 
+  private handleHardwareKeydown = (event: KeyboardEvent): void => {
+    const action = musicHardwareActionFromKey(event);
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.handleHardwareControl({ action });
+  };
+
   private handleYouTubeHostMessage(event: MessageEvent<unknown>): void {
     if (!this.youtubeFrame?.contentWindow || event.source !== this.youtubeFrame.contentWindow) return;
     const message = this.parseYouTubeHostMessage(event.data);
@@ -1441,7 +1474,7 @@ class MusicPlayerStore {
       durationMs: message.durationMs,
       error: null,
     };
-    this.updateMediaSession();
+    this.updateSystemMediaControls();
     void this.persistCurrentPlaybackState();
     this.updateMusicTray();
     if (status === "ended" && !wasEnded) {
@@ -1790,19 +1823,34 @@ class MusicPlayerStore {
     return this.muted ? 0 : clampVolume(this.snapshot.volume);
   }
 
-  private updateMediaSession(): void {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !this.currentSource) {
+  private updateSystemMediaControls(): void {
+    this.updateBrowserMediaSession();
+    this.updateNativeMediaControls();
+  }
+
+  private updateBrowserMediaSession(): void {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
       return;
     }
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: this.loadedTitle,
-      artist: this.sourceKindLabel,
-    });
+    if (!this.currentSource) {
+      navigator.mediaSession.playbackState = "none";
+      return;
+    }
+    if (typeof MediaMetadata !== "undefined") {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: this.loadedTitle,
+        artist: this.sourceKindLabel,
+        artwork: this.currentArtworkUrl
+          ? [{ src: this.currentArtworkUrl }]
+          : [],
+      });
+    }
     navigator.mediaSession.playbackState = this.snapshot.status === "playing"
       ? "playing"
       : this.snapshot.status === "paused"
         ? "paused"
         : "none";
+    this.updateBrowserPositionState();
     navigator.mediaSession.setActionHandler("play", () => {
       void this.playPlayback();
     });
@@ -1818,6 +1866,97 @@ class MusicPlayerStore {
     navigator.mediaSession.setActionHandler("stop", () => {
       void this.stopPlayback();
     });
+  }
+
+  private updateBrowserPositionState(): void {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (!("setPositionState" in navigator.mediaSession)) return;
+    const durationSeconds = this.snapshot.durationMs === null
+      ? null
+      : this.snapshot.durationMs / 1000;
+    if (durationSeconds === null || durationSeconds <= 0) return;
+    const positionSeconds = Math.min(this.snapshot.positionMs / 1000, durationSeconds);
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: durationSeconds,
+        playbackRate: this.snapshot.rate,
+        position: Math.max(0, positionSeconds),
+      });
+    } catch {
+      // Invalid position state should not break normal playback controls.
+    }
+  }
+
+  private updateNativeMediaControls(): void {
+    updateMediaControls({
+      status: this.snapshot.status,
+      title: this.currentSource ? this.loadedTitle : null,
+      sourceKindLabel: this.currentSource ? this.sourceKindLabel : null,
+      artworkUrl: this.currentArtworkUrl,
+      canPlayPause: Boolean(this.currentSource) && !this.isBusy,
+      canPrevious: this.canPlayPreviousTrack,
+      canNext: this.canPlayNextTrack,
+      canSeek: Boolean(this.currentSource) && this.durationMs > 0,
+      positionMs: Math.max(0, Math.round(this.snapshot.positionMs)),
+      durationMs: this.snapshot.durationMs === null
+        ? null
+        : Math.max(0, Math.round(this.snapshot.durationMs)),
+      volume: this.volumeControlValue,
+      muted: this.muted,
+      rate: this.snapshot.rate,
+      shuffleEnabled: this.shuffleEnabled,
+    }).catch(() => {});
+  }
+
+  private async handleHardwareControl(payload: MusicHardwareControlPayload): Promise<void> {
+    switch (payload.action) {
+      case "play":
+        await this.playPlayback();
+        return;
+      case "pause":
+        await this.pausePlayback();
+        return;
+      case "playPause":
+        await this.togglePlay();
+        return;
+      case "stop":
+        await this.stopPlayback();
+        return;
+      case "previousTrack":
+        await this.playPreviousTrack();
+        return;
+      case "nextTrack":
+        await this.playNextTrack();
+        return;
+      case "seekBy":
+        if (payload.deltaMs !== undefined) {
+          await this.seekByMs(payload.deltaMs);
+        }
+        return;
+      case "seekTo":
+        if (payload.positionMs !== undefined) {
+          await this.seekToMs(payload.positionMs);
+        }
+        return;
+      case "setVolume":
+        if (payload.volume !== undefined) {
+          await this.setVolume(payload.volume);
+        }
+        return;
+      case "setRate":
+        if (payload.rate !== undefined) {
+          await this.setRate(payload.rate);
+        }
+        return;
+      case "setShuffle":
+        if (
+          payload.shuffleEnabled !== undefined
+          && payload.shuffleEnabled !== this.shuffleEnabled
+        ) {
+          this.toggleShuffle();
+        }
+        return;
+    }
   }
 
   private listenToTrayEvents(): void {
@@ -1844,6 +1983,14 @@ class MusicPlayerStore {
     }).then((unlisten) => {
       this.unlisteners.push(unlisten);
     }).catch((error) => console.warn("Failed to listen for tray-music-open:", error));
+
+    listen("music-hardware-control", (event) => {
+      const payload = parseMusicHardwareControlPayload(event.payload);
+      if (!payload) return;
+      void this.handleHardwareControl(payload);
+    }).then((unlisten) => {
+      this.unlisteners.push(unlisten);
+    }).catch((error) => console.warn("Failed to listen for music-hardware-control:", error));
   }
 
   private updateMusicTray(): void {
