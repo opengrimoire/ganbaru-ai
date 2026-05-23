@@ -413,7 +413,7 @@ The WebView path is the intentional local video path. It can play only the forma
 
 Local audio volume, mute, pause, seek, rate, duration, and position snapshots are internal Rust media player operations. Local audio, local video, and YouTube volume are capped at normal `100%`. Local video uses the WebView media element directly and avoids Web Audio gain routing so playback can follow default output changes more reliably on Linux Bluetooth setups. When the OS reports an audio device change, the frontend recreates active local video media at the current position and resumes if it was playing.
 
-Hardware and Bluetooth media controls use the existing browser Media Session API where the WebView supports it. Linux desktop builds also expose a lightweight MPRIS bridge through GTK/GIO in `apps/client/src-tauri/src/media_controls.rs`, so desktop media widgets, keyboard media keys, and Bluetooth AVRCP controls can call the persistent music player even when local audio is playing through Rodio instead of a WebView media element.
+Hardware and Bluetooth media controls use the existing browser Media Session API where the WebView supports it. Linux desktop builds also expose a lightweight MPRIS bridge through GTK/GIO in `apps/client/src-tauri/src/media_controls.rs`, so desktop media widgets, keyboard media keys, and Bluetooth AVRCP controls can call the persistent music player even when local audio is playing through Rodio instead of a WebView media element. Windows desktop builds use the same module to expose System Media Transport Controls from the main native window, keeping Windows media flyouts and hardware controls on the same player action path.
 
 ### Rust audio backend target
 
