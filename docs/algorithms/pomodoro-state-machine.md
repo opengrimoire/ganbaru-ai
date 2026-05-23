@@ -105,7 +105,7 @@ The opposite design (decisions interleaved with writes) would make all of the ab
 Heartbeat properties:
 
 - **Frequency:** every ~30 seconds. Chosen to bound the recovery error to ~30 seconds while keeping write traffic minimal.
-- **Atomic single-row update.** Each heartbeat is one `UPDATE pomodoro_runs SET last_heartbeat = ? WHERE id = ?`. SQLite handles this in a microsecond or two, no contention.
+- **Atomic single-row update.** Each heartbeat is one `UPDATE pomodoro_runs SET last_heartbeat = ? WHERE id = ? AND ended_at IS NULL`. SQLite handles this in a microsecond or two, no contention.
 - **Independent of segment writes.** Heartbeats fire on their own schedule, not tied to phase boundaries. This way a crash mid-segment still has a recent heartbeat.
 
 Without the heartbeat, recovery would have to use the active segment's planned end (overestimating focus time on crash mid-phase) or now (catastrophic if the app crashed and reopened hours later). The heartbeat gives a tight bound regardless of when recovery runs.
@@ -181,6 +181,7 @@ On app startup, the system scans for runs with `ended_at = NULL`. For each:
 2. **Close the run.** Set `ended_at = last_heartbeat`, `end_reason = interrupted`.
 3. **Close the active segment.** Find any segment on this run with `status = active`. Set `status = interrupted`, `actual_end = run.last_heartbeat`.
 4. **Close any open pauses.** Find any pause on the active segment (or any segment on this run, defensively) with `ended_at = NULL`. Set `ended_at = run.last_heartbeat`.
+5. **Record recovery.** Insert a `pomodoro_run_events` row with `event_type = crash_recovery`.
 
 Each step is an independent SQL UPDATE. Each is atomic. The full recovery sweep is idempotent: running it twice produces the same result as running it once, because step 1 only acts on rows that still match the criteria.
 

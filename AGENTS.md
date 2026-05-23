@@ -98,7 +98,7 @@ vault/
   templates/: project management phase templates, methodology templates (SWOT, BMC, etc.)
   config.json: user settings, work environment definitions, blocker rulesets
   .yjs/: Yjs document state cache (binary)
-  app.db: SQLite index (metadata, search, tags, backlinks, pomodoro sessions, playlist definitions)
+  app.db: SQLite index (metadata, search, tags, backlinks, pomodoro configs, runs, segments, pauses, run events, playlist definitions)
 ```
 
 Music files stay wherever the user keeps them; vault stores only playlist definitions. Backups go to a user-specified path outside the vault.
@@ -110,7 +110,7 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - **Frontend:** plain Svelte 5 with runes (not SvelteKit)
 - **Desktop/mobile shell:** Tauri v2
 - **License:** AGPL 3.0
-- **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, future project tasks, workspace configs, pomodoro sessions) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
+- **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, future project tasks, workspace configs, pomodoro configs, runs, segments, pauses, and run events) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
 - **AI integration:** three paths. (1) Integrated terminal (xterm.js) running Codex or another CLI coding agent, with calendar-driven session switching, per-project conversation threads, and task context passed through the agent prompt or standard input. (2) BYOK chat widget for non-developer users (OpenAI API, OpenAI-compatible API, Ollama for local models, and other user-configured providers). (3) MCP for external AI clients only (ChatGPT, teammate agents, etc.), not for internal agent interaction.
 - **Agent data bridge:** a `ganbaruai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and GanbaruAI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager

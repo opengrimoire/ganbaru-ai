@@ -1,9 +1,50 @@
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, Sqlite, Transaction};
 use std::collections::HashMap;
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PomodoroRunWrite {
+    id: String,
+    event_id: String,
+    event_date: String,
+    planned_start: String,
+    planned_end: String,
+    started_at: String,
+    focus_duration_minutes: i64,
+    short_break_minutes: i64,
+    long_break_minutes: i64,
+    pomodoro_count: i64,
+    idle_timeout_minutes: Option<i64>,
+    event_title_snapshot: Option<String>,
+    inherited_focus_minutes: i64,
+    inherited_cycle: i64,
+    inherited_from_run_id: Option<String>,
+    start_trigger: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PomodoroRunClosure {
+    run_id: String,
+    ended_at: String,
+    end_reason: String,
+    segment_status: String,
+    segment_end_reason: String,
+    event_type: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PomodoroTransitionRunWrite {
+    closure: PomodoroRunClosure,
+    run: PomodoroRunWrite,
+    segment: PomodoroSegmentWrite,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,12 +61,7 @@ pub struct PomodoroSegmentWrite {
     actual_end: Option<String>,
     pauses: Vec<PomodoroPauseWrite>,
     status: String,
-    focus_duration_minutes: i64,
-    short_break_minutes: i64,
-    long_break_minutes: i64,
-    pomodoro_count: i64,
-    idle_timeout_minutes: Option<i64>,
-    run_planned_end: String,
+    end_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -33,8 +69,11 @@ pub struct PomodoroSegmentWrite {
 pub struct PomodoroSegmentUpdate {
     id: String,
     status: String,
+    planned_end: String,
     actual_start: Option<String>,
     actual_end: Option<String>,
+    end_reason: Option<String>,
+    occurred_at: Option<String>,
     pauses: Vec<PomodoroPauseWrite>,
 }
 
@@ -48,21 +87,14 @@ pub struct PomodoroPauseWrite {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PomodoroPauseMs {
-    start_ms: f64,
-    end_ms: Option<f64>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PomodoroSessionWrite {
-    id: String,
-    event_id: Option<String>,
-    start_time: String,
-    end_time: String,
-    start_ms: f64,
-    end_ms: f64,
-    pauses: Vec<PomodoroPauseMs>,
+pub struct PomodoroRunEventWrite {
+    run_id: String,
+    segment_id: Option<String>,
+    event_type: String,
+    occurred_at: String,
+    phase: Option<String>,
+    reason: Option<String>,
+    duration_seconds: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -107,6 +139,29 @@ impl_sqlite_from_row!(PomodoroSegmentRow {
     actual_end,
     status,
 });
+
+struct SegmentEventContext {
+    run_id: String,
+    phase: String,
+    status: String,
+    planned_end: String,
+}
+
+struct ExistingPause {
+    started_at: String,
+    ended_at: Option<String>,
+    reason: String,
+}
+
+struct RunEventInsert<'a> {
+    run_id: &'a str,
+    segment_id: Option<&'a str>,
+    event_type: &'a str,
+    occurred_at: &'a str,
+    phase: Option<&'a str>,
+    reason: Option<&'a str>,
+    duration_seconds: Option<i64>,
+}
 
 #[tauri::command]
 pub async fn pomodoro_load_segments_for_events<R: Runtime>(
@@ -205,6 +260,47 @@ pub async fn pomodoro_load_segments_for_events<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn pomodoro_start_run<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    run: PomodoroRunWrite,
+    segment: PomodoroSegmentWrite,
+) -> Result<(), String> {
+    validate_run_write(&run)?;
+    validate_segment_write(&segment)?;
+    if run.id != segment.run_id {
+        return Err("initial segment run_id must match run id".to_string());
+    }
+
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    insert_run_tx(&mut tx, &run, &segment).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pomodoro_transition_run<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    transition: PomodoroTransitionRunWrite,
+) -> Result<(), String> {
+    validate_run_closure(&transition.closure)?;
+    validate_run_write(&transition.run)?;
+    validate_segment_write(&transition.segment)?;
+    if transition.run.id != transition.segment.run_id {
+        return Err("transition segment run_id must match run id".to_string());
+    }
+
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    close_run_tx(&mut tx, &transition.closure).await?;
+    insert_run_tx(&mut tx, &transition.run, &transition.segment).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn pomodoro_insert_segments<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
@@ -218,57 +314,25 @@ pub async fn pomodoro_insert_segments<R: Runtime>(
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     for segment in segments {
-        let event_id = canonical_event_id(&segment.event_id)?.to_string();
-        let started_at = segment
+        insert_segment_tx(&mut tx, &segment).await?;
+        let occurred_at = segment
             .actual_start
             .as_deref()
-            .unwrap_or(&segment.planned_start)
-            .to_string();
-        sqlx::query(
-            "INSERT OR IGNORE INTO pomodoro_runs
-                (id, event_id, original_event_id, event_date, planned_start, planned_end,
-                 started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                 pomodoro_count, idle_timeout_minutes, last_heartbeat, start_trigger)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'block_auto')",
+            .unwrap_or(&segment.planned_start);
+        insert_run_event_tx(
+            &mut tx,
+            RunEventInsert {
+                run_id: &segment.run_id,
+                segment_id: Some(&segment.id),
+                event_type: "phase_start",
+                occurred_at,
+                phase: Some(&segment.phase),
+                reason: None,
+                duration_seconds: None,
+            },
         )
-        .bind(&segment.run_id)
-        .bind(&event_id)
-        .bind(&event_id)
-        .bind(&segment.event_date)
-        .bind(&segment.planned_start)
-        .bind(&segment.run_planned_end)
-        .bind(&started_at)
-        .bind(segment.focus_duration_minutes)
-        .bind(segment.short_break_minutes)
-        .bind(segment.long_break_minutes)
-        .bind(segment.pomodoro_count)
-        .bind(segment.idle_timeout_minutes)
-        .bind(&started_at)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| format!("insert pomodoro run: {e}"))?;
-
-        sqlx::query(
-            "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
-                 planned_start, planned_end, actual_start, actual_end, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&segment.id)
-        .bind(event_id)
-        .bind(&segment.event_date)
-        .bind(&segment.run_id)
-        .bind(segment.cycle_number)
-        .bind(&segment.phase)
-        .bind(&segment.planned_start)
-        .bind(&segment.planned_end)
-        .bind(&segment.actual_start)
-        .bind(&segment.actual_end)
-        .bind(&segment.status)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| format!("insert pomodoro segment: {e}"))?;
-        replace_segment_pauses(&mut tx, &segment.id, &segment.pauses).await?;
+        .await?;
+        log_new_pause_events(&mut tx, &segment.run_id, &segment).await?;
     }
 
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
@@ -292,14 +356,18 @@ pub async fn pomodoro_update_segments<R: Runtime>(
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     for segment in segments {
+        let context = load_segment_event_context(&mut tx, &segment.id).await?;
+        let previous_pauses = load_existing_pauses(&mut tx, &segment.id).await?;
         let result = sqlx::query(
             "UPDATE pomodoro_segments
-             SET status = ?, actual_start = ?, actual_end = ?
+             SET status = ?, planned_end = ?, actual_start = ?, actual_end = ?, end_reason = ?
              WHERE id = ?",
         )
         .bind(&segment.status)
+        .bind(&segment.planned_end)
         .bind(&segment.actual_start)
         .bind(&segment.actual_end)
+        .bind(&segment.end_reason)
         .bind(&segment.id)
         .execute(&mut *tx)
         .await
@@ -308,6 +376,7 @@ pub async fn pomodoro_update_segments<R: Runtime>(
             return Err(format!("pomodoro segment not found: {}", segment.id));
         }
         replace_segment_pauses(&mut tx, &segment.id, &segment.pauses).await?;
+        log_segment_update_events(&mut tx, &context, &segment, &previous_pauses).await?;
     }
 
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
@@ -315,55 +384,349 @@ pub async fn pomodoro_update_segments<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn pomodoro_cleanup_event_segments<R: Runtime>(
+pub async fn pomodoro_close_run<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
-    event_id: String,
-    event_date: String,
+    closure: PomodoroRunClosure,
 ) -> Result<(), String> {
-    let canonical_id = canonical_event_id(&event_id)?.to_string();
-    require_non_empty(&event_date, "event_date")?;
-
+    validate_run_closure(&closure)?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
-
-    sqlx::query(
-        "UPDATE pomodoro_segments
-         SET status = 'interrupted',
-             actual_end = COALESCE(actual_end, actual_start, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-         WHERE event_id IN (?, ?) AND event_date = ? AND status = 'active'",
-    )
-    .bind(&event_id)
-    .bind(&canonical_id)
-    .bind(&event_date)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| format!("interrupt active pomodoro segments: {e}"))?;
-
+    close_run_tx(&mut tx, &closure).await?;
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn pomodoro_cleanup_orphans<R: Runtime>(
+pub async fn pomodoro_heartbeat<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    run_id: String,
+    heartbeat_at: String,
+) -> Result<(), String> {
+    require_non_empty(&run_id, "run_id")?;
+    require_non_empty(&heartbeat_at, "heartbeat_at")?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let result = sqlx::query(
+        "UPDATE pomodoro_runs
+         SET last_heartbeat = ?
+         WHERE id = ? AND ended_at IS NULL",
+    )
+    .bind(&heartbeat_at)
+    .bind(&run_id)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("update pomodoro heartbeat: {e}"))?;
+    if result.rows_affected() == 0 {
+        return Err(format!("open pomodoro run not found: {run_id}"));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pomodoro_record_run_event<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    event: PomodoroRunEventWrite,
+) -> Result<(), String> {
+    validate_run_event_write(&event)?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    insert_run_event_tx(
+        &mut tx,
+        RunEventInsert {
+            run_id: &event.run_id,
+            segment_id: event.segment_id.as_deref(),
+            event_type: &event.event_type,
+            occurred_at: &event.occurred_at,
+            phase: event.phase.as_deref(),
+            reason: event.reason.as_deref(),
+            duration_seconds: event.duration_seconds,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pomodoro_recover_open_runs<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<(), String> {
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
-    sqlx::query(
-        "UPDATE pomodoro_segments
-         SET status = 'interrupted',
-             actual_end = COALESCE(actual_end, actual_start, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-         WHERE status = 'active'",
+    let rows = sqlx::query(
+        "SELECT id, last_heartbeat
+         FROM pomodoro_runs
+         WHERE ended_at IS NULL
+         ORDER BY started_at ASC",
     )
-    .execute(&mut *tx)
+    .fetch_all(&mut *tx)
     .await
-    .map_err(|e| format!("interrupt orphaned pomodoro segments: {e}"))?;
+    .map_err(|e| format!("load open pomodoro runs: {e}"))?;
+
+    for row in rows {
+        let run_id: String = row
+            .try_get("id")
+            .map_err(|e| format!("read open run id: {e}"))?;
+        let last_heartbeat: String = row
+            .try_get("last_heartbeat")
+            .map_err(|e| format!("read open run heartbeat: {e}"))?;
+        let closure = PomodoroRunClosure {
+            run_id,
+            ended_at: last_heartbeat,
+            end_reason: "interrupted".to_string(),
+            segment_status: "interrupted".to_string(),
+            segment_end_reason: "crash_recovery".to_string(),
+            event_type: "crash_recovery".to_string(),
+        };
+        close_run_tx(&mut tx, &closure).await?;
+    }
 
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
+}
+
+async fn insert_run_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    run: &PomodoroRunWrite,
+    initial_segment: &PomodoroSegmentWrite,
+) -> Result<(), String> {
+    let canonical_event_id = canonical_event_id(&run.event_id)?.to_string();
+    sqlx::query(
+        "INSERT INTO pomodoro_runs
+            (id, event_id, original_event_id, event_date, planned_start, planned_end,
+             started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
+             pomodoro_count, idle_timeout_minutes, last_heartbeat, event_title_snapshot,
+             inherited_focus_minutes, inherited_cycle, inherited_from_run_id, start_trigger)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&run.id)
+    .bind(&canonical_event_id)
+    .bind(&run.event_id)
+    .bind(&run.event_date)
+    .bind(&run.planned_start)
+    .bind(&run.planned_end)
+    .bind(&run.started_at)
+    .bind(run.focus_duration_minutes)
+    .bind(run.short_break_minutes)
+    .bind(run.long_break_minutes)
+    .bind(run.pomodoro_count)
+    .bind(run.idle_timeout_minutes)
+    .bind(&run.started_at)
+    .bind(&run.event_title_snapshot)
+    .bind(run.inherited_focus_minutes)
+    .bind(run.inherited_cycle)
+    .bind(&run.inherited_from_run_id)
+    .bind(&run.start_trigger)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("insert pomodoro run: {e}"))?;
+
+    insert_segment_tx(tx, initial_segment).await?;
+    insert_run_event_tx(
+        tx,
+        RunEventInsert {
+            run_id: &run.id,
+            segment_id: None,
+            event_type: "start",
+            occurred_at: &run.started_at,
+            phase: None,
+            reason: Some(&run.start_trigger),
+            duration_seconds: None,
+        },
+    )
+    .await?;
+    let phase_start = initial_segment
+        .actual_start
+        .as_deref()
+        .unwrap_or(&initial_segment.planned_start);
+    insert_run_event_tx(
+        tx,
+        RunEventInsert {
+            run_id: &run.id,
+            segment_id: Some(&initial_segment.id),
+            event_type: "phase_start",
+            occurred_at: phase_start,
+            phase: Some(&initial_segment.phase),
+            reason: None,
+            duration_seconds: None,
+        },
+    )
+    .await?;
+    log_new_pause_events(tx, &run.id, initial_segment).await
+}
+
+async fn insert_segment_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    segment: &PomodoroSegmentWrite,
+) -> Result<(), String> {
+    let event_id = canonical_event_id(&segment.event_id)?.to_string();
+    if segment.status == "active" {
+        let actual_start = segment
+            .actual_start
+            .as_deref()
+            .unwrap_or(&segment.planned_start);
+        sqlx::query(
+            "UPDATE pomodoro_segments
+             SET status = 'completed',
+                 actual_end = COALESCE(actual_end, ?),
+                 end_reason = COALESCE(end_reason, 'completed')
+             WHERE run_id = ? AND status = 'active' AND id <> ?",
+        )
+        .bind(actual_start)
+        .bind(&segment.run_id)
+        .bind(&segment.id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("close previous active pomodoro segment: {e}"))?;
+    }
+    sqlx::query(
+        "INSERT INTO pomodoro_segments
+            (id, event_id, event_date, run_id, cycle_number, phase,
+             planned_start, planned_end, actual_start, actual_end, status, end_reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&segment.id)
+    .bind(event_id)
+    .bind(&segment.event_date)
+    .bind(&segment.run_id)
+    .bind(segment.cycle_number)
+    .bind(&segment.phase)
+    .bind(&segment.planned_start)
+    .bind(&segment.planned_end)
+    .bind(&segment.actual_start)
+    .bind(&segment.actual_end)
+    .bind(&segment.status)
+    .bind(&segment.end_reason)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("insert pomodoro segment: {e}"))?;
+    replace_segment_pauses(tx, &segment.id, &segment.pauses).await
+}
+
+async fn close_run_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    closure: &PomodoroRunClosure,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE pomodoro_pauses
+         SET ended_at = ?
+         WHERE ended_at IS NULL
+           AND segment_id IN (
+             SELECT id FROM pomodoro_segments WHERE run_id = ?
+           )",
+    )
+    .bind(&closure.ended_at)
+    .bind(&closure.run_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("close pomodoro pauses: {e}"))?;
+
+    sqlx::query(
+        "UPDATE pomodoro_segments
+         SET status = ?, actual_end = COALESCE(actual_end, ?), end_reason = ?
+         WHERE run_id = ? AND status = 'active'",
+    )
+    .bind(&closure.segment_status)
+    .bind(&closure.ended_at)
+    .bind(&closure.segment_end_reason)
+    .bind(&closure.run_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("close active pomodoro segment: {e}"))?;
+
+    let result = sqlx::query(
+        "UPDATE pomodoro_runs
+         SET ended_at = ?, end_reason = ?, last_heartbeat = ?
+         WHERE id = ? AND ended_at IS NULL",
+    )
+    .bind(&closure.ended_at)
+    .bind(&closure.end_reason)
+    .bind(&closure.ended_at)
+    .bind(&closure.run_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("close pomodoro run: {e}"))?;
+    if result.rows_affected() == 0 {
+        return Err(format!("open pomodoro run not found: {}", closure.run_id));
+    }
+
+    insert_run_event_tx(
+        tx,
+        RunEventInsert {
+            run_id: &closure.run_id,
+            segment_id: None,
+            event_type: &closure.event_type,
+            occurred_at: &closure.ended_at,
+            phase: None,
+            reason: Some(&closure.end_reason),
+            duration_seconds: None,
+        },
+    )
+    .await
+}
+
+async fn load_segment_event_context(
+    tx: &mut Transaction<'_, Sqlite>,
+    segment_id: &str,
+) -> Result<SegmentEventContext, String> {
+    let row = sqlx::query(
+        "SELECT run_id, phase, status, planned_end
+         FROM pomodoro_segments
+         WHERE id = ?",
+    )
+    .bind(segment_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| format!("load pomodoro segment event context: {e}"))?;
+    Ok(SegmentEventContext {
+        run_id: row
+            .try_get("run_id")
+            .map_err(|e| format!("read segment run_id: {e}"))?,
+        phase: row
+            .try_get("phase")
+            .map_err(|e| format!("read segment phase: {e}"))?,
+        status: row
+            .try_get("status")
+            .map_err(|e| format!("read segment status: {e}"))?,
+        planned_end: row
+            .try_get("planned_end")
+            .map_err(|e| format!("read segment planned_end: {e}"))?,
+    })
+}
+
+async fn load_existing_pauses(
+    tx: &mut Transaction<'_, Sqlite>,
+    segment_id: &str,
+) -> Result<Vec<ExistingPause>, String> {
+    let rows = sqlx::query(
+        "SELECT started_at, ended_at, reason
+         FROM pomodoro_pauses
+         WHERE segment_id = ?
+         ORDER BY started_at ASC",
+    )
+    .bind(segment_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|e| format!("load existing pomodoro pauses: {e}"))?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(ExistingPause {
+                started_at: row
+                    .try_get("started_at")
+                    .map_err(|e| format!("read existing pause started_at: {e}"))?,
+                ended_at: row
+                    .try_get("ended_at")
+                    .map_err(|e| format!("read existing pause ended_at: {e}"))?,
+                reason: row
+                    .try_get("reason")
+                    .map_err(|e| format!("read existing pause reason: {e}"))?,
+            })
+        })
+        .collect()
 }
 
 async fn replace_segment_pauses(
@@ -400,61 +763,233 @@ async fn replace_segment_pauses(
     Ok(())
 }
 
-#[tauri::command]
-pub async fn pomodoro_save_session<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    session: PomodoroSessionWrite,
+async fn log_segment_update_events(
+    tx: &mut Transaction<'_, Sqlite>,
+    context: &SegmentEventContext,
+    segment: &PomodoroSegmentUpdate,
+    previous_pauses: &[ExistingPause],
 ) -> Result<(), String> {
-    validate_session_write(&session)?;
-    let event_id = match session.event_id.as_deref() {
-        Some(id) => Some(canonical_event_id(id)?.to_string()),
-        None => None,
-    };
-    let focus_score = compute_focus_score(session.start_ms, session.end_ms, &session.pauses)?;
+    let occurred_at = segment
+        .occurred_at
+        .as_deref()
+        .or(segment.actual_end.as_deref())
+        .or(segment.actual_start.as_deref())
+        .unwrap_or(&segment.planned_end);
 
-    let pool = connect_sqlite(app, db_url).await?;
-    sqlx::query(
-        "INSERT INTO pomodoro_sessions
-            (id, event_id, start_time, end_time, completed, focus_score, created_at)
-         VALUES (?, ?, ?, ?, 1, ?, ?)",
-    )
-    .bind(session.id)
-    .bind(event_id)
-    .bind(session.start_time)
-    .bind(&session.end_time)
-    .bind(focus_score)
-    .bind(&session.end_time)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("insert pomodoro session: {e}"))?;
+    if context.status == "active" && segment.status == "completed" {
+        insert_run_event_tx(
+            tx,
+            RunEventInsert {
+                run_id: &context.run_id,
+                segment_id: Some(&segment.id),
+                event_type: "phase_complete",
+                occurred_at,
+                phase: Some(&context.phase),
+                reason: segment.end_reason.as_deref(),
+                duration_seconds: None,
+            },
+        )
+        .await?;
+    }
+
+    if context.phase == "focus" && context.planned_end != segment.planned_end {
+        insert_run_event_tx(
+            tx,
+            RunEventInsert {
+                run_id: &context.run_id,
+                segment_id: Some(&segment.id),
+                event_type: "extend_focus",
+                occurred_at,
+                phase: Some(&context.phase),
+                reason: None,
+                duration_seconds: iso_seconds_between(&context.planned_end, &segment.planned_end),
+            },
+        )
+        .await?;
+    }
+
+    for pause in &segment.pauses {
+        let previous = previous_pauses
+            .iter()
+            .find(|old| old.started_at == pause.started_at && old.reason == pause.reason);
+        if previous.is_none() {
+            insert_pause_start_events(tx, &context.run_id, &segment.id, &context.phase, pause)
+                .await?;
+            if let Some(ended_at) = &pause.ended_at {
+                insert_run_event_tx(
+                    tx,
+                    RunEventInsert {
+                        run_id: &context.run_id,
+                        segment_id: Some(&segment.id),
+                        event_type: "pause_end",
+                        occurred_at: ended_at,
+                        phase: Some(&context.phase),
+                        reason: Some(&pause.reason),
+                        duration_seconds: None,
+                    },
+                )
+                .await?;
+            }
+            continue;
+        }
+
+        if previous.and_then(|old| old.ended_at.as_ref()).is_none() && pause.ended_at.is_some() {
+            let ended_at = pause.ended_at.as_deref().unwrap_or(occurred_at);
+            insert_run_event_tx(
+                tx,
+                RunEventInsert {
+                    run_id: &context.run_id,
+                    segment_id: Some(&segment.id),
+                    event_type: "pause_end",
+                    occurred_at: ended_at,
+                    phase: Some(&context.phase),
+                    reason: Some(&pause.reason),
+                    duration_seconds: None,
+                },
+            )
+            .await?;
+        }
+    }
     Ok(())
 }
 
-fn compute_focus_score(
-    start_ms: f64,
-    end_ms: f64,
-    pauses: &[PomodoroPauseMs],
-) -> Result<f64, String> {
-    require_finite(start_ms, "start_ms")?;
-    require_finite(end_ms, "end_ms")?;
-    let total_ms = end_ms - start_ms;
-    if total_ms <= 0.0 {
-        return Ok(1.0);
+async fn log_new_pause_events(
+    tx: &mut Transaction<'_, Sqlite>,
+    run_id: &str,
+    segment: &PomodoroSegmentWrite,
+) -> Result<(), String> {
+    for pause in &segment.pauses {
+        insert_pause_start_events(tx, run_id, &segment.id, &segment.phase, pause).await?;
+        if let Some(ended_at) = &pause.ended_at {
+            insert_run_event_tx(
+                tx,
+                RunEventInsert {
+                    run_id,
+                    segment_id: Some(&segment.id),
+                    event_type: "pause_end",
+                    occurred_at: ended_at,
+                    phase: Some(&segment.phase),
+                    reason: Some(&pause.reason),
+                    duration_seconds: None,
+                },
+            )
+            .await?;
+        }
     }
+    Ok(())
+}
 
-    let mut pause_ms = 0.0;
-    for pause in pauses {
-        require_finite(pause.start_ms, "pause.start_ms")?;
-        let raw_end = pause.end_ms.unwrap_or(end_ms);
-        require_finite(raw_end, "pause.end_ms")?;
-        let pause_start = pause.start_ms.max(start_ms);
-        let pause_end = raw_end.min(end_ms);
-        pause_ms += (pause_end - pause_start).max(0.0);
+async fn insert_pause_start_events(
+    tx: &mut Transaction<'_, Sqlite>,
+    run_id: &str,
+    segment_id: &str,
+    phase: &str,
+    pause: &PomodoroPauseWrite,
+) -> Result<(), String> {
+    insert_run_event_tx(
+        tx,
+        RunEventInsert {
+            run_id,
+            segment_id: Some(segment_id),
+            event_type: "pause_start",
+            occurred_at: &pause.started_at,
+            phase: Some(phase),
+            reason: Some(&pause.reason),
+            duration_seconds: None,
+        },
+    )
+    .await?;
+    if pause.reason == "idle" {
+        insert_run_event_tx(
+            tx,
+            RunEventInsert {
+                run_id,
+                segment_id: Some(segment_id),
+                event_type: "idle_detected",
+                occurred_at: &pause.started_at,
+                phase: Some(phase),
+                reason: Some(&pause.reason),
+                duration_seconds: None,
+            },
+        )
+        .await?;
     }
+    if pause.reason == "suspend" {
+        insert_run_event_tx(
+            tx,
+            RunEventInsert {
+                run_id,
+                segment_id: Some(segment_id),
+                event_type: "suspend_detected",
+                occurred_at: &pause.started_at,
+                phase: Some(phase),
+                reason: Some(&pause.reason),
+                duration_seconds: None,
+            },
+        )
+        .await?;
+    }
+    Ok(())
+}
 
-    let score = ((total_ms - pause_ms).max(0.0) / total_ms).max(0.0);
-    Ok((score * 100.0).round() / 100.0)
+async fn insert_run_event_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    event: RunEventInsert<'_>,
+) -> Result<(), String> {
+    validate_event_type(event.event_type)?;
+    if let Some(phase) = event.phase {
+        validate_phase(phase)?;
+    }
+    sqlx::query(
+        "INSERT INTO pomodoro_run_events
+            (id, run_id, segment_id, event_type, occurred_at, phase, reason, duration_seconds)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(event.run_id)
+    .bind(event.segment_id)
+    .bind(event.event_type)
+    .bind(event.occurred_at)
+    .bind(event.phase)
+    .bind(event.reason)
+    .bind(event.duration_seconds)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("insert pomodoro run event: {e}"))?;
+    Ok(())
+}
+
+fn validate_run_write(run: &PomodoroRunWrite) -> Result<(), String> {
+    require_non_empty(&run.id, "run.id")?;
+    canonical_event_id(&run.event_id)?;
+    require_non_empty(&run.event_date, "run.event_date")?;
+    require_non_empty(&run.planned_start, "run.planned_start")?;
+    require_non_empty(&run.planned_end, "run.planned_end")?;
+    require_non_empty(&run.started_at, "run.started_at")?;
+    validate_config_minutes(run.focus_duration_minutes, "focus_duration_minutes")?;
+    validate_config_minutes(run.short_break_minutes, "short_break_minutes")?;
+    validate_config_minutes(run.long_break_minutes, "long_break_minutes")?;
+    validate_config_minutes(run.pomodoro_count, "pomodoro_count")?;
+    if let Some(idle_timeout) = run.idle_timeout_minutes {
+        if idle_timeout < 0 {
+            return Err("idle_timeout_minutes cannot be negative".to_string());
+        }
+    }
+    if run.inherited_focus_minutes < 0 {
+        return Err("inherited_focus_minutes cannot be negative".to_string());
+    }
+    if run.inherited_cycle <= 0 {
+        return Err("inherited_cycle must be positive".to_string());
+    }
+    validate_start_trigger(&run.start_trigger)
+}
+
+fn validate_run_closure(closure: &PomodoroRunClosure) -> Result<(), String> {
+    require_non_empty(&closure.run_id, "closure.run_id")?;
+    require_non_empty(&closure.ended_at, "closure.ended_at")?;
+    validate_run_end_reason(&closure.end_reason)?;
+    validate_status(&closure.segment_status)?;
+    validate_segment_end_reason(&closure.segment_end_reason)?;
+    validate_event_type(&closure.event_type)
 }
 
 fn validate_segment_write(segment: &PomodoroSegmentWrite) -> Result<(), String> {
@@ -468,20 +1003,13 @@ fn validate_segment_write(segment: &PomodoroSegmentWrite) -> Result<(), String> 
     validate_phase(&segment.phase)?;
     require_non_empty(&segment.planned_start, "planned_start")?;
     require_non_empty(&segment.planned_end, "planned_end")?;
-    require_non_empty(&segment.run_planned_end, "run_planned_end")?;
     if segment.actual_start.is_none() {
         return Err("actual_start is required for persisted pomodoro segments".to_string());
     }
-    validate_config_minutes(segment.focus_duration_minutes, "focus_duration_minutes")?;
-    validate_config_minutes(segment.short_break_minutes, "short_break_minutes")?;
-    validate_config_minutes(segment.long_break_minutes, "long_break_minutes")?;
-    validate_config_minutes(segment.pomodoro_count, "pomodoro_count")?;
-    if let Some(idle_timeout) = segment.idle_timeout_minutes {
-        if idle_timeout < 0 {
-            return Err("idle_timeout_minutes cannot be negative".to_string());
-        }
-    }
     validate_status(&segment.status)?;
+    if let Some(reason) = &segment.end_reason {
+        validate_segment_end_reason(reason)?;
+    }
     for pause in &segment.pauses {
         validate_pause(pause)?;
     }
@@ -490,18 +1018,24 @@ fn validate_segment_write(segment: &PomodoroSegmentWrite) -> Result<(), String> 
 
 fn validate_segment_update(segment: &PomodoroSegmentUpdate) -> Result<(), String> {
     require_non_empty(&segment.id, "id")?;
+    require_non_empty(&segment.planned_end, "planned_end")?;
     validate_status(&segment.status)?;
+    if let Some(reason) = &segment.end_reason {
+        validate_segment_end_reason(reason)?;
+    }
     for pause in &segment.pauses {
         validate_pause(pause)?;
     }
     Ok(())
 }
 
-fn validate_session_write(session: &PomodoroSessionWrite) -> Result<(), String> {
-    require_non_empty(&session.id, "id")?;
-    require_non_empty(&session.start_time, "start_time")?;
-    require_non_empty(&session.end_time, "end_time")?;
-    compute_focus_score(session.start_ms, session.end_ms, &session.pauses)?;
+fn validate_run_event_write(event: &PomodoroRunEventWrite) -> Result<(), String> {
+    require_non_empty(&event.run_id, "event.run_id")?;
+    validate_event_type(&event.event_type)?;
+    require_non_empty(&event.occurred_at, "event.occurred_at")?;
+    if let Some(phase) = &event.phase {
+        validate_phase(phase)?;
+    }
     Ok(())
 }
 
@@ -516,6 +1050,37 @@ fn validate_status(status: &str) -> Result<(), String> {
     match status {
         "active" | "completed" | "interrupted" => Ok(()),
         _ => Err(format!("invalid pomodoro segment status: {status}")),
+    }
+}
+
+fn validate_run_end_reason(reason: &str) -> Result<(), String> {
+    match reason {
+        "completed" | "stopped" | "interrupted" | "reconfigured" | "block_transition" => Ok(()),
+        _ => Err(format!("invalid pomodoro run end reason: {reason}")),
+    }
+}
+
+fn validate_segment_end_reason(reason: &str) -> Result<(), String> {
+    match reason {
+        "completed" | "stopped" | "skipped_by_user" | "event_expired" | "reconfigured"
+        | "block_transition" | "crash_recovery" => Ok(()),
+        _ => Err(format!("invalid pomodoro segment end reason: {reason}")),
+    }
+}
+
+fn validate_start_trigger(trigger: &str) -> Result<(), String> {
+    match trigger {
+        "manual" | "block_auto" | "block_transition" | "reconfigure" | "crash_recovery" => Ok(()),
+        _ => Err(format!("invalid pomodoro start trigger: {trigger}")),
+    }
+}
+
+fn validate_event_type(event_type: &str) -> Result<(), String> {
+    match event_type {
+        "start" | "phase_start" | "phase_complete" | "pause_start" | "pause_end"
+        | "idle_detected" | "suspend_detected" | "skip_break" | "extend_focus" | "reconfigure"
+        | "block_transition" | "stop" | "complete" | "crash_recovery" => Ok(()),
+        _ => Err(format!("invalid pomodoro run event type: {event_type}")),
     }
 }
 
@@ -554,19 +1119,17 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
     }
 }
 
-fn require_finite(value: f64, field: &str) -> Result<(), String> {
-    if value.is_finite() {
-        Ok(())
-    } else {
-        Err(format!("{field} must be finite"))
-    }
+fn iso_seconds_between(start: &str, end: &str) -> Option<i64> {
+    let start = DateTime::parse_from_rfc3339(start).ok()?;
+    let end = DateTime::parse_from_rfc3339(end).ok()?;
+    Some((end - start).num_seconds())
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_event_id, compute_focus_score, validate_pause_reason, validate_phase,
-        validate_status, PomodoroPauseMs,
+        canonical_event_id, validate_event_type, validate_pause_reason, validate_phase,
+        validate_run_end_reason, validate_segment_end_reason, validate_status,
     };
 
     #[test]
@@ -589,6 +1152,21 @@ mod tests {
     }
 
     #[test]
+    fn validates_run_and_segment_end_reasons() {
+        assert!(validate_run_end_reason("completed").is_ok());
+        assert!(validate_run_end_reason("crash_recovery").is_err());
+        assert!(validate_segment_end_reason("crash_recovery").is_ok());
+        assert!(validate_segment_end_reason("unknown").is_err());
+    }
+
+    #[test]
+    fn validates_run_event_types() {
+        assert!(validate_event_type("skip_break").is_ok());
+        assert!(validate_event_type("extend_focus").is_ok());
+        assert!(validate_event_type("unknown").is_err());
+    }
+
+    #[test]
     fn canonicalizes_recurring_instance_ids() {
         assert_eq!(canonical_event_id("event-1").unwrap(), "event-1");
         assert_eq!(
@@ -596,29 +1174,5 @@ mod tests {
             "event-1"
         );
         assert!(canonical_event_id("::2026-05-09").is_err());
-    }
-
-    #[test]
-    fn computes_focus_score_with_pauses() {
-        let pauses = vec![
-            PomodoroPauseMs {
-                start_ms: 5.0,
-                end_ms: Some(10.0),
-            },
-            PomodoroPauseMs {
-                start_ms: 25.0,
-                end_ms: Some(30.0),
-            },
-        ];
-        assert_eq!(compute_focus_score(0.0, 40.0, &pauses).unwrap(), 0.75);
-    }
-
-    #[test]
-    fn computes_focus_score_with_open_pause() {
-        let pauses = vec![PomodoroPauseMs {
-            start_ms: 30.0,
-            end_ms: None,
-        }];
-        assert_eq!(compute_focus_score(0.0, 40.0, &pauses).unwrap(), 0.75);
     }
 }

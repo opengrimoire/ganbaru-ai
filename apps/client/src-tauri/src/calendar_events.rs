@@ -234,63 +234,10 @@ pub async fn calendar_add_event<R: Runtime>(
     event: CalendarEventCreate,
 ) -> Result<(), String> {
     validate_event_create(&event)?;
-    let description = sanitize_calendar_description_html(&event.description);
-    let geo = parse_geo(&event.geo)?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
-    sqlx::query(
-        "INSERT INTO calendar_events
-           (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, rrule, repeat_until,
-            all_day, location, url, transparency, status,
-            source_uid, visibility, priority, geo_lat, geo_lng,
-            sequence,
-            meeting_enabled, local_rsvp_status,
-            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&event.id)
-    .bind(&event.title)
-    .bind(&event.start_time)
-    .bind(&event.end_time)
-    .bind(&event.timezone)
-    .bind(&event.calendar_id)
-    .bind(event.color)
-    .bind(&description)
-    .bind(&event.rrule)
-    .bind(&event.repeat_until)
-    .bind(if event.all_day { 1_i64 } else { 0_i64 })
-    .bind(&event.location)
-    .bind(&event.url)
-    .bind(&event.transparency)
-    .bind(&event.status)
-    .bind(&event.source_uid)
-    .bind(&event.visibility)
-    .bind(event.priority)
-    .bind(geo.map(|value| value.0))
-    .bind(geo.map(|value| value.1))
-    .bind(event.sequence)
-    .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
-    .bind(&event.local_rsvp_status)
-    .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
-    .bind(if event.guest_can_invite_others {
-        1_i64
-    } else {
-        0_i64
-    })
-    .bind(if event.guest_can_see_other_guests {
-        1_i64
-    } else {
-        0_i64
-    })
-    .bind(&event.created_at)
-    .bind(&event.updated_at)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| format!("insert calendar event: {e}"))?;
-
+    insert_calendar_event_row(&mut tx, &event).await?;
     replace_i64_list(
         &mut tx,
         &event.id,
@@ -365,6 +312,66 @@ pub async fn calendar_add_event<R: Runtime>(
     Ok(())
 }
 
+async fn insert_calendar_event_row(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event: &CalendarEventCreate,
+) -> Result<(), String> {
+    let description = sanitize_calendar_description_html(&event.description);
+    let geo = parse_geo(&event.geo)?;
+    sqlx::query(
+        "INSERT INTO calendar_events
+           (id, title, start_time, end_time, timezone, calendar_id,
+            color, description, rrule, repeat_until,
+            all_day, location, url, transparency, status,
+            source_uid, visibility, priority, geo_lat, geo_lng,
+            sequence,
+            meeting_enabled, local_rsvp_status,
+            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&event.id)
+    .bind(&event.title)
+    .bind(&event.start_time)
+    .bind(&event.end_time)
+    .bind(&event.timezone)
+    .bind(&event.calendar_id)
+    .bind(event.color)
+    .bind(&description)
+    .bind(&event.rrule)
+    .bind(&event.repeat_until)
+    .bind(if event.all_day { 1_i64 } else { 0_i64 })
+    .bind(&event.location)
+    .bind(&event.url)
+    .bind(&event.transparency)
+    .bind(&event.status)
+    .bind(&event.source_uid)
+    .bind(&event.visibility)
+    .bind(event.priority)
+    .bind(geo.map(|value| value.0))
+    .bind(geo.map(|value| value.1))
+    .bind(event.sequence)
+    .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
+    .bind(&event.local_rsvp_status)
+    .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
+    .bind(if event.guest_can_invite_others {
+        1_i64
+    } else {
+        0_i64
+    })
+    .bind(if event.guest_can_see_other_guests {
+        1_i64
+    } else {
+        0_i64
+    })
+    .bind(&event.created_at)
+    .bind(&event.updated_at)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("insert calendar event: {e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn calendar_delete_event<R: Runtime>(
     app: AppHandle<R>,
@@ -373,11 +380,14 @@ pub async fn calendar_delete_event<R: Runtime>(
 ) -> Result<(), String> {
     require_non_empty(&id, "id")?;
     let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    close_open_pomodoro_runs_for_deleted_event(&mut tx, Some(&id)).await?;
     sqlx::query("DELETE FROM calendar_events WHERE id = ?")
-        .bind(id)
-        .execute(&pool)
+        .bind(&id)
+        .execute(&mut *tx)
         .await
         .map_err(|e| format!("delete calendar event: {e}"))?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
 
@@ -387,10 +397,101 @@ pub async fn calendar_clear_events<R: Runtime>(
     db_url: String,
 ) -> Result<(), String> {
     let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    close_open_pomodoro_runs_for_deleted_event(&mut tx, None).await?;
     sqlx::query("DELETE FROM calendar_events")
-        .execute(&pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| format!("clear calendar events: {e}"))?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+async fn close_open_pomodoro_runs_for_deleted_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: Option<&str>,
+) -> Result<(), String> {
+    let stopped_at: String = sqlx::query_scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| format!("read current time: {e}"))?;
+
+    let run_ids: Vec<String> = if let Some(event_id) = event_id {
+        sqlx::query_scalar(
+            "SELECT id
+             FROM pomodoro_runs
+             WHERE ended_at IS NULL
+               AND (event_id = ? OR original_event_id = ?)",
+        )
+        .bind(event_id)
+        .bind(event_id)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|e| format!("load open pomodoro runs for deleted event: {e}"))?
+    } else {
+        sqlx::query_scalar(
+            "SELECT id
+             FROM pomodoro_runs
+             WHERE ended_at IS NULL",
+        )
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|e| format!("load open pomodoro runs for clear: {e}"))?
+    };
+
+    for run_id in run_ids {
+        sqlx::query(
+            "UPDATE pomodoro_pauses
+             SET ended_at = ?
+             WHERE ended_at IS NULL
+               AND segment_id IN (
+                 SELECT id FROM pomodoro_segments WHERE run_id = ?
+               )",
+        )
+        .bind(&stopped_at)
+        .bind(&run_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("close pomodoro pauses before deleting event: {e}"))?;
+
+        sqlx::query(
+            "UPDATE pomodoro_segments
+             SET status = 'interrupted',
+                 actual_end = COALESCE(actual_end, ?),
+                 end_reason = COALESCE(end_reason, 'stopped')
+             WHERE run_id = ? AND status = 'active'",
+        )
+        .bind(&stopped_at)
+        .bind(&run_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("close pomodoro segments before deleting event: {e}"))?;
+
+        sqlx::query(
+            "INSERT OR IGNORE INTO pomodoro_run_events
+                (id, run_id, segment_id, event_type, occurred_at, phase, reason, duration_seconds)
+             VALUES (?, ?, NULL, 'stop', ?, NULL, 'stopped', NULL)",
+        )
+        .bind(format!("{run_id}:calendar-delete-stop"))
+        .bind(&run_id)
+        .bind(&stopped_at)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("record pomodoro stop before deleting event: {e}"))?;
+
+        sqlx::query(
+            "UPDATE pomodoro_runs
+             SET ended_at = ?, end_reason = 'stopped', last_heartbeat = ?
+             WHERE id = ? AND ended_at IS NULL",
+        )
+        .bind(&stopped_at)
+        .bind(&stopped_at)
+        .bind(&run_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("close pomodoro run before deleting event: {e}"))?;
+    }
+
     Ok(())
 }
 
@@ -1536,9 +1637,10 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_update_field, filter_excluded_dates, sanitize_stored_event_description,
-        validate_color, validate_event_create, validate_non_negative, validate_positive,
-        validate_priority, validate_update_field, CalendarEventCreate, CalendarEventUpdateField,
+        apply_update_field, close_open_pomodoro_runs_for_deleted_event, filter_excluded_dates,
+        insert_calendar_event_row, sanitize_stored_event_description, validate_color,
+        validate_event_create, validate_non_negative, validate_positive, validate_priority,
+        validate_update_field, CalendarEventCreate, CalendarEventUpdateField,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -1603,6 +1705,81 @@ mod tests {
         event.title = String::new();
         assert!(validate_event_create(&event).is_ok());
         assert!(validate_update_field(&CalendarEventUpdateField::Title(String::new())).is_ok());
+    }
+
+    #[test]
+    fn calendar_event_create_row_matches_current_schema() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let event = event_create();
+            let mut tx = pool.begin().await.unwrap();
+            insert_calendar_event_row(&mut tx, &event).await.unwrap();
+            tx.commit().await.unwrap();
+
+            let saved: (String, i64, Option<String>) = sqlx::query_as(
+                "SELECT title, meeting_enabled, local_rsvp_status
+                 FROM calendar_events
+                 WHERE id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(saved.0, "Focus");
+            assert_eq!(saved.1, 0);
+            assert_eq!(saved.2, None);
+        });
+    }
+
+    #[test]
+    fn deleting_event_closes_open_pomodoro_run_before_delete() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(&pool, "event-1", "").await;
+            insert_test_open_pomodoro_run(&pool).await;
+            insert_test_active_pomodoro_segment(&pool).await;
+
+            let mut tx = pool.begin().await.unwrap();
+            close_open_pomodoro_runs_for_deleted_event(&mut tx, Some("event-1"))
+                .await
+                .unwrap();
+            sqlx::query("DELETE FROM calendar_events WHERE id = 'event-1'")
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let run: (Option<String>, Option<String>) = sqlx::query_as(
+                "SELECT ended_at, event_id
+                 FROM pomodoro_runs
+                 WHERE id = 'run-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let segment: (String, Option<String>) = sqlx::query_as(
+                "SELECT status, event_id
+                 FROM pomodoro_segments
+                 WHERE id = 'segment-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let stop_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*)
+                 FROM pomodoro_run_events
+                 WHERE run_id = 'run-1' AND event_type = 'stop'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert!(run.0.is_some());
+            assert_eq!(run.1, None);
+            assert_eq!(segment.0, "interrupted");
+            assert_eq!(segment.1, None);
+            assert_eq!(stop_count, 1);
+        });
     }
 
     #[test]
@@ -1710,6 +1887,36 @@ mod tests {
         )
         .bind(id)
         .bind(description)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn insert_test_open_pomodoro_run(pool: &sqlx::SqlitePool) {
+        sqlx::query(
+            "INSERT INTO pomodoro_runs
+                (id, event_id, original_event_id, event_date, planned_start, planned_end,
+                 started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                 pomodoro_count, last_heartbeat, start_trigger)
+             VALUES ('run-1', 'event-1', 'event-1', '2026-05-09',
+                     '2026-05-09T10:00:00Z', '2026-05-09T11:00:00Z',
+                     '2026-05-09T10:00:00Z', 40, 5, 10, 4,
+                     '2026-05-09T10:05:00Z', 'manual')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn insert_test_active_pomodoro_segment(pool: &sqlx::SqlitePool) {
+        sqlx::query(
+            "INSERT INTO pomodoro_segments
+                (id, event_id, event_date, run_id, cycle_number, phase,
+                 planned_start, planned_end, actual_start, status)
+             VALUES ('segment-1', 'event-1', '2026-05-09', 'run-1', 1, 'focus',
+                     '2026-05-09T10:00:00Z', '2026-05-09T10:40:00Z',
+                     '2026-05-09T10:00:00Z', 'active')",
+        )
         .execute(pool)
         .await
         .unwrap();

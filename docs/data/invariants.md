@@ -60,7 +60,7 @@ Future time is rendered from config-based projections derived from the run's `st
 
 ## 6. Past progress is never erased
 
-Once a segment has `actual_start` set and its status is `completed` or `interrupted`, no user action may delete, overwrite, or hide it. Skipping a break, stopping the session, dismissing the idle overlay, reconfiguring pomodoro settings, the app closing unexpectedly, or archiving the calendar event: none of these remove previously recorded work. There is no mechanism to delete individual segments.
+Once a segment has `actual_start` set and its status is `completed` or `interrupted`, no user action may delete, overwrite, or hide it. Skipping a break, stopping the session, dismissing the idle overlay, reconfiguring pomodoro settings, the app closing unexpectedly, deleting a calendar event, or archiving the calendar event: none of these remove previously recorded work. There is no mechanism to delete individual segments.
 
 **Why:** the system is honest with the user about their patterns. Letting users (or operations) wipe out evidence breaks the contract that the app is a record, not a manipulable narrative.
 

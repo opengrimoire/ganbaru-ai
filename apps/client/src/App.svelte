@@ -83,23 +83,25 @@
     }
   }
 
-  function startNormalCalendarBoot(): void {
+  async function startNormalCalendarBoot(): Promise<void> {
     calendars.load().catch((e) => console.error("Failed to load calendars:", e));
+    if (isMainWindow) {
+      await pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
+    }
     // The legacy wall-clock to UTC ISO migration runs here instead of in
     // main.ts so first paint is not blocked by a per-event UPDATE pass on
     // first boot after the migration shipped. The hydrator is idempotent:
     // it short-circuits via a config marker once the migration succeeds,
     // so on every subsequent boot this is a single config read. Calendar
     // load is gated on it so the renderer never reads half-migrated rows.
-    hydrateCalendarEventTimezones()
-      .then(() => {
-        perfMark("boot.tz-hydrated");
-        return calendar.load();
-      })
-      .then(() => {
-        // Calendar startup marks are still produced for normal boots.
-      })
-      .catch((e) => console.error("Failed to migrate or load calendar:", e));
+    try {
+      await hydrateCalendarEventTimezones();
+      perfMark("boot.tz-hydrated");
+      await calendar.load();
+      // Calendar startup marks are still produced for normal boots.
+    } catch (e) {
+      console.error("Failed to migrate or load calendar:", e);
+    }
   }
 
   async function startBenchmarkOrNormalCalendarBoot(): Promise<void> {
@@ -121,7 +123,7 @@
       console.error("benchmark resume failed:", e);
     } finally {
       if (!benchmarkClaimedBoot) {
-        startNormalCalendarBoot();
+        await startNormalCalendarBoot();
       }
     }
   }
@@ -163,9 +165,6 @@
     startBenchmarkOrNormalCalendarBoot().catch((e) =>
       console.error("calendar boot failed:", e),
     );
-    if (isMainWindow) {
-      pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
-    }
     appWindow.isMaximized().then((v) => (isMaximized = v));
     invoke<number>("get_startup_elapsed_ms").then((ms) => {
       const scriptStartMs = firstMarkTime("boot.script-start") ?? 0;
@@ -572,8 +571,8 @@
       confirmLabel="Resume (Enter)"
       cancelLabel="Stop session (Esc)"
       danger={false}
-      onConfirm={() => pomodoro.dismissSuspend(true)}
-      onCancel={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissSuspend(false); }}
+      onConfirm={() => { void pomodoro.dismissSuspend(true); }}
+      onCancel={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; void pomodoro.dismissSuspend(false); }}
     />
   {/if}
 
@@ -583,7 +582,10 @@
       idleSeconds={idleInfo.idleSeconds}
       nativeOverlay={idleInfo.nativeOverlay}
       onResume={() => pomodoro.dismissIdle(true)}
-      onStop={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; pomodoro.dismissIdle(false); }}
+      onStop={async () => {
+        pomodoro.dismissedBlockId = pomodoro.activeBlockId;
+        await pomodoro.dismissIdle(false);
+      }}
     />
   {/if}
 

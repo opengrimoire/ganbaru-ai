@@ -11,8 +11,8 @@
   }: {
     idleSeconds: number;
     nativeOverlay?: boolean;
-    onResume: () => void;
-    onStop: () => void;
+    onResume: () => void | Promise<void>;
+    onStop: () => void | Promise<void>;
   } = $props();
 
   let elapsed = $state(0);
@@ -60,11 +60,11 @@
   }
 
   function handleResume() {
-    exitFullscreen().then(onResume);
+    void exitFullscreen().then(() => onResume());
   }
 
   function handleStop() {
-    exitFullscreen().then(onStop);
+    void exitFullscreen().then(() => onStop());
   }
 
   onMount(() => {

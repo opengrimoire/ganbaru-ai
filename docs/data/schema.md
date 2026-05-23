@@ -118,7 +118,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `created_at` | ISO datetime | Row creation time. |
 | `updated_at` | ISO datetime | Last modification. Bumped on any column change. |
 
-Indexes: `(user_id, start_time)`, `(user_id, recurrence_parent_id)`, `(end_time)` for archival sweeps.
+Indexes: `(start_time)`, `(end_time)`, `(calendar_id)`, and `(calendar_id, source_uid)` for window queries, archival sweeps, and import identity.
 
 Why `recurrence_rule` is plain text (the RRULE string) instead of decomposed columns: the RRULE format is the lingua franca for calendar interop. Storing it intact means import/export from iCalendar, Google Calendar, or other RFC 5545 sources is trivial. Decomposed columns would force a translation layer at every boundary.
 
@@ -136,7 +136,22 @@ Same schema as `calendar_events`, plus `archived_at` (ISO datetime). Past events
 
 ## Pomodoro
 
-The pomodoro tracking system uses three tables: runs, segments, and pauses. Together they record every session from start to finish with enough resolution for both real-time rendering and long-term analytics.
+The pomodoro tracking system uses normalized config rows plus four history tables: runs, segments, pauses, and run events. Together they record every session from start to finish with enough resolution for real-time rendering, crash recovery, and long-term analytics. There is no `pomodoro_sessions` summary table. Session totals are derived from the rows below.
+
+### `pomodoro_configs`
+
+One row per calendar event with Pomodoro enabled. The config row is the mutable source for future runs. Once a run starts, those settings are copied into `pomodoro_runs` as an immutable history snapshot.
+
+| Field | Type | Description |
+|---|---|---|
+| `event_id` | UUID | Primary key and FK to `calendar_events` (CASCADE delete). |
+| `focus_duration_minutes` | integer | Focus period length. |
+| `short_break_minutes` | integer | Short break length. |
+| `long_break_minutes` | integer | Long break length. |
+| `pomodoro_count` | integer | Cycles before a long break. |
+| `idle_timeout_minutes` | integer or null | Auto-pause threshold. Null disables idle detection for this event. |
+
+Built-in presets the UI can apply: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom.
 
 ### `pomodoro_runs`
 
@@ -148,7 +163,8 @@ One row per continuous session of pomodoro work. Created when the timer starts, 
 | `event_id` | UUID or null | FK to `calendar_events` (SET NULL on delete/archive). Null after the event is archived. |
 | `original_event_id` | UUID | Event ID at the time the run was created. Not a FK, just a value. Used to join to `calendar_events_archive` for analytics. |
 | `event_date` | `YYYY-MM-DD` | The calendar day this run belongs to. |
-| `user_id` | UUID | Owner. Required for future multi-user support. |
+| `planned_start` | ISO datetime | Planned start of the run within the event window. |
+| `planned_end` | ISO datetime | Planned end of the run, usually the event end. |
 | `started_at` | ISO datetime | When the session started. |
 | `ended_at` | ISO datetime or null | When the session ended. Null if still running. |
 | `end_reason` | enum or null | `completed`, `stopped`, `interrupted`, `reconfigured`, `block_transition`. Null if still running. |
@@ -162,11 +178,10 @@ One row per continuous session of pomodoro work. Created when the timer starts, 
 | `inherited_focus_minutes` | integer | Focus minutes accumulated in the current cycle, carried from the preceding run. 0 for fresh sessions. Non-zero when created by block transition or reconfiguration. |
 | `inherited_cycle` | integer | Cycle number carried from the preceding run. 1 for fresh sessions. Determines whether the next break is short or long. |
 | `inherited_from_run_id` | UUID or null | FK to `pomodoro_runs`. The run from which state was inherited. Null for fresh sessions. Enables tracing transition chains in analytics. |
-| `experiment_id` | text or null | A/B testing label, if any. |
-| `variant` | text or null | A/B testing variant, if any. |
+| `start_trigger` | enum | `manual`, `block_auto`, `block_transition`, `reconfigure`, `crash_recovery`. |
 | `created_at` | ISO datetime | Row creation time. |
 
-Indexes: `(user_id, event_date)`, `(event_id)`, `(original_event_id)`, `(ended_at)` for finding open runs on startup.
+Indexes: `(event_id, event_date)`, `(original_event_id)`, `(ended_at)`, plus a partial unique index that allows only one open run where `ended_at IS NULL`.
 
 Why the inherited fields are on the run instead of derived from the chain of previous runs: traversing the chain is fragile (previous runs might reference archived events) and slow (the chain length is unbounded). Capturing the inherited state on the run itself makes each run self-contained for plan derivation. See `algorithms/pomodoro-segments-and-plan.md`.
 
@@ -179,6 +194,8 @@ One row per uninterrupted stretch of focus or break. A row is only created when 
 | Field | Type | Description |
 |---|---|---|
 | `id` | UUID | Primary key. |
+| `event_id` | UUID or null | FK to `calendar_events` (SET NULL on delete/archive). Null after the event is deleted or archived; `run_id` still preserves the segment through the run. |
+| `event_date` | `YYYY-MM-DD` | The calendar day this segment belongs to. |
 | `run_id` | UUID | FK to `pomodoro_runs` (CASCADE delete). |
 | `cycle_number` | integer | Which pomodoro cycle (1 to `pomodoro_count`). |
 | `phase` | enum | `focus`, `short_break`, `long_break`. |
@@ -187,9 +204,10 @@ One row per uninterrupted stretch of focus or break. A row is only created when 
 | `actual_start` | ISO datetime | When the segment actually started. Always set; a row exists only if the phase ran. |
 | `actual_end` | ISO datetime or null | When the segment ended. Null if still running. |
 | `status` | enum | `active`, `completed`, `interrupted`. See below. |
+| `end_reason` | enum or null | `completed`, `stopped`, `skipped_by_user`, `event_expired`, `reconfigured`, `block_transition`, `crash_recovery`. Null while active. |
 | `created_at` | ISO datetime | Row creation time. |
 
-Indexes: `(run_id, actual_start)`, `(status)` for finding active segments quickly.
+Indexes: `(event_id, event_date)`, `(run_id)`, `(run_id, actual_start)`, plus a partial unique index that allows only one active segment globally.
 
 Why a row is only written when the phase begins (lazy segment creation): writing planned segments up front would create rows that may never reflect reality (a session can stop or reconfigure mid-cycle). Lazy creation means every row corresponds to actual history, simplifying analytics and avoiding "ghost" segments.
 
@@ -214,9 +232,10 @@ One row per pause within a segment. A pause records when the timer was not advan
 | `started_at` | ISO datetime | When the pause began. |
 | `ended_at` | ISO datetime or null | When the pause ended. Null if still paused. |
 | `reason` | enum | `idle`, `suspend`, `manual`. |
+| `detected_at` | ISO datetime or null | Detection time for idle pauses. Null for manual and suspend pauses. |
 | `created_at` | ISO datetime | Row creation time. |
 
-Indexes: `(segment_id, started_at)`, `(reason, started_at)` for time-of-day idle analytics.
+Indexes: `(segment_id, started_at)`, `(reason, started_at)`, plus a partial unique index that allows only one open pause per segment.
 
 Why pauses are individual rows instead of a JSON array on the segment row:
 
@@ -224,17 +243,23 @@ Why pauses are individual rows instead of a JSON array on the segment row:
 2. **Analytics use standard SQL.** Queries like "average idle duration by hour of day" become simple aggregations. With JSON, every row would need to be parsed in the client or in a custom SQL function.
 3. **Writes are atomic.** Inserting one row is one statement. Updating a JSON pause means read-modify-write, which can corrupt mid-crash.
 
-### Pomodoro config (per-event, embedded in `calendar_events.pomodoro_config`)
+### `pomodoro_run_events`
 
-| Field | Default | Description |
+Append-only event log for lifecycle moments that are useful for audit and analytics but should not be inferred only from final row state. Examples include skip-break decisions and focus extensions.
+
+| Field | Type | Description |
 |---|---|---|
-| `focusDurationMinutes` | 40 | Focus period length. |
-| `shortBreakMinutes` | 5 | Short break length. |
-| `longBreakMinutes` | 10 | Long break after `pomodoroCount` cycles. |
-| `pomodoroCount` | 4 | Cycles before a long break. |
-| `idleTimeoutMinutes` | null | Auto-pause threshold. Null disables idle detection for this event. |
+| `id` | UUID | Primary key. |
+| `run_id` | UUID | FK to `pomodoro_runs` (CASCADE delete). |
+| `segment_id` | UUID or null | FK to `pomodoro_segments` (SET NULL). Null for run-level events. |
+| `event_type` | enum | `start`, `phase_start`, `phase_complete`, `pause_start`, `pause_end`, `idle_detected`, `suspend_detected`, `skip_break`, `extend_focus`, `reconfigure`, `block_transition`, `stop`, `complete`, `crash_recovery`. |
+| `occurred_at` | ISO datetime | When the event happened. |
+| `phase` | enum or null | `focus`, `short_break`, `long_break`, or null for run-level events. |
+| `reason` | text or null | Optional reason or trigger detail. |
+| `duration_seconds` | integer or null | Optional duration or delta, used for events such as focus extension. |
+| `created_at` | ISO datetime | Row creation time. |
 
-Built-in presets the UI can apply: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom.
+Index: `(run_id, occurred_at)` for replaying a run's event history.
 
 ### Run reference integrity (for recurring events)
 

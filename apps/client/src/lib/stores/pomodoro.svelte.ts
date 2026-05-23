@@ -48,6 +48,7 @@ interface PomodoroWindowSnapshot {
   config: PomodoroConfig;
   completedPomodoros: number;
   activeBlockId: string | null;
+  activeRunId: string | null;
   activeBlockEndMs: number | null;
   dismissedBlockId: string | null;
   breakOvertimeSeconds: number;
@@ -93,6 +94,8 @@ let config = $state<PomodoroConfig>({ ...DEFAULT_CONFIG });
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let pausedOpportunityIntervalId: ReturnType<typeof setInterval> | null = null;
 let pausedTrayPulseIntervalId: ReturnType<typeof setInterval> | null = null;
+let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
+let pomodoroWriteQueue: Promise<void> = Promise.resolve();
 let pausedTrayPulseFrame = $state(0);
 let completedPomodoros = $state(0);
 let sessionStartTime: string | null = null;
@@ -103,9 +106,11 @@ let notificationShown = false;
 let focusExtensionUsed = false;
 let phaseEndTime: number | null = null;
 let activeBlockId = $state<string | null>(null);
+let activeRunId = $state<string | null>(null);
 let activeBlockEndMs = $state<number | null>(null);
 let dismissedBlockId = $state<string | null>(null);
 const FOCUS_EXTENSION_SECONDS = 180;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 const PAUSED_PULSE_AMOUNTS = [
   0, 0, 0, 0, 0, 0.067, 0.25, 0.5, 0.75, 0.933, 1, 1, 1, 1, 1, 1,
   0.933, 0.75, 0.5, 0.25, 0.067, 0,
@@ -118,6 +123,7 @@ let musicPauseInFlight: Promise<void> | null = null;
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
 let currentSegmentIndex = -1;
+const segmentEndReasons = new Map<string, PomodoroSegmentEndReason>();
 
 // Bumped after DB writes to persisted segments complete, so DayColumn re-fetches.
 let segmentVersion = $state(0);
@@ -285,6 +291,7 @@ function isPomodoroWindowSnapshot(value: unknown): value is PomodoroWindowSnapsh
     isPomodoroConfig(value.config) &&
     isNonNegativeNumber(value.completedPomodoros) &&
     isNullableString(value.activeBlockId) &&
+    isNullableString(value.activeRunId) &&
     isNullableNumber(value.activeBlockEndMs) &&
     isNullableString(value.dismissedBlockId) &&
     isNonNegativeNumber(value.breakOvertimeSeconds) &&
@@ -356,6 +363,7 @@ function buildWindowSnapshot(): PomodoroWindowSnapshot {
     config: { ...config },
     completedPomodoros,
     activeBlockId,
+    activeRunId,
     activeBlockEndMs,
     dismissedBlockId,
     breakOvertimeSeconds,
@@ -379,6 +387,7 @@ function applyWindowSnapshot(snapshot: PomodoroWindowSnapshot): void {
   config = { ...snapshot.config };
   completedPomodoros = snapshot.completedPomodoros;
   activeBlockId = snapshot.activeBlockId;
+  activeRunId = snapshot.activeRunId;
   activeBlockEndMs = snapshot.activeBlockEndMs;
   dismissedBlockId = snapshot.dismissedBlockId;
   breakOvertimeSeconds = snapshot.breakOvertimeSeconds;
@@ -427,29 +436,180 @@ interface PomodoroSegmentWrite {
   actualEnd: string | null;
   pauses: PauseInterval[];
   status: PersistedSegment["status"];
-  focusDurationMinutes: number;
-  shortBreakMinutes: number;
-  longBreakMinutes: number;
-  pomodoroCount: number;
-  idleTimeoutMinutes: number | null;
-  runPlannedEnd: string;
+  endReason: PomodoroSegmentEndReason | null;
 }
 
 interface PomodoroSegmentUpdate {
   id: string;
   status: PersistedSegment["status"];
+  plannedEnd: string;
   actualStart: string | null;
   actualEnd: string | null;
+  endReason: PomodoroSegmentEndReason | null;
+  occurredAt: string | null;
   pauses: PauseInterval[];
 }
 
-interface PomodoroPauseMs {
-  startMs: number;
-  endMs: number | null;
+type PomodoroStartTrigger = "manual" | "block_auto" | "block_transition" | "reconfigure" | "crash_recovery";
+type PomodoroRunEndReason = "completed" | "stopped" | "interrupted" | "reconfigured" | "block_transition";
+type PomodoroSegmentEndReason =
+  | "completed"
+  | "stopped"
+  | "skipped_by_user"
+  | "event_expired"
+  | "reconfigured"
+  | "block_transition"
+  | "crash_recovery";
+type PomodoroRunEventType =
+  | "start"
+  | "phase_start"
+  | "phase_complete"
+  | "pause_start"
+  | "pause_end"
+  | "idle_detected"
+  | "suspend_detected"
+  | "skip_break"
+  | "extend_focus"
+  | "reconfigure"
+  | "block_transition"
+  | "stop"
+  | "complete"
+  | "crash_recovery";
+
+interface PomodoroRunWrite {
+  id: string;
+  eventId: string;
+  eventDate: string;
+  plannedStart: string;
+  plannedEnd: string;
+  startedAt: string;
+  focusDurationMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  pomodoroCount: number;
+  idleTimeoutMinutes: number | null;
+  eventTitleSnapshot: string | null;
+  inheritedFocusMinutes: number;
+  inheritedCycle: number;
+  inheritedFromRunId: string | null;
+  startTrigger: PomodoroStartTrigger;
+}
+
+interface PomodoroRunClosure {
+  runId: string;
+  endedAt: string;
+  endReason: PomodoroRunEndReason;
+  segmentStatus: "completed" | "interrupted";
+  segmentEndReason: PomodoroSegmentEndReason;
+  eventType: PomodoroRunEventType;
+}
+
+interface PomodoroTransitionRunWrite {
+  closure: PomodoroRunClosure;
+  run: PomodoroRunWrite;
+  segment: PomodoroSegmentWrite;
+}
+
+interface PomodoroRunEventWrite {
+  runId: string;
+  segmentId: string | null;
+  eventType: PomodoroRunEventType;
+  occurredAt: string;
+  phase: SegmentPhase | null;
+  reason: string | null;
+  durationSeconds: number | null;
 }
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function segmentEndReasonFor(seg: PersistedSegment): PomodoroSegmentEndReason | null {
+  const explicit = segmentEndReasons.get(seg.id);
+  if (explicit) return explicit;
+  if (seg.status === "completed") return "completed";
+  if (seg.status === "skipped") return "skipped_by_user";
+  if (seg.status === "interrupted") return "stopped";
+  return null;
+}
+
+function runPlannedEndForSegment(seg: PersistedSegment): string {
+  return activeBlockEndMs === null ? seg.plannedEnd : new Date(activeBlockEndMs).toISOString();
+}
+
+function runWrite(
+  runId: string,
+  eventId: string,
+  eventDate: string,
+  startedAt: string,
+  plannedStart: string,
+  plannedEnd: string,
+  startTrigger: PomodoroStartTrigger,
+  inheritedFocusMinutes = 0,
+  inheritedCycle = 1,
+  inheritedFromRunId: string | null = null,
+): PomodoroRunWrite {
+  return {
+    id: runId,
+    eventId,
+    eventDate,
+    plannedStart,
+    plannedEnd,
+    startedAt,
+    focusDurationMinutes: config.focusMinutes,
+    shortBreakMinutes: config.shortBreakMinutes,
+    longBreakMinutes: config.longBreakMinutes,
+    pomodoroCount: config.cyclesBeforeLongBreak,
+    idleTimeoutMinutes: idleTimeoutMs === null ? null : Math.round(idleTimeoutMs / 60000),
+    eventTitleSnapshot: null,
+    inheritedFocusMinutes,
+    inheritedCycle,
+    inheritedFromRunId,
+    startTrigger,
+  };
+}
+
+function activeSegment(): PersistedSegment | null {
+  return currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
+    ? segments[currentSegmentIndex]
+    : null;
+}
+
+function runClosure(
+  endedAt: string,
+  endReason: PomodoroRunEndReason,
+  segmentStatus: "completed" | "interrupted",
+  segmentEndReason: PomodoroSegmentEndReason,
+  eventType: PomodoroRunEventType,
+): PomodoroRunClosure | null {
+  if (!activeRunId) return null;
+  return {
+    runId: activeRunId,
+    endedAt,
+    endReason,
+    segmentStatus,
+    segmentEndReason,
+    eventType,
+  };
+}
+
+function enqueuePomodoroWrite(operation: () => Promise<void>): Promise<void> {
+  const queued = pomodoroWriteQueue.then(operation, operation);
+  pomodoroWriteQueue = queued.catch(() => undefined);
+  return queued;
+}
+
+async function closeActiveRun(
+  endedAt: string,
+  endReason: PomodoroRunEndReason,
+  segmentStatus: "completed" | "interrupted",
+  segmentEndReason: PomodoroSegmentEndReason,
+  eventType: PomodoroRunEventType,
+): Promise<void> {
+  const closure = runClosure(endedAt, endReason, segmentStatus, segmentEndReason, eventType);
+  stopHeartbeat();
+  activeRunId = null;
+  if (closure) await closeRunInBackend(closure);
 }
 
 function actualPhaseElapsedSeconds(): number {
@@ -603,16 +763,12 @@ function expirePausedBlockAtDeadline(): void {
   refreshPausedOpportunityRemaining(activeBlockEndMs);
 
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-    markSegment(currentSegmentIndex, "completed", true, endIso);
-    skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+    void markSegment(currentSegmentIndex, "interrupted", true, endIso, "event_expired");
+    void skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
   }
 
-  if (phase === "focus" && sessionStartTime) {
-    const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
-      ? segments[currentSegmentIndex] : null;
-    saveCompletedSession(sessionStartTime, endIso, seg?.pauseLog ?? [], activeBlockId);
-    sessionStartTime = null;
-  }
+  void closeActiveRun(endIso, "completed", "interrupted", "event_expired", "complete");
+  sessionStartTime = null;
 
   if (intervalId) {
     clearInterval(intervalId);
@@ -692,10 +848,16 @@ function addFocusTimeInternal(seconds: number = FOCUS_EXTENSION_SECONDS): void {
 
   const elapsedSeconds = actualPhaseElapsedSeconds();
   const nextWorkRemainingSeconds = phaseWorkRemainingSeconds() + seconds;
+  const occurredAt = nowIso();
   focusExtensionUsed = true;
   notificationShown = false;
   setPhaseRemainingSeconds(nextWorkRemainingSeconds, elapsedSeconds);
   if (phaseEndTime !== null) phaseEndTime = Date.now() + remainingSeconds * 1000;
+  const seg = activeSegment();
+  if (seg && seg.phase === "focus" && seg.status === "active") {
+    seg.plannedEnd = new Date(new Date(seg.plannedEnd).getTime() + seconds * 1000).toISOString();
+    persistSegmentToBackend(seg, "Failed to save focus extension:", true, occurredAt);
+  }
   updateTray();
 }
 
@@ -719,21 +881,19 @@ function segmentWrite(seg: PersistedSegment): PomodoroSegmentWrite {
     actualEnd: seg.actualEnd,
     pauses: seg.pauseLog,
     status: seg.status,
-    focusDurationMinutes: config.focusMinutes,
-    shortBreakMinutes: config.shortBreakMinutes,
-    longBreakMinutes: config.longBreakMinutes,
-    pomodoroCount: config.cyclesBeforeLongBreak,
-    idleTimeoutMinutes: idleTimeoutMs === null ? null : Math.round(idleTimeoutMs / 60000),
-    runPlannedEnd: activeBlockEndMs === null ? seg.plannedEnd : new Date(activeBlockEndMs).toISOString(),
+    endReason: null,
   };
 }
 
-function segmentUpdate(seg: PersistedSegment): PomodoroSegmentUpdate {
+function segmentUpdate(seg: PersistedSegment, occurredAt: string | null = null): PomodoroSegmentUpdate {
   return {
     id: seg.id,
     status: seg.status,
+    plannedEnd: seg.plannedEnd,
     actualStart: seg.actualStart,
     actualEnd: seg.actualEnd,
+    endReason: segmentEndReasonFor(seg),
+    occurredAt,
     pauses: seg.pauseLog,
   };
 }
@@ -742,13 +902,15 @@ function persistSegmentsToBackend(
   updatedSegments: PersistedSegment[],
   warning: string,
   bumpSegmentVersion: boolean,
-) {
+  occurredAt: string | null = null,
+): Promise<void> {
   const persisted = updatedSegments.filter((segment) => segment.status !== "planned" && segment.status !== "skipped");
-  if (persisted.length === 0) return;
-  invoke("pomodoro_update_segments", {
-    dbUrl: dbUrl(),
-    segments: persisted.map(segmentUpdate),
-  }).then(() => {
+  if (persisted.length === 0) return Promise.resolve();
+  return enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_update_segments", {
+      dbUrl: dbUrl(),
+      segments: persisted.map((segment) => segmentUpdate(segment, occurredAt)),
+    });
     if (bumpSegmentVersion) {
       segmentVersion++;
       publishWindowSnapshot();
@@ -760,31 +922,91 @@ function persistSegmentToBackend(
   seg: PersistedSegment,
   warning: string,
   bumpSegmentVersion: boolean,
-) {
-  persistSegmentsToBackend([seg], warning, bumpSegmentVersion);
+  occurredAt: string | null = null,
+): Promise<void> {
+  return persistSegmentsToBackend([seg], warning, bumpSegmentVersion, occurredAt);
 }
 
 async function insertSegmentsToBackend(newSegments: PersistedSegment[]) {
   const persisted = newSegments.filter((segment) => segment.status !== "planned" && segment.status !== "skipped");
   if (persisted.length === 0) return;
-  await invoke("pomodoro_insert_segments", {
-    dbUrl: dbUrl(),
-    segments: persisted.map(segmentWrite),
-  }).then(() => {
+  await enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_insert_segments", {
+      dbUrl: dbUrl(),
+      segments: persisted.map(segmentWrite),
+    });
     segmentVersion++;
     publishWindowSnapshot();
   }).catch((e) => console.warn("Failed to insert segments:", e));
 }
 
-async function cleanupEventSegments(eventId: string, eventDate: string) {
-  await invoke("pomodoro_cleanup_event_segments", {
-    dbUrl: dbUrl(),
-    eventId,
-    eventDate,
-  }).catch((e) => console.warn("Failed to clean up orphaned event segments:", e));
+async function startRunInBackend(run: PomodoroRunWrite, segment: PersistedSegment): Promise<void> {
+  await enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_start_run", {
+      dbUrl: dbUrl(),
+      run,
+      segment: segmentWrite(segment),
+    });
+    segmentVersion++;
+    publishWindowSnapshot();
+  });
 }
 
-function skipPlannedSegmentsAfter(index: number, warning: string) {
+async function transitionRunInBackend(transition: PomodoroTransitionRunWrite): Promise<void> {
+  await enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_transition_run", {
+      dbUrl: dbUrl(),
+      transition,
+    });
+    segmentVersion++;
+    publishWindowSnapshot();
+  });
+}
+
+function closeRunInBackend(closure: PomodoroRunClosure, warning = "Failed to close pomodoro run:"): Promise<void> {
+  return enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_close_run", {
+      dbUrl: dbUrl(),
+      closure,
+    });
+    segmentVersion++;
+    publishWindowSnapshot();
+  }).catch((e) => console.warn(warning, e));
+}
+
+function recordRunEvent(event: PomodoroRunEventWrite, warning = "Failed to record pomodoro event:"): void {
+  enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_record_run_event", {
+      dbUrl: dbUrl(),
+      event,
+    });
+  }).catch((e) => console.warn(warning, e));
+}
+
+function sendHeartbeat(): void {
+  if (!activeRunId) return;
+  invoke("pomodoro_heartbeat", {
+    dbUrl: dbUrl(),
+    runId: activeRunId,
+    heartbeatAt: nowIso(),
+  }).catch((e) => console.warn("Failed to update pomodoro heartbeat:", e));
+}
+
+function startHeartbeat(): void {
+  stopHeartbeat();
+  if (!activeRunId) return;
+  sendHeartbeat();
+  heartbeatIntervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeat(): void {
+  if (heartbeatIntervalId !== null) {
+    clearInterval(heartbeatIntervalId);
+    heartbeatIntervalId = null;
+  }
+}
+
+function skipPlannedSegmentsAfter(index: number, warning: string): Promise<void> {
   const updated: PersistedSegment[] = [];
   for (let i = index + 1; i < segments.length; i++) {
     if (segments[i].status === "planned") {
@@ -792,7 +1014,7 @@ function skipPlannedSegmentsAfter(index: number, warning: string) {
       updated.push(segments[i]);
     }
   }
-  persistSegmentsToBackend(updated, warning, true);
+  return persistSegmentsToBackend(updated, warning, true);
 }
 
 function timestampMs(value: string): number {
@@ -801,13 +1023,6 @@ function timestampMs(value: string): number {
     throw new Error(`Invalid timestamp: ${value}`);
   }
   return ms;
-}
-
-function pauseIntervalsMs(pauseLog: PauseInterval[]): PomodoroPauseMs[] {
-  return pauseLog.map((pause) => ({
-    startMs: timestampMs(pause.startedAt),
-    endMs: pause.endedAt === null ? null : timestampMs(pause.endedAt),
-  }));
 }
 
 function appendPause(seg: PersistedSegment, startedAt: string, reason: PauseReason, endedAt: string | null = null) {
@@ -828,33 +1043,34 @@ function markSegment(
   status: PersistedSegment["status"],
   setActualEnd: boolean = false,
   actualEndIso: string = nowIso(),
-) {
-  if (index < 0 || index >= segments.length) return;
+  endReason: PomodoroSegmentEndReason | null = null,
+): Promise<void> {
+  if (index < 0 || index >= segments.length) return Promise.resolve();
   const seg = segments[index];
   seg.status = status;
+  if (endReason) segmentEndReasons.set(seg.id, endReason);
   if (setActualEnd) seg.actualEnd = actualEndIso;
 
   // Close any open pause interval
   closeLastPause(seg, seg.actualEnd ?? actualEndIso);
 
-  persistSegmentToBackend(seg, "Failed to update segment:", true);
   publishWindowSnapshot();
+  return persistSegmentToBackend(seg, "Failed to update segment:", true, actualEndIso);
 }
 
-function activateSegment(index: number) {
-  if (index < 0 || index >= segments.length) return;
+function activateSegment(index: number): Promise<void> {
+  if (index < 0 || index >= segments.length) return Promise.resolve();
   const seg = segments[index];
   seg.status = "active";
   seg.actualStart = nowIso();
   currentSegmentIndex = index;
 
-  insertSegmentsToBackend([seg]).catch((e) => console.warn("Failed to activate segment:", e));
+  const persisted = insertSegmentsToBackend([seg]).catch((e) => console.warn("Failed to activate segment:", e));
   publishWindowSnapshot();
+  return persisted;
 }
 
 async function createSegments(eventId: string, eventEnd: string, eventDate: string) {
-  await cleanupEventSegments(eventId, eventDate);
-
   const runId = crypto.randomUUID();
 
   const now = new Date();
@@ -889,8 +1105,30 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
     status: i === 0 ? "active" as const : "planned" as const,
   }));
 
-  await insertSegmentsToBackend(newSegments);
-
+  const firstSegment = newSegments.find((segment) => segment.status === "active");
+  if (firstSegment) {
+    const startedAt = firstSegment.actualStart ?? baseIso;
+    try {
+      await startRunInBackend(
+        runWrite(
+          runId,
+          eventId,
+          eventDate,
+          startedAt,
+          firstSegment.plannedStart,
+          runPlannedEndForSegment(firstSegment),
+          "block_auto",
+        ),
+        firstSegment,
+      );
+    } catch (e) {
+      console.warn("Failed to start pomodoro run:", e);
+      void stopSessionInternal();
+      return;
+    }
+    activeRunId = runId;
+    startHeartbeat();
+  }
   segments = newSegments;
   currentSegmentIndex = 0;
   publishWindowSnapshot();
@@ -899,6 +1137,7 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
 function clearSegments() {
   segments = [];
   currentSegmentIndex = -1;
+  segmentEndReasons.clear();
 }
 
 /**
@@ -906,22 +1145,41 @@ function clearSegments() {
  * (bridge for current phase remainder + future segments), and persists.
  * Used by both reconfigureSession and transitionToBlock.
  */
-async function rebuildSegments(blockId: string, eventEnd: string, eventDate: string) {
-  // Clean up old segments: mark current as completed, remaining planned as skipped.
-  // Guard against double-completing (segments may already be completed by tick's
-  // block expiry handler before transitionToBlock triggers a rebuild).
+interface RebuildRunOptions {
+  runEndReason: PomodoroRunEndReason;
+  segmentStatus: "completed" | "interrupted";
+  segmentEndReason: PomodoroSegmentEndReason;
+  eventType: PomodoroRunEventType;
+  startTrigger: PomodoroStartTrigger;
+  inheritedFocusSeconds: number;
+  inheritedCycle: number;
+}
+
+async function rebuildSegments(
+  blockId: string,
+  eventEnd: string,
+  eventDate: string,
+  options: RebuildRunOptions,
+) {
+  const previousSegments = cloneSegmentsForWindowSync(segments);
+  const previousSegmentIndex = currentSegmentIndex;
+  const previousEndReasons = new Map(segmentEndReasons);
+  const previousRunId = activeRunId;
+  const runId = crypto.randomUUID();
+  const now = new Date();
+  const nowStr = now.toISOString();
+
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
     const seg = segments[currentSegmentIndex];
     if (seg.status !== "completed" && seg.status !== "skipped" && seg.status !== "interrupted") {
-      markSegment(currentSegmentIndex, "completed", true);
+      seg.status = options.segmentStatus;
+      seg.actualEnd = nowStr;
+      segmentEndReasons.set(seg.id, options.segmentEndReason);
+      closeLastPause(seg, nowStr);
     }
   }
   skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
 
-  // Build new segment plan from now to event end
-  const runId = crypto.randomUUID();
-  const now = new Date();
-  const nowStr = now.toISOString();
   const end = new Date(eventEnd.replace(" ", "T"));
   const totalRemainingMinutes = Math.max(0, (end.getTime() - now.getTime()) / 60000);
   const bridgeMinutes = remainingSeconds / 60;
@@ -1003,8 +1261,6 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
     }
   }
 
-  await insertSegmentsToBackend(newSegments);
-
   // Preserve completed/interrupted segments so the green progress bar
   // keeps showing focus time accumulated before this rebuild.
   const kept = segments.filter(
@@ -1012,8 +1268,55 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
       (s.status === "completed" || s.status === "interrupted"),
   );
 
+  const firstSegment = newSegments.find((segment) => segment.status === "active");
+  if (firstSegment) {
+    const startedAt = firstSegment.actualStart ?? nowStr;
+    const run = runWrite(
+      runId,
+      blockId,
+      eventDate,
+      startedAt,
+      firstSegment.plannedStart,
+      runPlannedEndForSegment(firstSegment),
+      options.startTrigger,
+      Math.floor(options.inheritedFocusSeconds / 60),
+      options.inheritedCycle,
+      previousRunId,
+    );
+    try {
+      if (previousRunId) {
+        await transitionRunInBackend({
+          closure: {
+            runId: previousRunId,
+            endedAt: nowStr,
+            endReason: options.runEndReason,
+            segmentStatus: options.segmentStatus,
+            segmentEndReason: options.segmentEndReason,
+            eventType: options.eventType,
+          },
+          run,
+          segment: segmentWrite(firstSegment),
+        });
+      } else {
+        await startRunInBackend(run, firstSegment);
+      }
+    } catch (e) {
+      console.warn("Failed to rebuild pomodoro run:", e);
+      segments = previousSegments;
+      currentSegmentIndex = previousSegmentIndex;
+      segmentEndReasons.clear();
+      for (const [id, reason] of previousEndReasons) {
+        segmentEndReasons.set(id, reason);
+      }
+      publishWindowSnapshot();
+      return;
+    }
+    activeRunId = runId;
+    startHeartbeat();
+  }
+
   segments = [...kept, ...newSegments];
-  currentSegmentIndex = kept.length + (bridgeMinutes > 0 ? 0 : -1);
+  currentSegmentIndex = kept.length + (firstSegment ? newSegments.indexOf(firstSegment) : -1);
   publishWindowSnapshot();
 }
 
@@ -1059,7 +1362,15 @@ async function reconfigureSession(
     notificationShown = false;
   }
 
-  await rebuildSegments(blockId, eventEnd, eventDate);
+  await rebuildSegments(blockId, eventEnd, eventDate, {
+    runEndReason: "reconfigured",
+    segmentStatus: "completed",
+    segmentEndReason: "reconfigured",
+    eventType: "reconfigure",
+    startTrigger: "reconfigure",
+    inheritedFocusSeconds: phase === "focus" ? elapsedSeconds : 0,
+    inheritedCycle: currentCycle,
+  });
   updateTray();
 }
 
@@ -1078,6 +1389,8 @@ async function transitionToBlock(
   stopPausedOpportunityCountdown();
   const previousConfig = config;
   const elapsedSeconds = actualPhaseElapsedSeconds();
+  const inheritedFocusSeconds = phase === "focus" ? elapsedSeconds : 0;
+  const inheritedCycle = currentCycle;
   activeBlockId = blockId;
   activeBlockEndMs = new Date(eventEnd.replace(" ", "T")).getTime();
   initListeners();
@@ -1098,12 +1411,6 @@ async function transitionToBlock(
 
   switch (result.kind) {
     case "trigger_break": {
-      const endTime = new Date().toISOString();
-      if (sessionStartTime) {
-        const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
-          ? segments[currentSegmentIndex] : null;
-        saveCompletedSession(sessionStartTime, endTime, seg?.pauseLog ?? [], activeBlockId);
-      }
       completedPomodoros += 1;
       sessionStartTime = null;
       notificationShown = false;
@@ -1164,7 +1471,15 @@ async function transitionToBlock(
   }
 
   blockExpired = false;
-  await rebuildSegments(blockId, eventEnd, eventDate);
+  await rebuildSegments(blockId, eventEnd, eventDate, {
+    runEndReason: "block_transition",
+    segmentStatus: "interrupted",
+    segmentEndReason: "block_transition",
+    eventType: "block_transition",
+    startTrigger: "block_transition",
+    inheritedFocusSeconds,
+    inheritedCycle,
+  });
   updateTray();
 }
 
@@ -1229,13 +1544,13 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
       );
       return;
     case "dismiss-suspend":
-      dismissSuspend(command.resume);
+      void dismissSuspend(command.resume);
       return;
     case "dismiss-idle":
-      dismissIdle(command.resume);
+      void dismissIdle(command.resume);
       return;
     case "stop-session":
-      stopSessionInternal();
+      void stopSessionInternal();
       return;
     case "pause":
       pauseSession();
@@ -1288,8 +1603,19 @@ function initListeners() {
   listen("pomodoro-skip-break", () => {
     document.dispatchEvent(new Event("ganbaruai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
-      // Mark current break segment as skipped
-      markSegment(currentSegmentIndex, "skipped", true);
+      const occurredAt = nowIso();
+      if (activeRunId) {
+        recordRunEvent({
+          runId: activeRunId,
+          segmentId: activeSegment()?.id ?? null,
+          eventType: "skip_break",
+          occurredAt,
+          phase,
+          reason: "skipped_by_user",
+          durationSeconds: null,
+        }, "Failed to record skipped break:");
+      }
+      markSegment(currentSegmentIndex, "interrupted", true, occurredAt, "skipped_by_user");
       startFocusSession();
     } else {
       skipNextBreak = true;
@@ -1306,11 +1632,11 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
 
   listen("idle-overlay-resume", () => {
-    if (idlePaused) dismissIdle(true);
+    if (idlePaused) void dismissIdle(true);
   }).catch((e) => console.warn("Failed to listen for idle-overlay-resume:", e));
 
   listen("idle-overlay-stop", () => {
-    if (idlePaused) dismissIdle(false);
+    if (idlePaused) void dismissIdle(false);
   }).catch((e) => console.warn("Failed to listen for idle-overlay-stop:", e));
 
   listen("tray-pause-resume", () => {
@@ -1421,10 +1747,10 @@ function startFocusSession() {
   updateTray();
 }
 
-function dismissSuspend(resume: boolean) {
+async function dismissSuspend(resume: boolean): Promise<void> {
   stopPausedOpportunityCountdown();
-  suspendedAway = null;
   if (resume) {
+    suspendedAway = null;
     // Clear cached end time so tick() won't auto-stop with stale data.
     // The next checkActiveBlock (triggered by suspendedAway going null)
     // will call startFromBlock with fresh event times.
@@ -1436,18 +1762,15 @@ function dismissSuspend(resume: boolean) {
     startIdleChecking();
     updateTray();
   } else {
-    // Stop: save partial session up to suspend start
-    if (phase === "focus" && sessionStartTime) {
-      const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
-        ? segments[currentSegmentIndex] : null;
-      const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
-      const endIso = lastPause ? lastPause.startedAt : nowIso();
-      saveCompletedSession(sessionStartTime, endIso, seg?.pauseLog ?? [], activeBlockId);
-    }
+    const seg = activeSegment();
+    const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
+    const endIso = lastPause ? lastPause.startedAt : nowIso();
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-      markSegment(currentSegmentIndex, "interrupted", true);
-      skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+      await markSegment(currentSegmentIndex, "interrupted", true, endIso, "stopped");
+      await skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
     }
+    await closeActiveRun(endIso, "stopped", "interrupted", "stopped", "stop");
+    suspendedAway = null;
     stopOvertime();
     stopIdleChecking();
     isRunning = false;
@@ -1549,17 +1872,17 @@ async function checkIdle() {
   }
 }
 
-function dismissIdle(resume: boolean) {
+async function dismissIdle(resume: boolean): Promise<void> {
   stopPausedOpportunityCountdown();
-  idlePaused = null;
   if (resume) {
     // Close the open pause interval
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
       const seg = segments[currentSegmentIndex];
       if (closeLastPause(seg, nowIso())) {
-        persistSegmentToBackend(seg, "Failed to close idle pause:", false);
+        await persistSegmentToBackend(seg, "Failed to close idle pause:", false);
       }
     }
+    idlePaused = null;
     // Clear cached end time so tick() won't auto-stop with stale data.
     // The next checkActiveBlock (triggered by idlePaused going null)
     // will call startFromBlock with fresh event times.
@@ -1570,18 +1893,15 @@ function dismissIdle(resume: boolean) {
     intervalId = setInterval(tick, 1000);
     updateTray();
   } else {
-    // Stop session
-    if (phase === "focus" && sessionStartTime) {
-      const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
-        ? segments[currentSegmentIndex] : null;
-      const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
-      const endIso = lastPause ? lastPause.startedAt : nowIso();
-      saveCompletedSession(sessionStartTime, endIso, seg?.pauseLog ?? [], activeBlockId);
-    }
+    const seg = activeSegment();
+    const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
+    const endIso = lastPause ? lastPause.startedAt : nowIso();
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-      markSegment(currentSegmentIndex, "interrupted", true);
-      skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+      await markSegment(currentSegmentIndex, "interrupted", true, endIso, "stopped");
+      await skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
     }
+    await closeActiveRun(endIso, "stopped", "interrupted", "stopped", "stop");
+    idlePaused = null;
     stopOvertime();
     isRunning = false;
     phaseEndTime = null;
@@ -1622,30 +1942,6 @@ function showNotification() {
   });
 }
 
-async function saveCompletedSession(
-  startTime: string,
-  endTime: string,
-  pauseLog: PauseInterval[] = [],
-  eventId: string | null = null,
-): Promise<void> {
-  try {
-    await invoke("pomodoro_save_session", {
-      dbUrl: dbUrl(),
-      session: {
-        id: crypto.randomUUID(),
-        eventId,
-        startTime,
-        endTime,
-        startMs: timestampMs(startTime),
-        endMs: timestampMs(endTime),
-        pauses: pauseIntervalsMs(pauseLog),
-      },
-    });
-  } catch (e) {
-    console.warn("Failed to save completed session:", e);
-  }
-}
-
 // Timer
 
 function tick() {
@@ -1669,13 +1965,9 @@ function tick() {
       isRunning = false;
       lastTickMs = null;
       // Mark segments
-      markCurrentAndSkipRemaining();
-      if (phase === "focus" && sessionStartTime) {
-        const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
-          ? segments[currentSegmentIndex] : null;
-        saveCompletedSession(sessionStartTime, result.suspendStartIso, seg?.pauseLog ?? [], activeBlockId);
-        sessionStartTime = null;
-      }
+      markCurrentAndSkipRemaining(result.suspendStartIso);
+      void closeActiveRun(result.suspendStartIso, "completed", "interrupted", "event_expired", "complete");
+      sessionStartTime = null;
       stopOvertime();
       stopIdleChecking();
       phaseEndTime = null;
@@ -1708,18 +2000,16 @@ function tick() {
     case "block_expired": {
       lastTickMs = now;
       recordRunningPhaseProgress(0);
-      markCurrentAndSkipRemaining();
-      if (phase === "focus" && sessionStartTime) {
-        const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
-          ? segments[currentSegmentIndex] : null;
-        saveCompletedSession(
-          sessionStartTime,
-          new Date(activeBlockEndMs!).toISOString(),
-          seg?.pauseLog ?? [],
-          activeBlockId,
-        );
-        sessionStartTime = null;
-      }
+      const endIso = new Date(activeBlockEndMs!).toISOString();
+      markCurrentAndSkipRemaining(endIso);
+      void closeActiveRun(
+        endIso,
+        "completed",
+        "interrupted",
+        "event_expired",
+        "complete",
+      );
+      sessionStartTime = null;
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
       stopOvertime();
       stopIdleChecking();
@@ -1781,9 +2071,9 @@ function tick() {
 }
 
 /** Mark the current segment as completed and remaining planned segments as skipped. */
-function markCurrentAndSkipRemaining() {
+function markCurrentAndSkipRemaining(endIso: string = nowIso()) {
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-    markSegment(currentSegmentIndex, "completed", true);
+    markSegment(currentSegmentIndex, "interrupted", true, endIso, "event_expired");
     skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
   }
 }
@@ -1795,15 +2085,10 @@ function advancePhase() {
   if (phase === "focus") {
     clearMusicPausedByPomodoro();
     const endTime = new Date().toISOString();
-    if (sessionStartTime) {
-      const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
-        ? segments[currentSegmentIndex] : null;
-      saveCompletedSession(sessionStartTime, endTime, seg?.pauseLog ?? [], activeBlockId);
-    }
     completedPomodoros += 1;
     sessionStartTime = null;
     notificationShown = false;
-    markSegment(currentSegmentIndex, "completed", true);
+    markSegment(currentSegmentIndex, "completed", true, endTime, "completed");
   }
 
   switch (result.kind) {
@@ -1819,10 +2104,20 @@ function advancePhase() {
       const breakIdx = currentSegmentIndex + 1;
       if (breakIdx < segments.length && segments[breakIdx].phase !== "focus") {
         const now = nowIso();
+        if (activeRunId) {
+          recordRunEvent({
+            runId: activeRunId,
+            segmentId: null,
+            eventType: "skip_break",
+            occurredAt: now,
+            phase: segments[breakIdx].phase,
+            reason: "skip_next_break",
+            durationSeconds: null,
+          }, "Failed to record skipped break:");
+        }
         segments[breakIdx].status = "skipped";
         segments[breakIdx].actualStart = now;
         segments[breakIdx].actualEnd = now;
-        persistSegmentToBackend(segments[breakIdx], "Failed to skip segment:", true);
 
         const nextFocus = segments.findIndex(
           (s, i) => i > breakIdx && s.phase === "focus" && s.status === "planned",
@@ -1955,7 +2250,7 @@ function startFromBlockInternal(
     case "rebuild_segments":
       activeBlockEndMs = decision.newEndMs;
       refreshCurrentPhaseLimit();
-      rebuildSegments(blockId, eventEnd!, eventDate!);
+      publishWindowSnapshot();
       return;
 
     case "transition":
@@ -1996,15 +2291,19 @@ function startFromBlockInternal(
   }
 }
 
-function stopSessionInternal(): void {
+async function stopSessionInternal(): Promise<void> {
   clearMusicPausedByPomodoro();
   stopPausedOpportunityCountdown();
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
     const seg = segments[currentSegmentIndex];
     if (seg.status === "active") {
-      markSegment(currentSegmentIndex, "interrupted", true);
+      const endIso = nowIso();
+      await markSegment(currentSegmentIndex, "interrupted", true, endIso, "stopped");
+      await closeActiveRun(endIso, "stopped", "interrupted", "stopped", "stop");
     }
-    skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+    await skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+  } else if (activeRunId) {
+    await closeActiveRun(nowIso(), "stopped", "interrupted", "stopped", "stop");
   }
 
   if (intervalId) {
@@ -2017,6 +2316,7 @@ function stopSessionInternal(): void {
   lastTickMs = null;
   phaseEndTime = null;
   activeBlockId = null;
+  activeRunId = null;
   activeBlockEndMs = null;
   idleTimeoutMs = null;
   blockExpired = false;
@@ -2085,12 +2385,12 @@ function skipSession(): void {
 }
 
 async function cleanupOrphansInternal(): Promise<void> {
-  await invoke("pomodoro_cleanup_orphans", {
+  await invoke("pomodoro_recover_open_runs", {
     dbUrl: dbUrl(),
   }).then(() => {
     segmentVersion++;
     publishWindowSnapshot();
-  }).catch((e) => console.warn("Failed to clean up orphaned segments:", e));
+  }).catch((e) => console.warn("Failed to recover open pomodoro runs:", e));
 }
 
 // Public API
@@ -2171,16 +2471,16 @@ export function getPomodoro() {
     get suspendedAway() {
       return suspendedAway;
     },
-    dismissSuspend(resume: boolean) {
+    async dismissSuspend(resume: boolean) {
       if (forwardWindowCommand({ kind: "dismiss-suspend", resume })) return;
-      dismissSuspend(resume);
+      await dismissSuspend(resume);
     },
     get idlePaused() {
       return idlePaused;
     },
-    dismissIdle(resume: boolean) {
+    async dismissIdle(resume: boolean) {
       if (forwardWindowCommand({ kind: "dismiss-idle", resume })) return;
-      dismissIdle(resume);
+      await dismissIdle(resume);
     },
     startFromBlock(
       blockId: string,
@@ -2205,9 +2505,9 @@ export function getPomodoro() {
         blockIdleTimeoutMinutes,
       );
     },
-    stopSession() {
+    async stopSession() {
       if (forwardWindowCommand({ kind: "stop-session" })) return;
-      stopSessionInternal();
+      await stopSessionInternal();
     },
     pause() {
       if (forwardWindowCommand({ kind: "pause" })) return;

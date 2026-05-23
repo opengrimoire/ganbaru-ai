@@ -9,7 +9,6 @@ use crate::db_path::connect_sqlite;
 pub struct BenchmarkPomodoroHistoryPayload {
     configs: Vec<BenchmarkPomodoroConfigSeed>,
     segments: Vec<BenchmarkPomodoroSegmentSeed>,
-    sessions: Vec<BenchmarkPomodoroSessionSeed>,
 }
 
 #[derive(Deserialize)]
@@ -48,20 +47,6 @@ struct BenchmarkPomodoroPauseSeed {
     reason: String,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BenchmarkPomodoroSessionSeed {
-    id: String,
-    event_id: String,
-    start_time: String,
-    end_time: String,
-    completed: bool,
-    app_switch_count: i64,
-    break_extended: bool,
-    focus_score: f64,
-    created_at: String,
-}
-
 #[tauri::command]
 pub async fn benchmark_seed_pomodoro_history<R: Runtime>(
     app: AppHandle<R>,
@@ -78,9 +63,6 @@ pub async fn benchmark_seed_pomodoro_history<R: Runtime>(
     }
     for segment in &payload.segments {
         insert_segment(&mut tx, segment).await?;
-    }
-    for session in &payload.sessions {
-        insert_session(&mut tx, session).await?;
     }
 
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
@@ -175,6 +157,26 @@ async fn insert_segment(
     .await
     .map_err(|e| format!("seed benchmark pomodoro run: {e}"))?;
 
+    if let Some(actual_end) = &segment.actual_end {
+        sqlx::query(
+            "UPDATE pomodoro_runs
+             SET planned_end = CASE WHEN planned_end < ? THEN ? ELSE planned_end END,
+                 ended_at = CASE WHEN ended_at IS NULL OR ended_at < ? THEN ? ELSE ended_at END,
+                 last_heartbeat = CASE WHEN last_heartbeat < ? THEN ? ELSE last_heartbeat END
+             WHERE id = ?",
+        )
+        .bind(&segment.planned_end)
+        .bind(&segment.planned_end)
+        .bind(actual_end)
+        .bind(actual_end)
+        .bind(actual_end)
+        .bind(actual_end)
+        .bind(&segment.run_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("update benchmark pomodoro run bounds: {e}"))?;
+    }
+
     sqlx::query(
         "INSERT OR REPLACE INTO pomodoro_segments
             (id, event_id, event_date, run_id, cycle_number, phase,
@@ -212,31 +214,6 @@ async fn insert_segment(
     Ok(())
 }
 
-async fn insert_session(
-    tx: &mut Transaction<'_, Sqlite>,
-    session: &BenchmarkPomodoroSessionSeed,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT OR REPLACE INTO pomodoro_sessions
-            (id, event_id, start_time, end_time, completed, app_switch_count,
-             break_extended, focus_score, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&session.id)
-    .bind(&session.event_id)
-    .bind(&session.start_time)
-    .bind(&session.end_time)
-    .bind(if session.completed { 1_i64 } else { 0_i64 })
-    .bind(session.app_switch_count)
-    .bind(if session.break_extended { 1_i64 } else { 0_i64 })
-    .bind(session.focus_score)
-    .bind(&session.created_at)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("seed benchmark pomodoro session: {e}"))?;
-    Ok(())
-}
-
 fn validate_payload(payload: &BenchmarkPomodoroHistoryPayload) -> Result<(), String> {
     for config in &payload.configs {
         require_non_empty(&config.event_id, "config.event_id")?;
@@ -260,21 +237,6 @@ fn validate_payload(payload: &BenchmarkPomodoroHistoryPayload) -> Result<(), Str
             if !matches!(pause.reason.as_str(), "idle" | "manual" | "suspend") {
                 return Err(format!("invalid pomodoro pause reason: {}", pause.reason));
             }
-        }
-    }
-    for session in &payload.sessions {
-        require_non_empty(&session.id, "session.id")?;
-        require_non_empty(&session.event_id, "session.event_id")?;
-        require_non_empty(&session.start_time, "start_time")?;
-        require_non_empty(&session.end_time, "end_time")?;
-        if session.app_switch_count < 0 {
-            return Err("app_switch_count must be non-negative".to_string());
-        }
-        if !session.focus_score.is_finite()
-            || session.focus_score < 0.0
-            || session.focus_score > 1.0
-        {
-            return Err("focus_score must be between 0 and 1".to_string());
         }
     }
     Ok(())

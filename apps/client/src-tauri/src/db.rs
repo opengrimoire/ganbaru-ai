@@ -472,7 +472,7 @@ pub fn migrations() -> Vec<Migration> {
                 ended_at TEXT,
                 end_reason TEXT
                     CHECK(end_reason IS NULL OR end_reason IN
-                        ('completed', 'stopped', 'interrupted', 'reconfigured', 'block_transition', 'crash_recovery')),
+                        ('completed', 'stopped', 'interrupted', 'reconfigured', 'block_transition')),
                 focus_duration_minutes INTEGER NOT NULL,
                 short_break_minutes INTEGER NOT NULL,
                 long_break_minutes INTEGER NOT NULL,
@@ -493,11 +493,14 @@ pub fn migrations() -> Vec<Migration> {
                 ON pomodoro_runs(original_event_id);
             CREATE INDEX IF NOT EXISTS idx_pomodoro_runs_open
                 ON pomodoro_runs(ended_at);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_pomodoro_runs_single_open
+                ON pomodoro_runs((1))
+                WHERE ended_at IS NULL;
 
             -- pomodoro segment tracking
             CREATE TABLE IF NOT EXISTS pomodoro_segments (
                 id TEXT PRIMARY KEY,
-                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL,
                 event_date TEXT NOT NULL,
                 run_id TEXT NOT NULL REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
                 cycle_number INTEGER NOT NULL,
@@ -517,6 +520,11 @@ pub fn migrations() -> Vec<Migration> {
                 ON pomodoro_segments(event_id, event_date);
             CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_run
                 ON pomodoro_segments(run_id);
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_run_actual
+                ON pomodoro_segments(run_id, actual_start);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_pomodoro_segments_single_active
+                ON pomodoro_segments((1))
+                WHERE status = 'active';
 
             CREATE TABLE IF NOT EXISTS pomodoro_pauses (
                 id TEXT PRIMARY KEY,
@@ -531,6 +539,9 @@ pub fn migrations() -> Vec<Migration> {
                 ON pomodoro_pauses(segment_id, started_at);
             CREATE INDEX IF NOT EXISTS idx_pomodoro_pauses_reason
                 ON pomodoro_pauses(reason, started_at);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_pomodoro_pauses_single_open_per_segment
+                ON pomodoro_pauses(segment_id)
+                WHERE ended_at IS NULL;
 
             CREATE TABLE IF NOT EXISTS pomodoro_run_events (
                 id TEXT PRIMARY KEY,
@@ -549,25 +560,7 @@ pub fn migrations() -> Vec<Migration> {
             );
             CREATE INDEX IF NOT EXISTS idx_pomodoro_run_events_run
                 ON pomodoro_run_events(run_id, occurred_at);
-
-            -- pomodoro sessions (completed focus periods)
-            CREATE TABLE IF NOT EXISTS pomodoro_sessions (
-                id TEXT PRIMARY KEY,
-                task_id TEXT REFERENCES tasks(id),
-                start_time TEXT NOT NULL,
-                end_time TEXT NOT NULL,
-                completed INTEGER NOT NULL DEFAULT 1,
-                app_switch_count INTEGER NOT NULL DEFAULT 0,
-                break_extended INTEGER NOT NULL DEFAULT 0,
-                focus_score REAL NOT NULL DEFAULT 1.0,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
         ",
-    },
-    Migration {
-        version: 2,
-        description: "add event_id to pomodoro_sessions",
-        sql: "ALTER TABLE pomodoro_sessions ADD COLUMN event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL;",
     },
     Migration {
         version: 3,
@@ -880,6 +873,8 @@ pub fn migrations() -> Vec<Migration> {
                 ON icalendar_value_nodes(property_id, parent_node_id, sort_order);
             CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_parameter
                 ON icalendar_value_nodes(parameter_id, parent_node_id, sort_order);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_parent
+                ON icalendar_value_nodes(parent_node_id, sort_order);
 
             CREATE TABLE IF NOT EXISTS icalendar_object_diagnostics (
                 id TEXT PRIMARY KEY,
@@ -1348,59 +1343,6 @@ pub fn migrations() -> Vec<Migration> {
         ",
     },
     Migration {
-        version: 22,
-        description: "remove obsolete pomodoro session task reference",
-        sql: "
-            ALTER TABLE pomodoro_sessions RENAME TO pomodoro_sessions_before_task_cleanup;
-
-            CREATE TABLE pomodoro_sessions (
-                id TEXT PRIMARY KEY,
-                start_time TEXT NOT NULL,
-                end_time TEXT NOT NULL,
-                completed INTEGER NOT NULL DEFAULT 1,
-                app_switch_count INTEGER NOT NULL DEFAULT 0,
-                break_extended INTEGER NOT NULL DEFAULT 0,
-                focus_score REAL NOT NULL DEFAULT 1.0,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL
-            );
-
-            INSERT INTO pomodoro_sessions (
-                id,
-                start_time,
-                end_time,
-                completed,
-                app_switch_count,
-                break_extended,
-                focus_score,
-                created_at,
-                event_id
-            )
-            SELECT
-                id,
-                start_time,
-                end_time,
-                completed,
-                app_switch_count,
-                break_extended,
-                focus_score,
-                created_at,
-                CASE
-                    WHEN event_id IS NULL THEN NULL
-                    WHEN EXISTS (
-                        SELECT 1
-                        FROM calendar_events
-                        WHERE calendar_events.id =
-                            pomodoro_sessions_before_task_cleanup.event_id
-                    ) THEN event_id
-                    ELSE NULL
-                END
-            FROM pomodoro_sessions_before_task_cleanup;
-
-            DROP TABLE pomodoro_sessions_before_task_cleanup;
-        ",
-    },
-    Migration {
         version: 23,
         description: "add music playlists and playback state",
         sql: "
@@ -1469,52 +1411,51 @@ pub fn migrations() -> Vec<Migration> {
 #[cfg(test)]
 mod tests {
     use super::run_migrations;
-    use sqlx::Row;
+    use sqlx::{Row, SqlitePool};
 
-    #[test]
-    fn pomodoro_sessions_can_insert_with_foreign_keys_enabled() {
-        tauri::async_runtime::block_on(async {
-            let pool = sqlx::sqlite::SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .unwrap();
-            sqlx::raw_sql("PRAGMA foreign_keys=ON")
-                .execute(&pool)
-                .await
-                .unwrap();
-            run_migrations(&pool).await.unwrap();
-
-            sqlx::query(
-                "INSERT INTO pomodoro_sessions
-                    (id, start_time, end_time, completed, focus_score, created_at)
-                 VALUES (?, ?, ?, 1, 1.0, ?)",
-            )
-            .bind("session-1")
-            .bind("2026-05-16T10:00:00Z")
-            .bind("2026-05-16T10:40:00Z")
-            .bind("2026-05-16T10:40:00Z")
-            .execute(&pool)
+    async fn migrated_memory_pool() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
+        run_migrations(&pool).await.unwrap();
+        pool
+    }
 
-            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_sessions")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-            assert_eq!(count, 1);
-        });
+    async fn insert_event(pool: &SqlitePool) {
+        sqlx::query(
+            "INSERT INTO calendar_events (id, title, start_time, end_time)
+             VALUES ('event-1', 'Focus block', '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn insert_open_run(
+        pool: &SqlitePool,
+        id: &str,
+    ) -> Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO pomodoro_runs
+                (id, event_id, original_event_id, event_date, planned_start, planned_end,
+                 started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                 pomodoro_count, last_heartbeat, start_trigger)
+             VALUES (?, 'event-1', 'event-1', '2026-05-23',
+                     '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z',
+                     '2026-05-23T09:00:00Z', 40, 5, 10, 4,
+                     '2026-05-23T09:00:00Z', 'manual')",
+        )
+        .bind(id)
+        .execute(pool)
+        .await
     }
 
     #[test]
     fn schema_does_not_create_json_storage_columns() {
         tauri::async_runtime::block_on(async {
-            let pool = sqlx::sqlite::SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .unwrap();
-            run_migrations(&pool).await.unwrap();
+            let pool = migrated_memory_pool().await;
 
             let rows = sqlx::query(
                 "SELECT m.name AS table_name, p.name AS column_name
@@ -1537,14 +1478,152 @@ mod tests {
                 "extended_properties",
                 "organizer",
             ];
+            let forbidden_tables = ["pomodoro_sessions"];
             for row in rows {
                 let table_name: String = row.try_get("table_name").unwrap();
                 let column_name: String = row.try_get("column_name").unwrap();
+                assert!(
+                    !forbidden_tables.contains(&table_name.as_str()),
+                    "{table_name} should not be created as persisted storage",
+                );
                 assert!(
                     !forbidden.contains(&column_name.as_str()) && !column_name.ends_with("_json"),
                     "{table_name}.{column_name} should be normalized, not JSON storage",
                 );
             }
+        });
+    }
+
+    #[test]
+    fn schema_allows_only_one_open_pomodoro_run() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+            insert_event(&pool).await;
+
+            insert_open_run(&pool, "run-1").await.unwrap();
+            assert!(insert_open_run(&pool, "run-2").await.is_err());
+
+            sqlx::query(
+                "UPDATE pomodoro_runs
+                 SET ended_at = '2026-05-23T09:30:00Z', end_reason = 'stopped'
+                 WHERE id = 'run-1'",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            insert_open_run(&pool, "run-2").await.unwrap();
+        });
+    }
+
+    #[test]
+    fn schema_allows_only_one_active_pomodoro_segment() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+            insert_event(&pool).await;
+            insert_open_run(&pool, "run-1").await.unwrap();
+
+            sqlx::query(
+                "INSERT INTO pomodoro_segments
+                    (id, event_id, event_date, run_id, cycle_number, phase,
+                     planned_start, planned_end, actual_start, status)
+                 VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
+                         '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',
+                         '2026-05-23T09:00:00Z', 'active')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let second_active = sqlx::query(
+                "INSERT INTO pomodoro_segments
+                    (id, event_id, event_date, run_id, cycle_number, phase,
+                     planned_start, planned_end, actual_start, status)
+                 VALUES ('segment-2', 'event-1', '2026-05-23', 'run-1', 1, 'short_break',
+                         '2026-05-23T09:40:00Z', '2026-05-23T09:45:00Z',
+                         '2026-05-23T09:40:00Z', 'active')",
+            )
+            .execute(&pool)
+            .await;
+
+            assert!(second_active.is_err());
+        });
+    }
+
+    #[test]
+    fn deleting_calendar_event_preserves_pomodoro_segments() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+            insert_event(&pool).await;
+            insert_open_run(&pool, "run-1").await.unwrap();
+
+            sqlx::query(
+                "INSERT INTO pomodoro_segments
+                    (id, event_id, event_date, run_id, cycle_number, phase,
+                     planned_start, planned_end, actual_start, actual_end, status, end_reason)
+                 VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
+                         '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',
+                         '2026-05-23T09:00:00Z', '2026-05-23T09:20:00Z',
+                         'interrupted', 'stopped')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            sqlx::query("DELETE FROM calendar_events WHERE id = 'event-1'")
+                .execute(&pool)
+                .await
+                .unwrap();
+
+            let segment_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments WHERE id = 'segment-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let event_id: Option<String> =
+                sqlx::query_scalar("SELECT event_id FROM pomodoro_segments WHERE id = 'segment-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(segment_count, 1);
+            assert_eq!(event_id, None);
+        });
+    }
+
+    #[test]
+    fn schema_allows_only_one_open_pause_per_segment() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+            insert_event(&pool).await;
+            insert_open_run(&pool, "run-1").await.unwrap();
+            sqlx::query(
+                "INSERT INTO pomodoro_segments
+                    (id, event_id, event_date, run_id, cycle_number, phase,
+                     planned_start, planned_end, actual_start, status)
+                 VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
+                         '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',
+                         '2026-05-23T09:00:00Z', 'active')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                "INSERT INTO pomodoro_pauses (id, segment_id, started_at, reason)
+                 VALUES ('pause-1', 'segment-1', '2026-05-23T09:10:00Z', 'manual')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let second_open_pause = sqlx::query(
+                "INSERT INTO pomodoro_pauses (id, segment_id, started_at, reason)
+                 VALUES ('pause-2', 'segment-1', '2026-05-23T09:15:00Z', 'idle')",
+            )
+            .execute(&pool)
+            .await;
+
+            assert!(second_open_pause.is_err());
         });
     }
 }

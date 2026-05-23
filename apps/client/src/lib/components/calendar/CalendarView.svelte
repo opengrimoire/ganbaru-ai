@@ -1423,9 +1423,9 @@
 
     }
 
-    // Stop session after all mutations complete (hybrid logic needs activeBlockId intact)
+    // Stop session after all mutations complete because hybrid save logic needs activeBlockId intact.
     if (sessionStopPending) {
-      pomodoro.stopSession();
+      await pomodoro.stopSession();
       sessionStopPending = false;
     }
     if (!saveRefreshedVisibleWindow) {
@@ -1460,6 +1460,13 @@
       return;
     }
 
+    const activeBlockIdForDelete = pomodoro.activeBlockId;
+    const shouldStopSessionBeforeDelete = sessionStopPending;
+    if (shouldStopSessionBeforeDelete) {
+      await pomodoro.stopSession();
+      sessionStopPending = false;
+    }
+
     const s = session.state;
     let restoreDeleted: (() => Promise<void>) | undefined;
 
@@ -1491,8 +1498,8 @@
         const templateStartDate = template?.start.split(" ")[0];
 
         let splitDate = formatDatePart(new Date());
-        if (template && pomodoro.activeBlockId) {
-          const parts = pomodoro.activeBlockId.split("::");
+        if (template && activeBlockIdForDelete) {
+          const parts = activeBlockIdForDelete.split("::");
           if (parts[0] === template.id && parts[1] === splitDate) {
             splitDate = shiftDateStr(splitDate, 1);
           }
@@ -1528,10 +1535,6 @@
       }
     }
 
-    if (sessionStopPending) {
-      pomodoro.stopSession();
-      sessionStopPending = false;
-    }
     closeSession();
     if (restoreDeleted) showDeleteUndoToast(restoreDeleted);
   }

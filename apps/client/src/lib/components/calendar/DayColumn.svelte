@@ -207,7 +207,7 @@
   $effect(() => {
     const segVer = pomodoro.segmentVersion;
     const eventIds = positioned
-      .filter((p) => p.event.pomodoroConfig && p.event.id !== pomodoro.activeBlockId && p.event.id !== draggingEventId)
+      .filter((p) => p.event.pomodoroConfig && p.event.id !== draggingEventId)
       .map((p) => p.event.id)
       .sort();
     const queryEventIds = Array.from(new Set(

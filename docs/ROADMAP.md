@@ -11,7 +11,7 @@ The minimum viable cycle: plan sessions, focus with a timer, track tasks.
 **Includes:**
 
 - Monorepo scaffold: Turborepo + pnpm workspaces + Tauri v2 + Svelte 5 + Vite
-- SQLite setup through Rust commands with initial schema (sessions, tasks, calendar events, pomodoro configs)
+- SQLite setup through Rust commands with initial schema (calendar events, pomodoro configs, pomodoro runs, tasks)
 - Calendar with session blocks: day/week/month views, drag-and-drop event creation and resizing, session blocks carrying task references and Pomodoro counts
 - Basic Pomodoro timer: configurable focus/break durations, cycle counting per session block, timer state in Svelte runes, auto-start when session block activates
 - Basic personal Kanban: four default columns (backlog, to do, in progress, done), task cards with priority tiers (easy/medium/hard/epic), estimated Pomodoro count, drag-and-drop reordering (svelte-dnd-action), task-to-session-block linking

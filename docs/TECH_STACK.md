@@ -218,7 +218,7 @@ Everything with fields, relationships, and query requirements lives in SQLite. T
 - **Calendar events** with start/end times, recurrence rules, pomodoro config, music playlist, color, project ID, workspace association, attendees, alarms, and overrides.
 - **Kanban tasks** with status, priority, column position, estimated/actual pomodoro counts, linked calendar events, and project ID.
 - **Workspace configurations** defining which browser tabs to open, which terminal to activate, which apps to launch/close, which blocker ruleset to apply, and which project context to load.
-- **Pomodoro sessions and segments** with timestamps, phase, duration, pause log, idle events, and XP computation.
+- **Pomodoro configs, runs, segments, pauses, and run events** with timestamps, phase history, normalized pause intervals, idle and suspend detection, and future XP computation.
 - **Project definitions** linking all of the above: a project references its kanban board, its calendar events, its workspace config, and its notes directory.
 
 Why SQLite for structured data:
@@ -648,7 +648,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Collaboration cursors     | `@tiptap/extension-collaboration-cursor`             | Live presence in shared workspaces                                                 |
 | Sync server               | Hocuspocus                                           | Yjs server with persistence, presence, and auth hooks                              |
 | Encryption                | libsodium / `@noble/ciphers`                         | E2E encryption, server sees only ciphertext                                        |
-| Local DB                  | SQLite through Rust `sqlx` commands                  | Metadata, search, tags, pomodoro sessions, requirement diffs    |
+| Local DB                  | SQLite through Rust `sqlx` commands                  | Metadata, search, tags, Pomodoro runs and segments, requirement diffs    |
 | Media engine (video)      | Platform WebView media element                       | Local video through Tauri's platform WebView stack                                 |
 | Media engine (audio-only) | Rodio + Symphonia target                             | Native audio playback and decoding path for low-RAM local music                    |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |

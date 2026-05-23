@@ -66,7 +66,23 @@ pub async fn connect_sqlite<R: Runtime>(
         .execute(&pool)
         .await
         .map_err(|e| format!("pragma foreign_keys: {e}"))?;
+    sqlx::raw_sql("PRAGMA journal_mode=WAL")
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("pragma journal_mode: {e}"))?;
+    sqlx::raw_sql("PRAGMA busy_timeout=5000")
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("pragma busy_timeout: {e}"))?;
+    sqlx::raw_sql("PRAGMA synchronous=NORMAL")
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("pragma synchronous: {e}"))?;
     db::run_migrations(&pool).await?;
+    sqlx::raw_sql("PRAGMA optimize")
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("pragma optimize: {e}"))?;
 
     let mut pools = state
         .pools

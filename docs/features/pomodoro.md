@@ -102,7 +102,7 @@ The system shows two notifications related to the timer, in addition to whatever
 
 **Pre-break notification.** When 60 seconds remain in the current focus period, the system shows a desktop notification reminding the user that a break is coming. The threshold is named `NOTIFICATION_THRESHOLD` (60 seconds) in the state machine. The point of the heads-up is to let the user reach a stopping point in their work rather than being yanked out of context the moment focus ends.
 
-The focus controls can offer `Extend focus 3 minutes` once per focus period when the current event window still has room to extend the visible timer. The action is available from the title bar ring, from the tray ring, and from the first pre-break notification. If the user uses it from any surface, the timer extends the current focus opportunity, rearms the 60-second pre-break notification, and marks the extension as used for that focus period. Later controls and notifications in the same focus period do not offer another extension, so the user still gets a final warning without accidentally chaining extra focus time.
+The focus controls can offer `Extend focus 3 minutes` once per focus period when the current event window still has room to extend the visible timer. The action is available from the title bar ring, from the tray ring, and from the first pre-break notification. If the user uses it from any surface, the timer extends the current focus opportunity, updates the active focus segment's planned end, records an `extend_focus` run event, rearms the 60-second pre-break notification, and marks the extension as used for that focus period. Later controls and notifications in the same focus period do not offer another extension, so the user still gets a final warning without accidentally chaining extra focus time.
 
 **Break-end behavior.** When a break ends, the break screen handles acknowledgement (see `features/pomodoro-break-screen.md`). No separate notification is shown.
 
@@ -110,14 +110,14 @@ Calendar event notifications (configured per event, in minutes before start) are
 
 ## Linkage to calendar
 
-The calendar is the source of truth for when sessions run. The pomodoro system reads the event's window to decide when to start, when to transition, and when to end. The pomodoro system writes nothing back to the calendar event itself; it writes to its own tables (runs, segments, pauses, all keyed on the event's ID).
+The calendar is the source of truth for when sessions run. The pomodoro system reads the event's window to decide when to start, when to transition, and when to end. The pomodoro system writes nothing back to the calendar event itself; it writes to its own normalized tables: configs, runs, segments, pauses, and run events.
 
 This means:
 
 - Events without a pomodoro config simply do not participate in the timer. They show on the calendar like any other event.
-- Events with a pomodoro config are protected from deletion once any tracking data exists (invariant 7, see `data/invariants.md`). The protection comes from the calendar enforcement layer, not from the pomodoro system.
+- Deleting an event with an active pomodoro run must close the run first. Historical runs and segments remain in the pomodoro tables.
 - Editing the event's time changes when the session ends (see `features/calendar.md` → "Active session protection").
-- Archiving an event preserves the runs and segments by SET NULL on `event_id` and the snapshot fields (`original_event_id`, `event_title_snapshot`). Analytics joins continue to work.
+- Deleting or archiving an event preserves the runs and segments by SET NULL on `event_id` and the snapshot fields (`original_event_id`, `event_title_snapshot`). Analytics joins continue to work.
 
 The dependency runs one way: pomodoro depends on calendar, not the other way around. Removing the pomodoro feature would not break the calendar; removing the calendar would leave pomodoro with nothing to drive it.
 

@@ -1,6 +1,6 @@
 # Pomodoro segments and plan derivation
 
-A pomodoro session writes data to three tables: `pomodoro_runs`, `pomodoro_segments`, and `pomodoro_pauses` (see `data/schema.md`). The runs row is the session header; the segments are the actual phases that ran; the pauses are interruptions within segments. The user-facing pomodoro mechanics in `features/pomodoro.md` are implemented on top of this structure.
+A pomodoro session writes data to four history tables: `pomodoro_runs`, `pomodoro_segments`, `pomodoro_pauses`, and `pomodoro_run_events` (see `data/schema.md`). The run row is the session header, segments are the actual phases that ran, pauses are interruptions within segments, and run events are the audit trail for lifecycle decisions such as skip break, focus extension, reconfigure, transition, stop, complete, and crash recovery. The user-facing pomodoro mechanics in `features/pomodoro.md` are implemented on top of this structure.
 
 A core decision in this design: the **plan** for a session (the schedule of focus and break phases) is **never stored**. It is derived on demand from the run's config snapshot and inherited state. Segments record what actually happened. Comparing actuals to the derived plan gives plan-vs-actual analysis without ever needing a plan table.
 
@@ -40,7 +40,7 @@ A segment row is only created when its phase begins. The first focus segment is 
 
 This rule has three consequences:
 
-1. **Skipped breaks have no row.** If the user sets `skipNextBreak`, no break segment is created. The next focus segment starts immediately. The skip is detectable in analytics as the absence of a break segment between two consecutive focus segments on the same run, with the second focus's `actual_start` equal to the first focus's `actual_end`.
+1. **Skipped breaks have no break segment row.** If the user sets `skipNextBreak`, no break segment is created. The next focus segment starts immediately. The skip is also logged as `pomodoro_run_events.event_type = skip_break`, so analytics can distinguish an intentional skip from a missing break row.
 2. **Future segments do not exist.** At any moment in an active session, only the current segment and previously completed segments exist as rows. The future is computed on the fly for rendering (see `features/pomodoro-progress-displays.md`) and by the state machine for transitions.
 3. **Crash recovery is simple.** A crash leaves the active segment with `status = active` and `actual_end = NULL`. Recovery sets `status = interrupted` and `actual_end = run.last_heartbeat`. No future segments need cleanup because none exist.
 
@@ -117,6 +117,31 @@ Storing pauses as a JSON array on the segment row would cause three problems:
 3. **Writes are not atomic.** Updating a JSON pause means reading the full blob, deserializing, appending, re-serializing, and writing back. A crash mid-sequence can produce corrupted JSON. A single row INSERT is atomic.
 
 The hazard catalog (see `data/hazards.md`, hazard 8) covers pause edge cases that depend on this structural choice.
+
+## Run events
+
+`pomodoro_run_events` records the decisions that matter even when the final row state is already correct. It is not a replacement for runs, segments, or pauses. It is an append-only trail for audit and analytics.
+
+Events written by the timer include:
+
+| Event type | When written |
+|------------|--------------|
+| `start` | A run is created. |
+| `phase_start` | A segment starts. |
+| `phase_complete` | An active segment becomes completed. |
+| `pause_start` | A manual, idle, or suspend pause begins. |
+| `pause_end` | An open pause is closed. |
+| `idle_detected` | An idle pause is created. |
+| `suspend_detected` | A suspend pause is created. |
+| `skip_break` | The user skips the current or next break. |
+| `extend_focus` | The user extends the current focus opportunity. |
+| `reconfigure` | A run closes because the config changed. |
+| `block_transition` | A run closes because control moved to another event. |
+| `stop` | A run closes because the user stopped it. |
+| `complete` | A run closes because the event window ended. |
+| `crash_recovery` | Recovery closes a run left open by a crash. |
+
+Focus extension updates the active focus segment's `planned_end` and writes an `extend_focus` event with the extension duration in seconds. This preserves both the visible plan change and the behavioral decision that caused it.
 
 ## Worked examples
 

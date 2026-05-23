@@ -149,7 +149,6 @@ async function seedPomodoroHistory(payload: BenchmarkPomodoroHistoryPayload): Pr
   if (
     payload.configs.length === 0
     && payload.segments.length === 0
-    && payload.sessions.length === 0
   ) {
     return;
   }

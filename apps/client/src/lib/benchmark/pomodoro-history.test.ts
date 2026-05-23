@@ -59,24 +59,5 @@ describe("benchmark Pomodoro history seed", () => {
         plannedEnd: "2026-04-30T00:00:00Z",
       },
     ]);
-    expect(payload.sessions.map((session) => ({
-      eventId: session.eventId,
-      startTime: session.startTime,
-      endTime: session.endTime,
-      focusScore: session.focusScore,
-    }))).toEqual([
-      {
-        eventId: "past",
-        startTime: "2026-04-29T23:00:00Z",
-        endTime: "2026-04-29T23:40:00Z",
-        focusScore: 1,
-      },
-      {
-        eventId: "past",
-        startTime: "2026-04-29T23:45:00Z",
-        endTime: "2026-04-30T00:00:00Z",
-        focusScore: 1,
-      },
-    ]);
   });
 });

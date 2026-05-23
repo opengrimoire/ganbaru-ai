@@ -34,22 +34,9 @@ export interface BenchmarkPomodoroSegmentSeed {
   status: "completed";
 }
 
-export interface BenchmarkPomodoroSessionSeed {
-  id: string;
-  eventId: string;
-  startTime: string;
-  endTime: string;
-  completed: boolean;
-  appSwitchCount: number;
-  breakExtended: boolean;
-  focusScore: number;
-  createdAt: string;
-}
-
 export interface BenchmarkPomodoroHistoryPayload {
   configs: BenchmarkPomodoroConfigSeed[];
   segments: BenchmarkPomodoroSegmentSeed[];
-  sessions: BenchmarkPomodoroSessionSeed[];
 }
 
 interface WallParts {
@@ -112,7 +99,6 @@ export function buildDensePomodoroHistoryPayload(
   const payload: BenchmarkPomodoroHistoryPayload = {
     configs: [],
     segments: [],
-    sessions: [],
   };
 
   for (const event of events) {
@@ -156,20 +142,6 @@ export function buildDensePomodoroHistoryPayload(
         pauses: [],
         status: "completed",
       });
-
-      if (segment.phase === "focus") {
-        payload.sessions.push({
-          id: `${event.id}-session-${index + 1}`,
-          eventId: event.id,
-          startTime: plannedStart,
-          endTime: plannedEnd,
-          completed: true,
-          appSwitchCount: 0,
-          breakExtended: false,
-          focusScore: 1,
-          createdAt: plannedEnd,
-        });
-      }
     });
   }
 

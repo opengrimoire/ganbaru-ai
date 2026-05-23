@@ -235,6 +235,13 @@ export function computeDayTimelineBands(
     }
 
     if (isActive && activeState && activeState.segments.length > 0) {
+      const activeRunIds = new Set(activeState.segments.map((segment) => segment.runId));
+      const previousRunSegments = (persistedSegments?.get(ev.id) ?? [])
+        .filter((segment) => !activeRunIds.has(segment.runId));
+      if (previousRunSegments.length > 0) {
+        bands.push(...projectPersistedSegments(previousRunSegments, ev, dayStartMs));
+      }
+
       // Active event: project both focus fills and break bands from persisted segments
       const activeBands = projectActiveSegments(
         activeState.segments,

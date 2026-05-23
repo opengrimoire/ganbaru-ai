@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computePlannedSegments, segmentsToAccentBands, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands, computeFocusScore } from "./pomodoro-segments";
-import type { PauseInterval, PomodoroConfig } from "$lib/components/calendar/types";
+import type { PauseInterval, PersistedSegment, PomodoroConfig } from "$lib/components/calendar/types";
 import type { TimelineEvent, ActivePomodoroState } from "./pomodoro-segments";
 
 const DEFAULT_CONFIG: PomodoroConfig = {
@@ -585,6 +585,69 @@ describe("computeDayTimelineBands", () => {
     // Future planned break
     const plannedBand = breakBands.find((b) => b.status === "planned");
     expect(plannedBand).toBeDefined();
+  });
+
+  it("active event includes recovered prior runs without duplicating the current run", () => {
+    const ev = makeEvent("A", 10, 12);
+    const firstRunStartMs = DAY_MS + 10 * 3600000;
+    const secondRunStartMs = DAY_MS + 10.75 * 3600000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "current-s1", eventId: "A", eventDate: "2026-03-21", runId: "current-run",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(secondRunStartMs).toISOString(),
+          plannedEnd: new Date(secondRunStartMs + 40 * 60000).toISOString(),
+          actualStart: new Date(secondRunStartMs).toISOString(),
+          actualEnd: null,
+          pauseLog: [],
+          status: "active",
+        },
+      ],
+      remainingSeconds: 30 * 60,
+      breakOvertimeSeconds: 0,
+    };
+
+    const persistedSegments = new Map<string, PersistedSegment[]>();
+    persistedSegments.set("A", [
+      {
+        id: "recovered-s1", eventId: "A", eventDate: "2026-03-21", runId: "recovered-run",
+        cycleNumber: 1, phase: "focus",
+        plannedStart: new Date(firstRunStartMs).toISOString(),
+        plannedEnd: new Date(firstRunStartMs + 40 * 60000).toISOString(),
+        actualStart: new Date(firstRunStartMs).toISOString(),
+        actualEnd: new Date(firstRunStartMs + 20 * 60000).toISOString(),
+        pauseLog: [],
+        status: "interrupted",
+      },
+      {
+        id: "current-s1", eventId: "A", eventDate: "2026-03-21", runId: "current-run",
+        cycleNumber: 1, phase: "focus",
+        plannedStart: new Date(secondRunStartMs).toISOString(),
+        plannedEnd: new Date(secondRunStartMs + 40 * 60000).toISOString(),
+        actualStart: new Date(secondRunStartMs).toISOString(),
+        actualEnd: null,
+        pauseLog: [],
+        status: "active",
+      },
+    ]);
+
+    const nowMs = secondRunStartMs + 10 * 60000;
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, nowMs, persistedSegments);
+    const focusBands = bands.filter((band) => band.phase === "focus");
+
+    expect(focusBands).toHaveLength(2);
+    expect(focusBands[0]).toMatchObject({
+      topMinute: 600,
+      heightMinutes: 20,
+      status: "interrupted",
+    });
+    expect(focusBands[1]).toMatchObject({
+      topMinute: 645,
+      heightMinutes: 10,
+      status: "active",
+    });
   });
 
   it("suppresses planned bands from non-active events overlapping the active event", () => {
