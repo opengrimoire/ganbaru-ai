@@ -312,7 +312,13 @@ export interface AccentBarBand {
   status?: SegmentStatus;
 }
 
-export type PauseInterval = [string, string | null]; // [pauseStartIso, resumeIso | null]
+export type PauseReason = "idle" | "manual" | "suspend";
+
+export interface PauseInterval {
+  startedAt: string;
+  endedAt: string | null;
+  reason: PauseReason;
+}
 
 export interface PersistedSegment {
   id: string;

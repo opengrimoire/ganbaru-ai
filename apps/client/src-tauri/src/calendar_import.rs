@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
@@ -139,6 +140,18 @@ struct CalendarImportOverride {
     transparency: Option<String>,
     visibility: Option<String>,
     extended_properties: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CalendarGeoPayload {
+    lat: f64,
+    lng: f64,
+}
+
+#[derive(Deserialize)]
+struct CalendarOrganizerPayload {
+    name: Option<String>,
+    email: String,
 }
 
 #[derive(Serialize)]
@@ -369,9 +382,8 @@ async fn replace_preservation(
         sqlx::query(
             "INSERT INTO icalendar_objects
                 (id, calendar_id, source_kind, source_name, source_fingerprint,
-                 prodid, version, method, calendar_scale, raw_jcal, diagnostics,
-                 created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 prodid, version, method, calendar_scale, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&object.id)
         .bind(target_calendar_id)
@@ -382,16 +394,56 @@ async fn replace_preservation(
         .bind(&object.version)
         .bind(&object.method)
         .bind(&object.calendar_scale)
-        .bind(&object.raw_jcal)
-        .bind(&object.diagnostics)
         .bind(now)
         .bind(now)
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("insert iCalendar object preservation: {e}"))?;
 
-        insert_preserved_components(tx, target_calendar_id, now, &object.id, &object.components)
-            .await?;
+        let diagnostics = parse_string_vec(&object.diagnostics, "preservation.object.diagnostics")?;
+        for (sort_order, message) in diagnostics.iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO icalendar_object_diagnostics
+                    (id, object_id, message, sort_order)
+                 VALUES (lower(hex(randomblob(16))), ?, ?, ?)",
+            )
+            .bind(&object.id)
+            .bind(message)
+            .bind(sort_order as i64)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert iCalendar object diagnostic: {e}"))?;
+        }
+
+        let root_component_id = format!("{}:root", object.id);
+        insert_preserved_component_row(
+            tx,
+            target_calendar_id,
+            now,
+            &object.id,
+            None,
+            0,
+            &root_component_id,
+            "vcalendar",
+            None,
+            None,
+            None,
+            None,
+            None,
+            "lossless",
+            &[],
+            &object.raw_jcal,
+        )
+        .await?;
+        insert_preserved_components(
+            tx,
+            target_calendar_id,
+            now,
+            &object.id,
+            Some(root_component_id),
+            &object.components,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -401,49 +453,257 @@ async fn insert_preserved_components(
     target_calendar_id: &str,
     now: &str,
     object_id: &str,
+    root_component_id: Option<String>,
     components: &[CalendarImportPreservedComponent],
 ) -> Result<(), String> {
     let mut stack: Vec<(Option<String>, i64, &CalendarImportPreservedComponent)> = components
         .iter()
         .enumerate()
         .rev()
-        .map(|(index, component)| (None, index as i64, component))
+        .map(|(index, component)| (root_component_id.clone(), index as i64, component))
         .collect();
 
     while let Some((parent_component_id, sort_order, component)) = stack.pop() {
-        sqlx::query(
-            "INSERT INTO icalendar_components
-                (id, object_id, parent_component_id, calendar_id, component_type,
-                 uid, recurrence_id, recurrence_id_value_type, sequence, dtstart_key,
-                 raw_jcal, projected_kind, projected_id, preservation_status,
-                 projection_warnings, sort_order, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)",
+        let warnings = parse_string_vec(
+            &component.projection_warnings,
+            "preservation.component.projection_warnings",
+        )?;
+        insert_preserved_component_row(
+            tx,
+            target_calendar_id,
+            now,
+            object_id,
+            parent_component_id.as_deref(),
+            sort_order,
+            &component.id,
+            &component.component_type,
+            component.uid.as_deref(),
+            component.recurrence_id.as_deref(),
+            component.recurrence_id_value_type.as_deref(),
+            component.sequence,
+            component.dtstart_key.as_deref(),
+            &component.preservation_status,
+            &warnings,
+            &component.raw_jcal,
         )
-        .bind(&component.id)
-        .bind(object_id)
-        .bind(&parent_component_id)
-        .bind(target_calendar_id)
-        .bind(&component.component_type)
-        .bind(&component.uid)
-        .bind(&component.recurrence_id)
-        .bind(&component.recurrence_id_value_type)
-        .bind(component.sequence)
-        .bind(&component.dtstart_key)
-        .bind(&component.raw_jcal)
-        .bind(&component.preservation_status)
-        .bind(&component.projection_warnings)
-        .bind(sort_order)
-        .bind(now)
-        .bind(now)
-        .execute(&mut **tx)
-        .await
-        .map_err(|e| format!("insert iCalendar component preservation: {e}"))?;
+        .await?;
 
         for (index, child) in component.components.iter().enumerate().rev() {
             stack.push((Some(component.id.clone()), index as i64, child));
         }
     }
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_preserved_component_row(
+    tx: &mut Transaction<'_, Sqlite>,
+    target_calendar_id: &str,
+    now: &str,
+    object_id: &str,
+    parent_component_id: Option<&str>,
+    sort_order: i64,
+    component_id: &str,
+    component_type: &str,
+    uid: Option<&str>,
+    recurrence_id: Option<&str>,
+    recurrence_id_value_type: Option<&str>,
+    sequence: Option<i64>,
+    dtstart_key: Option<&str>,
+    preservation_status: &str,
+    projection_warnings: &[String],
+    raw_jcal: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO icalendar_components
+            (id, object_id, parent_component_id, calendar_id, component_type,
+             uid, recurrence_id, recurrence_id_value_type, sequence, dtstart_key,
+             projected_kind, projected_id, preservation_status, sort_order,
+             created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)",
+    )
+    .bind(component_id)
+    .bind(object_id)
+    .bind(parent_component_id)
+    .bind(target_calendar_id)
+    .bind(component_type)
+    .bind(uid)
+    .bind(recurrence_id)
+    .bind(recurrence_id_value_type)
+    .bind(sequence)
+    .bind(dtstart_key)
+    .bind(preservation_status)
+    .bind(sort_order)
+    .bind(now)
+    .bind(now)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("insert iCalendar component preservation: {e}"))?;
+
+    for (index, message) in projection_warnings.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO icalendar_component_projection_warnings
+                (id, component_id, message, sort_order)
+             VALUES (lower(hex(randomblob(16))), ?, ?, ?)",
+        )
+        .bind(component_id)
+        .bind(message)
+        .bind(index as i64)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("insert iCalendar projection warning: {e}"))?;
+    }
+
+    store_jcal_component(tx, component_id, raw_jcal).await
+}
+
+async fn store_jcal_component(
+    tx: &mut Transaction<'_, Sqlite>,
+    component_id: &str,
+    raw_jcal: &str,
+) -> Result<(), String> {
+    let value = serde_json::from_str::<Value>(raw_jcal)
+        .map_err(|e| format!("parse preserved iCalendar component: {e}"))?;
+    let component = value
+        .as_array()
+        .ok_or_else(|| "preserved iCalendar component must be an array".to_string())?;
+    let properties = component
+        .get(1)
+        .and_then(Value::as_array)
+        .ok_or_else(|| "preserved iCalendar component properties must be an array".to_string())?;
+
+    for (property_index, property) in properties.iter().enumerate() {
+        let Some(property_array) = property.as_array() else {
+            continue;
+        };
+        if property_array.len() < 3 {
+            continue;
+        }
+        let Some(name) = property_array.first().and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(value_type) = property_array.get(2).and_then(Value::as_str) else {
+            continue;
+        };
+        let property_id = format!("{component_id}:property:{property_index}");
+        sqlx::query(
+            "INSERT INTO icalendar_component_properties
+                (id, component_id, name, value_type, sort_order)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&property_id)
+        .bind(component_id)
+        .bind(name)
+        .bind(value_type)
+        .bind(property_index as i64)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("insert iCalendar property: {e}"))?;
+
+        if let Some(params) = property_array.get(1).and_then(Value::as_object) {
+            for (param_index, (param_name, param_value)) in params.iter().enumerate() {
+                let parameter_id = format!("{property_id}:parameter:{param_index}");
+                sqlx::query(
+                    "INSERT INTO icalendar_property_parameters
+                        (id, property_id, name, sort_order)
+                     VALUES (?, ?, ?, ?)",
+                )
+                .bind(&parameter_id)
+                .bind(&property_id)
+                .bind(param_name)
+                .bind(param_index as i64)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| format!("insert iCalendar parameter: {e}"))?;
+                store_value_node(
+                    tx,
+                    None,
+                    Some(&parameter_id),
+                    None,
+                    0,
+                    param_value,
+                    &format!("{parameter_id}:value"),
+                )
+                .await?;
+            }
+        }
+
+        for (value_index, property_value) in property_array.iter().skip(3).enumerate() {
+            store_value_node(
+                tx,
+                Some(&property_id),
+                None,
+                None,
+                value_index as i64,
+                property_value,
+                &format!("{property_id}:value:{value_index}"),
+            )
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+fn store_value_node<'a>(
+    tx: &'a mut Transaction<'_, Sqlite>,
+    property_id: Option<&'a str>,
+    parameter_id: Option<&'a str>,
+    parent_node_id: Option<&'a str>,
+    sort_order: i64,
+    value: &'a Value,
+    node_id: &'a str,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
+    Box::pin(async move {
+        let (value_kind, text_value, number_value, boolean_value) = match value {
+            Value::Array(_) => ("array", None, None, None),
+            Value::String(text) => ("text", Some(text.as_str()), None, None),
+            Value::Number(number) => ("number", None, number.as_f64(), None),
+            Value::Bool(boolean) => (
+                "boolean",
+                None,
+                None,
+                Some(if *boolean { 1_i64 } else { 0_i64 }),
+            ),
+            Value::Null => ("null", None, None, None),
+            Value::Object(_) => {
+                return Err("iCalendar jCal values cannot be objects".to_string());
+            }
+        };
+        sqlx::query(
+            "INSERT INTO icalendar_value_nodes
+                (id, property_id, parameter_id, parent_node_id, sort_order,
+                 value_kind, text_value, number_value, boolean_value)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(node_id)
+        .bind(property_id)
+        .bind(parameter_id)
+        .bind(parent_node_id)
+        .bind(sort_order)
+        .bind(value_kind)
+        .bind(text_value)
+        .bind(number_value)
+        .bind(boolean_value)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("insert iCalendar value: {e}"))?;
+
+        if let Value::Array(items) = value {
+            for (index, child) in items.iter().enumerate() {
+                store_value_node(
+                    tx,
+                    property_id,
+                    parameter_id,
+                    Some(node_id),
+                    index as i64,
+                    child,
+                    &format!("{node_id}:child:{index}"),
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    })
 }
 
 fn preservation_link_id(value: &Option<String>, apply: bool) -> Option<&str> {
@@ -486,19 +746,20 @@ async fn insert_event(
     apply_preservation_links: bool,
 ) -> Result<(), String> {
     let description = sanitize_calendar_description_html(&event.description);
+    let geo = parse_geo(&event.geo)?;
     let icalendar_component_id =
         preservation_link_id(&event.icalendar_component_id, apply_preservation_links);
     sqlx::query(
         "INSERT INTO calendar_events
             (id, title, start_time, end_time, timezone, calendar_id,
-             color, description, rrule, notifications, exceptions, repeat_until,
+             color, description, rrule, repeat_until,
              all_day, location, url, transparency, status,
-             source_uid, visibility, priority, categories, geo,
-             sequence, rdate, extended_properties, organizer,
+             source_uid, visibility, priority, geo_lat, geo_lng,
+             sequence,
              meeting_enabled,
              guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
              icalendar_component_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&event.candidate_id)
     .bind(&event.title)
@@ -509,8 +770,6 @@ async fn insert_event(
     .bind(event.color)
     .bind(&description)
     .bind(&event.rrule)
-    .bind(&event.notifications)
-    .bind(&event.exceptions)
     .bind(&event.repeat_until)
     .bind(if event.all_day { 1_i64 } else { 0_i64 })
     .bind(&event.location)
@@ -520,12 +779,9 @@ async fn insert_event(
     .bind(&event.source_uid)
     .bind(&event.visibility)
     .bind(event.priority)
-    .bind(&event.categories)
-    .bind(&event.geo)
+    .bind(geo.map(|value| value.0))
+    .bind(geo.map(|value| value.1))
     .bind(event.sequence)
-    .bind(&event.rdate)
-    .bind(&event.extended_properties)
-    .bind(&event.organizer)
     .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_invite_others {
@@ -544,6 +800,7 @@ async fn insert_event(
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("insert imported event: {e}"))?;
+    replace_import_event_metadata(tx, &event.candidate_id, event).await?;
     link_preserved_component(
         tx,
         icalendar_component_id,
@@ -564,18 +821,19 @@ async fn update_event(
     apply_preservation_links: bool,
 ) -> Result<(), String> {
     let description = sanitize_calendar_description_html(&event.description);
+    let geo = parse_geo(&event.geo)?;
     let icalendar_component_id =
         preservation_link_id(&event.icalendar_component_id, apply_preservation_links);
     let result = sqlx::query(
         "UPDATE calendar_events
             SET title = ?, start_time = ?, end_time = ?, timezone = ?,
                 color = ?, description = ?,
-                rrule = ?, notifications = ?, exceptions = ?, repeat_until = ?,
+                rrule = ?, repeat_until = ?,
                 all_day = ?, location = ?, url = ?,
                 transparency = ?, status = ?,
                 visibility = ?, priority = ?,
-                categories = ?, geo = ?,
-                sequence = ?, rdate = ?, extended_properties = ?, organizer = ?,
+                geo_lat = ?, geo_lng = ?,
+                sequence = ?,
                 meeting_enabled = ?,
                 guest_can_modify = ?, guest_can_invite_others = ?,
                 guest_can_see_other_guests = ?,
@@ -590,8 +848,6 @@ async fn update_event(
     .bind(event.color)
     .bind(&description)
     .bind(&event.rrule)
-    .bind(&event.notifications)
-    .bind(&event.exceptions)
     .bind(&event.repeat_until)
     .bind(if event.all_day { 1_i64 } else { 0_i64 })
     .bind(&event.location)
@@ -600,12 +856,9 @@ async fn update_event(
     .bind(&event.status)
     .bind(&event.visibility)
     .bind(event.priority)
-    .bind(&event.categories)
-    .bind(&event.geo)
+    .bind(geo.map(|value| value.0))
+    .bind(geo.map(|value| value.1))
     .bind(event.sequence)
-    .bind(&event.rdate)
-    .bind(&event.extended_properties)
-    .bind(&event.organizer)
     .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
     .bind(if event.guest_can_invite_others {
@@ -633,8 +886,57 @@ async fn update_event(
     if result.rows_affected() == 0 {
         return Err(format!("import target event '{event_id}' not found"));
     }
+    replace_import_event_metadata(tx, event_id, event).await?;
     link_preserved_component(tx, icalendar_component_id, "event", event_id, now).await?;
     Ok(())
+}
+
+async fn replace_import_event_metadata(
+    tx: &mut Transaction<'_, Sqlite>,
+    event_id: &str,
+    event: &CalendarImportEvent,
+) -> Result<(), String> {
+    replace_i64_list(
+        tx,
+        event_id,
+        "calendar_event_notifications",
+        "offset_minutes",
+        parse_i64_list(&event.notifications, "notifications")?,
+    )
+    .await?;
+    replace_string_list(
+        tx,
+        event_id,
+        "calendar_event_exdates",
+        "occurrence_date",
+        parse_string_list(&event.exceptions, "exceptions")?,
+    )
+    .await?;
+    replace_string_list(
+        tx,
+        event_id,
+        "calendar_event_categories",
+        "category",
+        parse_string_list(&event.categories, "categories")?,
+    )
+    .await?;
+    replace_string_list(
+        tx,
+        event_id,
+        "calendar_event_rdates",
+        "occurrence_start",
+        parse_string_list(&event.rdate, "rdate")?,
+    )
+    .await?;
+    replace_extended_properties(
+        tx,
+        event_id,
+        "calendar_event_extended_properties",
+        "event_id",
+        parse_string_map(&event.extended_properties, "extended_properties")?,
+    )
+    .await?;
+    replace_organizer(tx, event_id, parse_organizer(&event.organizer)?).await
 }
 
 async fn replace_child_rows(
@@ -726,8 +1028,8 @@ async fn insert_child_rows(
             "INSERT INTO calendar_event_overrides
                 (id, parent_event_id, recurrence_id, recurrence_range, title, start_time, end_time,
                  description, location, url, color, status, transparency, visibility,
-                 extended_properties, icalendar_component_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 icalendar_component_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&override_row.id)
         .bind(event_id)
@@ -743,11 +1045,21 @@ async fn insert_child_rows(
         .bind(&override_row.status)
         .bind(&override_row.transparency)
         .bind(&override_row.visibility)
-        .bind(&override_row.extended_properties)
         .bind(icalendar_component_id)
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("insert imported override: {e}"))?;
+        replace_extended_properties(
+            tx,
+            &override_row.id,
+            "calendar_event_override_extended_properties",
+            "override_id",
+            parse_string_map(
+                &override_row.extended_properties,
+                "override.extended_properties",
+            )?,
+        )
+        .await?;
         link_preserved_component(
             tx,
             icalendar_component_id,
@@ -799,6 +1111,171 @@ fn validate_preserved_object(object: &CalendarImportPreservedObject) -> Result<(
     validate_json_string(&object.diagnostics, "preservation.object.diagnostics")?;
     for component in &object.components {
         validate_preserved_component(component)?;
+    }
+    Ok(())
+}
+
+fn parse_string_vec(value: &str, field: &str) -> Result<Vec<String>, String> {
+    serde_json::from_str::<Vec<String>>(value)
+        .map_err(|e| format!("{field} is not a valid string list: {e}"))
+}
+
+fn parse_i64_list(value: &Option<String>, field: &str) -> Result<Vec<i64>, String> {
+    match value {
+        Some(json) => serde_json::from_str::<Vec<i64>>(json)
+            .map_err(|e| format!("{field} is not a valid integer list: {e}")),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn parse_string_list(value: &Option<String>, field: &str) -> Result<Vec<String>, String> {
+    match value {
+        Some(json) => serde_json::from_str::<Vec<String>>(json)
+            .map_err(|e| format!("{field} is not a valid string list: {e}")),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn parse_string_map(value: &Option<String>, field: &str) -> Result<Vec<(String, String)>, String> {
+    let Some(json) = value else {
+        return Ok(Vec::new());
+    };
+    let map = serde_json::from_str::<std::collections::BTreeMap<String, String>>(json)
+        .map_err(|e| format!("{field} is not a valid string map: {e}"))?;
+    Ok(map.into_iter().collect())
+}
+
+fn parse_geo(value: &Option<String>) -> Result<Option<(f64, f64)>, String> {
+    let Some(json) = value else {
+        return Ok(None);
+    };
+    let geo = serde_json::from_str::<CalendarGeoPayload>(json)
+        .map_err(|e| format!("geo is not valid coordinates: {e}"))?;
+    if !geo.lat.is_finite() || !geo.lng.is_finite() {
+        return Err("geo coordinates must be finite".to_string());
+    }
+    Ok(Some((geo.lat, geo.lng)))
+}
+
+fn parse_organizer(value: &Option<String>) -> Result<Option<CalendarOrganizerPayload>, String> {
+    let Some(json) = value else {
+        return Ok(None);
+    };
+    let organizer = serde_json::from_str::<CalendarOrganizerPayload>(json)
+        .map_err(|e| format!("organizer is not valid: {e}"))?;
+    require_non_empty(&organizer.email, "organizer.email")?;
+    Ok(Some(organizer))
+}
+
+async fn replace_i64_list(
+    tx: &mut Transaction<'_, Sqlite>,
+    event_id: &str,
+    table: &'static str,
+    column: &'static str,
+    values: Vec<i64>,
+) -> Result<(), String> {
+    let delete = format!("DELETE FROM {table} WHERE event_id = ?");
+    sqlx::query(&delete)
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar {table}: {e}"))?;
+    let insert = format!(
+        "INSERT INTO {table} (id, event_id, {column}, sort_order)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?)"
+    );
+    for (sort_order, value) in values.into_iter().enumerate() {
+        sqlx::query(&insert)
+            .bind(event_id)
+            .bind(value)
+            .bind(sort_order as i64)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert calendar {table}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn replace_string_list(
+    tx: &mut Transaction<'_, Sqlite>,
+    event_id: &str,
+    table: &'static str,
+    column: &'static str,
+    values: Vec<String>,
+) -> Result<(), String> {
+    let delete = format!("DELETE FROM {table} WHERE event_id = ?");
+    sqlx::query(&delete)
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar {table}: {e}"))?;
+    let insert = format!(
+        "INSERT INTO {table} (id, event_id, {column}, sort_order)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?)"
+    );
+    for (sort_order, value) in values.into_iter().enumerate() {
+        sqlx::query(&insert)
+            .bind(event_id)
+            .bind(value)
+            .bind(sort_order as i64)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert calendar {table}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn replace_extended_properties(
+    tx: &mut Transaction<'_, Sqlite>,
+    owner_id: &str,
+    table: &'static str,
+    owner_column: &'static str,
+    values: Vec<(String, String)>,
+) -> Result<(), String> {
+    let delete = format!("DELETE FROM {table} WHERE {owner_column} = ?");
+    sqlx::query(&delete)
+        .bind(owner_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar {table}: {e}"))?;
+    let insert = format!(
+        "INSERT INTO {table} (id, {owner_column}, property_key, property_value, sort_order)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?)"
+    );
+    for (sort_order, (key, value)) in values.into_iter().enumerate() {
+        sqlx::query(&insert)
+            .bind(owner_id)
+            .bind(key)
+            .bind(value)
+            .bind(sort_order as i64)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert calendar {table}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn replace_organizer(
+    tx: &mut Transaction<'_, Sqlite>,
+    event_id: &str,
+    organizer: Option<CalendarOrganizerPayload>,
+) -> Result<(), String> {
+    sqlx::query("DELETE FROM calendar_event_organizers WHERE event_id = ?")
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar organizer: {e}"))?;
+    if let Some(organizer) = organizer {
+        sqlx::query(
+            "INSERT INTO calendar_event_organizers (event_id, name, email)
+             VALUES (?, ?, ?)",
+        )
+        .bind(event_id)
+        .bind(organizer.name)
+        .bind(organizer.email)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("insert calendar organizer: {e}"))?;
     }
     Ok(())
 }
@@ -1121,8 +1598,8 @@ mod tests {
             .unwrap();
 
             assert_eq!(object_count, 1);
-            assert_eq!(component_count, 2);
-            assert_eq!(nested_parent_count, 1);
+            assert_eq!(component_count, 3);
+            assert_eq!(nested_parent_count, 2);
         });
     }
 

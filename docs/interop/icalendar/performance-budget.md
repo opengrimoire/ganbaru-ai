@@ -6,7 +6,7 @@ Full iCalendar compatibility must not make normal calendar use heavy. Compatibil
 
 Startup must not:
 
-- parse preserved iCalendar JSON for every imported component
+- reconstruct preserved iCalendar component trees for every imported component
 - read raw `.ics` text for calendars
 - load unsupported components
 - expand all recurrence instances for all time
@@ -28,7 +28,7 @@ Visible-window load must:
 - load only slim override rows needed for expansion
 - keep recurrence expansion bounded to the requested window
 
-Visible-window load must not join preservation JSON tables unless a debug mode explicitly requests it.
+Visible-window load must not join preservation component tables unless a debug mode explicitly requests it.
 
 ## Import budget
 
@@ -49,7 +49,7 @@ Current implemented limits:
 - zip imports reject unsafe paths, encrypted entries, wrong extensions, oversized entries, oversized aggregate input, and excessive entry count.
 - parser safety checks reject unfolded content lines above 2 MiB, more than 50,000 components, more than 500,000 properties, component nesting deeper than 32, and inline binary `ATTACH` values above 1 MiB.
 - visible-window recurrence expansion is bounded by the requested window plus a 10,000 cursor-iteration guard per template.
-- full-event reads load preserved component JSON lazily; visible-window reads do not join preservation tables.
+- full-event reads reconstruct preserved components lazily; visible-window reads do not join preservation tables.
 
 Large imports should stream or batch where practical. The UI should report progress for slow imports once this becomes user-visible.
 
@@ -87,7 +87,7 @@ Track:
 - bytes per projected event
 - total bytes per imported calendar
 - attachment size contribution
-- diagnostic JSON size
+- diagnostic row size
 
 Future maintenance tools can show storage cost per imported calendar.
 
@@ -102,7 +102,7 @@ Add benchmarks for:
 - import of a mixed standards fixture
 - export of a large calendar
 - recurrence expansion for complex `BY*` rules
-- preservation JSON load for one full event
+- preservation component reconstruction for one full event
 
 ## Success targets
 

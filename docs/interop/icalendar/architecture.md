@@ -14,7 +14,7 @@ Full iCalendar compatibility should not turn every standard field into always-lo
 
 ### Lossless preservation layer
 
-The preservation layer stores full iCalendar data in durable structured form. jCal-like JSON is the preferred starting point because it maps directly to iCalendar components, properties, parameters, and values.
+The preservation layer stores full iCalendar data in durable relational form. The parser may use jCal in memory because it maps directly to iCalendar components, properties, parameters, and values, but SQLite stores those parts as rows.
 
 Responsibilities:
 
@@ -92,7 +92,7 @@ Always loaded for calendar rendering:
 
 Loaded on demand:
 
-- preserved component JSON
+- preserved component rows
 - full attendee and organizer parameter sets
 - full alarms
 - unsupported component types

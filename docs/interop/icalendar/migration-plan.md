@@ -116,7 +116,7 @@ Migration tests should cover:
 - empty database
 - database with local events only
 - database with imported calendars and no preserved data
-- malformed old JSON fields
+- malformed legacy payload fields
 - duplicate UIDs
 - recurring events with overrides
 - all-day events imported before exclusive `DTEND` fixes

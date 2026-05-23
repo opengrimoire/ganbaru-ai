@@ -159,6 +159,18 @@ struct CalendarGuestPermissions {
 }
 
 #[derive(Deserialize)]
+struct CalendarGeoPayload {
+    lat: f64,
+    lng: f64,
+}
+
+#[derive(Deserialize)]
+struct CalendarOrganizerPayload {
+    name: Option<String>,
+    email: String,
+}
+
+#[derive(Deserialize)]
 #[serde(tag = "action", content = "value")]
 enum CalendarPomodoroConfigPatch {
     #[serde(rename = "set")]
@@ -223,20 +235,21 @@ pub async fn calendar_add_event<R: Runtime>(
 ) -> Result<(), String> {
     validate_event_create(&event)?;
     let description = sanitize_calendar_description_html(&event.description);
+    let geo = parse_geo(&event.geo)?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
     sqlx::query(
         "INSERT INTO calendar_events
            (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, rrule, notifications, repeat_until,
+            color, description, rrule, repeat_until,
             all_day, location, url, transparency, status,
-            source_uid, visibility, priority, categories, geo,
-            sequence, rdate, extended_properties, organizer,
+            source_uid, visibility, priority, geo_lat, geo_lng,
+            sequence,
             meeting_enabled, local_rsvp_status,
             guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&event.id)
     .bind(&event.title)
@@ -247,7 +260,6 @@ pub async fn calendar_add_event<R: Runtime>(
     .bind(event.color)
     .bind(&description)
     .bind(&event.rrule)
-    .bind(&event.notifications)
     .bind(&event.repeat_until)
     .bind(if event.all_day { 1_i64 } else { 0_i64 })
     .bind(&event.location)
@@ -257,12 +269,9 @@ pub async fn calendar_add_event<R: Runtime>(
     .bind(&event.source_uid)
     .bind(&event.visibility)
     .bind(event.priority)
-    .bind(&event.categories)
-    .bind(&event.geo)
+    .bind(geo.map(|value| value.0))
+    .bind(geo.map(|value| value.1))
     .bind(event.sequence)
-    .bind(&event.rdate)
-    .bind(&event.extended_properties)
-    .bind(&event.organizer)
     .bind(if event.meeting_enabled { 1_i64 } else { 0_i64 })
     .bind(&event.local_rsvp_status)
     .bind(if event.guest_can_modify { 1_i64 } else { 0_i64 })
@@ -281,6 +290,40 @@ pub async fn calendar_add_event<R: Runtime>(
     .execute(&mut *tx)
     .await
     .map_err(|e| format!("insert calendar event: {e}"))?;
+
+    replace_i64_list(
+        &mut tx,
+        &event.id,
+        "calendar_event_notifications",
+        "offset_minutes",
+        parse_i64_list(&event.notifications, "notifications")?,
+    )
+    .await?;
+    replace_string_list(
+        &mut tx,
+        &event.id,
+        "calendar_event_rdates",
+        "occurrence_start",
+        parse_string_list(&event.rdate, "rdate")?,
+    )
+    .await?;
+    replace_string_list(
+        &mut tx,
+        &event.id,
+        "calendar_event_categories",
+        "category",
+        parse_string_list(&event.categories, "categories")?,
+    )
+    .await?;
+    replace_extended_properties(
+        &mut tx,
+        &event.id,
+        "calendar_event_extended_properties",
+        "event_id",
+        parse_string_map(&event.extended_properties, "extended_properties")?,
+    )
+    .await?;
+    replace_organizer(&mut tx, &event.id, parse_organizer(&event.organizer)?).await?;
 
     if let Some(config) = &event.pomodoro_config {
         sqlx::query(
@@ -468,14 +511,20 @@ pub async fn calendar_detach_instance<R: Runtime>(
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
 
-    let result =
-        sqlx::query("UPDATE calendar_events SET exceptions = ?, updated_at = ? WHERE id = ?")
-            .bind(&input.exceptions)
-            .bind(&input.now)
-            .bind(&input.parent_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| format!("update detached parent exceptions: {e}"))?;
+    replace_string_list(
+        &mut tx,
+        &input.parent_id,
+        "calendar_event_exdates",
+        "occurrence_date",
+        parse_string_list(&Some(input.exceptions.clone()), "exceptions")?,
+    )
+    .await?;
+    let result = sqlx::query("UPDATE calendar_events SET updated_at = ? WHERE id = ?")
+        .bind(&input.now)
+        .bind(&input.parent_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("touch detached parent: {e}"))?;
     if result.rows_affected() == 0 {
         return Err(format!("calendar event '{}' not found", input.parent_id));
     }
@@ -483,21 +532,21 @@ pub async fn calendar_detach_instance<R: Runtime>(
     sqlx::query(
         "INSERT INTO calendar_events (
            id, title, start_time, end_time, timezone, calendar_id,
-           color, notifications, rrule, repeat_until, exceptions, rdate,
+           color, rrule, repeat_until,
            all_day, location, transparency, status,
            source_uid,
-           description, url, visibility, priority, categories, geo,
-           sequence, extended_properties, organizer,
+           description, url, visibility, priority, geo_lat, geo_lng,
+           sequence,
            meeting_enabled, local_rsvp_status,
            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
            created_at, updated_at
          )
          SELECT ?, ?, ?, ?, ?, ?,
-                ?, ?, NULL, NULL, NULL, NULL,
+                ?, NULL, NULL,
                 ?, ?, ?, ?,
                 NULL,
-                description, url, visibility, priority, categories, geo,
-                sequence, extended_properties, organizer,
+                description, url, visibility, priority, geo_lat, geo_lng,
+                sequence,
                 meeting_enabled, local_rsvp_status,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
                 ?, ?
@@ -510,7 +559,6 @@ pub async fn calendar_detach_instance<R: Runtime>(
     .bind(&input.timezone)
     .bind(&input.calendar_id)
     .bind(input.color)
-    .bind(&input.notifications)
     .bind(if input.all_day { 1_i64 } else { 0_i64 })
     .bind(&input.location)
     .bind(&input.transparency)
@@ -522,6 +570,15 @@ pub async fn calendar_detach_instance<R: Runtime>(
     .await
     .map_err(|e| format!("insert detached event: {e}"))?;
     sanitize_stored_event_description(&mut tx, &input.new_id).await?;
+    replace_i64_list(
+        &mut tx,
+        &input.new_id,
+        "calendar_event_notifications",
+        "offset_minutes",
+        parse_i64_list(&input.notifications, "notifications")?,
+    )
+    .await?;
+    copy_calendar_metadata(&mut tx, &input.parent_id, &input.new_id).await?;
 
     copy_pomodoro_config(&mut tx, &input.parent_id, &input.new_id).await?;
     copy_attendees(&mut tx, &input.parent_id, &input.new_id).await?;
@@ -571,23 +628,23 @@ pub async fn calendar_split_series<R: Runtime>(
     sqlx::query(
         "INSERT INTO calendar_events (
            id, title, start_time, end_time, timezone, calendar_id,
-           color, notifications, rrule, repeat_until, exceptions, rdate,
+           color, rrule, repeat_until,
            all_day, location, transparency, status,
            source_uid,
-           description, url, visibility, priority, categories, geo,
-           sequence, extended_properties, organizer,
+           description, url, visibility, priority, geo_lat, geo_lng,
+           sequence,
            meeting_enabled, local_rsvp_status,
            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
            created_at, updated_at
          )
          SELECT ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, NULL, NULL, NULL,
+                ?, ?, NULL,
                 ?, ?, ?, ?,
                 NULL,
                 COALESCE(?, description),
                 COALESCE(?, url),
-                visibility, priority, categories, geo,
-                sequence, extended_properties, organizer,
+                visibility, priority, geo_lat, geo_lng,
+                sequence,
                 ?,
                 ?,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
@@ -601,7 +658,6 @@ pub async fn calendar_split_series<R: Runtime>(
     .bind(&input.timezone)
     .bind(&input.calendar_id)
     .bind(input.color)
-    .bind(&input.notifications)
     .bind(&input.rrule)
     .bind(if input.all_day { 1_i64 } else { 0_i64 })
     .bind(&input.location)
@@ -618,6 +674,15 @@ pub async fn calendar_split_series<R: Runtime>(
     .await
     .map_err(|e| format!("insert split series event: {e}"))?;
     sanitize_stored_event_description(&mut tx, &input.new_id).await?;
+    replace_i64_list(
+        &mut tx,
+        &input.new_id,
+        "calendar_event_notifications",
+        "offset_minutes",
+        parse_i64_list(&input.notifications, "notifications")?,
+    )
+    .await?;
+    copy_calendar_metadata(&mut tx, &input.parent_id, &input.new_id).await?;
 
     if let Some(config) = &input.pomodoro_config {
         insert_pomodoro_config(&mut tx, &input.new_id, config).await?;
@@ -644,7 +709,7 @@ pub async fn calendar_has_progress_segments<R: Runtime>(
         "SELECT COUNT(*)
          FROM pomodoro_segments
          WHERE event_id IN (?, ? || '::' || ?) AND event_date = ?
-           AND status IN ('completed', 'interrupted', 'skipped')
+           AND status IN ('completed', 'interrupted')
            AND actual_start IS NOT NULL",
     )
     .bind(&template_id)
@@ -676,7 +741,7 @@ pub async fn calendar_progress_dates_before<R: Runtime>(
          FROM pomodoro_segments
          WHERE (event_id = ? OR event_id = ? || '::' || event_date)
            AND event_date < ?
-           AND status IN ('completed', 'interrupted', 'skipped')
+           AND status IN ('completed', 'interrupted')
            AND actual_start IS NOT NULL
          ORDER BY event_date ASC",
     )
@@ -749,6 +814,46 @@ async fn copy_attendees(
     Ok(())
 }
 
+async fn copy_calendar_metadata(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_event_id: &str,
+    target_event_id: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO calendar_event_categories (id, event_id, category, sort_order)
+         SELECT lower(hex(randomblob(16))), ?, category, sort_order
+         FROM calendar_event_categories WHERE event_id = ?",
+    )
+    .bind(target_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("copy calendar categories: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_extended_properties
+            (id, event_id, property_key, property_value, sort_order)
+         SELECT lower(hex(randomblob(16))), ?, property_key, property_value, sort_order
+         FROM calendar_event_extended_properties WHERE event_id = ?",
+    )
+    .bind(target_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("copy calendar extended properties: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_organizers (event_id, name, email)
+         SELECT ?, name, email FROM calendar_event_organizers WHERE event_id = ?",
+    )
+    .bind(target_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("copy calendar organizer: {e}"))?;
+    Ok(())
+}
+
 async fn apply_update_field(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
@@ -778,10 +883,24 @@ async fn apply_update_field(
             update_optional_text(tx, id, "repeat_until", value.as_deref()).await
         }
         CalendarEventUpdateField::Notifications(value) => {
-            update_optional_text(tx, id, "notifications", value.as_deref()).await
+            replace_i64_list(
+                tx,
+                id,
+                "calendar_event_notifications",
+                "offset_minutes",
+                parse_i64_list(value, "notifications")?,
+            )
+            .await
         }
         CalendarEventUpdateField::Exceptions(value) => {
-            update_optional_text(tx, id, "exceptions", value.as_deref()).await
+            replace_string_list(
+                tx,
+                id,
+                "calendar_event_exdates",
+                "occurrence_date",
+                parse_string_list(value, "exceptions")?,
+            )
+            .await
         }
         CalendarEventUpdateField::AllDay(value) => {
             update_i64(tx, id, "all_day", if *value { 1 } else { 0 }).await
@@ -802,20 +921,49 @@ async fn apply_update_field(
             update_optional_i64(tx, id, "priority", *value).await
         }
         CalendarEventUpdateField::Categories(value) => {
-            update_optional_text(tx, id, "categories", value.as_deref()).await
+            replace_string_list(
+                tx,
+                id,
+                "calendar_event_categories",
+                "category",
+                parse_string_list(value, "categories")?,
+            )
+            .await
         }
         CalendarEventUpdateField::Geo(value) => {
-            update_optional_text(tx, id, "geo", value.as_deref()).await
+            let geo = parse_geo(value)?;
+            sqlx::query("UPDATE calendar_events SET geo_lat = ?, geo_lng = ? WHERE id = ?")
+                .bind(geo.map(|value| value.0))
+                .bind(geo.map(|value| value.1))
+                .bind(id)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| format!("update calendar geo: {e}"))?;
+            Ok(())
         }
         CalendarEventUpdateField::Sequence(value) => update_i64(tx, id, "sequence", *value).await,
         CalendarEventUpdateField::Rdate(value) => {
-            update_optional_text(tx, id, "rdate", value.as_deref()).await
+            replace_string_list(
+                tx,
+                id,
+                "calendar_event_rdates",
+                "occurrence_start",
+                parse_string_list(value, "rdate")?,
+            )
+            .await
         }
         CalendarEventUpdateField::ExtendedProperties(value) => {
-            update_optional_text(tx, id, "extended_properties", value.as_deref()).await
+            replace_extended_properties(
+                tx,
+                id,
+                "calendar_event_extended_properties",
+                "event_id",
+                parse_string_map(value, "extended_properties")?,
+            )
+            .await
         }
         CalendarEventUpdateField::Organizer(value) => {
-            update_optional_text(tx, id, "organizer", value.as_deref()).await
+            replace_organizer(tx, id, parse_organizer(value)?).await
         }
         CalendarEventUpdateField::MeetingEnabled(value) => {
             update_i64(tx, id, "meeting_enabled", if *value { 1 } else { 0 }).await
@@ -849,6 +997,166 @@ async fn apply_update_field(
             Ok(())
         }
     }
+}
+
+fn parse_i64_list(value: &Option<String>, field: &str) -> Result<Vec<i64>, String> {
+    match value {
+        Some(json) => serde_json::from_str::<Vec<i64>>(json)
+            .map_err(|e| format!("{field} is not a valid integer list: {e}")),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn parse_string_list(value: &Option<String>, field: &str) -> Result<Vec<String>, String> {
+    match value {
+        Some(json) => serde_json::from_str::<Vec<String>>(json)
+            .map_err(|e| format!("{field} is not a valid string list: {e}")),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn parse_string_map(value: &Option<String>, field: &str) -> Result<Vec<(String, String)>, String> {
+    let Some(json) = value else {
+        return Ok(Vec::new());
+    };
+    let map = serde_json::from_str::<std::collections::BTreeMap<String, String>>(json)
+        .map_err(|e| format!("{field} is not a valid string map: {e}"))?;
+    Ok(map.into_iter().collect())
+}
+
+fn parse_geo(value: &Option<String>) -> Result<Option<(f64, f64)>, String> {
+    let Some(json) = value else {
+        return Ok(None);
+    };
+    let geo = serde_json::from_str::<CalendarGeoPayload>(json)
+        .map_err(|e| format!("geo is not valid coordinates: {e}"))?;
+    if !geo.lat.is_finite() || !geo.lng.is_finite() {
+        return Err("geo coordinates must be finite".to_string());
+    }
+    Ok(Some((geo.lat, geo.lng)))
+}
+
+fn parse_organizer(value: &Option<String>) -> Result<Option<CalendarOrganizerPayload>, String> {
+    let Some(json) = value else {
+        return Ok(None);
+    };
+    let organizer = serde_json::from_str::<CalendarOrganizerPayload>(json)
+        .map_err(|e| format!("organizer is not valid: {e}"))?;
+    require_non_empty(&organizer.email, "organizer.email")?;
+    Ok(Some(organizer))
+}
+
+async fn replace_i64_list(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    table: &'static str,
+    column: &'static str,
+    values: Vec<i64>,
+) -> Result<(), String> {
+    let delete = format!("DELETE FROM {table} WHERE event_id = ?");
+    sqlx::query(&delete)
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar {table}: {e}"))?;
+    let insert = format!(
+        "INSERT INTO {table} (id, event_id, {column}, sort_order)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?)"
+    );
+    for (sort_order, value) in values.into_iter().enumerate() {
+        sqlx::query(&insert)
+            .bind(event_id)
+            .bind(value)
+            .bind(sort_order as i64)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert calendar {table}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn replace_string_list(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    table: &'static str,
+    column: &'static str,
+    values: Vec<String>,
+) -> Result<(), String> {
+    let delete = format!("DELETE FROM {table} WHERE event_id = ?");
+    sqlx::query(&delete)
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar {table}: {e}"))?;
+    let insert = format!(
+        "INSERT INTO {table} (id, event_id, {column}, sort_order)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?)"
+    );
+    for (sort_order, value) in values.into_iter().enumerate() {
+        sqlx::query(&insert)
+            .bind(event_id)
+            .bind(value)
+            .bind(sort_order as i64)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert calendar {table}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn replace_extended_properties(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    owner_id: &str,
+    table: &'static str,
+    owner_column: &'static str,
+    values: Vec<(String, String)>,
+) -> Result<(), String> {
+    let delete = format!("DELETE FROM {table} WHERE {owner_column} = ?");
+    sqlx::query(&delete)
+        .bind(owner_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar {table}: {e}"))?;
+    let insert = format!(
+        "INSERT INTO {table} (id, {owner_column}, property_key, property_value, sort_order)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?)"
+    );
+    for (sort_order, (key, value)) in values.into_iter().enumerate() {
+        sqlx::query(&insert)
+            .bind(owner_id)
+            .bind(key)
+            .bind(value)
+            .bind(sort_order as i64)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert calendar {table}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn replace_organizer(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    organizer: Option<CalendarOrganizerPayload>,
+) -> Result<(), String> {
+    sqlx::query("DELETE FROM calendar_event_organizers WHERE event_id = ?")
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear calendar organizer: {e}"))?;
+    if let Some(organizer) = organizer {
+        sqlx::query(
+            "INSERT INTO calendar_event_organizers (event_id, name, email)
+             VALUES (?, ?, ?)",
+        )
+        .bind(event_id)
+        .bind(organizer.name)
+        .bind(organizer.email)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("insert calendar organizer: {e}"))?;
+    }
+    Ok(())
 }
 
 async fn update_text(
@@ -1389,16 +1697,15 @@ mod tests {
         sqlx::query(
             "INSERT INTO calendar_events
                (id, title, start_time, end_time, timezone, calendar_id,
-                color, description, rrule, notifications, repeat_until,
-                all_day, location, url, transparency, status,
-                source_uid, visibility, priority, categories, geo,
-                sequence, rdate, extended_properties, organizer,
+                color, description, rrule, repeat_until, all_day, location, url,
+                transparency, status, source_uid, visibility, priority, geo_lat, geo_lng,
+                sequence,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
                 created_at, updated_at)
              VALUES (?, '', '2026-05-09T10:00:00Z', '2026-05-09T11:00:00Z',
-                'America/Monterrey', 'local', NULL, ?, NULL, NULL, NULL,
+                'America/Monterrey', 'local', NULL, ?, NULL, NULL,
                 0, '', '', 'opaque', 'confirmed',
-                NULL, 'public', NULL, NULL, NULL, 0, NULL, NULL, NULL,
+                NULL, 'public', NULL, NULL, NULL, 0,
                 0, 1, 1, '2026-05-09 10:00:00', '2026-05-09 10:00:00')",
         )
         .bind(id)

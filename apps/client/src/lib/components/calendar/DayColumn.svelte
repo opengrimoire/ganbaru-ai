@@ -189,7 +189,7 @@
     planned_end: string;
     actual_start: string | null;
     actual_end: string | null;
-    pause_log: string | null;
+    pauses: PersistedSegment["pauseLog"];
     status: string;
   }
 
@@ -251,7 +251,7 @@
           plannedEnd: r.planned_end,
           actualStart: r.actual_start,
           actualEnd: r.actual_end,
-          pauseLog: r.pause_log ? JSON.parse(r.pause_log) : [],
+          pauseLog: r.pauses,
           status: r.status as PersistedSegment["status"],
         };
         const arr = map.get(mapKey) ?? [];

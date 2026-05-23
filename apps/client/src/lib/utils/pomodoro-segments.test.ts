@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computePlannedSegments, segmentsToAccentBands, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands, computeFocusScore } from "./pomodoro-segments";
-import type { PomodoroConfig } from "$lib/components/calendar/types";
+import type { PauseInterval, PomodoroConfig } from "$lib/components/calendar/types";
 import type { TimelineEvent, ActivePomodoroState } from "./pomodoro-segments";
 
 const DEFAULT_CONFIG: PomodoroConfig = {
@@ -894,9 +894,11 @@ describe("computeDayTimelineBands", () => {
           plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
           actualEnd: null,
-          pauseLog: [
-            [new Date(pauseStartMs).toISOString(), new Date(resumeMs).toISOString()],
-          ],
+          pauseLog: [{
+            startedAt: new Date(pauseStartMs).toISOString(),
+            endedAt: new Date(resumeMs).toISOString(),
+            reason: "manual",
+          }],
           status: "active",
         },
       ],
@@ -933,9 +935,11 @@ describe("computeDayTimelineBands", () => {
         plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(segStartMs).toISOString(),
         actualEnd: new Date(segStartMs + 40 * 60000).toISOString(),
-        pauseLog: [
-          [new Date(pauseStartMs).toISOString(), new Date(resumeMs).toISOString()],
-        ],
+        pauseLog: [{
+          startedAt: new Date(pauseStartMs).toISOString(),
+          endedAt: new Date(resumeMs).toISOString(),
+          reason: "manual",
+        }],
         status: "completed",
       },
     ]);
@@ -965,8 +969,8 @@ describe("computeFocusScore", () => {
     const start = new Date("2024-01-15T10:00:00Z").getTime();
     const end = new Date("2024-01-15T10:40:00Z").getTime();
     // 10 minute pause out of 40 minutes = 30/40 = 0.75
-    const pauseLog: [string, string | null][] = [
-      ["2024-01-15T10:10:00Z", "2024-01-15T10:20:00Z"],
+    const pauseLog: PauseInterval[] = [
+      { startedAt: "2024-01-15T10:10:00Z", endedAt: "2024-01-15T10:20:00Z", reason: "manual" },
     ];
     expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
   });
@@ -975,9 +979,9 @@ describe("computeFocusScore", () => {
     const start = new Date("2024-01-15T10:00:00Z").getTime();
     const end = new Date("2024-01-15T10:40:00Z").getTime();
     // Two 5-minute pauses = 10 min pause, 30/40 = 0.75
-    const pauseLog: [string, string | null][] = [
-      ["2024-01-15T10:05:00Z", "2024-01-15T10:10:00Z"],
-      ["2024-01-15T10:25:00Z", "2024-01-15T10:30:00Z"],
+    const pauseLog: PauseInterval[] = [
+      { startedAt: "2024-01-15T10:05:00Z", endedAt: "2024-01-15T10:10:00Z", reason: "manual" },
+      { startedAt: "2024-01-15T10:25:00Z", endedAt: "2024-01-15T10:30:00Z", reason: "idle" },
     ];
     expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
   });
@@ -987,8 +991,8 @@ describe("computeFocusScore", () => {
     const end = new Date("2024-01-15T10:40:00Z").getTime();
     // Pause from 10:30 to 11:00, but session ends at 10:40
     // Effective pause = 10 min, score = 30/40 = 0.75
-    const pauseLog: [string, string | null][] = [
-      ["2024-01-15T10:30:00Z", "2024-01-15T11:00:00Z"],
+    const pauseLog: PauseInterval[] = [
+      { startedAt: "2024-01-15T10:30:00Z", endedAt: "2024-01-15T11:00:00Z", reason: "manual" },
     ];
     expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
   });
@@ -997,8 +1001,8 @@ describe("computeFocusScore", () => {
     const start = new Date("2024-01-15T10:00:00Z").getTime();
     const end = new Date("2024-01-15T10:40:00Z").getTime();
     // Open pause from 10:30 to null, clamped to end = 10 min
-    const pauseLog: [string, string | null][] = [
-      ["2024-01-15T10:30:00Z", null],
+    const pauseLog: PauseInterval[] = [
+      { startedAt: "2024-01-15T10:30:00Z", endedAt: null, reason: "idle" },
     ];
     expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
   });
@@ -1011,8 +1015,8 @@ describe("computeFocusScore", () => {
   it("returns 0.0 when entire session is paused", () => {
     const start = new Date("2024-01-15T10:00:00Z").getTime();
     const end = new Date("2024-01-15T10:40:00Z").getTime();
-    const pauseLog: [string, string | null][] = [
-      ["2024-01-15T10:00:00Z", "2024-01-15T10:40:00Z"],
+    const pauseLog: PauseInterval[] = [
+      { startedAt: "2024-01-15T10:00:00Z", endedAt: "2024-01-15T10:40:00Z", reason: "suspend" },
     ];
     expect(computeFocusScore(start, end, pauseLog)).toBe(0.0);
   });

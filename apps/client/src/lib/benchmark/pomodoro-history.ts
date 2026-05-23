@@ -1,4 +1,4 @@
-import type { CalendarEvent, PomodoroConfig } from "$lib/components/calendar/types";
+import type { CalendarEvent, PauseInterval, PomodoroConfig } from "$lib/components/calendar/types";
 import { wallClockToUtcIso } from "$lib/components/calendar/utils";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 
@@ -30,7 +30,7 @@ export interface BenchmarkPomodoroSegmentSeed {
   plannedEnd: string;
   actualStart: string | null;
   actualEnd: string | null;
-  pauseLog: string;
+  pauses: PauseInterval[];
   status: "completed";
 }
 
@@ -153,7 +153,7 @@ export function buildDensePomodoroHistoryPayload(
         plannedEnd,
         actualStart: plannedStart,
         actualEnd: plannedEnd,
-        pauseLog: "[]",
+        pauses: [],
         status: "completed",
       });
 

@@ -44,10 +44,10 @@ Fields:
 - `source_kind`: origin class, currently `import-file` or `import-zip-entry` for Settings imports. Future values can support generated export bases or subscriptions.
 - `source_name`: file basename or zip entry basename used to replace preservation rows on re-import of the same source.
 - `source_fingerprint`: deterministic fingerprint of the imported text for diagnostics and later dedupe work.
-- `prodid`, `version`, `method`, `calendar_scale`: object-level properties copied out for indexed diagnostics while the full object remains in `raw_jcal`.
-- `raw_jcal`: structured JSON representation of the full object.
-- `diagnostics`: JSON warning list captured during parse and projection.
+- `prodid`, `version`, `method`, `calendar_scale`: object-level properties copied out for indexed diagnostics.
 - `created_at`, `updated_at`: row timestamps.
+
+Object diagnostics live in `icalendar_object_diagnostics` as one row per message. The original component tree is stored relationally through `icalendar_components`, `icalendar_component_properties`, `icalendar_property_parameters`, and `icalendar_value_nodes`; SQLite does not store jCal blobs.
 
 Indexes: `(calendar_id)`, `(calendar_id, source_kind, source_name)`, and `(source_fingerprint)`.
 
@@ -67,14 +67,19 @@ Fields:
 - `recurrence_id_value_type`: original value type for the recurrence identity.
 - `sequence`: copied `SEQUENCE` when present.
 - `dtstart_key`: copied `DTSTART` value for diagnostics and future lookup.
-- `raw_jcal`: structured JSON representation of the component and its properties.
 - `projected_kind`, `projected_id`: optional reverse link to a normalized app row. Currently used for projected `event`, `alarm`, and `override` rows.
 - `preservation_status`: diagnostic state such as `partial` or `unsupported`.
-- `projection_warnings`: JSON warning list for lossy projection notes.
 - `sort_order`: component order among siblings.
 - `created_at`, `updated_at`: row timestamps.
 
 Indexes: `(calendar_id, component_type)`, `(calendar_id, uid)`, `(calendar_id, uid, recurrence_id)`, `(projected_kind, projected_id)`, `(preservation_status)`, and `(object_id)`.
+
+Component properties, parameters, nested values, and projection warnings are child rows:
+
+- `icalendar_component_properties`: component_id, name, value_type, sort_order.
+- `icalendar_property_parameters`: property_id, name, sort_order.
+- `icalendar_value_nodes`: recursive scalar or array nodes for property values and parameter values.
+- `icalendar_component_projection_warnings`: component_id, message, sort_order.
 
 ### `calendar_events`
 
@@ -97,11 +102,16 @@ The active calendar. One row per event (or per recurring template, with instance
 | `status` | enum | `confirmed`, `tentative`, or `cancelled`. Defaults to `confirmed`. Event-level cancelled controls cancelled rendering; attendee RSVP can still drive the local surface pattern independently. |
 | `visibility` | enum | `public` or `private`. Imported `CONFIDENTIAL` values normalize to `private`. The database default is `public` to match missing iCalendar `CLASS`, while app-authored panel events default to `private`. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
-| `recurrence_exceptions` | text or null | Comma-separated EXDATE recurrence dates (`YYYY-MM-DD`). Null if none. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |
+| `recurrence_exceptions` | child rows | Stored in `calendar_event_exdates`, one occurrence date per row. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |
 | `recurrence_parent_id` | UUID or null | For detached instances, points to the original template. Used to trace history. |
-| `pomodoro_config` | JSON or null | Per-event pomodoro settings (see "Pomodoro config"). Null means pomodoro is disabled for this event. |
-| `notification_config` | JSON or null | Notification offsets and channels. Null means no notifications. |
-| `attendees` | JSON or null | Placeholder. Designed for shared/team events. |
+| `pomodoro_config` | child row or null | Per-event pomodoro settings in `pomodoro_configs`. Null means pomodoro is disabled for this event. |
+| `notification_config` | child rows | Notification offsets in `calendar_event_notifications`, one row per offset. |
+| `attendees` | child rows | Participants in `calendar_event_attendees`. |
+| `categories` | child rows | RFC 5545 categories in `calendar_event_categories`, one row per category. |
+| `geo_lat`, `geo_lng` | real or null | RFC 5545 GEO coordinates. Both are null when no coordinates are set. |
+| `rdate` | child rows | Additional recurrence dates in `calendar_event_rdates`. |
+| `extended_properties` | child rows | iCalendar `X-*` and other extended properties in `calendar_event_extended_properties`. |
+| `organizer` | child row or null | Organizer name and email in `calendar_event_organizers`. |
 | `local_rsvp_status` | text or null | App-local RSVP state for the "You (Local, no email provided)" meeting row. It drives local event surface patterns before an email identity exists and is not exported as iCalendar `ATTENDEE` data. |
 | `timezone` | text | IANA home zone (`America/Los_Angeles`). Required and non-empty. Used as the anchor for recurrence math (so "9 AM daily" stays 9 AM through DST, walked via `Temporal.PlainDate` arithmetic), and as the `TZID` on `.ics` re-export. The render zone (what the UI shows) is independent: it tracks the device's current zone by default, with an opt-in preference (`preferences.eventTimezoneDisplay`) to pin display to this home zone instead. |
 | `environment_id` | UUID or null | FK to `work_environments` (planned). Null when no environment is attached. |
@@ -116,9 +126,9 @@ Per-instance overrides live in `calendar_event_overrides` (one row per detached 
 
 `calendar_event_overrides.recurrence_range` stores the projected `RECURRENCE-ID` `RANGE` parameter. The only supported value is `this-and-future`, from RFC 5545 `RANGE=THISANDFUTURE`. Imported cancelled overrides with this range hide that occurrence and all following generated occurrences during expansion while preserving the override for export.
 
-The full iCalendar compatibility data model is in `docs/interop/icalendar/data-model.md`. New imports keep raw iCalendar components and properties available for future lossless round trips while projecting the subset the app understands into these normalized calendar tables. Migration v13 adds nullable `icalendar_component_id` links to `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms`; attendee rows also keep `icalendar_property_index` so an `ATTENDEE` row can be traced to the original property inside its preserved `VEVENT`. Migration v15 adds `calendar_events.local_rsvp_status` as local-only UI state, deliberately outside the iCalendar attendee projection. Full-event loads can join preservation diagnostics on demand, but visible-window loads continue to query only projected calendar rows.
+The full iCalendar compatibility data model is in `docs/interop/icalendar/data-model.md`. New imports keep iCalendar components and properties available for future lossless round trips while projecting the subset the app understands into normalized calendar tables. Migration v13 adds nullable `icalendar_component_id` links to `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms`; attendee rows also keep `icalendar_property_index` so an `ATTENDEE` row can be traced to the original property inside its preserved `VEVENT`. Migration v15 adds `calendar_events.local_rsvp_status` as local-only UI state, deliberately outside the iCalendar attendee projection. Full-event loads can reconstruct preserved components on demand, but visible-window loads continue to query only projected calendar rows.
 
-Why `pomodoro_config` is JSON instead of FK to a `pomodoro_configs` table: the config is per-event, immutable after the event is created (changing it ends the active run, see `algorithms/pomodoro-state-machine.md`), and small. A separate table earns no normalization benefit and adds a join to every event read.
+Why `pomodoro_configs` is normalized: the config becomes part of analytics once a run starts, and row storage gives schema migrations a safe path when settings gain fields. Active runs copy config values into `pomodoro_runs` as a historical snapshot.
 
 ### `calendar_events_archive`
 
@@ -362,7 +372,9 @@ JSON keeps a role as the export format only: `serializeTheme` emits a v2 envelop
 Music files remain outside the vault. SQLite stores playlist definitions, source identities, and playback resume state.
 
 - **`music_playlists`:** id, name, created_at, updated_at.
-- **`music_playlist_tracks`:** id, playlist_id, position, source_kind, source_uri, source_identity, title, start_ms, end_ms, skip_ranges_json, volume, rate, break_source_json, created_at, updated_at.
+- **`music_playlist_tracks`:** id, playlist_id, position, source_kind, source_uri, source_identity, title, start_ms, end_ms, volume, rate, created_at, updated_at.
+- **`music_track_skip_ranges`:** track_id, start_ms, end_ms, sort_order.
+- **`music_track_break_sources`:** track_id, source_kind, source_uri, source_identity, title, start_ms, end_ms, volume, rate.
 - **`music_playback_states`:** source_identity, source_kind, position_ms, duration_ms, status, updated_at.
 
 ## Other features (stub)
@@ -370,7 +382,7 @@ Music files remain outside the vault. SQLite stores playlist definitions, source
 These tables are designed but their detailed shape is filled in when the feature ships. Each feature doc owns the deeper definition.
 
 - **Project task tables:** deferred until the future task design is settled.
-- **`work_environments`:** id, name, apps_to_open (JSON), browser_tabs (JSON), playlist_id, blocker_ruleset_id.
+- **`work_environments`:** planned normalized environment header. Apps, browser tabs, and blocker rules are child rows, not embedded blobs.
 - **`notes_index`:** path, title, modified_at, tags, backlinks. Source of truth is the markdown file under `vault/notes/`.
 - **`diary_index`:** date, type (morning/evening), mood, energy, sleep_hours, path. Source of truth is the markdown file under `vault/diary/`.
 - **`projects`:** id, name, status, lifecycle_phase, created_at.

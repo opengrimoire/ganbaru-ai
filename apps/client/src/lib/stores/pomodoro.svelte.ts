@@ -1,5 +1,10 @@
 import type { PomodoroPhase } from "@ganbaruai/shared-types";
-import type { PauseInterval, PersistedSegment, SegmentPhase } from "$lib/components/calendar/types";
+import type {
+  PauseInterval,
+  PauseReason,
+  PersistedSegment,
+  SegmentPhase,
+} from "$lib/components/calendar/types";
 import { dbUrl } from "$lib/api/db";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
@@ -226,12 +231,14 @@ function isPartialPomodoroConfig(value: unknown): value is Partial<PomodoroConfi
 }
 
 function isPauseInterval(value: unknown): value is PauseInterval {
-  return (
-    Array.isArray(value) &&
-    value.length === 2 &&
-    typeof value[0] === "string" &&
-    isNullableString(value[1])
-  );
+  return isRecord(value) &&
+    typeof value.startedAt === "string" &&
+    isNullableString(value.endedAt) &&
+    isPauseReason(value.reason);
+}
+
+function isPauseReason(value: unknown): value is PauseReason {
+  return value === "idle" || value === "manual" || value === "suspend";
 }
 
 function isPersistedSegment(value: unknown): value is PersistedSegment {
@@ -334,7 +341,7 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
 function cloneSegmentsForWindowSync(source: readonly PersistedSegment[]): PersistedSegment[] {
   return source.map((segment) => ({
     ...segment,
-    pauseLog: segment.pauseLog.map(([start, end]) => [start, end]),
+    pauseLog: segment.pauseLog.map((pause) => ({ ...pause })),
   }));
 }
 
@@ -418,8 +425,14 @@ interface PomodoroSegmentWrite {
   plannedEnd: string;
   actualStart: string | null;
   actualEnd: string | null;
-  pauseLog: string;
+  pauses: PauseInterval[];
   status: PersistedSegment["status"];
+  focusDurationMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  pomodoroCount: number;
+  idleTimeoutMinutes: number | null;
+  runPlannedEnd: string;
 }
 
 interface PomodoroSegmentUpdate {
@@ -427,7 +440,7 @@ interface PomodoroSegmentUpdate {
   status: PersistedSegment["status"];
   actualStart: string | null;
   actualEnd: string | null;
-  pauseLog: string;
+  pauses: PauseInterval[];
 }
 
 interface PomodoroPauseMs {
@@ -704,8 +717,14 @@ function segmentWrite(seg: PersistedSegment): PomodoroSegmentWrite {
     plannedEnd: seg.plannedEnd,
     actualStart: seg.actualStart,
     actualEnd: seg.actualEnd,
-    pauseLog: JSON.stringify(seg.pauseLog),
+    pauses: seg.pauseLog,
     status: seg.status,
+    focusDurationMinutes: config.focusMinutes,
+    shortBreakMinutes: config.shortBreakMinutes,
+    longBreakMinutes: config.longBreakMinutes,
+    pomodoroCount: config.cyclesBeforeLongBreak,
+    idleTimeoutMinutes: idleTimeoutMs === null ? null : Math.round(idleTimeoutMs / 60000),
+    runPlannedEnd: activeBlockEndMs === null ? seg.plannedEnd : new Date(activeBlockEndMs).toISOString(),
   };
 }
 
@@ -715,7 +734,7 @@ function segmentUpdate(seg: PersistedSegment): PomodoroSegmentUpdate {
     status: seg.status,
     actualStart: seg.actualStart,
     actualEnd: seg.actualEnd,
-    pauseLog: JSON.stringify(seg.pauseLog),
+    pauses: seg.pauseLog,
   };
 }
 
@@ -724,10 +743,11 @@ function persistSegmentsToBackend(
   warning: string,
   bumpSegmentVersion: boolean,
 ) {
-  if (updatedSegments.length === 0) return;
+  const persisted = updatedSegments.filter((segment) => segment.status !== "planned" && segment.status !== "skipped");
+  if (persisted.length === 0) return;
   invoke("pomodoro_update_segments", {
     dbUrl: dbUrl(),
-    segments: updatedSegments.map(segmentUpdate),
+    segments: persisted.map(segmentUpdate),
   }).then(() => {
     if (bumpSegmentVersion) {
       segmentVersion++;
@@ -745,10 +765,11 @@ function persistSegmentToBackend(
 }
 
 async function insertSegmentsToBackend(newSegments: PersistedSegment[]) {
-  if (newSegments.length === 0) return;
+  const persisted = newSegments.filter((segment) => segment.status !== "planned" && segment.status !== "skipped");
+  if (persisted.length === 0) return;
   await invoke("pomodoro_insert_segments", {
     dbUrl: dbUrl(),
-    segments: newSegments.map(segmentWrite),
+    segments: persisted.map(segmentWrite),
   }).then(() => {
     segmentVersion++;
     publishWindowSnapshot();
@@ -783,10 +804,23 @@ function timestampMs(value: string): number {
 }
 
 function pauseIntervalsMs(pauseLog: PauseInterval[]): PomodoroPauseMs[] {
-  return pauseLog.map(([start, end]) => ({
-    startMs: timestampMs(start),
-    endMs: end === null ? null : timestampMs(end),
+  return pauseLog.map((pause) => ({
+    startMs: timestampMs(pause.startedAt),
+    endMs: pause.endedAt === null ? null : timestampMs(pause.endedAt),
   }));
+}
+
+function appendPause(seg: PersistedSegment, startedAt: string, reason: PauseReason, endedAt: string | null = null) {
+  seg.pauseLog = [...seg.pauseLog, { startedAt, endedAt, reason }];
+}
+
+function closeLastPause(seg: PersistedSegment, endedAt: string): boolean {
+  const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
+  if (!lastPause || lastPause.endedAt !== null) return false;
+  const updated = [...seg.pauseLog];
+  updated[updated.length - 1] = { ...lastPause, endedAt };
+  seg.pauseLog = updated;
+  return true;
 }
 
 function markSegment(
@@ -801,11 +835,7 @@ function markSegment(
   if (setActualEnd) seg.actualEnd = actualEndIso;
 
   // Close any open pause interval
-  const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
-  if (lastPause && lastPause[1] === null) {
-    lastPause[1] = seg.actualEnd ?? actualEndIso;
-    seg.pauseLog = [...seg.pauseLog];
-  }
+  closeLastPause(seg, seg.actualEnd ?? actualEndIso);
 
   persistSegmentToBackend(seg, "Failed to update segment:", true);
   publishWindowSnapshot();
@@ -818,7 +848,7 @@ function activateSegment(index: number) {
   seg.actualStart = nowIso();
   currentSegmentIndex = index;
 
-  persistSegmentToBackend(seg, "Failed to activate segment:", false);
+  insertSegmentsToBackend([seg]).catch((e) => console.warn("Failed to activate segment:", e));
   publishWindowSnapshot();
 }
 
@@ -914,7 +944,7 @@ async function rebuildSegments(blockId: string, eventEnd: string, eventDate: str
       plannedEnd: addMinutesToIso(nowStr, bridgeMinutes),
       actualStart: nowStr,
       actualEnd: null,
-      pauseLog: isPaused ? [[nowStr, null] as [string, string | null]] : [],
+      pauseLog: isPaused ? [{ startedAt: nowStr, endedAt: null, reason: "manual" }] : [],
       status: "active",
     });
   }
@@ -1411,7 +1441,7 @@ function dismissSuspend(resume: boolean) {
       const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
         ? segments[currentSegmentIndex] : null;
       const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
-      const endIso = lastPause ? lastPause[0] : nowIso();
+      const endIso = lastPause ? lastPause.startedAt : nowIso();
       saveCompletedSession(sessionStartTime, endIso, seg?.pauseLog ?? [], activeBlockId);
     }
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
@@ -1485,7 +1515,7 @@ async function checkIdle() {
     // Record synthetic pause on current segment
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
       const seg = segments[currentSegmentIndex];
-      seg.pauseLog = [...seg.pauseLog, [idleStartIso, null]];
+      appendPause(seg, idleStartIso, "idle");
       persistSegmentToBackend(seg, "Failed to save idle pause:", false);
     }
 
@@ -1526,11 +1556,7 @@ function dismissIdle(resume: boolean) {
     // Close the open pause interval
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
       const seg = segments[currentSegmentIndex];
-      const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
-      if (lastPause && lastPause[1] === null) {
-        const updated = [...seg.pauseLog];
-        updated[updated.length - 1] = [lastPause[0], nowIso()];
-        seg.pauseLog = updated;
+      if (closeLastPause(seg, nowIso())) {
         persistSegmentToBackend(seg, "Failed to close idle pause:", false);
       }
     }
@@ -1549,7 +1575,7 @@ function dismissIdle(resume: boolean) {
       const seg = currentSegmentIndex >= 0 && currentSegmentIndex < segments.length
         ? segments[currentSegmentIndex] : null;
       const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
-      const endIso = lastPause ? lastPause[0] : nowIso();
+      const endIso = lastPause ? lastPause.startedAt : nowIso();
       saveCompletedSession(sessionStartTime, endIso, seg?.pauseLog ?? [], activeBlockId);
     }
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
@@ -1631,7 +1657,7 @@ function tick() {
       // Record synthetic pause
       if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
         const seg = segments[currentSegmentIndex];
-        seg.pauseLog = [...seg.pauseLog, [result.suspendStartIso, result.suspendEndIso]];
+        appendPause(seg, result.suspendStartIso, "suspend", result.suspendEndIso);
         persistSegmentToBackend(seg, "Failed to save suspend pause:", false);
       }
       setVisibleRemainingForPause(
@@ -1662,7 +1688,7 @@ function tick() {
       // Record synthetic pause
       if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
         const seg = segments[currentSegmentIndex];
-        seg.pauseLog = [...seg.pauseLog, [result.suspendStartIso, result.suspendEndIso]];
+        appendPause(seg, result.suspendStartIso, "suspend", result.suspendEndIso);
         persistSegmentToBackend(seg, "Failed to save suspend pause:", false);
       }
       setVisibleRemainingForPause(
@@ -2018,7 +2044,7 @@ function pauseSession(): void {
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
     const seg = segments[currentSegmentIndex];
     const now = nowIso();
-    seg.pauseLog = [...seg.pauseLog, [now, null]];
+    appendPause(seg, now, "manual");
     persistSegmentToBackend(seg, "Failed to save pause:", false);
   }
   startPausedOpportunityCountdown();
@@ -2043,10 +2069,7 @@ function resumeSession(): void {
   }
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
     const seg = segments[currentSegmentIndex];
-    const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
-    if (lastPause && lastPause[1] === null) {
-      lastPause[1] = nowIso();
-      seg.pauseLog = [...seg.pauseLog];
+    if (closeLastPause(seg, nowIso())) {
       persistSegmentToBackend(seg, "Failed to save resume:", false);
     }
   }

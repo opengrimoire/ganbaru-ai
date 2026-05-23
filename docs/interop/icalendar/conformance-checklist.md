@@ -49,7 +49,7 @@ Evidence reviewed:
 Current implementation summary:
 
 - The parser uses `ical.js` and returns projected `CalendarEvent` rows plus warning strings.
-- New imports store structured iCalendar object and component JSON in `icalendar_objects` and `icalendar_components`.
+- New imports store iCalendar objects and components in relational preservation tables.
 - Projected events, attendees, alarms, and recurrence overrides link back to preserved components.
 - Import still only projects `VEVENT` components into visible calendar rows. Other legal components are preserved without an app surface.
 - Export generates a new `VCALENDAR` object from projected rows, preserved timezones, preserved top-level passthrough components, and one safe object-level `METHOD` when available.
@@ -65,7 +65,7 @@ Current implementation summary:
 - Exported: `partial`.
 - Editable: `no`.
 - Tested: `partial`.
-- Evidence: `parseIcs` stores each parsed `VCALENDAR` object as structured JSON, plus copied `PRODID`, `VERSION`, `CALSCALE`, and `METHOD` metadata. Export emits generated `PRODID`, `VERSION`, `CALSCALE`, and `X-WR-CALNAME`, and reuses a preserved `METHOD` only when all preserved objects in the exported calendar agree on one method.
+- Evidence: `parseIcs` stores each parsed `VCALENDAR` object as component, property, parameter, value, diagnostic, and metadata rows. Export emits generated `PRODID`, `VERSION`, `CALSCALE`, and `X-WR-CALNAME`, and reuses a preserved `METHOD` only when all preserved objects in the exported calendar agree on one method.
 - Gap: imported object-level properties beyond a single safe `METHOD` are preserved for new imports but not merged into export yet.
 
 ### `VEVENT`
@@ -135,7 +135,7 @@ Current implementation summary:
 - Exported: `partial`.
 - Editable: `no`.
 - Tested: `partial`.
-- Evidence: new import preservation stores recursive components as structured JSON. Top-level preserved components outside `VEVENT` and `VTIMEZONE` pass through export unchanged.
+- Evidence: new import preservation stores recursive components as relational rows. Top-level preserved components outside `VEVENT` and `VTIMEZONE` pass through export unchanged.
 - Gap: unknown or future legal components do not have a visible app projection or export merge yet.
 
 ## Object-level properties
@@ -146,10 +146,10 @@ Current object-level import status:
 - `VERSION`: stored in object metadata. Export emits `VERSION:2.0`.
 - `CALSCALE`: stored in object metadata. Export emits `CALSCALE:GREGORIAN`.
 - `METHOD`: stored in object metadata. Export reuses it only when all preserved objects in the exported calendar agree on one method; otherwise export emits `PUBLISH`.
-- `X-WR-CALNAME`: preserved inside raw object JSON but not exported.
-- `X-WR-TIMEZONE`: preserved inside raw object JSON but not exported.
-- `NAME`, `DESCRIPTION`, `COLOR`, `IMAGE`, `REFRESH-INTERVAL`, `SOURCE`: preserved inside raw object JSON but not exported.
-- unknown `X-*` and `IANA-*`: preserved inside raw object JSON but not exported.
+- `X-WR-CALNAME`: preserved in relational `VCALENDAR` component rows but not exported.
+- `X-WR-TIMEZONE`: preserved in relational `VCALENDAR` component rows but not exported.
+- `NAME`, `DESCRIPTION`, `COLOR`, `IMAGE`, `REFRESH-INTERVAL`, `SOURCE`: preserved in relational `VCALENDAR` component rows but not exported.
+- unknown `X-*` and `IANA-*`: preserved in relational `VCALENDAR` component rows but not exported.
 
 Current object-level export status:
 
@@ -159,7 +159,7 @@ Current object-level export status:
 
 Required future state:
 
-- Preserve every object-level property and parameter in structured storage.
+- Keep preserving every object-level property and parameter in structured storage.
 - Project only fields the app needs.
 - Merge generated and preserved fields intentionally on export.
 

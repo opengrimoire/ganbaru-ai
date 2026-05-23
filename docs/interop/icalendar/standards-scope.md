@@ -9,7 +9,7 @@ Primary standards:
 - **RFC 5545, iCalendar:** the core file format and data model for components, properties, parameters, value types, recurrence, `VTIMEZONE`, and line serialization.
 - **RFC 6868, parameter value encoding:** caret escaping for parameter values, including names with quotes and newlines.
 - **RFC 5546, iCalendar scheduling:** invitation and reply semantics. GanbaruAI should preserve this metadata offline, but must not act on it without a configured transport.
-- **RFC 7265, jCal:** JSON representation of iCalendar. This is a strong candidate for the preservation format because it preserves the iCalendar data model in structured JSON.
+- **RFC 7265, jCal:** JSON representation of iCalendar. This is the parser and serializer interchange shape, while SQLite stores the same model in relational component, property, parameter, and value rows.
 
 Useful extension standards to track:
 

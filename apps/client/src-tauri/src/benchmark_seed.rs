@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use sqlx::{Sqlite, Transaction};
+use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
@@ -36,8 +36,16 @@ struct BenchmarkPomodoroSegmentSeed {
     planned_end: String,
     actual_start: Option<String>,
     actual_end: Option<String>,
-    pause_log: String,
+    pauses: Vec<BenchmarkPomodoroPauseSeed>,
     status: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BenchmarkPomodoroPauseSeed {
+    started_at: String,
+    ended_at: Option<String>,
+    reason: String,
 }
 
 #[derive(Deserialize)]
@@ -105,11 +113,73 @@ async fn insert_segment(
     tx: &mut Transaction<'_, Sqlite>,
     segment: &BenchmarkPomodoroSegmentSeed,
 ) -> Result<(), String> {
+    let config = sqlx::query(
+        "SELECT focus_duration_minutes, short_break_minutes, long_break_minutes,
+                pomodoro_count, idle_timeout_minutes
+         FROM pomodoro_configs
+         WHERE event_id = ?",
+    )
+    .bind(&segment.event_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| format!("load benchmark pomodoro config for run: {e}"))?;
+    let focus_duration_minutes: i64 = config
+        .try_get("focus_duration_minutes")
+        .map_err(|e| format!("read focus_duration_minutes: {e}"))?;
+    let short_break_minutes: i64 = config
+        .try_get("short_break_minutes")
+        .map_err(|e| format!("read short_break_minutes: {e}"))?;
+    let long_break_minutes: i64 = config
+        .try_get("long_break_minutes")
+        .map_err(|e| format!("read long_break_minutes: {e}"))?;
+    let pomodoro_count: i64 = config
+        .try_get("pomodoro_count")
+        .map_err(|e| format!("read pomodoro_count: {e}"))?;
+    let idle_timeout_minutes: Option<i64> = config
+        .try_get("idle_timeout_minutes")
+        .map_err(|e| format!("read idle_timeout_minutes: {e}"))?;
+
+    sqlx::query(
+        "INSERT OR IGNORE INTO pomodoro_runs
+            (id, event_id, original_event_id, event_date, planned_start, planned_end,
+             started_at, ended_at, end_reason, focus_duration_minutes,
+             short_break_minutes, long_break_minutes, pomodoro_count,
+             idle_timeout_minutes, last_heartbeat, start_trigger)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, 'manual')",
+    )
+    .bind(&segment.run_id)
+    .bind(&segment.event_id)
+    .bind(&segment.event_id)
+    .bind(&segment.event_date)
+    .bind(&segment.planned_start)
+    .bind(&segment.planned_end)
+    .bind(
+        segment
+            .actual_start
+            .as_deref()
+            .unwrap_or(&segment.planned_start),
+    )
+    .bind(&segment.actual_end)
+    .bind(focus_duration_minutes)
+    .bind(short_break_minutes)
+    .bind(long_break_minutes)
+    .bind(pomodoro_count)
+    .bind(idle_timeout_minutes)
+    .bind(
+        segment
+            .actual_end
+            .as_deref()
+            .unwrap_or(&segment.planned_end),
+    )
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("seed benchmark pomodoro run: {e}"))?;
+
     sqlx::query(
         "INSERT OR REPLACE INTO pomodoro_segments
             (id, event_id, event_date, run_id, cycle_number, phase,
-             planned_start, planned_end, actual_start, actual_end, pause_log, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             planned_start, planned_end, actual_start, actual_end, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&segment.id)
     .bind(&segment.event_id)
@@ -121,11 +191,24 @@ async fn insert_segment(
     .bind(&segment.planned_end)
     .bind(&segment.actual_start)
     .bind(&segment.actual_end)
-    .bind(&segment.pause_log)
     .bind(&segment.status)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("seed benchmark pomodoro segment: {e}"))?;
+    for (index, pause) in segment.pauses.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO pomodoro_pauses
+                (id, segment_id, started_at, ended_at, reason)
+             VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?)",
+        )
+        .bind(&segment.id)
+        .bind(&pause.started_at)
+        .bind(&pause.ended_at)
+        .bind(&pause.reason)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("seed benchmark pomodoro pause {index}: {e}"))?;
+    }
     Ok(())
 }
 
@@ -172,7 +255,12 @@ fn validate_payload(payload: &BenchmarkPomodoroHistoryPayload) -> Result<(), Str
         require_non_empty(&segment.planned_start, "planned_start")?;
         require_non_empty(&segment.planned_end, "planned_end")?;
         validate_status(&segment.status)?;
-        validate_pause_log_json(&segment.pause_log)?;
+        for pause in &segment.pauses {
+            require_non_empty(&pause.started_at, "pause.started_at")?;
+            if !matches!(pause.reason.as_str(), "idle" | "manual" | "suspend") {
+                return Err(format!("invalid pomodoro pause reason: {}", pause.reason));
+            }
+        }
     }
     for session in &payload.sessions {
         require_non_empty(&session.id, "session.id")?;
@@ -215,13 +303,7 @@ fn validate_phase(phase: &str) -> Result<(), String> {
 
 fn validate_status(status: &str) -> Result<(), String> {
     match status {
-        "completed" | "interrupted" | "active" | "planned" | "skipped" => Ok(()),
+        "completed" | "interrupted" | "active" => Ok(()),
         _ => Err(format!("invalid pomodoro segment status: {status}")),
     }
-}
-
-fn validate_pause_log_json(value: &str) -> Result<(), String> {
-    serde_json::from_str::<Vec<(String, Option<String>)>>(value)
-        .map_err(|e| format!("pause_log is not a valid pause interval list: {e}"))?;
-    Ok(())
 }

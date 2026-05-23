@@ -35,7 +35,7 @@ Deliverables:
 Exit criteria:
 
 - Importing a fixture with `VTODO`, `VJOURNAL`, `VFREEBUSY`, unknown properties, and `X-*` fields preserves them.
-- Visible calendar load queries do not read preservation JSON.
+- Visible calendar load queries do not read preservation component trees.
 
 ## Milestone 3: projection links and diagnostics
 

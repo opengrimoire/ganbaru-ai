@@ -35,7 +35,7 @@ Status: accepted.
 
 Decision:
 
-The normal calendar boot path and visible-window queries must not load full preserved iCalendar component JSON.
+The normal calendar boot path and visible-window queries must not load full preserved iCalendar component trees.
 
 Rationale:
 

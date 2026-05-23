@@ -25,7 +25,7 @@ These tables are optimized for visible-window queries, recurrence expansion, edi
 
 ## Proposed preservation tables
 
-Migration v12 implements the first preservation step with `icalendar_objects` and `icalendar_components`. It stores structured object and recursive component JSON for new imports. Migration v13 links supported projections back to preserved components.
+Migration v12 implements preservation with `icalendar_objects`, `icalendar_components`, and relational property/value child tables. It stores imported iCalendar structure without JSON columns. Migration v13 links supported projections back to preserved components.
 
 ### `icalendar_objects`
 
@@ -42,10 +42,10 @@ Suggested fields:
 - `version`: preserved `VERSION`, normally `2.0`.
 - `method`: preserved `METHOD`, if present.
 - `calendar_scale`: preserved `CALSCALE`, normally `GREGORIAN`.
-- `raw_jcal`: optional full structured object JSON for whole-object round-trip.
-- `diagnostics`: JSON warning list and parser notes.
 - `created_at`: row creation time.
 - `updated_at`: last update time.
+
+Parser notes live in `icalendar_object_diagnostics` as message rows ordered by `sort_order`.
 
 Indexes:
 
@@ -68,13 +68,13 @@ Suggested fields:
 - `recurrence_id_value_type`: `date`, `date-time`, or other exact value type.
 - `sequence`: parsed `SEQUENCE`, if present.
 - `dtstart_key`: normalized start key for lookup and ordering.
-- `raw_jcal`: structured component JSON with properties, parameters, value types, and subcomponents.
 - `projected_kind`: `event`, `todo`, `journal`, `freebusy`, or null.
 - `projected_id`: linked row in the projection table, such as `calendar_events.id`.
 - `preservation_status`: `lossless`, `partial`, `unsupported`, `needs-review`, `regenerated`, or `invalid`.
-- `projection_warnings`: JSON list of lossy or unsupported mappings.
 - `created_at`: row creation time.
 - `updated_at`: last update time.
+
+Component properties are stored in `icalendar_component_properties`; property parameters are stored in `icalendar_property_parameters`; property and parameter values are stored as recursive rows in `icalendar_value_nodes`; lossy projection notes are stored in `icalendar_component_projection_warnings`.
 
 Indexes:
 
@@ -94,7 +94,7 @@ Suggested fields:
 - `object_id`: parent object.
 - `calendar_id`: owning calendar.
 - `tzid`: `TZID` value.
-- `raw_jcal`: full `VTIMEZONE` component JSON.
+- `component_id`: FK to the preserved `VTIMEZONE` component.
 - `iana_zone`: matched IANA zone when known.
 - `match_confidence`: `exact`, `alias`, `offset-only`, `unknown`.
 - `created_at`: row creation time.
@@ -122,7 +122,7 @@ Use this only if the simpler `projected_kind` and `projected_id` fields on `ical
 
 ## Preservation format
 
-jCal-like JSON is the preferred baseline because RFC 7265 already defines a JSON mapping for iCalendar. The implementation may wrap it with metadata, but it should not invent a representation that loses:
+RFC 7265 jCal remains the in-memory parser and serializer shape, but SQLite stores the same structure relationally. The database representation must not lose:
 
 - component names
 - property names
@@ -132,7 +132,7 @@ jCal-like JSON is the preferred baseline because RFC 7265 already defines a JSON
 - nested components
 - extension fields
 
-If the parser stores both source text and structured JSON, source text is diagnostic only. Export should be generated from structured data so edited fields can be merged safely.
+Export should be generated from structured relational data so edited fields can be merged safely.
 
 ## Projection mapping
 
@@ -140,7 +140,7 @@ Projection creates or updates current app rows:
 
 - `VEVENT` maps to `calendar_events`.
 - `VALARM` under `VEVENT` maps to `calendar_event_alarms` when supported.
-- `ATTENDEE` maps to `calendar_event_attendees` while preserving unsupported attendee parameters in the component JSON.
+- `ATTENDEE` maps to `calendar_event_attendees` while preserving unsupported attendee parameters in `icalendar_property_parameters` and `icalendar_value_nodes`.
 - recurring override `VEVENT`s map to `calendar_event_overrides`.
 - `VTODO`, `VJOURNAL`, and `VFREEBUSY` are preserved only until matching app surfaces exist.
 
@@ -148,7 +148,7 @@ Every projected row created from preserved data should be traceable back to its 
 
 The `icalendar_components.projected_kind` and `projected_id` reverse link is used where one component maps to one projected row: master events, override events, and alarms. Attendee rows keep their direct link on the projected row so multiple attendees can reference the same preserved `VEVENT` without overwriting the component's reverse link.
 
-Full-event loads expose linked `VEVENT` raw JSON to the serializer. Export merges the preserved `VEVENT` and nested `VALARM` components with regenerated supported fields, preserving unsupported event properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported alarm fields. Preserved `VTIMEZONE` components are loaded separately for calendar export and emitted before generated timezone stubs. Preserved top-level non-event components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, and future components are passed through unchanged while they have no app projection. A projected row or projected alarm that was deleted is not re-created from preservation storage during export.
+Full-event loads reconstruct linked `VEVENT` structures for the serializer. Export merges the preserved `VEVENT` and nested `VALARM` components with regenerated supported fields, preserving unsupported event properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported alarm fields. Preserved `VTIMEZONE` components are loaded separately for calendar export and emitted before generated timezone stubs. Preserved top-level non-event components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, and future components are passed through unchanged while they have no app projection. A projected row or projected alarm that was deleted is not re-created from preservation storage during export.
 
 Rows from older imports may have a `source_uid` but no `icalendar_component_id`. Full-event loads derive a `regenerated` iCalendar preservation state for those rows so diagnostics and export behavior make clear that the original component is not available.
 

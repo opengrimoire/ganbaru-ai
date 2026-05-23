@@ -353,9 +353,9 @@ function splitAroundPauses(
   const ranges: Array<{ start: number; end: number }> = [];
   let cursor = startMs;
 
-  for (const [pauseStart, pauseEnd] of pauseLog) {
-    const pStartMs = new Date(pauseStart).getTime();
-    const pEndMs = pauseEnd ? new Date(pauseEnd).getTime() : endMs;
+  for (const pause of pauseLog) {
+    const pStartMs = new Date(pause.startedAt).getTime();
+    const pEndMs = pause.endedAt ? new Date(pause.endedAt).getTime() : endMs;
 
     if (pStartMs > cursor) {
       ranges.push({ start: cursor, end: Math.min(pStartMs, endMs) });
@@ -496,7 +496,7 @@ function projectPersistedSegments(
  *
  * @param startMs - Session start timestamp (ms).
  * @param endMs - Session end timestamp (ms).
- * @param pauseLog - Array of [pauseStart, resumeOrNull] intervals.
+ * @param pauseLog - Pause intervals recorded while the segment timer was stopped.
  * @returns Ratio of actual focus time to total elapsed time (0.0 to 1.0).
  */
 export function computeFocusScore(
@@ -507,9 +507,9 @@ export function computeFocusScore(
   const totalMs = endMs - startMs;
   if (totalMs <= 0) return 1.0;
   let pauseMs = 0;
-  for (const [pStart, pEnd] of pauseLog) {
-    const ps = new Date(pStart).getTime();
-    const pe = pEnd ? new Date(pEnd).getTime() : endMs;
+  for (const pause of pauseLog) {
+    const ps = new Date(pause.startedAt).getTime();
+    const pe = pause.endedAt ? new Date(pause.endedAt).getTime() : endMs;
     pauseMs += Math.max(0, Math.min(pe, endMs) - Math.max(ps, startMs));
   }
   return Math.round(Math.max(0, (totalMs - pauseMs) / totalMs) * 100) / 100;

@@ -312,8 +312,6 @@ pub fn migrations() -> Vec<Migration> {
                 color TEXT,
                 description TEXT NOT NULL DEFAULT '',
                 rrule TEXT,
-                notifications TEXT,
-                exceptions TEXT,
                 repeat_until TEXT,
                 environment_id TEXT,
                 playlist_id TEXT,
@@ -325,12 +323,9 @@ pub fn migrations() -> Vec<Migration> {
                 source_uid TEXT,
                 visibility TEXT NOT NULL DEFAULT 'public',
                 priority INTEGER,
-                categories TEXT,
-                geo TEXT,
+                geo_lat REAL,
+                geo_lng REAL,
                 sequence INTEGER NOT NULL DEFAULT 0,
-                rdate TEXT,
-                extended_properties TEXT,
-                organizer TEXT,
                 guest_can_modify INTEGER NOT NULL DEFAULT 0,
                 guest_can_invite_others INTEGER NOT NULL DEFAULT 1,
                 guest_can_see_other_guests INTEGER NOT NULL DEFAULT 1,
@@ -361,7 +356,6 @@ pub fn migrations() -> Vec<Migration> {
                 status TEXT,
                 transparency TEXT,
                 visibility TEXT,
-                extended_properties TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -395,6 +389,68 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_alarms_event
                 ON calendar_event_alarms(event_id);
 
+            CREATE TABLE IF NOT EXISTS calendar_event_notifications (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                offset_minutes INTEGER NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_event_notifications_event
+                ON calendar_event_notifications(event_id, sort_order);
+
+            CREATE TABLE IF NOT EXISTS calendar_event_exdates (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                occurrence_date TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_event_exdates_event_date
+                ON calendar_event_exdates(event_id, occurrence_date);
+
+            CREATE TABLE IF NOT EXISTS calendar_event_rdates (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                occurrence_start TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_event_rdates_event_start
+                ON calendar_event_rdates(event_id, occurrence_start);
+
+            CREATE TABLE IF NOT EXISTS calendar_event_categories (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                category TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_event_categories_event
+                ON calendar_event_categories(event_id, sort_order);
+
+            CREATE TABLE IF NOT EXISTS calendar_event_extended_properties (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+                property_key TEXT NOT NULL,
+                property_value TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_event_extended_properties_key
+                ON calendar_event_extended_properties(event_id, property_key);
+
+            CREATE TABLE IF NOT EXISTS calendar_event_override_extended_properties (
+                id TEXT PRIMARY KEY,
+                override_id TEXT NOT NULL REFERENCES calendar_event_overrides(id) ON DELETE CASCADE,
+                property_key TEXT NOT NULL,
+                property_value TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_override_extended_properties_key
+                ON calendar_event_override_extended_properties(override_id, property_key);
+
+            CREATE TABLE IF NOT EXISTS calendar_event_organizers (
+                event_id TEXT PRIMARY KEY REFERENCES calendar_events(id) ON DELETE CASCADE,
+                name TEXT,
+                email TEXT NOT NULL
+            );
+
             -- pomodoro config per event
             CREATE TABLE IF NOT EXISTS pomodoro_configs (
                 event_id TEXT PRIMARY KEY REFERENCES calendar_events(id) ON DELETE CASCADE,
@@ -405,27 +461,94 @@ pub fn migrations() -> Vec<Migration> {
                 idle_timeout_minutes INTEGER
             );
 
+            CREATE TABLE IF NOT EXISTS pomodoro_runs (
+                id TEXT PRIMARY KEY,
+                event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL,
+                original_event_id TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                planned_start TEXT NOT NULL,
+                planned_end TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                end_reason TEXT
+                    CHECK(end_reason IS NULL OR end_reason IN
+                        ('completed', 'stopped', 'interrupted', 'reconfigured', 'block_transition', 'crash_recovery')),
+                focus_duration_minutes INTEGER NOT NULL,
+                short_break_minutes INTEGER NOT NULL,
+                long_break_minutes INTEGER NOT NULL,
+                pomodoro_count INTEGER NOT NULL,
+                idle_timeout_minutes INTEGER,
+                last_heartbeat TEXT NOT NULL,
+                event_title_snapshot TEXT,
+                inherited_focus_minutes INTEGER NOT NULL DEFAULT 0,
+                inherited_cycle INTEGER NOT NULL DEFAULT 1,
+                inherited_from_run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+                start_trigger TEXT NOT NULL DEFAULT 'manual'
+                    CHECK(start_trigger IN ('manual', 'block_auto', 'block_transition', 'reconfigure', 'crash_recovery')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_runs_event_date
+                ON pomodoro_runs(event_id, event_date);
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_runs_original_event
+                ON pomodoro_runs(original_event_id);
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_runs_open
+                ON pomodoro_runs(ended_at);
+
             -- pomodoro segment tracking
             CREATE TABLE IF NOT EXISTS pomodoro_segments (
                 id TEXT PRIMARY KEY,
                 event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
                 event_date TEXT NOT NULL,
-                run_id TEXT NOT NULL,
+                run_id TEXT NOT NULL REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
                 cycle_number INTEGER NOT NULL,
                 phase TEXT NOT NULL CHECK(phase IN ('focus', 'short_break', 'long_break')),
                 planned_start TEXT NOT NULL,
                 planned_end TEXT NOT NULL,
-                actual_start TEXT,
+                actual_start TEXT NOT NULL,
                 actual_end TEXT,
-                pause_log TEXT,
-                status TEXT NOT NULL DEFAULT 'planned'
-                    CHECK(status IN ('planned', 'active', 'completed', 'skipped', 'interrupted')),
+                status TEXT NOT NULL DEFAULT 'active'
+                    CHECK(status IN ('active', 'completed', 'interrupted')),
+                end_reason TEXT
+                    CHECK(end_reason IS NULL OR end_reason IN
+                        ('completed', 'stopped', 'skipped_by_user', 'event_expired', 'reconfigured', 'block_transition', 'crash_recovery')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_event
                 ON pomodoro_segments(event_id, event_date);
             CREATE INDEX IF NOT EXISTS idx_pomodoro_segments_run
                 ON pomodoro_segments(run_id);
+
+            CREATE TABLE IF NOT EXISTS pomodoro_pauses (
+                id TEXT PRIMARY KEY,
+                segment_id TEXT NOT NULL REFERENCES pomodoro_segments(id) ON DELETE CASCADE,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                reason TEXT NOT NULL CHECK(reason IN ('idle', 'manual', 'suspend')),
+                detected_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_pauses_segment
+                ON pomodoro_pauses(segment_id, started_at);
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_pauses_reason
+                ON pomodoro_pauses(reason, started_at);
+
+            CREATE TABLE IF NOT EXISTS pomodoro_run_events (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
+                segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
+                event_type TEXT NOT NULL CHECK(event_type IN (
+                    'start', 'phase_start', 'phase_complete', 'pause_start', 'pause_end',
+                    'idle_detected', 'suspend_detected', 'skip_break', 'extend_focus',
+                    'reconfigure', 'block_transition', 'stop', 'complete', 'crash_recovery'
+                )),
+                occurred_at TEXT NOT NULL,
+                phase TEXT CHECK(phase IS NULL OR phase IN ('focus', 'short_break', 'long_break')),
+                reason TEXT,
+                duration_seconds INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_pomodoro_run_events_run
+                ON pomodoro_run_events(run_id, occurred_at);
 
             -- pomodoro sessions (completed focus periods)
             CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -681,8 +804,6 @@ pub fn migrations() -> Vec<Migration> {
                 version TEXT,
                 method TEXT,
                 calendar_scale TEXT,
-                raw_jcal TEXT NOT NULL,
-                diagnostics TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -704,12 +825,10 @@ pub fn migrations() -> Vec<Migration> {
                 recurrence_id_value_type TEXT,
                 sequence INTEGER,
                 dtstart_key TEXT,
-                raw_jcal TEXT NOT NULL,
                 projected_kind TEXT,
                 projected_id TEXT,
                 preservation_status TEXT NOT NULL
                     CHECK (preservation_status IN ('lossless', 'partial', 'unsupported', 'needs-review', 'regenerated', 'invalid')),
-                projection_warnings TEXT NOT NULL DEFAULT '[]',
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -726,6 +845,59 @@ pub fn migrations() -> Vec<Migration> {
                 ON icalendar_components(preservation_status);
             CREATE INDEX IF NOT EXISTS idx_icalendar_components_object
                 ON icalendar_components(object_id);
+
+            CREATE TABLE IF NOT EXISTS icalendar_component_properties (
+                id TEXT PRIMARY KEY,
+                component_id TEXT NOT NULL REFERENCES icalendar_components(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                value_type TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_icalendar_properties_component
+                ON icalendar_component_properties(component_id, sort_order);
+
+            CREATE TABLE IF NOT EXISTS icalendar_property_parameters (
+                id TEXT PRIMARY KEY,
+                property_id TEXT NOT NULL REFERENCES icalendar_component_properties(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_icalendar_parameters_property
+                ON icalendar_property_parameters(property_id, sort_order);
+
+            CREATE TABLE IF NOT EXISTS icalendar_value_nodes (
+                id TEXT PRIMARY KEY,
+                property_id TEXT REFERENCES icalendar_component_properties(id) ON DELETE CASCADE,
+                parameter_id TEXT REFERENCES icalendar_property_parameters(id) ON DELETE CASCADE,
+                parent_node_id TEXT REFERENCES icalendar_value_nodes(id) ON DELETE CASCADE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                value_kind TEXT NOT NULL CHECK(value_kind IN ('array', 'text', 'number', 'boolean', 'null')),
+                text_value TEXT,
+                number_value REAL,
+                boolean_value INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_property
+                ON icalendar_value_nodes(property_id, parent_node_id, sort_order);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_parameter
+                ON icalendar_value_nodes(parameter_id, parent_node_id, sort_order);
+
+            CREATE TABLE IF NOT EXISTS icalendar_object_diagnostics (
+                id TEXT PRIMARY KEY,
+                object_id TEXT NOT NULL REFERENCES icalendar_objects(id) ON DELETE CASCADE,
+                message TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_icalendar_object_diagnostics_object
+                ON icalendar_object_diagnostics(object_id, sort_order);
+
+            CREATE TABLE IF NOT EXISTS icalendar_component_projection_warnings (
+                id TEXT PRIMARY KEY,
+                component_id TEXT NOT NULL REFERENCES icalendar_components(id) ON DELETE CASCADE,
+                message TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_icalendar_projection_warnings_component
+                ON icalendar_component_projection_warnings(component_id, sort_order);
         ",
     },
     Migration {
@@ -1157,8 +1329,8 @@ pub fn migrations() -> Vec<Migration> {
             SET meeting_enabled = 1
             WHERE location <> ''
                 OR url <> ''
-                OR organizer IS NOT NULL
-                OR geo IS NOT NULL
+                OR geo_lat IS NOT NULL
+                OR geo_lng IS NOT NULL
                 OR local_rsvp_status IS NOT NULL
                 OR guest_can_modify <> 0
                 OR guest_can_invite_others <> 1
@@ -1167,6 +1339,11 @@ pub fn migrations() -> Vec<Migration> {
                     SELECT 1
                     FROM calendar_event_attendees
                     WHERE calendar_event_attendees.event_id = calendar_events.id
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM calendar_event_organizers
+                    WHERE calendar_event_organizers.event_id = calendar_events.id
                 );
         ",
     },
@@ -1244,10 +1421,8 @@ pub fn migrations() -> Vec<Migration> {
                 title TEXT NOT NULL DEFAULT '',
                 start_ms INTEGER CHECK (start_ms IS NULL OR start_ms >= 0),
                 end_ms INTEGER CHECK (end_ms IS NULL OR end_ms >= 0),
-                skip_ranges_json TEXT NOT NULL DEFAULT '[]',
                 volume REAL CHECK (volume IS NULL OR (volume >= 0 AND volume <= 1)),
                 rate REAL CHECK (rate IS NULL OR (rate >= 0.25 AND rate <= 2)),
-                break_source_json TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
@@ -1255,6 +1430,29 @@ pub fn migrations() -> Vec<Migration> {
                 ON music_playlist_tracks(playlist_id, position);
             CREATE INDEX IF NOT EXISTS idx_music_playlist_tracks_source_identity
                 ON music_playlist_tracks(source_identity);
+
+            CREATE TABLE IF NOT EXISTS music_track_skip_ranges (
+                id TEXT PRIMARY KEY,
+                track_id TEXT NOT NULL REFERENCES music_playlist_tracks(id) ON DELETE CASCADE,
+                start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+                end_ms INTEGER NOT NULL CHECK (end_ms >= 0),
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                CHECK (end_ms >= start_ms)
+            );
+            CREATE INDEX IF NOT EXISTS idx_music_track_skip_ranges_track
+                ON music_track_skip_ranges(track_id, sort_order);
+
+            CREATE TABLE IF NOT EXISTS music_track_break_sources (
+                track_id TEXT PRIMARY KEY REFERENCES music_playlist_tracks(id) ON DELETE CASCADE,
+                source_kind TEXT NOT NULL CHECK (source_kind IN ('local-file', 'youtube-video', 'youtube-playlist')),
+                source_uri TEXT NOT NULL,
+                source_identity TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                start_ms INTEGER CHECK (start_ms IS NULL OR start_ms >= 0),
+                end_ms INTEGER CHECK (end_ms IS NULL OR end_ms >= 0),
+                volume REAL CHECK (volume IS NULL OR (volume >= 0 AND volume <= 1)),
+                rate REAL CHECK (rate IS NULL OR (rate >= 0.25 AND rate <= 2))
+            );
 
             CREATE TABLE IF NOT EXISTS music_playback_states (
                 source_identity TEXT PRIMARY KEY,
@@ -1271,6 +1469,7 @@ pub fn migrations() -> Vec<Migration> {
 #[cfg(test)]
 mod tests {
     use super::run_migrations;
+    use sqlx::Row;
 
     #[test]
     fn pomodoro_sessions_can_insert_with_foreign_keys_enabled() {
@@ -1304,6 +1503,48 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(count, 1);
+        });
+    }
+
+    #[test]
+    fn schema_does_not_create_json_storage_columns() {
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+            run_migrations(&pool).await.unwrap();
+
+            let rows = sqlx::query(
+                "SELECT m.name AS table_name, p.name AS column_name
+                 FROM sqlite_schema AS m, pragma_table_info(m.name) AS p
+                 WHERE m.type = 'table'",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            let forbidden = [
+                "pause_log",
+                "raw_jcal",
+                "skip_ranges_json",
+                "break_source_json",
+                "notifications",
+                "exceptions",
+                "categories",
+                "geo",
+                "rdate",
+                "extended_properties",
+                "organizer",
+            ];
+            for row in rows {
+                let table_name: String = row.try_get("table_name").unwrap();
+                let column_name: String = row.try_get("column_name").unwrap();
+                assert!(
+                    !forbidden.contains(&column_name.as_str()) && !column_name.ends_with("_json"),
+                    "{table_name}.{column_name} should be normalized, not JSON storage",
+                );
+            }
         });
     }
 }
