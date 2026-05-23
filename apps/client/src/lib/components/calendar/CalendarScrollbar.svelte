@@ -19,6 +19,7 @@
   } = $props();
 
   const calZoom = getCalendarZoom();
+  const SCROLLBAR_VISIBILITY_THRESHOLD_PX = 2;
 
   let trackEl: HTMLDivElement | undefined = $state();
   let thumbTop = $state(0);
@@ -35,14 +36,15 @@
     if (calZoom.isAnimating) return;
     if (!scrollContainer || !trackEl) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-    if (scrollHeight <= clientHeight) {
+    const scrollRange = scrollHeight - clientHeight;
+    if (scrollRange <= SCROLLBAR_VISIBILITY_THRESHOLD_PX) {
       thumbHeight = 0;
+      thumbTop = 0;
       return;
     }
     const trackH = trackEl.clientHeight;
     const ratio = clientHeight / scrollHeight;
     thumbHeight = Math.max(ratio * trackH, 24);
-    const scrollRange = scrollHeight - clientHeight;
     thumbTop = scrollRange > 0
       ? (scrollTop / scrollRange) * (trackH - thumbHeight)
       : 0;

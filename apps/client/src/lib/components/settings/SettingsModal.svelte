@@ -8,6 +8,7 @@
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import X from "@lucide/svelte/icons/x";
   import AppearanceSection from "./AppearanceSection.svelte";
+  import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import MusicSection from "./MusicSection.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
@@ -45,6 +46,7 @@
   ];
 
   let activeSection = $state<SectionId>("appearance");
+  let settingsScrollEl: HTMLElement | undefined = $state();
   const useTopNav = $derived(viewport.below("compact"));
   const useIconRail = $derived(!useTopNav && viewport.below("regular"));
   type CalendarsSectionComponent = typeof import("./CalendarsSection.svelte").default;
@@ -225,27 +227,33 @@
       </aside>
     {/if}
 
-    <!-- Content -->
-    <section
-      data-settings-content
-      class={cn(
-        "min-h-0 flex-1 bg-background/40 dark:bg-black/20",
-        activeSection === "shortcuts" ? "overflow-hidden" : "overflow-y-auto",
-        useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
-      )}
-    >
-      {#if activeSection === "appearance"}
-        <AppearanceSection />
-      {:else if activeSection === "calendars"}
-        {#if CalendarsSection}
-          {@const Section = CalendarsSection}
-          <Section />
+    <div class="relative min-h-0 flex-1">
+      <!-- Content -->
+      <section
+        bind:this={settingsScrollEl}
+        data-settings-content
+        class={cn(
+          "h-full min-h-0 bg-background/40 dark:bg-black/20",
+          activeSection === "shortcuts" ? "overflow-hidden" : "hide-scrollbar overflow-y-auto",
+          useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
+        )}
+      >
+        {#if activeSection === "appearance"}
+          <AppearanceSection />
+        {:else if activeSection === "calendars"}
+          {#if CalendarsSection}
+            {@const Section = CalendarsSection}
+            <Section />
+          {/if}
+        {:else if activeSection === "music"}
+          <MusicSection />
+        {:else if activeSection === "shortcuts"}
+          <ShortcutsSection />
         {/if}
-      {:else if activeSection === "music"}
-        <MusicSection />
-      {:else if activeSection === "shortcuts"}
-        <ShortcutsSection />
+      </section>
+      {#if activeSection !== "shortcuts"}
+        <CalendarScrollbar scrollContainer={settingsScrollEl} wheelPassthrough />
       {/if}
-    </section>
+    </div>
   </div>
 </div>

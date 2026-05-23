@@ -6,6 +6,7 @@
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Search from "@lucide/svelte/icons/search";
   import X from "@lucide/svelte/icons/x";
+  import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import {
     SHORTCUT_GROUPS,
     filterShortcutGroups,
@@ -14,6 +15,7 @@
 
   let search = $state("");
   let searchInput: HTMLInputElement | undefined = $state();
+  let shortcutsScrollEl: HTMLDivElement | undefined = $state();
   const filteredGroups = $derived(filterShortcutGroups(SHORTCUT_GROUPS, search));
   const hasSearch = $derived(search.trim().length > 0);
 
@@ -66,64 +68,67 @@
     </label>
   </div>
 
-  <div class="min-h-0 flex-1 overflow-y-auto pr-1">
-    {#if filteredGroups.length === 0}
-      <div class="px-1 py-6 text-[0.866667rem] text-muted-foreground">
-        No shortcuts found.
-      </div>
-    {/if}
+  <div class="relative min-h-0 flex-1">
+    <div bind:this={shortcutsScrollEl} class="hide-scrollbar h-full overflow-y-auto pr-1">
+      {#if filteredGroups.length === 0}
+        <div class="px-1 py-6 text-[0.866667rem] text-muted-foreground">
+          No shortcuts found.
+        </div>
+      {/if}
 
-    <div class="flex flex-col pb-3 pt-1">
-      {#each filteredGroups as group, index}
-        <section
-          class={[
-            "flex flex-col gap-4",
-            index > 0 ? "pt-7" : "",
-          ]}
-        >
-          <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{group.title}</h2>
-          <div class="flex flex-col divide-y divide-border/70">
-            {#each group.items as item}
-              <div
-                class="grid grid-cols-[minmax(0,1fr)_minmax(8rem,13rem)] gap-x-3 gap-y-1 px-1 py-2.5 first:pt-0 max-[560px]:grid-cols-1"
-              >
-                <div class="min-w-0 text-[0.866667rem] text-foreground">
-                  <div class="min-h-6 leading-6">{item.action}</div>
-                  {#if item.context}
-                    <div class="text-[0.733333rem] leading-4 text-muted-foreground">{item.context}</div>
-                  {/if}
-                </div>
-                <div class="flex min-w-0 flex-col items-start gap-1.5 overflow-hidden">
-                  {#each item.keys as key}
-                    <span class="flex flex-wrap items-center gap-1">
-                      {#each shortcutParts(key) as part, i}
-                        {#if i > 0}
-                          <span class="text-[0.733333rem] leading-5 text-muted-foreground">+</span>
-                        {/if}
-                        {@const ArrowIcon = arrowIconForKey(part)}
-                        <kbd
-                          class="inline-flex min-h-6 items-center justify-center rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[0.733333rem] leading-5 text-foreground shadow-sm"
-                          aria-label={ArrowIcon ? part : undefined}
-                          title={ArrowIcon ? part : undefined}
-                        >
-                          {#if ArrowIcon}
-                            <ArrowIcon size={13} strokeWidth={2.1} aria-hidden="true" />
-                          {:else}
-                            {part}
+      <div class="flex flex-col pb-3 pt-1">
+        {#each filteredGroups as group, index}
+          <section
+            class={[
+              "flex flex-col gap-4",
+              index > 0 ? "pt-7" : "",
+            ]}
+          >
+            <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{group.title}</h2>
+            <div class="flex flex-col divide-y divide-border/70">
+              {#each group.items as item}
+                <div
+                  class="grid grid-cols-[minmax(0,1fr)_minmax(8rem,13rem)] gap-x-3 gap-y-1 px-1 py-2.5 first:pt-0 max-[560px]:grid-cols-1"
+                >
+                  <div class="min-w-0 text-[0.866667rem] text-foreground">
+                    <div class="min-h-6 leading-6">{item.action}</div>
+                    {#if item.context}
+                      <div class="text-[0.733333rem] leading-4 text-muted-foreground">{item.context}</div>
+                    {/if}
+                  </div>
+                  <div class="flex min-w-0 flex-col items-start gap-1.5 overflow-hidden">
+                    {#each item.keys as key}
+                      <span class="flex flex-wrap items-center gap-1">
+                        {#each shortcutParts(key) as part, i}
+                          {#if i > 0}
+                            <span class="text-[0.733333rem] leading-5 text-muted-foreground">+</span>
                           {/if}
-                        </kbd>
-                      {/each}
-                    </span>
-                  {/each}
+                          {@const ArrowIcon = arrowIconForKey(part)}
+                          <kbd
+                            class="inline-flex min-h-6 items-center justify-center rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[0.733333rem] leading-5 text-foreground shadow-sm"
+                            aria-label={ArrowIcon ? part : undefined}
+                            title={ArrowIcon ? part : undefined}
+                          >
+                            {#if ArrowIcon}
+                              <ArrowIcon size={13} strokeWidth={2.1} aria-hidden="true" />
+                            {:else}
+                              {part}
+                            {/if}
+                          </kbd>
+                        {/each}
+                      </span>
+                    {/each}
+                  </div>
                 </div>
-              </div>
-            {/each}
-          </div>
-        </section>
-        {#if index < filteredGroups.length - 1}
-          <div class="h-px bg-border/70" aria-hidden="true"></div>
-        {/if}
-      {/each}
+              {/each}
+            </div>
+          </section>
+          {#if index < filteredGroups.length - 1}
+            <div class="h-px bg-border/70" aria-hidden="true"></div>
+          {/if}
+        {/each}
+      </div>
     </div>
+    <CalendarScrollbar scrollContainer={shortcutsScrollEl} wheelPassthrough />
   </div>
 </div>

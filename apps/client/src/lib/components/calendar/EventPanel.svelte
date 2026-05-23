@@ -7,6 +7,7 @@
   import MiniDatePicker from "./MiniDatePicker.svelte";
   import TimePicker, { type TimePickerInputNavigation } from "./TimePicker.svelte";
   import ColorPicker from "./ColorPicker.svelte";
+  import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import MeetingSection from "./MeetingSection.svelte";
   import PomodoroSection from "./PomodoroSection.svelte";
   import NotificationsSection from "./NotificationsSection.svelte";
@@ -57,6 +58,7 @@
   const PANEL_MAX_WIDTH = Math.round(EVENT_PANEL_MAX_WIDTH * 1.08);
   const PANEL_GAP = EVENT_PANEL_EDGE_MARGIN;
   const TITLE_BAR_HEIGHT = EVENT_PANEL_TITLE_BAR_HEIGHT;
+  const PANEL_HEIGHT_CONSTRAINT_TOLERANCE = 2;
 
   let {
     mode,
@@ -658,6 +660,8 @@
   // ─── Panel positioning & drag ───────────────────────────────────
   let titleInput: HTMLInputElement | undefined = $state();
   let panelEl: HTMLDivElement | undefined = $state();
+  let eventPanelScrollEl: HTMLDivElement | undefined = $state();
+  let eventPanelContentEl: HTMLDivElement | undefined = $state();
   let panelHeight = $state(0);
   let pinnedBottom = $state(0);
   let pinnedDragY = 0;
@@ -677,6 +681,31 @@
   function clampFloatingTop(top: number, viewportHeight: number, visibleHeight: number): number {
     const maxTop = Math.max(minTop, viewportHeight - visibleHeight - PANEL_GAP);
     return Math.max(minTop, Math.min(maxTop, top));
+  }
+
+  function getAvailablePanelHeight(viewportHeight: number): number {
+    return Math.max(
+      96,
+      getEventPanelUsableHeight(viewportHeight, TITLE_BAR_HEIGHT, PANEL_GAP),
+    );
+  }
+
+  function getPinnedHeightLimit(viewportHeight: number): number {
+    const dragDelta = dragOffset.y - pinnedDragY;
+    const viewportBottom = Math.max(minTop + 96, viewportHeight - PANEL_GAP);
+    const effectiveBottom = Math.min(pinnedBottom + dragDelta, viewportBottom);
+    return Math.max(96, Math.round(effectiveBottom - minTop));
+  }
+
+  function getPanelHeightLimit(layout: EventPanelLayout, viewportHeight: number): number {
+    const availableHeight = getAvailablePanelHeight(viewportHeight);
+    if (layout === "bottom") return Math.min(560, availableHeight);
+    if (pinnedBottom > 0) return getPinnedHeightLimit(viewportHeight);
+    return availableHeight;
+  }
+
+  function shouldConstrainPanelHeight(limit: number): boolean {
+    return panelHeight > 0 && panelHeight > limit + PANEL_HEIGHT_CONSTRAINT_TOLERANCE;
   }
 
   const isRecurring = $derived(
@@ -920,13 +949,35 @@
     }
   });
 
-  // Track actual panel height for initial placement estimates
+  function measurePanelNaturalHeight() {
+    const panel = panelEl;
+    if (!panel) return;
+
+    const renderedHeight = panel.offsetHeight;
+    let naturalHeight = panel.scrollHeight;
+
+    if (eventPanelScrollEl) {
+      const panelRect = panel.getBoundingClientRect();
+      const scrollRect = eventPanelScrollEl.getBoundingClientRect();
+      const chromeHeight = Math.max(0, panelRect.height - scrollRect.height);
+      naturalHeight = Math.max(naturalHeight, chromeHeight + eventPanelScrollEl.scrollHeight);
+    }
+
+    panelHeight = Math.ceil(Math.max(renderedHeight, naturalHeight));
+  }
+
+  // Track natural panel height so scrolling starts only when the panel
+  // cannot fit in the usable viewport height.
   $effect(() => {
-    if (!panelEl) return;
-    const observer = new ResizeObserver(() => {
-      panelHeight = panelEl!.offsetHeight;
-    });
-    observer.observe(panelEl);
+    const panel = panelEl;
+    if (!panel) return;
+
+    const observer = new ResizeObserver(measurePanelNaturalHeight);
+    observer.observe(panel);
+    if (eventPanelScrollEl) observer.observe(eventPanelScrollEl);
+    if (eventPanelContentEl) observer.observe(eventPanelContentEl);
+    void tick().then(measurePanelNaturalHeight);
+
     return () => observer.disconnect();
   });
 
@@ -979,6 +1030,10 @@
   // reverting all edits back to the original values disables the button
   // again, matching the click-outside cancellation behavior.
   const saveReady = $derived(mode === "create" || externalDirty);
+  const eventPanelBodyConstrained = $derived.by(() => (
+    panelLayout === "fullscreen"
+    || shouldConstrainPanelHeight(getPanelHeightLimit(panelLayout, viewport.height))
+  ));
 
   // ─── Emit changes ───────────────────────────────────────────────
   /**
@@ -1064,10 +1119,7 @@
     const vw = viewport.width;
     const vh = viewport.height;
     const width = panelWidth;
-    const availableHeight = Math.max(
-      96,
-      getEventPanelUsableHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP),
-    );
+    const availableHeight = getAvailablePanelHeight(vh);
     const layout = panelLayout;
     const ph = panelHeight || DEFAULT_PANEL_HEIGHT;
     const visibleHeight = Math.min(ph, availableHeight);
@@ -1077,8 +1129,11 @@
     }
 
     if (layout === "bottom") {
-      const maxHeight = Math.min(560, availableHeight);
-      return `position:fixed; left:${PANEL_GAP}px; right:${PANEL_GAP}px; bottom:${PANEL_GAP}px; max-height:${Math.round(maxHeight)}px; z-index:50;`;
+      const maxHeight = getPanelHeightLimit(layout, vh);
+      const heightCss = shouldConstrainPanelHeight(maxHeight)
+        ? `height:${Math.round(maxHeight)}px;`
+        : "";
+      return `position:fixed; left:${PANEL_GAP}px; right:${PANEL_GAP}px; bottom:${PANEL_GAP}px; max-height:${Math.round(maxHeight)}px; ${heightCss} z-index:50;`;
     }
 
     const left = clampFloatingLeft(baseLeft + dragOffset.x, vw, width);
@@ -1089,8 +1144,11 @@
       // The browser keeps it fixed frame-by-frame without JS timing issues.
       const dragDelta = dragOffset.y - pinnedDragY;
       const bottomCss = Math.max(PANEL_GAP, Math.round(vh - pinnedBottom - dragDelta));
-      const maxH = Math.max(96, Math.round(pinnedBottom + dragDelta - minTop));
-      return `position:fixed; left:${Math.round(left)}px; bottom:${bottomCss}px; max-height:${maxH}px; width:${Math.round(width)}px; z-index:50;`;
+      const maxH = getPinnedHeightLimit(vh);
+      const heightCss = shouldConstrainPanelHeight(maxH)
+        ? `height:${maxH}px;`
+        : "";
+      return `position:fixed; left:${Math.round(left)}px; bottom:${bottomCss}px; max-height:${maxH}px; ${heightCss} width:${Math.round(width)}px; z-index:50;`;
     }
 
     // Normal: pin top, nudge up if overflowing bottom
@@ -1100,7 +1158,10 @@
       top = Math.max(minTop, top - overflow);
     }
 
-    return `position:fixed; left:${Math.round(left)}px; top:${Math.round(top)}px; width:${Math.round(width)}px; max-height:${Math.round(availableHeight)}px; z-index:50;`;
+    const heightCss = shouldConstrainPanelHeight(availableHeight)
+      ? `height:${Math.round(availableHeight)}px;`
+      : "";
+    return `position:fixed; left:${Math.round(left)}px; top:${Math.round(top)}px; width:${Math.round(width)}px; max-height:${Math.round(availableHeight)}px; ${heightCss} z-index:50;`;
   });
   const parkedPanelStyle = $derived(
     `position:fixed; left:-10000px; top:-10000px; width:${Math.round(panelWidth)}px; z-index:-1; pointer-events:none;`,
@@ -1547,9 +1608,22 @@
     </div>
   </div>
 
-  <div class="event-panel-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-  <!-- Main editor: title + date -->
-  <div class="shrink-0 px-4 pt-2.5">
+  <div
+    class={cn(
+      "relative min-h-0",
+      eventPanelBodyConstrained ? "flex-1 overflow-hidden" : "shrink-0",
+    )}
+  >
+    <div
+      bind:this={eventPanelScrollEl}
+      class={cn(
+        "event-panel-scroll hide-scrollbar overscroll-contain",
+        eventPanelBodyConstrained ? "h-full overflow-y-auto" : "overflow-visible",
+      )}
+    >
+    <div bind:this={eventPanelContentEl}>
+    <!-- Main editor: title + date -->
+    <div class="shrink-0 px-4 pt-2.5">
 
     <!-- Scope selector (recurring events only) -->
     {#if isRecurring}
@@ -1916,6 +1990,11 @@
       </div>
   </div>
   </div>
+  </div>
+    {#if eventPanelBodyConstrained}
+      <CalendarScrollbar scrollContainer={eventPanelScrollEl} wheelPassthrough />
+    {/if}
+  </div>
 
   <!-- Save (pinned outside scroll) -->
   <div
@@ -1979,10 +2058,8 @@
     --foreground: var(--event-panel-text);
     --muted-foreground: var(--event-panel-muted-text);
     font-variant-numeric: tabular-nums;
-  }
-
-  .event-panel-scroll {
-    scrollbar-width: thin;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .date-time-grid {
