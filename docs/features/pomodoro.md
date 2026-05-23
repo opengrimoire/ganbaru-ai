@@ -5,6 +5,7 @@ The pomodoro feature is the work mechanic underneath the calendar. A calendar ev
 This doc covers the user-facing loop. The pieces that make it work each have their own document:
 
 - `features/pomodoro-progress-displays.md`: the title bar ring, tray ring, and timeline rail.
+- `features/tray-icon.md`: tray menu behavior and platform-specific tray icon implementation details.
 - `features/pomodoro-break-screen.md`: the overlay that enforces breaks.
 - `features/pomodoro-idle-detection.md`: what happens when the user steps away.
 - `algorithms/pomodoro-state-machine.md`: the decision functions behind ticks and transitions.
@@ -123,6 +124,7 @@ The dependency runs one way: pomodoro depends on calendar, not the other way aro
 ## Where to look next
 
 - For the actual visual surfaces (ring, tray, rail): `features/pomodoro-progress-displays.md`.
+- For tray-specific menu behavior and platform details: `features/tray-icon.md`.
 - For the break screen UI and overtime behavior: `features/pomodoro-break-screen.md`.
 - For idle and suspend handling from the user's perspective: `features/pomodoro-idle-detection.md`.
 - For the decision rules behind ticks and transitions: `algorithms/pomodoro-state-machine.md`.

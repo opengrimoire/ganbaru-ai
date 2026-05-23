@@ -11,11 +11,11 @@ name = "desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "~2.6.1", features = [] }
 
 [dependencies]
 ammonia = "4.1.2"
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "~2.11.1", features = ["tray-icon", "image-png"] }
 rodio = { version = "0.22.2", default-features = false, features = [
   "playback",
   "symphonia-flac",

@@ -4,11 +4,13 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter,
+    AppHandle, Emitter, Manager,
 };
 
 const ICON_SIZE: u32 = 32;
 const RING_WIDTH: f64 = 3.5;
+#[cfg(target_os = "linux")]
+const LINUX_TRAY_ICON_VERSION: u8 = 2;
 
 #[derive(Debug, Clone)]
 struct PomodoroTrayState {
@@ -64,6 +66,12 @@ struct MenuShape {
     music_can_next: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrayIconKey {
+    Empty,
+    Progress(u8),
+}
+
 static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
     Mutex::new(TrayState {
         pomodoro: PomodoroTrayState {
@@ -85,7 +93,7 @@ static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
 });
 
 /// Track last icon state to avoid unnecessary set_icon calls.
-static LAST_ICON_STEP: Mutex<(u8, bool)> = Mutex::new((255, true));
+static LAST_ICON_KEY: Mutex<TrayIconKey> = Mutex::new(TrayIconKey::Empty);
 static LAST_MENU_SHAPE: LazyLock<Mutex<Option<MenuShape>>> = LazyLock::new(|| Mutex::new(None));
 static POMODORO_STATUS_ITEM: Mutex<Option<MenuItem<tauri::Wry>>> = Mutex::new(None);
 static MUSIC_STATUS_ITEM: Mutex<Option<MenuItem<tauri::Wry>>> = Mutex::new(None);
@@ -100,6 +108,7 @@ fn render_progress_icon(progress: f64, active: bool) -> Vec<u8> {
 
     let gray: (u8, u8, u8) = (110, 110, 110);
     let white: (u8, u8, u8) = (240, 240, 240);
+    let progress = normalize_progress(progress);
 
     for y in 0..size {
         for x in 0..size {
@@ -112,9 +121,7 @@ fn render_progress_icon(progress: f64, active: bool) -> Vec<u8> {
                 let aa_inner = (dist - (inner_r - 0.5)).clamp(0.0, 1.0);
                 let alpha = (aa_outer * aa_inner * 255.0) as u8;
 
-                let (r, g, b) = if !active {
-                    gray
-                } else {
+                let (r, g, b) = if active {
                     let angle = (-dx).atan2(-dy);
                     let normalized = (angle + std::f64::consts::PI) / (2.0 * std::f64::consts::PI);
                     let normalized = (normalized + 0.5) % 1.0;
@@ -124,6 +131,8 @@ fn render_progress_icon(progress: f64, active: bool) -> Vec<u8> {
                     } else {
                         white
                     }
+                } else {
+                    gray
                 };
 
                 let idx = (y * size + x) * 4;
@@ -135,6 +144,14 @@ fn render_progress_icon(progress: f64, active: bool) -> Vec<u8> {
         }
     }
     pixels
+}
+
+fn normalize_progress(progress: f64) -> f64 {
+    if progress.is_finite() {
+        progress.clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
 }
 
 fn format_tray_time(secs: u32) -> String {
@@ -191,6 +208,15 @@ fn pomodoro_progress(state: &PomodoroTrayState) -> f64 {
     } else {
         0.0
     }
+}
+
+fn tray_icon_key(progress: f64, active: bool) -> TrayIconKey {
+    let progress = normalize_progress(progress);
+    if !active || progress >= 1.0 {
+        return TrayIconKey::Empty;
+    }
+
+    TrayIconKey::Progress((progress * 100.0) as u8)
 }
 
 fn pomodoro_status_text(state: &PomodoroTrayState) -> String {
@@ -320,19 +346,95 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         .map_err(|e| e.to_string())
 }
 
+#[cfg(target_os = "linux")]
+fn linux_tray_icon_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let mut path = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    path.push("tray-icons");
+    std::fs::create_dir_all(&path).map_err(|e| format!("create tray icon cache: {e}"))?;
+    Ok(path)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_tray_icon_name(icon_key: TrayIconKey) -> String {
+    match icon_key {
+        TrayIconKey::Empty => format!("ganbaruai-tray-v{LINUX_TRAY_ICON_VERSION}-empty.png"),
+        TrayIconKey::Progress(step) => {
+            format!("ganbaruai-tray-v{LINUX_TRAY_ICON_VERSION}-progress-{step:03}.png")
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn write_linux_tray_icon(path: &std::path::Path, pixels: Vec<u8>) -> Result<(), String> {
+    use gtk::gdk_pixbuf::{Colorspace, Pixbuf};
+
+    if path.exists() {
+        return Ok(());
+    }
+
+    let pixbuf = Pixbuf::from_mut_slice(
+        pixels,
+        Colorspace::Rgb,
+        true,
+        8,
+        ICON_SIZE as i32,
+        ICON_SIZE as i32,
+        (ICON_SIZE * 4) as i32,
+    );
+    pixbuf
+        .savev(path, "png", &[])
+        .map_err(|e| format!("write tray icon png: {e}"))
+}
+
+#[cfg(target_os = "linux")]
+fn set_tray_icon(
+    app: &AppHandle,
+    tray: &tauri::tray::TrayIcon<tauri::Wry>,
+    icon_key: TrayIconKey,
+    pixels: Vec<u8>,
+) -> Result<(), String> {
+    let dir = linux_tray_icon_dir(app)?;
+    let path = dir.join(linux_tray_icon_name(icon_key));
+    write_linux_tray_icon(&path, pixels)?;
+
+    let parent_path = dir.to_string_lossy().into_owned();
+    let icon_path = path.to_string_lossy().into_owned();
+    tray.with_inner_tray_icon(move |inner| {
+        // Tauri's Linux set_icon path removes the current PNG before
+        // publishing the next one. Updating AppIndicator after the next PNG
+        // exists avoids Ubuntu showing its missing-icon placeholder.
+        unsafe {
+            let indicator = &mut *inner.app_indicator().cast_mut();
+            indicator.set_icon_theme_path(&parent_path);
+            indicator.set_icon_full(&icon_path, "tray icon");
+        }
+    })
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn set_tray_icon(
+    _app: &AppHandle,
+    tray: &tauri::tray::TrayIcon<tauri::Wry>,
+    _icon_key: TrayIconKey,
+    pixels: Vec<u8>,
+) -> Result<(), String> {
+    let icon = Image::new_owned(pixels, ICON_SIZE, ICON_SIZE);
+    tray.set_icon(Some(icon)).map_err(|e| e.to_string())
+}
+
 fn apply_tray_state(app: &AppHandle, state: &TrayState) -> Result<(), String> {
     let tray = app.tray_by_id("main").ok_or("No tray icon found")?;
 
     let progress = pomodoro_progress(&state.pomodoro);
-    let progress_step = (progress * 100.0) as u8;
     let active = pomodoro_active(&state.pomodoro);
+    let icon_key = tray_icon_key(progress, active);
     {
-        let mut last = LAST_ICON_STEP.lock().unwrap();
-        if last.0 != progress_step || last.1 != active {
-            *last = (progress_step, active);
+        let mut last = LAST_ICON_KEY.lock().unwrap();
+        if *last != icon_key {
+            *last = icon_key;
             let pixels = render_progress_icon(progress, active);
-            let icon = Image::new_owned(pixels, ICON_SIZE, ICON_SIZE);
-            tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
+            set_tray_icon(app, &tray, icon_key, pixels)?;
         }
     }
 
@@ -376,6 +478,10 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let icon = Image::new_owned(idle_icon, ICON_SIZE, ICON_SIZE);
     let state = TRAY_STATE.lock().unwrap().clone();
     let menu = build_menu(app, &state).map_err(std::io::Error::other)?;
+    {
+        let mut last = LAST_ICON_KEY.lock().unwrap();
+        *last = TrayIconKey::Empty;
+    }
 
     let _tray = TrayIconBuilder::with_id("main")
         .icon(icon)
@@ -451,4 +557,74 @@ pub fn update_music_tray(app: AppHandle, update: MusicTrayUpdate) -> Result<(), 
         state.clone()
     };
     apply_tray_state(&app, &state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has_ring_pixel_with_color(pixels: &[u8], color: (u8, u8, u8)) -> bool {
+        pixels.chunks_exact(4).any(|pixel| {
+            pixel[3] > 0 && pixel[0] == color.0 && pixel[1] == color.1 && pixel[2] == color.2
+        })
+    }
+
+    #[test]
+    fn active_zero_progress_renders_remaining_ring() {
+        let pixels = render_progress_icon(0.0, true);
+
+        assert!(has_ring_pixel_with_color(&pixels, (240, 240, 240)));
+    }
+
+    #[test]
+    fn active_negative_progress_renders_remaining_ring() {
+        assert_eq!(
+            render_progress_icon(-0.25, true),
+            render_progress_icon(0.0, true)
+        );
+    }
+
+    #[test]
+    fn active_positive_progress_renders_progress_arc() {
+        let pixels = render_progress_icon(0.5, true);
+
+        assert!(has_ring_pixel_with_color(&pixels, (240, 240, 240)));
+        assert!(has_ring_pixel_with_color(&pixels, (110, 110, 110)));
+    }
+
+    #[test]
+    fn active_progress_reduces_remaining_arc_from_top() {
+        let pixels = render_progress_icon(0.25, true);
+        let top_idx = ((2 * ICON_SIZE as usize) + (ICON_SIZE as usize / 2)) * 4;
+        let bottom_idx =
+            (((ICON_SIZE as usize - 3) * ICON_SIZE as usize) + (ICON_SIZE as usize / 2)) * 4;
+
+        assert_eq!(&pixels[top_idx..top_idx + 3], &[110, 110, 110]);
+        assert_eq!(&pixels[bottom_idx..bottom_idx + 3], &[240, 240, 240]);
+    }
+
+    #[test]
+    fn active_zero_progress_uses_progress_icon_key() {
+        assert_eq!(tray_icon_key(0.0, true), TrayIconKey::Progress(0));
+    }
+
+    #[test]
+    fn inactive_zero_progress_uses_empty_icon_key() {
+        assert_eq!(tray_icon_key(0.0, false), TrayIconKey::Empty);
+    }
+
+    #[test]
+    fn active_negative_progress_uses_zero_progress_icon_key() {
+        assert_eq!(tray_icon_key(-0.25, true), TrayIconKey::Progress(0));
+    }
+
+    #[test]
+    fn complete_progress_uses_empty_icon_key() {
+        assert_eq!(tray_icon_key(1.0, true), TrayIconKey::Empty);
+    }
+
+    #[test]
+    fn positive_progress_uses_progress_icon_key() {
+        assert_eq!(tray_icon_key(0.5, true), TrayIconKey::Progress(50));
+    }
 }

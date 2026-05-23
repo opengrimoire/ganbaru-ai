@@ -29,6 +29,8 @@ The ring menu mirrors the tray menu's compact controls and adds a subdued Music 
 
 The tray icon is an RGBA-rendered circular progress ring. It mirrors the title bar ring's semantics but lives in the OS tray (or menu bar on macOS), making it visible even when the app window is hidden, minimized, or behind other windows.
 
+Tray-specific menu behavior and platform implementation details live in `features/tray-icon.md`.
+
 What it shows:
 
 - **Focus only**, same as the title bar ring.
