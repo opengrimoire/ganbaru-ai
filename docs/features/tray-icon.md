@@ -33,6 +33,7 @@ Visual states:
 | No active focus session | Empty gray ring |
 | Focus starts | Full white remaining-time ring |
 | Focus running | White remaining arc shrinks as progress increases |
+| Focus manually paused | Remaining arc gently pulses between white and empty-ring gray |
 | Focus complete or stopped | Empty gray ring |
 
 The active `0%` state is intentionally distinct from idle. Idle means no focus session is active, so the icon is an empty gray ring. Active `0%` means the user has just started focus, so the icon is a full remaining-time ring. This keeps the tray synchronized with the title bar at session start.
@@ -40,6 +41,8 @@ The active `0%` state is intentionally distinct from idle. Idle means no focus s
 The active `100%` state maps back to the empty ring. At that point the current focus opportunity is over, and keeping a separate completed icon would add another tray icon replacement with no useful user-facing meaning.
 
 The ring redraw is quantized to 1% progress steps. That is frequent enough to feel current while avoiding needless tray icon churn.
+
+While a focus session is manually paused, the tray ring animates a slow color beat so the user can notice that focus is waiting to resume. The beat is limited to the focus phase and stops immediately on resume, stop, phase change, idle pause, or suspend pause. The tray cannot animate like the title bar SVG, so GanbaruAI switches between a small set of cached PNG frames instead of trying to drive a high-frame-rate animation. The pulse holds at the full white and dim gray endpoints, with smoother transitions between them.
 
 ## Menu behavior
 
@@ -73,11 +76,11 @@ GanbaruAI avoids that gap on Linux:
 3. Reuse the PNG if it already exists.
 4. Point AppIndicator at the already-written PNG.
 
-This means the old icon remains resolvable until the new icon is ready. The user should see a direct transition from one ring state to the next, without the three-dot placeholder.
+This means the old icon remains resolvable until the new icon is ready. The user should see a direct transition from one ring state to the next, without the three-dot placeholder. The paused pulse uses the same path: each pulse frame is written or reused before AppIndicator is pointed at it.
 
 The cache filenames include a tray icon renderer version. Bump `LINUX_TRAY_ICON_VERSION` in `apps/client/src-tauri/src/tray.rs` when a renderer change makes existing cached PNGs visually obsolete.
 
-Generated tray PNGs live in the app cache, not the vault. They are derived UI assets, not user data. The cache footprint is small: one empty icon plus up to 101 progress icons per renderer version.
+Generated tray PNGs live in the app cache, not the vault. They are derived UI assets, not user data. The cache footprint is small: one empty icon, up to 101 normal progress icons, and up to 22 paused pulse frames per progress step per renderer version.
 
 ## Tauri version pinning
 

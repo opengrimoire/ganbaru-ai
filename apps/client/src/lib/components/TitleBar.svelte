@@ -296,6 +296,23 @@
   const pomodoroPauseResumeLabel = $derived(
     isActive && !pomodoro.isRunning ? "Resume pomodoro" : "Pause pomodoro",
   );
+  const pomodoroPausedPulseActive = $derived(
+    isActive &&
+    pomodoro.phase === "focus" &&
+    !pomodoro.isRunning &&
+    !pomodoro.suspendedAway &&
+    !pomodoro.idlePaused,
+  );
+  const pomodoroPausedPulseAmount = $derived.by(() => {
+    const amount = pomodoro.pausedPulseAmount;
+    if (amount === null) return "0%";
+    return `${Math.round(amount * 100)}%`;
+  });
+  const pomodoroPausedPulseStyle = $derived(
+    pomodoroPausedPulseActive
+      ? `--pomodoro-ring-paused-pulse-amount: ${pomodoroPausedPulseAmount};`
+      : undefined,
+  );
   const phaseAdvanceLabel = $derived(
     isActive
       ? pomodoro.phase === "focus"
@@ -955,7 +972,11 @@
                 stroke-width={POMODORO_RING_STROKE_WIDTH}
                 stroke-dasharray={`${((100 - progressPercent()) / 100) * 50.27} 50.27`}
                 stroke-linecap="round"
-                class="stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center"
+                class={cn(
+                  "stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center",
+                  pomodoroPausedPulseActive ? "pomodoro-ring-paused-pulse" : "",
+                )}
+                style={pomodoroPausedPulseStyle}
               />
             {/if}
           </svg>
@@ -1484,6 +1505,21 @@
 
   .tab-indicator {
     transition: none;
+  }
+
+  .pomodoro-ring-paused-pulse {
+    stroke: color-mix(
+      in srgb,
+      color-mix(in srgb, var(--foreground) 18%, transparent)
+        var(--pomodoro-ring-paused-pulse-amount, 0%),
+      color-mix(in srgb, var(--foreground) 62%, transparent)
+    );
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pomodoro-ring-paused-pulse {
+      stroke: color-mix(in srgb, var(--foreground) 34%, transparent);
+    }
   }
 
   :global(html[data-focus-intent="keyboard"]) .titlebar-tab:focus {

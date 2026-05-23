@@ -9,8 +9,13 @@ use tauri::{
 
 const ICON_SIZE: u32 = 32;
 const RING_WIDTH: f64 = 3.5;
+const PAUSED_PULSE_FRAME_COUNT: u8 = 22;
+const PAUSED_PULSE_AMOUNTS: [f64; 22] = [
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.067, 0.25, 0.5, 0.75, 0.933, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.933,
+    0.75, 0.5, 0.25, 0.067, 0.0,
+];
 #[cfg(target_os = "linux")]
-const LINUX_TRAY_ICON_VERSION: u8 = 2;
+const LINUX_TRAY_ICON_VERSION: u8 = 5;
 
 #[derive(Debug, Clone)]
 struct PomodoroTrayState {
@@ -20,6 +25,7 @@ struct PomodoroTrayState {
     is_running: bool,
     is_active: bool,
     can_add_focus_time: bool,
+    paused_pulse_frame: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +35,18 @@ struct MusicTrayState {
     can_play_pause: bool,
     can_previous: bool,
     can_next: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PomodoroTrayUpdate {
+    phase: String,
+    remaining_seconds: u32,
+    total_seconds: u32,
+    is_running: bool,
+    is_active: bool,
+    can_add_focus_time: bool,
+    paused_pulse_frame: Option<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +88,7 @@ struct MenuShape {
 enum TrayIconKey {
     Empty,
     Progress(u8),
+    PausedProgress { step: u8, frame: u8 },
 }
 
 static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
@@ -81,6 +100,7 @@ static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
             is_running: false,
             is_active: false,
             can_add_focus_time: false,
+            paused_pulse_frame: None,
         },
         music: MusicTrayState {
             status: "idle".to_string(),
@@ -98,8 +118,39 @@ static LAST_MENU_SHAPE: LazyLock<Mutex<Option<MenuShape>>> = LazyLock::new(|| Mu
 static POMODORO_STATUS_ITEM: Mutex<Option<MenuItem<tauri::Wry>>> = Mutex::new(None);
 static MUSIC_STATUS_ITEM: Mutex<Option<MenuItem<tauri::Wry>>> = Mutex::new(None);
 
+fn ring_progress_color(paused_pulse_frame: Option<u8>) -> (u8, u8, u8) {
+    let white: (u8, u8, u8) = (240, 240, 240);
+    let empty_gray: (u8, u8, u8) = (110, 110, 110);
+    let Some(frame) = paused_pulse_frame else {
+        return white;
+    };
+    let amount = PAUSED_PULSE_AMOUNTS[(frame % PAUSED_PULSE_FRAME_COUNT) as usize];
+    let mix = |from: u8, to: u8| -> u8 {
+        (from as f64 + (to as f64 - from as f64) * amount)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
+    (
+        mix(white.0, empty_gray.0),
+        mix(white.1, empty_gray.1),
+        mix(white.2, empty_gray.2),
+    )
+}
+
+fn normalized_paused_pulse_frame(frame: Option<u8>) -> Option<u8> {
+    frame.map(|value| value % PAUSED_PULSE_FRAME_COUNT)
+}
+
 /// Render a progress ring icon as raw RGBA pixels.
 fn render_progress_icon(progress: f64, active: bool) -> Vec<u8> {
+    render_progress_icon_with_pause(progress, active, None)
+}
+
+fn render_progress_icon_with_pause(
+    progress: f64,
+    active: bool,
+    paused_pulse_frame: Option<u8>,
+) -> Vec<u8> {
     let size = ICON_SIZE as usize;
     let mut pixels = vec![0u8; size * size * 4];
     let center = size as f64 / 2.0;
@@ -107,7 +158,7 @@ fn render_progress_icon(progress: f64, active: bool) -> Vec<u8> {
     let inner_r = outer_r - RING_WIDTH;
 
     let gray: (u8, u8, u8) = (110, 110, 110);
-    let white: (u8, u8, u8) = (240, 240, 240);
+    let progress_color = ring_progress_color(paused_pulse_frame);
     let progress = normalize_progress(progress);
 
     for y in 0..size {
@@ -129,7 +180,7 @@ fn render_progress_icon(progress: f64, active: bool) -> Vec<u8> {
                     if normalized <= progress {
                         gray
                     } else {
-                        white
+                        progress_color
                     }
                 } else {
                     gray
@@ -210,13 +261,18 @@ fn pomodoro_progress(state: &PomodoroTrayState) -> f64 {
     }
 }
 
-fn tray_icon_key(progress: f64, active: bool) -> TrayIconKey {
+fn tray_icon_key(progress: f64, active: bool, paused_pulse_frame: Option<u8>) -> TrayIconKey {
     let progress = normalize_progress(progress);
     if !active || progress >= 1.0 {
         return TrayIconKey::Empty;
     }
 
-    TrayIconKey::Progress((progress * 100.0) as u8)
+    let step = (progress * 100.0) as u8;
+    if let Some(frame) = normalized_paused_pulse_frame(paused_pulse_frame) {
+        TrayIconKey::PausedProgress { step, frame }
+    } else {
+        TrayIconKey::Progress(step)
+    }
 }
 
 fn pomodoro_status_text(state: &PomodoroTrayState) -> String {
@@ -269,6 +325,13 @@ fn menu_shape(state: &TrayState) -> MenuShape {
         music_can_previous: state.music.can_previous,
         music_can_next: state.music.can_next,
     }
+}
+
+fn pomodoro_paused_pulse_frame(state: &PomodoroTrayState) -> Option<u8> {
+    if state.phase != "focus" || !state.is_active || state.is_running {
+        return None;
+    }
+    normalized_paused_pulse_frame(state.paused_pulse_frame)
 }
 
 fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, String> {
@@ -361,6 +424,11 @@ fn linux_tray_icon_name(icon_key: TrayIconKey) -> String {
         TrayIconKey::Progress(step) => {
             format!("ganbaruai-tray-v{LINUX_TRAY_ICON_VERSION}-progress-{step:03}.png")
         }
+        TrayIconKey::PausedProgress { step, frame } => {
+            format!(
+                "ganbaruai-tray-v{LINUX_TRAY_ICON_VERSION}-progress-{step:03}-pause-{frame}.png"
+            )
+        }
     }
 }
 
@@ -428,12 +496,13 @@ fn apply_tray_state(app: &AppHandle, state: &TrayState) -> Result<(), String> {
 
     let progress = pomodoro_progress(&state.pomodoro);
     let active = pomodoro_active(&state.pomodoro);
-    let icon_key = tray_icon_key(progress, active);
+    let paused_pulse_frame = pomodoro_paused_pulse_frame(&state.pomodoro);
+    let icon_key = tray_icon_key(progress, active, paused_pulse_frame);
     {
         let mut last = LAST_ICON_KEY.lock().unwrap();
         if *last != icon_key {
             *last = icon_key;
-            let pixels = render_progress_icon(progress, active);
+            let pixels = render_progress_icon_with_pause(progress, active, paused_pulse_frame);
             set_tray_icon(app, &tray, icon_key, pixels)?;
         }
     }
@@ -518,24 +587,17 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
 /// Update tray icon progress ring, tooltip, and Pomodoro menu state.
 #[tauri::command]
-pub fn update_tray(
-    app: AppHandle,
-    phase: &str,
-    remaining_seconds: u32,
-    total_seconds: u32,
-    is_running: bool,
-    is_active: bool,
-    can_add_focus_time: bool,
-) -> Result<(), String> {
+pub fn update_tray(app: AppHandle, update: PomodoroTrayUpdate) -> Result<(), String> {
     let state = {
         let mut state = TRAY_STATE.lock().unwrap();
         state.pomodoro = PomodoroTrayState {
-            phase: phase.to_string(),
-            remaining_seconds,
-            total_seconds,
-            is_running,
-            is_active,
-            can_add_focus_time,
+            phase: update.phase,
+            remaining_seconds: update.remaining_seconds,
+            total_seconds: update.total_seconds,
+            is_running: update.is_running,
+            is_active: update.is_active,
+            can_add_focus_time: update.can_add_focus_time,
+            paused_pulse_frame: update.paused_pulse_frame,
         };
         state.clone()
     };
@@ -605,26 +667,41 @@ mod tests {
 
     #[test]
     fn active_zero_progress_uses_progress_icon_key() {
-        assert_eq!(tray_icon_key(0.0, true), TrayIconKey::Progress(0));
+        assert_eq!(tray_icon_key(0.0, true, None), TrayIconKey::Progress(0));
     }
 
     #[test]
     fn inactive_zero_progress_uses_empty_icon_key() {
-        assert_eq!(tray_icon_key(0.0, false), TrayIconKey::Empty);
+        assert_eq!(tray_icon_key(0.0, false, None), TrayIconKey::Empty);
     }
 
     #[test]
     fn active_negative_progress_uses_zero_progress_icon_key() {
-        assert_eq!(tray_icon_key(-0.25, true), TrayIconKey::Progress(0));
+        assert_eq!(tray_icon_key(-0.25, true, None), TrayIconKey::Progress(0));
     }
 
     #[test]
     fn complete_progress_uses_empty_icon_key() {
-        assert_eq!(tray_icon_key(1.0, true), TrayIconKey::Empty);
+        assert_eq!(tray_icon_key(1.0, true, None), TrayIconKey::Empty);
     }
 
     #[test]
     fn positive_progress_uses_progress_icon_key() {
-        assert_eq!(tray_icon_key(0.5, true), TrayIconKey::Progress(50));
+        assert_eq!(tray_icon_key(0.5, true, None), TrayIconKey::Progress(50));
+    }
+
+    #[test]
+    fn paused_progress_uses_paused_icon_key() {
+        assert_eq!(
+            tray_icon_key(0.5, true, Some(23)),
+            TrayIconKey::PausedProgress { step: 50, frame: 1 }
+        );
+    }
+
+    #[test]
+    fn paused_progress_peak_renders_empty_gray_remaining_ring() {
+        let pixels = render_progress_icon_with_pause(0.0, true, Some(12));
+
+        assert!(has_ring_pixel_with_color(&pixels, (110, 110, 110)));
     }
 }

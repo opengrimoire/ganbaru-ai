@@ -87,6 +87,8 @@ let isRunning = $state(false);
 let config = $state<PomodoroConfig>({ ...DEFAULT_CONFIG });
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let pausedOpportunityIntervalId: ReturnType<typeof setInterval> | null = null;
+let pausedTrayPulseIntervalId: ReturnType<typeof setInterval> | null = null;
+let pausedTrayPulseFrame = $state(0);
 let completedPomodoros = $state(0);
 let sessionStartTime: string | null = null;
 let skipNextBreak = false;
@@ -99,6 +101,12 @@ let activeBlockId = $state<string | null>(null);
 let activeBlockEndMs = $state<number | null>(null);
 let dismissedBlockId = $state<string | null>(null);
 const FOCUS_EXTENSION_SECONDS = 180;
+const PAUSED_PULSE_AMOUNTS = [
+  0, 0, 0, 0, 0, 0.067, 0.25, 0.5, 0.75, 0.933, 1, 1, 1, 1, 1, 1,
+  0.933, 0.75, 0.5, 0.25, 0.067, 0,
+] as const;
+const PAUSED_TRAY_PULSE_FRAME_COUNT = PAUSED_PULSE_AMOUNTS.length;
+const PAUSED_TRAY_PULSE_FRAME_MS = 180;
 let musicPausedByPomodoroPause = false;
 let musicPauseInFlight: Promise<void> | null = null;
 
@@ -522,6 +530,56 @@ function pomodoroSessionActive(nowMs: number = Date.now()): boolean {
     totalSeconds: phaseTotalSeconds,
     nowMs,
   });
+}
+
+function pausedFocusPulseActive(): boolean {
+  return (
+    phase === "focus" &&
+    !isRunning &&
+    !suspendedAway &&
+    !idlePaused &&
+    !overtimeIntervalId &&
+    pomodoroSessionActive()
+  );
+}
+
+function stopPausedTrayPulse(): void {
+  if (pausedTrayPulseIntervalId !== null) {
+    clearInterval(pausedTrayPulseIntervalId);
+    pausedTrayPulseIntervalId = null;
+  }
+  pausedTrayPulseFrame = 0;
+}
+
+function currentPausedTrayPulseFrame(): number | null {
+  return pausedFocusPulseActive() ? pausedTrayPulseFrame : null;
+}
+
+function currentPausedPulseAmount(): number | null {
+  const frame = currentPausedTrayPulseFrame();
+  if (frame === null) return null;
+  return PAUSED_PULSE_AMOUNTS[frame % PAUSED_TRAY_PULSE_FRAME_COUNT];
+}
+
+function syncPausedTrayPulse(): void {
+  if (!pomodoroCoordinator) return;
+  if (!pausedFocusPulseActive()) {
+    stopPausedTrayPulse();
+    return;
+  }
+  if (pausedTrayPulseIntervalId !== null) return;
+
+  pausedTrayPulseFrame = 0;
+  pausedTrayPulseIntervalId = setInterval(() => {
+    if (!pausedFocusPulseActive()) {
+      stopPausedTrayPulse();
+      updateTray({ publishSnapshot: false });
+      return;
+    }
+
+    pausedTrayPulseFrame = (pausedTrayPulseFrame + 1) % PAUSED_TRAY_PULSE_FRAME_COUNT;
+    updateTray({ publishSnapshot: false });
+  }, PAUSED_TRAY_PULSE_FRAME_MS);
 }
 
 function expirePausedBlockAtDeadline(): void {
@@ -1082,19 +1140,36 @@ async function transitionToBlock(
 
 // Tray
 
-function updateTray() {
-  publishWindowSnapshot();
-  if (!pomodoroCoordinator) return;
-  const isActive = pomodoroSessionActive();
+interface UpdateTrayOptions {
+  publishSnapshot?: boolean;
+}
 
-  invoke("update_tray", {
+interface PomodoroTrayUpdatePayload {
+  phase: PomodoroPhase;
+  remainingSeconds: number;
+  totalSeconds: number;
+  isRunning: boolean;
+  isActive: boolean;
+  canAddFocusTime: boolean;
+  pausedPulseFrame: number | null;
+}
+
+function updateTray(options: UpdateTrayOptions = {}) {
+  if (options.publishSnapshot !== false) publishWindowSnapshot();
+  if (!pomodoroCoordinator) return;
+  syncPausedTrayPulse();
+  const isActive = pomodoroSessionActive();
+  const update: PomodoroTrayUpdatePayload = {
     phase,
     remainingSeconds,
     totalSeconds: phaseTotalSeconds,
     isRunning,
     isActive,
     canAddFocusTime: canExtendFocusTime(),
-  }).catch(() => {});
+    pausedPulseFrame: currentPausedTrayPulseFrame(),
+  };
+
+  invoke("update_tray", { update }).catch(() => {});
 }
 
 // Listeners
@@ -2027,6 +2102,12 @@ export function getPomodoro() {
     },
     get canAddFocusTime() {
       return canExtendFocusTime();
+    },
+    get pausedPulseFrame() {
+      return currentPausedTrayPulseFrame();
+    },
+    get pausedPulseAmount() {
+      return currentPausedPulseAmount();
     },
     get formattedTime() {
       const mins = Math.floor(remainingSeconds / 60);

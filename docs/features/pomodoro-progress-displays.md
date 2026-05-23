@@ -1,6 +1,6 @@
 # Pomodoro progress displays
 
-The pomodoro system surfaces progress in three places: a small ring in the title bar, a colored ring in the system tray, and a vertical timeline rail in the calendar day and week views. They serve different purposes (always-visible, OS-level, and in-context) and follow different rendering rules, but they share one principle: each shows only what the user needs to make a decision in the next minute, not the full history of the session.
+The pomodoro system surfaces progress in three places: a small ring in the title bar, a ring in the system tray, and a vertical timeline rail in the calendar day and week views. They serve different purposes (always-visible, OS-level, and in-context) and follow different rendering rules, but they share one principle: each shows only what the user needs to make a decision in the next minute, not the full history of the session.
 
 This doc covers what each surface shows, when each is visible, and why the design favors near-future information over comprehensive readouts.
 
@@ -10,9 +10,10 @@ The title bar ring is a small circular progress indicator rendered as inline SVG
 
 What it shows:
 
-- **Focus only.** The ring fills as the current focus segment progresses. When focus ends and a break begins, the ring is hidden until the next focus starts.
-- **Time remaining until the next phase transition.** The fill represents progress through the active focus segment. If the event window is shorter than the configured focus duration, the segment is clipped to the event end. At the start of a focus period the ring is empty, at the end it is full. The numeric label inside the ring shows minutes and seconds remaining.
+- **Focus only.** The ring appears while the current focus opportunity is active. When focus ends and a break begins, the ring is hidden until the next focus starts.
+- **Time remaining until the next phase transition.** The visible arc represents remaining focus time. If the event window is shorter than the configured focus duration, the segment is clipped to the event end. At the start of a focus period the ring is full, and the remaining arc shrinks toward empty as the transition approaches. The tooltip and menu status show minutes and seconds remaining.
 - **Usable focus opportunity while paused.** Manual pause stops focus credit, but it does not stop the calendar event. While paused, the ring keeps counting down only when the event end is the limiting deadline. The calendar rail remains empty for the paused interval.
+- **Paused reminder.** While a focus session is manually paused, the remaining arc gently pulses between white and empty-ring gray so the paused state is visible at a glance without using a warning color. The pulse holds at both endpoints, then eases through the transition frames. The title bar reads the same pulse frame that drives the tray icon, avoiding a separate CSS animation that can drift out of phase.
 
 What it does not show:
 
@@ -35,13 +36,13 @@ What it shows:
 
 - **Focus only**, same as the title bar ring.
 - **Time remaining until the next phase transition**, same encoding.
-- **Color matches the event's calendar color**, so a user with multiple work modes can read the active context at a glance.
+- **Paused reminder**, same intent as the title bar ring, implemented by switching between cached raster frames.
 
 What it does not show:
 
 - Same exclusions as the title bar ring.
 
-The tray ring is the most ambient surface: it sits in the user's peripheral vision constantly. The pixel-level rendering (RGBA, not SVG) is necessary because tray icons on most platforms accept only raster images, not vector ones. The icon redraws every few seconds, fine-grained enough to feel alive without burning CPU.
+The tray ring is the most ambient surface: it sits in the user's peripheral vision constantly. The pixel-level rendering (RGBA, not SVG) is necessary because tray icons on most platforms accept raster images more reliably than vector ones. Normal progress redraws only when the quantized ring state changes. Manual pause uses a small slow frame cycle, fine-grained enough to feel alive without turning the tray into a high-frame-rate animation surface.
 
 When clicked, the tray icon opens or focuses the main window. The tray menu offers session controls without needing the main window: `Pause pomodoro` or `Resume pomodoro`, `Extend focus 3 minutes` once per focus period when the event window has room, `Go to break now` during focus, and `Start focus now` during breaks. Those Pomodoro actions stay visible but disabled when no session is active, matching the Music controls. The tray music status shows only the active media title when one is loaded, without redundant status or category prefixes. Shuffle remains controlled from the Music view rather than from the tray menu.
 
