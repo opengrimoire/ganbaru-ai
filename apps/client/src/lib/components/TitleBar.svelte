@@ -373,11 +373,13 @@
     "settings",
   ]);
   const TITLE_BAR_ICON_COLOR_CLASS = "text-foreground/68 dark:text-white/76";
+  const TITLE_BAR_ICON_STROKE_CLASS = "stroke-foreground/68 dark:stroke-white/76";
+  const TITLE_BAR_SUBTLE_STROKE_CLASS = "stroke-foreground/20 dark:stroke-white/20";
   const TITLE_BAR_ICON_STROKE_WIDTH = 1.5;
   const TITLE_BAR_ICON_SIZE = 14;
   const TITLE_BAR_MENU_ICON_SIZE = 14;
   const TITLE_BAR_MENU_ICON_STROKE_WIDTH = 1.8;
-  const POMODORO_RING_SIZE = 16;
+  const POMODORO_RING_SIZE = TITLE_BAR_ICON_SIZE + 0.5;
   const POMODORO_RING_STROKE_WIDTH = 2.15;
   const RESET_SHORTCUT_REQUIRED_PRESSES = 10;
   const RESET_SHORTCUT_WINDOW_MS = 8_000;
@@ -961,7 +963,7 @@
               r="8"
               fill="none"
               stroke-width={POMODORO_RING_STROKE_WIDTH}
-              class={isActive ? "stroke-foreground/20 dark:stroke-white/20" : "stroke-foreground/15 dark:stroke-white/15"}
+              class={isActive ? TITLE_BAR_SUBTLE_STROKE_CLASS : TITLE_BAR_ICON_STROKE_CLASS}
             />
             {#if isActive}
               <circle
@@ -973,7 +975,7 @@
                 stroke-dasharray={`${((100 - progressPercent()) / 100) * 50.27} 50.27`}
                 stroke-linecap="round"
                 class={cn(
-                  "stroke-foreground/60 dark:stroke-white/70 -rotate-90 origin-center",
+                  `${TITLE_BAR_ICON_COLOR_CLASS} ${TITLE_BAR_ICON_STROKE_CLASS} -rotate-90 origin-center`,
                   pomodoroPausedPulseActive ? "pomodoro-ring-paused-pulse" : "",
                 )}
                 style={pomodoroPausedPulseStyle}
@@ -1221,7 +1223,10 @@
       <div class="relative">
         <button
           onclick={togglePerfMenu}
-          class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+          class={cn(
+            "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
+            TITLE_BAR_ICON_COLOR_CLASS,
+          )}
           title={`Diagnostics (${formatShortcut("Mod + Shift + D")})`}
         >
           <CircleGauge size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -1256,7 +1261,10 @@
             showPomodoroMenu = false;
             showPerfMenu = false;
           }}
-          class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+          class={cn(
+            "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
+            TITLE_BAR_ICON_COLOR_CLASS,
+          )}
           aria-label="More controls"
           data-app-tooltip-disabled="true"
         >
@@ -1295,7 +1303,10 @@
   <div class="flex shrink-0 items-center gap-0.5 pr-1.5">
     <button
       onclick={() => win.minimize()}
-      class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+      class={cn(
+        "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
+        TITLE_BAR_ICON_COLOR_CLASS,
+      )}
       aria-label="Minimize"
       data-app-tooltip-disabled="true"
     >
@@ -1303,7 +1314,10 @@
     </button>
     <button
       onclick={() => win.toggleMaximize()}
-      class="titlebar-icon-button flex items-center justify-center rounded-lg text-foreground/68 dark:text-white/76 transition-colors hover:bg-sidebar-accent"
+      class={cn(
+        "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
+        TITLE_BAR_ICON_COLOR_CLASS,
+      )}
       aria-label={isMaximized ? "Restore" : "Maximize"}
       data-app-tooltip-disabled="true"
     >
@@ -1510,15 +1524,15 @@
   .pomodoro-ring-paused-pulse {
     stroke: color-mix(
       in srgb,
-      color-mix(in srgb, var(--foreground) 18%, transparent)
+      color-mix(in srgb, currentColor 30%, transparent)
         var(--pomodoro-ring-paused-pulse-amount, 0%),
-      color-mix(in srgb, var(--foreground) 62%, transparent)
+      currentColor
     );
   }
 
   @media (prefers-reduced-motion: reduce) {
     .pomodoro-ring-paused-pulse {
-      stroke: color-mix(in srgb, var(--foreground) 34%, transparent);
+      stroke: color-mix(in srgb, currentColor 50%, transparent);
     }
   }
 
