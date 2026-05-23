@@ -504,6 +504,11 @@ interface PomodoroRunClosure {
   eventType: PomodoroRunEventType;
 }
 
+interface PomodoroRunWindowUpdate {
+  runId: string;
+  plannedEnd: string;
+}
+
 interface PomodoroTransitionRunWrite {
   closure: PomodoroRunClosure;
   run: PomodoroRunWrite;
@@ -974,6 +979,15 @@ function closeRunInBackend(closure: PomodoroRunClosure, warning = "Failed to clo
   }).catch((e) => console.warn(warning, e));
 }
 
+function updateRunWindowInBackend(update: PomodoroRunWindowUpdate): void {
+  enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_update_run_window", {
+      dbUrl: dbUrl(),
+      update,
+    });
+  }).catch((e) => console.warn("Failed to update pomodoro run window:", e));
+}
+
 function recordRunEvent(event: PomodoroRunEventWrite, warning = "Failed to record pomodoro event:"): void {
   enqueuePomodoroWrite(async () => {
     await invoke("pomodoro_record_run_event", {
@@ -1155,6 +1169,97 @@ interface RebuildRunOptions {
   inheritedCycle: number;
 }
 
+function plannedSegmentsAfterCurrentPhase(
+  blockId: string,
+  eventDate: string,
+  runId: string,
+  baseAfter: string,
+  afterMinutes: number,
+): PersistedSegment[] {
+  const newSegments: PersistedSegment[] = [];
+  let offset = 0;
+  let cycle = currentCycle;
+  let nextIsFocus = phase !== "focus";
+
+  while (offset < afterMinutes) {
+    if (nextIsFocus) {
+      const duration = Math.min(config.focusMinutes, afterMinutes - offset);
+      newSegments.push({
+        id: crypto.randomUUID(),
+        eventId: blockId,
+        eventDate,
+        runId,
+        cycleNumber: cycle,
+        phase: "focus",
+        plannedStart: addMinutesToIso(baseAfter, offset),
+        plannedEnd: addMinutesToIso(baseAfter, offset + duration),
+        actualStart: null,
+        actualEnd: null,
+        pauseLog: [],
+        status: "planned",
+      });
+      offset += duration;
+      if (offset >= afterMinutes) break;
+      nextIsFocus = false;
+    } else {
+      const isLongBreak = cycle >= config.cyclesBeforeLongBreak;
+      const breakPhase: SegmentPhase = isLongBreak ? "long_break" : "short_break";
+      const breakDur = isLongBreak ? config.longBreakMinutes : config.shortBreakMinutes;
+      const duration = Math.min(breakDur, afterMinutes - offset);
+      newSegments.push({
+        id: crypto.randomUUID(),
+        eventId: blockId,
+        eventDate,
+        runId,
+        cycleNumber: cycle,
+        phase: breakPhase,
+        plannedStart: addMinutesToIso(baseAfter, offset),
+        plannedEnd: addMinutesToIso(baseAfter, offset + duration),
+        actualStart: null,
+        actualEnd: null,
+        pauseLog: [],
+        status: "planned",
+      });
+      offset += duration;
+      cycle = isLongBreak ? 1 : cycle + 1;
+      nextIsFocus = true;
+    }
+  }
+
+  return newSegments;
+}
+
+function refreshFutureSegmentsForActiveWindow(blockId: string, eventDate: string): void {
+  if (!activeRunId || activeBlockEndMs === null) return;
+  if (currentSegmentIndex < 0 || currentSegmentIndex >= segments.length) return;
+
+  const nowMs = Date.now();
+  const currentPhaseEndMs = nowMs + Math.max(0, remainingSeconds) * 1000;
+  const afterMinutes = Math.max(0, (activeBlockEndMs - currentPhaseEndMs) / 60000);
+  const baseAfter = new Date(currentPhaseEndMs).toISOString();
+  segments = [
+    ...segments.slice(0, currentSegmentIndex + 1),
+    ...plannedSegmentsAfterCurrentPhase(blockId, eventDate, activeRunId, baseAfter, afterMinutes),
+  ];
+}
+
+function applyActiveBlockWindowChange(blockId: string, newEndMs: number, eventDate?: string): void {
+  activeBlockEndMs = newEndMs;
+  refreshCurrentPhaseLimit();
+  if (activeRunId) {
+    updateRunWindowInBackend({
+      runId: activeRunId,
+      plannedEnd: new Date(newEndMs).toISOString(),
+    });
+  }
+
+  const segmentEventDate = eventDate ?? activeSegment()?.eventDate;
+  if (segmentEventDate) {
+    refreshFutureSegmentsForActiveWindow(blockId, segmentEventDate);
+  }
+  updateTray();
+}
+
 async function rebuildSegments(
   blockId: string,
   eventEnd: string,
@@ -1211,54 +1316,7 @@ async function rebuildSegments(
   const afterMinutes = totalRemainingMinutes - bridgeMinutes;
   if (afterMinutes > 0) {
     const baseAfter = addMinutesToIso(nowStr, bridgeMinutes);
-    let offset = 0;
-    let cycle = currentCycle;
-    let nextIsFocus = phase !== "focus";
-
-    while (offset < afterMinutes) {
-      if (nextIsFocus) {
-        const duration = Math.min(config.focusMinutes, afterMinutes - offset);
-        newSegments.push({
-          id: crypto.randomUUID(),
-          eventId: blockId,
-          eventDate,
-          runId,
-          cycleNumber: cycle,
-          phase: "focus",
-          plannedStart: addMinutesToIso(baseAfter, offset),
-          plannedEnd: addMinutesToIso(baseAfter, offset + duration),
-          actualStart: null,
-          actualEnd: null,
-          pauseLog: [],
-          status: "planned",
-        });
-        offset += duration;
-        if (offset >= afterMinutes) break;
-        nextIsFocus = false;
-      } else {
-        const isLongBreak = cycle >= config.cyclesBeforeLongBreak;
-        const breakPhase: SegmentPhase = isLongBreak ? "long_break" : "short_break";
-        const breakDur = isLongBreak ? config.longBreakMinutes : config.shortBreakMinutes;
-        const duration = Math.min(breakDur, afterMinutes - offset);
-        newSegments.push({
-          id: crypto.randomUUID(),
-          eventId: blockId,
-          eventDate,
-          runId,
-          cycleNumber: cycle,
-          phase: breakPhase,
-          plannedStart: addMinutesToIso(baseAfter, offset),
-          plannedEnd: addMinutesToIso(baseAfter, offset + duration),
-          actualStart: null,
-          actualEnd: null,
-          pauseLog: [],
-          status: "planned",
-        });
-        offset += duration;
-        cycle = isLongBreak ? 1 : cycle + 1;
-        nextIsFocus = true;
-      }
-    }
+    newSegments.push(...plannedSegmentsAfterCurrentPhase(blockId, eventDate, runId, baseAfter, afterMinutes));
   }
 
   // Preserve completed/interrupted segments so the green progress bar
@@ -2193,12 +2251,12 @@ function clearBlockExpiredInternal(): void {
 function transferBlockIdInternal(newBlockId: string, newEndTime?: string): void {
   if (!activeBlockId) return;
   activeBlockId = newBlockId;
-  if (newEndTime) {
-    activeBlockEndMs = new Date(newEndTime.replace(" ", "T")).getTime();
-    refreshCurrentPhaseLimit();
-  }
   for (const seg of segments) {
     seg.eventId = newBlockId;
+  }
+  if (newEndTime) {
+    applyActiveBlockWindowChange(newBlockId, new Date(newEndTime.replace(" ", "T")).getTime());
+    return;
   }
   publishWindowSnapshot();
 }
@@ -2238,9 +2296,7 @@ function startFromBlockInternal(
       return;
 
     case "update_end_only":
-      activeBlockEndMs = decision.newEndMs;
-      refreshCurrentPhaseLimit();
-      publishWindowSnapshot();
+      applyActiveBlockWindowChange(blockId, decision.newEndMs, eventDate);
       return;
 
     case "reconfigure":
@@ -2248,9 +2304,7 @@ function startFromBlockInternal(
       return;
 
     case "rebuild_segments":
-      activeBlockEndMs = decision.newEndMs;
-      refreshCurrentPhaseLimit();
-      publishWindowSnapshot();
+      applyActiveBlockWindowChange(blockId, decision.newEndMs, eventDate);
       return;
 
     case "transition":

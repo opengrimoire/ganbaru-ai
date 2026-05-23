@@ -70,7 +70,7 @@ The function does not check whether a pause is already active; the caller does t
 
 ### `decideStartFromBlock`
 
-Called by the auto-start poll (every ~30 seconds, on app open, on calendar change).
+Called by the auto-start poll (every ~1 second, on app open, on calendar change).
 
 **Inputs:** the calendar's pomodoro events overlapping `now`, the currently running session (if any).
 
@@ -118,7 +118,7 @@ Without the heartbeat, recovery would have to use the active segment's planned e
 | `NOTIFICATION_THRESHOLD` | 60 (seconds) | `decideTick` | Gives the user a one-minute heads-up before focus ends so they can reach a stopping point. |
 | `MAX_BREAK_OVERTIME_SECONDS` | 1800 (30 minutes) | break-end logic | Caps overtime at 30 minutes. After that, the system auto-advances to focus to prevent indefinite breaks from corrupting analytics. |
 | `HEARTBEAT_INTERVAL_MS` | 30000 (30 seconds) | heartbeat scheduler | Bounds crash recovery error to ~30 seconds. |
-| `AUTO_START_POLL_MS` | 30000 (30 seconds) | auto-start scheduler | Catches calendar boundary crossings without polling so often that battery suffers. |
+| `AUTO_START_POLL_MS` | 1000 (1 second) | auto-start scheduler | Catches calendar boundary crossings promptly enough that event-start notifications and pomodoro auto-start feel aligned with the system clock. |
 | `IDLE_CHECK_INTERVAL_MS` | 15000 (15 seconds) | idle scheduler | Frequent enough to detect idle within a reasonable window of the threshold; infrequent enough to not poll the OS constantly. |
 
 These values are constants, not user settings, because changing them changes the meaning of the timestamps in the database. Users who want different thresholds (e.g. longer suspend tolerance) would need a code change. The trade is intentional: a stable schema is more valuable than a knob no one will turn.

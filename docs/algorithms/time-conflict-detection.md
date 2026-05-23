@@ -25,7 +25,7 @@ When the system needs to pick which event auto-starts at a given moment (app ope
 3. **Shorter remaining duration wins.** Of the remaining candidates, pick the one with the least time left. A 30-minute event that is half over has 15 minutes remaining; a 4-hour event has more. The shorter remaining is more time-sensitive.
 4. **Earliest creation order wins.** If two candidates have identical remaining durations, the one with the earlier `created_at` wins. This makes the choice deterministic without requiring the user to set a manual priority.
 
-The same rules apply when the user has just stopped a session and auto-start fires within 30 seconds: the system picks the next candidate using the same logic, including any other event that may have started during the gap.
+The same rules apply when the user has just stopped a session and auto-start fires on the next scheduler tick: the system picks the next candidate using the same logic, including any other event that may have started during the gap.
 
 **Example, two events at 09:00.** "Morning Standup" (09:00-09:30) and "Deep Work" (09:00-12:00). Both have pomodoro and auto-start. The user opens the app at 09:00. Rule 3 picks Standup (30 minutes remaining beats 3 hours remaining). When Standup ends at 09:30, the system re-evaluates: Deep Work is now the only candidate, so it auto-starts.
 

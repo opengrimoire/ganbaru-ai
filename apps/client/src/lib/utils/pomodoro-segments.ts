@@ -414,7 +414,6 @@ function projectActiveSegments(
   const bands: TimelineBand[] = [];
   const activeIdx = segments.findIndex((s) => s.status === "active");
   const currentEndMs = nowMs + remainingSeconds * 1000;
-  let cursor = currentEndMs;
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
@@ -446,27 +445,58 @@ function projectActiveSegments(
         // Active break
         const startMs = new Date(seg.actualStart!).getTime();
         const topMinute = (startMs - dayStartMs) / 60000;
-        const heightMinutes = (cursor - startMs) / 60000;
+        const heightMinutes = (currentEndMs - startMs) / 60000;
         if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
           bands.push({ topMinute, heightMinutes, phase: seg.phase, status: "active" });
         }
       }
-    } else if (i > activeIdx || activeIdx === -1) {
-      // Future planned segments: only output breaks (no focus fill for planned)
-      if (seg.phase === "focus") {
-        cursor += plannedDurMs;
-        continue;
-      }
-      const topMinute = (cursor - dayStartMs) / 60000;
-      const heightMinutes = plannedDurMs / 60000;
-      if (topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
-        bands.push({ topMinute, heightMinutes, phase: seg.phase, status: seg.status });
-      }
-      cursor += plannedDurMs;
     }
   }
 
+  const activeSegment = activeIdx >= 0 ? segments[activeIdx] : null;
+  if (activeSegment) {
+    emitProjectedFutureBreakBands(activeSegment, currentEndMs, ev, dayStartMs, bands);
+  }
+
   return bands;
+}
+
+function emitProjectedFutureBreakBands(
+  activeSegment: PersistedSegment,
+  currentEndMs: number,
+  ev: TimelineEvent,
+  dayStartMs: number,
+  bands: TimelineBand[],
+): void {
+  let cursor = currentEndMs;
+  let cycle = activeSegment.cycleNumber;
+  let nextIsFocus = activeSegment.phase !== "focus";
+
+  if (activeSegment.phase === "short_break" || activeSegment.phase === "long_break") {
+    cycle = activeSegment.phase === "long_break" ? 1 : activeSegment.cycleNumber + 1;
+  }
+
+  while (cursor < ev.endMs) {
+    if (nextIsFocus) {
+      cursor += ev.config.focusDurationMinutes * 60_000;
+      nextIsFocus = false;
+      continue;
+    }
+
+    const isLongBreak = cycle >= ev.config.pomodoroCount;
+    const breakPhase: SegmentPhase = isLongBreak ? "long_break" : "short_break";
+    const breakDurationMs = (isLongBreak ? ev.config.longBreakMinutes : ev.config.shortBreakMinutes) * 60_000;
+    const breakEnd = Math.min(cursor + breakDurationMs, ev.endMs);
+    const topMinute = (cursor - dayStartMs) / 60000;
+    const heightMinutes = (breakEnd - cursor) / 60000;
+    if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
+      bands.push({ topMinute, heightMinutes, phase: breakPhase, status: "planned" });
+    }
+
+    cursor += breakDurationMs;
+    cycle = isLongBreak ? 1 : cycle + 1;
+    nextIsFocus = true;
+  }
 }
 
 /**

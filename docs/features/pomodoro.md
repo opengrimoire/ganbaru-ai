@@ -55,7 +55,7 @@ A session has three structural moments: it begins, it runs through phases, it en
 **Begin.** A session begins when the calendar event's time window includes the current moment, the event has a pomodoro config, and no session is already running on a higher-priority event. The trigger can be:
 
 - The user opens the app while a pomodoro event is in window (auto-start).
-- The clock advances into the start of a pomodoro event (the auto-start poll, every ~30 seconds, picks it up).
+- The clock advances into the start of a pomodoro event (the auto-start poll, every ~1 second, picks it up).
 - The user manually starts a session by clicking the play control on an event.
 
 The session always begins from the current moment, never from the event's scheduled start. If the event was scheduled for 14:00 and the user opens the app at 14:40, the session covers 14:40 onward. The 40-minute gap is honest: the user was not working.

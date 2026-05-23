@@ -40,6 +40,13 @@ pub struct PomodoroRunClosure {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PomodoroRunWindowUpdate {
+    run_id: String,
+    planned_end: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PomodoroTransitionRunWrite {
     closure: PomodoroRunClosure,
     run: PomodoroRunWrite,
@@ -394,6 +401,30 @@ pub async fn pomodoro_close_run<R: Runtime>(
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
     close_run_tx(&mut tx, &closure).await?;
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pomodoro_update_run_window<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    update: PomodoroRunWindowUpdate,
+) -> Result<(), String> {
+    validate_run_window_update(&update)?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let result = sqlx::query(
+        "UPDATE pomodoro_runs
+         SET planned_end = ?
+         WHERE id = ? AND ended_at IS NULL",
+    )
+    .bind(&update.planned_end)
+    .bind(&update.run_id)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("update pomodoro run window: {e}"))?;
+    if result.rows_affected() == 0 {
+        return Err(format!("open pomodoro run not found: {}", update.run_id));
+    }
     Ok(())
 }
 
@@ -992,6 +1023,11 @@ fn validate_run_closure(closure: &PomodoroRunClosure) -> Result<(), String> {
     validate_event_type(&closure.event_type)
 }
 
+fn validate_run_window_update(update: &PomodoroRunWindowUpdate) -> Result<(), String> {
+    require_non_empty(&update.run_id, "update.run_id")?;
+    require_non_empty(&update.planned_end, "update.planned_end")
+}
+
 fn validate_segment_write(segment: &PomodoroSegmentWrite) -> Result<(), String> {
     require_non_empty(&segment.id, "id")?;
     canonical_event_id(&segment.event_id)?;
@@ -1129,7 +1165,8 @@ fn iso_seconds_between(start: &str, end: &str) -> Option<i64> {
 mod tests {
     use super::{
         canonical_event_id, validate_event_type, validate_pause_reason, validate_phase,
-        validate_run_end_reason, validate_segment_end_reason, validate_status,
+        validate_run_end_reason, validate_run_window_update, validate_segment_end_reason,
+        validate_status, PomodoroRunWindowUpdate,
     };
 
     #[test]
@@ -1157,6 +1194,20 @@ mod tests {
         assert!(validate_run_end_reason("crash_recovery").is_err());
         assert!(validate_segment_end_reason("crash_recovery").is_ok());
         assert!(validate_segment_end_reason("unknown").is_err());
+    }
+
+    #[test]
+    fn validates_run_window_update() {
+        assert!(validate_run_window_update(&PomodoroRunWindowUpdate {
+            run_id: "run-1".to_string(),
+            planned_end: "2026-05-23T15:00:00Z".to_string(),
+        })
+        .is_ok());
+        assert!(validate_run_window_update(&PomodoroRunWindowUpdate {
+            run_id: String::new(),
+            planned_end: "2026-05-23T15:00:00Z".to_string(),
+        })
+        .is_err());
     }
 
     #[test]

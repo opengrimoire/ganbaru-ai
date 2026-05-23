@@ -97,7 +97,7 @@ Break phases are written lazily like focus phases. A break that never begins has
 
 ### Projected breaks during a stop-and-restart gap
 
-When a session has stopped but the event still has remaining time, the rail continues to show projected break marks for the remaining time. These are computed as if a new session were starting right now, with a full focus period followed by breaks per the event's config. As the seconds tick by during the gap, the projected positions shift because "now" changes. The auto-start poll (~30s) recomputes them.
+When a session has stopped but the event still has remaining time, the rail continues to show projected break marks for the remaining time. These are computed as if a new session were starting right now, with a full focus period followed by breaks per the event's config. As the seconds tick by during the gap, the projected positions shift because "now" changes. The auto-start poll (~1s) recomputes them.
 
 When the user restarts (via auto-start or manually), the projected breaks become the actual plan and lock in place. From then on, those break positions are stable for the duration of the session (invariant 3).
 

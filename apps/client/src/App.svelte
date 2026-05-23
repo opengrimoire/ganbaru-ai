@@ -54,6 +54,8 @@
   const viewport = getViewport();
   const detachedWindows = getDetachedWindows();
   let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
+  const ACTIVE_BLOCK_CHECK_INTERVAL_MS = 1000;
+  const EVENT_NOTIFICATION_CHECK_INTERVAL_MS = 1000;
 
   let isMaximized = $state(true);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
@@ -480,7 +482,7 @@
 
   // Also poll for time-based transitions
   $effect(() => {
-    const id = setInterval(checkActiveBlock, 30_000);
+    const id = setInterval(checkActiveBlock, ACTIVE_BLOCK_CHECK_INTERVAL_MS);
     return () => clearInterval(id);
   });
 
@@ -506,8 +508,8 @@
         const notifyTime = new Date(startTime.getTime() - minutes * 60_000);
         const diff = now.getTime() - notifyTime.getTime();
 
-        // Fire if within a 90-second window (covers 30s polling interval with margin)
-        if (diff >= 0 && diff < 90_000) {
+        // Fire if within a narrow window that covers the 1s polling interval with margin.
+        if (diff >= 0 && diff < 2_500) {
           notifiedEvents.add(notifKey);
           const title = event.title.trim() || "Calendar event";
           const body = formatEventNotificationBody(event, now);
@@ -519,14 +521,14 @@
     }
   }
 
-  // Check notifications on event changes and every 30s
+  // Check notifications on event changes and every scheduler tick.
   $effect(() => {
     const _v = calendar.indexVersion;
     checkEventNotifications();
   });
 
   $effect(() => {
-    const id = setInterval(checkEventNotifications, 30_000);
+    const id = setInterval(checkEventNotifications, EVENT_NOTIFICATION_CHECK_INTERVAL_MS);
     return () => clearInterval(id);
   });
 </script>

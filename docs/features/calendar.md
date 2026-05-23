@@ -45,7 +45,7 @@ A calendar event is a structured record (see `data/schema.md` for the table). Th
 
 Events without a pomodoro config are still first-class citizens. They appear in the calendar, drive notifications, and trigger work-environment activation. They simply do not show a rail and do not contribute to focus stats.
 
-Event notifications are transient native desktop notifications, not sound-only alerts. The notification title is the event title, and the body includes the lead time, time range or all-day label, and location when available. Clicking the notification or its Open calendar action switches the main app to Calendar and requests that the OS show and focus the main window. Ubuntu GNOME and other compositors may still block the raise request through focus-stealing prevention. The app asks the OS not to keep calendar reminders in notification history after the popup disappears, though final persistence behavior depends on the user's desktop notification server.
+Event notifications are transient native desktop notifications, not sound-only alerts. The notification title is the event title, and the body includes the lead time, time range or all-day label, and location when available. The foreground app checks due notifications roughly once per second so start-time reminders align with the system clock. Clicking the notification or its Open calendar action switches the main app to Calendar and requests that the OS show and focus the main window. Ubuntu GNOME and other compositors may still block the raise request through focus-stealing prevention. The app asks the OS not to keep calendar reminders in notification history after the popup disappears, though final persistence behavior depends on the user's desktop notification server.
 
 ## Interactions
 

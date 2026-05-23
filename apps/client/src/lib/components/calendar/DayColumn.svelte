@@ -620,7 +620,7 @@
           class="absolute left-0 right-0"
           style="
             top: {((band.topMinute - seg.start) / (seg.end - seg.start)) * 100}%;
-            height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0.5)}%;
+            height: {Math.max((band.heightMinutes / (seg.end - seg.start)) * 100, 0)}%;
             background-color: var(--cal-timeline-focus);
           "
         ></div>

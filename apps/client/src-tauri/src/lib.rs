@@ -765,6 +765,7 @@ pub fn run() {
             pomodoro::pomodoro_insert_segments,
             pomodoro::pomodoro_update_segments,
             pomodoro::pomodoro_close_run,
+            pomodoro::pomodoro_update_run_window,
             pomodoro::pomodoro_heartbeat,
             pomodoro::pomodoro_record_run_event,
             pomodoro::pomodoro_recover_open_runs,
