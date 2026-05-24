@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, PositionedEvent, PersistedSegment } from "./types";
+  import type { CalendarEvent, PositionedEvent, PersistedSegment, TimelineBand } from "./types";
   import {
     layoutEventsForDay,
     effectiveMinuteRange,
@@ -206,10 +206,13 @@
 
   $effect(() => {
     const segVer = pomodoro.segmentVersion;
-    const eventIds = positioned
+    const positionedEventIds = positioned
       .filter((p) => p.event.pomodoroConfig && p.event.id !== draggingEventId)
-      .map((p) => p.event.id)
-      .sort();
+      .map((p) => p.event.id);
+    const previewEventIds = dragPreview?.event.pomodoroConfig
+      ? [dragPreview.event.id]
+      : [];
+    const eventIds = Array.from(new Set([...positionedEventIds, ...previewEventIds])).sort();
     const queryEventIds = Array.from(new Set(
       eventIds.flatMap((id) => id.includes("::") ? [id, id.split("::")[0]] : [id]),
     )).sort();
@@ -315,9 +318,21 @@
       activeBlockId: pomodoro.activeBlockId,
       segments: pomodoro.segments,
       remainingSeconds: pomodoro.remainingSeconds,
+      phaseElapsedSeconds: pomodoro.phaseElapsedSeconds,
+      currentConfig: {
+        focusDurationMinutes: pomodoro.currentConfig.focusMinutes,
+        shortBreakMinutes: pomodoro.currentConfig.shortBreakMinutes,
+        longBreakMinutes: pomodoro.currentConfig.longBreakMinutes,
+        pomodoroCount: pomodoro.currentConfig.cyclesBeforeLongBreak,
+        idleTimeoutMinutes: null,
+      },
       breakOvertimeSeconds: pomodoro.breakOvertimeSeconds,
     }, dayStartMs, nowMs, persistedSegmentsMap);
   });
+
+  function timelineBandKey(band: TimelineBand, index: number): string {
+    return `${band.phase}:${band.status}:${band.topMinute.toFixed(3)}:${band.heightMinutes.toFixed(3)}:${index}`;
+  }
 
   let columnEl: HTMLDivElement | undefined = $state();
   let lastClientX: number | null = null;
@@ -615,7 +630,7 @@
       "
     >
       <!-- Focus fill bands (green, behind breaks) -->
-      {#each timelineBands.filter(b => b.phase === "focus" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band}
+      {#each timelineBands.filter(b => b.phase === "focus" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band, bandIndex (timelineBandKey(band, bandIndex))}
         <div
           class="absolute left-0 right-0"
           style="
@@ -626,7 +641,7 @@
         ></div>
       {/each}
       <!-- Break bands (on top of focus fills) -->
-      {#each timelineBands.filter(b => b.phase !== "focus" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band}
+      {#each timelineBands.filter(b => b.phase !== "focus" && b.topMinute < seg.end && b.topMinute + b.heightMinutes > seg.start) as band, bandIndex (timelineBandKey(band, bandIndex))}
         <div
           class="absolute left-0 right-0 {band.status === 'active' ? 'break-band-active' : ''}"
           style="

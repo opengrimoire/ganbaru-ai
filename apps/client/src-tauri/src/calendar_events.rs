@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use sqlx::Row;
 use tauri::{AppHandle, Runtime};
 
 use crate::calendar_description::{
@@ -7,6 +8,23 @@ use crate::calendar_description::{
 use crate::db_path::connect_sqlite;
 
 const PALETTE_SIZE: i64 = 32;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEventMutationTarget {
+    id: String,
+    occurrence_start: Option<String>,
+    occurrence_end: Option<String>,
+}
+
+struct CalendarEventMutationContext {
+    id: String,
+    source_event_id: String,
+    occurrence_date: Option<String>,
+    start_time: String,
+    end_time: String,
+    synthetic: bool,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -376,17 +394,40 @@ async fn insert_calendar_event_row(
 pub async fn calendar_delete_event<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
-    id: String,
+    target: CalendarEventMutationTarget,
 ) -> Result<(), String> {
-    require_non_empty(&id, "id")?;
+    validate_mutation_target(&target)?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
-    close_open_pomodoro_runs_for_deleted_event(&mut tx, Some(&id)).await?;
-    sqlx::query("DELETE FROM calendar_events WHERE id = ?")
-        .bind(&id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| format!("delete calendar event: {e}"))?;
+    delete_calendar_event_tx(&mut tx, &target).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn calendar_archive_event<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    target: CalendarEventMutationTarget,
+) -> Result<(), String> {
+    validate_mutation_target(&target)?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    archive_calendar_event_tx(&mut tx, &target).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn calendar_restore_archived_event<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    target: CalendarEventMutationTarget,
+) -> Result<(), String> {
+    validate_mutation_target(&target)?;
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    restore_archived_calendar_event_tx(&mut tx, &target).await?;
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
@@ -398,101 +439,1033 @@ pub async fn calendar_clear_events<R: Runtime>(
 ) -> Result<(), String> {
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
-    close_open_pomodoro_runs_for_deleted_event(&mut tx, None).await?;
-    sqlx::query("DELETE FROM calendar_events")
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| format!("clear calendar events: {e}"))?;
+    archive_or_delete_calendar_events_for_calendar(&mut tx, None).await?;
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
 
-async fn close_open_pomodoro_runs_for_deleted_event(
+pub async fn archive_or_delete_calendar_events_for_calendar(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    event_id: Option<&str>,
+    calendar_id: Option<&str>,
 ) -> Result<(), String> {
-    let stopped_at: String = sqlx::query_scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
+    ensure_no_open_runs_for_scope(tx, calendar_id).await?;
+    let now = current_utc_iso(tx).await?;
+    let event_ids = load_event_ids_for_scope(tx, calendar_id).await?;
+    for id in event_ids {
+        let target = CalendarEventMutationTarget {
+            id,
+            occurrence_start: None,
+            occurrence_end: None,
+        };
+        let context = load_mutation_context(tx, &target).await?;
+        if is_protected_event(tx, &context, &now).await? {
+            archive_loaded_event(tx, &context, &now).await?;
+        } else {
+            hard_delete_loaded_event(tx, &context, &now).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn delete_calendar_event_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    target: &CalendarEventMutationTarget,
+) -> Result<(), String> {
+    let now = current_utc_iso(tx).await?;
+    let context = load_mutation_context(tx, target).await?;
+    ensure_no_open_runs_for_event(tx, &context).await?;
+    if is_protected_event(tx, &context, &now).await? {
+        return Err(format!(
+            "calendar event '{}' is protected; archive it instead",
+            context.id
+        ));
+    }
+    hard_delete_loaded_event(tx, &context, &now).await
+}
+
+async fn archive_calendar_event_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    target: &CalendarEventMutationTarget,
+) -> Result<(), String> {
+    let now = current_utc_iso(tx).await?;
+    let context = load_mutation_context(tx, target).await?;
+    ensure_no_open_runs_for_event(tx, &context).await?;
+    archive_loaded_event(tx, &context, &now).await
+}
+
+async fn restore_archived_calendar_event_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    target: &CalendarEventMutationTarget,
+) -> Result<(), String> {
+    let row = sqlx::query(
+        "SELECT source_event_id, calendar_id, start_time
+         FROM calendar_events_archive
+         WHERE id = ?",
+    )
+    .bind(&target.id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| format!("load archived calendar event: {e}"))?;
+    let Some(row) = row else {
+        return Err(format!("archived calendar event '{}' not found", target.id));
+    };
+
+    let source_event_id: String = row
+        .try_get("source_event_id")
+        .map_err(|e| format!("read archived source_event_id: {e}"))?;
+    let calendar_id: String = row
+        .try_get("calendar_id")
+        .map_err(|e| format!("read archived calendar_id: {e}"))?;
+    let start_time: String = row
+        .try_get("start_time")
+        .map_err(|e| format!("read archived start_time: {e}"))?;
+
+    if target.id == source_event_id {
+        restore_archived_event_row(tx, &target.id, &source_event_id, &calendar_id).await?;
+        restore_archived_event_children(tx, &target.id, &source_event_id).await?;
+        relink_pomodoro_refs_for_restored_event(tx, &source_event_id, &target.id).await?;
+    } else {
+        restore_archived_synthetic_occurrence(tx, &target.id, &source_event_id, &start_time)
+            .await?;
+    }
+
+    sqlx::query("DELETE FROM calendar_events_archive WHERE id = ?")
+        .bind(&target.id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("delete restored archive row: {e}"))?;
+    Ok(())
+}
+
+async fn restore_archived_event_row(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    archive_event_id: &str,
+    source_event_id: &str,
+    calendar_id: &str,
+) -> Result<(), String> {
+    let calendar_exists: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calendars WHERE id = ?")
+        .bind(calendar_id)
         .fetch_one(&mut **tx)
         .await
-        .map_err(|e| format!("read current time: {e}"))?;
+        .map_err(|e| format!("check archived calendar: {e}"))?;
+    if calendar_exists == 0 {
+        return Err(format!(
+            "calendar '{}' no longer exists; cannot restore archived event",
+            calendar_id
+        ));
+    }
 
-    let run_ids: Vec<String> = if let Some(event_id) = event_id {
+    let live_exists: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = ?")
+        .bind(source_event_id)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| format!("check restored event conflict: {e}"))?;
+    if live_exists > 0 {
+        return Err(format!(
+            "calendar event '{}' already exists; cannot restore archive",
+            source_event_id
+        ));
+    }
+
+    sqlx::query(
+        "INSERT INTO calendar_events (
+            id, title, start_time, end_time, timezone, calendar_id,
+            color, description, rrule, repeat_until, environment_id, playlist_id,
+            all_day, location, url, transparency, status, source_uid, visibility,
+            priority, geo_lat, geo_lng, sequence, guest_can_modify,
+            guest_can_invite_others, guest_can_see_other_guests, created_at, updated_at,
+            icalendar_component_id, local_rsvp_status, meeting_enabled
+         )
+         SELECT
+            source_event_id, title, start_time, end_time, timezone, calendar_id,
+            color, description, rrule, repeat_until, environment_id, playlist_id,
+            all_day, location, url, transparency, status, source_uid, visibility,
+            priority, geo_lat, geo_lng, sequence, guest_can_modify,
+            guest_can_invite_others, guest_can_see_other_guests, created_at, updated_at,
+            icalendar_component_id, local_rsvp_status, meeting_enabled
+         FROM calendar_events_archive
+         WHERE id = ?",
+    )
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived calendar event: {e}"))?;
+    Ok(())
+}
+
+async fn restore_archived_event_children(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    archive_event_id: &str,
+    source_event_id: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO pomodoro_configs
+            (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+             pomodoro_count, idle_timeout_minutes)
+         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                pomodoro_count, idle_timeout_minutes
+         FROM calendar_event_archive_pomodoro_configs
+         WHERE archive_event_id = ?",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived pomodoro config: {e}"))?;
+
+    for (archive_table, live_table, column) in [
+        (
+            "calendar_event_archive_notifications",
+            "calendar_event_notifications",
+            "offset_minutes",
+        ),
+        (
+            "calendar_event_archive_exdates",
+            "calendar_event_exdates",
+            "occurrence_date",
+        ),
+        (
+            "calendar_event_archive_rdates",
+            "calendar_event_rdates",
+            "occurrence_start",
+        ),
+        (
+            "calendar_event_archive_categories",
+            "calendar_event_categories",
+            "category",
+        ),
+    ] {
+        let query = format!(
+            "INSERT INTO {live_table} (id, event_id, {column}, sort_order)
+             SELECT lower(hex(randomblob(16))), ?, {column}, sort_order
+             FROM {archive_table}
+             WHERE archive_event_id = ?"
+        );
+        sqlx::query(&query)
+            .bind(source_event_id)
+            .bind(archive_event_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("restore archived {live_table}: {e}"))?;
+    }
+
+    sqlx::query(
+        "INSERT INTO calendar_event_extended_properties
+            (id, event_id, property_key, property_value, sort_order)
+         SELECT lower(hex(randomblob(16))), ?, property_key, property_value, sort_order
+         FROM calendar_event_archive_extended_properties
+         WHERE archive_event_id = ?",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived extended properties: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_organizers (event_id, name, email)
+         SELECT ?, name, email
+         FROM calendar_event_archive_organizers
+         WHERE archive_event_id = ?",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived organizer: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_attendees
+            (id, event_id, name, email, role, status, rsvp, sort_order,
+             icalendar_component_id, icalendar_property_index)
+         SELECT source_attendee_id, ?, name, email, role, status, rsvp, sort_order,
+                icalendar_component_id, icalendar_property_index
+         FROM calendar_event_archive_attendees
+         WHERE archive_event_id = ?",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived attendees: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_alarms
+            (id, event_id, action, trigger_type, trigger_value, description,
+             sort_order, icalendar_component_id)
+         SELECT source_alarm_id, ?, action, trigger_type, trigger_value, description,
+                sort_order, icalendar_component_id
+         FROM calendar_event_archive_alarms
+         WHERE archive_event_id = ?",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived alarms: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_overrides
+            (id, parent_event_id, recurrence_id, title, start_time, end_time,
+             description, location, url, color, status, transparency, visibility,
+             created_at, updated_at, icalendar_component_id, recurrence_range)
+         SELECT source_override_id, ?, recurrence_id, title, start_time, end_time,
+                description, location, url, color, status, transparency, visibility,
+                created_at, updated_at, icalendar_component_id, recurrence_range
+         FROM calendar_event_archive_overrides
+         WHERE archive_event_id = ?",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived overrides: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_override_extended_properties
+            (id, override_id, property_key, property_value, sort_order)
+         SELECT lower(hex(randomblob(16))), archive_override.source_override_id,
+                source.property_key, source.property_value, source.sort_order
+         FROM calendar_event_archive_override_extended_properties source
+         JOIN calendar_event_archive_overrides archive_override
+           ON archive_override.id = source.archive_override_id
+         WHERE archive_override.archive_event_id = ?",
+    )
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived override extended properties: {e}"))?;
+
+    Ok(())
+}
+
+async fn restore_archived_synthetic_occurrence(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    archive_event_id: &str,
+    source_event_id: &str,
+    start_time: &str,
+) -> Result<(), String> {
+    let parent_exists: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = ?")
+            .bind(source_event_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(|e| format!("check recurring parent: {e}"))?;
+    if parent_exists == 0 {
+        return Err(format!(
+            "calendar event '{}' no longer exists; cannot restore archived occurrence",
+            source_event_id
+        ));
+    }
+
+    let occurrence_date = split_synthetic_id(archive_event_id)
+        .1
+        .map(str::to_string)
+        .or_else(|| date_part(start_time))
+        .ok_or_else(|| "archived occurrence date is required".to_string())?;
+
+    sqlx::query(
+        "DELETE FROM calendar_event_exdates
+         WHERE event_id = ? AND occurrence_date = ?",
+    )
+    .bind(source_event_id)
+    .bind(&occurrence_date)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore recurring exception date: {e}"))?;
+
+    let restored_at = current_utc_iso(tx).await?;
+    sqlx::query("UPDATE calendar_events SET updated_at = ? WHERE id = ?")
+        .bind(restored_at)
+        .bind(source_event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("touch restored recurring parent: {e}"))?;
+
+    relink_pomodoro_refs_for_restored_synthetic(
+        tx,
+        source_event_id,
+        archive_event_id,
+        &occurrence_date,
+    )
+    .await
+}
+
+async fn relink_pomodoro_refs_for_restored_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    original_event_id: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE pomodoro_runs
+         SET event_id = ?
+         WHERE event_id IS NULL AND original_event_id = ?",
+    )
+    .bind(event_id)
+    .bind(original_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived run references: {e}"))?;
+
+    sqlx::query(
+        "UPDATE pomodoro_segments
+         SET event_id = ?
+         WHERE event_id IS NULL
+           AND run_id IN (
+                SELECT id FROM pomodoro_runs
+                WHERE event_id = ? AND original_event_id = ?
+           )",
+    )
+    .bind(event_id)
+    .bind(event_id)
+    .bind(original_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived segment references: {e}"))?;
+    Ok(())
+}
+
+async fn relink_pomodoro_refs_for_restored_synthetic(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_event_id: &str,
+    exact_event_id: &str,
+    occurrence_date: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE pomodoro_runs
+         SET event_id = ?
+         WHERE event_id IS NULL
+           AND (
+                original_event_id = ?
+                OR (original_event_id = ? AND event_date = ?)
+           )",
+    )
+    .bind(source_event_id)
+    .bind(exact_event_id)
+    .bind(source_event_id)
+    .bind(occurrence_date)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived synthetic run references: {e}"))?;
+
+    sqlx::query(
+        "UPDATE pomodoro_segments
+         SET event_id = ?
+         WHERE event_id IS NULL
+           AND run_id IN (
+                SELECT id FROM pomodoro_runs
+                WHERE event_id = ?
+                  AND (
+                    original_event_id = ?
+                    OR (original_event_id = ? AND event_date = ?)
+                  )
+           )",
+    )
+    .bind(source_event_id)
+    .bind(source_event_id)
+    .bind(exact_event_id)
+    .bind(source_event_id)
+    .bind(occurrence_date)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived synthetic segment references: {e}"))?;
+    Ok(())
+}
+
+async fn hard_delete_loaded_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    context: &CalendarEventMutationContext,
+    now: &str,
+) -> Result<(), String> {
+    if context.synthetic {
+        let occurrence_date = context
+            .occurrence_date
+            .as_deref()
+            .ok_or_else(|| "synthetic occurrence date is required".to_string())?;
+        add_exdate(tx, &context.source_event_id, occurrence_date, now).await?;
+        return Ok(());
+    }
+
+    sqlx::query("DELETE FROM calendar_events WHERE id = ?")
+        .bind(&context.source_event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("delete calendar event: {e}"))?;
+    Ok(())
+}
+
+async fn archive_loaded_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    context: &CalendarEventMutationContext,
+    archived_at: &str,
+) -> Result<(), String> {
+    archive_event_snapshot(tx, context, archived_at).await?;
+    if context.synthetic {
+        let occurrence_date = context
+            .occurrence_date
+            .as_deref()
+            .ok_or_else(|| "synthetic occurrence date is required".to_string())?;
+        add_exdate(tx, &context.source_event_id, occurrence_date, archived_at).await?;
+        null_pomodoro_live_refs_for_synthetic(
+            tx,
+            &context.source_event_id,
+            &context.id,
+            occurrence_date,
+        )
+        .await?;
+        return Ok(());
+    }
+
+    null_pomodoro_live_refs_for_event(tx, &context.source_event_id).await?;
+    sqlx::query("DELETE FROM calendar_events WHERE id = ?")
+        .bind(&context.source_event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("delete archived calendar event: {e}"))?;
+    Ok(())
+}
+
+async fn load_mutation_context(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    target: &CalendarEventMutationTarget,
+) -> Result<CalendarEventMutationContext, String> {
+    let (source_event_id, synthetic_date) = split_synthetic_id(&target.id);
+    let synthetic = synthetic_date.is_some();
+    if synthetic {
+        require_non_empty_option(&target.occurrence_start, "occurrence_start")?;
+        require_non_empty_option(&target.occurrence_end, "occurrence_end")?;
+    }
+    let row = sqlx::query(
+        "SELECT id, start_time, end_time
+         FROM calendar_events
+         WHERE id = ?",
+    )
+    .bind(source_event_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| format!("load calendar event for mutation: {e}"))?;
+    let Some(row) = row else {
+        return Err(format!("calendar event '{}' not found", source_event_id));
+    };
+
+    let stored_start: String = row
+        .try_get("start_time")
+        .map_err(|e| format!("read event start_time: {e}"))?;
+    let stored_end: String = row
+        .try_get("end_time")
+        .map_err(|e| format!("read event end_time: {e}"))?;
+    let occurrence_date = target
+        .occurrence_start
+        .as_deref()
+        .and_then(date_part)
+        .or_else(|| synthetic_date.map(str::to_string));
+
+    Ok(CalendarEventMutationContext {
+        id: target.id.clone(),
+        source_event_id: source_event_id.to_string(),
+        occurrence_date,
+        start_time: target.occurrence_start.clone().unwrap_or(stored_start),
+        end_time: target.occurrence_end.clone().unwrap_or(stored_end),
+        synthetic,
+    })
+}
+
+async fn is_protected_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    context: &CalendarEventMutationContext,
+    now: &str,
+) -> Result<bool, String> {
+    if context.start_time.as_str() <= now {
+        return Ok(true);
+    }
+    event_has_pomodoro_history(tx, context).await
+}
+
+async fn event_has_pomodoro_history(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    context: &CalendarEventMutationContext,
+) -> Result<bool, String> {
+    let count: i64 = if context.synthetic {
+        let occurrence_date = context
+            .occurrence_date
+            .as_deref()
+            .ok_or_else(|| "synthetic occurrence date is required".to_string())?;
         sqlx::query_scalar(
-            "SELECT id
+            "SELECT
+                (SELECT COUNT(*)
+                 FROM pomodoro_runs
+                 WHERE event_id = ?
+                   AND (original_event_id = ? OR event_date = ?))
+              + (SELECT COUNT(*)
+                 FROM pomodoro_segments
+                 WHERE event_id = ? AND event_date = ?)",
+        )
+        .bind(&context.source_event_id)
+        .bind(&context.id)
+        .bind(occurrence_date)
+        .bind(&context.source_event_id)
+        .bind(occurrence_date)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| format!("count synthetic pomodoro history: {e}"))?
+    } else {
+        sqlx::query_scalar(
+            "SELECT
+                (SELECT COUNT(*)
+                 FROM pomodoro_runs
+                 WHERE event_id = ? OR original_event_id = ?)
+              + (SELECT COUNT(*)
+                 FROM pomodoro_segments
+                 WHERE event_id = ?)",
+        )
+        .bind(&context.source_event_id)
+        .bind(&context.id)
+        .bind(&context.source_event_id)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| format!("count event pomodoro history: {e}"))?
+    };
+    Ok(count > 0)
+}
+
+async fn ensure_no_open_runs_for_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    context: &CalendarEventMutationContext,
+) -> Result<(), String> {
+    let count: i64 = if context.synthetic {
+        let occurrence_date = context
+            .occurrence_date
+            .as_deref()
+            .ok_or_else(|| "synthetic occurrence date is required".to_string())?;
+        sqlx::query_scalar(
+            "SELECT COUNT(*)
+             FROM pomodoro_runs
+             WHERE ended_at IS NULL
+               AND event_id = ?
+               AND (original_event_id = ? OR event_date = ?)",
+        )
+        .bind(&context.source_event_id)
+        .bind(&context.id)
+        .bind(occurrence_date)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| format!("count active synthetic pomodoro runs: {e}"))?
+    } else {
+        sqlx::query_scalar(
+            "SELECT COUNT(*)
              FROM pomodoro_runs
              WHERE ended_at IS NULL
                AND (event_id = ? OR original_event_id = ?)",
         )
-        .bind(event_id)
-        .bind(event_id)
-        .fetch_all(&mut **tx)
+        .bind(&context.source_event_id)
+        .bind(&context.id)
+        .fetch_one(&mut **tx)
         .await
-        .map_err(|e| format!("load open pomodoro runs for deleted event: {e}"))?
-    } else {
-        sqlx::query_scalar(
-            "SELECT id
-             FROM pomodoro_runs
-             WHERE ended_at IS NULL",
-        )
-        .fetch_all(&mut **tx)
-        .await
-        .map_err(|e| format!("load open pomodoro runs for clear: {e}"))?
+        .map_err(|e| format!("count active pomodoro runs: {e}"))?
     };
+    if count > 0 {
+        return Err(format!(
+            "calendar event '{}' has an active pomodoro run; stop it before deleting or archiving",
+            context.id
+        ));
+    }
+    Ok(())
+}
 
-    for run_id in run_ids {
-        sqlx::query(
-            "UPDATE pomodoro_pauses
-             SET ended_at = ?
+async fn ensure_no_open_runs_for_scope(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    calendar_id: Option<&str>,
+) -> Result<(), String> {
+    let count: i64 = if let Some(calendar_id) = calendar_id {
+        sqlx::query_scalar(
+            "SELECT COUNT(*)
+             FROM pomodoro_runs
              WHERE ended_at IS NULL
-               AND segment_id IN (
-                 SELECT id FROM pomodoro_segments WHERE run_id = ?
+               AND event_id IN (
+                    SELECT id FROM calendar_events WHERE calendar_id = ?
                )",
         )
-        .bind(&stopped_at)
-        .bind(&run_id)
-        .execute(&mut **tx)
+        .bind(calendar_id)
+        .fetch_one(&mut **tx)
         .await
-        .map_err(|e| format!("close pomodoro pauses before deleting event: {e}"))?;
+        .map_err(|e| format!("count active pomodoro runs for calendar: {e}"))?
+    } else {
+        sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_runs WHERE ended_at IS NULL")
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(|e| format!("count active pomodoro runs: {e}"))?
+    };
+    if count > 0 {
+        return Err(
+            "active pomodoro runs must be stopped before clearing or removing calendar events"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
 
-        sqlx::query(
-            "UPDATE pomodoro_segments
-             SET status = 'interrupted',
-                 actual_end = COALESCE(actual_end, ?),
-                 end_reason = COALESCE(end_reason, 'stopped')
-             WHERE run_id = ? AND status = 'active'",
+async fn load_event_ids_for_scope(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    calendar_id: Option<&str>,
+) -> Result<Vec<String>, String> {
+    if let Some(calendar_id) = calendar_id {
+        sqlx::query_scalar(
+            "SELECT id FROM calendar_events WHERE calendar_id = ? ORDER BY start_time ASC",
         )
-        .bind(&stopped_at)
-        .bind(&run_id)
-        .execute(&mut **tx)
+        .bind(calendar_id)
+        .fetch_all(&mut **tx)
         .await
-        .map_err(|e| format!("close pomodoro segments before deleting event: {e}"))?;
+        .map_err(|e| format!("load calendar event ids: {e}"))
+    } else {
+        sqlx::query_scalar("SELECT id FROM calendar_events ORDER BY start_time ASC")
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(|e| format!("load calendar event ids: {e}"))
+    }
+}
 
-        sqlx::query(
-            "INSERT OR IGNORE INTO pomodoro_run_events
-                (id, run_id, segment_id, event_type, occurred_at, phase, reason, duration_seconds)
-             VALUES (?, ?, NULL, 'stop', ?, NULL, 'stopped', NULL)",
-        )
-        .bind(format!("{run_id}:calendar-delete-stop"))
-        .bind(&run_id)
-        .bind(&stopped_at)
-        .execute(&mut **tx)
-        .await
-        .map_err(|e| format!("record pomodoro stop before deleting event: {e}"))?;
+async fn archive_event_snapshot(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    context: &CalendarEventMutationContext,
+    archived_at: &str,
+) -> Result<(), String> {
+    clear_archive_children(tx, &context.id).await?;
+    sqlx::query(
+        "INSERT OR REPLACE INTO calendar_events_archive (
+            id, source_event_id, archived_at, title, start_time, end_time, timezone,
+            calendar_id, color, description, rrule, repeat_until, environment_id,
+            playlist_id, all_day, location, url, transparency, status, source_uid,
+            visibility, priority, geo_lat, geo_lng, sequence, guest_can_modify,
+            guest_can_invite_others, guest_can_see_other_guests, created_at, updated_at,
+            icalendar_component_id, local_rsvp_status, meeting_enabled
+         )
+         SELECT
+            ?, ?, ?, title, ?, ?, timezone,
+            calendar_id, color, description,
+            CASE WHEN ? = 1 THEN NULL ELSE rrule END,
+            CASE WHEN ? = 1 THEN NULL ELSE repeat_until END,
+            environment_id, playlist_id, all_day, location, url, transparency, status,
+            source_uid, visibility, priority, geo_lat, geo_lng, sequence,
+            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
+            created_at, updated_at, icalendar_component_id, local_rsvp_status,
+            meeting_enabled
+         FROM calendar_events
+         WHERE id = ?",
+    )
+    .bind(&context.id)
+    .bind(&context.source_event_id)
+    .bind(archived_at)
+    .bind(&context.start_time)
+    .bind(&context.end_time)
+    .bind(if context.synthetic { 1_i64 } else { 0_i64 })
+    .bind(if context.synthetic { 1_i64 } else { 0_i64 })
+    .bind(&context.source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive calendar event: {e}"))?;
 
-        sqlx::query(
-            "UPDATE pomodoro_runs
-             SET ended_at = ?, end_reason = 'stopped', last_heartbeat = ?
-             WHERE id = ? AND ended_at IS NULL",
-        )
-        .bind(&stopped_at)
-        .bind(&stopped_at)
-        .bind(&run_id)
-        .execute(&mut **tx)
-        .await
-        .map_err(|e| format!("close pomodoro run before deleting event: {e}"))?;
+    copy_archive_children(tx, &context.id, &context.source_event_id).await
+}
+
+async fn clear_archive_children(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    archive_event_id: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "DELETE FROM calendar_event_archive_override_extended_properties
+         WHERE archive_override_id IN (
+            SELECT id FROM calendar_event_archive_overrides WHERE archive_event_id = ?
+         )",
+    )
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("clear archived override properties: {e}"))?;
+    for table in [
+        "calendar_event_archive_overrides",
+        "calendar_event_archive_alarms",
+        "calendar_event_archive_attendees",
+        "calendar_event_archive_organizers",
+        "calendar_event_archive_extended_properties",
+        "calendar_event_archive_categories",
+        "calendar_event_archive_rdates",
+        "calendar_event_archive_exdates",
+        "calendar_event_archive_notifications",
+        "calendar_event_archive_pomodoro_configs",
+    ] {
+        let query = format!("DELETE FROM {table} WHERE archive_event_id = ?");
+        sqlx::query(&query)
+            .bind(archive_event_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("clear archived {table}: {e}"))?;
+    }
+    Ok(())
+}
+
+async fn copy_archive_children(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    archive_event_id: &str,
+    source_event_id: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_pomodoro_configs
+            (archive_event_id, focus_duration_minutes, short_break_minutes,
+             long_break_minutes, pomodoro_count, idle_timeout_minutes)
+         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                pomodoro_count, idle_timeout_minutes
+         FROM pomodoro_configs
+         WHERE event_id = ?",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive pomodoro config: {e}"))?;
+
+    for (source_table, archive_table, column) in [
+        (
+            "calendar_event_notifications",
+            "calendar_event_archive_notifications",
+            "offset_minutes",
+        ),
+        (
+            "calendar_event_exdates",
+            "calendar_event_archive_exdates",
+            "occurrence_date",
+        ),
+        (
+            "calendar_event_rdates",
+            "calendar_event_archive_rdates",
+            "occurrence_start",
+        ),
+        (
+            "calendar_event_categories",
+            "calendar_event_archive_categories",
+            "category",
+        ),
+    ] {
+        let query = format!(
+            "INSERT INTO {archive_table} (id, archive_event_id, {column}, sort_order)
+             SELECT lower(hex(randomblob(16))), ?, {column}, sort_order
+             FROM {source_table}
+             WHERE event_id = ?"
+        );
+        sqlx::query(&query)
+            .bind(archive_event_id)
+            .bind(source_event_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("archive {source_table}: {e}"))?;
     }
 
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_extended_properties
+            (id, archive_event_id, property_key, property_value, sort_order)
+         SELECT lower(hex(randomblob(16))), ?, property_key, property_value, sort_order
+         FROM calendar_event_extended_properties
+         WHERE event_id = ?",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive extended properties: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_organizers (archive_event_id, name, email)
+         SELECT ?, name, email
+         FROM calendar_event_organizers
+         WHERE event_id = ?",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive organizer: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_attendees
+            (id, archive_event_id, source_attendee_id, name, email, role, status,
+             rsvp, sort_order, icalendar_component_id, icalendar_property_index)
+         SELECT lower(hex(randomblob(16))), ?, id, name, email, role, status,
+                rsvp, sort_order, icalendar_component_id, icalendar_property_index
+         FROM calendar_event_attendees
+         WHERE event_id = ?",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive attendees: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_alarms
+            (id, archive_event_id, source_alarm_id, action, trigger_type,
+             trigger_value, description, sort_order, icalendar_component_id)
+         SELECT lower(hex(randomblob(16))), ?, id, action, trigger_type,
+                trigger_value, description, sort_order, icalendar_component_id
+         FROM calendar_event_alarms
+         WHERE event_id = ?",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive alarms: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_overrides
+            (id, archive_event_id, source_override_id, recurrence_id, title,
+             start_time, end_time, description, location, url, color, status,
+             transparency, visibility, created_at, updated_at, icalendar_component_id,
+             recurrence_range)
+         SELECT lower(hex(randomblob(16))), ?, id, recurrence_id, title,
+                start_time, end_time, description, location, url, color, status,
+                transparency, visibility, created_at, updated_at, icalendar_component_id,
+                recurrence_range
+         FROM calendar_event_overrides
+         WHERE parent_event_id = ?",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive overrides: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_override_extended_properties
+            (id, archive_override_id, property_key, property_value, sort_order)
+         SELECT lower(hex(randomblob(16))), archive_override.id, source.property_key,
+                source.property_value, source.sort_order
+         FROM calendar_event_override_extended_properties source
+         JOIN calendar_event_archive_overrides archive_override
+           ON archive_override.archive_event_id = ?
+          AND archive_override.source_override_id = source.override_id",
+    )
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive override extended properties: {e}"))?;
+
     Ok(())
+}
+
+async fn add_exdate(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    occurrence_date: &str,
+    updated_at: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO calendar_event_exdates
+            (id, event_id, occurrence_date, sort_order)
+         SELECT lower(hex(randomblob(16))), ?, ?, COALESCE(MAX(sort_order) + 1, 0)
+         FROM calendar_event_exdates
+         WHERE event_id = ?",
+    )
+    .bind(event_id)
+    .bind(occurrence_date)
+    .bind(event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("add recurring exception date: {e}"))?;
+
+    sqlx::query("UPDATE calendar_events SET updated_at = ? WHERE id = ?")
+        .bind(updated_at)
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("touch recurring parent: {e}"))?;
+    Ok(())
+}
+
+async fn null_pomodoro_live_refs_for_synthetic(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_event_id: &str,
+    exact_event_id: &str,
+    occurrence_date: &str,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE pomodoro_runs
+         SET event_id = NULL
+         WHERE event_id = ?
+           AND (original_event_id = ? OR event_date = ?)",
+    )
+    .bind(source_event_id)
+    .bind(exact_event_id)
+    .bind(occurrence_date)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("clear archived synthetic run references: {e}"))?;
+
+    sqlx::query(
+        "UPDATE pomodoro_segments
+         SET event_id = NULL
+         WHERE event_id = ? AND event_date = ?",
+    )
+    .bind(source_event_id)
+    .bind(occurrence_date)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("clear archived synthetic segment references: {e}"))?;
+    Ok(())
+}
+
+async fn null_pomodoro_live_refs_for_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+) -> Result<(), String> {
+    sqlx::query("UPDATE pomodoro_runs SET event_id = NULL WHERE event_id = ?")
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear archived run references: {e}"))?;
+    sqlx::query("UPDATE pomodoro_segments SET event_id = NULL WHERE event_id = ?")
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear archived segment references: {e}"))?;
+    Ok(())
+}
+
+async fn current_utc_iso(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<String, String> {
+    sqlx::query_scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| format!("read current time: {e}"))
+}
+
+fn split_synthetic_id(id: &str) -> (&str, Option<&str>) {
+    id.split_once("::")
+        .map_or((id, None), |(parent, date)| (parent, Some(date)))
+}
+
+fn date_part(value: &str) -> Option<String> {
+    let date = value.get(0..10)?;
+    if date.len() == 10 {
+        Some(date.to_string())
+    } else {
+        None
+    }
+}
+
+fn validate_mutation_target(target: &CalendarEventMutationTarget) -> Result<(), String> {
+    require_non_empty(&target.id, "id")?;
+    if let Some(value) = &target.occurrence_start {
+        require_non_empty(value, "occurrence_start")?;
+    }
+    if let Some(value) = &target.occurrence_end {
+        require_non_empty(value, "occurrence_end")?;
+    }
+    Ok(())
+}
+
+fn require_non_empty_option(value: &Option<String>, field: &str) -> Result<(), String> {
+    match value {
+        Some(value) => require_non_empty(value, field),
+        None => Err(format!("{field} cannot be empty")),
+    }
 }
 
 #[tauri::command]
@@ -684,14 +1657,28 @@ pub async fn calendar_detach_instance<R: Runtime>(
     copy_pomodoro_config(&mut tx, &input.parent_id, &input.new_id).await?;
     copy_attendees(&mut tx, &input.parent_id, &input.new_id).await?;
 
+    let original_occurrence_id = format!("{}::{}", input.parent_id, input.instance_date);
+    sqlx::query(
+        "UPDATE pomodoro_runs
+         SET event_id = ?, original_event_id = ?
+         WHERE event_id = ?
+           AND (original_event_id = ? OR event_date = ?)",
+    )
+    .bind(&input.new_id)
+    .bind(&input.new_id)
+    .bind(&input.parent_id)
+    .bind(&original_occurrence_id)
+    .bind(&input.instance_date)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("move detached pomodoro runs: {e}"))?;
+
     sqlx::query(
         "UPDATE pomodoro_segments SET event_id = ?
-         WHERE event_id IN (?, ? || '::' || ?) AND event_date = ?",
+         WHERE event_id = ? AND event_date = ?",
     )
     .bind(&input.new_id)
     .bind(&input.parent_id)
-    .bind(&input.parent_id)
-    .bind(&input.instance_date)
     .bind(&input.instance_date)
     .execute(&mut *tx)
     .await
@@ -1637,10 +2624,11 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_update_field, close_open_pomodoro_runs_for_deleted_event, filter_excluded_dates,
-        insert_calendar_event_row, sanitize_stored_event_description, validate_color,
-        validate_event_create, validate_non_negative, validate_positive, validate_priority,
-        validate_update_field, CalendarEventCreate, CalendarEventUpdateField,
+        apply_update_field, archive_calendar_event_tx, delete_calendar_event_tx,
+        filter_excluded_dates, insert_calendar_event_row, restore_archived_calendar_event_tx,
+        sanitize_stored_event_description, validate_color, validate_event_create,
+        validate_non_negative, validate_positive, validate_priority, validate_update_field,
+        CalendarEventCreate, CalendarEventMutationTarget, CalendarEventUpdateField,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -1732,7 +2720,7 @@ mod tests {
     }
 
     #[test]
-    fn deleting_event_closes_open_pomodoro_run_before_delete() {
+    fn deleting_event_rejects_active_pomodoro_run() {
         tauri::async_runtime::block_on(async {
             let pool = in_memory_pool().await;
             insert_test_event(&pool, "event-1", "").await;
@@ -1740,14 +2728,18 @@ mod tests {
             insert_test_active_pomodoro_segment(&pool).await;
 
             let mut tx = pool.begin().await.unwrap();
-            close_open_pomodoro_runs_for_deleted_event(&mut tx, Some("event-1"))
-                .await
-                .unwrap();
-            sqlx::query("DELETE FROM calendar_events WHERE id = 'event-1'")
-                .execute(&mut *tx)
-                .await
-                .unwrap();
-            tx.commit().await.unwrap();
+            let err = delete_calendar_event_tx(
+                &mut tx,
+                &CalendarEventMutationTarget {
+                    id: "event-1".to_string(),
+                    occurrence_start: None,
+                    occurrence_end: None,
+                },
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(err.contains("active pomodoro run"));
 
             let run: (Option<String>, Option<String>) = sqlx::query_as(
                 "SELECT ended_at, event_id
@@ -1765,20 +2757,324 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-            let stop_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*)
-                 FROM pomodoro_run_events
-                 WHERE run_id = 'run-1' AND event_type = 'stop'",
+            assert!(run.0.is_none());
+            assert_eq!(run.1, Some("event-1".to_string()));
+            assert_eq!(segment.0, "active");
+            assert_eq!(segment.1, Some("event-1".to_string()));
+        });
+    }
+
+    #[test]
+    fn future_untracked_event_hard_deletes() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2099-05-09T10:00:00Z",
+                "2099-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            delete_calendar_event_tx(
+                &mut tx,
+                &CalendarEventMutationTarget {
+                    id: "event-1".to_string(),
+                    occurrence_start: None,
+                    occurrence_end: None,
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let live_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let archive_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1'",
             )
             .fetch_one(&pool)
             .await
             .unwrap();
+            assert_eq!(live_count, 0);
+            assert_eq!(archive_count, 0);
+        });
+    }
 
-            assert!(run.0.is_some());
-            assert_eq!(run.1, None);
-            assert_eq!(segment.0, "interrupted");
-            assert_eq!(segment.1, None);
-            assert_eq!(stop_count, 1);
+    #[test]
+    fn past_event_delete_rejects_and_archive_succeeds() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(&pool, "event-1", "").await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = delete_calendar_event_tx(
+                &mut tx,
+                &CalendarEventMutationTarget {
+                    id: "event-1".to_string(),
+                    occurrence_start: None,
+                    occurrence_end: None,
+                },
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(err.contains("archive it instead"));
+
+            let mut tx = pool.begin().await.unwrap();
+            archive_calendar_event_tx(
+                &mut tx,
+                &CalendarEventMutationTarget {
+                    id: "event-1".to_string(),
+                    occurrence_start: None,
+                    occurrence_end: None,
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let live_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let archived_title: String = sqlx::query_scalar(
+                "SELECT title FROM calendar_events_archive WHERE id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(live_count, 0);
+            assert_eq!(archived_title, "");
+        });
+    }
+
+    #[test]
+    fn archived_event_restore_relinks_pomodoro_history() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2000-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+            insert_test_completed_pomodoro_history(&pool, "event-1", "event-1", "2000-05-09").await;
+
+            let target = CalendarEventMutationTarget {
+                id: "event-1".to_string(),
+                occurrence_start: None,
+                occurrence_end: None,
+            };
+            let mut tx = pool.begin().await.unwrap();
+            archive_calendar_event_tx(&mut tx, &target).await.unwrap();
+            tx.commit().await.unwrap();
+
+            let live_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let archive_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let run_event_id: Option<String> =
+                sqlx::query_scalar("SELECT event_id FROM pomodoro_runs WHERE id = 'run-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let segment_event_id: Option<String> =
+                sqlx::query_scalar("SELECT event_id FROM pomodoro_segments WHERE id = 'segment-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(live_count, 0);
+            assert_eq!(archive_count, 1);
+            assert_eq!(run_event_id, None);
+            assert_eq!(segment_event_id, None);
+
+            let mut tx = pool.begin().await.unwrap();
+            restore_archived_calendar_event_tx(&mut tx, &target)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let live_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let archive_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let run: (Option<String>, String) = sqlx::query_as(
+                "SELECT event_id, original_event_id FROM pomodoro_runs WHERE id = 'run-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let segment_event_id: Option<String> =
+                sqlx::query_scalar("SELECT event_id FROM pomodoro_segments WHERE id = 'segment-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(live_count, 1);
+            assert_eq!(archive_count, 0);
+            assert_eq!(run.0, Some("event-1".to_string()));
+            assert_eq!(run.1, "event-1");
+            assert_eq!(segment_event_id, Some("event-1".to_string()));
+        });
+    }
+
+    #[test]
+    fn archived_synthetic_restore_removes_exception_and_relinks_history() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2000-05-09T11:00:00Z",
+                Some("FREQ=DAILY"),
+            )
+            .await;
+            insert_test_completed_pomodoro_history(
+                &pool,
+                "event-1",
+                "event-1::2000-05-10",
+                "2000-05-10",
+            )
+            .await;
+
+            let target = CalendarEventMutationTarget {
+                id: "event-1::2000-05-10".to_string(),
+                occurrence_start: Some("2000-05-10T10:00:00Z".to_string()),
+                occurrence_end: Some("2000-05-10T11:00:00Z".to_string()),
+            };
+            let mut tx = pool.begin().await.unwrap();
+            archive_calendar_event_tx(&mut tx, &target).await.unwrap();
+            tx.commit().await.unwrap();
+
+            let parent_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let archive_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1::2000-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let exdate_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_event_exdates
+                 WHERE event_id = 'event-1' AND occurrence_date = '2000-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let run_event_id: Option<String> =
+                sqlx::query_scalar("SELECT event_id FROM pomodoro_runs WHERE id = 'run-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(parent_count, 1);
+            assert_eq!(archive_count, 1);
+            assert_eq!(exdate_count, 1);
+            assert_eq!(run_event_id, None);
+
+            let mut tx = pool.begin().await.unwrap();
+            restore_archived_calendar_event_tx(&mut tx, &target)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let archive_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1::2000-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let exdate_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_event_exdates
+                 WHERE event_id = 'event-1' AND occurrence_date = '2000-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let run: (Option<String>, String) = sqlx::query_as(
+                "SELECT event_id, original_event_id FROM pomodoro_runs WHERE id = 'run-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let segment_event_id: Option<String> =
+                sqlx::query_scalar("SELECT event_id FROM pomodoro_segments WHERE id = 'segment-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(archive_count, 0);
+            assert_eq!(exdate_count, 0);
+            assert_eq!(run.0, Some("event-1".to_string()));
+            assert_eq!(run.1, "event-1::2000-05-10");
+            assert_eq!(segment_event_id, Some("event-1".to_string()));
+        });
+    }
+
+    #[test]
+    fn synthetic_future_delete_adds_exception_without_deleting_parent() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2099-05-09T10:00:00Z",
+                "2099-05-09T11:00:00Z",
+                Some("FREQ=DAILY"),
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            delete_calendar_event_tx(
+                &mut tx,
+                &CalendarEventMutationTarget {
+                    id: "event-1::2099-05-10".to_string(),
+                    occurrence_start: Some("2099-05-10T10:00:00Z".to_string()),
+                    occurrence_end: Some("2099-05-10T11:00:00Z".to_string()),
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let live_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let exdate_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_event_exdates
+                 WHERE event_id = 'event-1' AND occurrence_date = '2099-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(live_count, 1);
+            assert_eq!(exdate_count, 1);
         });
     }
 
@@ -1871,6 +3167,29 @@ mod tests {
     }
 
     async fn insert_test_event(pool: &sqlx::SqlitePool, id: &str, description: &str) {
+        insert_test_event_at(
+            pool,
+            id,
+            "2026-05-09T10:00:00Z",
+            "2026-05-09T11:00:00Z",
+            None,
+        )
+        .await;
+        sqlx::query("UPDATE calendar_events SET description = ? WHERE id = ?")
+            .bind(description)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    async fn insert_test_event_at(
+        pool: &sqlx::SqlitePool,
+        id: &str,
+        start_time: &str,
+        end_time: &str,
+        rrule: Option<&str>,
+    ) {
         sqlx::query(
             "INSERT INTO calendar_events
                (id, title, start_time, end_time, timezone, calendar_id,
@@ -1879,14 +3198,16 @@ mod tests {
                 sequence,
                 guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
                 created_at, updated_at)
-             VALUES (?, '', '2026-05-09T10:00:00Z', '2026-05-09T11:00:00Z',
-                'America/Monterrey', 'local', NULL, ?, NULL, NULL,
+             VALUES (?, '', ?, ?,
+                'America/Monterrey', 'local', NULL, '', ?, NULL,
                 0, '', '', 'opaque', 'confirmed',
                 NULL, 'public', NULL, NULL, NULL, 0,
                 0, 1, 1, '2026-05-09 10:00:00', '2026-05-09 10:00:00')",
         )
         .bind(id)
-        .bind(description)
+        .bind(start_time)
+        .bind(end_time)
+        .bind(rrule)
         .execute(pool)
         .await
         .unwrap();
@@ -1917,6 +3238,54 @@ mod tests {
                      '2026-05-09T10:00:00Z', '2026-05-09T10:40:00Z',
                      '2026-05-09T10:00:00Z', 'active')",
         )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn insert_test_completed_pomodoro_history(
+        pool: &sqlx::SqlitePool,
+        event_id: &str,
+        original_event_id: &str,
+        event_date: &str,
+    ) {
+        let planned_start = format!("{event_date}T10:00:00Z");
+        let segment_end = format!("{event_date}T10:40:00Z");
+        let planned_end = format!("{event_date}T11:00:00Z");
+        sqlx::query(
+            "INSERT INTO pomodoro_runs
+                (id, event_id, original_event_id, event_date, planned_start, planned_end,
+                 started_at, ended_at, end_reason, focus_duration_minutes,
+                 short_break_minutes, long_break_minutes, pomodoro_count, last_heartbeat,
+                 start_trigger)
+             VALUES ('run-1', ?, ?, ?, ?, ?, ?, ?, 'completed',
+                     40, 5, 10, 4, ?, 'manual')",
+        )
+        .bind(event_id)
+        .bind(original_event_id)
+        .bind(event_date)
+        .bind(&planned_start)
+        .bind(&planned_end)
+        .bind(&planned_start)
+        .bind(&segment_end)
+        .bind(&segment_end)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO pomodoro_segments
+                (id, event_id, event_date, run_id, cycle_number, phase,
+                 planned_start, planned_end, actual_start, actual_end, status, end_reason)
+             VALUES ('segment-1', ?, ?, 'run-1', 1, 'focus',
+                     ?, ?, ?, ?, 'completed', 'completed')",
+        )
+        .bind(event_id)
+        .bind(event_date)
+        .bind(&planned_start)
+        .bind(&segment_end)
+        .bind(&planned_start)
+        .bind(&segment_end)
         .execute(pool)
         .await
         .unwrap();

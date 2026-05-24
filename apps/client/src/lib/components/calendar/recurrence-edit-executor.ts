@@ -28,7 +28,7 @@ export interface RecurrenceEditCalendarStore {
 }
 
 export interface RecurrenceEditPomodoroBridge {
-  transferBlockId(newBlockId: string, newEndTime?: string): void;
+  transferBlockId(newBlockId: string, newEndTime?: string): Promise<void> | void;
 }
 
 export interface RecurrenceEditExecutorDeps {
@@ -254,7 +254,7 @@ export async function executeRecurrenceCommitPlan(
           break;
         case "transfer-active-run": {
           const target = resolveTransferTarget(operation.to, operationResults);
-          pomodoro?.transferBlockId(operation.newEnd ? target.id : target.id, operation.newEnd ?? target.end);
+          await pomodoro?.transferBlockId(target.id, operation.newEnd ?? target.end);
           break;
         }
         case "refresh-window":

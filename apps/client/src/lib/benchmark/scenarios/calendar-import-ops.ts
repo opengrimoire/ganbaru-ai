@@ -22,7 +22,7 @@ import {
   ensureBenchmarkDbReady,
   invokeDb,
   measureMs,
-  nowLocal,
+  nowIso,
   repeatedMeasuredTimingMetric,
   scalarMsMetric,
 } from "./operation-utils";
@@ -37,7 +37,7 @@ function localTimezone(): string {
 
 async function createImportCalendar(label: string): Promise<string> {
   const id = `bench-import-${label}-${crypto.randomUUID()}`;
-  const now = nowLocal();
+  const now = nowIso();
   await invokeDb<void>("calendar_add_calendar", {
     calendar: {
       id,
@@ -76,7 +76,7 @@ function buildPayload(
   return buildBulkImportPayload(
     namespaceImportChildIds(events, calendarId),
     calendarId,
-    nowLocal(),
+    nowIso(),
     localTimezone(),
     () => crypto.randomUUID(),
   );

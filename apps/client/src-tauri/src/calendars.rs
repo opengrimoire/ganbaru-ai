@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
+use crate::calendar_events::archive_or_delete_calendar_events_for_calendar;
 use crate::db_path::connect_sqlite;
 
 #[derive(Deserialize)]
@@ -161,11 +162,7 @@ pub async fn calendar_remove_calendar<R: Runtime>(
     require_non_empty(&id, "id")?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
-    sqlx::query("DELETE FROM calendar_events WHERE calendar_id = ?")
-        .bind(&id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| format!("delete calendar events: {e}"))?;
+    archive_or_delete_calendar_events_for_calendar(&mut tx, Some(&id)).await?;
     let result = sqlx::query("DELETE FROM calendars WHERE id = ?")
         .bind(id)
         .execute(&mut *tx)

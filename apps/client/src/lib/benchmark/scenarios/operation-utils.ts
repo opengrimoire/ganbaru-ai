@@ -64,15 +64,8 @@ export function scalarMsMetric(label: string, value: number): BenchmarkMetric {
   };
 }
 
-export function nowLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${y}-${m}-${day} ${h}:${min}:${s}`;
+export function nowIso(): string {
+  return new Date().toISOString();
 }
 
 export function isoMinutesFromAnchor(minutes: number): string {

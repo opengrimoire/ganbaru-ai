@@ -26,6 +26,11 @@ import {
   type CalendarImportSourceKind,
   type CalendarBulkImportResult,
 } from "./calendar-bulk-import";
+import {
+  buildCalendarEventMutationTarget,
+  buildCalendarEventMutationTargetFromId,
+  type CalendarEventMutationTarget,
+} from "./calendar-mutations";
 import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
 import { calendarDisplayName } from "$lib/calendar/calendar-display";
 import { adjacentCalendarWindowRequests } from "./calendar-window-prefetch";
@@ -95,15 +100,8 @@ interface CalendarWindowSyncPayload {
 
 let calendarSyncInitialized = false;
 
-function nowLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${y}-${m}-${day} ${h}:${min}:${s}`;
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 function localTimezone(): string {
@@ -378,6 +376,13 @@ function getIndex(): ExpansionIndex {
 function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
   const parentId = event.recurringParentId ?? event.id;
   return rawBlocks.find((b) => b.id === parentId);
+}
+
+function mutationTargetForEvent(eventOrId: CalendarEvent | string): CalendarEventMutationTarget {
+  if (typeof eventOrId === "string") {
+    return buildCalendarEventMutationTargetFromId(eventOrId);
+  }
+  return buildCalendarEventMutationTarget(eventOrId, resolveToTemplate(eventOrId));
 }
 
 /**
@@ -994,7 +999,7 @@ export function getCalendar() {
       }
 
       const id = opts.id ?? crypto.randomUUID();
-      const now = nowLocal();
+      const now = nowIso();
       const timezone = opts.timezone ?? localTimezone();
       const calendarId = opts.calendarId ?? "local";
       const description = sanitizeCalendarDescriptionHtml(opts.description ?? "");
@@ -1273,7 +1278,7 @@ export function getCalendar() {
         }
       }
 
-      const now = nowLocal();
+      const now = nowIso();
       const pomodoroConfig: PomodoroConfigPatch | null = presentKeys.has("pomodoroConfig")
         ? toUpdate.pomodoroConfig
           ? { action: "set", value: toUpdate.pomodoroConfig }
@@ -1318,12 +1323,58 @@ export function getCalendar() {
       publishCalendarWindowSync();
     },
 
-    async deleteBlock(id: string) {
-      // Resolve recurring instance to parent
-      const parentId = id.includes("::") ? id.split("::")[0] : id;
-      await invoke("calendar_delete_event", { dbUrl: dbUrl(), id: parentId });
-      rawBlocks = rawBlocks.filter((b) => b.id !== parentId);
-      totalEventCount = Math.max(0, totalEventCount - 1);
+    async deleteBlock(eventOrId: CalendarEvent | string) {
+      const target = mutationTargetForEvent(eventOrId);
+      await invoke("calendar_delete_event", { dbUrl: dbUrl(), target });
+      if (target.id.includes("::")) {
+        const [parentId, date] = target.id.split("::");
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId ? { ...b, exceptions: [...(b.exceptions ?? []), date] } : b,
+        );
+      } else {
+        rawBlocks = rawBlocks.filter((b) => b.id !== target.id);
+        totalEventCount = Math.max(0, totalEventCount - 1);
+      }
+      invalidate();
+      publishCalendarWindowSync();
+    },
+
+    async archiveBlock(eventOrId: CalendarEvent | string) {
+      const target = mutationTargetForEvent(eventOrId);
+      await invoke("calendar_archive_event", { dbUrl: dbUrl(), target });
+      if (target.id.includes("::")) {
+        const [parentId, date] = target.id.split("::");
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId ? { ...b, exceptions: [...(b.exceptions ?? []), date] } : b,
+        );
+      } else {
+        rawBlocks = rawBlocks.filter((b) => b.id !== target.id);
+        totalEventCount = Math.max(0, totalEventCount - 1);
+      }
+      invalidate();
+      publishCalendarWindowSync();
+    },
+
+    async restoreArchivedBlock(eventOrId: CalendarEvent | string) {
+      const target = mutationTargetForEvent(eventOrId);
+      await invoke("calendar_restore_archived_event", { dbUrl: dbUrl(), target });
+      if (target.id.includes("::")) {
+        const [parentId, date] = target.id.split("::");
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId
+            ? { ...b, exceptions: (b.exceptions ?? []).filter((exception) => exception !== date) }
+            : b,
+        );
+      } else {
+        const existed = rawBlocks.some((b) => b.id === target.id);
+        panelEventCache.delete(target.id);
+        const restored = await store.loadFullEvent(target.id)
+          ?? (typeof eventOrId === "string" ? undefined : { ...eventOrId, recurringParentId: undefined });
+        if (restored) {
+          rawBlocks = [...rawBlocks.filter((b) => b.id !== target.id), restored];
+          if (!existed) totalEventCount += 1;
+        }
+      }
       invalidate();
       publishCalendarWindowSync();
     },
@@ -1347,7 +1398,7 @@ export function getCalendar() {
 
       const instanceDate = instanceEvent.start.split(" ")[0];
       const exceptions = [...(parent.exceptions ?? []), instanceDate];
-      const now = nowLocal();
+      const now = nowIso();
       const newId = crypto.randomUUID();
       const timezone = parent.timezone || localTimezone();
       const notifJson = parent.notifications && parent.notifications.length > 0
@@ -1409,7 +1460,7 @@ export function getCalendar() {
       if (!parent) return;
 
       const exceptions = [...(parent.exceptions ?? []), date];
-      const now = nowLocal();
+      const now = nowIso();
       await invoke("calendar_update_event", {
         dbUrl: dbUrl(),
         patch: {
@@ -1435,7 +1486,7 @@ export function getCalendar() {
       const parent = rawBlocks.find((b) => b.id === parentId);
       if (!parent || !parent.recurrence) return;
 
-      const now = nowLocal();
+      const now = nowIso();
       const updatedRecurrence: RecurrenceConfig = {
         ...parent.recurrence,
         end: { type: "until", date },
@@ -1484,7 +1535,7 @@ export function getCalendar() {
       const capBefore = parseYMD(capDate);
       capBefore.setDate(capBefore.getDate() - 1);
       const dayBefore = fmtYMD(capBefore);
-      const now = nowLocal();
+      const now = nowIso();
 
       // Cap the old template's recurrence at dayBefore
       const cappedRecurrence: RecurrenceConfig | undefined = parent.recurrence
@@ -1603,7 +1654,7 @@ export function getCalendar() {
         sourceKind?: CalendarImportSourceKind;
       } = {},
     ): Promise<IcsImportSummary> {
-      const now = nowLocal();
+      const now = nowIso();
       const fallbackZone = localTimezone();
 
       const payload = buildBulkImportPayload(

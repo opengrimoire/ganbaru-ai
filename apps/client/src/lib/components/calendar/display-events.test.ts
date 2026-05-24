@@ -375,7 +375,8 @@ describe("computeEditDisplay", () => {
   it("keeps following scope preview contours when recurrence returns to its saved value", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2026-03-20");
-    const storeEvents = [template, inst20, makeInstance(template, "2026-03-21")];
+    const inst21 = makeInstance(template, "2026-03-21");
+    const storeEvents = [template, inst20, inst21];
 
     const result = computeEditDisplay(
       [template],
@@ -386,8 +387,7 @@ describe("computeEditDisplay", () => {
       TEST_WINDOW,
     );
 
-    expect(result.previewedIds.size).toBeGreaterThan(1);
-    expect([...result.previewedIds].every((id) => id === `__vf__${template.id}` || id.startsWith(`__vf__${template.id}::`))).toBe(true);
+    expect(result.previewedIds).toEqual(new Set([inst20.id, inst21.id]));
     expect(result.events.filter((event) => result.previewedIds.has(event.id)).length).toBe(result.previewedIds.size);
   });
 
@@ -531,7 +531,7 @@ describe("applyAll", () => {
     expect(tmpl.end).toBe(`${expected} 09:30`);
   });
 
-  it("freezes past instances and only previews future ones", () => {
+  it("freezes past instances but still contours them as affected", () => {
     // Template starts in the past with daily recurrence
     const template = makeRecurringTemplate({
       start: "2026-01-01 09:00",
@@ -556,8 +556,7 @@ describe("applyAll", () => {
     expect(pastEvt).toBeDefined();
     expect(pastEvt!.title).toBe("Daily standup");
 
-    // Past instance should NOT be in previewedIds
-    expect(result.previewedIds.has(pastInst.id)).toBe(false);
+    expect(result.previewedIds.has(pastInst.id)).toBe(true);
 
     // Future instances should have the new title
     const futEvts = result.events.filter(

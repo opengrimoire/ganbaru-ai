@@ -66,15 +66,8 @@ export function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-function nowLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${y}-${m}-${day} ${h}:${min}:${s}`;
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 /**
@@ -129,7 +122,7 @@ async function bulkImportBenchmarkEvents(
   const payload = buildBulkImportPayload(
     events,
     targetCalendarId,
-    nowLocal(),
+    nowIso(),
     localTimezone(),
     () => eventIds[index++] ?? crypto.randomUUID(),
   );

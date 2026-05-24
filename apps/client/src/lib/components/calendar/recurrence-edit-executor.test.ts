@@ -207,6 +207,39 @@ describe("executeRecurrenceCommitPlan", () => {
     ]);
   });
 
+  it("executes following active selected resize by splitting at selected occurrence", async () => {
+    const template = makeTemplate();
+    const inst20 = makeInstance(template, "2027-06-20");
+    const store = new FakeCalendarStore(template);
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: inst20,
+      changes: { end: "2027-06-20 10:15" },
+      scope: "following",
+      activeBlockId: inst20.id,
+      today: "2027-06-20",
+      currentTime: "09:15",
+    });
+
+    const pomodoro = await execute(plan, store);
+
+    expect(store.calls.map((call) => call.type)).toEqual([
+      "beginBatch",
+      "splitSeries",
+      "endBatch",
+      "refreshWindow",
+    ]);
+    expect(store.calls[1]).toMatchObject({
+      type: "splitSeries",
+      detail: {
+        instanceId: inst20.id,
+        changes: { end: "2027-06-20 10:15" },
+      },
+    });
+    expect(pomodoro.transfers).toEqual([{ id: "split-1", end: "2027-06-20 10:15" }]);
+  });
+
   it("executes all recurrence change by protecting history before template update", async () => {
     const template = makeTemplate({
       start: "2027-01-01 09:00",

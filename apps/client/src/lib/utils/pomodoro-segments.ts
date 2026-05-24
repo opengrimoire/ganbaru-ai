@@ -168,6 +168,8 @@ export interface ActivePomodoroState {
   activeBlockId: string | null;
   segments: PersistedSegment[];
   remainingSeconds: number;
+  phaseElapsedSeconds?: number;
+  currentConfig?: PomodoroConfig;
   breakOvertimeSeconds: number;
 }
 
@@ -246,6 +248,8 @@ export function computeDayTimelineBands(
       const activeBands = projectActiveSegments(
         activeState.segments,
         activeState.remainingSeconds,
+        activeState.phaseElapsedSeconds,
+        activeState.currentConfig,
         ev,
         dayStartMs,
         nowMs,
@@ -254,9 +258,10 @@ export function computeDayTimelineBands(
     } else {
       // Check for persisted segments (past completed sessions)
       const evPersistedSegs = persistedSegments?.get(ev.id);
-      if (evPersistedSegs && evPersistedSegs.length > 0) {
+      const hasPersistedSegments = !!evPersistedSegs && evPersistedSegs.length > 0;
+      if (hasPersistedSegments) {
         // Output focus fill and break bands from persisted segments
-        const pastBands = projectPersistedSegments(evPersistedSegs, ev, dayStartMs);
+        const pastBands = projectPersistedSegments(evPersistedSegs ?? [], ev, dayStartMs);
         bands.push(...pastBands);
       }
 
@@ -272,21 +277,21 @@ export function computeDayTimelineBands(
         continue;
       }
 
-      // Compute remaining planned bands from now (or effectiveStart).
-      // Always adjust for elapsed time since event start so break positions
-      // stay aligned with the original schedule regardless of when the app
-      // is opened. (Create previews already clamp evStartMinute to now via
-      // the PENDING_CREATE_ID path in DayColumn.)
+      // Compute remaining planned bands from now or effectiveStart. Events
+      // with persisted segments keep their original rhythm. Untracked events
+      // that are already in progress preview from now, matching the schedule
+      // created when the user starts Pomodoro work after saving.
       const evStartMs = dayStartMs + effectiveStart * 60000;
       const plannedStartMs = Math.max(nowMs, evStartMs);
       const plannedStartMinute = (plannedStartMs - dayStartMs) / 60000;
       const remainingDuration = ev.endMinute - plannedStartMinute;
+      const untrackedInProgress = !hasPersistedSegments && nowMs > evStartMs && nowMs < evEndMs;
 
       if (remainingDuration > 0) {
-        let adjustedFocus = inheritedFocus;
-        let adjustedCycle = inheritedCycle;
+        let adjustedFocus = untrackedInProgress ? 0 : inheritedFocus;
+        let adjustedCycle = untrackedInProgress ? 1 : inheritedCycle;
         const elapsedSinceEffective = plannedStartMinute - effectiveStart;
-        if (elapsedSinceEffective > 0) {
+        if (elapsedSinceEffective > 0 && !untrackedInProgress) {
           const elapsedSegments = computePlannedSegments(ev.config, elapsedSinceEffective, inheritedFocus, inheritedCycle);
           adjustedFocus = computeTrailingFocusMinutes(elapsedSegments);
           adjustedCycle = computeTrailingCycleNumber(elapsedSegments);
@@ -312,9 +317,21 @@ export function computeDayTimelineBands(
       }
     }
 
-    // Compute trailing state for inheritance to next event (using full event duration)
-    const fullDurationFromStart = ev.endMinute - effectiveStart;
-    const fullSegments = computePlannedSegments(ev.config, fullDurationFromStart, inheritedFocus, inheritedCycle);
+    const evEndMsForTrailing = dayStartMs + ev.endMinute * 60000;
+    const evStartMsForTrailing = dayStartMs + effectiveStart * 60000;
+    const isUntrackedInProgressForTrailing = !isActive
+      && !persistedSegments?.get(ev.id)?.length
+      && nowMs > evStartMsForTrailing
+      && nowMs < evEndMsForTrailing;
+    const trailingStartMinute = isUntrackedInProgressForTrailing
+      ? (Math.max(nowMs, evStartMsForTrailing) - dayStartMs) / 60000
+      : effectiveStart;
+    const trailingFocus = isUntrackedInProgressForTrailing ? 0 : inheritedFocus;
+    const trailingCycle = isUntrackedInProgressForTrailing ? 1 : inheritedCycle;
+
+    // Compute trailing state for inheritance to next event.
+    const fullDurationFromStart = ev.endMinute - trailingStartMinute;
+    const fullSegments = computePlannedSegments(ev.config, fullDurationFromStart, trailingFocus, trailingCycle);
     inheritedFocus = computeTrailingFocusMinutes(fullSegments);
     inheritedCycle = computeTrailingCycleNumber(fullSegments);
     cursor = Math.max(cursor, ev.endMinute);
@@ -344,6 +361,40 @@ function filterContained(events: TimelineEvent[]): TimelineEvent[] {
     }
     return true;
   });
+}
+
+function samePomodoroConfig(a: PomodoroConfig | undefined, b: PomodoroConfig | undefined): boolean {
+  return !!a && !!b
+    && a.focusDurationMinutes === b.focusDurationMinutes
+    && a.shortBreakMinutes === b.shortBreakMinutes
+    && a.longBreakMinutes === b.longBreakMinutes
+    && a.pomodoroCount === b.pomodoroCount;
+}
+
+function phaseDurationMinutes(phase: SegmentPhase, config: PomodoroConfig): number {
+  if (phase === "focus") return config.focusDurationMinutes;
+  if (phase === "long_break") return config.longBreakMinutes;
+  return config.shortBreakMinutes;
+}
+
+function projectedActiveSegmentEndMs(
+  activeSegment: PersistedSegment,
+  remainingSeconds: number,
+  ev: TimelineEvent,
+  nowMs: number,
+  activeConfig?: PomodoroConfig,
+  phaseElapsedSeconds?: number,
+): number {
+  const storedEndMs = nowMs + remainingSeconds * 1000;
+  if (samePomodoroConfig(activeConfig, ev.config)) return storedEndMs;
+
+  const targetDurationSeconds = phaseDurationMinutes(activeSegment.phase, ev.config) * 60;
+  const elapsedSeconds = phaseElapsedSeconds ?? Math.max(
+    0,
+    phaseDurationMinutes(activeSegment.phase, activeConfig ?? ev.config) * 60 - remainingSeconds,
+  );
+  const projectedRemainingSeconds = Math.max(0, targetDurationSeconds - elapsedSeconds);
+  return Math.min(ev.endMs, nowMs + projectedRemainingSeconds * 1000);
 }
 
 /**
@@ -407,13 +458,18 @@ function emitFocusFillBands(
 function projectActiveSegments(
   segments: PersistedSegment[],
   remainingSeconds: number,
+  phaseElapsedSeconds: number | undefined,
+  activeConfig: PomodoroConfig | undefined,
   ev: TimelineEvent,
   dayStartMs: number,
   nowMs: number,
 ): TimelineBand[] {
   const bands: TimelineBand[] = [];
   const activeIdx = segments.findIndex((s) => s.status === "active");
-  const currentEndMs = nowMs + remainingSeconds * 1000;
+  const activeSegment = activeIdx >= 0 ? segments[activeIdx] : null;
+  const currentEndMs = activeSegment
+    ? projectedActiveSegmentEndMs(activeSegment, remainingSeconds, ev, nowMs, activeConfig, phaseElapsedSeconds)
+    : nowMs + remainingSeconds * 1000;
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
@@ -453,7 +509,6 @@ function projectActiveSegments(
     }
   }
 
-  const activeSegment = activeIdx >= 0 ? segments[activeIdx] : null;
   if (activeSegment) {
     emitProjectedFutureBreakBands(activeSegment, currentEndMs, ev, dayStartMs, bands);
   }

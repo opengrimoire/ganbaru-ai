@@ -30,15 +30,8 @@ function mapRow(r: DbCalendar): Calendar {
   };
 }
 
-function nowLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${y}-${m}-${day} ${h}:${min}:${s}`;
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 let calendars = $state<Calendar[]>([]);
@@ -65,7 +58,7 @@ export function getCalendars() {
         dbUrl: dbUrl(),
         id,
         visible: !cal.visible,
-        updatedAt: nowLocal(),
+        updatedAt: nowIso(),
       });
       calendars = calendars.map((c) =>
         c.id === id ? { ...c, visible: !c.visible } : c,
@@ -74,7 +67,7 @@ export function getCalendars() {
 
     async add(cal: Omit<Calendar, "id" | "visible" | "readOnly"> & { id?: string; visible?: boolean; readOnly?: boolean }): Promise<Calendar> {
       const id = cal.id ?? crypto.randomUUID();
-      const now = nowLocal();
+      const now = nowIso();
       await invoke("calendar_add_calendar", {
         dbUrl: dbUrl(),
         calendar: {

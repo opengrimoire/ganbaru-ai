@@ -109,6 +109,7 @@ let activeBlockId = $state<string | null>(null);
 let activeRunId = $state<string | null>(null);
 let activeBlockEndMs = $state<number | null>(null);
 let dismissedBlockId = $state<string | null>(null);
+let autoStartSuppressed = $state(false);
 const FOCUS_EXTENSION_SECONDS = 180;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PAUSED_PULSE_AMOUNTS = [
@@ -509,10 +510,21 @@ interface PomodoroRunWindowUpdate {
   plannedEnd: string;
 }
 
+interface PomodoroActiveEventReferenceTransfer {
+  newEventId: string;
+  newEventDate: string | null;
+  plannedEnd: string | null;
+}
+
 interface PomodoroTransitionRunWrite {
   closure: PomodoroRunClosure;
   run: PomodoroRunWrite;
   segment: PomodoroSegmentWrite;
+}
+
+interface PomodoroBackendWriteOptions {
+  bumpSegmentVersion?: boolean;
+  publishSnapshot?: boolean;
 }
 
 interface PomodoroRunEventWrite {
@@ -872,6 +884,10 @@ function addMinutesToIso(base: string, minutes: number): string {
   return d.toISOString();
 }
 
+function eventDateFromBlockId(blockId: string): string | null {
+  return blockId.split("::")[1] ?? null;
+}
+
 function segmentWrite(seg: PersistedSegment): PomodoroSegmentWrite {
   return {
     id: seg.id,
@@ -945,26 +961,36 @@ async function insertSegmentsToBackend(newSegments: PersistedSegment[]) {
   }).catch((e) => console.warn("Failed to insert segments:", e));
 }
 
-async function startRunInBackend(run: PomodoroRunWrite, segment: PersistedSegment): Promise<void> {
+function completePomodoroBackendWrite(options: PomodoroBackendWriteOptions = {}): void {
+  if (options.bumpSegmentVersion !== false) segmentVersion++;
+  if (options.publishSnapshot !== false) publishWindowSnapshot();
+}
+
+async function startRunInBackend(
+  run: PomodoroRunWrite,
+  segment: PersistedSegment,
+  options: PomodoroBackendWriteOptions = {},
+): Promise<void> {
   await enqueuePomodoroWrite(async () => {
     await invoke("pomodoro_start_run", {
       dbUrl: dbUrl(),
       run,
       segment: segmentWrite(segment),
     });
-    segmentVersion++;
-    publishWindowSnapshot();
+    completePomodoroBackendWrite(options);
   });
 }
 
-async function transitionRunInBackend(transition: PomodoroTransitionRunWrite): Promise<void> {
+async function transitionRunInBackend(
+  transition: PomodoroTransitionRunWrite,
+  options: PomodoroBackendWriteOptions = {},
+): Promise<void> {
   await enqueuePomodoroWrite(async () => {
     await invoke("pomodoro_transition_run", {
       dbUrl: dbUrl(),
       transition,
     });
-    segmentVersion++;
-    publishWindowSnapshot();
+    completePomodoroBackendWrite(options);
   });
 }
 
@@ -986,6 +1012,19 @@ function updateRunWindowInBackend(update: PomodoroRunWindowUpdate): void {
       update,
     });
   }).catch((e) => console.warn("Failed to update pomodoro run window:", e));
+}
+
+function transferActiveEventReferenceInBackend(
+  transfer: PomodoroActiveEventReferenceTransfer,
+): Promise<void> {
+  return enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_transfer_active_event_reference", {
+      dbUrl: dbUrl(),
+      transfer,
+    });
+    segmentVersion++;
+    publishWindowSnapshot();
+  }).catch((e) => console.warn("Failed to transfer pomodoro event reference:", e));
 }
 
 function recordRunEvent(event: PomodoroRunEventWrite, warning = "Failed to record pomodoro event:"): void {
@@ -1269,21 +1308,22 @@ async function rebuildSegments(
   const previousSegments = cloneSegmentsForWindowSync(segments);
   const previousSegmentIndex = currentSegmentIndex;
   const previousEndReasons = new Map(segmentEndReasons);
+  const workingSegments = cloneSegmentsForWindowSync(segments);
+  const workingEndReasons = new Map(segmentEndReasons);
   const previousRunId = activeRunId;
   const runId = crypto.randomUUID();
   const now = new Date();
   const nowStr = now.toISOString();
 
-  if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-    const seg = segments[currentSegmentIndex];
+  if (currentSegmentIndex >= 0 && currentSegmentIndex < workingSegments.length) {
+    const seg = workingSegments[currentSegmentIndex];
     if (seg.status !== "completed" && seg.status !== "skipped" && seg.status !== "interrupted") {
       seg.status = options.segmentStatus;
       seg.actualEnd = nowStr;
-      segmentEndReasons.set(seg.id, options.segmentEndReason);
+      workingEndReasons.set(seg.id, options.segmentEndReason);
       closeLastPause(seg, nowStr);
     }
   }
-  skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
 
   const end = new Date(eventEnd.replace(" ", "T"));
   const totalRemainingMinutes = Math.max(0, (end.getTime() - now.getTime()) / 60000);
@@ -1321,7 +1361,7 @@ async function rebuildSegments(
 
   // Preserve completed/interrupted segments so the green progress bar
   // keeps showing focus time accumulated before this rebuild.
-  const kept = segments.filter(
+  const kept = workingSegments.filter(
     (s, i) => i <= currentSegmentIndex &&
       (s.status === "completed" || s.status === "interrupted"),
   );
@@ -1354,9 +1394,9 @@ async function rebuildSegments(
           },
           run,
           segment: segmentWrite(firstSegment),
-        });
+        }, { bumpSegmentVersion: false, publishSnapshot: false });
       } else {
-        await startRunInBackend(run, firstSegment);
+        await startRunInBackend(run, firstSegment, { bumpSegmentVersion: false, publishSnapshot: false });
       }
     } catch (e) {
       console.warn("Failed to rebuild pomodoro run:", e);
@@ -1373,8 +1413,13 @@ async function rebuildSegments(
     startHeartbeat();
   }
 
+  segmentEndReasons.clear();
+  for (const [id, reason] of workingEndReasons) {
+    segmentEndReasons.set(id, reason);
+  }
   segments = [...kept, ...newSegments];
   currentSegmentIndex = kept.length + (firstSegment ? newSegments.indexOf(firstSegment) : -1);
+  segmentVersion++;
   publishWindowSnapshot();
 }
 
@@ -1590,10 +1635,10 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
       clearBlockExpiredInternal();
       return;
     case "transfer-block-id":
-      transferBlockIdInternal(command.newBlockId, command.newEndTime);
+      void transferBlockIdInternal(command.newBlockId, command.newEndTime);
       return;
     case "start-from-block":
-      startFromBlockInternal(
+      void startFromBlockInternal(
         command.blockId,
         command.blockConfig,
         command.eventEnd,
@@ -2248,26 +2293,37 @@ function clearBlockExpiredInternal(): void {
   publishWindowSnapshot();
 }
 
-function transferBlockIdInternal(newBlockId: string, newEndTime?: string): void {
+async function transferBlockIdInternal(newBlockId: string, newEndTime?: string): Promise<void> {
   if (!activeBlockId) return;
+  const newEndMs = newEndTime ? new Date(newEndTime.replace(" ", "T")).getTime() : null;
+  const plannedEnd = newEndMs != null && Number.isFinite(newEndMs)
+    ? new Date(newEndMs).toISOString()
+    : null;
+  const newEventDate = eventDateFromBlockId(newBlockId) ?? activeSegment()?.eventDate ?? null;
+  await transferActiveEventReferenceInBackend({
+    newEventId: newBlockId,
+    newEventDate,
+    plannedEnd,
+  });
   activeBlockId = newBlockId;
   for (const seg of segments) {
     seg.eventId = newBlockId;
+    if (newEventDate) seg.eventDate = newEventDate;
   }
-  if (newEndTime) {
-    applyActiveBlockWindowChange(newBlockId, new Date(newEndTime.replace(" ", "T")).getTime());
+  if (newEndMs != null && Number.isFinite(newEndMs)) {
+    applyActiveBlockWindowChange(newBlockId, newEndMs, newEventDate ?? undefined);
     return;
   }
   publishWindowSnapshot();
 }
 
-function startFromBlockInternal(
+async function startFromBlockInternal(
   blockId: string,
   blockConfig: Partial<PomodoroConfig>,
   eventEnd?: string,
   eventDate?: string,
   blockIdleTimeoutMinutes?: number | null,
-): void {
+): Promise<void> {
   const newConfig = { ...DEFAULT_CONFIG, ...blockConfig };
 
   const newIdleMs = (blockIdleTimeoutMinutes != null && blockIdleTimeoutMinutes > 0)
@@ -2300,7 +2356,7 @@ function startFromBlockInternal(
       return;
 
     case "reconfigure":
-      reconfigureSession(blockId, decision.newConfig, eventEnd!, eventDate!);
+      await reconfigureSession(blockId, decision.newConfig, eventEnd!, eventDate!);
       return;
 
     case "rebuild_segments":
@@ -2308,7 +2364,7 @@ function startFromBlockInternal(
       return;
 
     case "transition":
-      transitionToBlock(blockId, decision.newConfig, eventEnd!, eventDate!);
+      await transitionToBlock(blockId, decision.newConfig, eventEnd!, eventDate!);
       return;
 
     case "new_session": {
@@ -2336,7 +2392,7 @@ function startFromBlockInternal(
       startIdleChecking();
 
       if (eventEnd && eventDate) {
-        createSegments(blockId, eventEnd, eventDate);
+        await createSegments(blockId, eventEnd, eventDate);
       }
 
       updateTray();
@@ -2369,6 +2425,7 @@ async function stopSessionInternal(): Promise<void> {
   isRunning = false;
   lastTickMs = null;
   phaseEndTime = null;
+  if (!dismissedBlockId && activeBlockId) dismissedBlockId = activeBlockId;
   activeBlockId = null;
   activeRunId = null;
   activeBlockEndMs = null;
@@ -2459,6 +2516,12 @@ export function getPomodoro() {
     get remainingSeconds() {
       return remainingSeconds;
     },
+    get phaseElapsedSeconds() {
+      return phaseElapsedSeconds;
+    },
+    get currentConfig() {
+      return config;
+    },
     get currentCycle() {
       return currentCycle;
     },
@@ -2501,6 +2564,12 @@ export function getPomodoro() {
       if (forwardWindowCommand({ kind: "set-dismissed-block-id", id })) return;
       setDismissedBlockId(id);
     },
+    get autoStartSuppressed() {
+      return autoStartSuppressed;
+    },
+    set autoStartSuppressed(value: boolean) {
+      autoStartSuppressed = value;
+    },
     get breakOvertimeSeconds() {
       return breakOvertimeSeconds;
     },
@@ -2518,9 +2587,9 @@ export function getPomodoro() {
       clearBlockExpiredInternal();
     },
     /** Transfer session to a new block ID without resetting state (after detachInstance creates a standalone). */
-    transferBlockId(newBlockId: string, newEndTime?: string) {
+    async transferBlockId(newBlockId: string, newEndTime?: string) {
       if (forwardWindowCommand({ kind: "transfer-block-id", newBlockId, newEndTime })) return;
-      transferBlockIdInternal(newBlockId, newEndTime);
+      await transferBlockIdInternal(newBlockId, newEndTime);
     },
     get suspendedAway() {
       return suspendedAway;
@@ -2536,7 +2605,7 @@ export function getPomodoro() {
       if (forwardWindowCommand({ kind: "dismiss-idle", resume })) return;
       await dismissIdle(resume);
     },
-    startFromBlock(
+    async startFromBlock(
       blockId: string,
       blockConfig: Partial<PomodoroConfig>,
       eventEnd?: string,
@@ -2551,7 +2620,7 @@ export function getPomodoro() {
         eventDate,
         blockIdleTimeoutMinutes,
       })) return;
-      startFromBlockInternal(
+      await startFromBlockInternal(
         blockId,
         blockConfig,
         eventEnd,

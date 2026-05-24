@@ -484,29 +484,46 @@ describe("computeDayTimelineBands", () => {
     }
   });
 
-  it("aligns break positions with event start regardless of open time", () => {
-    // A: 09:00-12:00 (3h). Open at different times; future break positions
-    // should be the same because they derive from the event start.
+  it("starts untracked in-progress events from now", () => {
     const A = makeEvent("A", 9, 12);
-    const nowEarly = DAY_MS + (9 * 60 + 50) * 60000; // 09:50
     const nowLate = DAY_MS + (10 * 60 + 5) * 60000; // 10:05
 
-    const bandsEarly = computeDayTimelineBands([A], null, DAY_MS, nowEarly);
     const bandsLate = computeDayTimelineBands([A], null, DAY_MS, nowLate);
 
-    // Both should produce bands; the late set has fewer (past ones dropped)
-    expect(bandsEarly.length).toBeGreaterThanOrEqual(bandsLate.length);
+    expect(bandsLate[0]).toEqual({
+      topMinute: 10 * 60 + 45,
+      heightMinutes: 5,
+      phase: "short_break",
+      status: "planned",
+    });
+  });
 
-    // Every band from the late set must match a band from the early set
-    // (same topMinute, same heightMinutes) to confirm positions are stable.
-    for (const lb of bandsLate) {
-      const match = bandsEarly.find(
-        (eb) =>
-          Math.abs(eb.topMinute - lb.topMinute) < 0.01 &&
-          Math.abs(eb.heightMinutes - lb.heightMinutes) < 0.01,
-      );
-      expect(match).toBeDefined();
-    }
+  it("keeps persisted in-progress events aligned with stored rhythm", () => {
+    const A = makeEvent("A", 9, 12);
+    const nowLate = DAY_MS + (10 * 60 + 5) * 60000; // 10:05
+    const persistedSegments = new Map<string, PersistedSegment[]>();
+    persistedSegments.set("A", [
+      {
+        id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 1, phase: "focus",
+        plannedStart: new Date(DAY_MS + 9 * 60 * 60000).toISOString(),
+        plannedEnd: new Date(DAY_MS + (9 * 60 + 40) * 60000).toISOString(),
+        actualStart: new Date(DAY_MS + 9 * 60 * 60000).toISOString(),
+        actualEnd: new Date(DAY_MS + (9 * 60 + 40) * 60000).toISOString(),
+        pauseLog: [],
+        status: "completed",
+      },
+    ]);
+
+    const bandsLate = computeDayTimelineBands([A], null, DAY_MS, nowLate, persistedSegments);
+    const plannedBands = bandsLate.filter((band) => band.status === "planned");
+
+    expect(plannedBands[0]).toEqual({
+      topMinute: 10 * 60 + 25,
+      heightMinutes: 5,
+      phase: "short_break",
+      status: "planned",
+    });
   });
 
   it("handles overlapping events with cursor walk", () => {
@@ -585,6 +602,40 @@ describe("computeDayTimelineBands", () => {
     // Future planned break
     const plannedBand = breakBands.find((b) => b.status === "planned");
     expect(plannedBand).toBeDefined();
+  });
+
+  it("active event previews a pending config change for the current focus segment", () => {
+    const ev = makeEvent("A", 10, 12, DEFAULT_CONFIG);
+    const segStartMs = DAY_MS + 10 * 3600000; // 10:00
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      currentConfig: CREATIVE_CONFIG,
+      phaseElapsedSeconds: 0,
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(segStartMs).toISOString(),
+          plannedEnd: new Date(segStartMs + 25 * 60000).toISOString(),
+          actualStart: new Date(segStartMs).toISOString(),
+          actualEnd: null,
+          pauseLog: [],
+          status: "active",
+        },
+      ],
+      remainingSeconds: 25 * 60,
+      breakOvertimeSeconds: 0,
+    };
+
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, segStartMs);
+    const firstBreak = bands.find((band) => band.phase !== "focus");
+
+    expect(firstBreak).toEqual({
+      topMinute: 10 * 60 + 40,
+      heightMinutes: 5,
+      phase: "short_break",
+      status: "planned",
+    });
   });
 
   it("active event includes recovered prior runs without duplicating the current run", () => {

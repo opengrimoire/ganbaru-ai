@@ -16,6 +16,7 @@
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { deleteActionForCalendarEvent } from "$lib/stores/calendar-mutations";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
@@ -40,6 +41,7 @@
   } from "$lib/utils/responsive";
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Archive from "@lucide/svelte/icons/archive";
   import Music from "@lucide/svelte/icons/music";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import Calendar1 from "@lucide/svelte/icons/calendar-1";
@@ -74,6 +76,7 @@
     initialSyncSeeded = false,
     parked = false,
     readOnly = false,
+    allowDeleteWhenReadOnly = false,
     skipInlineDeleteConfirm = false,
     calendarIdentityEmail,
     loadFullEvent,
@@ -98,6 +101,7 @@
     initialSyncSeeded?: boolean;
     parked?: boolean;
     readOnly?: boolean;
+    allowDeleteWhenReadOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
     calendarIdentityEmail?: string;
     /**
@@ -135,6 +139,8 @@
   } = $props();
 
   const controlsDisabled = $derived(readOnly || parked);
+  const deleteControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
+  const scopeControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
 
   // ─── Core fields ────────────────────────────────────────────────
   let title = $state("");
@@ -218,6 +224,8 @@
   // click inside the panel disarms (see panel-root onclick below).
   let deleteArmed = $state(false);
   let confirmDeleteBtn: HTMLButtonElement | undefined = $state();
+  const deleteAction = $derived(event ? deleteActionForCalendarEvent(event) : "delete");
+  const deleteActionLabel = $derived(deleteAction === "archive" ? "Archive" : "Delete");
 
   // ─── Date pickers ──────────────────────────────────────────────
   let datepickerOpen = $state(false);
@@ -1239,6 +1247,7 @@
     }, 200);
   }
   function handleDeleteClick() {
+    if (deleteControlsDisabled) return;
     if (!parked && event && onDelete) onDelete(event.id, isRecurring ? scope : undefined);
   }
 
@@ -1251,6 +1260,7 @@
 
   function armOrConfirmDelete() {
     if (mode !== "edit" || !event || !onDelete) return;
+    if (deleteControlsDisabled) return;
     // For deletes that would stop the active pomodoro session, skip the
     // inline arm step and go straight to delete. The parent will show a
     // modal that acts as the confirmation.
@@ -1520,7 +1530,11 @@
     emitChange();
   }
 
-  function handleScopeClick(s: RecurringScope) { scope = s; onScopeChange?.(s); }
+  function handleScopeClick(s: RecurringScope) {
+    if (scopeControlsDisabled) return;
+    scope = s;
+    onScopeChange?.(s);
+  }
 
   function handleDragStart(e: PointerEvent) {
     if (!panelCanDrag) return;
@@ -1640,9 +1654,9 @@
             data-panel-roving="scope"
             data-roving-index={index}
             tabindex={scopeFocusIndex === index ? 0 : -1}
-            disabled={controlsDisabled}
+            disabled={scopeControlsDisabled}
             class={cn(
-              "flex min-w-0 items-center justify-center rounded px-2 py-1 text-center font-semibold",
+              "readonly-interactive flex min-w-0 items-center justify-center rounded px-2 py-1 text-center font-semibold",
               scope === option.value
                 ? "bg-action-confirm text-action-confirm-foreground"
                 : "text-event-panel-input-text/70",
@@ -2004,10 +2018,10 @@
     )}
     style="background-color: var(--panel-bg);"
   >
-    {#if readOnly}
+    {#if readOnly && !(allowDeleteWhenReadOnly && mode === "edit" && onDelete && event)}
       <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[0.8rem] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
-        Read-only
+        Read only
       </div>
     {:else}
       <div class="panel-footer-actions flex">
@@ -2015,20 +2029,36 @@
           <button
             bind:this={confirmDeleteBtn}
             onclick={() => { deleteArmed = false; handleDeleteClick(); }}
-            disabled={controlsDisabled}
-            class="flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-action-danger-armed-foreground bg-action-danger-armed">
-            <Trash2 size={14} strokeWidth={1.8} />
-            <span>Press again to delete ({formatShortcut("Mod + D")})</span>
+            disabled={deleteControlsDisabled}
+            class="readonly-interactive flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-action-danger-armed-foreground bg-action-danger-armed">
+            {#if deleteAction === "archive"}
+              <Archive size={14} strokeWidth={1.8} />
+            {:else}
+              <Trash2 size={14} strokeWidth={1.8} />
+            {/if}
+            <span>Press again to {deleteAction} ({formatShortcut("Mod + D")})</span>
           </button>
         {:else}
           {#if mode === "edit" && onDelete && event}
             <button onclick={armOrConfirmDelete}
-              disabled={controlsDisabled}
-              class="event-panel-delete-icon-button flex w-10 shrink-0 items-center justify-center text-foreground"
-              title={`Delete (${formatShortcut("Mod + D")})`}>
-              <Trash2 size={14} strokeWidth={1.8} />
+              disabled={deleteControlsDisabled}
+              class={cn(
+                "readonly-interactive event-panel-delete-icon-button flex w-10 shrink-0 items-center justify-center text-foreground",
+              )}
+              title={`${deleteActionLabel} (${formatShortcut("Mod + D")})`}>
+              {#if deleteAction === "archive"}
+                <Archive size={14} strokeWidth={1.8} />
+              {:else}
+                <Trash2 size={14} strokeWidth={1.8} />
+              {/if}
             </button>
           {/if}
+          {#if readOnly}
+            <div class="flex flex-1 items-center justify-center rounded-none py-1.5 text-[0.8rem] text-muted-foreground/60"
+              style="background-color: var(--panel-contrast);">
+              Read only
+            </div>
+          {:else}
           <button onclick={handleSave}
             disabled={controlsDisabled}
             class="flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem]
@@ -2043,6 +2073,7 @@
               <span>Save ({formatShortcut("Mod + Enter")})</span>
             {/if}
           </button>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -2166,7 +2197,7 @@
   }
 
   /* Kill all interactivity below the drag-handle bar when readOnly */
-  .panel-root[data-readonly] :global(button:not(.panel-chrome)),
+  .panel-root[data-readonly] :global(button:not(.panel-chrome):not(.readonly-interactive)),
   .panel-root[data-readonly] :global(input),
   .panel-root[data-readonly] :global([contenteditable]) {
     pointer-events: none !important;

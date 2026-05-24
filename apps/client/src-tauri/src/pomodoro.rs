@@ -47,6 +47,14 @@ pub struct PomodoroRunWindowUpdate {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PomodoroActiveEventReferenceTransfer {
+    new_event_id: String,
+    new_event_date: Option<String>,
+    planned_end: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PomodoroTransitionRunWrite {
     closure: PomodoroRunClosure,
     run: PomodoroRunWrite,
@@ -425,6 +433,65 @@ pub async fn pomodoro_update_run_window<R: Runtime>(
     if result.rows_affected() == 0 {
         return Err(format!("open pomodoro run not found: {}", update.run_id));
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pomodoro_transfer_active_event_reference<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    transfer: PomodoroActiveEventReferenceTransfer,
+) -> Result<(), String> {
+    validate_active_event_reference_transfer(&transfer)?;
+    let canonical_event_id = canonical_event_id(&transfer.new_event_id)?.to_string();
+    let event_date = transfer
+        .new_event_date
+        .clone()
+        .or_else(|| synthetic_event_date(&transfer.new_event_id).map(str::to_string));
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+
+    let run_id: Option<String> =
+        sqlx::query_scalar("SELECT id FROM pomodoro_runs WHERE ended_at IS NULL LIMIT 1")
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| format!("load active pomodoro run: {e}"))?;
+    let Some(run_id) = run_id else {
+        tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+        return Ok(());
+    };
+
+    sqlx::query(
+        "UPDATE pomodoro_runs
+         SET event_id = ?,
+             original_event_id = ?,
+             event_date = COALESCE(?, event_date),
+             planned_end = COALESCE(?, planned_end)
+         WHERE id = ? AND ended_at IS NULL",
+    )
+    .bind(&canonical_event_id)
+    .bind(&transfer.new_event_id)
+    .bind(&event_date)
+    .bind(&transfer.planned_end)
+    .bind(&run_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("transfer active pomodoro run reference: {e}"))?;
+
+    sqlx::query(
+        "UPDATE pomodoro_segments
+         SET event_id = ?,
+             event_date = COALESCE(?, event_date)
+         WHERE run_id = ?",
+    )
+    .bind(&canonical_event_id)
+    .bind(&event_date)
+    .bind(&run_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("transfer active pomodoro segment references: {e}"))?;
+
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
 
@@ -1028,6 +1095,19 @@ fn validate_run_window_update(update: &PomodoroRunWindowUpdate) -> Result<(), St
     require_non_empty(&update.planned_end, "update.planned_end")
 }
 
+fn validate_active_event_reference_transfer(
+    transfer: &PomodoroActiveEventReferenceTransfer,
+) -> Result<(), String> {
+    canonical_event_id(&transfer.new_event_id)?;
+    if let Some(date) = &transfer.new_event_date {
+        require_non_empty(date, "transfer.new_event_date")?;
+    }
+    if let Some(planned_end) = &transfer.planned_end {
+        require_non_empty(planned_end, "transfer.planned_end")?;
+    }
+    Ok(())
+}
+
 fn validate_segment_write(segment: &PomodoroSegmentWrite) -> Result<(), String> {
     require_non_empty(&segment.id, "id")?;
     canonical_event_id(&segment.event_id)?;
@@ -1145,6 +1225,13 @@ fn canonical_event_id(value: &str) -> Result<&str, String> {
     let id = value.split_once("::").map_or(value, |(parent, _)| parent);
     require_non_empty(id, "event_id")?;
     Ok(id)
+}
+
+fn synthetic_event_date(value: &str) -> Option<&str> {
+    value
+        .split_once("::")
+        .map(|(_, date)| date)
+        .filter(|date| !date.trim().is_empty())
 }
 
 fn require_non_empty(value: &str, field: &str) -> Result<(), String> {

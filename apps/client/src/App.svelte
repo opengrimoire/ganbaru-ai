@@ -379,7 +379,7 @@
 
   function checkActiveBlock() {
     if (!isMainWindow) return;
-    if (showStopConfirm || reverting || suspendInfo || idleInfo) return;
+    if (showStopConfirm || reverting || suspendInfo || idleInfo || pomodoro.autoStartSuppressed) return;
 
     const activeBlock = findActiveBlock();
 
@@ -395,7 +395,7 @@
     if (activeBlock) {
       if (pomodoro.blockExpired) pomodoro.clearBlockExpired();
       const pc = activeBlock.pomodoroConfig!;
-      pomodoro.startFromBlock(
+      void pomodoro.startFromBlock(
         activeBlock.id,
         {
           focusMinutes: pc.focusDurationMinutes,

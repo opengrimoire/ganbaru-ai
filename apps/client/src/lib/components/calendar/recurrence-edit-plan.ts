@@ -231,6 +231,36 @@ function datePart(value: string): string {
   return value.split(" ")[0];
 }
 
+function applyScopeOnlyPreview(
+  storeEvents: CalendarEvent[],
+  templateId: string,
+  instanceEvent: CalendarEvent,
+  scope: RecurringScope,
+): DisplayResult {
+  const instanceDate = datePart(instanceEvent.start);
+  const belongsToSeries = (event: CalendarEvent) =>
+    event.id === templateId || event.recurringParentId === templateId;
+  const previewedIds = new Set<string>();
+  let editingId: string | undefined;
+
+  for (const event of storeEvents) {
+    if (!belongsToSeries(event)) continue;
+    const eventDate = datePart(event.start);
+    const affected = scope === "all"
+      || (scope === "following" && eventDate >= instanceDate)
+      || (scope === "this" && eventDate === instanceDate);
+    if (!affected) continue;
+    previewedIds.add(event.id);
+    if (eventDate === instanceDate) editingId = event.id;
+  }
+
+  return {
+    events: storeEvents,
+    previewedIds,
+    editingId: editingId ?? instanceEvent.id,
+  };
+}
+
 function timePart(value: string, fallback = "00:00"): string {
   return (value.split(" ")[1] ?? fallback).slice(0, 5);
 }
@@ -417,20 +447,24 @@ function buildCommitOperations(input: {
         };
       }
 
-      const nextDate = shiftDateStr(instanceDate, 1);
-      const operationId = "split-after-active-selected";
+      const operationId = "split-active-selected";
       return {
-        operations: appendRefreshOperation([{
-          type: "split-series",
-          operationId,
-          templateId: input.templateId,
-          occurrence: occurrenceOnDate(input.instanceEvent, input.templateId, nextDate),
-          startDate: nextDate,
-          patch: moveDatedPatchToDate(
-            patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
-            nextDate,
-          ),
-        }]),
+        operations: appendRefreshOperation([
+          {
+            type: "split-series",
+            operationId,
+            templateId: input.templateId,
+            occurrence: input.instanceEvent,
+            startDate: instanceDate,
+            patch: patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
+          },
+          {
+            type: "transfer-active-run",
+            fromId: input.activeBlockId ?? input.instanceEvent.id,
+            to: { kind: "operation-result", operationId },
+            newEnd: input.changes.end ? String(input.changes.end) : input.instanceEvent.end,
+          },
+        ]),
         diagnostics,
       };
     }
@@ -541,6 +575,16 @@ function buildCommitOperations(input: {
     patch: patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
     materializeProtectedHistory: true,
   });
+  if (input.activeBlockId && activeDate) {
+    operations.push({
+      type: "transfer-active-run",
+      fromId: input.activeBlockId,
+      to: { kind: "split-occurrence", operationId: input.templateId, date: activeDate },
+      newEnd: input.activeOnSelectedDate && input.changes.end
+        ? String(input.changes.end)
+        : undefined,
+    });
+  }
   return { operations: appendRefreshOperation(operations), diagnostics };
 }
 
@@ -606,29 +650,36 @@ export function buildRecurringEditPlan(input: {
   currentTime: string;
   activeDate?: string;
 }): RecurringEditPlan {
-  const display = input.scope === "this"
-    ? applyThis(input.storeEvents, input.originalEvent, input.changes)
-    : input.scope === "all"
-      ? applyAll(
-          input.rawBlocks,
-          input.storeEvents,
-          input.templateId,
-          input.instanceEvent,
-          input.changes,
-          input.window,
-          input.currentDate,
-          input.currentTime,
-          input.activeDate,
-        )
-      : applyFollowing(
-          input.rawBlocks,
-          input.storeEvents,
-          input.templateId,
-          input.instanceEvent,
-          input.changes,
-          input.window,
-          input.activeDate,
-        );
+  const display = !hasVisibleEventChanges(input.originalEvent, input.changes)
+    ? applyScopeOnlyPreview(
+        input.storeEvents,
+        input.templateId,
+        input.instanceEvent,
+        input.scope,
+      )
+    : input.scope === "this"
+        ? applyThis(input.storeEvents, input.originalEvent, input.changes)
+        : input.scope === "all"
+          ? applyAll(
+              input.rawBlocks,
+              input.storeEvents,
+              input.templateId,
+              input.instanceEvent,
+              input.changes,
+              input.window,
+              input.currentDate,
+              input.currentTime,
+              input.activeDate,
+            )
+          : applyFollowing(
+              input.rawBlocks,
+              input.storeEvents,
+              input.templateId,
+              input.instanceEvent,
+              input.changes,
+              input.window,
+              input.activeDate,
+            );
 
   return {
     display,
@@ -737,9 +788,15 @@ export function applyAll(
       exceptions: undefined,
     };
 
+    const previewedIds = new Set([
+      ...preservedSeries.map((event) => event.id),
+      collapsedId,
+      ...activePreview.map((event) => event.id),
+    ]);
+
     return {
       events: [...otherEvents, ...preservedSeries, ...activePreview, collapsed],
-      previewedIds: new Set([collapsedId, ...activePreview.map((event) => event.id)]),
+      previewedIds,
       editingId: collapsedId,
     };
   }
@@ -770,6 +827,10 @@ export function applyAll(
     const pastFromStore = storeEvents.filter(
       (e) => belongsToSeries(e) && occurrenceIsProtected(e, currentDateTime),
     );
+    for (const event of pastFromStore) {
+      previewedIds.add(event.id);
+      if (datePart(event.start) === instanceDateStr) editingId = event.id;
+    }
 
     const activeDayEvents: CalendarEvent[] = [];
 

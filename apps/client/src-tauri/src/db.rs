@@ -9,6 +9,674 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
+const CALENDAR_HARDENING_SQL: &str = r#"
+    INSERT OR IGNORE INTO calendars
+        (id, name, color, source, visible, read_only, created_at, updated_at)
+    VALUES (
+        'local',
+        'GanbaruAI',
+        '',
+        'local',
+        1,
+        0,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    );
+
+    UPDATE calendar_events
+    SET calendar_id = 'local'
+    WHERE calendar_id IS NULL
+       OR trim(calendar_id) = ''
+       OR NOT EXISTS (
+            SELECT 1 FROM calendars WHERE calendars.id = calendar_events.calendar_id
+       );
+
+    CREATE TABLE calendars_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        name TEXT NOT NULL CHECK (trim(name) <> ''),
+        color TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'local' CHECK (source IN ('local', 'ics')),
+        visible INTEGER NOT NULL DEFAULT 1 CHECK (visible IN (0, 1)),
+        read_only INTEGER NOT NULL DEFAULT 0 CHECK (read_only IN (0, 1)),
+        source_url TEXT,
+        last_synced TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) CHECK (trim(created_at) <> ''),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) CHECK (trim(updated_at) <> '')
+    );
+    INSERT OR IGNORE INTO calendars_hardened
+        (id, name, color, source, visible, read_only, source_url, last_synced, created_at, updated_at)
+    SELECT
+        id,
+        CASE WHEN trim(name) = '' THEN id ELSE name END,
+        COALESCE(color, ''),
+        CASE WHEN source IN ('local', 'ics') THEN source ELSE 'local' END,
+        CASE WHEN visible = 0 THEN 0 ELSE 1 END,
+        CASE WHEN read_only = 1 THEN 1 ELSE 0 END,
+        source_url,
+        last_synced,
+        COALESCE(NULLIF(trim(created_at), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        COALESCE(NULLIF(trim(updated_at), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    FROM calendars
+    WHERE trim(id) <> '';
+    INSERT OR IGNORE INTO calendars_hardened
+        (id, name, color, source, visible, read_only, created_at, updated_at)
+    VALUES (
+        'local',
+        'GanbaruAI',
+        '',
+        'local',
+        1,
+        0,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    );
+
+    CREATE TABLE calendar_events_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        title TEXT NOT NULL DEFAULT '',
+        start_time TEXT NOT NULL CHECK (trim(start_time) <> ''),
+        end_time TEXT NOT NULL CHECK (trim(end_time) <> ''),
+        timezone TEXT NOT NULL DEFAULT 'UTC' CHECK (trim(timezone) <> ''),
+        calendar_id TEXT NOT NULL DEFAULT 'local' REFERENCES calendars_hardened(id) ON DELETE RESTRICT,
+        color INTEGER CHECK (color IS NULL OR (color >= 0 AND color < 32)),
+        description TEXT NOT NULL DEFAULT '',
+        rrule TEXT,
+        repeat_until TEXT,
+        environment_id TEXT,
+        playlist_id TEXT,
+        all_day INTEGER NOT NULL DEFAULT 0 CHECK (all_day IN (0, 1)),
+        location TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL DEFAULT '',
+        transparency TEXT NOT NULL DEFAULT 'opaque' CHECK (transparency IN ('opaque', 'transparent')),
+        status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'tentative', 'cancelled')),
+        source_uid TEXT,
+        visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),
+        priority INTEGER CHECK (priority IS NULL OR (priority >= 0 AND priority <= 9)),
+        geo_lat REAL,
+        geo_lng REAL,
+        sequence INTEGER NOT NULL DEFAULT 0 CHECK (sequence >= 0),
+        guest_can_modify INTEGER NOT NULL DEFAULT 0 CHECK (guest_can_modify IN (0, 1)),
+        guest_can_invite_others INTEGER NOT NULL DEFAULT 1 CHECK (guest_can_invite_others IN (0, 1)),
+        guest_can_see_other_guests INTEGER NOT NULL DEFAULT 1 CHECK (guest_can_see_other_guests IN (0, 1)),
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) CHECK (trim(created_at) <> ''),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) CHECK (trim(updated_at) <> ''),
+        icalendar_component_id TEXT REFERENCES icalendar_components(id) ON DELETE SET NULL,
+        local_rsvp_status TEXT CHECK (
+            local_rsvp_status IS NULL OR local_rsvp_status IN (
+                'needs-action', 'accepted', 'declined', 'tentative', 'delegated'
+            )
+        ),
+        meeting_enabled INTEGER NOT NULL DEFAULT 0 CHECK (meeting_enabled IN (0, 1)),
+        CHECK (
+            (geo_lat IS NULL AND geo_lng IS NULL)
+            OR (
+                geo_lat IS NOT NULL
+                AND geo_lng IS NOT NULL
+                AND geo_lat >= -90
+                AND geo_lat <= 90
+                AND geo_lng >= -180
+                AND geo_lng <= 180
+            )
+        )
+    );
+    INSERT OR IGNORE INTO calendar_events_hardened (
+        id, title, start_time, end_time, timezone, calendar_id,
+        color, description, rrule, repeat_until, environment_id, playlist_id,
+        all_day, location, url, transparency, status, source_uid, visibility,
+        priority, geo_lat, geo_lng, sequence, guest_can_modify,
+        guest_can_invite_others, guest_can_see_other_guests, created_at, updated_at,
+        icalendar_component_id, local_rsvp_status, meeting_enabled
+    )
+    SELECT
+        id,
+        COALESCE(title, ''),
+        start_time,
+        end_time,
+        COALESCE(NULLIF(trim(timezone), ''), 'UTC'),
+        CASE
+            WHEN EXISTS (SELECT 1 FROM calendars_hardened WHERE calendars_hardened.id = calendar_events.calendar_id)
+            THEN calendar_id
+            ELSE 'local'
+        END,
+        CASE WHEN color BETWEEN 0 AND 31 THEN color ELSE NULL END,
+        COALESCE(description, ''),
+        rrule,
+        repeat_until,
+        environment_id,
+        playlist_id,
+        CASE WHEN all_day = 1 THEN 1 ELSE 0 END,
+        COALESCE(location, ''),
+        COALESCE(url, ''),
+        CASE WHEN transparency IN ('opaque', 'transparent') THEN transparency ELSE 'opaque' END,
+        CASE WHEN status IN ('confirmed', 'tentative', 'cancelled') THEN status ELSE 'confirmed' END,
+        source_uid,
+        CASE WHEN visibility IN ('public', 'private') THEN visibility ELSE 'public' END,
+        CASE WHEN priority BETWEEN 0 AND 9 THEN priority ELSE NULL END,
+        CASE
+            WHEN geo_lat IS NOT NULL AND geo_lng IS NOT NULL
+                 AND geo_lat >= -90 AND geo_lat <= 90
+                 AND geo_lng >= -180 AND geo_lng <= 180
+            THEN geo_lat
+            ELSE NULL
+        END,
+        CASE
+            WHEN geo_lat IS NOT NULL AND geo_lng IS NOT NULL
+                 AND geo_lat >= -90 AND geo_lat <= 90
+                 AND geo_lng >= -180 AND geo_lng <= 180
+            THEN geo_lng
+            ELSE NULL
+        END,
+        CASE WHEN sequence >= 0 THEN sequence ELSE 0 END,
+        CASE WHEN guest_can_modify = 1 THEN 1 ELSE 0 END,
+        CASE WHEN guest_can_invite_others = 0 THEN 0 ELSE 1 END,
+        CASE WHEN guest_can_see_other_guests = 0 THEN 0 ELSE 1 END,
+        COALESCE(NULLIF(trim(created_at), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        COALESCE(NULLIF(trim(updated_at), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        CASE
+            WHEN icalendar_component_id IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM icalendar_components WHERE id = calendar_events.icalendar_component_id)
+            THEN icalendar_component_id
+            ELSE NULL
+        END,
+        CASE
+            WHEN local_rsvp_status IN ('needs-action', 'accepted', 'declined', 'tentative', 'delegated')
+            THEN local_rsvp_status
+            ELSE NULL
+        END,
+        CASE WHEN meeting_enabled = 1 THEN 1 ELSE 0 END
+    FROM calendar_events
+    WHERE trim(id) <> ''
+      AND trim(start_time) <> ''
+      AND trim(end_time) <> '';
+
+    CREATE TABLE calendar_event_overrides_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        parent_event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        recurrence_id TEXT NOT NULL CHECK (trim(recurrence_id) <> ''),
+        title TEXT,
+        start_time TEXT,
+        end_time TEXT,
+        description TEXT,
+        location TEXT,
+        url TEXT,
+        color INTEGER CHECK (color IS NULL OR (color >= 0 AND color < 32)),
+        status TEXT CHECK (status IS NULL OR status IN ('confirmed', 'tentative', 'cancelled')),
+        transparency TEXT CHECK (transparency IS NULL OR transparency IN ('opaque', 'transparent')),
+        visibility TEXT CHECK (visibility IS NULL OR visibility IN ('public', 'private')),
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) CHECK (trim(created_at) <> ''),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) CHECK (trim(updated_at) <> ''),
+        icalendar_component_id TEXT REFERENCES icalendar_components(id) ON DELETE SET NULL,
+        recurrence_range TEXT CHECK (recurrence_range IS NULL OR recurrence_range = 'this-and-future')
+    );
+    INSERT OR IGNORE INTO calendar_event_overrides_hardened
+        (id, parent_event_id, recurrence_id, title, start_time, end_time, description,
+         location, url, color, status, transparency, visibility, created_at, updated_at,
+         icalendar_component_id, recurrence_range)
+    SELECT
+        id,
+        parent_event_id,
+        recurrence_id,
+        title,
+        start_time,
+        end_time,
+        description,
+        location,
+        url,
+        CASE WHEN color BETWEEN 0 AND 31 THEN color ELSE NULL END,
+        CASE WHEN status IN ('confirmed', 'tentative', 'cancelled') THEN status ELSE NULL END,
+        CASE WHEN transparency IN ('opaque', 'transparent') THEN transparency ELSE NULL END,
+        CASE WHEN visibility IN ('public', 'private') THEN visibility ELSE NULL END,
+        COALESCE(NULLIF(trim(created_at), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        COALESCE(NULLIF(trim(updated_at), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        CASE
+            WHEN icalendar_component_id IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM icalendar_components WHERE id = calendar_event_overrides.icalendar_component_id)
+            THEN icalendar_component_id
+            ELSE NULL
+        END,
+        CASE WHEN recurrence_range = 'this-and-future' THEN recurrence_range ELSE NULL END
+    FROM calendar_event_overrides
+    WHERE trim(id) <> ''
+      AND trim(parent_event_id) <> ''
+      AND trim(recurrence_id) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_overrides.parent_event_id
+      );
+
+    CREATE TABLE calendar_event_attendees_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        name TEXT,
+        email TEXT NOT NULL CHECK (trim(email) <> ''),
+        role TEXT NOT NULL DEFAULT 'req-participant' CHECK (role IN ('chair', 'req-participant', 'opt-participant', 'non-participant')),
+        status TEXT NOT NULL DEFAULT 'needs-action' CHECK (status IN ('needs-action', 'accepted', 'declined', 'tentative', 'delegated')),
+        rsvp INTEGER NOT NULL DEFAULT 0 CHECK (rsvp IN (0, 1)),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+        icalendar_component_id TEXT REFERENCES icalendar_components(id) ON DELETE SET NULL,
+        icalendar_property_index INTEGER CHECK (icalendar_property_index IS NULL OR icalendar_property_index >= 0)
+    );
+    INSERT OR IGNORE INTO calendar_event_attendees_hardened
+        (id, event_id, name, email, role, status, rsvp, sort_order,
+         icalendar_component_id, icalendar_property_index)
+    SELECT
+        id,
+        event_id,
+        name,
+        email,
+        CASE
+            WHEN role IN ('chair', 'req-participant', 'opt-participant', 'non-participant')
+            THEN role ELSE 'req-participant'
+        END,
+        CASE
+            WHEN status IN ('needs-action', 'accepted', 'declined', 'tentative', 'delegated')
+            THEN status ELSE 'needs-action'
+        END,
+        CASE WHEN rsvp = 1 THEN 1 ELSE 0 END,
+        CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END,
+        CASE
+            WHEN icalendar_component_id IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM icalendar_components WHERE id = calendar_event_attendees.icalendar_component_id)
+            THEN icalendar_component_id
+            ELSE NULL
+        END,
+        CASE WHEN icalendar_property_index >= 0 THEN icalendar_property_index ELSE NULL END
+    FROM calendar_event_attendees
+    WHERE trim(id) <> ''
+      AND trim(event_id) <> ''
+      AND trim(email) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_attendees.event_id
+      );
+
+    CREATE TABLE calendar_event_alarms_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        action TEXT NOT NULL DEFAULT 'display' CHECK (action IN ('display', 'audio', 'email')),
+        trigger_type TEXT NOT NULL DEFAULT 'relative' CHECK (trigger_type IN ('relative', 'absolute')),
+        trigger_value TEXT NOT NULL CHECK (trim(trigger_value) <> ''),
+        description TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+        icalendar_component_id TEXT REFERENCES icalendar_components(id) ON DELETE SET NULL
+    );
+    INSERT OR IGNORE INTO calendar_event_alarms_hardened
+        (id, event_id, action, trigger_type, trigger_value, description, sort_order, icalendar_component_id)
+    SELECT
+        id,
+        event_id,
+        CASE WHEN action IN ('display', 'audio', 'email') THEN action ELSE 'display' END,
+        CASE WHEN trigger_type IN ('relative', 'absolute') THEN trigger_type ELSE 'relative' END,
+        trigger_value,
+        description,
+        CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END,
+        CASE
+            WHEN icalendar_component_id IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM icalendar_components WHERE id = calendar_event_alarms.icalendar_component_id)
+            THEN icalendar_component_id
+            ELSE NULL
+        END
+    FROM calendar_event_alarms
+    WHERE trim(id) <> ''
+      AND trim(event_id) <> ''
+      AND trim(trigger_value) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_alarms.event_id
+      );
+
+    CREATE TABLE calendar_event_notifications_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        offset_minutes INTEGER NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    INSERT OR IGNORE INTO calendar_event_notifications_hardened
+        (id, event_id, offset_minutes, sort_order)
+    SELECT id, event_id, offset_minutes, CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END
+    FROM calendar_event_notifications
+    WHERE trim(id) <> ''
+      AND trim(event_id) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_notifications.event_id
+      );
+
+    CREATE TABLE calendar_event_exdates_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        occurrence_date TEXT NOT NULL CHECK (trim(occurrence_date) <> ''),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    INSERT OR IGNORE INTO calendar_event_exdates_hardened
+        (id, event_id, occurrence_date, sort_order)
+    SELECT id, event_id, occurrence_date, CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END
+    FROM calendar_event_exdates
+    WHERE trim(id) <> ''
+      AND trim(event_id) <> ''
+      AND trim(occurrence_date) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_exdates.event_id
+      );
+
+    CREATE TABLE calendar_event_rdates_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        occurrence_start TEXT NOT NULL CHECK (trim(occurrence_start) <> ''),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    INSERT OR IGNORE INTO calendar_event_rdates_hardened
+        (id, event_id, occurrence_start, sort_order)
+    SELECT id, event_id, occurrence_start, CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END
+    FROM calendar_event_rdates
+    WHERE trim(id) <> ''
+      AND trim(event_id) <> ''
+      AND trim(occurrence_start) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_rdates.event_id
+      );
+
+    CREATE TABLE calendar_event_categories_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        category TEXT NOT NULL CHECK (trim(category) <> ''),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    INSERT OR IGNORE INTO calendar_event_categories_hardened
+        (id, event_id, category, sort_order)
+    SELECT id, event_id, category, CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END
+    FROM calendar_event_categories
+    WHERE trim(id) <> ''
+      AND trim(event_id) <> ''
+      AND trim(category) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_categories.event_id
+      );
+
+    CREATE TABLE calendar_event_extended_properties_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        event_id TEXT NOT NULL REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        property_key TEXT NOT NULL CHECK (trim(property_key) <> ''),
+        property_value TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    INSERT OR IGNORE INTO calendar_event_extended_properties_hardened
+        (id, event_id, property_key, property_value, sort_order)
+    SELECT id, event_id, property_key, property_value, CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END
+    FROM calendar_event_extended_properties
+    WHERE trim(id) <> ''
+      AND trim(event_id) <> ''
+      AND trim(property_key) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_extended_properties.event_id
+      );
+
+    CREATE TABLE calendar_event_override_extended_properties_hardened (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        override_id TEXT NOT NULL REFERENCES calendar_event_overrides_hardened(id) ON DELETE CASCADE,
+        property_key TEXT NOT NULL CHECK (trim(property_key) <> ''),
+        property_value TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    INSERT OR IGNORE INTO calendar_event_override_extended_properties_hardened
+        (id, override_id, property_key, property_value, sort_order)
+    SELECT id, override_id, property_key, property_value, CASE WHEN sort_order >= 0 THEN sort_order ELSE 0 END
+    FROM calendar_event_override_extended_properties
+    WHERE trim(id) <> ''
+      AND trim(override_id) <> ''
+      AND trim(property_key) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_event_overrides_hardened
+            WHERE id = calendar_event_override_extended_properties.override_id
+      );
+
+    CREATE TABLE calendar_event_organizers_hardened (
+        event_id TEXT PRIMARY KEY REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        name TEXT,
+        email TEXT NOT NULL CHECK (trim(email) <> '')
+    );
+    INSERT OR IGNORE INTO calendar_event_organizers_hardened
+        (event_id, name, email)
+    SELECT event_id, name, email
+    FROM calendar_event_organizers
+    WHERE trim(event_id) <> ''
+      AND trim(email) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = calendar_event_organizers.event_id
+      );
+
+    CREATE TABLE pomodoro_configs_hardened (
+        event_id TEXT PRIMARY KEY REFERENCES calendar_events_hardened(id) ON DELETE CASCADE,
+        focus_duration_minutes INTEGER NOT NULL DEFAULT 40 CHECK (focus_duration_minutes > 0),
+        short_break_minutes INTEGER NOT NULL DEFAULT 5 CHECK (short_break_minutes > 0),
+        long_break_minutes INTEGER NOT NULL DEFAULT 10 CHECK (long_break_minutes > 0),
+        pomodoro_count INTEGER NOT NULL DEFAULT 4 CHECK (pomodoro_count > 0),
+        idle_timeout_minutes INTEGER CHECK (idle_timeout_minutes IS NULL OR idle_timeout_minutes > 0)
+    );
+    INSERT OR IGNORE INTO pomodoro_configs_hardened
+        (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+         pomodoro_count, idle_timeout_minutes)
+    SELECT
+        event_id,
+        CASE WHEN focus_duration_minutes > 0 THEN focus_duration_minutes ELSE 40 END,
+        CASE WHEN short_break_minutes > 0 THEN short_break_minutes ELSE 5 END,
+        CASE WHEN long_break_minutes > 0 THEN long_break_minutes ELSE 10 END,
+        CASE WHEN pomodoro_count > 0 THEN pomodoro_count ELSE 4 END,
+        CASE WHEN idle_timeout_minutes > 0 THEN idle_timeout_minutes ELSE NULL END
+    FROM pomodoro_configs
+    WHERE trim(event_id) <> ''
+      AND EXISTS (
+            SELECT 1 FROM calendar_events_hardened WHERE id = pomodoro_configs.event_id
+      );
+
+    DROP TABLE calendar_event_override_extended_properties;
+    DROP TABLE calendar_event_organizers;
+    DROP TABLE calendar_event_extended_properties;
+    DROP TABLE calendar_event_categories;
+    DROP TABLE calendar_event_rdates;
+    DROP TABLE calendar_event_exdates;
+    DROP TABLE calendar_event_notifications;
+    DROP TABLE calendar_event_alarms;
+    DROP TABLE calendar_event_attendees;
+    DROP TABLE calendar_event_overrides;
+    DROP TABLE pomodoro_configs;
+    DROP TABLE calendar_events;
+    DROP TABLE calendars;
+
+    ALTER TABLE calendars_hardened RENAME TO calendars;
+    ALTER TABLE calendar_events_hardened RENAME TO calendar_events;
+    ALTER TABLE calendar_event_overrides_hardened RENAME TO calendar_event_overrides;
+    ALTER TABLE calendar_event_attendees_hardened RENAME TO calendar_event_attendees;
+    ALTER TABLE calendar_event_alarms_hardened RENAME TO calendar_event_alarms;
+    ALTER TABLE calendar_event_notifications_hardened RENAME TO calendar_event_notifications;
+    ALTER TABLE calendar_event_exdates_hardened RENAME TO calendar_event_exdates;
+    ALTER TABLE calendar_event_rdates_hardened RENAME TO calendar_event_rdates;
+    ALTER TABLE calendar_event_categories_hardened RENAME TO calendar_event_categories;
+    ALTER TABLE calendar_event_extended_properties_hardened RENAME TO calendar_event_extended_properties;
+    ALTER TABLE calendar_event_override_extended_properties_hardened RENAME TO calendar_event_override_extended_properties;
+    ALTER TABLE calendar_event_organizers_hardened RENAME TO calendar_event_organizers;
+    ALTER TABLE pomodoro_configs_hardened RENAME TO pomodoro_configs;
+
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events(start_time);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_end ON calendar_events(end_time);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_calendar ON calendar_events(calendar_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_calendar_events_source_uid
+        ON calendar_events(calendar_id, source_uid);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_icalendar_component
+        ON calendar_events(icalendar_component_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_overrides_parent_recid
+        ON calendar_event_overrides(parent_event_id, recurrence_id);
+    CREATE INDEX IF NOT EXISTS idx_overrides_icalendar_component
+        ON calendar_event_overrides(icalendar_component_id);
+    CREATE INDEX IF NOT EXISTS idx_attendees_event ON calendar_event_attendees(event_id);
+    CREATE INDEX IF NOT EXISTS idx_attendees_icalendar_component
+        ON calendar_event_attendees(icalendar_component_id);
+    CREATE INDEX IF NOT EXISTS idx_alarms_event ON calendar_event_alarms(event_id);
+    CREATE INDEX IF NOT EXISTS idx_alarms_icalendar_component
+        ON calendar_event_alarms(icalendar_component_id);
+    CREATE INDEX IF NOT EXISTS idx_event_notifications_event
+        ON calendar_event_notifications(event_id, sort_order);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_event_exdates_event_date
+        ON calendar_event_exdates(event_id, occurrence_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_event_rdates_event_start
+        ON calendar_event_rdates(event_id, occurrence_start);
+    CREATE INDEX IF NOT EXISTS idx_event_categories_event
+        ON calendar_event_categories(event_id, sort_order);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_event_extended_properties_key
+        ON calendar_event_extended_properties(event_id, property_key);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_override_extended_properties_key
+        ON calendar_event_override_extended_properties(override_id, property_key);
+
+    CREATE TABLE IF NOT EXISTS calendar_events_archive (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        source_event_id TEXT NOT NULL CHECK (trim(source_event_id) <> ''),
+        archived_at TEXT NOT NULL CHECK (trim(archived_at) <> ''),
+        title TEXT NOT NULL DEFAULT '',
+        start_time TEXT NOT NULL CHECK (trim(start_time) <> ''),
+        end_time TEXT NOT NULL CHECK (trim(end_time) <> ''),
+        timezone TEXT NOT NULL DEFAULT 'UTC' CHECK (trim(timezone) <> ''),
+        calendar_id TEXT NOT NULL CHECK (trim(calendar_id) <> ''),
+        color INTEGER CHECK (color IS NULL OR (color >= 0 AND color < 32)),
+        description TEXT NOT NULL DEFAULT '',
+        rrule TEXT,
+        repeat_until TEXT,
+        environment_id TEXT,
+        playlist_id TEXT,
+        all_day INTEGER NOT NULL DEFAULT 0 CHECK (all_day IN (0, 1)),
+        location TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL DEFAULT '',
+        transparency TEXT NOT NULL DEFAULT 'opaque' CHECK (transparency IN ('opaque', 'transparent')),
+        status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'tentative', 'cancelled')),
+        source_uid TEXT,
+        visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),
+        priority INTEGER CHECK (priority IS NULL OR (priority >= 0 AND priority <= 9)),
+        geo_lat REAL,
+        geo_lng REAL,
+        sequence INTEGER NOT NULL DEFAULT 0 CHECK (sequence >= 0),
+        guest_can_modify INTEGER NOT NULL DEFAULT 0 CHECK (guest_can_modify IN (0, 1)),
+        guest_can_invite_others INTEGER NOT NULL DEFAULT 1 CHECK (guest_can_invite_others IN (0, 1)),
+        guest_can_see_other_guests INTEGER NOT NULL DEFAULT 1 CHECK (guest_can_see_other_guests IN (0, 1)),
+        created_at TEXT NOT NULL CHECK (trim(created_at) <> ''),
+        updated_at TEXT NOT NULL CHECK (trim(updated_at) <> ''),
+        icalendar_component_id TEXT,
+        local_rsvp_status TEXT CHECK (
+            local_rsvp_status IS NULL OR local_rsvp_status IN (
+                'needs-action', 'accepted', 'declined', 'tentative', 'delegated'
+            )
+        ),
+        meeting_enabled INTEGER NOT NULL DEFAULT 0 CHECK (meeting_enabled IN (0, 1)),
+        CHECK (
+            (geo_lat IS NULL AND geo_lng IS NULL)
+            OR (
+                geo_lat IS NOT NULL
+                AND geo_lng IS NOT NULL
+                AND geo_lat >= -90
+                AND geo_lat <= 90
+                AND geo_lng >= -180
+                AND geo_lng <= 180
+            )
+        )
+    );
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_archive_source
+        ON calendar_events_archive(source_event_id);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_archive_calendar
+        ON calendar_events_archive(calendar_id);
+
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_pomodoro_configs (
+        archive_event_id TEXT PRIMARY KEY REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        focus_duration_minutes INTEGER NOT NULL CHECK (focus_duration_minutes > 0),
+        short_break_minutes INTEGER NOT NULL CHECK (short_break_minutes > 0),
+        long_break_minutes INTEGER NOT NULL CHECK (long_break_minutes > 0),
+        pomodoro_count INTEGER NOT NULL CHECK (pomodoro_count > 0),
+        idle_timeout_minutes INTEGER CHECK (idle_timeout_minutes IS NULL OR idle_timeout_minutes > 0)
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_notifications (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        offset_minutes INTEGER NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_exdates (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        occurrence_date TEXT NOT NULL CHECK (trim(occurrence_date) <> ''),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_rdates (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        occurrence_start TEXT NOT NULL CHECK (trim(occurrence_start) <> ''),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_categories (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        category TEXT NOT NULL CHECK (trim(category) <> ''),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_extended_properties (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        property_key TEXT NOT NULL CHECK (trim(property_key) <> ''),
+        property_value TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_organizers (
+        archive_event_id TEXT PRIMARY KEY REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        name TEXT,
+        email TEXT NOT NULL CHECK (trim(email) <> '')
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_attendees (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        source_attendee_id TEXT NOT NULL CHECK (trim(source_attendee_id) <> ''),
+        name TEXT,
+        email TEXT NOT NULL CHECK (trim(email) <> ''),
+        role TEXT NOT NULL DEFAULT 'req-participant' CHECK (role IN ('chair', 'req-participant', 'opt-participant', 'non-participant')),
+        status TEXT NOT NULL DEFAULT 'needs-action' CHECK (status IN ('needs-action', 'accepted', 'declined', 'tentative', 'delegated')),
+        rsvp INTEGER NOT NULL DEFAULT 0 CHECK (rsvp IN (0, 1)),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+        icalendar_component_id TEXT,
+        icalendar_property_index INTEGER CHECK (icalendar_property_index IS NULL OR icalendar_property_index >= 0)
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_alarms (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        source_alarm_id TEXT NOT NULL CHECK (trim(source_alarm_id) <> ''),
+        action TEXT NOT NULL DEFAULT 'display' CHECK (action IN ('display', 'audio', 'email')),
+        trigger_type TEXT NOT NULL DEFAULT 'relative' CHECK (trigger_type IN ('relative', 'absolute')),
+        trigger_value TEXT NOT NULL CHECK (trim(trigger_value) <> ''),
+        description TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+        icalendar_component_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_overrides (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_event_id TEXT NOT NULL REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+        source_override_id TEXT NOT NULL CHECK (trim(source_override_id) <> ''),
+        recurrence_id TEXT NOT NULL CHECK (trim(recurrence_id) <> ''),
+        title TEXT,
+        start_time TEXT,
+        end_time TEXT,
+        description TEXT,
+        location TEXT,
+        url TEXT,
+        color INTEGER CHECK (color IS NULL OR (color >= 0 AND color < 32)),
+        status TEXT CHECK (status IS NULL OR status IN ('confirmed', 'tentative', 'cancelled')),
+        transparency TEXT CHECK (transparency IS NULL OR transparency IN ('opaque', 'transparent')),
+        visibility TEXT CHECK (visibility IS NULL OR visibility IN ('public', 'private')),
+        created_at TEXT NOT NULL CHECK (trim(created_at) <> ''),
+        updated_at TEXT NOT NULL CHECK (trim(updated_at) <> ''),
+        icalendar_component_id TEXT,
+        recurrence_range TEXT CHECK (recurrence_range IS NULL OR recurrence_range = 'this-and-future')
+    );
+    CREATE INDEX IF NOT EXISTS idx_calendar_event_archive_overrides_source
+        ON calendar_event_archive_overrides(source_override_id);
+    CREATE TABLE IF NOT EXISTS calendar_event_archive_override_extended_properties (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        archive_override_id TEXT NOT NULL REFERENCES calendar_event_archive_overrides(id) ON DELETE CASCADE,
+        property_key TEXT NOT NULL CHECK (trim(property_key) <> ''),
+        property_value TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0)
+    );
+"#;
+
 pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     sqlx::raw_sql(
         "CREATE TABLE IF NOT EXISTS ganbaruai_schema_migrations (
@@ -104,6 +772,9 @@ async fn apply_migration(pool: &SqlitePool, migration: Migration) -> Result<(), 
     if migration.version == 11 {
         return apply_theme_calendar_default_migration(pool, migration).await;
     }
+    if migration.version == 24 {
+        return apply_calendar_hardening_migration(pool, migration).await;
+    }
 
     let version = migration.version;
     let description = migration.description;
@@ -156,6 +827,75 @@ async fn apply_migration(pool: &SqlitePool, migration: Migration) -> Result<(), 
         .await
         .map_err(|e| format!("commit migration {version}: {e}"))?;
     Ok(())
+}
+
+async fn apply_calendar_hardening_migration(
+    pool: &SqlitePool,
+    migration: Migration,
+) -> Result<(), String> {
+    let version = migration.version;
+    let description = migration.description;
+    let sql = migration.sql;
+
+    sqlx::raw_sql("PRAGMA foreign_keys=OFF")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("disable foreign keys for migration {version}: {e}"))?;
+
+    let result = async {
+        sqlx::raw_sql("BEGIN IMMEDIATE")
+            .execute(pool)
+            .await
+            .map_err(|e| format!("begin migration {version}: {e}"))?;
+
+        match migration_version_exists(pool, version).await {
+            Ok(true) => {
+                sqlx::raw_sql("COMMIT")
+                    .execute(pool)
+                    .await
+                    .map_err(|e| format!("commit migration {version}: {e}"))?;
+                return Ok(());
+            }
+            Ok(false) => {}
+            Err(err) => {
+                let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+                return Err(err);
+            }
+        }
+
+        if let Err(err) = sqlx::raw_sql(sql).execute(pool).await {
+            let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+            return Err(format!("run migration {version} {description}: {err}"));
+        }
+
+        if let Err(err) = sqlx::query(
+            "INSERT INTO ganbaruai_schema_migrations (version, description)
+             VALUES (?, ?)",
+        )
+        .bind(version)
+        .bind(description)
+        .execute(pool)
+        .await
+        {
+            let _ = sqlx::raw_sql("ROLLBACK").execute(pool).await;
+            return Err(format!("record migration {version}: {err}"));
+        }
+
+        sqlx::raw_sql("COMMIT")
+            .execute(pool)
+            .await
+            .map_err(|e| format!("commit migration {version}: {e}"))?;
+        Ok(())
+    }
+    .await;
+
+    let restore_result = sqlx::raw_sql("PRAGMA foreign_keys=ON").execute(pool).await;
+    if let Err(err) = restore_result {
+        return Err(format!(
+            "restore foreign keys after migration {version}: {err}"
+        ));
+    }
+    result
 }
 
 async fn theme_column_exists(pool: &SqlitePool, column: &str) -> Result<bool, String> {
@@ -1405,6 +2145,11 @@ pub fn migrations() -> Vec<Migration> {
                 updated_at INTEGER NOT NULL
             );
         ",
+    },
+    Migration {
+        version: 24,
+        description: "harden calendar persistence and add event archives",
+        sql: CALENDAR_HARDENING_SQL,
     }]
 }
 
@@ -1417,6 +2162,10 @@ mod tests {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::raw_sql("PRAGMA foreign_keys=ON")
+            .execute(&pool)
             .await
             .unwrap();
         run_migrations(&pool).await.unwrap();
@@ -1491,6 +2240,102 @@ mod tests {
                     "{table_name}.{column_name} should be normalized, not JSON storage",
                 );
             }
+        });
+    }
+
+    #[test]
+    fn schema_creates_normalized_calendar_archive_tables() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+            let archive_tables = [
+                "calendar_events_archive",
+                "calendar_event_archive_pomodoro_configs",
+                "calendar_event_archive_notifications",
+                "calendar_event_archive_exdates",
+                "calendar_event_archive_rdates",
+                "calendar_event_archive_categories",
+                "calendar_event_archive_extended_properties",
+                "calendar_event_archive_organizers",
+                "calendar_event_archive_attendees",
+                "calendar_event_archive_alarms",
+                "calendar_event_archive_overrides",
+                "calendar_event_archive_override_extended_properties",
+            ];
+            for table in archive_tables {
+                let exists: Option<i64> = sqlx::query_scalar(
+                    "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?",
+                )
+                .bind(table)
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+                assert_eq!(exists, Some(1), "{table} should exist");
+            }
+        });
+    }
+
+    #[test]
+    fn schema_rejects_invalid_calendar_values() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+
+            assert!(sqlx::query(
+                "INSERT INTO calendars (id, name, source, created_at, updated_at)
+                 VALUES ('bad-source', 'Bad', 'web', '2026-05-23T00:00:00Z', '2026-05-23T00:00:00Z')",
+            )
+            .execute(&pool)
+            .await
+            .is_err());
+
+            assert!(sqlx::query(
+                "INSERT INTO calendar_events
+                    (id, title, start_time, end_time, timezone, calendar_id, all_day)
+                 VALUES ('bad-bool', 'Bad', '2026-05-23T09:00:00Z',
+                         '2026-05-23T10:00:00Z', 'UTC', 'local', 2)",
+            )
+            .execute(&pool)
+            .await
+            .is_err());
+
+            assert!(sqlx::query(
+                "INSERT INTO calendar_events
+                    (id, title, start_time, end_time, timezone, calendar_id, color)
+                 VALUES ('bad-color', 'Bad', '2026-05-23T09:00:00Z',
+                         '2026-05-23T10:00:00Z', 'UTC', 'local', 32)",
+            )
+            .execute(&pool)
+            .await
+            .is_err());
+
+            assert!(sqlx::query(
+                "INSERT INTO calendar_events
+                    (id, title, start_time, end_time, timezone, calendar_id, priority)
+                 VALUES ('bad-priority', 'Bad', '2026-05-23T09:00:00Z',
+                         '2026-05-23T10:00:00Z', 'UTC', 'local', 10)",
+            )
+            .execute(&pool)
+            .await
+            .is_err());
+
+            assert!(sqlx::query(
+                "INSERT INTO calendar_events
+                    (id, title, start_time, end_time, timezone, calendar_id, geo_lat)
+                 VALUES ('bad-geo', 'Bad', '2026-05-23T09:00:00Z',
+                         '2026-05-23T10:00:00Z', 'UTC', 'local', 25.0)",
+            )
+            .execute(&pool)
+            .await
+            .is_err());
+
+            assert!(sqlx::query(
+                "INSERT INTO calendar_events
+                    (id, title, start_time, end_time, timezone, calendar_id)
+                 VALUES ('bad-fk', 'Bad', '2026-05-23T09:00:00Z',
+                         '2026-05-23T10:00:00Z', 'UTC', 'missing')",
+            )
+            .execute(&pool)
+            .await
+            .is_err());
         });
     }
 
