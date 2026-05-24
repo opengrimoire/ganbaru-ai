@@ -38,9 +38,9 @@ These outcomes are required:
 
 **Captured edit time.** The wall-clock date and time sampled for one projection and its matching Save plan. Projection and Save must use the same captured edit time for recurrence boundary decisions.
 
-**Protected occurrence.** A generated occurrence whose end time is at or before the captured edit time and that would vanish, move, or change meaning after a structural edit. For supported recurrence rules, all affected protected occurrences from the template start through the captured edit time are protected, not only occurrences in the visible window. Occurrences with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected.
+**Protected occurrence.** A generated occurrence whose start time is at or before the captured edit time and that would vanish, move, or change meaning after a structural edit. For supported recurrence rules, all affected protected occurrences from the template start through the captured edit time are protected, not only occurrences in the visible window. Occurrences with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected.
 
-**First mutable occurrence.** The first generated occurrence from the same source series whose end time is after the captured edit time. `All` edits may apply from this occurrence forward while protected history remains unchanged.
+**First mutable occurrence.** The first generated occurrence from the same source series whose start time is after the captured edit time and that has no tracking or persisted reference. `All` edits may apply from this occurrence forward while protected history remains unchanged.
 
 **Exception date.** A date on the template that prevents one generated occurrence from appearing.
 
@@ -58,7 +58,7 @@ These outcomes are required:
 
 **Projection.** The non-mutating visible event list and preview contour set for the current draft and scope.
 
-**Delete or archive projection.** The visible event list after the current scope is removed. This is separate from edit projection because protected occurrences archive while future untracked occurrences hard delete, but both should disappear from the visible calendar in one final projection.
+**Delete or archive plan.** The semantic plan for a delete or archive request. It owns the affected visible IDs, the final visible projection, the active-session stop requirement, the ordered backend operations, and the undo metadata. Protected occurrences archive while future untracked occurrences hard delete, but both disappear from the visible calendar in one final projection.
 
 **Commit plan.** The ordered mutation plan that Save executes to make the projection real.
 
@@ -120,9 +120,9 @@ The visible event list must include unchanged unrelated events exactly as they w
 
 Preview contour IDs must be a subset of the rendered event IDs. If a virtual event is previewed, it needs a stable virtual ID that cannot collide with persisted or synthetic IDs.
 
-For delete and archive, the scope selector uses the same affected-set preview model as editing. `Only this` contours the selected occurrence. `Following` contours the selected occurrence and later rendered occurrences in the same series. `All` contours all rendered occurrences in the series, including protected past occurrences. A protected past occurrence may keep its current geometry and content in the preview, but the contour still communicates that the operation will archive it.
+For delete and archive, the scope selector uses the same affected-set preview model as editing. `Only this` contours the selected occurrence. `Following` contours the selected occurrence and later rendered occurrences in the same series. `All` contours all rendered occurrences in the series, including protected started occurrences. A protected occurrence may keep its current geometry and content in the preview, but the contour still communicates that the operation will archive it.
 
-When the user confirms delete or archive, the UI applies one final visible projection for the affected scope before executing the sequential database writes. This projection is display-only. It prevents protected occurrence archive batches from disappearing one by one while the backend snapshots each occurrence and caps the template.
+When the user confirms delete or archive, the UI applies the plan's final visible projection for the affected scope before sending one atomic backend batch. This projection is display-only. It prevents protected occurrence archive batches from disappearing one by one while the backend snapshots each occurrence and caps the template.
 
 ## Save contract
 
@@ -275,8 +275,8 @@ Occurrence positions:
 - Synthetic future occurrence.
 - Synthetic past occurrence.
 - Today's occurrence.
-- Same-day occurrence that already ended before the captured edit time.
-- Same-day occurrence that has not ended at the captured edit time.
+- Same-day occurrence that already started before the captured edit time.
+- Same-day occurrence that has not started at the captured edit time.
 - Cross-midnight occurrence whose start date and end date fall on different sides of the captured edit time.
 - Occurrence after the original first occurrence was detached.
 
@@ -309,7 +309,7 @@ Runtime states:
 - Active session on an unrelated event.
 - Past occurrences outside the current visible window that would be erased by the edit.
 - Past occurrences outside the current visible window with stored run references.
-- Captured edit time that separates an ended occurrence and a future occurrence on the same date.
+- Captured edit time that separates a started occurrence and a future occurrence on the same date.
 
 Window states:
 
@@ -336,7 +336,7 @@ Required tests:
 - Compare preview projection against post-commit canonical expansion for representative cases.
 - Ensure every preview contour ID exists in the rendered projection.
 - Ensure a daily repeat created on Monday renders through Sunday in the current week.
-- Ensure same-day ended occurrences are protected by end time, not by date only.
+- Ensure same-day started occurrences are protected by start time, not by date only.
 - Ensure clearing recurrence with `All` preserves protected history, removes mutable non-survivors, and keeps the selected survivor.
 - Ensure post-save refresh cannot be overwritten by stale prefetch data at the semantic store boundary.
 
@@ -391,7 +391,7 @@ The recurrence edit flow is correct only when:
 - Preview is a non-mutating projection of Save.
 - Save executes the same semantic plan preview showed.
 - Save followed by canonical reload equals the preview result inside the visible window.
-- Protected and mutable occurrences are separated by occurrence end time, not calendar date alone.
+- Protected and mutable occurrences are separated by occurrence start time, not calendar date alone.
 - Scope switching never loses the draft recurrence operation.
 - Clearing repeat for `All` keeps the selected occurrence as the survivor.
 - Adding repeat to a non-recurring event previews the new instances immediately and does not show a meaningless scope selector.

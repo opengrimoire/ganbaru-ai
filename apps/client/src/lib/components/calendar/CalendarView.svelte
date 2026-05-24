@@ -10,10 +10,6 @@
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
-  import {
-    concreteRecurringOccurrenceForMutation,
-    deleteActionForCalendarEvent,
-  } from "$lib/stores/calendar-mutations";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { calendarIdentityEmail } from "$lib/calendar/calendar-display";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -50,9 +46,11 @@
   } from "./display-events";
   import { executeRecurrenceCommitPlan } from "./recurrence-edit-executor";
   import {
-    protectedRecurringOccurrencesForArchive,
-    visibleEventsAfterRecurringDeleteScope,
-  } from "./delete-scope";
+    buildCalendarDeleteArchivePlan,
+    type CalendarDeleteArchiveOutcome,
+    type CalendarDeleteArchivePlan,
+    type CalendarDeleteArchiveRestoreSnapshot,
+  } from "./delete-archive-plan";
 
   const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
@@ -258,11 +256,7 @@
     const now = new Date();
     const currentDate = formatDatePart(now);
     const currentTime = formatCalendarDate(now).split(" ")[1];
-    let activeDate: string | undefined;
-    if (pomodoro.activeBlockId && s.templateId) {
-      const parts = pomodoro.activeBlockId.split("::");
-      if (parts[0] === s.templateId) activeDate = parts[1];
-    }
+    const activeDate = activeDateForEditSession(s.templateId);
     return computeEditDisplay(
       calendarStore.rawBlocks,
       storeEvents,
@@ -286,7 +280,43 @@
   function activeDateForEditSession(templateId: string): string | undefined {
     if (!pomodoro.activeBlockId) return undefined;
     const parts = pomodoro.activeBlockId.split("::");
-    return parts[0] === templateId ? parts[1] : undefined;
+    if (parts[0] !== templateId) return undefined;
+    return parts[1] ?? activePomodoroDate(pomodoro.activeBlockId);
+  }
+
+  function activePomodoroDate(activeId: string): string | undefined {
+    const [, syntheticDate] = activeId.split("::");
+    if (syntheticDate) return syntheticDate;
+    return pomodoro.segments.find((segment) => segment.status === "active")?.eventDate;
+  }
+
+  function buildDeleteArchivePlanForEvent(
+    id: string,
+    scope?: RecurringScope,
+    now = new Date(),
+  ): CalendarDeleteArchivePlan {
+    const state = session.state;
+    const selectedEvent = state.mode === "edit"
+      ? state.instanceEvent
+      : currentVisibleStoreEvents().find((event) => event.id === id)
+        ?? calendarStore.getTemplate({ id } as CalendarEvent);
+    if (!selectedEvent) throw new Error(`Calendar event '${id}' not found.`);
+
+    const deleteScope = state.mode === "edit" && isRecurring(state.instanceEvent)
+      ? scope ?? session.scope
+      : undefined;
+
+    return buildCalendarDeleteArchivePlan({
+      rawBlocks: calendarStore.rawBlocks,
+      visibleEvents: currentVisibleStoreEvents(),
+      selectedEvent,
+      scope: deleteScope,
+      now,
+      activePomodoro: {
+        blockId: pomodoro.activeBlockId,
+        eventDate: pomodoro.activeBlockId ? activePomodoroDate(pomodoro.activeBlockId) : undefined,
+      },
+    });
   }
 
   function cloneDisplayEvents(events: CalendarEvent[]): CalendarEvent[] {
@@ -327,19 +357,6 @@
     }
 
     return cloneDisplayEvents(displayResult.events);
-  }
-
-  function buildDeleteDisplayFreeze(id: string, scope?: RecurringScope): CalendarEvent[] {
-    const storeEvents = currentVisibleStoreEvents();
-    const s = session.state;
-    if (scope && s.mode === "edit") {
-      const instanceDate = s.instanceEvent.start.split(" ")[0];
-      const templateId = s.instanceEvent.recurringParentId ?? s.instanceEvent.id;
-      return cloneDisplayEvents(
-        visibleEventsAfterRecurringDeleteScope(storeEvents, templateId, instanceDate, scope),
-      );
-    }
-    return cloneDisplayEvents(storeEvents.filter((event) => event.id !== id));
   }
 
   const calendarIdentityById = $derived.by(() => {
@@ -450,8 +467,14 @@
   // as a strong confirmation step.
   const deleteWouldStopSession = $derived.by(() => {
     if (session.state.mode !== "edit") return false;
-    const scopeArg = isRecurring(session.state.instanceEvent) ? session.scope : undefined;
-    return wouldDeleteActiveSession(scopeArg);
+    try {
+      return buildDeleteArchivePlanForEvent(
+        session.state.instanceEvent.id,
+        isRecurring(session.state.instanceEvent) ? session.scope : undefined,
+      ).requiresActiveStop;
+    } catch {
+      return false;
+    }
   });
 
   // Past pomodoro events are read-only (completed work is sacred)
@@ -574,67 +597,25 @@
     return !!event.recurringParentId || !!event.recurrence;
   }
 
-  function activePomodoroDate(activeId: string): string | undefined {
-    const [, syntheticDate] = activeId.split("::");
-    if (syntheticDate) return syntheticDate;
-    return pomodoro.segments.find((segment) => segment.status === "active")?.eventDate;
-  }
-
-  function eventMatchesActivePomodoro(event: CalendarEvent, activeId: string): boolean {
-    if (event.id === activeId) return true;
-
-    const eventRoot = (event.recurringParentId ?? event.id).split("::")[0];
-    const activeRoot = activeId.split("::")[0];
-    if (eventRoot !== activeRoot) return false;
-
-    const activeDate = activePomodoroDate(activeId);
-    if (!activeDate) return true;
-    return event.start.split(" ")[0] === activeDate;
-  }
-
-  /** Would this delete stop the active pomodoro session? */
-  function wouldDeleteActiveSession(scope?: RecurringScope): boolean {
-    if (!pomodoro.activeBlockId || session.state.mode !== "edit") return false;
-    const activeId = pomodoro.activeBlockId;
-    const event = session.state.instanceEvent;
-
-    // Non-recurring or "this" delete of the active block
-    if (!scope || scope === "this") return eventMatchesActivePomodoro(event, activeId);
-
-    // "Following" delete: stops if active block is at or after the split point
-    if (scope === "following") {
-      const activeRoot = activeId.includes("::") ? activeId.split("::")[0] : activeId;
-      const inst = session.state.instanceEvent;
-      const targetRoot = (inst.recurringParentId ?? inst.id).split("::")[0];
-      if (activeRoot !== targetRoot) return false;
-      const instanceDate = inst.start.split(" ")[0];
-      const activeDate = activePomodoroDate(activeId) ?? formatDatePart(new Date());
-      return instanceDate <= activeDate;
-    }
-
-    const activeRoot = activeId.split("::")[0];
-    const targetRoot = (event.recurringParentId ?? event.id).split("::")[0];
-    return activeRoot === targetRoot;
-  }
-
   /** Would this save displace the active block out of the current time window? */
   function wouldSaveStopSession(data: { start: string; end: string }, scope?: RecurringScope): boolean {
     if (!pomodoro.activeBlockId || session.state.mode !== "edit") return false;
-    // "Following" splits from next day, preserving the active block
-    if (scope === "following") return false;
 
     const s = session.state;
     const activeId = pomodoro.activeBlockId;
 
-    // "All events" scope: check if the new time window still covers "now" on today
-    if (scope === "all") {
+    // Recurring scopes can still affect the active occurrence. If the new
+    // projected window no longer contains now, the active session must stop.
+    if (scope === "all" || scope === "following") {
       const templateId = (s.instanceEvent.recurringParentId ?? s.instanceEvent.id).split("::")[0];
       const activeRoot = activeId.includes("::") ? activeId.split("::")[0] : activeId;
       if (activeRoot !== templateId) return false;
 
       const todayStr = formatDatePart(new Date());
-      const activeDate = activeId.includes("::") ? activeId.split("::")[1] : null;
+      const selectedDate = s.instanceEvent.start.split(" ")[0];
+      const activeDate = activePomodoroDate(activeId);
       if (activeDate !== todayStr) return false;
+      if (scope === "following" && activeDate < selectedDate) return false;
 
       // Compute the new time window projected onto today
       const newStartTime = data.start.split(" ")[1];
@@ -663,7 +644,6 @@
   // Flag: the user confirmed the session stop but the actual stopSession() call
   // must happen after the save because hybrid logic needs activeBlockId intact.
   let sessionStopPending = false;
-  let deleteStopPending = false;
 
   // View history for Alt+Left/Right navigation (capped at 50)
   const VIEW_HISTORY_LIMIT = 50;
@@ -777,7 +757,8 @@
       id: e.id, title: e.title, start: e.start, end: e.end,
       timezone: e.timezone, calendarId: e.calendarId, color: e.color,
       description: e.description, recurrence: e.recurrence,
-      notifications: e.notifications, pomodoroConfig: e.pomodoroConfig,
+      notifications: e.notifications, exceptions: e.exceptions,
+      pomodoroConfig: e.pomodoroConfig,
       allDay: e.allDay, location: e.location, url: e.url,
       meetingEnabled: e.meetingEnabled,
       transparency: e.transparency, status: e.status,
@@ -791,31 +772,37 @@
     });
   }
 
-  function restoreForDeleteOutcome(
-    outcome: CalendarDeleteOutcome,
-    mutationEvent: CalendarEvent,
-    snapshot?: CalendarEvent,
-  ): (() => Promise<void>) | undefined {
-    if (outcome === "archive") {
-      const restoreTarget = mutationEvent.id.includes("::") ? mutationEvent : (snapshot ?? mutationEvent);
-      return () => calendarStore.restoreArchivedBlock(restoreTarget);
-    }
-    if (!snapshot) return undefined;
-    if (mutationEvent.id.includes("::")) return () => calendarStore.updateBlock(snapshot);
-    return () => restoreDeletedBlock(snapshot);
+  async function hydrateRestoreSnapshot(
+    snapshot: CalendarDeleteArchiveRestoreSnapshot,
+  ): Promise<CalendarDeleteArchiveRestoreSnapshot> {
+    const full = await calendarStore.loadFullEvent(snapshot.event.id);
+    if (!full) return snapshot;
+    return {
+      ...snapshot,
+      event: {
+        ...full,
+        exceptions: [...(snapshot.event.exceptions ?? full.exceptions ?? [])],
+      },
+    };
   }
 
-  function combineRestoreCallbacks(
-    ...callbacks: Array<(() => Promise<void>) | undefined>
-  ): (() => Promise<void>) | undefined {
-    const restoreCallbacks = callbacks.filter(
-      (callback): callback is () => Promise<void> => !!callback,
-    );
-    if (restoreCallbacks.length === 0) return undefined;
+  async function buildRestoreCallbackForDeletePlan(
+    plan: CalendarDeleteArchivePlan,
+  ): Promise<(() => Promise<void>) | undefined> {
+    const snapshots = await Promise.all(plan.restore.snapshots.map(hydrateRestoreSnapshot));
+    if (plan.restore.archivedEvents.length === 0 && snapshots.length === 0) return undefined;
     return async () => {
-      for (const callback of restoreCallbacks) {
-        await callback();
+      for (const event of plan.restore.archivedEvents) {
+        await calendarStore.restoreArchivedBlock(event);
       }
+      for (const snapshot of snapshots) {
+        if (snapshot.restoreMode === "insert") {
+          await restoreDeletedBlock(snapshot.event);
+        } else {
+          await calendarStore.updateBlock(snapshot.event);
+        }
+      }
+      await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
     };
   }
 
@@ -1485,6 +1472,7 @@
             changes: data,
             scope,
             activeBlockId: pomodoro.activeBlockId ?? undefined,
+            activeDate: activeDateForEditSession(s.templateId),
             today: formatDatePart(now),
             currentTime: formatCalendarDate(now).split(" ")[1],
           });
@@ -1521,21 +1509,10 @@
     }
   }
 
-  type CalendarDeleteOutcome = "delete" | "archive";
-
-  function eventDeleteOutcomeLabel(outcome: CalendarDeleteOutcome): string {
-    return outcome === "archive" ? "Event archived" : "Event deleted";
-  }
-
-  function isActivePomodoroMutationError(message: string): boolean {
-    return message.includes("active pomodoro run");
-  }
-
-  function suppressActivePomodoroRestart(event: CalendarEvent): void {
-    const activeId = pomodoro.activeBlockId;
-    if (activeId && eventMatchesActivePomodoro(event, activeId)) {
-      pomodoro.dismissedBlockId = event.id;
-    }
+  function eventDeleteOutcomeLabel(outcome: CalendarDeleteArchiveOutcome): string {
+    if (outcome === "archive") return "Event archived";
+    if (outcome === "mixed") return "Events deleted and archived";
+    return "Event deleted";
   }
 
   async function syncSavedActivePomodoro(event: CalendarEvent): Promise<void> {
@@ -1556,46 +1533,38 @@
     );
   }
 
-  async function deleteOrArchiveEvent(
-    event: CalendarEvent,
-    retryAfterStop = true,
-  ): Promise<CalendarDeleteOutcome> {
-    const action = deleteActionForCalendarEvent(event);
+  async function executeDeleteArchivePlan(
+    plan: CalendarDeleteArchivePlan,
+    stopActiveSession: boolean,
+  ): Promise<void> {
+    const activeBlockId = pomodoro.activeBlockId;
+    suppressEditPreview = true;
+    saveDisplayFreeze = cloneDisplayEvents(plan.finalVisibleEvents);
+
     try {
-      if (action === "archive") {
-        await calendarStore.archiveBlock(event);
-        return "archive";
-      } else {
-        await calendarStore.deleteBlock(event);
-        return "delete";
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (action === "delete" && message.includes("archive it instead")) {
-        await calendarStore.archiveBlock(event);
-        return "archive";
-      }
-      if (retryAfterStop && isActivePomodoroMutationError(message)) {
-        suppressActivePomodoroRestart(event);
+      const restoreDeleted = await buildRestoreCallbackForDeletePlan(plan);
+      if (stopActiveSession && activeBlockId) {
+        pomodoro.dismissedBlockId = activeBlockId;
         await pomodoro.stopSession();
-        return deleteOrArchiveEvent(event, false);
       }
-      throw error;
+      await calendarStore.applyDeleteArchivePlan(plan.operations);
+      await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
+      closeSession();
+      if (restoreDeleted) showDeleteUndoToast(eventDeleteOutcomeLabel(plan.outcome), restoreDeleted);
+    } finally {
+      suppressEditPreview = false;
+      saveDisplayFreeze = null;
     }
   }
 
   async function handleDelete(id: string, scope?: RecurringScope) {
-    const deletesActiveSession = wouldDeleteActiveSession(scope);
-    if (deletesActiveSession && !deleteStopPending) {
-      const action = session.state.mode === "edit"
-        ? deleteActionForCalendarEvent(session.state.instanceEvent)
-        : "delete";
-      const actionVerb = action === "archive" ? "archive" : "delete";
+    const plan = buildDeleteArchivePlanForEvent(id, scope);
+    if (plan.requiresActiveStop) {
+      const actionVerb = plan.outcome === "archive" ? "archive" : "delete";
       requestConfirm(
-        `The current focus session will stop before this event is ${action === "archive" ? "archived" : "deleted"}.`,
+        `The current focus session will stop before this event is ${actionVerb === "archive" ? "archived" : "deleted"}.`,
         async () => {
-          deleteStopPending = true;
-          await handleDelete(id, scope);
+          await executeDeleteArchivePlan(plan, true);
         },
         {
           title: `Stop and ${actionVerb} event?`,
@@ -1608,153 +1577,7 @@
       return;
     }
 
-    const activeBlockIdForDelete = pomodoro.activeBlockId;
-    const s = session.state;
-
-    if (deletesActiveSession && deleteStopPending) {
-      deleteStopPending = false;
-      if (s.mode === "edit") suppressActivePomodoroRestart(s.instanceEvent);
-      await pomodoro.stopSession();
-    }
-
-    suppressEditPreview = true;
-    saveDisplayFreeze = buildDeleteDisplayFreeze(id, scope);
-
-    try {
-    let restoreDeleted: (() => Promise<void>) | undefined;
-    let deleteOutcome: CalendarDeleteOutcome = "delete";
-
-    const archiveProtectedOccurrencesThenCapSeries = async (
-      rangeStartDate: string,
-      capBeforeDate: string,
-      parentId: string,
-      template: CalendarEvent,
-      snapshot: CalendarEvent,
-    ) => {
-      const archiveEndDate = formatDatePart(new Date());
-      const archivedOccurrences: CalendarEvent[] = [];
-      for (const occurrence of protectedRecurringOccurrencesForArchive(
-        snapshot,
-        rangeStartDate,
-        archiveEndDate,
-      )) {
-        await calendarStore.archiveBlock(occurrence);
-        archivedOccurrences.push(occurrence);
-      }
-      const dayBefore = shiftDateStr(capBeforeDate, -1);
-      await calendarStore.setRepeatUntil(parentId, dayBefore);
-      deleteOutcome = archivedOccurrences.length > 0 ? "archive" : "delete";
-      const restoreOccurrences = archivedOccurrences.length > 0
-        ? async () => {
-            for (const occurrence of archivedOccurrences) {
-              await calendarStore.restoreArchivedBlock(occurrence);
-            }
-          }
-        : undefined;
-      restoreDeleted = combineRestoreCallbacks(
-        restoreOccurrences,
-        () => calendarStore.updateBlock(snapshot),
-      );
-    };
-
-    if (scope && s.mode === "edit") {
-      const instanceEvent = s.instanceEvent;
-      const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
-      if (scope === "this") {
-        const template = calendarStore.getTemplate(instanceEvent);
-        const full = await calendarStore.loadFullEvent(parentId);
-        const snapshot = full ?? (template ? { ...template } : undefined);
-        const mutationEvent = concreteRecurringOccurrenceForMutation(instanceEvent, template);
-        deleteOutcome = await deleteOrArchiveEvent(mutationEvent);
-        restoreDeleted = restoreForDeleteOutcome(deleteOutcome, mutationEvent, snapshot);
-      } else if (scope === "following") {
-        const template = calendarStore.getTemplate(instanceEvent);
-        const full = await calendarStore.loadFullEvent(parentId);
-        const snapshot = full ?? (template ? { ...template } : undefined);
-        const instanceDate = instanceEvent.start.split(" ")[0];
-        if (template && snapshot) {
-          await archiveProtectedOccurrencesThenCapSeries(
-            instanceDate,
-            instanceDate,
-            parentId,
-            template,
-            snapshot,
-          );
-        } else {
-          const dayBefore = shiftDateStr(instanceDate, -1);
-          await calendarStore.setRepeatUntil(parentId, dayBefore);
-          if (snapshot) restoreDeleted = () => calendarStore.updateBlock(snapshot);
-        }
-      } else {
-        const template = calendarStore.getTemplate(instanceEvent);
-        const templateStartDate = template?.start.split(" ")[0];
-        const currentDate = formatDatePart(new Date());
-        const templateIsFutureOnly = !!template
-          && deleteActionForCalendarEvent(template) === "delete"
-          && !!templateStartDate
-          && templateStartDate >= currentDate;
-
-        if (template && templateStartDate && !templateIsFutureOnly) {
-          const full = await calendarStore.loadFullEvent(parentId);
-          const snapshot = full ?? { ...template };
-          await archiveProtectedOccurrencesThenCapSeries(
-            templateStartDate,
-            templateStartDate,
-            parentId,
-            template,
-            snapshot,
-          );
-        } else {
-          let splitDate = formatDatePart(new Date());
-          if (template && activeBlockIdForDelete) {
-            const parts = activeBlockIdForDelete.split("::");
-            if (parts[0] === template.id && parts[1] === splitDate) {
-              splitDate = shiftDateStr(splitDate, 1);
-            }
-          }
-
-          if (templateStartDate && templateStartDate < splitDate) {
-            const full = await calendarStore.loadFullEvent(parentId);
-            const snapshot = full ?? (template ? { ...template } : undefined);
-            const dayBefore = shiftDateStr(splitDate, -1);
-            await calendarStore.setRepeatUntil(parentId, dayBefore);
-            if (snapshot) {
-              restoreDeleted = () => calendarStore.updateBlock(snapshot);
-            }
-          } else {
-            if (template) {
-              const full = await calendarStore.loadFullEvent(template.id);
-              const snapshot = full ?? { ...template };
-              deleteOutcome = await deleteOrArchiveEvent(template);
-              restoreDeleted = restoreForDeleteOutcome(deleteOutcome, template, snapshot);
-            } else {
-              await calendarStore.deleteBlock(parentId);
-            }
-          }
-        }
-      }
-    } else {
-      const event = calendarStore.getTemplate({ id } as CalendarEvent) ?? visibleEvents.find((e) => e.id === id);
-      const full = event ? await calendarStore.loadFullEvent(event.id) : undefined;
-      if (event) {
-        deleteOutcome = await deleteOrArchiveEvent(event);
-      } else {
-        await calendarStore.deleteBlock(id);
-      }
-      const snapshot = full ?? (event ? { ...event } : undefined);
-      if (event) {
-        restoreDeleted = restoreForDeleteOutcome(deleteOutcome, event, snapshot);
-      } else if (snapshot) {
-        restoreDeleted = () => restoreDeletedBlock(snapshot);
-      }
-    }
-
-    closeSession();
-    if (restoreDeleted) showDeleteUndoToast(eventDeleteOutcomeLabel(deleteOutcome), restoreDeleted);
-    } finally {
-      suppressEditPreview = false;
-      saveDisplayFreeze = null;
-    }
+    await executeDeleteArchivePlan(plan, false);
   }
 
   function handleDayClickFromMonth(date: Date) {

@@ -10,7 +10,7 @@
     getEventColor,
     formatTimeRange,
   } from "./utils";
-  import { computeDayTimelineBands } from "$lib/utils/pomodoro-segments";
+  import { computeDayTimelineBands, isLatestSegmentFetchResponse } from "$lib/utils/pomodoro-segments";
   import { PENDING_CREATE_ID } from "./display-events";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { dbUrl } from "$lib/api/db";
@@ -228,6 +228,7 @@
     const fetchKey = `${segVer}|${eventIds.join(",")}`;
     if (fetchKey === lastFetchKey) return;
     lastFetchKey = fetchKey;
+    const requestFetchKey = fetchKey;
     const tStart = performance.now();
     perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
     const visibleIds = new Set(eventIds);
@@ -235,6 +236,7 @@
       dbUrl: dbUrl(),
       eventIds: queryEventIds,
     }).then((rows) => {
+      if (!isLatestSegmentFetchResponse(requestFetchKey, lastFetchKey)) return;
       const map = new Map<string, PersistedSegment[]>();
       for (const r of rows) {
         const virtualId = `${r.event_id}::${r.event_date}`;

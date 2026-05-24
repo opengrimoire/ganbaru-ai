@@ -268,6 +268,184 @@ describe("executeRecurrenceCommitPlan", () => {
     ]);
   });
 
+  it("executes all active selected resize by updating the active chain", async () => {
+    const template = makeTemplate({
+      start: "2027-06-20 09:00",
+      end: "2027-06-20 09:30",
+    });
+    const store = new FakeCalendarStore(template);
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: template,
+      changes: { end: "2027-06-20 10:15" },
+      scope: "all",
+      activeBlockId: template.id,
+      today: "2027-06-20",
+      currentTime: "09:15",
+    });
+
+    const pomodoro = await execute(plan, store);
+
+    expect(store.calls.map((call) => call.type)).toEqual([
+      "beginBatch",
+      "protectHistoricalSegments",
+      "updateBlock",
+      "endBatch",
+      "refreshWindow",
+    ]);
+    expect(store.calls[1]).toEqual({
+      type: "protectHistoricalSegments",
+      detail: { templateId: template.id, cutoffDate: "2027-06-20", excludeDate: "2027-06-20" },
+    });
+    expect(store.calls[2]).toMatchObject({
+      type: "updateBlock",
+      detail: {
+        id: template.id,
+        end: "2027-06-20 10:15",
+      },
+    });
+    expect(pomodoro.transfers).toEqual([{ id: template.id, end: "2027-06-20 10:15" }]);
+  });
+
+  it("executes all active selected move outside current time by cutting active", async () => {
+    const template = makeTemplate({
+      start: "2027-06-20 09:00",
+      end: "2027-06-20 09:30",
+    });
+    const store = new FakeCalendarStore(template);
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: template,
+      changes: { start: "2027-06-20 11:00", end: "2027-06-20 12:00" },
+      scope: "all",
+      activeBlockId: template.id,
+      today: "2027-06-20",
+      currentTime: "09:15",
+    });
+
+    const pomodoro = await execute(plan, store);
+
+    expect(store.calls.map((call) => call.type)).toEqual([
+      "beginBatch",
+      "protectHistoricalSegments",
+      "detachInstance",
+      "updateBlock",
+      "splitSeries",
+      "endBatch",
+      "refreshWindow",
+    ]);
+    expect(store.calls[1]).toEqual({
+      type: "protectHistoricalSegments",
+      detail: { templateId: template.id, cutoffDate: "2027-06-21", excludeDate: "2027-06-20" },
+    });
+    expect(store.calls[3]).toMatchObject({
+      type: "updateBlock",
+      detail: { id: "detached-1", end: "2027-06-20 09:15", recurrence: undefined },
+    });
+    expect(store.calls[4]).toMatchObject({
+      type: "splitSeries",
+      detail: {
+        instanceId: `${template.id}::2027-06-21`,
+        changes: { start: "2027-06-21 11:00", end: "2027-06-21 12:00" },
+      },
+    });
+    expect(pomodoro.transfers).toEqual([{ id: "detached-1", end: "2027-06-20 09:15" }]);
+  });
+
+  it("executes all future edit by continuing the edited chain from protected active", async () => {
+    const template = makeTemplate({
+      start: "2026-05-18 20:20",
+      end: "2026-05-18 23:20",
+    });
+    const selected = makeInstance(template, "2026-05-24");
+    const store = new FakeCalendarStore(template);
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: selected,
+      changes: { title: "Changed" },
+      scope: "all",
+      activeBlockId: `${template.id}::2026-05-23`,
+      today: "2026-05-23",
+      currentTime: "21:00",
+    });
+
+    const pomodoro = await execute(plan, store);
+
+    expect(store.calls.map((call) => call.type)).toEqual([
+      "beginBatch",
+      "protectHistoricalSegments",
+      "splitSeries",
+      "endBatch",
+      "refreshWindow",
+    ]);
+    expect(store.calls[1]).toEqual({
+      type: "protectHistoricalSegments",
+      detail: { templateId: template.id, cutoffDate: "2026-05-23", excludeDate: undefined },
+    });
+    expect(store.calls[2]).toMatchObject({
+      type: "splitSeries",
+      detail: {
+        instanceId: `${template.id}::2026-05-23`,
+        changes: { title: "Changed" },
+      },
+    });
+    expect(pomodoro.transfers).toEqual([
+      { id: "split-1", end: "2026-05-23 23:20" },
+    ]);
+  });
+
+  it("executes all future move outside protected active by cutting active", async () => {
+    const template = makeTemplate({
+      start: "2026-05-18 20:20",
+      end: "2026-05-18 23:20",
+    });
+    const selected = makeInstance(template, "2026-05-24");
+    const store = new FakeCalendarStore(template);
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: selected,
+      changes: { start: "2026-05-24 10:00", end: "2026-05-24 11:00" },
+      scope: "all",
+      activeBlockId: `${template.id}::2026-05-23`,
+      today: "2026-05-23",
+      currentTime: "21:00",
+    });
+
+    const pomodoro = await execute(plan, store);
+
+    expect(store.calls.map((call) => call.type)).toEqual([
+      "beginBatch",
+      "protectHistoricalSegments",
+      "detachInstance",
+      "updateBlock",
+      "splitSeries",
+      "endBatch",
+      "refreshWindow",
+    ]);
+    expect(store.calls[1]).toEqual({
+      type: "protectHistoricalSegments",
+      detail: { templateId: template.id, cutoffDate: "2026-05-24", excludeDate: "2026-05-23" },
+    });
+    expect(store.calls[3]).toMatchObject({
+      type: "updateBlock",
+      detail: { id: "detached-1", end: "2026-05-23 21:00", recurrence: undefined },
+    });
+    expect(store.calls[4]).toMatchObject({
+      type: "splitSeries",
+      detail: {
+        instanceId: `${template.id}::2026-05-24`,
+        changes: { start: "2026-05-24 10:00", end: "2026-05-24 11:00" },
+      },
+    });
+    expect(pomodoro.transfers).toEqual([
+      { id: "detached-1", end: "2026-05-23 21:00" },
+    ]);
+  });
+
   it("executes future-only all clear as a template collapse", async () => {
     const template = makeTemplate();
     const inst20 = makeInstance(template, "2027-06-20");

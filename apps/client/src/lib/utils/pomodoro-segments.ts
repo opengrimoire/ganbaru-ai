@@ -173,6 +173,13 @@ export interface ActivePomodoroState {
   breakOvertimeSeconds: number;
 }
 
+export function isLatestSegmentFetchResponse(
+  responseKey: string,
+  currentKey: string,
+): boolean {
+  return responseKey === currentKey;
+}
+
 /**
  * Compute a unified timeline of break and focus-fill bands for an entire day column.
  *

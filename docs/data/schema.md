@@ -155,6 +155,8 @@ Archive child data stays normalized, not JSON. Snapshot tables exist for pomodor
 
 The calendar UI does not query archive tables for normal rendering. Analytics can join retained sessions through `pomodoro_runs.original_event_id`.
 
+Delete/archive requests are planned before they reach the backend. The plan can mix hard deletes, archive snapshots, and recurrence caps, then `calendar_apply_delete_archive_plan` applies the operations in one SQLite transaction. Existing single-event delete, archive, and restore commands remain available for compatibility.
+
 ## Pomodoro
 
 The pomodoro tracking system uses normalized config rows plus four history tables: runs, segments, pauses, and run events. Together they record every session from start to finish with enough resolution for real-time rendering, crash recovery, and long-term analytics. There is no `pomodoro_sessions` summary table. Session totals are derived from the rows below.
@@ -294,6 +296,7 @@ After any structural operation on a recurring event, runs and segments must poin
 | Archive synthetic occurrence | Writes `calendar_events_archive.id = templateId::date`, adds an EXDATE, and sets matching run and segment `event_id` values to null while preserving `original_event_id`. |
 | Delete template (future-only, no tracking) | Hard deletes the live template and children. No run or segment rows should exist. |
 | Archive template | `event_id` becomes null on matching runs and segments. `original_event_id` preserves the exact identity. |
+| Delete or archive recurring scope | The frontend sends one semantic plan. The backend applies every delete, archive, and template cap in one transaction. A later validation failure rolls back earlier operations. |
 | Add recurrence to existing event | Existing runs keep the base UUID in both live and original references. Future instance runs use the template UUID for `event_id` and `UUID::date` for `original_event_id`. |
 | Remove recurrence (scope "all") | Protected history remains resolvable through a capped historical template, archive rows, or detached standalones. The selected mutable occurrence becomes the non-recurring survivor. |
 

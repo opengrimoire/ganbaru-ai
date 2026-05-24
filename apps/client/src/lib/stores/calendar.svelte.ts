@@ -7,6 +7,9 @@ import type {
   EventOrganizer, EventStatus, EventTransparency, EventVisibility, AttendeeStatus,
   GeoCoordinates, GuestPermissions, IcalendarPreservationStatus, PomodoroConfig, RecurrenceConfig,
 } from "$lib/components/calendar/types";
+import type {
+  CalendarDeleteArchiveOperation,
+} from "$lib/components/calendar/delete-archive-plan";
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
 import {
@@ -971,6 +974,7 @@ export function getCalendar() {
       description?: string;
       recurrence?: RecurrenceConfig;
       notifications?: number[];
+      exceptions?: string[];
       pomodoroConfig?: PomodoroConfig;
       allDay?: boolean;
       location?: string;
@@ -1009,6 +1013,8 @@ export function getCalendar() {
         ? opts.recurrence.end.date : null;
       const notifJson = opts.notifications && opts.notifications.length > 0
         ? JSON.stringify(opts.notifications) : null;
+      const exceptionsJson = opts.exceptions && opts.exceptions.length > 0
+        ? JSON.stringify(opts.exceptions) : null;
       await invoke("calendar_add_event", {
         dbUrl: dbUrl(),
         event: {
@@ -1022,6 +1028,7 @@ export function getCalendar() {
           description,
           rrule,
           notifications: notifJson,
+          exceptions: exceptionsJson,
           repeatUntil,
           allDay: opts.allDay ?? false,
           location: opts.location ?? "",
@@ -1062,6 +1069,7 @@ export function getCalendar() {
         timezone, calendarId,
         color: opts.color,
         recurrence: opts.recurrence, notifications: opts.notifications,
+        exceptions: opts.exceptions,
         pomodoroConfig: opts.pomodoroConfig,
         meetingEnabled,
         allDay: opts.allDay, location: opts.location, url: opts.url,
@@ -1352,6 +1360,16 @@ export function getCalendar() {
         totalEventCount = Math.max(0, totalEventCount - 1);
       }
       invalidate();
+      publishCalendarWindowSync();
+    },
+
+    async applyDeleteArchivePlan(operations: CalendarDeleteArchiveOperation[]) {
+      await invoke("calendar_apply_delete_archive_plan", {
+        dbUrl: dbUrl(),
+        operations,
+      });
+      invalidate(false);
+      panelEventCache.clear();
       publishCalendarWindowSync();
     },
 

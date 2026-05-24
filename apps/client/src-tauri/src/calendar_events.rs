@@ -17,6 +17,23 @@ pub struct CalendarEventMutationTarget {
     occurrence_end: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+pub enum CalendarDeleteArchiveOperation {
+    #[serde(rename = "delete_event")]
+    DeleteEvent { target: CalendarEventMutationTarget },
+    #[serde(rename = "archive_event")]
+    ArchiveEvent { target: CalendarEventMutationTarget },
+    #[serde(rename = "cap_series")]
+    CapSeries {
+        #[serde(rename = "eventId")]
+        event_id: String,
+        #[serde(rename = "repeatUntil")]
+        repeat_until: String,
+        rrule: String,
+    },
+}
+
 struct CalendarEventMutationContext {
     id: String,
     source_event_id: String,
@@ -39,6 +56,7 @@ pub struct CalendarEventCreate {
     description: String,
     rrule: Option<String>,
     notifications: Option<String>,
+    exceptions: Option<String>,
     repeat_until: Option<String>,
     all_day: bool,
     location: String,
@@ -267,6 +285,14 @@ pub async fn calendar_add_event<R: Runtime>(
     replace_string_list(
         &mut tx,
         &event.id,
+        "calendar_event_exdates",
+        "occurrence_date",
+        parse_string_list(&event.exceptions, "exceptions")?,
+    )
+    .await?;
+    replace_string_list(
+        &mut tx,
+        &event.id,
         "calendar_event_rdates",
         "occurrence_start",
         parse_string_list(&event.rdate, "rdate")?,
@@ -419,6 +445,23 @@ pub async fn calendar_archive_event<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn calendar_apply_delete_archive_plan<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    operations: Vec<CalendarDeleteArchiveOperation>,
+) -> Result<(), String> {
+    for operation in &operations {
+        validate_delete_archive_operation(operation)?;
+    }
+
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    apply_delete_archive_operations_tx(&mut tx, operations).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn calendar_restore_archived_event<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
@@ -491,6 +534,33 @@ async fn archive_calendar_event_tx(
     let context = load_mutation_context(tx, target).await?;
     ensure_no_open_runs_for_event(tx, &context).await?;
     archive_loaded_event(tx, &context, &now).await
+}
+
+async fn apply_delete_archive_operations_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    operations: Vec<CalendarDeleteArchiveOperation>,
+) -> Result<(), String> {
+    for operation in &operations {
+        validate_delete_archive_operation(operation)?;
+    }
+    for operation in operations {
+        match operation {
+            CalendarDeleteArchiveOperation::DeleteEvent { target } => {
+                delete_calendar_event_tx(tx, &target).await?;
+            }
+            CalendarDeleteArchiveOperation::ArchiveEvent { target } => {
+                archive_calendar_event_tx(tx, &target).await?;
+            }
+            CalendarDeleteArchiveOperation::CapSeries {
+                event_id,
+                repeat_until,
+                rrule,
+            } => {
+                cap_calendar_series_tx(tx, &event_id, &repeat_until, &rrule).await?;
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn restore_archived_calendar_event_tx(
@@ -954,11 +1024,11 @@ async fn load_mutation_context(
     let stored_end: String = row
         .try_get("end_time")
         .map_err(|e| format!("read event end_time: {e}"))?;
-    let occurrence_date = target
-        .occurrence_start
-        .as_deref()
-        .and_then(date_part)
-        .or_else(|| synthetic_date.map(str::to_string));
+    // Synthetic ids carry the local recurrence date. The occurrence start is
+    // UTC and can fall on a different calendar date near midnight.
+    let occurrence_date = synthetic_date
+        .map(str::to_string)
+        .or_else(|| target.occurrence_start.as_deref().and_then(date_part));
 
     Ok(CalendarEventMutationContext {
         id: target.id.clone(),
@@ -1457,6 +1527,49 @@ fn validate_mutation_target(target: &CalendarEventMutationTarget) -> Result<(), 
     }
     if let Some(value) = &target.occurrence_end {
         require_non_empty(value, "occurrence_end")?;
+    }
+    Ok(())
+}
+
+fn validate_delete_archive_operation(
+    operation: &CalendarDeleteArchiveOperation,
+) -> Result<(), String> {
+    match operation {
+        CalendarDeleteArchiveOperation::DeleteEvent { target }
+        | CalendarDeleteArchiveOperation::ArchiveEvent { target } => {
+            validate_mutation_target(target)
+        }
+        CalendarDeleteArchiveOperation::CapSeries {
+            event_id,
+            repeat_until,
+            rrule,
+        } => {
+            require_non_empty(event_id, "event_id")?;
+            require_non_empty(repeat_until, "repeat_until")?;
+            require_non_empty(rrule, "rrule")
+        }
+    }
+}
+
+async fn cap_calendar_series_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    repeat_until: &str,
+    rrule: &str,
+) -> Result<(), String> {
+    let now = current_utc_iso(tx).await?;
+    let result = sqlx::query(
+        "UPDATE calendar_events SET repeat_until = ?, rrule = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(repeat_until)
+    .bind(rrule)
+    .bind(&now)
+    .bind(event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("cap calendar series: {e}"))?;
+    if result.rows_affected() == 0 {
+        return Err(format!("calendar event '{event_id}' not found"));
     }
     Ok(())
 }
@@ -2354,6 +2467,7 @@ fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
     validate_priority(event.priority)?;
     validate_non_negative(event.sequence, "sequence")?;
     validate_json_option(&event.notifications, "notifications")?;
+    validate_json_option(&event.exceptions, "exceptions")?;
     validate_json_option(&event.categories, "categories")?;
     validate_json_option(&event.geo, "geo")?;
     validate_json_option(&event.rdate, "rdate")?;
@@ -2624,11 +2738,13 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_update_field, archive_calendar_event_tx, delete_calendar_event_tx,
-        filter_excluded_dates, insert_calendar_event_row, restore_archived_calendar_event_tx,
+        apply_delete_archive_operations_tx, apply_update_field, archive_calendar_event_tx,
+        cap_calendar_series_tx, delete_calendar_event_tx, filter_excluded_dates,
+        insert_calendar_event_row, restore_archived_calendar_event_tx,
         sanitize_stored_event_description, validate_color, validate_event_create,
         validate_non_negative, validate_positive, validate_priority, validate_update_field,
-        CalendarEventCreate, CalendarEventMutationTarget, CalendarEventUpdateField,
+        CalendarDeleteArchiveOperation, CalendarEventCreate, CalendarEventMutationTarget,
+        CalendarEventUpdateField,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -2643,6 +2759,7 @@ mod tests {
             description: String::new(),
             rrule: None,
             notifications: None,
+            exceptions: None,
             repeat_until: None,
             all_day: false,
             location: String::new(),
@@ -3075,6 +3192,353 @@ mod tests {
             .unwrap();
             assert_eq!(live_count, 1);
             assert_eq!(exdate_count, 1);
+        });
+    }
+
+    #[test]
+    fn synthetic_archive_uses_id_date_when_utc_start_is_next_day() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2099-05-09T02:00:00Z",
+                "2099-05-09T03:00:00Z",
+                Some("FREQ=DAILY"),
+            )
+            .await;
+
+            let target = CalendarEventMutationTarget {
+                id: "event-1::2099-05-10".to_string(),
+                occurrence_start: Some("2099-05-11T02:00:00Z".to_string()),
+                occurrence_end: Some("2099-05-11T03:00:00Z".to_string()),
+            };
+            let mut tx = pool.begin().await.unwrap();
+            archive_calendar_event_tx(&mut tx, &target).await.unwrap();
+            tx.commit().await.unwrap();
+
+            let local_date_exdates: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_event_exdates
+                 WHERE event_id = 'event-1' AND occurrence_date = '2099-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let utc_date_exdates: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_event_exdates
+                 WHERE event_id = 'event-1' AND occurrence_date = '2099-05-11'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(local_date_exdates, 1);
+            assert_eq!(utc_date_exdates, 0);
+
+            let mut tx = pool.begin().await.unwrap();
+            restore_archived_calendar_event_tx(&mut tx, &target)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let remaining_exdates: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_event_exdates WHERE event_id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(remaining_exdates, 0);
+        });
+    }
+
+    #[test]
+    fn batch_delete_archive_and_cap_executes_in_one_transaction() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "delete-me",
+                "2099-05-09T10:00:00Z",
+                "2099-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+            insert_test_event_at(
+                &pool,
+                "archive-me",
+                "2000-05-09T10:00:00Z",
+                "2000-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+            insert_test_event_at(
+                &pool,
+                "series-1",
+                "2099-05-09T10:00:00Z",
+                "2099-05-09T11:00:00Z",
+                Some("FREQ=DAILY"),
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            apply_delete_archive_operations_tx(
+                &mut tx,
+                vec![
+                    CalendarDeleteArchiveOperation::DeleteEvent {
+                        target: CalendarEventMutationTarget {
+                            id: "delete-me".to_string(),
+                            occurrence_start: None,
+                            occurrence_end: None,
+                        },
+                    },
+                    CalendarDeleteArchiveOperation::ArchiveEvent {
+                        target: CalendarEventMutationTarget {
+                            id: "archive-me".to_string(),
+                            occurrence_start: None,
+                            occurrence_end: None,
+                        },
+                    },
+                    CalendarDeleteArchiveOperation::CapSeries {
+                        event_id: "series-1".to_string(),
+                        repeat_until: "2099-05-08".to_string(),
+                        rrule: "FREQ=DAILY;UNTIL=20990508T235959Z".to_string(),
+                    },
+                ],
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let delete_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'delete-me'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let archived_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'archive-me'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let series: (Option<String>, Option<String>) = sqlx::query_as(
+                "SELECT repeat_until, rrule FROM calendar_events WHERE id = 'series-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(delete_count, 0);
+            assert_eq!(archived_count, 1);
+            assert_eq!(series.0, Some("2099-05-08".to_string()));
+            assert_eq!(
+                series.1,
+                Some("FREQ=DAILY;UNTIL=20990508T235959Z".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn batch_rolls_back_when_later_operation_fails() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "delete-me",
+                "2099-05-09T10:00:00Z",
+                "2099-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = apply_delete_archive_operations_tx(
+                &mut tx,
+                vec![
+                    CalendarDeleteArchiveOperation::DeleteEvent {
+                        target: CalendarEventMutationTarget {
+                            id: "delete-me".to_string(),
+                            occurrence_start: None,
+                            occurrence_end: None,
+                        },
+                    },
+                    CalendarDeleteArchiveOperation::CapSeries {
+                        event_id: "missing-series".to_string(),
+                        repeat_until: "2099-05-08".to_string(),
+                        rrule: "FREQ=DAILY;UNTIL=20990508T235959Z".to_string(),
+                    },
+                ],
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(err.contains("missing-series"));
+
+            let live_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events WHERE id = 'delete-me'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(live_count, 1);
+        });
+    }
+
+    #[test]
+    fn batch_hard_delete_rejects_protected_rows() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2000-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = apply_delete_archive_operations_tx(
+                &mut tx,
+                vec![CalendarDeleteArchiveOperation::DeleteEvent {
+                    target: CalendarEventMutationTarget {
+                        id: "event-1".to_string(),
+                        occurrence_start: None,
+                        occurrence_end: None,
+                    },
+                }],
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(err.contains("archive it instead"));
+        });
+    }
+
+    #[test]
+    fn batch_archive_rejects_active_pomodoro_rows() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(&pool, "event-1", "").await;
+            insert_test_open_pomodoro_run(&pool).await;
+            insert_test_active_pomodoro_segment(&pool).await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = apply_delete_archive_operations_tx(
+                &mut tx,
+                vec![CalendarDeleteArchiveOperation::ArchiveEvent {
+                    target: CalendarEventMutationTarget {
+                        id: "event-1".to_string(),
+                        occurrence_start: None,
+                        occurrence_end: None,
+                    },
+                }],
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(err.contains("active pomodoro run"));
+        });
+    }
+
+    #[test]
+    fn batch_synthetic_archive_preserves_original_event_id() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2000-05-09T11:00:00Z",
+                Some("FREQ=DAILY"),
+            )
+            .await;
+            insert_test_completed_pomodoro_history(
+                &pool,
+                "event-1",
+                "event-1::2000-05-10",
+                "2000-05-10",
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            apply_delete_archive_operations_tx(
+                &mut tx,
+                vec![CalendarDeleteArchiveOperation::ArchiveEvent {
+                    target: CalendarEventMutationTarget {
+                        id: "event-1::2000-05-10".to_string(),
+                        occurrence_start: Some("2000-05-10T10:00:00Z".to_string()),
+                        occurrence_end: Some("2000-05-10T11:00:00Z".to_string()),
+                    },
+                }],
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let archived_source: String = sqlx::query_scalar(
+                "SELECT source_event_id FROM calendar_events_archive WHERE id = 'event-1::2000-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let exdate_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM calendar_event_exdates
+                 WHERE event_id = 'event-1' AND occurrence_date = '2000-05-10'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let run: (Option<String>, String) = sqlx::query_as(
+                "SELECT event_id, original_event_id FROM pomodoro_runs WHERE id = 'run-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(archived_source, "event-1");
+            assert_eq!(exdate_count, 1);
+            assert_eq!(run.0, None);
+            assert_eq!(run.1, "event-1::2000-05-10");
+        });
+    }
+
+    #[test]
+    fn batch_cap_updates_repeat_rule_and_timestamp() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "series-1",
+                "2099-05-09T10:00:00Z",
+                "2099-05-09T11:00:00Z",
+                Some("FREQ=DAILY"),
+            )
+            .await;
+
+            let before: String =
+                sqlx::query_scalar("SELECT updated_at FROM calendar_events WHERE id = 'series-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+
+            let mut tx = pool.begin().await.unwrap();
+            cap_calendar_series_tx(
+                &mut tx,
+                "series-1",
+                "2099-05-08",
+                "FREQ=DAILY;UNTIL=20990508T235959Z",
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let row: (Option<String>, Option<String>, String) = sqlx::query_as(
+                "SELECT repeat_until, rrule, updated_at FROM calendar_events WHERE id = 'series-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(row.0, Some("2099-05-08".to_string()));
+            assert_eq!(row.1, Some("FREQ=DAILY;UNTIL=20990508T235959Z".to_string()));
+            assert_ne!(row.2, before);
         });
     }
 

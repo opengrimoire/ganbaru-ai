@@ -72,7 +72,7 @@ Runs and segments on past instances still reference the old template through the
 
 When to choose split: a permanent change that should apply going forward but not retroactively.
 
-For delete or archive with scope "following," protected occurrences from the selected occurrence through the captured edit time are archived as concrete occurrence snapshots first. The template is then capped before the selected occurrence, so unprotected future occurrences disappear instead of being archived.
+For delete or archive with scope "following," one semantic plan archives protected occurrences from the selected occurrence through the captured edit time, then caps the template before the selected occurrence so unprotected future occurrences disappear instead of being archived. The backend applies those archive and cap operations in one transaction.
 
 ### Template-wide edit ("edit all")
 
@@ -80,19 +80,19 @@ For a template-wide edit where repeat remains set, the system first finds the pr
 
 If no protected occurrence exists, the template can be updated directly. If protected occurrences exist, the preferred operation is to cap the old template at the last protected occurrence and create a new mutable template beginning at the first occurrence after that boundary. Detached standalones are reserved for occurrences that need their own event ID or cannot be represented safely by the capped historical template.
 
-**Example.** "Weekly review" recurs every Friday at 16:00. The user changes it to 15:00 with scope "all" after several Fridays have already ended. The old template is capped at the last protected Friday, preserving those 16:00 historical blocks. A new template starts at the first mutable Friday and expands at 15:00.
+**Example.** "Weekly review" recurs every Friday at 16:00. The user changes it to 15:00 with scope "all" after several Fridays have already started. The old template is capped at the last protected Friday, preserving those 16:00 historical blocks. A new template starts at the first mutable Friday and expands at 15:00.
 
 If repeat is cleared with scope "all," the mutable side collapses. The selected occurrence becomes the single non-recurring survivor for the mutable side, even when that occurrence is synthetic and not the original template date. Protected history remains visible through the capped old template or detached standalones. Future mutable occurrences other than the selected survivor stop expanding.
 
 When to choose all: a change that the user wants applied to the whole series from the selected edit perspective, while the app protects historical data automatically.
 
-For delete or archive with scope "all," a future-only untracked series can be hard deleted. Once any protected occurrence exists, protected occurrences from the template start through the captured edit time are archived as concrete occurrence snapshots, then the template is capped before its first occurrence so future occurrences disappear.
+For delete or archive with scope "all," a future-only untracked series can be hard deleted. Once any protected occurrence exists, one semantic plan archives protected occurrences from the template start through the captured edit time, then caps the template before its first occurrence so future occurrences disappear. The backend applies the archive and cap operations atomically.
 
 ## Recurring scope selector UX
 
 The scope picker appears when the event being edited was already part of a saved recurring series when the panel opened. It appears for both the template's first occurrence and synthetic occurrences. It does not appear merely because the user adds repeat to a saved non-recurring event during the edit.
 
-When only the scope changes and no event fields have changed, the preview is an affected-scope preview. It keeps the current window's occurrences in place and draws the preview contour on the occurrences that would be affected by `Only this`, `Following`, or `All`. Field-change previews use the same affected-set rule for the contour: protected past occurrences may keep their current geometry and content because history is immutable, but they still get the contour when the chosen scope will touch them. The commit path decides per occurrence whether the result is archive or hard delete. Delete and archive confirmation apply one final visible projection before sequential archive writes run, so affected visible occurrences disappear together rather than one archived occurrence at a time.
+When only the scope changes and no event fields have changed, the preview is an affected-scope preview. It keeps the current window's occurrences in place and draws the preview contour on the occurrences that would be affected by `Only this`, `Following`, or `All`. Field-change previews use the same affected-set rule for the contour: protected occurrences may keep their current geometry and content because history is immutable, but they still get the contour when the chosen scope will touch them. The delete/archive planner decides per occurrence whether the result is archive or hard delete. Delete and archive confirmation apply one final visible projection before the atomic backend batch runs, so affected visible occurrences disappear together rather than one archived occurrence at a time.
 
 Default selection:
 
@@ -118,13 +118,13 @@ A capped historical template is the preferred preservation mechanism when one ru
 
 4. **Changing the recurrence pattern so protected dates no longer match.** A capped historical template preserves the old pattern through the protected boundary. The new pattern starts at the first mutable occurrence.
 
-   **Example, pattern change.** "Exercise" recurs every weekday. The user changes it to every Monday with scope "all" after Friday's 08:00 occurrence has already ended. The historical template remains capped through Friday, so past Tuesday through Friday occurrences still exist even when they had no runs. The mutable template starts after the boundary and only expands Mondays.
+   **Example, pattern change.** "Exercise" recurs every weekday. The user changes it to every Monday with scope "all" after Friday's 08:00 occurrence has already started. The historical template remains capped through Friday, so past Tuesday through Friday occurrences still exist even when they had no runs. The mutable template starts after the boundary and only expands Mondays.
 
 5. **Removing recurrence entirely with scope "all."** Protected history remains visible through a capped historical template or detached standalones. The selected mutable occurrence becomes the single non-recurring survivor, even when that selected occurrence is synthetic and not the original template date. Other mutable occurrences stop expanding.
 
-   **Example.** "Daily focus" starts Monday 08:00 to 09:00 and repeats daily. On Friday at 21:00, the user selects Sunday's occurrence and removes recurrence with scope "all." Monday through Friday remain on the historical template because their end times are protected. Saturday is mutable and disappears. Sunday becomes the non-recurring survivor. Later daily instances stop expanding.
+   **Example.** "Daily focus" starts Monday 08:00 to 09:00 and repeats daily. On Friday at 21:00, the user selects Sunday's occurrence and removes recurrence with scope "all." Monday through Friday remain on the historical template because their start times are protected. Saturday is mutable and disappears. Sunday becomes the non-recurring survivor. Later daily instances stop expanding.
 
-For supported recurrence frequencies, this protection is exact for all affected protected occurrences from the template start through the captured edit time. It is not tied to the visible window, and it is based on each occurrence's end time, not only on the calendar date. Same-day occurrences that already ended are protected; same-day occurrences that have not ended remain mutable. If an imported malformed rule cannot be enumerated safely, the import or edit path must stop with a diagnostic or apply an explicit documented safety policy before changing the template; it must not silently rewrite history.
+For supported recurrence frequencies, this protection is exact for all affected protected occurrences from the template start through the captured edit time. It is not tied to the visible window, and it is based on each occurrence's start time, not only on the calendar date. Same-day occurrences that already started are protected; same-day occurrences that have not started and have no tracking remain mutable. If an imported malformed rule cannot be enumerated safely, the import or edit path must stop with a diagnostic or apply an explicit documented safety policy before changing the template; it must not silently rewrite history.
 
 ## Active session continuity during recurrence edits
 
@@ -155,4 +155,4 @@ The protected-history behavior described above resolves this naturally: protecte
 
 This is not an additional rule. It is a natural consequence of separating protected history from mutable future instances before applying template-wide edits.
 
-**Example.** "Morning meeting" recurs daily at 09:00-09:30. The user changes it to 14:00-14:30 with scope "all" after today's meeting has ended. The old template is capped at today's occurrence, preserving protected 09:00-09:30 blocks. The mutable template starts at the first later occurrence and expands at 14:00-14:30. Historical runs align with their original event blocks.
+**Example.** "Morning meeting" recurs daily at 09:00-09:30. The user changes it to 14:00-14:30 with scope "all" after today's meeting has started. The old template is capped at today's occurrence, preserving protected 09:00-09:30 blocks. The mutable template starts at the first later occurrence and expands at 14:00-14:30. Historical runs align with their original event blocks.

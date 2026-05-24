@@ -269,16 +269,63 @@ function calendarDateTime(date: string, time: string): string {
   return `${date} ${time.slice(0, 5)}`;
 }
 
-function eventEndDateTime(event: CalendarEvent): string {
-  return `${datePart(event.end)} ${timePart(event.end, "23:59")}`;
+function eventStartDateTime(event: CalendarEvent): string {
+  return `${datePart(event.start)} ${timePart(event.start)}`;
 }
 
 function occurrenceIsProtected(event: CalendarEvent, currentDateTime: string): boolean {
-  return eventEndDateTime(event) <= currentDateTime;
+  return eventStartDateTime(event) <= currentDateTime;
+}
+
+function occurrenceWindowOnDate(
+  source: CalendarEvent,
+  changes: Partial<CalendarEvent>,
+  date: string,
+): { start: string; end: string } {
+  const startTime = changes.start
+    ? String(changes.start).split(" ")[1]
+    : source.start.split(" ")[1];
+  const endTime = changes.end
+    ? String(changes.end).split(" ")[1]
+    : source.end.split(" ")[1];
+  const sourceSpan = dateDiffDays(datePart(source.start), datePart(source.end));
+  const changeSpan = changes.start && changes.end
+    ? dateDiffDays(String(changes.start).split(" ")[0], String(changes.end).split(" ")[0])
+    : sourceSpan;
+  const endDate = changeSpan !== 0 ? shiftDateStr(date, changeSpan) : date;
+  return {
+    start: calendarDateTime(date, startTime),
+    end: calendarDateTime(endDate, endTime),
+  };
+}
+
+function occurrenceWindowContains(
+  source: CalendarEvent,
+  changes: Partial<CalendarEvent>,
+  date: string,
+  value: string,
+): boolean {
+  const window = occurrenceWindowOnDate(source, changes, date);
+  return value >= window.start && value < window.end;
 }
 
 function boundaryWindowEnd(currentDate: string, selectedDate: string): Temporal.PlainDate {
   return Temporal.PlainDate.from(selectedDate > currentDate ? selectedDate : currentDate);
+}
+
+function firstMutableOccurrenceAfter(
+  template: CalendarEvent,
+  currentDateTime: string,
+  afterDate: Temporal.PlainDate,
+): string | undefined {
+  for (const years of [1, 5, 30]) {
+    const occurrences = expandRecurring([template], afterDate, afterDate.add({ years }));
+    const mutable = occurrences.find((occurrence) =>
+      !occurrenceIsProtected(occurrence, currentDateTime)
+    );
+    if (mutable) return datePart(mutable.start);
+  }
+  return undefined;
 }
 
 function recurrenceEditBoundary(
@@ -314,6 +361,13 @@ function recurrenceEditBoundary(
   if (!firstMutableDate && !occurrenceIsProtected(selectedOccurrence, currentDateTime)) {
     firstMutableDate = selectedDate;
   }
+  if (!firstMutableDate && protectedUntilDate) {
+    firstMutableDate = firstMutableOccurrenceAfter(
+      template,
+      currentDateTime,
+      boundaryWindowEnd(currentDate, selectedDate).add({ days: 1 }),
+    );
+  }
 
   return { currentDateTime, protectedUntilDate, firstMutableDate };
 }
@@ -347,7 +401,19 @@ export function moveDatedPatchToDate<T extends Partial<CalendarEvent>>(
   data: T,
   targetDate: string,
 ): T {
-  if (!data.start || !data.end) return data;
+  if (!data.start && !data.end) return data;
+  if (!data.start) {
+    return {
+      ...data,
+      end: `${targetDate} ${String(data.end).split(" ")[1]}`,
+    };
+  }
+  if (!data.end) {
+    return {
+      ...data,
+      start: `${targetDate} ${String(data.start).split(" ")[1]}`,
+    };
+  }
   const dataStartDate = String(data.start).split(" ")[0];
   const dataEndDate = String(data.end).split(" ")[0];
   const daySpan = dateDiffDays(dataStartDate, dataEndDate);
@@ -385,6 +451,7 @@ function buildCommitOperations(input: {
   scope: RecurringScope;
   recurrenceOperation: RecurrenceFieldOperation;
   activeBlockId?: string;
+  activeDate?: string;
   activeOnSelectedDate: boolean;
   today: string;
   currentTime: string;
@@ -406,7 +473,8 @@ function buildCommitOperations(input: {
 
   const instanceDate = input.instanceEvent.start.split(" ")[0];
   const recurrenceCleared = input.recurrenceOperation.kind === "cleared";
-  const activeDate = activeDateForTemplate(input.activeBlockId, input.templateId, input.today);
+  const activeDate = input.activeDate
+    ?? activeDateForTemplate(input.activeBlockId, input.templateId, input.today);
   const activeAfterSelected = activeDate !== undefined && activeDate > instanceDate;
   const activeOnDifferentOccurrence = activeDate !== undefined && activeDate !== instanceDate;
 
@@ -510,14 +578,48 @@ function buildCommitOperations(input: {
 
   const operations: RecurrenceCommitOperation[] = [];
   const boundary = recurrenceEditBoundary(template, input.instanceEvent, input.today, input.currentTime);
+  const activeProtectedByExistingSeries = activeDate !== undefined
+    && boundary.protectedUntilDate !== undefined
+    && activeDate <= boundary.protectedUntilDate;
+  const activeCurrentDateTime = calendarDateTime(input.today, input.currentTime);
+  const activeCutRequired = !recurrenceCleared
+    && activeProtectedByExistingSeries
+    && input.activeBlockId !== undefined
+    && activeDate !== undefined
+    && !occurrenceWindowContains(
+      occurrenceOnDate(template, input.templateId, activeDate),
+      input.changes,
+      activeDate,
+      activeCurrentDateTime,
+    );
+  const activeContinuesInEditedSeries = !recurrenceCleared
+    && activeProtectedByExistingSeries
+    && input.activeBlockId !== undefined
+    && activeDate !== undefined
+    && !activeCutRequired;
+  const activeContinuationSplitsSeries = activeContinuesInEditedSeries
+    && activeDate !== undefined
+    && datePart(template.start) < activeDate;
+  const updateProtectedUntilDate = activeContinuationSplitsSeries && activeDate
+    ? shiftDateStr(activeDate, -1)
+    : activeContinuesInEditedSeries
+      ? undefined
+      : boundary.protectedUntilDate;
+  const updateFirstMutableDate = activeContinuationSplitsSeries && activeDate
+    ? activeDate
+    : activeContinuesInEditedSeries
+      ? undefined
+      : boundary.firstMutableDate;
   const historyCutoffDate = boundary.firstMutableDate
     ?? (boundary.protectedUntilDate ? shiftDateStr(boundary.protectedUntilDate, 1) : input.today);
   if (boundary.protectedUntilDate) {
     operations.push({
       type: "materialize-protected-history",
       templateId: input.templateId,
-      cutoffDate: historyCutoffDate,
-      excludeDate: recurrenceCleared ? instanceDate : undefined,
+      cutoffDate: activeContinuesInEditedSeries && activeDate ? activeDate : historyCutoffDate,
+      excludeDate: activeCutRequired
+        ? activeDate
+        : recurrenceCleared || input.activeOnSelectedDate ? instanceDate : undefined,
     });
   }
 
@@ -570,12 +672,74 @@ function buildCommitOperations(input: {
     selectedOccurrence: input.instanceEvent,
     currentDate: input.today,
     currentTime: input.currentTime,
-    protectedUntilDate: boundary.protectedUntilDate,
-    firstMutableDate: boundary.firstMutableDate,
+    protectedUntilDate: updateProtectedUntilDate,
+    firstMutableDate: updateFirstMutableDate,
     patch: patchWithRecurrenceOperation(input.changes, input.recurrenceOperation),
     materializeProtectedHistory: true,
   });
-  if (input.activeBlockId && activeDate) {
+
+  if (activeContinuesInEditedSeries && input.activeBlockId && activeDate) {
+    const activeWindow = occurrenceWindowOnDate(
+      occurrenceOnDate(template, input.templateId, activeDate),
+      input.changes,
+      activeDate,
+    );
+    operations.push({
+      type: "transfer-active-run",
+      fromId: input.activeBlockId,
+      to: activeContinuationSplitsSeries
+        ? { kind: "operation-result", operationId: input.templateId }
+        : { kind: "event-id", eventId: input.activeBlockId },
+      newEnd: activeWindow.end,
+    });
+    return { operations: appendRefreshOperation(operations), diagnostics };
+  }
+
+  if (!recurrenceCleared && input.activeOnSelectedDate && input.activeBlockId && boundary.protectedUntilDate) {
+    const operationId = "materialize-active-all";
+    const activePatch: Partial<CalendarEvent> = {
+      end: activeCurrentDateTime,
+      recurrence: undefined,
+    };
+    operations.splice(operations.length - 1, 0, {
+      type: "materialize-occurrence",
+      operationId,
+      templateId: input.templateId,
+      occurrence: input.instanceEvent,
+      occurrenceDate: instanceDate,
+      reason: "active-session",
+      patch: activePatch,
+    });
+    operations.push({
+      type: "transfer-active-run",
+      fromId: input.activeBlockId,
+      to: { kind: "operation-result", operationId },
+      newEnd: activeCurrentDateTime,
+    });
+    return { operations: appendRefreshOperation(operations), diagnostics };
+  }
+
+  if (activeCutRequired && input.activeBlockId && activeDate) {
+    const operationId = "materialize-active-all";
+    operations.splice(operations.length - 1, 0, {
+      type: "materialize-occurrence",
+      operationId,
+      templateId: input.templateId,
+      occurrence: occurrenceOnDate(template, input.templateId, activeDate),
+      occurrenceDate: activeDate,
+      reason: "active-session",
+      patch: {
+        end: activeCurrentDateTime,
+        recurrence: undefined,
+      },
+    });
+    operations.push({
+      type: "transfer-active-run",
+      fromId: input.activeBlockId,
+      to: { kind: "operation-result", operationId },
+      newEnd: activeCurrentDateTime,
+    });
+  } else if (input.activeBlockId && activeDate && !activeProtectedByExistingSeries) {
     operations.push({
       type: "transfer-active-run",
       fromId: input.activeBlockId,
@@ -595,6 +759,7 @@ export function buildRecurringCommitPlan(input: {
   changes: Partial<CalendarEvent>;
   scope: RecurringScope;
   activeBlockId?: string;
+  activeDate?: string;
   today: string;
   currentTime: string;
 }): RecurringCommitPlan {
@@ -604,10 +769,10 @@ export function buildRecurringCommitPlan(input: {
   const instanceDate = input.instanceEvent.start.split(" ")[0];
   const today = input.today;
   const activeBlockId = input.activeBlockId;
-  const activeOnSelectedDate = activeBlockId === input.instanceEvent.id
-    || activeBlockId === `${input.templateId}::${instanceDate}`;
-  const activeOnToday = activeBlockId === input.templateId
-    || activeBlockId === `${input.templateId}::${today}`;
+  const activeDate = input.activeDate
+    ?? activeDateForTemplate(activeBlockId, input.templateId, today);
+  const activeOnSelectedDate = activeDate === instanceDate;
+  const activeOnToday = activeDate === today;
   const planned = buildCommitOperations({
     template,
     templateId: input.templateId,
@@ -616,6 +781,7 @@ export function buildRecurringCommitPlan(input: {
     scope: input.scope,
     recurrenceOperation,
     activeBlockId,
+    activeDate,
     activeOnSelectedDate,
     today,
     currentTime: input.currentTime,
@@ -690,6 +856,7 @@ export function buildRecurringEditPlan(input: {
       changes: input.changes,
       scope: input.scope,
       activeBlockId: input.activeDate ? `${input.templateId}::${input.activeDate}` : undefined,
+      activeDate: input.activeDate,
       today: input.currentDate,
       currentTime: input.currentTime,
     }),
@@ -745,7 +912,6 @@ export function applyAll(
   const template = rawBlocks.find((b) => b.id === templateId);
   if (!template) return closedDisplay(storeEvents);
 
-  const todayStr = currentDate;
   const currentDateTime = calendarDateTime(currentDate, currentTime);
   const templateStartDate = datePart(template.start);
   const recurrenceCleared = getRecurrenceFieldOperation(template.recurrence, changes).kind === "cleared";
@@ -762,9 +928,6 @@ export function applyAll(
     const targetStart = changes.start ? String(changes.start) : instanceEvent.start;
     const targetEnd = changes.end ? String(changes.end) : instanceEvent.end;
     const collapsedId = hasPast ? `__va__${templateId}` : templateId;
-    const preservedSeries = hasPast
-      ? storeEvents.filter((e) => belongsToSeries(e) && occurrenceIsProtected(e, currentDateTime))
-      : [];
     const activeMaterialized = activeDate && activeDate !== instanceDateStr
       ? storeEvents.find((e) => belongsToSeries(e) && e.start.split(" ")[0] === activeDate)
       : undefined;
@@ -776,6 +939,13 @@ export function applyAll(
           recurrence: undefined,
           exceptions: undefined,
         }]
+      : [];
+    const preservedSeries = hasPast
+      ? storeEvents.filter((e) =>
+          belongsToSeries(e)
+          && occurrenceIsProtected(e, currentDateTime)
+          && (!activeMaterialized || e.start.split(" ")[0] !== activeDate)
+        )
       : [];
     const collapsed: CalendarEvent = {
       ...template,
@@ -824,80 +994,64 @@ export function applyAll(
   let editingId: string | undefined;
 
   if (hasPast) {
-    const pastFromStore = storeEvents.filter(
+    let pastFromStore = storeEvents.filter(
       (e) => belongsToSeries(e) && occurrenceIsProtected(e, currentDateTime),
     );
-    for (const event of pastFromStore) {
-      previewedIds.add(event.id);
-      if (datePart(event.start) === instanceDateStr) editingId = event.id;
-    }
-
     const activeDayEvents: CalendarEvent[] = [];
+    let activeContinuationDate: string | undefined;
 
-    if (activeDate && activeDate >= todayStr) {
+    if (activeDate) {
       const todayOriginal = storeEvents.find(
         (e) => belongsToSeries(e) && e.start.split(" ")[0] === activeDate,
       );
       if (todayOriginal) {
-        const newSTime = changes.start ? String(changes.start).split(" ")[1] : todayOriginal.start.split(" ")[1];
-        const newETime = changes.end ? String(changes.end).split(" ")[1] : todayOriginal.end.split(" ")[1];
-        let endDateForActive = activeDate;
-        if (changes.start && changes.end) {
-          const span = dateDiffDays(String(changes.start).split(" ")[0], String(changes.end).split(" ")[0]);
-          if (span !== 0) endDateForActive = shiftDateStr(activeDate, span);
-        }
-
-        const nowTime = currentTime;
-        const newStartOnToday = `${activeDate} ${newSTime}`;
-        const newEndOnToday = `${endDateForActive} ${newETime}`;
-        const nowStr = `${activeDate} ${nowTime}`;
-
-        if (nowStr >= newStartOnToday && nowStr < newEndOnToday) {
-          const hybridEnd = newEndOnToday > nowStr ? newEndOnToday : nowStr;
-          const hybrid: CalendarEvent = {
-            ...todayOriginal,
-            ...changes,
-            id: todayOriginal.id,
-            start: todayOriginal.start,
-            end: hybridEnd,
-          };
-          activeDayEvents.push(hybrid);
-          previewedIds.add(hybrid.id);
-          if (activeDate === changesDateStr) editingId = hybrid.id;
+        if (occurrenceWindowContains(todayOriginal, changes, activeDate, currentDateTime)) {
+          activeContinuationDate = activeDate;
         } else {
           const capped: CalendarEvent = {
             ...todayOriginal,
             id: todayOriginal.id,
             start: todayOriginal.start,
-            end: nowStr,
+            end: currentDateTime,
+            recurrence: undefined,
+            recurringParentId: undefined,
+            exceptions: undefined,
           };
           activeDayEvents.push(capped);
           previewedIds.add(capped.id);
-
-          if (nowStr < newEndOnToday) {
-            const newBlock: CalendarEvent = {
-              ...todayOriginal,
-              ...changes,
-              id: `${todayOriginal.id}::preview`,
-              start: newStartOnToday,
-              end: newEndOnToday,
-              recurringParentId: undefined,
-              recurrence: undefined,
-            };
-            activeDayEvents.push(newBlock);
-            previewedIds.add(newBlock.id);
-          }
+          if (activeDate === changesDateStr) editingId = capped.id;
         }
       }
     }
 
+    if (activeContinuationDate || activeDayEvents.length > 0) {
+      pastFromStore = pastFromStore.filter((event) => datePart(event.start) !== activeDate);
+    }
+
+    for (const event of pastFromStore) {
+      previewedIds.add(event.id);
+      if (datePart(event.start) === instanceDateStr) editingId = event.id;
+    }
+
     const futureFromExpanded = expanded.filter(
       (e) => belongsToSeries(e)
-        && !occurrenceIsProtected(e, currentDateTime)
+        && (!occurrenceIsProtected(e, currentDateTime) || datePart(e.start) === activeContinuationDate)
         && (!activeDate || e.start.split(" ")[0] !== activeDate),
     );
-    seriesEvents = [...pastFromStore, ...activeDayEvents, ...futureFromExpanded];
+    const activeContinuation = activeContinuationDate
+      ? expanded.find((e) => belongsToSeries(e) && datePart(e.start) === activeContinuationDate)
+      : undefined;
+    seriesEvents = [
+      ...pastFromStore,
+      ...activeDayEvents,
+      ...(activeContinuation ? [activeContinuation] : []),
+      ...futureFromExpanded,
+    ];
 
+    if (activeContinuation) {
+      previewedIds.add(activeContinuation.id);
+      if (activeContinuationDate === instanceDateStr) editingId = activeContinuation.id;
+    }
     for (const e of futureFromExpanded) {
       previewedIds.add(e.id);
       if (e.start.split(" ")[0] === changesDateStr) editingId = e.id;
@@ -939,15 +1093,9 @@ export function applyFollowing(
   const recurrenceOperation = getRecurrenceFieldOperation(template.recurrence, changes);
   const recurrenceCleared = recurrenceOperation.kind === "cleared";
   const activeOnSelectedDate = activeDate === instanceDateStr;
-  const splitStartDate = activeOnSelectedDate && !recurrenceCleared
-    ? shiftDateStr(instanceDateStr, 1)
-    : instanceDateStr;
-  const splitSourceEvent = activeOnSelectedDate && !recurrenceCleared
-    ? occurrenceOnDate(instanceEvent, templateId, splitStartDate)
-    : instanceEvent;
-  const splitPatch = activeOnSelectedDate && !recurrenceCleared
-    ? moveDatedPatchToDate(changes, splitStartDate)
-    : changes;
+  const splitStartDate = instanceDateStr;
+  const splitSourceEvent = instanceEvent;
+  const splitPatch = changes;
   const newStartDateStr = splitPatch.start ? String(splitPatch.start).split(" ")[0] : splitStartDate;
 
   const capDate = newStartDateStr < instanceDateStr ? newStartDateStr : instanceDateStr;
