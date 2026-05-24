@@ -4,6 +4,16 @@ This document defines how editing recurring calendar events must behave. It is t
 
 The core rule is simple: preview is a non-mutating projection of the current save result. It must show what the visible calendar would contain if the user pressed Save with the current draft and scope, but it must not detach, split, collapse, delete, transfer sessions, or write any data until the user actually saves.
 
+## Ownership boundary
+
+The long-run architecture is intentionally split:
+
+- The frontend owns recurrence edit planning, preview projection, affected-set contours, display freeze, active-event edit restrictions, and occurrence materialization payloads for Save. These are UI semantics and must stay pure, local, and synchronous enough to update while the user drags, resizes, switches scope, or edits fields. They must not depend on async backend expansion before the user can see the preview.
+- The backend owns durable persistence, invariant enforcement, and atomic mutation. Once the frontend has a semantic commit plan, the store translates it to a backend batch and Rust commits or rolls back the calendar writes and active Pomodoro reference transfers together.
+- Rust may own canonical render expansion for persisted window loads. That does not make Rust the owner of edit preview semantics. Preview and canonical render expansion must stay equivalent for supported recurrence rules, and tests should cover that equivalence when recurrence support grows.
+
+Do not move live recurrence edit preview behind Tauri IPC just to make Rust the only recurrence engine. That would make stale async responses, visual flashes, and drag-time lag more likely. A full Rust-only recurrence engine would only be justified if the whole app moved recurrence planning, expansion, wall-clock occurrence materialization, and preview invalidation to a shared non-IPC library. That is not the preferred direction for this app.
+
 ## Related docs
 
 - `features/calendar-recurrence.md`: the stored template and instance model.

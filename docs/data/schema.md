@@ -155,7 +155,7 @@ Archive child data stays normalized, not JSON. Snapshot tables exist for pomodor
 
 The calendar UI does not query archive tables for normal rendering. Analytics can join retained sessions through `pomodoro_runs.original_event_id`.
 
-Delete/archive requests are planned before they reach the backend. The plan can mix hard deletes, archive snapshots, and recurrence caps, then `calendar_apply_delete_archive_plan` applies the operations in one SQLite transaction. Recurrence edit saves follow the same boundary: the frontend produces one semantic commit plan, translates it to `calendar_apply_recurrence_commit_plan`, and the backend commits template updates, detachments, splits, and active Pomodoro reference transfers atomically. Existing single-event delete, archive, restore, update, detach, and split commands remain available for compatibility.
+Delete/archive requests are planned before they reach the backend. The plan can mix hard deletes, archive snapshots, and recurrence caps, then `calendar_apply_delete_archive_plan` applies the operations in one SQLite transaction. Recurrence edit saves follow the same boundary: the frontend produces one semantic commit plan, translates it to `calendar_apply_recurrence_commit_plan`, and the backend commits template updates, detachments, splits, and active Pomodoro reference transfers atomically. The frontend owns live preview and occurrence materialization payloads; Rust owns persisted writes, rollback, and invariant checks. Existing single-event delete, archive, restore, update, detach, and split commands remain available for compatibility.
 
 ## Pomodoro
 

@@ -4,6 +4,15 @@ Given a calendar event with a recurrence rule, expansion produces the list of co
 
 The user-facing model and recurrence structural operations are in `features/calendar-recurrence.md`. This doc covers the math.
 
+## Implementation ownership
+
+The app has two recurrence expansion consumers with different responsibilities:
+
+- **Canonical persisted render:** Rust expands persisted rows for loaded calendar windows through the Tauri backend. This keeps DB reads, window loading, and canonical post-save refresh under the backend's durable-data boundary.
+- **Live edit preview:** TypeScript expands and materializes recurrence projections inside the frontend planners. This is required for immediate scope previews, drag and resize feedback, no-flash display freezes, active-event restrictions, and undo/redo metadata. Preview must be pure and must not wait on backend IPC before the user sees the result.
+
+These two implementations must stay behaviorally equivalent for supported recurrence rules. When adding recurrence features, update tests for both the TypeScript preview path and the Rust canonical expansion path. Do not replace live preview with an async backend round trip unless recurrence planning itself is moved to a shared non-IPC library; otherwise the UI becomes vulnerable to stale responses and visual jumps.
+
 ## Inputs
 
 - **Template event.** A `CalendarEvent` row with `recurrence_rule` non-null. The rule encodes FREQ, INTERVAL, and any BY* refinements (see the supported subset in `features/calendar-recurrence.md`).
