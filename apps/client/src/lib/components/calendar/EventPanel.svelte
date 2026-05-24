@@ -376,6 +376,10 @@
     return timeInputEditTarget === target;
   }
 
+  function isAnyTimeInputEditing(): boolean {
+    return timeInputEditTarget !== null || startTimeDraftEdited || endTimeDraftEdited;
+  }
+
   function timeInputDisplayValue(target: "start" | "end"): string {
     const draft = target === "start" ? startTimeDraft : endTimeDraft;
     const canonical = target === "start" ? startTime : endTime;
@@ -509,9 +513,11 @@
 
   function handleTimeInputClick(target: "start" | "end") {
     if (controlsDisabled || (target === "start" && lockStartControls)) return;
+    const input = target === "start" ? startTimeInput : endTimeInput;
+    const shouldSelectAll = timeInputEditTarget !== target || document.activeElement !== input;
     openTimePicker(target, "pointer");
     enterTimeInputEditMode(target);
-    selectTimeInputText(target);
+    if (shouldSelectAll) selectTimeInputText(target);
   }
 
   function beginTimeTypingFromNavigation(target: "start" | "end", text: string) {
@@ -651,16 +657,21 @@
     emitChange();
   }
 
+  function canExpandSection(s: Section): boolean {
+    return !controlsDisabled || (s === "meeting" && readOnly && !parked && !!showHeavySections);
+  }
+
   /** Label click: expand/collapse the details panel. */
   function handleExpand(s: Section) {
-    if (controlsDisabled) return;
-    // Auto-activate repeat when expanding for the first time
-    if (s === "repeat" && !recurrence && openSection !== s) {
+    if (!canExpandSection(s)) return;
+    const canMutate = !controlsDisabled;
+    // Auto-activate repeat when expanding for the first time.
+    if (canMutate && s === "repeat" && !recurrence && openSection !== s) {
       recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
       emitChange();
     }
-    // Auto-activate meeting when expanding from a disabled state
-    if (s === "meeting" && !meetingEnabled && openSection !== s) {
+    // Auto-activate meeting when expanding from a disabled state.
+    if (canMutate && s === "meeting" && !meetingEnabled && openSection !== s) {
       meetingEnabled = true;
       emitChange();
     }
@@ -980,6 +991,7 @@
   // have edited in the panel. The session's diff-based dirty tracking handles
   // revert-to-original automatically.
   $effect(() => {
+    if (isAnyTimeInputEditing()) return;
     if (mode === "edit" && event) {
       startDate = event.start.split(" ")[0] ?? "";
       startTime = event.start.split(" ")[1] ?? "";
@@ -1814,13 +1826,13 @@
 
       <!-- Time group, visually hidden when all-day so the date grid keeps its shape. -->
       <div
-        class="time-group relative z-2 flex items-center justify-center gap-1.5 py-0.5"
+        class="time-group relative {timePickerTarget ? 'z-20' : 'z-2'} flex items-center justify-center gap-1.5 py-0.5"
         class:invisible={allDay}
         class:pointer-events-none={allDay}
         aria-hidden={allDay}
       >
         <span
-          class="time-input-shell rounded text-center text-event-panel-input-text
+          class="time-input-shell relative z-30 rounded text-center text-event-panel-input-text
             {preferences.calendarTimeFormat === '12h' ? 'text-[0.8rem]' : 'text-[0.866667rem]'}
             {startTimeShellStateClass()}"
           data-value={timeInputMirrorValue("start")}>
@@ -1844,7 +1856,7 @@
         </span>
         <span class="text-muted-foreground/60">-</span>
         <span
-          class="time-input-shell rounded text-center text-event-panel-input-text
+          class="time-input-shell relative z-30 rounded text-center text-event-panel-input-text
             {preferences.calendarTimeFormat === '12h' ? 'text-[0.8rem]' : 'text-[0.866667rem]'}
             {controlsDisabled ? '' : timePickerTarget === 'end' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
           data-value={timeInputMirrorValue("end")}>
@@ -1868,7 +1880,7 @@
         {#if timePickerTarget}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-19" onclick={() => closeTimePicker("pointer")}></div>
+          <div class="fixed inset-0 z-19" onpointerdown={() => closeTimePicker("pointer")}></div>
           {@const isEnd = timePickerTarget === 'end'}
           {@const startMins = (() => { const [h, m] = (startTime || "0:0").split(":").map(Number); return h * 60 + m; })()}
           <div class="absolute top-full z-20 mt-1 rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
@@ -2041,6 +2053,7 @@
           selfEmail={calendarIdentityEmail}
           {description}
           readOnly={controlsDisabled}
+          allowReadOnlyExpand={readOnly && !parked}
           expanded={openSection === "meeting"}
           ontoggle={() => handleToggle("meeting")}
           onexpand={() => handleExpand("meeting")}
@@ -2151,9 +2164,9 @@
             </button>
           {/if}
           {#if readOnly}
-            <div class="flex flex-1 items-center justify-center rounded-none py-1.5 text-[0.8rem] text-muted-foreground/60"
+            <div class="flex flex-1 cursor-not-allowed items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-muted-foreground"
               style="background-color: var(--panel-contrast);">
-              Read only
+              <span>Read-only (Ctrl + D to archive)</span>
             </div>
           {:else}
           <button onclick={handleSave}

@@ -32,6 +32,7 @@
     selfEmail,
     description,
     readOnly = false,
+    allowReadOnlyExpand = false,
     expanded,
     onchange,
     ondescriptionchange,
@@ -52,6 +53,7 @@
     selfEmail?: string;
     description: string;
     readOnly?: boolean;
+    allowReadOnlyExpand?: boolean;
     expanded: boolean;
     onchange: () => void;
     ondescriptionchange: (html: string) => void;
@@ -215,8 +217,8 @@
       <Users size={14} />
     </button>
     <button onclick={onexpand}
-      disabled={readOnly}
-      class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
+      disabled={readOnly && !allowReadOnlyExpand}
+      class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left {allowReadOnlyExpand ? 'readonly-interactive' : ''}">
       <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
       {#if enabled && summary}
         <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{summary}</span>
