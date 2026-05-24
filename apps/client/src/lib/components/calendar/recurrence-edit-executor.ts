@@ -1,12 +1,16 @@
 import type { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent } from "./types";
 import {
-  dateDiffDays,
   moveDatedPatchToDate,
-  shiftDateStr,
   type RecurrenceCommitOperation,
   type RecurringCommitPlan,
 } from "./recurrence-edit-plan";
+import {
+  occurrenceOnDate,
+  patchForTemplateAnchor,
+  templateEndForDate,
+  templateEventIdForDate,
+} from "./recurrence-commit-helpers";
 
 export interface RecurrenceEditCalendarStore {
   beginBatch(): void;
@@ -24,11 +28,20 @@ export interface RecurrenceEditCalendarStore {
     cutoffDate: string,
     excludeDate?: string,
   ): Promise<string[]>;
+  applyRecurrenceCommitPlan?(
+    plan: RecurringCommitPlan,
+  ): Promise<AppliedRecurrenceCommitPlan>;
   refreshWindow(windowStart: Temporal.PlainDate, windowEnd: Temporal.PlainDate): Promise<void>;
+}
+
+export interface AppliedRecurrenceCommitPlan {
+  operationResults: ReadonlyMap<string, CalendarEvent>;
+  activeRunTransferred: boolean;
 }
 
 export interface RecurrenceEditPomodoroBridge {
   transferBlockId(newBlockId: string, newEndTime?: string): Promise<void> | void;
+  adoptTransferredBlockId?(newBlockId: string, newEndTime?: string): Promise<void> | void;
 }
 
 export interface RecurrenceEditExecutorDeps {
@@ -37,61 +50,6 @@ export interface RecurrenceEditExecutorDeps {
   window?: {
     start: Temporal.PlainDate;
     end: Temporal.PlainDate;
-  };
-}
-
-function occurrenceOnDate(source: CalendarEvent, templateId: string, date: string): CalendarEvent {
-  const startTime = source.start.split(" ")[1];
-  const endTime = source.end.split(" ")[1];
-  return {
-    ...source,
-    id: `${templateId}::${date}`,
-    start: `${date} ${startTime}`,
-    end: `${date} ${endTime}`,
-    recurringParentId: templateId,
-    recurrence: undefined,
-    exceptions: undefined,
-  };
-}
-
-function templateEventIdForDate(template: CalendarEvent, date: string): string {
-  return template.start.split(" ")[0] === date ? template.id : `${template.id}::${date}`;
-}
-
-function templateEndForDate(template: CalendarEvent, date: string): string {
-  const templateStartDate = template.start.split(" ")[0];
-  const templateEndDate = template.end.split(" ")[0];
-  const daySpan = dateDiffDays(templateStartDate, templateEndDate);
-  const endDate = daySpan !== 0 ? shiftDateStr(date, daySpan) : date;
-  return `${endDate} ${template.end.split(" ")[1]}`;
-}
-
-function patchForTemplateAnchor(
-  template: CalendarEvent,
-  selectedOccurrence: CalendarEvent,
-  patch: Partial<CalendarEvent>,
-): CalendarEvent {
-  const selectedDate = selectedOccurrence.start.split(" ")[0];
-  const patchStartDate = patch.start ? String(patch.start).split(" ")[0] : selectedDate;
-  const delta = dateDiffDays(selectedDate, patchStartDate);
-  const templateStartDate = template.start.split(" ")[0];
-  const newStartDate = delta !== 0 ? shiftDateStr(templateStartDate, delta) : templateStartDate;
-  const patchEndDate = patch.end ? String(patch.end).split(" ")[0] : patchStartDate;
-  const daySpan = dateDiffDays(patchStartDate, patchEndDate);
-  const newEndDate = shiftDateStr(newStartDate, daySpan);
-  const startTime = patch.start ? String(patch.start).split(" ")[1] : template.start.split(" ")[1];
-  const endTime = patch.end ? String(patch.end).split(" ")[1] : template.end.split(" ")[1];
-
-  return {
-    ...template,
-    ...patch,
-    id: template.id,
-    title: patch.title ?? template.title,
-    start: `${newStartDate} ${startTime}`,
-    end: `${newEndDate} ${endTime}`,
-    timezone: patch.timezone ?? template.timezone,
-    calendarId: patch.calendarId ?? template.calendarId,
-    recurringParentId: undefined,
   };
 }
 
@@ -218,52 +176,68 @@ export async function executeRecurrenceCommitPlan(
   deps: RecurrenceEditExecutorDeps,
 ): Promise<void> {
   const { calendarStore, pomodoro, window } = deps;
-  const operationResults = new Map<string, CalendarEvent>();
+  const appliedPlan = calendarStore.applyRecurrenceCommitPlan
+    ? await calendarStore.applyRecurrenceCommitPlan(plan)
+    : undefined;
+  const operationResults = appliedPlan
+    ? new Map(appliedPlan.operationResults)
+    : new Map<string, CalendarEvent>();
   let shouldRefresh = false;
 
-  calendarStore.beginBatch();
-  try {
-    for (const operation of plan.operations) {
-      switch (operation.type) {
-        case "detach-occurrence":
-          await executeDetachOperation(operation, calendarStore, operationResults);
-          break;
-        case "cap-template":
-          await calendarStore.setRepeatUntil(operation.templateId, operation.untilDate);
-          break;
-        case "split-series": {
-          const newTemplate = await calendarStore.splitSeries(operation.occurrence, operation.patch);
-          operationResults.set(operation.operationId, newTemplate);
-          break;
+  if (!calendarStore.applyRecurrenceCommitPlan) {
+    calendarStore.beginBatch();
+    try {
+      for (const operation of plan.operations) {
+        switch (operation.type) {
+          case "detach-occurrence":
+            await executeDetachOperation(operation, calendarStore, operationResults);
+            break;
+          case "cap-template":
+            await calendarStore.setRepeatUntil(operation.templateId, operation.untilDate);
+            break;
+          case "split-series": {
+            const newTemplate = await calendarStore.splitSeries(operation.occurrence, operation.patch);
+            operationResults.set(operation.operationId, newTemplate);
+            break;
+          }
+          case "update-template-fields":
+            await executeTemplateUpdateOperation(operation, calendarStore, operationResults);
+            break;
+          case "collapse-series":
+            await executeCollapseOperation(operation, calendarStore, operationResults);
+            break;
+          case "materialize-protected-history":
+            await calendarStore.protectHistoricalSegments(
+              operation.templateId,
+              operation.cutoffDate,
+              operation.excludeDate,
+            );
+            break;
+          case "materialize-occurrence":
+            await executeMaterializeOperation(operation, calendarStore, operationResults);
+            break;
+          case "transfer-active-run":
+          case "refresh-window":
+            break;
         }
-        case "update-template-fields":
-          await executeTemplateUpdateOperation(operation, calendarStore, operationResults);
-          break;
-        case "collapse-series":
-          await executeCollapseOperation(operation, calendarStore, operationResults);
-          break;
-        case "materialize-protected-history":
-          await calendarStore.protectHistoricalSegments(
-            operation.templateId,
-            operation.cutoffDate,
-            operation.excludeDate,
-          );
-          break;
-        case "materialize-occurrence":
-          await executeMaterializeOperation(operation, calendarStore, operationResults);
-          break;
-        case "transfer-active-run": {
-          const target = resolveTransferTarget(operation.to, operationResults);
-          await pomodoro?.transferBlockId(target.id, operation.newEnd ?? target.end);
-          break;
-        }
-        case "refresh-window":
-          shouldRefresh = true;
-          break;
       }
+    } finally {
+      calendarStore.endBatch();
     }
-  } finally {
-    calendarStore.endBatch();
+  }
+
+  for (const operation of plan.operations) {
+    if (operation.type === "refresh-window") {
+      shouldRefresh = true;
+      continue;
+    }
+    if (operation.type !== "transfer-active-run") continue;
+    const target = resolveTransferTarget(operation.to, operationResults);
+    if (appliedPlan?.activeRunTransferred && pomodoro?.adoptTransferredBlockId) {
+      await pomodoro.adoptTransferredBlockId(target.id, operation.newEnd ?? target.end);
+    } else {
+      await pomodoro?.transferBlockId(target.id, operation.newEnd ?? target.end);
+    }
   }
 
   if (shouldRefresh && window) {

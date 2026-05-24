@@ -17,6 +17,7 @@
   import CalendarScrollbar from "./CalendarScrollbar.svelte";
   import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
+  import { eventMatchesActiveOccurrence } from "./occurrence-protection";
   import type { PanelAnchor } from "./edit-session.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -321,16 +322,10 @@
   }
 
   function isActiveCalendarEvent(event: CalendarEvent): boolean {
-    const activeId = pomodoroStore.activeBlockId;
-    if (!activeId) return false;
-    if (event.id === activeId) return true;
-
-    const [activeRoot, syntheticDate] = activeId.split("::");
-    const eventRoot = event.recurringParentId ?? event.id.split("::")[0];
-    if (eventRoot !== activeRoot) return false;
-
-    const activeDate = syntheticDate ?? activePomodoroDate();
-    return activeDate !== undefined && event.start.split(" ")[0] === activeDate;
+    return eventMatchesActiveOccurrence(event, {
+      blockId: pomodoroStore.activeBlockId,
+      eventDate: activePomodoroDate(),
+    });
   }
 
   const drag = useDragController({

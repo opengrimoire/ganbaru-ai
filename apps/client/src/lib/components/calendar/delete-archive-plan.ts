@@ -3,19 +3,34 @@ import type { CalendarEvent, RecurringScope } from "./types";
 import { expandRecurring } from "./recurrence";
 import { recurrenceToRrule } from "./rrule";
 import {
+  activeOccurrenceDate,
+  activeRootId,
+  calendarEventDatePart,
+  classifyEventProtection,
+  eventMatchesActiveOccurrence,
+  exactOccurrenceId,
+  occurrenceStartedBy,
+  rootIdForEvent,
+  type ActivePomodoroIdentity,
+} from "./occurrence-protection";
+import {
   buildCalendarEventMutationTarget,
   concreteRecurringOccurrenceForMutation,
 } from "$lib/stores/calendar-mutations";
 import type { CalendarEventMutationTarget } from "$lib/stores/calendar-mutations";
 
+export {
+  classifyEventProtection,
+  eventMatchesActiveOccurrence,
+  exactOccurrenceId,
+} from "./occurrence-protection";
+export type {
+  ActivePomodoroIdentity,
+  EventProtection,
+  EventProtectionReason,
+} from "./occurrence-protection";
+
 export type CalendarDeleteArchiveOutcome = "delete" | "archive" | "mixed";
-
-export type EventProtectionReason = "started" | "active" | "pomodoro-history";
-
-export interface EventProtection {
-  protected: boolean;
-  reason?: EventProtectionReason;
-}
 
 export type CalendarDeleteArchiveOperation =
   | { type: "delete_event"; target: CalendarEventMutationTarget }
@@ -41,11 +56,6 @@ export interface CalendarDeleteArchivePlan {
   restore: CalendarDeleteArchiveRestoreMetadata;
 }
 
-export interface ActivePomodoroIdentity {
-  blockId: string | null | undefined;
-  eventDate?: string;
-}
-
 export interface BuildCalendarDeleteArchivePlanInput {
   rawBlocks: CalendarEvent[];
   visibleEvents: CalendarEvent[];
@@ -57,11 +67,7 @@ export interface BuildCalendarDeleteArchivePlanInput {
 }
 
 function datePart(value: string): string {
-  return value.split(" ")[0];
-}
-
-function wallClockMs(value: string): number {
-  return new Date(value.replace(" ", "T")).getTime();
+  return calendarEventDatePart(value);
 }
 
 function currentDatePart(now: Date): string {
@@ -79,73 +85,8 @@ function maxDate(a: string, b: string): string {
   return a > b ? a : b;
 }
 
-function rootIdForEvent(event: CalendarEvent): string {
-  return (event.recurringParentId ?? event.id).split("::")[0];
-}
-
-export function exactOccurrenceId(event: CalendarEvent, template?: CalendarEvent): string {
-  const recurringRoot = event.recurringParentId
-    ?? template?.id
-    ?? (event.recurrence ? event.id : undefined);
-  if (!recurringRoot) return event.id;
-  return `${recurringRoot.split("::")[0]}::${datePart(event.start)}`;
-}
-
-function activeOccurrenceDate(active: ActivePomodoroIdentity | undefined): string | undefined {
-  if (!active?.blockId) return undefined;
-  const [, syntheticDate] = active.blockId.split("::");
-  return syntheticDate ?? active.eventDate;
-}
-
-function activeRootId(active: ActivePomodoroIdentity | undefined): string | undefined {
-  return active?.blockId?.split("::")[0];
-}
-
-export function eventMatchesActiveOccurrence(
-  event: CalendarEvent,
-  active: ActivePomodoroIdentity | undefined,
-  template?: CalendarEvent,
-): boolean {
-  const activeRoot = activeRootId(active);
-  if (!activeRoot) return false;
-  const eventRoot = rootIdForEvent(template ?? event);
-  if (eventRoot !== activeRoot) return false;
-
-  const activeDate = activeOccurrenceDate(active);
-  if (!activeDate) {
-    return event.id === active?.blockId || rootIdForEvent(event) === activeRoot;
-  }
-  return datePart(event.start) === activeDate;
-}
-
 function isStarted(event: CalendarEvent, now: Date): boolean {
-  const startMs = wallClockMs(event.start);
-  return Number.isFinite(startMs) && startMs <= now.getTime();
-}
-
-export function classifyEventProtection(
-  event: CalendarEvent,
-  input: {
-    now: Date;
-    activePomodoro?: ActivePomodoroIdentity;
-    protectedEventIds?: ReadonlySet<string>;
-    template?: CalendarEvent;
-  },
-): EventProtection {
-  const exactId = exactOccurrenceId(event, input.template);
-  if (
-    input.protectedEventIds?.has(event.id)
-    || input.protectedEventIds?.has(exactId)
-  ) {
-    return { protected: true, reason: "pomodoro-history" };
-  }
-  if (eventMatchesActiveOccurrence(event, input.activePomodoro, input.template)) {
-    return { protected: true, reason: "active" };
-  }
-  if (isStarted(event, input.now)) {
-    return { protected: true, reason: "started" };
-  }
-  return { protected: false };
+  return occurrenceStartedBy(event, now);
 }
 
 function belongsToSeries(event: CalendarEvent, templateId: string): boolean {

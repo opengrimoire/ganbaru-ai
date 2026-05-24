@@ -2311,6 +2311,17 @@ async function transferBlockIdInternal(newBlockId: string, newEndTime?: string):
     newEventDate,
     plannedEnd,
   });
+  adoptTransferredBlockIdInternal(newBlockId, newEndTime, newEventDate);
+}
+
+function adoptTransferredBlockIdInternal(
+  newBlockId: string,
+  newEndTime?: string,
+  eventDate?: string | null,
+): void {
+  if (!activeBlockId) return;
+  const newEndMs = newEndTime ? new Date(newEndTime.replace(" ", "T")).getTime() : null;
+  const newEventDate = eventDateFromBlockId(newBlockId) ?? eventDate ?? activeSegment()?.eventDate ?? null;
   activeBlockId = newBlockId;
   for (const seg of segments) {
     seg.eventId = newBlockId;
@@ -2642,6 +2653,9 @@ export function getPomodoro() {
     async transferBlockId(newBlockId: string, newEndTime?: string) {
       if (forwardWindowCommand({ kind: "transfer-block-id", newBlockId, newEndTime })) return;
       await transferBlockIdInternal(newBlockId, newEndTime);
+    },
+    adoptTransferredBlockId(newBlockId: string, newEndTime?: string) {
+      adoptTransferredBlockIdInternal(newBlockId, newEndTime);
     },
     get suspendedAway() {
       return suspendedAway;

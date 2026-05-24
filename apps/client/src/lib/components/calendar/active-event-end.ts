@@ -1,23 +1,8 @@
 import type { CalendarEvent } from "./types";
 import { parseCalendarDate } from "./utils";
+import { sameConcreteOccurrence } from "./occurrence-protection";
 
-function isRecurringOccurrence(event: CalendarEvent): boolean {
-  return !!event.recurringParentId || event.id.includes("::") || !!event.recurrence;
-}
-
-function occurrenceRoot(event: CalendarEvent): string {
-  return event.recurringParentId ?? event.id.split("::")[0];
-}
-
-function occurrenceDate(event: CalendarEvent): string {
-  return event.id.split("::")[1] ?? event.start.split(" ")[0];
-}
-
-export function sameConcreteOccurrence(a: CalendarEvent, b: CalendarEvent): boolean {
-  if (a.id === b.id) return true;
-  if (!isRecurringOccurrence(a) && !isRecurringOccurrence(b)) return false;
-  return occurrenceRoot(a) === occurrenceRoot(b) && occurrenceDate(a) === occurrenceDate(b);
-}
+export { sameConcreteOccurrence };
 
 function eventCoversInstant(event: CalendarEvent, instant: Date): boolean {
   const startMs = parseCalendarDate(event.start).getTime();

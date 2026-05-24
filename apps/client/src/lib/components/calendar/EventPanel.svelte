@@ -16,7 +16,7 @@
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import { deleteActionForCalendarEvent } from "$lib/stores/calendar-mutations";
+  import { deleteActionForCalendarEvent } from "./occurrence-protection";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";

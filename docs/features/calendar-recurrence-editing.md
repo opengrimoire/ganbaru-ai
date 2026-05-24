@@ -60,7 +60,7 @@ These outcomes are required:
 
 **Delete or archive plan.** The semantic plan for a delete or archive request. It owns the affected visible IDs, the final visible projection, the active-session stop requirement, the ordered backend operations, and the undo metadata. Protected occurrences archive while future untracked occurrences hard delete, but both disappear from the visible calendar in one final projection.
 
-**Commit plan.** The ordered mutation plan that Save executes to make the projection real.
+**Commit plan.** The ordered mutation plan that Save executes to make the projection real. Calendar writes and active Pomodoro reference transfers from this plan are applied through one backend transaction.
 
 **Canonical render window.** The persisted event rows expanded by the canonical recurrence expander for the visible date window.
 
@@ -131,6 +131,8 @@ When the user confirms delete or archive, the UI applies the plan's final visibl
 Save executes the same semantic commit plan projection would produce for the current draft, scope, active metadata, captured edit time, and visible window. The implementation may reuse the exact plan object or recompute it from the same normalized inputs, but it must not independently decide what recurrence operation means.
 
 When Save starts, the submitted projection may remain visually frozen until the canonical refresh completes. This freeze is display-only: it must not detach, split, collapse, delete, transfer sessions, or write data before Save executes the commit plan.
+
+Save translates the commit plan to one backend recurrence batch. The batch may update templates, detach occurrences, split series, and transfer the active run reference, and those writes must commit or roll back together. Single-operation backend commands remain available for compatibility, but the normal recurrence Save path must not sequence them independently.
 
 After Save succeeds:
 
@@ -368,7 +370,7 @@ The planner should return:
 - Active-session transfer plan.
 - Cache invalidation or canonical refresh requirement.
 
-Save code may translate the commit plan into existing store commands, but it must not recalculate recurrence semantics with separate conditionals.
+Save code may translate the commit plan into backend payloads, but it must not recalculate recurrence semantics with separate conditionals.
 
 ## Commit plan operations
 

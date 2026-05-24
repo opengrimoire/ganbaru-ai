@@ -34,6 +34,29 @@ pub enum CalendarDeleteArchiveOperation {
     },
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarActiveEventReferenceTransfer {
+    new_event_id: String,
+    new_event_date: Option<String>,
+    planned_end: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+pub enum CalendarRecurrenceCommitOperation {
+    #[serde(rename = "update_event")]
+    UpdateEvent { patch: CalendarEventUpdate },
+    #[serde(rename = "detach_instance")]
+    DetachInstance { input: CalendarDetachInstance },
+    #[serde(rename = "split_series")]
+    SplitSeries { input: CalendarSplitSeries },
+    #[serde(rename = "transfer_active_event_reference")]
+    TransferActiveEventReference {
+        transfer: CalendarActiveEventReferenceTransfer,
+    },
+}
+
 struct CalendarEventMutationContext {
     id: String,
     source_event_id: String,
@@ -463,6 +486,23 @@ pub async fn calendar_apply_delete_archive_plan<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn calendar_apply_recurrence_commit_plan<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    operations: Vec<CalendarRecurrenceCommitOperation>,
+) -> Result<(), String> {
+    for operation in &operations {
+        validate_recurrence_commit_operation(operation)?;
+    }
+
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    apply_recurrence_commit_operations_tx(&mut tx, operations).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn calendar_restore_archived_event<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
@@ -558,6 +598,32 @@ async fn apply_delete_archive_operations_tx(
                 rrule,
             } => {
                 cap_calendar_series_tx(tx, &event_id, &repeat_until, &rrule).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn apply_recurrence_commit_operations_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    operations: Vec<CalendarRecurrenceCommitOperation>,
+) -> Result<(), String> {
+    for operation in &operations {
+        validate_recurrence_commit_operation(operation)?;
+    }
+    for operation in operations {
+        match operation {
+            CalendarRecurrenceCommitOperation::UpdateEvent { patch } => {
+                update_calendar_event_tx(tx, &patch).await?;
+            }
+            CalendarRecurrenceCommitOperation::DetachInstance { input } => {
+                detach_calendar_instance_tx(tx, &input).await?;
+            }
+            CalendarRecurrenceCommitOperation::SplitSeries { input } => {
+                split_calendar_series_tx(tx, &input).await?;
+            }
+            CalendarRecurrenceCommitOperation::TransferActiveEventReference { transfer } => {
+                transfer_active_event_reference_tx(tx, &transfer).await?;
             }
         }
     }
@@ -1552,6 +1618,40 @@ fn validate_delete_archive_operation(
     }
 }
 
+fn validate_active_event_reference_transfer(
+    transfer: &CalendarActiveEventReferenceTransfer,
+) -> Result<(), String> {
+    canonical_event_id(&transfer.new_event_id)?;
+    if let Some(date) = &transfer.new_event_date {
+        require_non_empty(date, "transfer.new_event_date")?;
+    }
+    if let Some(planned_end) = &transfer.planned_end {
+        require_non_empty(planned_end, "transfer.planned_end")?;
+    }
+    Ok(())
+}
+
+fn validate_recurrence_commit_operation(
+    operation: &CalendarRecurrenceCommitOperation,
+) -> Result<(), String> {
+    match operation {
+        CalendarRecurrenceCommitOperation::UpdateEvent { patch } => validate_event_update(patch),
+        CalendarRecurrenceCommitOperation::DetachInstance { input } => {
+            validate_detach_instance(input)
+        }
+        CalendarRecurrenceCommitOperation::SplitSeries { input } => validate_split_series(input),
+        CalendarRecurrenceCommitOperation::TransferActiveEventReference { transfer } => {
+            validate_active_event_reference_transfer(transfer)
+        }
+    }
+}
+
+fn canonical_event_id(value: &str) -> Result<&str, String> {
+    let (event_id, _) = split_synthetic_id(value);
+    require_non_empty(event_id, "event_id")?;
+    Ok(event_id)
+}
+
 async fn cap_calendar_series_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -1575,6 +1675,59 @@ async fn cap_calendar_series_tx(
     Ok(())
 }
 
+async fn transfer_active_event_reference_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    transfer: &CalendarActiveEventReferenceTransfer,
+) -> Result<(), String> {
+    validate_active_event_reference_transfer(transfer)?;
+    let canonical_event_id = canonical_event_id(&transfer.new_event_id)?.to_string();
+    let synthetic_date = split_synthetic_id(&transfer.new_event_id)
+        .1
+        .map(str::to_string);
+    let event_date = transfer.new_event_date.clone().or(synthetic_date);
+
+    let run_id: Option<String> =
+        sqlx::query_scalar("SELECT id FROM pomodoro_runs WHERE ended_at IS NULL LIMIT 1")
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|e| format!("load active pomodoro run: {e}"))?;
+    let Some(run_id) = run_id else {
+        return Ok(());
+    };
+
+    sqlx::query(
+        "UPDATE pomodoro_runs
+         SET event_id = ?,
+             original_event_id = ?,
+             event_date = COALESCE(?, event_date),
+             planned_end = COALESCE(?, planned_end)
+         WHERE id = ? AND ended_at IS NULL",
+    )
+    .bind(&canonical_event_id)
+    .bind(&transfer.new_event_id)
+    .bind(&event_date)
+    .bind(&transfer.planned_end)
+    .bind(&run_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("transfer active pomodoro run reference: {e}"))?;
+
+    sqlx::query(
+        "UPDATE pomodoro_segments
+         SET event_id = ?,
+             event_date = COALESCE(?, event_date)
+         WHERE run_id = ?",
+    )
+    .bind(&canonical_event_id)
+    .bind(&event_date)
+    .bind(&run_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("transfer active pomodoro segment references: {e}"))?;
+
+    Ok(())
+}
+
 fn require_non_empty_option(value: &Option<String>, field: &str) -> Result<(), String> {
     match value {
         Some(value) => require_non_empty(value, field),
@@ -1591,15 +1744,24 @@ pub async fn calendar_update_event<R: Runtime>(
     validate_event_update(&patch)?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    update_calendar_event_tx(&mut tx, &patch).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
 
+async fn update_calendar_event_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    patch: &CalendarEventUpdate,
+) -> Result<(), String> {
+    validate_event_update(patch)?;
     for field in &patch.fields {
-        apply_update_field(&mut tx, &patch.id, field).await?;
+        apply_update_field(tx, &patch.id, field).await?;
     }
 
     if let Some(attendees) = &patch.attendees {
         sqlx::query("DELETE FROM calendar_event_attendees WHERE event_id = ?")
             .bind(&patch.id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await
             .map_err(|e| format!("delete calendar attendees: {e}"))?;
         for (sort_order, attendee) in attendees.iter().enumerate() {
@@ -1616,7 +1778,7 @@ pub async fn calendar_update_event<R: Runtime>(
             .bind(&attendee.status)
             .bind(if attendee.rsvp { 1_i64 } else { 0_i64 })
             .bind(sort_order as i64)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await
             .map_err(|e| format!("insert calendar attendee: {e}"))?;
         }
@@ -1625,7 +1787,7 @@ pub async fn calendar_update_event<R: Runtime>(
     if let Some(alarms) = &patch.alarms {
         sqlx::query("DELETE FROM calendar_event_alarms WHERE event_id = ?")
             .bind(&patch.id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await
             .map_err(|e| format!("delete calendar alarms: {e}"))?;
         for (sort_order, alarm) in alarms.iter().enumerate() {
@@ -1641,7 +1803,7 @@ pub async fn calendar_update_event<R: Runtime>(
             .bind(&alarm.trigger_value)
             .bind(&alarm.description)
             .bind(sort_order as i64)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await
             .map_err(|e| format!("insert calendar alarm: {e}"))?;
         }
@@ -1661,14 +1823,14 @@ pub async fn calendar_update_event<R: Runtime>(
                 .bind(config.long_break_minutes)
                 .bind(config.pomodoro_count)
                 .bind(config.idle_timeout_minutes)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await
                 .map_err(|e| format!("upsert calendar pomodoro config: {e}"))?;
             }
             CalendarPomodoroConfigPatch::Clear => {
                 sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?")
                     .bind(&patch.id)
-                    .execute(&mut *tx)
+                    .execute(&mut **tx)
                     .await
                     .map_err(|e| format!("delete calendar pomodoro config: {e}"))?;
             }
@@ -1678,14 +1840,12 @@ pub async fn calendar_update_event<R: Runtime>(
     let result = sqlx::query("UPDATE calendar_events SET updated_at = ? WHERE id = ?")
         .bind(&patch.updated_at)
         .bind(&patch.id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|e| format!("touch calendar event: {e}"))?;
     if result.rows_affected() == 0 {
         return Err(format!("calendar event '{}' not found", patch.id));
     }
-
-    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
 
@@ -1698,9 +1858,18 @@ pub async fn calendar_detach_instance<R: Runtime>(
     validate_detach_instance(&input)?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    detach_calendar_instance_tx(&mut tx, &input).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
 
+async fn detach_calendar_instance_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    input: &CalendarDetachInstance,
+) -> Result<(), String> {
+    validate_detach_instance(input)?;
     replace_string_list(
-        &mut tx,
+        tx,
         &input.parent_id,
         "calendar_event_exdates",
         "occurrence_date",
@@ -1710,7 +1879,7 @@ pub async fn calendar_detach_instance<R: Runtime>(
     let result = sqlx::query("UPDATE calendar_events SET updated_at = ? WHERE id = ?")
         .bind(&input.now)
         .bind(&input.parent_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|e| format!("touch detached parent: {e}"))?;
     if result.rows_affected() == 0 {
@@ -1754,22 +1923,22 @@ pub async fn calendar_detach_instance<R: Runtime>(
     .bind(&input.now)
     .bind(&input.now)
     .bind(&input.parent_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("insert detached event: {e}"))?;
-    sanitize_stored_event_description(&mut tx, &input.new_id).await?;
+    sanitize_stored_event_description(tx, &input.new_id).await?;
     replace_i64_list(
-        &mut tx,
+        tx,
         &input.new_id,
         "calendar_event_notifications",
         "offset_minutes",
         parse_i64_list(&input.notifications, "notifications")?,
     )
     .await?;
-    copy_calendar_metadata(&mut tx, &input.parent_id, &input.new_id).await?;
+    copy_calendar_metadata(tx, &input.parent_id, &input.new_id).await?;
 
-    copy_pomodoro_config(&mut tx, &input.parent_id, &input.new_id).await?;
-    copy_attendees(&mut tx, &input.parent_id, &input.new_id).await?;
+    copy_pomodoro_config(tx, &input.parent_id, &input.new_id).await?;
+    copy_attendees(tx, &input.parent_id, &input.new_id).await?;
 
     let original_occurrence_id = format!("{}::{}", input.parent_id, input.instance_date);
     sqlx::query(
@@ -1783,7 +1952,7 @@ pub async fn calendar_detach_instance<R: Runtime>(
     .bind(&input.parent_id)
     .bind(&original_occurrence_id)
     .bind(&input.instance_date)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("move detached pomodoro runs: {e}"))?;
 
@@ -1794,11 +1963,9 @@ pub async fn calendar_detach_instance<R: Runtime>(
     .bind(&input.new_id)
     .bind(&input.parent_id)
     .bind(&input.instance_date)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("move detached pomodoro segments: {e}"))?;
-
-    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
 
@@ -1809,10 +1976,19 @@ pub async fn calendar_split_series<R: Runtime>(
     input: CalendarSplitSeries,
 ) -> Result<(), String> {
     validate_split_series(&input)?;
-    let description_patch = sanitize_optional_calendar_description(&input.description_patch);
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
+    split_calendar_series_tx(&mut tx, &input).await?;
+    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
 
+async fn split_calendar_series_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    input: &CalendarSplitSeries,
+) -> Result<(), String> {
+    validate_split_series(input)?;
+    let description_patch = sanitize_optional_calendar_description(&input.description_patch);
     let result = sqlx::query(
         "UPDATE calendar_events SET repeat_until = ?, rrule = ?, updated_at = ? WHERE id = ?",
     )
@@ -1820,7 +1996,7 @@ pub async fn calendar_split_series<R: Runtime>(
     .bind(&input.capped_rrule)
     .bind(&input.now)
     .bind(&input.parent_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("cap split parent series: {e}"))?;
     if result.rows_affected() == 0 {
@@ -1872,12 +2048,12 @@ pub async fn calendar_split_series<R: Runtime>(
     .bind(&input.now)
     .bind(&input.now)
     .bind(&input.parent_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("insert split series event: {e}"))?;
-    sanitize_stored_event_description(&mut tx, &input.new_id).await?;
+    sanitize_stored_event_description(tx, &input.new_id).await?;
     replace_i64_list(
-        &mut tx,
+        tx,
         &input.new_id,
         "calendar_event_notifications",
         "offset_minutes",
@@ -1885,23 +2061,21 @@ pub async fn calendar_split_series<R: Runtime>(
     )
     .await?;
     replace_string_list(
-        &mut tx,
+        tx,
         &input.new_id,
         "calendar_event_exdates",
         "occurrence_date",
         parse_string_list(&input.exceptions, "exceptions")?,
     )
     .await?;
-    copy_calendar_metadata(&mut tx, &input.parent_id, &input.new_id).await?;
+    copy_calendar_metadata(tx, &input.parent_id, &input.new_id).await?;
 
     if let Some(config) = &input.pomodoro_config {
-        insert_pomodoro_config(&mut tx, &input.new_id, config).await?;
+        insert_pomodoro_config(tx, &input.new_id, config).await?;
     } else {
-        copy_pomodoro_config(&mut tx, &input.parent_id, &input.new_id).await?;
+        copy_pomodoro_config(tx, &input.parent_id, &input.new_id).await?;
     }
-    copy_attendees(&mut tx, &input.parent_id, &input.new_id).await?;
-
-    tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    copy_attendees(tx, &input.parent_id, &input.new_id).await?;
     Ok(())
 }
 
@@ -2748,13 +2922,15 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_delete_archive_operations_tx, apply_update_field, archive_calendar_event_tx,
-        cap_calendar_series_tx, delete_calendar_event_tx, filter_excluded_dates,
-        insert_calendar_event_row, restore_archived_calendar_event_tx,
-        sanitize_stored_event_description, validate_color, validate_event_create,
-        validate_non_negative, validate_positive, validate_priority, validate_update_field,
-        CalendarDeleteArchiveOperation, CalendarEventCreate, CalendarEventMutationTarget,
-        CalendarEventUpdateField,
+        apply_delete_archive_operations_tx, apply_recurrence_commit_operations_tx,
+        apply_update_field, archive_calendar_event_tx, cap_calendar_series_tx,
+        delete_calendar_event_tx, filter_excluded_dates, insert_calendar_event_row,
+        restore_archived_calendar_event_tx, sanitize_stored_event_description, validate_color,
+        validate_event_create, validate_non_negative, validate_positive, validate_priority,
+        validate_update_field, CalendarActiveEventReferenceTransfer,
+        CalendarDeleteArchiveOperation, CalendarDetachInstance, CalendarEventCreate,
+        CalendarEventMutationTarget, CalendarEventUpdate, CalendarEventUpdateField,
+        CalendarRecurrenceCommitOperation,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -3388,6 +3564,135 @@ mod tests {
                     .await
                     .unwrap();
             assert_eq!(live_count, 1);
+        });
+    }
+
+    #[test]
+    fn recurrence_commit_batch_updates_event_and_active_run_in_one_transaction() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(&pool, "event-1", "").await;
+            insert_test_event_at(
+                &pool,
+                "event-2",
+                "2026-05-10T10:00:00Z",
+                "2026-05-10T11:00:00Z",
+                None,
+            )
+            .await;
+            insert_test_open_pomodoro_run(&pool).await;
+            insert_test_active_pomodoro_segment(&pool).await;
+
+            let mut tx = pool.begin().await.unwrap();
+            apply_recurrence_commit_operations_tx(
+                &mut tx,
+                vec![
+                    CalendarRecurrenceCommitOperation::UpdateEvent {
+                        patch: CalendarEventUpdate {
+                            id: "event-1".to_string(),
+                            updated_at: "2026-05-09T10:30:00Z".to_string(),
+                            fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                            attendees: None,
+                            alarms: None,
+                            pomodoro_config: None,
+                        },
+                    },
+                    CalendarRecurrenceCommitOperation::TransferActiveEventReference {
+                        transfer: CalendarActiveEventReferenceTransfer {
+                            new_event_id: "event-2".to_string(),
+                            new_event_date: Some("2026-05-10".to_string()),
+                            planned_end: Some("2026-05-10T11:00:00Z".to_string()),
+                        },
+                    },
+                ],
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let run: (String, String, String) =
+                sqlx::query_as("SELECT event_id, original_event_id, event_date FROM pomodoro_runs WHERE id = 'run-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let segment: (String, String) = sqlx::query_as(
+                "SELECT event_id, event_date FROM pomodoro_segments WHERE id = 'segment-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(title, "Changed");
+            assert_eq!(
+                run,
+                (
+                    "event-2".to_string(),
+                    "event-2".to_string(),
+                    "2026-05-10".to_string()
+                )
+            );
+            assert_eq!(segment, ("event-2".to_string(), "2026-05-10".to_string()));
+        });
+    }
+
+    #[test]
+    fn recurrence_commit_batch_rolls_back_when_later_operation_fails() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(&pool, "event-1", "").await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = apply_recurrence_commit_operations_tx(
+                &mut tx,
+                vec![
+                    CalendarRecurrenceCommitOperation::UpdateEvent {
+                        patch: CalendarEventUpdate {
+                            id: "event-1".to_string(),
+                            updated_at: "2026-05-09T10:30:00Z".to_string(),
+                            fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                            attendees: None,
+                            alarms: None,
+                            pomodoro_config: None,
+                        },
+                    },
+                    CalendarRecurrenceCommitOperation::DetachInstance {
+                        input: CalendarDetachInstance {
+                            parent_id: "missing-parent".to_string(),
+                            instance_date: "2026-05-10".to_string(),
+                            exceptions: "[\"2026-05-10\"]".to_string(),
+                            new_id: "detached-1".to_string(),
+                            title: "Detached".to_string(),
+                            start_time: "2026-05-10T10:00:00Z".to_string(),
+                            end_time: "2026-05-10T11:00:00Z".to_string(),
+                            timezone: "America/Monterrey".to_string(),
+                            calendar_id: "local".to_string(),
+                            color: None,
+                            notifications: None,
+                            all_day: false,
+                            location: String::new(),
+                            transparency: "opaque".to_string(),
+                            status: "confirmed".to_string(),
+                            now: "2026-05-09T10:30:00Z".to_string(),
+                        },
+                    },
+                ],
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(!err.is_empty());
+
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "");
         });
     }
 

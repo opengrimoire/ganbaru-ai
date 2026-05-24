@@ -1,6 +1,11 @@
 import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent, RecurrenceConfig, RecurringScope } from "./types";
 import { expandRecurring, fmtYMD, parseYMD } from "./recurrence";
+import {
+  calendarDateTime,
+  calendarEventDatePart,
+  occurrenceStartsAtOrBefore,
+} from "./occurrence-protection";
 
 /**
  * Inclusive date window used by recurrence expansion. Edit-flow consumers
@@ -254,7 +259,7 @@ function activeDateForTemplate(
 }
 
 function datePart(value: string): string {
-  return value.split(" ")[0];
+  return calendarEventDatePart(value);
 }
 
 function exceptionsFromDate(template: CalendarEvent, startDate: string): string[] | undefined {
@@ -310,20 +315,8 @@ function applyScopeOnlyPreview(
   };
 }
 
-function timePart(value: string, fallback = "00:00"): string {
-  return (value.split(" ")[1] ?? fallback).slice(0, 5);
-}
-
-function calendarDateTime(date: string, time: string): string {
-  return `${date} ${time.slice(0, 5)}`;
-}
-
-function eventStartDateTime(event: CalendarEvent): string {
-  return `${datePart(event.start)} ${timePart(event.start)}`;
-}
-
 function occurrenceIsProtected(event: CalendarEvent, currentDateTime: string): boolean {
-  return eventStartDateTime(event) <= currentDateTime;
+  return occurrenceStartsAtOrBefore(event, currentDateTime);
 }
 
 function boundaryWindowEnd(currentDate: string, selectedDate: string): Temporal.PlainDate {

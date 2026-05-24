@@ -44,6 +44,7 @@
   } from "./display-events";
   import { executeRecurrenceCommitPlan } from "./recurrence-edit-executor";
   import { endActiveEventWouldStopProductivity } from "./active-event-end";
+  import { activeRootId } from "./occurrence-protection";
   import {
     buildCalendarDeleteArchivePlan,
     type CalendarDeleteArchiveOutcome,
@@ -302,17 +303,7 @@
   }
 
   function activeBlockBelongsToTemplate(templateId: string, activeBlockId: string): boolean {
-    const visibleActive = currentVisibleStoreEvents().find((event) => event.id === activeBlockId);
-    if (visibleActive) {
-      return visibleActive.id === templateId || visibleActive.recurringParentId === templateId;
-    }
-
-    const rawActive = calendarStore.rawBlocks.find((event) => event.id === activeBlockId);
-    if (rawActive) {
-      return rawActive.id === templateId && !!rawActive.recurrence;
-    }
-
-    return activeBlockId.split("::")[0] === templateId;
+    return activeRootId({ blockId: activeBlockId }) === templateId;
   }
 
   function activeDateForEditSession(templateId: string): string | undefined {

@@ -747,6 +747,7 @@ pub fn run() {
             calendar_events::calendar_delete_event,
             calendar_events::calendar_archive_event,
             calendar_events::calendar_apply_delete_archive_plan,
+            calendar_events::calendar_apply_recurrence_commit_plan,
             calendar_events::calendar_restore_archived_event,
             calendar_events::calendar_clear_events,
             calendar_events::calendar_update_event,

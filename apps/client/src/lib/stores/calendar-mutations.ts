@@ -1,7 +1,10 @@
 import type { CalendarEvent } from "$lib/components/calendar/types";
 import { toDbTime } from "./map-row";
 
-export type CalendarEventDeleteAction = "delete" | "archive";
+export {
+  deleteActionForCalendarEvent,
+  type CalendarEventDeleteAction,
+} from "$lib/components/calendar/occurrence-protection";
 
 export interface CalendarEventMutationTarget {
   id: string;
@@ -48,16 +51,4 @@ export function buildCalendarEventMutationTargetFromId(
     occurrenceStart: null,
     occurrenceEnd: null,
   };
-}
-
-function wallClockMs(value: string): number {
-  return new Date(value.replace(" ", "T")).getTime();
-}
-
-export function deleteActionForCalendarEvent(
-  event: CalendarEvent,
-  now: Date = new Date(),
-): CalendarEventDeleteAction {
-  const startMs = wallClockMs(event.start);
-  return Number.isFinite(startMs) && startMs <= now.getTime() ? "archive" : "delete";
 }
