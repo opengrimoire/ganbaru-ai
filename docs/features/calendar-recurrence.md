@@ -32,13 +32,13 @@ A recurring event lives as a single row in `calendar_events` with a non-null `re
 
 For example, a daily event with template ID `7f2c...` produces instances `7f2c...::2026-04-16`, `7f2c...::2026-04-17`, and so on.
 
-The template itself is also a valid first occurrence. Its ID is the plain template UUID (no `::date` suffix). Code that resolves event IDs must accept three formats:
+The template itself is also a valid first occurrence. Its ID is the plain template UUID (no `::date` suffix). Pomodoro history stores two event identities:
 
-1. A plain UUID for non-recurring events or the template's first occurrence.
-2. A synthetic `UUID::date` for derived instances.
-3. A null reference, joined back to `calendar_events_archive` (for archived events).
+1. `pomodoro_runs.event_id` and `pomodoro_segments.event_id` are nullable live FKs to the canonical calendar row. For generated occurrences, this is the parent template UUID while the occurrence is live.
+2. `pomodoro_runs.original_event_id` preserves the exact occurrence identity. For generated occurrences, this is the synthetic `UUID::date`.
+3. When a protected occurrence or template is archived, live FKs become null and analytics joins through `calendar_events_archive.id = original_event_id`.
 
-This three-format contract is also documented in `data/schema.md` because it affects every join that touches `pomodoro_runs.event_id`.
+This two-field contract is also documented in `data/schema.md` because it affects every join that touches pomodoro history.
 
 Each instance gets its own runs and segments, independent of other instances. There is no inheritance of pomodoro state across instances: Monday's session ending mid-cycle does not carry over to Tuesday. Each new day starts fresh. This matches the user's mental model (Monday's deep work and Tuesday's deep work are separate blocks of time) and avoids cross-instance dependencies that would compound over a long-running series.
 
@@ -50,7 +50,7 @@ When a user edits an event that was already part of a saved recurring series, th
 
 A single instance is pulled out of the source series. The template gains an exception (EXDATE) for that date so the instance no longer expands from the source rule.
 
-If repeat is unchanged or cleared, the detached result is a standalone non-recurring event with a new UUID. All runs whose `event_id` matches the synthetic ID `templateId::date` are updated: their `event_id` and `original_event_id` move to the standalone UUID.
+If repeat is unchanged or cleared, the detached result is a standalone non-recurring event with a new UUID. Matching runs and segments move together: `pomodoro_runs.event_id`, `pomodoro_runs.original_event_id`, and `pomodoro_segments.event_id` all move from the template occurrence to the standalone UUID in the same transaction.
 
 If repeat is set or changed while using scope "this," the detached result becomes an independent recurring template anchored on the selected occurrence. The source template still only receives the exception date for the selected occurrence; later source-series occurrences continue unchanged.
 
@@ -64,7 +64,7 @@ When to choose detach: a one-off variation that should not affect the series.
 
 The template is capped with an UNTIL date set to the day before the selected instance. If repeat remains set, a new template is created starting from the selected instance with the updated properties and recurrence config. If repeat is cleared, the selected instance becomes one non-recurring survivor and later instances stop expanding.
 
-Runs on past instances still reference the old template, which still exists, just capped. Runs on new recurring future instances reference the new template's synthetic IDs. When repeat is cleared, runs on the selected synthetic instance transfer to the selected survivor.
+Runs and segments on past instances still reference the old template through the live canonical FK, while `original_event_id` keeps the exact synthetic occurrence. Runs on new recurring future instances use the new template UUID for live FKs and the new synthetic ID for `original_event_id`. When repeat is cleared, runs and segments on the selected synthetic instance transfer to the selected survivor.
 
 **Example.** "Study session" recurs daily at 09:00. The user selects Thursday and edits with scope "following," changing the time to 10:00. The old template gets UNTIL = Wednesday. A new template starts Thursday at 10:00 with the same recurrence rule. Monday through Wednesday's runs still reference the old template. Thursday onward generates instances from the new template.
 
@@ -72,9 +72,11 @@ Runs on past instances still reference the old template, which still exists, jus
 
 When to choose split: a permanent change that should apply going forward but not retroactively.
 
+For delete or archive with scope "following," protected occurrences from the selected occurrence through the captured edit time are archived as concrete occurrence snapshots first. The template is then capped before the selected occurrence, so unprotected future occurrences disappear instead of being archived.
+
 ### Template-wide edit ("edit all")
 
-For a template-wide edit where repeat remains set, the system first finds the protected history boundary. A protected occurrence is any occurrence whose end time is at or before the captured edit time, plus any occurrence with runs, segments, overrides, exceptions, an active session, or another persisted reference that must not lose identity.
+For a template-wide edit where repeat remains set, the system first finds the protected history boundary. A protected occurrence is any occurrence that has already started by the captured edit time, plus any occurrence with runs, segments, overrides, exceptions, an active session, or another persisted reference that must not lose identity.
 
 If no protected occurrence exists, the template can be updated directly. If protected occurrences exist, the preferred operation is to cap the old template at the last protected occurrence and create a new mutable template beginning at the first occurrence after that boundary. Detached standalones are reserved for occurrences that need their own event ID or cannot be represented safely by the capped historical template.
 
@@ -84,9 +86,13 @@ If repeat is cleared with scope "all," the mutable side collapses. The selected 
 
 When to choose all: a change that the user wants applied to the whole series from the selected edit perspective, while the app protects historical data automatically.
 
+For delete or archive with scope "all," a future-only untracked series can be hard deleted. Once any protected occurrence exists, protected occurrences from the template start through the captured edit time are archived as concrete occurrence snapshots, then the template is capped before its first occurrence so future occurrences disappear.
+
 ## Recurring scope selector UX
 
 The scope picker appears when the event being edited was already part of a saved recurring series when the panel opened. It appears for both the template's first occurrence and synthetic occurrences. It does not appear merely because the user adds repeat to a saved non-recurring event during the edit.
+
+When only the scope changes and no event fields have changed, the preview is an affected-scope preview. It keeps the current window's occurrences in place and draws the preview contour on the occurrences that would be affected by `Only this`, `Following`, or `All`. Field-change previews use the same affected-set rule for the contour: protected past occurrences may keep their current geometry and content because history is immutable, but they still get the contour when the chosen scope will touch them. The commit path decides per occurrence whether the result is archive or hard delete. Delete and archive confirmation apply one final visible projection before sequential archive writes run, so affected visible occurrences disappear together rather than one archived occurrence at a time.
 
 Default selection:
 
@@ -102,7 +108,7 @@ Several operations can cause protected occurrences to silently stop expanding fr
 
 A capped historical template is the preferred preservation mechanism when one rule can still represent the protected range without changing its meaning. Detached standalones are required for isolated exceptions, active occurrences that need their own identity, selected survivors, and imported or overridden instances that cannot be safely represented by the capped historical template.
 
-1. **Adding an exception (EXDATE) for a protected occurrence.** The affected occurrence is detached first so the exception does not erase it from history.
+1. **Adding an exception (EXDATE) for a protected occurrence.** The affected occurrence is archived or detached first so the exception does not erase it from history. Future untracked synthetic occurrence deletion only adds an EXDATE to the parent template.
 
 2. **Moving UNTIL to before protected occurrences.** Protected occurrences beyond the new UNTIL remain visible through the old capped template when possible, or through detached standalones when the old template cannot represent them safely.
 

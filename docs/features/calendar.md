@@ -57,8 +57,8 @@ The day and week views support direct manipulation:
 - **Drag an event body** moves it. The pointer snaps to a configurable minute granularity.
 - **Drag the top or bottom edge** resizes from that side. The opposite edge stays put.
 - **Esc, click outside, or pressing Save** closes the edit panel.
-- **Right-click** opens a context menu (delete, archive, duplicate). Past events show archive instead of delete.
-- **Delete event** removes the event immediately and shows a bottom `Event deleted` toast with `Undo` for 5 seconds. Closing the toast, letting it expire, or closing the app makes the delete permanent.
+- **Right-click** opens a context menu (delete, archive, duplicate). Protected events show archive instead of delete.
+- **Delete event** removes only future untracked events. Past, in-progress, started, or tracked events are archived instead. Delete and archive are blocked while a pomodoro run is active on the event.
 
 In month view, click on a day cell to switch to day view focused on that date. Click on an event row to open the edit panel.
 
@@ -119,7 +119,9 @@ Time-based view manipulations (zoom, scroll) do not affect the all-day band heig
 
 When a pomodoro session is running on an event, the calendar UI restricts certain edits to keep the timer's assumptions valid. The restrictions are not arbitrary: each one corresponds to a hazard documented in `data/hazards.md` (hazard 2).
 
-- **Delete is unavailable.** A past or in-progress event with tracking data can only be archived, never deleted (invariant 7). The delete button is hidden; the only available action is archive, and only after the session is stopped.
+- **Delete and archive are blocked while active.** A running pomodoro session must be stopped before the event can be deleted or archived.
+- **Protected rows archive instead of delete.** A past, in-progress, started, or tracked event can only be archived, never deleted (invariant 7). Future untracked events can still be hard deleted.
+- **Recurring delete scopes preserve protected occurrences.** `Only this` archives or deletes only the selected concrete occurrence. `Following` and `All` preview the affected occurrences uniformly, including past, present, and future visible occurrences. On commit, the UI applies the final visible projection in one step. Affected protected occurrences archive first, then unprotected future occurrences are removed from the visible series.
 - **End-time edits propagate.** Resizing the event end changes when the session expires. The timer schedules a new expiration tick; the rail reflects the new boundary.
 - **Start-time edits are no-ops for the running session.** The session already started; segments already exist. The new start time only affects future rendering of the rail background.
 - **Recurrence edits are scoped carefully.** Editing a recurring event with an active session must preserve the active run across `Only this`, `Following`, and `All`. Depending on the scope, the active occurrence may remain on the old template, move to a new template, become the selected collapse survivor, or be detached; the run transfers only when Save changes the active occurrence's event ID. See `features/calendar-recurrence.md`.
@@ -144,7 +146,7 @@ The Settings modal exposes a "Calendars" section (under the "Data" group) that l
 
 - **Import .ics file.** Calls the Rust command `vault_pick_and_read_ics_import`, which opens a native file picker filtered to `.ics` and `.zip`, validates the selected path in Rust, and reads only after the user chooses a file. Plain `.ics` files are capped at 25 MiB, parsed via `lib/calendar/ics/parser.ts`, and bulk-upserted by `(calendar_id, source_uid)`. A `.ics.zip` (Google Calendar's default export shape, where each calendar is a separate `.ics` inside the bundle) is unpacked in Rust with the `zip` crate using only the deflate feature enabled. The zip path validates entry paths through `enclosed_name` (zip-slip protection), refuses encrypted entries, and caps each entry at 25 MiB / aggregate 250 MiB / 1024 entries to reject decompression bombs. Each `.ics` entry becomes its own imported calendar (one toast aggregating the totals). Re-importing the same file always lands in the same calendar keyed by the source filename, so events deduplicate by UID instead of stacking. Imported calendar UI labels show the `.ics` basename and an `ics` tag; the import date belongs in the settings details, not in the main label. Warnings (lossy fields, unknown TZIDs, malformed events) print to the console.
 - **Export to .ics.** Per-calendar. Serializes every event in that calendar through `lib/calendar/ics/serializer.ts`, then calls `vault_pick_and_write_ics_export`. Rust owns the native save dialog, validates the final `.ics` path, and writes the file atomically.
-- **Delete calendar.** Per-row, with a confirm dialog. The cascade runs in two stages: `stores/calendars.svelte.ts.remove` first deletes every event in the calendar (which cascades through `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms` via their FK `ON DELETE CASCADE` on `calendar_events.id`), then deletes the `calendars` row. The built-in `local` calendar can never be deleted.
+- **Delete calendar.** Per-row, with a confirm dialog. The command first hard deletes future untracked events and archives protected events from that calendar, then deletes the `calendars` row. Archive rows keep the source `calendar_id` as text and do not FK to `calendars`, so imported-calendar deletion preserves protected history. The built-in `local` calendar can never be deleted.
 
 Re-import idempotence is driven by RFC 5545 `SEQUENCE`. On a re-import, an event with a lower sequence than the stored row is skipped, equal-or-higher overwrites in place (replacing all child rows in lockstep). Events without a `SEQUENCE` default to 0 on both sides, so the behavior degrades to "always overwrite on re-import", which is what the major calendars do anyway.
 

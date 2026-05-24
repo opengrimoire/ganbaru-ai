@@ -31,7 +31,7 @@ Top-level grouping for events. Lets the user keep their local data in `local` wh
 | `created_at` | ISO datetime | Row creation time. |
 | `updated_at` | ISO datetime | Last modification. |
 
-The `local` row is seeded on first boot (`INSERT OR IGNORE`) and can never be deleted from the UI. Deleting an imported calendar runs at the application layer (`stores/calendars.svelte.ts.remove`): events are removed first (`DELETE FROM calendar_events WHERE calendar_id = $1`), which cascades through `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms` via their FK `ON DELETE CASCADE` on `calendar_events.id`; the `calendars` row is then deleted.
+The `local` row is seeded on first boot (`INSERT OR IGNORE`) and can never be deleted from the UI. Deleting an imported calendar runs at the application layer (`stores/calendars.svelte.ts.remove`): future untracked events are hard deleted, protected rows are copied into archive tables, then the `calendars` row is deleted. Archive rows keep the original `calendar_id` as text and do not FK to `calendars`, so protected history survives removing an imported calendar.
 
 ### `icalendar_objects`
 
@@ -83,12 +83,11 @@ Component properties, parameters, nested values, and projection warnings are chi
 
 ### `calendar_events`
 
-The active calendar. One row per event (or per recurring template, with instances expanded on read).
+The active calendar. One row per event (or per recurring template, with instances expanded on read). The live table has real FKs for `calendar_id`, `icalendar_component_id`, child tables, and `pomodoro_configs`, plus `CHECK` constraints for booleans, enum values, palette slots, priority, sequence, required IDs, and complete GEO coordinate pairs.
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | UUID | Primary key. For recurring templates, also the base UUID for the first occurrence. |
-| `user_id` | UUID | Owner. Defaults to the local UUID in single-user mode. |
+| `id` | UUID | Primary key. For recurring templates, also the base UUID for generated occurrences. |
 | `title` | text | Display title. |
 | `description` | text or null | Rich text stored as sanitized HTML in the current implementation. Raw descriptions are capped at 20,000 characters before sanitization. |
 | `start_time` | ISO datetime | Event start as a UTC ISO 8601 instant (`YYYY-MM-DDTHH:MM:SSZ`). |
@@ -103,7 +102,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `visibility` | enum | `public` or `private`. Imported `CONFIDENTIAL` values normalize to `private`. The database default is `public` to match missing iCalendar `CLASS`, while app-authored panel events default to `private`. |
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
 | `recurrence_exceptions` | child rows | Stored in `calendar_event_exdates`, one occurrence date per row. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |
-| `recurrence_parent_id` | UUID or null | For detached instances, points to the original template. Used to trace history. |
+| `calendar_id` | UUID | FK to `calendars`. Deleting a calendar archives or hard deletes its events first, then removes the calendar row. |
 | `pomodoro_config` | child row or null | Per-event pomodoro settings in `pomodoro_configs`. Null means pomodoro is disabled for this event. |
 | `notification_config` | child rows | Notification offsets in `calendar_event_notifications`, one row per offset. |
 | `attendees` | child rows | Participants in `calendar_event_attendees`. |
@@ -115,8 +114,8 @@ The active calendar. One row per event (or per recurring template, with instance
 | `local_rsvp_status` | text or null | App-local RSVP state for the "You (Local, no email provided)" meeting row. It drives local event surface patterns before an email identity exists and is not exported as iCalendar `ATTENDEE` data. |
 | `timezone` | text | IANA home zone (`America/Los_Angeles`). Required and non-empty. Used as the anchor for recurrence math (so "9 AM daily" stays 9 AM through DST, walked via `Temporal.PlainDate` arithmetic), and as the `TZID` on `.ics` re-export. The render zone (what the UI shows) is independent: it tracks the device's current zone by default, with an opt-in preference (`preferences.eventTimezoneDisplay`) to pin display to this home zone instead. |
 | `environment_id` | UUID or null | FK to `work_environments` (planned). Null when no environment is attached. |
-| `created_at` | ISO datetime | Row creation time. |
-| `updated_at` | ISO datetime | Last modification. Bumped on any column change. |
+| `created_at` | ISO datetime | Row creation time as UTC ISO with `Z`. |
+| `updated_at` | ISO datetime | Last modification as UTC ISO with `Z`. Bumped on any column change. |
 
 Indexes: `(start_time)`, `(end_time)`, `(calendar_id)`, and `(calendar_id, source_uid)` for window queries, archival sweeps, and import identity.
 
@@ -132,7 +131,29 @@ Why `pomodoro_configs` is normalized: the config becomes part of analytics once 
 
 ### `calendar_events_archive`
 
-Same schema as `calendar_events`, plus `archived_at` (ISO datetime). Past events that the user archived live here. The calendar UI never queries this table; analytics and stats join via `original_event_id` on `pomodoro_runs`.
+Snapshot table for events removed from the active calendar but retained as history. It stores the scalar `calendar_events` columns plus:
+
+- `id`: the exact archived identity. For a recurring occurrence this is the synthetic ID, such as `templateId::YYYY-MM-DD`.
+- `source_event_id`: the live row that produced the snapshot. For a synthetic occurrence this is the parent template ID.
+- `archived_at`: UTC ISO timestamp for the archive transaction.
+
+Archive rows do not FK to `calendars` or live iCalendar component rows. The archived `calendar_id` and `icalendar_component_id` values are copied as text so deleting an imported calendar or replacing preservation rows cannot destroy retained history.
+
+Archive child data stays normalized, not JSON. Snapshot tables exist for pomodoro config, notifications, EXDATEs, RDATEs, categories, extended properties, organizer, attendees, alarms, recurrence overrides, and override extended properties:
+
+- `calendar_event_archive_pomodoro_configs`
+- `calendar_event_archive_notifications`
+- `calendar_event_archive_exdates`
+- `calendar_event_archive_rdates`
+- `calendar_event_archive_categories`
+- `calendar_event_archive_extended_properties`
+- `calendar_event_archive_organizers`
+- `calendar_event_archive_attendees`
+- `calendar_event_archive_alarms`
+- `calendar_event_archive_overrides`
+- `calendar_event_archive_override_extended_properties`
+
+The calendar UI does not query archive tables for normal rendering. Analytics can join retained sessions through `pomodoro_runs.original_event_id`.
 
 ## Pomodoro
 
@@ -160,8 +181,8 @@ One row per continuous session of pomodoro work. Created when the timer starts, 
 | Field | Type | Description |
 |---|---|---|
 | `id` | UUID | Primary key. |
-| `event_id` | UUID or null | FK to `calendar_events` (SET NULL on delete/archive). Null after the event is archived. |
-| `original_event_id` | UUID | Event ID at the time the run was created. Not a FK, just a value. Used to join to `calendar_events_archive` for analytics. |
+| `event_id` | UUID or null | Nullable FK to the live canonical `calendar_events.id`. For a recurring occurrence this stores the parent template ID while it is live. It becomes null after archive. |
+| `original_event_id` | UUID or synthetic ID | Exact event identity at the time the run was created or transferred. Recurring occurrences keep `templateId::YYYY-MM-DD`. This is not a FK. It is used to join archive snapshots and preserve occurrence identity after live FKs are nulled. |
 | `event_date` | `YYYY-MM-DD` | The calendar day this run belongs to. |
 | `planned_start` | ISO datetime | Planned start of the run within the event window. |
 | `planned_end` | ISO datetime | Planned end of the run, usually the event end. |
@@ -185,7 +206,7 @@ Indexes: `(event_id, event_date)`, `(original_event_id)`, `(ended_at)`, plus a p
 
 Why the inherited fields are on the run instead of derived from the chain of previous runs: traversing the chain is fragile (previous runs might reference archived events) and slow (the chain length is unbounded). Capturing the inherited state on the run itself makes each run self-contained for plan derivation. See `algorithms/pomodoro-segments-and-plan.md`.
 
-Why `original_event_id` is duplicated alongside `event_id` instead of relying on the FK: archival triggers a SET NULL on `event_id`. Without `original_event_id`, the run would be orphaned from analytics queries. The two-field pattern (live FK plus immutable historical pointer) keeps both joins clean.
+Why `original_event_id` is duplicated alongside `event_id` instead of relying on the FK: archive and protected calendar removal set the live FK to null. Without `original_event_id`, the run would be orphaned from analytics queries and recurring occurrence identity would be lost. The two-field pattern keeps live joins and historical joins separate.
 
 ### `pomodoro_segments`
 
@@ -194,7 +215,7 @@ One row per uninterrupted stretch of focus or break. A row is only created when 
 | Field | Type | Description |
 |---|---|---|
 | `id` | UUID | Primary key. |
-| `event_id` | UUID or null | FK to `calendar_events` (SET NULL on delete/archive). Null after the event is deleted or archived; `run_id` still preserves the segment through the run. |
+| `event_id` | UUID or null | Nullable FK to the live canonical `calendar_events.id`. For recurring occurrences this stores the parent template ID while live. It becomes null after archive; `run_id` still preserves the segment through the run. |
 | `event_date` | `YYYY-MM-DD` | The calendar day this segment belongs to. |
 | `run_id` | UUID | FK to `pomodoro_runs` (CASCADE delete). |
 | `cycle_number` | integer | Which pomodoro cycle (1 to `pomodoro_count`). |
@@ -263,26 +284,28 @@ Index: `(run_id, occurred_at)` for replaying a run's event history.
 
 ### Run reference integrity (for recurring events)
 
-After any structural operation on a recurring event, runs must point to valid, resolvable event IDs. The synthetic ID format is `templateId::YYYY-MM-DD`.
+After any structural operation on a recurring event, runs and segments must point to valid live rows through `event_id`, while `pomodoro_runs.original_event_id` keeps the exact occurrence identity. The synthetic identity format is `templateId::YYYY-MM-DD`.
 
-| Operation | Effect on run `event_id` |
+| Operation | Effect on live references |
 |---|---|
-| Detach instance | Updated from `templateId::date` to the standalone's new UUID. |
-| Split series | Runs on old dates keep `templateId::date` (old template still exists, capped). Runs on new dates reference `newTemplateId::date`. |
-| Delete template (future-only, no past instances) | Runs are deleted via CASCADE (no past data exists to preserve). |
-| Archive template | `event_id` becomes null via SET NULL. `original_event_id` preserves the link. |
-| Add recurrence to existing event | Existing runs keep the base UUID. Future instance runs use `UUID::date`. Both are valid. |
-| Remove recurrence (scope "all") | Protected history remains resolvable through a capped historical template or detached standalones. The selected mutable occurrence becomes the non-recurring survivor. Runs on the selected occurrence transfer to the survivor when the selected occurrence was synthetic. |
+| Detach instance | Matching `pomodoro_runs.event_id` and `pomodoro_segments.event_id` move from the template UUID to the standalone UUID. The active run's `original_event_id` also moves to the standalone UUID. |
+| Split series | Runs and segments on old dates keep the old template UUID. Active runs transferred to the new template update `event_id`, `original_event_id`, and segment `event_id` in one transaction. |
+| Delete future synthetic occurrence | Adds an EXDATE to the template. No run or segment rows should exist because tracked occurrences are protected. |
+| Archive synthetic occurrence | Writes `calendar_events_archive.id = templateId::date`, adds an EXDATE, and sets matching run and segment `event_id` values to null while preserving `original_event_id`. |
+| Delete template (future-only, no tracking) | Hard deletes the live template and children. No run or segment rows should exist. |
+| Archive template | `event_id` becomes null on matching runs and segments. `original_event_id` preserves the exact identity. |
+| Add recurrence to existing event | Existing runs keep the base UUID in both live and original references. Future instance runs use the template UUID for `event_id` and `UUID::date` for `original_event_id`. |
+| Remove recurrence (scope "all") | Protected history remains resolvable through a capped historical template, archive rows, or detached standalones. The selected mutable occurrence becomes the non-recurring survivor. |
 
 When recurrence is removed with scope "all," the base UUID remains the run target only when the selected survivor can safely reuse the template without rewriting protected history. If protected history keeps the old template, the selected survivor is detached into a standalone event, and runs attached to `templateId::date` for that selected occurrence move to the survivor event ID. Runs attached to other protected occurrences remain resolvable through the capped historical template unless those occurrences had to be detached, in which case they move to their detached standalone IDs.
 
-Code that resolves an `event_id` on a run must handle three formats:
+Code that resolves a run must read both fields:
 
-1. A plain UUID (non-recurring event, or the first occurrence of a template).
-2. A synthetic `UUID::date` (recurring instance that still expands).
-3. A null (archived event, join to `calendar_events_archive` via `original_event_id`).
+1. `event_id`: nullable live canonical FK. It is a plain UUID when live and null after archive.
+2. `original_event_id`: exact historical identity. It can be a plain UUID or a synthetic `UUID::date`.
+3. Archive fallback: when `event_id` is null, join to `calendar_events_archive.id = original_event_id`.
 
-If a synthetic ID no longer expands (e.g. an UNTIL cap removed the instance and detach failed), the run is an orphan. Analytics surface orphaned runs as a data integrity warning, not silent failure.
+If `original_event_id` is synthetic and neither the live template expands that occurrence nor an archive row exists, the run is an orphan. Analytics surface orphaned runs as a data integrity warning, not silent failure.
 
 ## Themes
 

@@ -8,7 +8,7 @@ The core rule is simple: preview is a non-mutating projection of the current sav
 
 - `features/calendar-recurrence.md`: the stored template and instance model.
 - `algorithms/recurrence-expansion.md`: how a recurrence rule expands into visible instances.
-- `data/invariants.md`: invariant 7, past events are never deleted.
+- `data/invariants.md`: invariant 7, protected events are never deleted.
 - `features/pomodoro.md`: timer behavior tied to calendar events.
 - `features/pomodoro-progress-displays.md`: rail rendering for event blocks.
 
@@ -57,6 +57,8 @@ These outcomes are required:
 **Field operation.** The normalized meaning of a draft field: unchanged, set, or cleared.
 
 **Projection.** The non-mutating visible event list and preview contour set for the current draft and scope.
+
+**Delete or archive projection.** The visible event list after the current scope is removed. This is separate from edit projection because protected occurrences archive while future untracked occurrences hard delete, but both should disappear from the visible calendar in one final projection.
 
 **Commit plan.** The ordered mutation plan that Save executes to make the projection real.
 
@@ -117,6 +119,10 @@ Projection returns:
 The visible event list must include unchanged unrelated events exactly as they were. It may replace events from the edited series with virtual events, but only inside the visible window.
 
 Preview contour IDs must be a subset of the rendered event IDs. If a virtual event is previewed, it needs a stable virtual ID that cannot collide with persisted or synthetic IDs.
+
+For delete and archive, the scope selector uses the same affected-set preview model as editing. `Only this` contours the selected occurrence. `Following` contours the selected occurrence and later rendered occurrences in the same series. `All` contours all rendered occurrences in the series, including protected past occurrences. A protected past occurrence may keep its current geometry and content in the preview, but the contour still communicates that the operation will archive it.
+
+When the user confirms delete or archive, the UI applies one final visible projection for the affected scope before executing the sequential database writes. This projection is display-only. It prevents protected occurrence archive batches from disappearing one by one while the backend snapshots each occurrence and caps the template.
 
 ## Save contract
 

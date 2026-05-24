@@ -115,9 +115,9 @@ The calendar is the source of truth for when sessions run. The pomodoro system r
 This means:
 
 - Events without a pomodoro config simply do not participate in the timer. They show on the calendar like any other event.
-- Deleting an event with an active pomodoro run must close the run first. Historical runs and segments remain in the pomodoro tables.
+- Deleting or archiving an event with an active pomodoro run is rejected until the run is stopped. Calendar removal and clear-all operations use the same guard.
 - Editing the event's time changes when the session ends (see `features/calendar.md` → "Active session protection").
-- Deleting or archiving an event preserves the runs and segments by SET NULL on `event_id` and the snapshot fields (`original_event_id`, `event_title_snapshot`). Analytics joins continue to work.
+- Deleting future untracked events removes only calendar data. Archiving protected events preserves runs and segments by setting live `event_id` FKs to null while keeping `pomodoro_runs.original_event_id` and `event_title_snapshot`. For recurring occurrences, `original_event_id` keeps the exact synthetic ID.
 
 The dependency runs one way: pomodoro depends on calendar, not the other way around. Removing the pomodoro feature would not break the calendar; removing the calendar would leave pomodoro with nothing to drive it.
 

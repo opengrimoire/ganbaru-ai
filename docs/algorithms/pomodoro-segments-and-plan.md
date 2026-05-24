@@ -64,7 +64,7 @@ Without inheritance, every block transition and reconfiguration would start fres
 
 ### Why store inherited state on the run rather than derive it
 
-Without `inherited_focus_minutes` and `inherited_cycle`, reconstructing the plan for a transition or reconfiguration run would require traversing the chain of previous runs and their segments. This is fragile (previous runs might reference archived events, breaking the join) and slow (chain length is unbounded if many transitions happen). Capturing the inherited state on the run itself makes each run self-contained: the plan can be derived from the run alone, without joining anywhere else.
+Without `inherited_focus_minutes` and `inherited_cycle`, reconstructing the plan for a transition or reconfiguration run would require traversing the chain of previous runs and their segments. This is fragile because previous runs might have null live event FKs after archive and only retain the exact occurrence in `original_event_id`. It is also slow because chain length is unbounded if many transitions happen. Capturing the inherited state on the run itself makes each run self-contained: the plan can be derived from the run alone, without joining anywhere else.
 
 ## End reasons
 

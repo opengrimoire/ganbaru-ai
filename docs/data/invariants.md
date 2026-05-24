@@ -68,9 +68,9 @@ Once a segment has `actual_start` set and its status is `completed` or `interrup
 
 **Enforced by:** absence of any delete-segment API. Even structural calendar operations (detach, split, template-wide edit) preserve segments by transferring run references rather than dropping them.
 
-## 7. Past events are never deleted
+## 7. Protected events are never deleted
 
-A calendar event whose end time is in the past can only be archived, never deleted. This applies regardless of whether the event has tracking data. An event where the user planned to focus but never opened the app is still valuable: the absence of work on a planned block is itself a procrastination pattern. Only future events (entirely in the future, no tracking data) can be truly deleted.
+A calendar event that has started, is in progress, is in the past, or has pomodoro tracking can only be archived, never hard deleted. This applies regardless of whether the event has completed focus segments. An event where the user planned to focus but never opened the app is still valuable: the absence of work on a planned block is itself a procrastination pattern. Only future events with no run or segment history can be truly deleted.
 
 **Why:** this is invariant 6 generalized to events. The shape of the user's schedule is part of the historical record; deleting past blocks rewrites the past.
 
@@ -78,15 +78,15 @@ A calendar event whose end time is in the past can only be archived, never delet
 
 **Enforced by every programmatic boundary:**
 
-- **UI:** no delete button is rendered on a past event. The only available action is archive.
+- **UI:** protected events show archive behavior instead of delete. Active sessions must be stopped before delete or archive.
 - **CLI (`ganbaruai`):** delete commands on past events are rejected with a descriptive error pointing to archive. The rejection is logged with timestamp, command, and event ID.
 - **MCP handlers:** event deletion handlers refuse past events at the handler level and return a structured error including the archive alternative.
-- **Internal Tauri commands and database layer:** every DELETE on `calendar_events` is guarded by `end_time > now()`. The guard is the last-resort protection in case a higher layer has a bug.
+- **Internal Tauri commands and database layer:** `calendar_delete_event` accepts the concrete rendered identity and rejects protected rows with an archive-required error. Hard delete is allowed only when the exact event or occurrence is future-only and untracked. `calendar_archive_event`, `calendar_clear_events`, and `calendar_remove_calendar` snapshot protected rows into archive tables and null live pomodoro FKs.
 - **AI agent integration:** system prompts and tool descriptions communicate the policy. Repeated rejection attempts by an agent are logged for diagnostic purposes.
 
 The user owns the SQLite file and can modify it directly with a third-party tool. The app does not attempt to prevent that. But every code path inside the app must refuse.
 
-Recurring events have additional protection: structural changes that would cause protected occurrences to silently stop expanding (an EXDATE on a protected date, an UNTIL moved earlier, a pattern change that excludes protected dates) must preserve those occurrences first. This is not a visible-window-only rule. For supported recurrence rules, structural edit code must reason over all affected occurrences from the template start through the captured edit time, using each occurrence's end time rather than only its date. Same-day occurrences that already ended are protected; same-day occurrences that have not ended remain mutable. A capped historical template is preferred when it can preserve the protected range without changing its meaning. Detached standalone events are required when an occurrence needs its own event ID or cannot be represented safely by the capped template. Occurrences with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected. See `features/calendar-recurrence.md`.
+Recurring events have additional protection: structural changes that would cause protected occurrences to silently stop expanding (an EXDATE on a protected date, an UNTIL moved earlier, a pattern change that excludes protected dates) must preserve those occurrences first. This is not a visible-window-only rule. For supported recurrence rules, structural edit code must reason over all affected occurrences from the template start through the captured edit time, using each occurrence's end time rather than only its date. Same-day occurrences that already started are protected; same-day occurrences that have not started and have no tracking remain mutable. A capped historical template is preferred when it can preserve the protected range without changing its meaning. Detached standalone events or archive snapshots are required when an occurrence needs its own event ID or cannot be represented safely by the capped template. Occurrences with runs, segments, overrides, exceptions, active sessions, or persisted references are always protected. See `features/calendar-recurrence.md`.
 
 ## Adding new invariants
 
