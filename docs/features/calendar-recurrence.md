@@ -44,7 +44,7 @@ Each instance gets its own runs and segments, independent of other instances. Th
 
 ## Structural operations
 
-When a user edits an event that was already part of a saved recurring series, the scope picker offers three choices: this, following, all. Each maps to a structural operation. Adding repeat to a saved non-recurring event does not show this picker because there is no existing series to scope.
+When a user edits an event that was already part of a saved recurring series, the scope picker offers three choices: this, following, all. Each maps to a structural operation. Adding repeat to a saved non-recurring event does not show this picker because there is no existing series to scope. If the selected recurring occurrence is active, the picker is hidden and the edit is treated as `Only this`.
 
 ### Detach ("edit this")
 
@@ -72,7 +72,7 @@ Runs and segments on past instances still reference the old template through the
 
 When to choose split: a permanent change that should apply going forward but not retroactively.
 
-For delete or archive with scope "following," one semantic plan archives protected occurrences from the selected occurrence through the captured edit time, then caps the template before the selected occurrence so unprotected future occurrences disappear instead of being archived. The backend applies those archive and cap operations in one transaction.
+For delete or archive with scope "following," selecting a started occurrence is a history-only operation: one semantic plan archives started affected occurrences from the selected occurrence through the captured edit time and leaves later mutable occurrences in the repeat chain. Selecting a future occurrence keeps the structural delete behavior: protected occurrences in range archive first, then the template is capped before the selected occurrence so unprotected future occurrences disappear instead of being archived. The backend applies each plan atomically.
 
 ### Template-wide edit ("edit all")
 
@@ -86,13 +86,13 @@ If repeat is cleared with scope "all," the mutable side collapses. The selected 
 
 When to choose all: a change that the user wants applied to the whole series from the selected edit perspective, while the app protects historical data automatically.
 
-For delete or archive with scope "all," a future-only untracked series can be hard deleted. Once any protected occurrence exists, one semantic plan archives protected occurrences from the template start through the captured edit time, then caps the template before its first occurrence so future occurrences disappear. The backend applies the archive and cap operations atomically.
+For delete or archive with scope "all," selecting a started occurrence archives started occurrences from the template start through the captured edit time and leaves later mutable occurrences in the repeat chain. A future-only untracked series can still be hard deleted. When the selected occurrence is future and protected history exists, the protected history remains on the original template and the plan caps the series at the last started occurrence, or at the captured edit date when the protected generated occurrences were already removed as exceptions. Future protected occurrences inside the removed mutable side archive before the cap. The backend applies each plan atomically.
 
 ## Recurring scope selector UX
 
-The scope picker appears when the event being edited was already part of a saved recurring series when the panel opened. It appears for both the template's first occurrence and synthetic occurrences. It does not appear merely because the user adds repeat to a saved non-recurring event during the edit.
+The scope picker appears when the event being edited was already part of a saved recurring series when the panel opened. It appears for both the template's first occurrence and synthetic occurrences. It does not appear merely because the user adds repeat to a saved non-recurring event during the edit, and it does not appear for the selected occurrence when that occurrence is the active pomodoro event. Active selected recurring occurrences save as `Only this`.
 
-When only the scope changes and no event fields have changed, the preview is an affected-scope preview. It keeps the current window's occurrences in place and draws the preview contour on the occurrences that would be affected by `Only this`, `Following`, or `All`. Field-change previews use the same affected-set rule for the contour: protected occurrences may keep their current geometry and content because history is immutable, but they still get the contour when the chosen scope will touch them. The delete/archive planner decides per occurrence whether the result is archive or hard delete. Delete and archive confirmation apply one final visible projection before the atomic backend batch runs, so affected visible occurrences disappear together rather than one archived occurrence at a time.
+When only the scope changes and no event fields have changed, the preview is an affected-scope preview. It keeps the current window's occurrences in place and draws the preview contour on the occurrences that would be affected by `Only this`, `Following`, or `All`. For a started selected occurrence, `Following` and `All` contour only started occurrences because delete and archive from history do not touch future rows. For a future selected occurrence with protected history, `All` contours only the mutable future rows that would disappear. Field-change previews use the same affected-set rule for the contour: protected occurrences may keep their current geometry and content because history is immutable, but they still get the contour when the chosen scope will touch them. The delete/archive planner decides per occurrence whether the result is archive or hard delete. Delete and archive confirmation apply one final visible projection before the atomic backend batch runs, so affected visible occurrences disappear together rather than one archived occurrence at a time.
 
 Default selection:
 
@@ -109,6 +109,8 @@ Several operations can cause protected occurrences to silently stop expanding fr
 A capped historical template is the preferred preservation mechanism when one rule can still represent the protected range without changing its meaning. Detached standalones are required for isolated exceptions, active occurrences that need their own identity, selected survivors, and imported or overridden instances that cannot be safely represented by the capped historical template.
 
 1. **Adding an exception (EXDATE) for a protected occurrence.** The affected occurrence is archived or detached first so the exception does not erase it from history. Future untracked synthetic occurrence deletion only adds an EXDATE to the parent template.
+
+   If a later `Following` split creates a new mutable template, exception dates at or after that new template's start are copied forward so detached, archived, or deleted occurrences do not regenerate as part of the new chain.
 
 2. **Moving UNTIL to before protected occurrences.** Protected occurrences beyond the new UNTIL remain visible through the old capped template when possible, or through detached standalones when the old template cannot represent them safely.
 
@@ -128,22 +130,19 @@ For supported recurrence frequencies, this protection is exact for all affected 
 
 ## Active session continuity during recurrence edits
 
-When the user edits a recurring event's recurrence settings while a session is running on one of its instances, the active session must survive regardless of the scope or the nature of the change.
+When the user edits a recurring event while a session is running on one of its instances, the active session must survive, but the active selected occurrence cannot edit the repeat chain.
 
 **Scope "this":** if the selected occurrence is active, it is detached. If repeat is unchanged or cleared, the active session transfers to the standalone's UUID. If repeat is set or changed, the active session transfers to the detached independent template's first occurrence. If another occurrence in the same source series is active, it is unaffected.
 
-**Scope "following":** the series splits. If the active instance is at the requested split point, active-session protection wins and the effective split moves to the next occurrence. The active instance stays on the old template, which is capped at the active occurrence. If repeat was cleared, no new future template is created and later occurrences stop. If the active instance is before the split point, it is unaffected. If the active instance is after the split point, it moves to the corresponding occurrence in the new template when repeat remains set, or is materialized as a standalone when repeat is cleared.
+**Selected active occurrence:** the scope picker is hidden and Save uses `Only this`, even if the previous panel scope was `Following` or `All`. Direct manipulation can only resize the bottom edge to change the end time. Moving the block or resizing its top edge is disabled because the start time already has pomodoro history.
 
-**Scope "all":** four steps in order:
+**Scope "following":** if the active occurrence is before the selected split point, it is unaffected. If the active occurrence is after the selected split point, Save materializes that active occurrence unchanged as a standalone event before splitting the series, then transfers the active run there. The new following chain does not move, retime, or otherwise rewrite the active occurrence.
 
-1. Preserve every protected occurrence that would vanish, move, or change meaning (invariant 7, as above).
-2. Materialize or reuse the selected occurrence as the save operation requires.
-3. Transfer the active session if the active occurrence is materialized, moves to a new template, or becomes the selected survivor.
-4. Apply the template-wide change or collapse. The session continues on the materialized occurrence, new-template occurrence, or survivor and does not transition to an unrelated recurring instance.
+**Scope "all":** protected history remains unchanged through the normal invariant 7 boundary. A protected active occurrence is part of that preserved side and is not moved or retimed by a template-wide edit started from another occurrence. Mutable future occurrences use the edited chain.
 
-**Example, removing recurrence while active.** "Daily focus" recurs every day. The user is mid-session on today's instance and removes recurrence with scope "all." Earlier protected instances remain on the capped historical template. Today's selected occurrence becomes the non-recurring survivor, and the active session transfers to that survivor if needed. Future daily instances stop expanding. The active session finishes normally on the survivor.
+**Example, changing future times while today is active.** "Daily focus" recurs every day from 09:00 to 13:00. Monday's occurrence is active at 10:30. The user edits Tuesday and chooses `All`, changing the time to 14:00 to 18:00. Monday remains 09:00 to 13:00 with its active session intact. Tuesday and later mutable occurrences move to 14:00 to 18:00.
 
-**Example, changing pattern while active.** "Study" recurs Mon/Wed/Fri. Today is Wednesday, session is active. The user changes to "Mon/Thu" with scope "all." Wednesday is no longer in the new pattern, so today's active instance would vanish if the template changed directly. The system preserves older protected history, detaches today's active occurrence if it needs its own identity, and applies the pattern change to the mutable side. The session continues on the standalone Wednesday.
+**Example, following edit across an active later occurrence.** "Daily focus" recurs every day. The user selects Monday and chooses `Following` while Wednesday is active. Save materializes Wednesday unchanged as a standalone event, transfers the active run there, and applies the following edit to the rest of the chain without moving Wednesday.
 
 **Example, adding recurrence to an active non-recurring event.** The user has "Project work" 14:00-16:00 with a running session. They add "repeat daily." The event becomes a template. The active run's `event_id` is the base UUID (the template ID), which is also the first occurrence. Tomorrow's instance will be `UUID::2026-04-17`. The session continues because the template's base ID is still a valid first occurrence. Code must not assume all recurring instances have `::date` suffixes; the template's own occurrence uses the base UUID.
 
@@ -155,4 +154,4 @@ The protected-history behavior described above resolves this naturally: protecte
 
 This is not an additional rule. It is a natural consequence of separating protected history from mutable future instances before applying template-wide edits.
 
-**Example.** "Morning meeting" recurs daily at 09:00-09:30. The user changes it to 14:00-14:30 with scope "all" after today's meeting has started. The old template is capped at today's occurrence, preserving protected 09:00-09:30 blocks. The mutable template starts at the first later occurrence and expands at 14:00-14:30. Historical runs align with their original event blocks.
+**Example.** "Morning meeting" recurs daily at 09:00-09:30. The user changes it to 14:00-14:30 with scope "all" after today's meeting has started. Today's protected 09:00-09:30 occurrence remains unchanged. The mutable template starts at the first later mutable occurrence and expands at 14:00-14:30. Historical runs align with their original event blocks, and the active occurrence is not split.

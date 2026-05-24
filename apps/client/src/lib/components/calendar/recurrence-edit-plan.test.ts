@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent } from "./types";
 import {
+  applyFollowing,
   buildRecurringCommitPlan,
   buildRecurringEditPlan,
   getRecurrenceFieldOperation,
@@ -139,6 +140,100 @@ describe("recurrence edit planner", () => {
     expect(result.editingId).toBe(inst16.id);
   });
 
+  it("limits following scope-only preview from a started occurrence to started rows", () => {
+    const template = makeRecurringTemplate();
+    const inst16 = makeInstance(template, "2027-06-16");
+    const inst17 = makeInstance(template, "2027-06-17");
+    const storeEvents = [template, inst16, inst17];
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents,
+      originalEvent: inst16,
+      instanceEvent: inst16,
+      templateId: template.id,
+      changes: {},
+      scope: "following",
+      window: TEST_WINDOW,
+      currentDate: "2027-06-16",
+      currentTime: "12:00",
+    }).display;
+
+    expect(result.events).toBe(storeEvents);
+    expect(result.previewedIds).toEqual(new Set([inst16.id]));
+    expect(result.editingId).toBe(inst16.id);
+  });
+
+  it("treats panel-normalized default fields as unchanged for started following preview", () => {
+    const template = makeRecurringTemplate({
+      allDay: false,
+      meetingEnabled: false,
+      location: "",
+      description: "",
+      transparency: "opaque",
+      status: "confirmed",
+      visibility: "public",
+    });
+    const inst16 = makeInstance(template, "2027-06-16");
+    const inst17 = makeInstance(template, "2027-06-17");
+    const storeEvents = [template, inst16, inst17];
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents,
+      originalEvent: inst16,
+      instanceEvent: inst16,
+      templateId: template.id,
+      changes: {
+        title: inst16.title,
+        start: inst16.start,
+        end: inst16.end,
+        recurrence: inst16.recurrence,
+        allDay: undefined,
+        meetingEnabled: undefined,
+        location: undefined,
+        description: "",
+        transparency: undefined,
+        status: undefined,
+        visibility: undefined,
+      },
+      scope: "following",
+      window: TEST_WINDOW,
+      currentDate: "2027-06-16",
+      currentTime: "12:00",
+    }).display;
+
+    expect(result.events).toBe(storeEvents);
+    expect(result.previewedIds).toEqual(new Set([inst16.id]));
+    expect(result.editingId).toBe(inst16.id);
+  });
+
+  it("does not contour a later active occurrence from a started following archive preview", () => {
+    const template = makeRecurringTemplate();
+    const inst16 = makeInstance(template, "2027-06-16");
+    const active = makeInstance(template, "2027-06-17");
+    const future = makeInstance(template, "2027-06-18");
+    const storeEvents = [template, inst16, active, future];
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents,
+      originalEvent: inst16,
+      instanceEvent: inst16,
+      templateId: template.id,
+      changes: {},
+      scope: "following",
+      window: TEST_WINDOW,
+      currentDate: "2027-06-17",
+      currentTime: "12:00",
+      activeDate: "2027-06-17",
+    }).display;
+
+    expect(result.events).toBe(storeEvents);
+    expect(result.previewedIds).toEqual(new Set([inst16.id]));
+    expect(result.editingId).toBe(inst16.id);
+  });
+
   it("previews all scope as affected occurrences when there are no field changes", () => {
     const template = makeRecurringTemplate();
     const inst16 = makeInstance(template, "2027-06-16");
@@ -161,6 +256,87 @@ describe("recurrence edit planner", () => {
     expect(result.events).toBe(storeEvents);
     expect(result.previewedIds).toEqual(new Set([template.id, inst16.id, inst17.id]));
     expect(result.editingId).toBe(inst16.id);
+  });
+
+  it("limits all scope-only preview from a started occurrence to started rows", () => {
+    const template = makeRecurringTemplate();
+    const inst16 = makeInstance(template, "2027-06-16");
+    const inst17 = makeInstance(template, "2027-06-17");
+    const storeEvents = [template, inst16, inst17];
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents,
+      originalEvent: inst16,
+      instanceEvent: inst16,
+      templateId: template.id,
+      changes: {},
+      scope: "all",
+      window: TEST_WINDOW,
+      currentDate: "2027-06-16",
+      currentTime: "12:00",
+    }).display;
+
+    expect(result.events).toBe(storeEvents);
+    expect(result.previewedIds).toEqual(new Set([template.id, inst16.id]));
+    expect(result.editingId).toBe(inst16.id);
+  });
+
+  it("limits all scope-only preview from a future occurrence to future rows when history exists", () => {
+    const template = makeRecurringTemplate();
+    const inst16 = makeInstance(template, "2027-06-16");
+    const inst18 = makeInstance(template, "2027-06-18");
+    const inst19 = makeInstance(template, "2027-06-19");
+    const storeEvents = [template, inst16, inst18, inst19];
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents,
+      originalEvent: inst18,
+      instanceEvent: inst18,
+      templateId: template.id,
+      changes: {},
+      scope: "all",
+      window: TEST_WINDOW,
+      currentDate: "2027-06-17",
+      currentTime: "12:00",
+    }).display;
+
+    expect(result.events).toBe(storeEvents);
+    expect(result.previewedIds).toEqual(new Set([inst18.id, inst19.id]));
+    expect(result.editingId).toBe(inst18.id);
+  });
+
+  it("does not regenerate detached exception dates in following preview", () => {
+    const template = makeRecurringTemplate({
+      exceptions: ["2027-06-18"],
+    });
+    const inst16 = makeInstance(template, "2027-06-16");
+    const detachedActive: CalendarEvent = {
+      ...inst16,
+      id: "detached-active",
+      start: "2027-06-18 09:00",
+      end: "2027-06-18 09:30",
+      recurringParentId: undefined,
+      recurrence: undefined,
+      exceptions: undefined,
+    };
+
+    const result = applyFollowing(
+      [template],
+      [template, inst16, detachedActive],
+      template.id,
+      inst16,
+      { title: "Changed" },
+      TEST_WINDOW,
+    );
+
+    const regenerated = result.events.find((event) =>
+      event.recurringParentId === `__vf__${template.id}`
+      && event.start.startsWith("2027-06-18 ")
+    );
+    expect(regenerated).toBeUndefined();
+    expect(result.events.find((event) => event.id === detachedActive.id)).toBeDefined();
   });
 
   it("plans only-this clear as a standalone detach with refresh", () => {
@@ -238,7 +414,7 @@ describe("recurrence edit planner", () => {
     });
   });
 
-  it("plans following clear on the active selected occurrence as a cap only", () => {
+  it("normalizes following clear on the active selected occurrence to only-this", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
 
@@ -254,16 +430,23 @@ describe("recurrence edit planner", () => {
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
-      "cap-template",
+      "detach-occurrence",
+      "transfer-active-run",
       "refresh-window",
     ]);
     expect(plan.operations[0]).toMatchObject({
-      type: "cap-template",
-      untilDate: "2027-06-20",
+      type: "detach-occurrence",
+      occurrenceDate: "2027-06-20",
+      patch: { recurrence: undefined },
+    });
+    expect(plan.operations[1]).toMatchObject({
+      type: "transfer-active-run",
+      fromId: inst20.id,
+      to: { kind: "operation-result", operationId: "detach-selected" },
     });
   });
 
-  it("projects following clear on the active selected occurrence as the old active occurrence", () => {
+  it("projects following clear on the active selected occurrence as only-this", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
     const inst21 = makeInstance(template, "2027-06-21");
@@ -284,8 +467,139 @@ describe("recurrence edit planner", () => {
 
     expect(result.events.some((event) => event.id === `__vf__${template.id}`)).toBe(false);
     expect(result.events.find((event) => event.id === inst20.id)).toBeDefined();
-    expect(result.events.some((event) => event.id === inst21.id)).toBe(false);
+    expect(result.events.some((event) => event.id === inst21.id)).toBe(true);
     expect(result.editingId).toBe(inst20.id);
+  });
+
+  it("projects only-this active moves as one detached occurrence", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-03-20 09:00",
+      end: "2026-03-20 13:00",
+    });
+    const active = makeInstance(template, "2026-03-20");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [active],
+      originalEvent: active,
+      instanceEvent: active,
+      templateId: template.id,
+      changes: { start: "2026-03-20 11:00", end: "2026-03-20 15:00" },
+      scope: "this",
+      window: TEST_WINDOW,
+      currentDate: "2026-03-20",
+      currentTime: "10:30",
+      activeDate: "2026-03-20",
+    }).display;
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({
+      id: active.id,
+      start: "2026-03-20 11:00",
+      end: "2026-03-20 15:00",
+      recurrence: undefined,
+    });
+  });
+
+  it("plans only-this active moves as one detached occurrence", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-03-20 09:00",
+      end: "2026-03-20 13:00",
+    });
+    const active = makeInstance(template, "2026-03-20");
+
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: active,
+      changes: { start: "2026-03-20 11:00", end: "2026-03-20 15:00" },
+      scope: "this",
+      activeBlockId: active.id,
+      today: "2026-03-20",
+      currentTime: "10:30",
+    });
+
+    expect(plan.operations.map((operation) => operation.type)).toEqual([
+      "detach-occurrence",
+      "transfer-active-run",
+      "refresh-window",
+    ]);
+    expect(plan.operations[0]).toMatchObject({
+      type: "detach-occurrence",
+      patch: { start: "2026-03-20 11:00", end: "2026-03-20 15:00" },
+    });
+    expect(plan.operations[1]).toMatchObject({
+      type: "transfer-active-run",
+      to: { kind: "operation-result", operationId: "detach-selected" },
+      newEnd: "2026-03-20 15:00",
+    });
+  });
+
+  it("normalizes following active selected moves to only-this projection", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-03-20 09:00",
+      end: "2026-03-20 13:00",
+    });
+    const active = makeInstance(template, "2026-03-20");
+    const next = makeInstance(template, "2026-03-21");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [active, next],
+      originalEvent: active,
+      instanceEvent: active,
+      templateId: template.id,
+      changes: { start: "2026-03-20 10:00", end: "2026-03-20 14:00" },
+      scope: "following",
+      window: {
+        start: Temporal.PlainDate.from("2026-03-20"),
+        end: Temporal.PlainDate.from("2026-03-22"),
+      },
+      currentDate: "2026-03-20",
+      currentTime: "10:30",
+      activeDate: "2026-03-20",
+    }).display;
+
+    expect(result.events.find((event) => event.id === active.id)).toMatchObject({
+      start: "2026-03-20 10:00",
+      end: "2026-03-20 14:00",
+    });
+    expect(result.events.find((event) => event.id === next.id)).toBeDefined();
+    expect(result.editingId).toBe(active.id);
+  });
+
+  it("normalizes following active selected moves to only-this save plans", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-03-20 09:00",
+      end: "2026-03-20 13:00",
+    });
+    const active = makeInstance(template, "2026-03-20");
+
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: active,
+      changes: { start: "2026-03-20 10:00", end: "2026-03-20 14:00" },
+      scope: "following",
+      activeBlockId: active.id,
+      today: "2026-03-20",
+      currentTime: "10:30",
+    });
+
+    expect(plan.operations.map((operation) => operation.type)).toEqual([
+      "detach-occurrence",
+      "transfer-active-run",
+      "refresh-window",
+    ]);
+    expect(plan.operations[0]).toMatchObject({
+      type: "detach-occurrence",
+      patch: { start: "2026-03-20 10:00", end: "2026-03-20 14:00" },
+    });
+    expect(plan.operations[1]).toMatchObject({
+      type: "transfer-active-run",
+      to: { kind: "operation-result", operationId: "detach-selected" },
+      newEnd: "2026-03-20 14:00",
+    });
   });
 
   it("plans following clear by materializing an active later occurrence", () => {
@@ -351,10 +665,10 @@ describe("recurrence edit planner", () => {
     expect(selectedSurvivors).toHaveLength(1);
     expect(activeSurvivor).toBeDefined();
     expect(activeSurvivor?.recurrence).toBeUndefined();
-    expect(result.previewedIds.has(activeSurvivor!.id)).toBe(true);
+    expect(result.previewedIds.has(activeSurvivor!.id)).toBe(false);
   });
 
-  it("plans following recurrence changes by transferring an active later occurrence to the new split template", () => {
+  it("plans following recurrence changes by materializing an active later occurrence", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
     const activeId = `${template.id}::2027-06-22`;
@@ -372,18 +686,23 @@ describe("recurrence edit planner", () => {
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
-      "split-series",
+      "materialize-occurrence",
       "transfer-active-run",
+      "split-series",
       "refresh-window",
     ]);
+    expect(plan.operations[0]).toMatchObject({
+      type: "materialize-occurrence",
+      occurrenceDate: "2027-06-22",
+    });
     expect(plan.operations[1]).toMatchObject({
       type: "transfer-active-run",
       fromId: activeId,
-      to: { kind: "split-occurrence", operationId: "split-following", date: "2027-06-22" },
+      to: { kind: "operation-result", operationId: "materialize-active-following" },
     });
   });
 
-  it("plans following resize on the active selected occurrence from that occurrence", () => {
+  it("normalizes following resize on the active selected occurrence to only-this", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
     const resized = { end: "2027-06-20 10:15" };
@@ -400,24 +719,23 @@ describe("recurrence edit planner", () => {
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
-      "split-series",
+      "detach-occurrence",
       "transfer-active-run",
       "refresh-window",
     ]);
     expect(plan.operations[0]).toMatchObject({
-      type: "split-series",
-      startDate: "2027-06-20",
+      type: "detach-occurrence",
       patch: resized,
     });
     expect(plan.operations[1]).toMatchObject({
       type: "transfer-active-run",
       fromId: inst20.id,
-      to: { kind: "operation-result", operationId: "split-active-selected" },
+      to: { kind: "operation-result", operationId: "detach-selected" },
       newEnd: "2027-06-20 10:15",
     });
   });
 
-  it("projects following resize on the active selected occurrence without dropping the active day", () => {
+  it("projects following resize on the active selected occurrence as only-this", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");
     const inst21 = makeInstance(template, "2027-06-21");
@@ -436,17 +754,15 @@ describe("recurrence edit planner", () => {
       activeDate: "2027-06-20",
     }).display;
 
-    const activeProjection = result.events.find((event) =>
-      event.start.startsWith("2027-06-20 ")
-        && (event.id === `__vf__${template.id}` || event.recurringParentId === `__vf__${template.id}`)
-    );
+    const activeProjection = result.events.find((event) => event.id === inst20.id);
 
     expect(activeProjection).toBeDefined();
     expect(activeProjection?.end).toBe("2027-06-20 10:15");
+    expect(result.events.find((event) => event.id === inst21.id)).toBeDefined();
     expect(result.editingId).toBe(activeProjection?.id);
   });
 
-  it("plans all resize on the active selected first occurrence by updating the active chain", () => {
+  it("normalizes all resize on the active selected first occurrence to only-this", () => {
     const template = makeRecurringTemplate({
       start: "2027-06-20 09:00",
       end: "2027-06-20 09:30",
@@ -464,29 +780,23 @@ describe("recurrence edit planner", () => {
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
-      "materialize-protected-history",
-      "update-template-fields",
+      "detach-occurrence",
       "transfer-active-run",
       "refresh-window",
     ]);
     expect(plan.operations[0]).toMatchObject({
-      type: "materialize-protected-history",
-      cutoffDate: "2027-06-20",
+      type: "detach-occurrence",
+      patch: { end: "2027-06-20 10:15" },
     });
     expect(plan.operations[1]).toMatchObject({
-      type: "update-template-fields",
-      protectedUntilDate: undefined,
-      firstMutableDate: undefined,
-    });
-    expect(plan.operations[2]).toMatchObject({
       type: "transfer-active-run",
       fromId: template.id,
-      to: { kind: "event-id", eventId: template.id },
+      to: { kind: "operation-result", operationId: "detach-selected" },
       newEnd: "2027-06-20 10:15",
     });
   });
 
-  it("plans all edit on an active later occurrence from the active date", () => {
+  it("normalizes all edit on an active selected later occurrence to only-this", () => {
     const template = makeRecurringTemplate({
       start: "2026-05-18 20:20",
       end: "2026-05-18 23:20",
@@ -505,31 +815,22 @@ describe("recurrence edit planner", () => {
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
-      "materialize-protected-history",
-      "update-template-fields",
+      "detach-occurrence",
       "transfer-active-run",
       "refresh-window",
     ]);
     expect(plan.operations[0]).toMatchObject({
-      type: "materialize-protected-history",
-      cutoffDate: "2026-05-23",
-      excludeDate: "2026-05-23",
-    });
-    expect(plan.operations[1]).toMatchObject({
-      type: "update-template-fields",
-      protectedUntilDate: "2026-05-22",
-      firstMutableDate: "2026-05-23",
+      type: "detach-occurrence",
       patch: { title: "Changed" },
     });
-    expect(plan.operations[2]).toMatchObject({
+    expect(plan.operations[1]).toMatchObject({
       type: "transfer-active-run",
       fromId: active.id,
-      to: { kind: "operation-result", operationId: template.id },
-      newEnd: "2026-05-23 23:20",
+      to: { kind: "operation-result", operationId: "detach-selected" },
     });
   });
 
-  it("plans all move outside the active selected occurrence by cutting active and splitting future", () => {
+  it("normalizes all moves on the active selected occurrence to only-this", () => {
     const template = makeRecurringTemplate({
       start: "2027-06-20 09:00",
       end: "2027-06-20 09:30",
@@ -547,32 +848,19 @@ describe("recurrence edit planner", () => {
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
-      "materialize-protected-history",
-      "materialize-occurrence",
-      "update-template-fields",
+      "detach-occurrence",
       "transfer-active-run",
       "refresh-window",
     ]);
     expect(plan.operations[0]).toMatchObject({
-      type: "materialize-protected-history",
-      excludeDate: "2027-06-20",
+      type: "detach-occurrence",
+      patch: { start: "2027-06-20 11:00", end: "2027-06-20 12:00" },
     });
     expect(plan.operations[1]).toMatchObject({
-      type: "materialize-occurrence",
-      occurrenceDate: "2027-06-20",
-      reason: "active-session",
-      patch: { end: "2027-06-20 09:15", recurrence: undefined },
-    });
-    expect(plan.operations[2]).toMatchObject({
-      type: "update-template-fields",
-      protectedUntilDate: "2027-06-20",
-      firstMutableDate: "2027-06-21",
-    });
-    expect(plan.operations[3]).toMatchObject({
       type: "transfer-active-run",
       fromId: template.id,
-      to: { kind: "operation-result", operationId: "materialize-active-all" },
-      newEnd: "2027-06-20 09:15",
+      to: { kind: "operation-result", operationId: "detach-selected" },
+      newEnd: "2027-06-20 12:00",
     });
   });
 
@@ -597,26 +885,54 @@ describe("recurrence edit planner", () => {
     expect(plan.operations.map((operation) => operation.type)).toEqual([
       "materialize-protected-history",
       "update-template-fields",
-      "transfer-active-run",
       "refresh-window",
     ]);
     expect(plan.operations[0]).toMatchObject({
       type: "materialize-protected-history",
-      cutoffDate: "2026-05-23",
+      cutoffDate: "2026-05-24",
     });
     expect(plan.operations[1]).toMatchObject({
       type: "update-template-fields",
-      protectedUntilDate: "2026-05-22",
-      firstMutableDate: "2026-05-23",
-    });
-    expect(plan.operations[2]).toMatchObject({
-      type: "transfer-active-run",
-      fromId: `${template.id}::2026-05-23`,
-      to: { kind: "operation-result", operationId: template.id },
+      protectedUntilDate: "2026-05-23",
+      firstMutableDate: "2026-05-24",
     });
   });
 
-  it("plans all future move outside protected active occurrence by cutting active", () => {
+  it("plans all future move after now by creating a same-day active-date occurrence", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-05-18 09:00",
+      end: "2026-05-18 13:00",
+    });
+    const selected = makeInstance(template, "2026-05-19");
+
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: selected,
+      changes: { start: "2026-05-19 14:00", end: "2026-05-19 18:00" },
+      scope: "all",
+      activeBlockId: template.id,
+      today: "2026-05-18",
+      currentTime: "10:30",
+    });
+
+    expect(plan.operations.map((operation) => operation.type)).toEqual([
+      "materialize-protected-history",
+      "update-template-fields",
+      "refresh-window",
+    ]);
+    expect(plan.operations[0]).toMatchObject({
+      type: "materialize-protected-history",
+      cutoffDate: "2026-05-19",
+    });
+    expect(plan.operations[1]).toMatchObject({
+      type: "update-template-fields",
+      protectedUntilDate: "2026-05-18",
+      firstMutableDate: "2026-05-19",
+    });
+  });
+
+  it("plans all future move outside a protected active occurrence without changing active", () => {
     const template = makeRecurringTemplate({
       start: "2026-05-18 20:20",
       end: "2026-05-18 23:20",
@@ -636,29 +952,16 @@ describe("recurrence edit planner", () => {
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
       "materialize-protected-history",
-      "materialize-occurrence",
       "update-template-fields",
-      "transfer-active-run",
       "refresh-window",
     ]);
     expect(plan.operations[0]).toMatchObject({
       type: "materialize-protected-history",
-      excludeDate: "2026-05-23",
+      cutoffDate: "2026-05-24",
     });
     expect(plan.operations[1]).toMatchObject({
-      type: "materialize-occurrence",
-      occurrenceDate: "2026-05-23",
-      patch: { end: "2026-05-23 21:00", recurrence: undefined },
-    });
-    expect(plan.operations[2]).toMatchObject({
       type: "update-template-fields",
       firstMutableDate: "2026-05-24",
-    });
-    expect(plan.operations[3]).toMatchObject({
-      type: "transfer-active-run",
-      fromId: `${template.id}::2026-05-23`,
-      to: { kind: "operation-result", operationId: "materialize-active-all" },
-      newEnd: "2026-05-23 21:00",
     });
   });
 
@@ -700,7 +1003,117 @@ describe("recurrence edit planner", () => {
     );
     expect(activeDayEvents).toHaveLength(1);
     expect(activeDayEvents[0].id).toBe(`${template.id}::2026-05-23`);
-    expect(activeDayEvents[0].title).toBe("Changed");
+    expect(activeDayEvents[0].title).toBe("Daily standup");
+    expect(result.previewedIds.has(activeDayEvents[0].id)).toBe(false);
+  });
+
+  it("projects all future move after now without changing the active day", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-05-18 09:00",
+      end: "2026-05-18 13:00",
+    });
+    const selected = makeInstance(template, "2026-05-19");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [template, selected],
+      originalEvent: selected,
+      instanceEvent: selected,
+      templateId: template.id,
+      changes: { start: "2026-05-19 14:00", end: "2026-05-19 18:00" },
+      scope: "all",
+      window: {
+        start: Temporal.PlainDate.from("2026-05-18"),
+        end: Temporal.PlainDate.from("2026-05-20"),
+      },
+      currentDate: "2026-05-18",
+      currentTime: "10:30",
+      activeDate: "2026-05-18",
+    }).display;
+
+    const activeDayEvents = result.events
+      .filter((event) => event.start.startsWith("2026-05-18 "))
+      .sort((a, b) => a.start.localeCompare(b.start));
+
+    expect(activeDayEvents).toHaveLength(1);
+    expect(activeDayEvents[0]).toMatchObject({
+      id: template.id,
+      start: "2026-05-18 09:00",
+      end: "2026-05-18 13:00",
+    });
+    expect(result.previewedIds.has(activeDayEvents[0].id)).toBe(false);
+  });
+
+  it("normalizes all active selected move previews to only-this", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-05-18 09:00",
+      end: "2026-05-18 13:00",
+    });
+    const selected = makeInstance(template, "2026-05-18");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [selected, makeInstance(template, "2026-05-19")],
+      originalEvent: selected,
+      instanceEvent: selected,
+      templateId: template.id,
+      changes: { start: "2026-05-18 10:00", end: "2026-05-18 14:00" },
+      scope: "all",
+      window: {
+        start: Temporal.PlainDate.from("2026-05-18"),
+        end: Temporal.PlainDate.from("2026-05-20"),
+      },
+      currentDate: "2026-05-18",
+      currentTime: "10:30",
+      activeDate: "2026-05-18",
+    }).display;
+
+    const activeDayEvents = result.events.filter((event) =>
+      event.start.startsWith("2026-05-18 ")
+    ).sort((a, b) => a.start.localeCompare(b.start));
+    expect(activeDayEvents).toHaveLength(1);
+    expect(activeDayEvents[0]).toMatchObject({
+      id: selected.id,
+      start: "2026-05-18 10:00",
+      end: "2026-05-18 14:00",
+    });
+    expect(result.events.find((event) =>
+      event.recurringParentId === template.id && event.start === "2026-05-19 09:00"
+    )).toBeDefined();
+  });
+
+  it("normalizes all active selected move plans to only-this", () => {
+    const template = makeRecurringTemplate({
+      start: "2026-05-18 09:00",
+      end: "2026-05-18 13:00",
+    });
+    const selected = makeInstance(template, "2026-05-18");
+
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: selected,
+      changes: { start: "2026-05-18 10:00", end: "2026-05-18 14:00" },
+      scope: "all",
+      activeBlockId: selected.id,
+      today: "2026-05-18",
+      currentTime: "10:30",
+    });
+
+    expect(plan.operations.map((operation) => operation.type)).toEqual([
+      "detach-occurrence",
+      "transfer-active-run",
+      "refresh-window",
+    ]);
+    expect(plan.operations[0]).toMatchObject({
+      type: "detach-occurrence",
+      patch: { start: "2026-05-18 10:00", end: "2026-05-18 14:00" },
+    });
+    expect(plan.operations[1]).toMatchObject({
+      type: "transfer-active-run",
+      to: { kind: "operation-result", operationId: "detach-selected" },
+      newEnd: "2026-05-18 14:00",
+    });
   });
 
   it("plans all clear on a future-only series as a selected survivor collapse", () => {
@@ -765,32 +1178,35 @@ describe("recurrence edit planner", () => {
     });
   });
 
-  it("projects all clear with a different active occurrence as an extra standalone survivor", () => {
-    const template = makeRecurringTemplate();
+  it("projects all clear without changing a protected active occurrence", () => {
+    const template = makeRecurringTemplate({
+      start: "2027-06-18 09:00",
+      end: "2027-06-18 09:30",
+    });
+    const active = makeInstance(template, "2027-06-19");
     const inst20 = makeInstance(template, "2027-06-20");
-    const inst22 = makeInstance(template, "2027-06-22");
 
     const result = buildRecurringEditPlan({
       rawBlocks: [template],
-      storeEvents: [template, inst20, inst22],
+      storeEvents: [template, active, inst20],
       originalEvent: inst20,
       instanceEvent: inst20,
       templateId: template.id,
       changes: { recurrence: undefined },
       scope: "all",
       window: TEST_WINDOW,
-      currentDate: "2027-06-10",
-      currentTime: "12:00",
-      activeDate: "2027-06-22",
+      currentDate: "2027-06-19",
+      currentTime: "09:15",
+      activeDate: "2027-06-19",
     }).display;
 
-    expect(result.events.find((event) => event.id === template.id)?.start).toBe(inst20.start);
+    expect(result.events.find((event) => event.id === `__va__${template.id}`)?.start).toBe(inst20.start);
     const activeSurvivor = result.events.find((event) =>
-      event.id === `__va_active__${template.id}::2027-06-22`
+      event.id === active.id
     );
     expect(activeSurvivor).toBeDefined();
-    expect(activeSurvivor?.recurrence).toBeUndefined();
-    expect(result.previewedIds.has(activeSurvivor!.id)).toBe(true);
+    expect(activeSurvivor?.start).toBe("2027-06-19 09:00");
+    expect(result.previewedIds.has(activeSurvivor!.id)).toBe(false);
   });
 
   it("projects all clear without duplicating a protected active occurrence", () => {
@@ -830,7 +1246,8 @@ describe("recurrence edit planner", () => {
       event.start.startsWith("2026-05-23 ")
     );
     expect(activeDayEvents).toHaveLength(1);
-    expect(activeDayEvents[0].id).toBe(`__va_active__${template.id}::2026-05-23`);
+    expect(activeDayEvents[0].id).toBe(`${template.id}::2026-05-23`);
+    expect(result.previewedIds.has(activeDayEvents[0].id)).toBe(false);
   });
 
   it("contours protected all-scope occurrences without changing their frozen fields", () => {

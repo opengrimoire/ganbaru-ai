@@ -316,6 +316,23 @@
 
   const pomodoroStore = getPomodoro();
 
+  function activePomodoroDate(): string | undefined {
+    return pomodoroStore.segments.find((segment) => segment.status === "active")?.eventDate;
+  }
+
+  function isActiveCalendarEvent(event: CalendarEvent): boolean {
+    const activeId = pomodoroStore.activeBlockId;
+    if (!activeId) return false;
+    if (event.id === activeId) return true;
+
+    const [activeRoot, syntheticDate] = activeId.split("::");
+    const eventRoot = event.recurringParentId ?? event.id.split("::")[0];
+    if (eventRoot !== activeRoot) return false;
+
+    const activeDate = syntheticDate ?? activePomodoroDate();
+    return activeDate !== undefined && event.start.split(" ")[0] === activeDate;
+  }
+
   const drag = useDragController({
     events: () => events,
     hourHeight: () => calZoom.hourHeight,
@@ -324,11 +341,11 @@
     onEventUpdate: (e) => onEventUpdate(e),
     onEventCreate: (s, e, anchor) => onEventCreate(s, e, false, anchor),
     canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
-    activeBlockId: () => pomodoroStore.activeBlockId,
+    isActiveEvent: isActiveCalendarEvent,
     isEventLocked: (id) => {
       const ev = events.find((e) => e.id === id);
       if (!ev || !ev.pomodoroConfig) return false;
-      if (id === pomodoroStore.activeBlockId) return false;
+      if (isActiveCalendarEvent(ev)) return false;
       return parseCalendarDate(ev.end).getTime() < Date.now();
     },
   });

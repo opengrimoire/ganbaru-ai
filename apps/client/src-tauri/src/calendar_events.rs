@@ -250,6 +250,7 @@ pub struct CalendarSplitSeries {
     calendar_id: String,
     color: Option<i64>,
     notifications: Option<String>,
+    exceptions: Option<String>,
     rrule: Option<String>,
     all_day: bool,
     location: String,
@@ -1883,6 +1884,14 @@ pub async fn calendar_split_series<R: Runtime>(
         parse_i64_list(&input.notifications, "notifications")?,
     )
     .await?;
+    replace_string_list(
+        &mut tx,
+        &input.new_id,
+        "calendar_event_exdates",
+        "occurrence_date",
+        parse_string_list(&input.exceptions, "exceptions")?,
+    )
+    .await?;
     copy_calendar_metadata(&mut tx, &input.parent_id, &input.new_id).await?;
 
     if let Some(config) = &input.pomodoro_config {
@@ -2540,6 +2549,7 @@ fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
     require_non_empty(&input.now, "now")?;
     validate_color(input.color, "color")?;
     validate_json_option(&input.notifications, "notifications")?;
+    validate_json_option(&input.exceptions, "exceptions")?;
     if let Some(config) = &input.pomodoro_config {
         validate_pomodoro_config(config)?;
     }

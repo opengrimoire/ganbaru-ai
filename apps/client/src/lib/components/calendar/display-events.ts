@@ -128,6 +128,7 @@ export function computeEditDisplay(
   activeDate?: string,
   currentDate = fmtDate(new Date()),
   currentTime = fmtTime(new Date()),
+  _activeBlockId?: string,
 ): DisplayResult {
   const { originalEvent, instanceEvent, templateId } = session;
   const isRecurring = !!originalEvent.recurringParentId || !!originalEvent.recurrence;
@@ -138,7 +139,12 @@ export function computeEditDisplay(
   }
 
   if (!isRecurring) {
-    return applyNonRecurring(storeEvents, originalEvent, changes, window);
+    return applyNonRecurring(
+      storeEvents,
+      originalEvent,
+      changes,
+      window,
+    );
   }
 
   return buildRecurringEditPlan({

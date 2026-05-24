@@ -145,7 +145,7 @@ describe("calendar delete/archive planner", () => {
     expect([...plan.affectedVisibleIds]).toEqual(["template-1::2026-05-26"]);
   });
 
-  it("plans following scope as archived protected occurrences plus a cap", () => {
+  it("plans following scope from a started occurrence as archive-only through now", () => {
     const template = dailyTemplate({ start: "2026-05-22 09:00", end: "2026-05-22 10:00" });
     const selected = occurrence(template, "2026-05-24");
     const future = occurrence(template, "2026-05-25");
@@ -157,18 +157,38 @@ describe("calendar delete/archive planner", () => {
       now: new Date("2026-05-24T12:00:00"),
     });
 
-    expect([...plan.affectedVisibleIds]).toEqual(["template-1::2026-05-24", "template-1::2026-05-25"]);
-    expect(plan.finalVisibleEvents.map((item) => item.id)).toEqual(["template-1::2026-05-23"]);
-    expect(plan.operations.map((operation) => operation.type)).toEqual(["archive_event", "cap_series"]);
+    expect([...plan.affectedVisibleIds]).toEqual(["template-1::2026-05-24"]);
+    expect(plan.finalVisibleEvents.map((item) => item.id)).toEqual([
+      "template-1::2026-05-23",
+      "template-1::2026-05-25",
+    ]);
+    expect(plan.operations.map((operation) => operation.type)).toEqual(["archive_event"]);
     expect(plan.operations[0]).toMatchObject({
       target: { id: "template-1::2026-05-24" },
     });
-    expect(plan.operations[1]).toMatchObject({
+    expect(plan.outcome).toBe("archive");
+  });
+
+  it("plans following scope from a future occurrence as a cap", () => {
+    const template = dailyTemplate({ start: "2026-05-22 09:00", end: "2026-05-22 10:00" });
+    const selected = occurrence(template, "2026-05-25");
+    const future = occurrence(template, "2026-05-26");
+    const plan = buildCalendarDeleteArchivePlan({
+      rawBlocks: [template],
+      visibleEvents: [occurrence(template, "2026-05-24"), selected, future],
+      selectedEvent: selected,
+      scope: "following",
+      now: new Date("2026-05-24T12:00:00"),
+    });
+
+    expect([...plan.affectedVisibleIds]).toEqual(["template-1::2026-05-25", "template-1::2026-05-26"]);
+    expect(plan.finalVisibleEvents.map((item) => item.id)).toEqual(["template-1::2026-05-24"]);
+    expect(plan.operations).toMatchObject([{
       type: "cap_series",
       eventId: "template-1",
-      repeatUntil: "2026-05-23",
-    });
-    expect(plan.outcome).toBe("mixed");
+      repeatUntil: "2026-05-24",
+    }]);
+    expect(plan.outcome).toBe("delete");
   });
 
   it("plans all scope on a future-only untracked series as a template hard delete", () => {
@@ -211,41 +231,152 @@ describe("calendar delete/archive planner", () => {
     expect(plan.outcome).toBe("mixed");
   });
 
-  it("plans all scope on a mixed series as protected archives plus a pre-start cap", () => {
+  it("plans all scope from a future occurrence as a cap after started history", () => {
     const template = dailyTemplate({ start: "2026-05-22 09:00", end: "2026-05-22 10:00" });
     const selected = occurrence(template, "2026-05-25");
     const plan = buildCalendarDeleteArchivePlan({
       rawBlocks: [template],
-      visibleEvents: [template, occurrence(template, "2026-05-23"), selected],
+      visibleEvents: [
+        template,
+        occurrence(template, "2026-05-23"),
+        occurrence(template, "2026-05-24"),
+        selected,
+        occurrence(template, "2026-05-26"),
+      ],
       selectedEvent: selected,
       scope: "all",
       now: new Date("2026-05-24T12:00:00"),
     });
 
     expect(plan.operations.map((operation) => operation.type)).toEqual([
-      "archive_event",
-      "archive_event",
-      "archive_event",
       "cap_series",
     ]);
     expect(plan.operations.at(-1)).toMatchObject({
       type: "cap_series",
       eventId: "template-1",
-      repeatUntil: "2026-05-21",
+      repeatUntil: "2026-05-24",
     });
-    expect(plan.finalVisibleEvents).toEqual([]);
-    expect(plan.outcome).toBe("mixed");
+    expect([...plan.affectedVisibleIds]).toEqual([
+      "template-1::2026-05-25",
+      "template-1::2026-05-26",
+    ]);
+    expect(plan.finalVisibleEvents.map((item) => item.id)).toEqual([
+      "template-1",
+      "template-1::2026-05-23",
+      "template-1::2026-05-24",
+    ]);
+    expect(plan.outcome).toBe("delete");
+  });
+
+  it("caps instead of hard deleting all future occurrences after past exceptions removed history", () => {
+    const template = dailyTemplate({
+      start: "2026-05-18 09:00",
+      end: "2026-05-18 10:00",
+      exceptions: [
+        "2026-05-18",
+        "2026-05-19",
+        "2026-05-20",
+        "2026-05-21",
+        "2026-05-22",
+        "2026-05-23",
+        "2026-05-24",
+      ],
+    });
+    const detachedActive = event({
+      id: "active-detached",
+      start: "2026-05-24 09:00",
+      end: "2026-05-24 10:00",
+      recurrence: undefined,
+      recurringParentId: undefined,
+    });
+    const selected = occurrence(template, "2026-05-25");
+    const future = occurrence(template, "2026-05-26");
+    const plan = buildCalendarDeleteArchivePlan({
+      rawBlocks: [template, detachedActive],
+      visibleEvents: [detachedActive, selected, future],
+      selectedEvent: selected,
+      scope: "all",
+      now: new Date("2026-05-24T12:00:00"),
+    });
+
+    expect(plan.operations).toMatchObject([{
+      type: "cap_series",
+      eventId: "template-1",
+      repeatUntil: "2026-05-24",
+    }]);
+    expect([...plan.affectedVisibleIds]).toEqual([
+      "template-1::2026-05-25",
+      "template-1::2026-05-26",
+    ]);
+    expect(plan.finalVisibleEvents.map((item) => item.id)).toEqual(["active-detached"]);
+    expect(plan.requiresActiveStop).toBe(false);
+  });
+
+  it("does not stop an earlier active occurrence when deleting all future occurrences", () => {
+    const template = dailyTemplate({ start: "2026-05-22 09:00", end: "2026-05-22 10:00" });
+    const selected = occurrence(template, "2026-05-25");
+    const active = occurrence(template, "2026-05-24");
+    const plan = buildCalendarDeleteArchivePlan({
+      rawBlocks: [template],
+      visibleEvents: [template, active, selected],
+      selectedEvent: selected,
+      scope: "all",
+      now: new Date("2026-05-24T09:30:00"),
+      activePomodoro: { blockId: active.id },
+    });
+
+    expect(plan.requiresActiveStop).toBe(false);
+    expect(plan.operations).toMatchObject([{
+      type: "cap_series",
+      eventId: "template-1",
+      repeatUntil: "2026-05-24",
+    }]);
+    expect(plan.finalVisibleEvents.map((item) => item.id)).toEqual([
+      "template-1",
+      "template-1::2026-05-24",
+    ]);
+  });
+
+  it("plans all scope from a started occurrence as archive-only through now", () => {
+    const template = dailyTemplate({ start: "2026-05-22 09:00", end: "2026-05-22 10:00" });
+    const selected = occurrence(template, "2026-05-23");
+    const plan = buildCalendarDeleteArchivePlan({
+      rawBlocks: [template],
+      visibleEvents: [
+        template,
+        selected,
+        occurrence(template, "2026-05-24"),
+        occurrence(template, "2026-05-25"),
+      ],
+      selectedEvent: selected,
+      scope: "all",
+      now: new Date("2026-05-24T12:00:00"),
+    });
+
+    expect([...plan.affectedVisibleIds]).toEqual([
+      "template-1",
+      "template-1::2026-05-23",
+      "template-1::2026-05-24",
+    ]);
+    expect(plan.finalVisibleEvents.map((item) => item.id)).toEqual(["template-1::2026-05-25"]);
+    expect(plan.operations.map((operation) => operation.type)).toEqual([
+      "archive_event",
+      "archive_event",
+      "archive_event",
+    ]);
+    expect(plan.outcome).toBe("archive");
   });
 
   it("records empty original exceptions in recurring restore snapshots", () => {
-    const template = dailyTemplate({ start: "2026-05-22 09:00", end: "2026-05-22 10:00" });
-    const selected = occurrence(template, "2026-05-24");
+    const template = dailyTemplate({ start: "2026-05-25 09:00", end: "2026-05-25 10:00" });
+    const selected = occurrence(template, "2026-05-26");
     const plan = buildCalendarDeleteArchivePlan({
       rawBlocks: [template],
       visibleEvents: [template, selected],
       selectedEvent: selected,
       scope: "all",
       now: new Date("2026-05-24T12:00:00"),
+      protectedEventIds: new Set(["template-1::2026-05-26"]),
     });
 
     expect(plan.restore.snapshots).toHaveLength(1);

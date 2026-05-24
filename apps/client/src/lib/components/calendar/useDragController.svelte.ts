@@ -47,8 +47,8 @@ export interface DragControllerConfig {
   canDrag?: (eventId: string) => boolean;
   /** Returns true if event has completed progress and should not be moved or resized. */
   isEventLocked?: (eventId: string) => boolean;
-  /** The currently active pomodoro block ID (only resize-bottom is allowed). */
-  activeBlockId?: () => string | null;
+  /** Returns true when the rendered event is the currently active pomodoro occurrence. */
+  isActiveEvent?: (event: CalendarEvent) => boolean;
 }
 
 export function useDragController(config: DragControllerConfig) {
@@ -221,13 +221,12 @@ export function useDragController(config: DragControllerConfig) {
       }
     }
 
-    // Active block: only allow resize-bottom (extend/shrink future end)
-    const activeId = config.activeBlockId?.();
-    if (activeId && eventId === activeId) {
-      if (dragState.type !== "resize-bottom") {
-        dragState = null;
-        return;
-      }
+    // Active events can only change their end time from the bottom edge.
+    // Moving or top-resizing would rewrite a start time that already has
+    // pomodoro history.
+    if (config.isActiveEvent?.(event) && dragState.type !== "resize-bottom") {
+      dragState = null;
+      return;
     }
 
     // Locked events (past with completed progress): no drag/resize at all
@@ -328,9 +327,10 @@ export function useDragController(config: DragControllerConfig) {
       }
     }
 
-    // Active block: start is sacred, only future end can change
-    const activeResize = config.activeBlockId?.();
-    if (activeResize && dragState.eventId === activeResize) {
+    // Active resize keeps the historical start fixed. Active move keeps the
+    // normal move preview and the save flow decides whether the session stops.
+    const activeResize = config.isActiveEvent?.(event) === true;
+    if (activeResize && dragState.type !== "move") {
       newStart = dragState.originStartMinute;
       const now = new Date();
       const nowMinute = now.getHours() * 60 + now.getMinutes();
@@ -352,8 +352,7 @@ export function useDragController(config: DragControllerConfig) {
     // Minute-based metrics for the primary (start) day column
     const visibleEnd = Math.min(newEnd, 1440);
 
-    dragPreviewDate = targetDate;
-    dragPreview = {
+    const nextPreview: PositionedEvent = {
       event: {
         ...event,
         start: startStr,
@@ -366,6 +365,8 @@ export function useDragController(config: DragControllerConfig) {
       column: 0,
       totalColumns: 1,
     };
+    dragPreviewDate = targetDate;
+    dragPreview = nextPreview;
 
   }
 
@@ -613,22 +614,23 @@ export function useDragController(config: DragControllerConfig) {
 
   // Computed helpers for DayColumn props
 
-  function getDragPreviewForDate(dateStr: string): PositionedEvent | null {
-    if (!dragPreview) return null;
-
-    const previewStartDate = dragPreview.event.start.split(" ")[0];
-    const previewEndDate = dragPreview.event.end.split(" ")[0];
+  function positionDragPreviewForDate(
+    preview: PositionedEvent,
+    dateStr: string,
+  ): PositionedEvent | null {
+    const previewStartDate = preview.event.start.split(" ")[0];
+    const previewEndDate = preview.event.end.split(" ")[0];
 
     // Single-day event: return preview as-is for its date
     if (previewStartDate === previewEndDate) {
-      return dateStr === previewStartDate ? dragPreview : null;
+      return dateStr === previewStartDate ? preview : null;
     }
 
     // Start day: show from event start to bottom of day
     if (dateStr === previewStartDate) {
-      const startMin = minuteOfDay(dragPreview.event.start);
+      const startMin = minuteOfDay(preview.event.start);
       return {
-        ...dragPreview,
+        ...preview,
         startMinute: startMin,
         durationMinutes: 1440 - startMin,
       };
@@ -636,16 +638,21 @@ export function useDragController(config: DragControllerConfig) {
 
     // End day: show from top to event end
     if (dateStr === previewEndDate) {
-      const endMin = minuteOfDay(dragPreview.event.end);
+      const endMin = minuteOfDay(preview.event.end);
       if (endMin <= 0) return null;
       return {
-        ...dragPreview,
+        ...preview,
         startMinute: 0,
         durationMinutes: endMin,
       };
     }
 
     return null;
+  }
+
+  function getDragPreviewForDate(dateStr: string): PositionedEvent | null {
+    if (!dragPreview) return null;
+    return positionDragPreviewForDate(dragPreview, dateStr);
   }
 
   function getCreatePreviewForDate(dateStr: string): PositionedEvent | null {

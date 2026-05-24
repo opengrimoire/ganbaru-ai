@@ -115,7 +115,7 @@ The calendar is the source of truth for when sessions run. The pomodoro system r
 This means:
 
 - Events without a pomodoro config simply do not participate in the timer. They show on the calendar like any other event.
-- Deleting or archiving an event with an active pomodoro run is rejected until the run is stopped. Calendar removal and clear-all operations use the same guard.
+- An active pomodoro event shows End event in the calendar panel instead of archive or delete. Ending sets the event end time to now, closes the run as event-expired/completed, and leaves the resulting past event available for archive. The calendar uses the standard "Stop the focus session?" modal when ending the only current pomodoro event would stop the focus session; overlapping pomodoro events use inline red confirmation. Calendar removal and clear-all operations still reject active runs until they are closed.
 - Editing the event's time changes when the session ends (see `features/calendar.md` → "Active session protection").
 - Deleting future untracked events removes only calendar data. Archiving protected events preserves runs and segments by setting live `event_id` FKs to null while keeping `pomodoro_runs.original_event_id` and `event_title_snapshot`. For recurring occurrences, `original_event_id` keeps the exact synthetic ID.
 

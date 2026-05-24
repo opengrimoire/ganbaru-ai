@@ -78,7 +78,7 @@ A calendar event that has started, is in progress, is in the past, or has pomodo
 
 **Enforced by every programmatic boundary:**
 
-- **UI:** protected events show archive behavior instead of delete. Active sessions must be stopped before delete or archive.
+- **UI:** protected events show archive behavior instead of delete. Active pomodoro events show End event first; delete and archive become available only after the run is closed and the event is past.
 - **CLI (`ganbaruai`):** delete commands on past events are rejected with a descriptive error pointing to archive. The rejection is logged with timestamp, command, and event ID.
 - **MCP handlers:** event deletion handlers refuse past events at the handler level and return a structured error including the archive alternative.
 - **Internal Tauri commands and database layer:** `calendar_delete_event` accepts the concrete rendered identity and rejects protected rows with an archive-required error. Hard delete is allowed only when the exact event or occurrence is future-only and untracked. `calendar_archive_event`, `calendar_clear_events`, and `calendar_remove_calendar` snapshot protected rows into archive tables and null live pomodoro FKs.

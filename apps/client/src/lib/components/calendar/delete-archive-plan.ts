@@ -159,13 +159,31 @@ function recurringAffectedVisibleEvents(
   templateId: string,
   selectedDate: string,
   scope: RecurringScope,
+  options: {
+    startedOnly?: boolean;
+    futureOnly?: boolean;
+    now?: Date;
+    activePomodoro?: ActivePomodoroIdentity;
+    template?: CalendarEvent;
+    selectedEvent?: CalendarEvent;
+  } = {},
 ): CalendarEvent[] {
   return visibleEvents.filter((event) => {
     if (!belongsToSeries(event, templateId)) return false;
     const eventDate = datePart(event.start);
-    return scope === "all"
+    const affected = scope === "all"
       || (scope === "following" && eventDate >= selectedDate)
       || (scope === "this" && eventDate === selectedDate);
+    if (!affected) return false;
+    if (options.futureOnly && options.now && isStarted(event, options.now)) return false;
+    if (!options.startedOnly || !options.now) return true;
+    if (!isStarted(event, options.now)) return false;
+    const selectedExactId = options.selectedEvent
+      ? exactOccurrenceId(options.selectedEvent, options.template)
+      : undefined;
+    const eventExactId = exactOccurrenceId(event, options.template);
+    return eventExactId === selectedExactId
+      || !eventMatchesActiveOccurrence(event, options.activePomodoro, options.template);
   });
 }
 
@@ -277,6 +295,18 @@ function appendExplicitProtectedOccurrences(
   }
 
   return [...byExactId.values()].sort((a, b) => a.start.localeCompare(b.start));
+}
+
+function occurrenceBelongsToStartedArchiveScope(
+  occurrence: CalendarEvent,
+  template: CalendarEvent,
+  input: BuildCalendarDeleteArchivePlanInput,
+): boolean {
+  if (!isStarted(occurrence, input.now)) return false;
+  const selectedExactId = exactOccurrenceId(input.selectedEvent, template);
+  const occurrenceExactId = exactOccurrenceId(occurrence, template);
+  return occurrenceExactId === selectedExactId
+    || !eventMatchesActiveOccurrence(occurrence, input.activePomodoro, template);
 }
 
 function protectedRecurringOccurrencesForRange(
@@ -416,26 +446,51 @@ export function buildCalendarDeleteArchivePlan(
   }
 
   const selectedDate = datePart(input.selectedEvent.start);
+  const templateStartDate = datePart(template.start);
+  const nowDate = currentDatePart(input.now);
+  const startedArchiveScope = isStarted(input.selectedEvent, input.now);
+  const templateHasStartedHistory = isStarted(template, input.now);
+  const startedProtectedOccurrences = protectedRecurringOccurrencesForRange(
+    template,
+    templateStartDate,
+    nowDate,
+    input,
+  ).filter((occurrence) => isStarted(occurrence, input.now));
+  const allFutureWithProtectedHistory = recurringScope === "all"
+    && !startedArchiveScope
+    && (templateHasStartedHistory || startedProtectedOccurrences.length > 0);
   const affectedEvents = recurringAffectedVisibleEvents(
     input.visibleEvents,
     template.id,
     selectedDate,
     recurringScope,
+    {
+      startedOnly: startedArchiveScope,
+      futureOnly: allFutureWithProtectedHistory,
+      now: input.now,
+      activePomodoro: input.activePomodoro,
+      template,
+      selectedEvent: input.selectedEvent,
+    },
   );
   const affectedVisibleIds = new Set(affectedEvents.map((event) => event.id));
   const operations: CalendarDeleteArchiveOperation[] = [];
   const archivedEvents: CalendarEvent[] = [];
   const snapshots: CalendarDeleteArchiveRestoreSnapshot[] = [];
-  const nowDate = currentDatePart(input.now);
 
   if (recurringScope === "following") {
-    const archiveEndDate = maxDate(nowDate, activeOccurrenceDate(input.activePomodoro) ?? nowDate);
+    const archiveEndDate = startedArchiveScope
+      ? nowDate
+      : maxDate(nowDate, activeOccurrenceDate(input.activePomodoro) ?? nowDate);
     const protectedOccurrences = appendExplicitProtectedOccurrences(
       protectedRecurringOccurrencesForRange(template, selectedDate, archiveEndDate, input),
       template,
       input,
       selectedDate,
       recurringScope,
+    ).filter((occurrence) =>
+      !startedArchiveScope
+        || occurrenceBelongsToStartedArchiveScope(occurrence, template, input)
     );
     for (const occurrence of protectedOccurrences) {
       operations.push({
@@ -444,20 +499,48 @@ export function buildCalendarDeleteArchivePlan(
       });
       archivedEvents.push(occurrence);
     }
-    operations.push(capSeriesOperation(template, shiftDate(selectedDate, -1)));
-    addSnapshot(snapshots, template, "update");
+    if (!startedArchiveScope) {
+      operations.push(capSeriesOperation(template, shiftDate(selectedDate, -1)));
+      addSnapshot(snapshots, template, "update");
+    }
   } else {
-    const templateStartDate = datePart(template.start);
-    const archiveEndDate = maxDate(nowDate, activeOccurrenceDate(input.activePomodoro) ?? nowDate);
+    const archiveEndDate = startedArchiveScope
+      ? nowDate
+      : maxDate(nowDate, activeOccurrenceDate(input.activePomodoro) ?? nowDate);
     const protectedOccurrences = appendExplicitProtectedOccurrences(
       protectedRecurringOccurrencesForRange(template, templateStartDate, archiveEndDate, input),
       template,
       input,
       selectedDate,
       recurringScope,
+    ).filter((occurrence) =>
+      !startedArchiveScope
+        || occurrenceBelongsToStartedArchiveScope(occurrence, template, input)
     );
 
-    if (protectedOccurrences.length === 0) {
+    if (startedArchiveScope) {
+      for (const occurrence of protectedOccurrences) {
+        operations.push({
+          type: "archive_event",
+          target: targetForOccurrence(occurrence, template),
+        });
+        archivedEvents.push(occurrence);
+      }
+    } else if (allFutureWithProtectedHistory) {
+      const futureProtectedOccurrences = protectedOccurrences.filter((occurrence) =>
+        !isStarted(occurrence, input.now)
+      );
+      for (const occurrence of futureProtectedOccurrences) {
+        operations.push({
+          type: "archive_event",
+          target: targetForOccurrence(occurrence, template),
+        });
+        archivedEvents.push(occurrence);
+      }
+      const repeatUntil = startedProtectedOccurrences.at(-1)?.start.split(" ")[0] ?? nowDate;
+      operations.push(capSeriesOperation(template, repeatUntil));
+      addSnapshot(snapshots, template, "update");
+    } else if (protectedOccurrences.length === 0) {
       operations.push({
         type: "delete_event",
         target: buildCalendarEventMutationTarget(template),
@@ -480,13 +563,17 @@ export function buildCalendarDeleteArchivePlan(
     affectedVisibleIds,
     finalVisibleEvents: finalVisibleEvents(input.visibleEvents, affectedVisibleIds),
     outcome: outcomeForOperations(operations),
-    requiresActiveStop: requiresActiveStopForScope(
-      input.selectedEvent,
-      template.id,
-      selectedDate,
-      scope,
-      input.activePomodoro,
-    ),
+    requiresActiveStop: startedArchiveScope
+      ? eventMatchesActiveOccurrence(input.selectedEvent, input.activePomodoro, template)
+      : allFutureWithProtectedHistory
+        ? false
+        : requiresActiveStopForScope(
+          input.selectedEvent,
+          template.id,
+          selectedDate,
+          scope,
+          input.activePomodoro,
+        ),
     operations,
     restore: { archivedEvents, snapshots },
   };

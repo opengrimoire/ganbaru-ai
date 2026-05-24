@@ -29,7 +29,7 @@
     sanitizeTimeDraftInput,
   } from "./event-panel-utils";
   import { buildEventPanelInitKey } from "./event-panel-init-key";
-  import { formatTimeLabel } from "./utils";
+  import { formatCalendarDate, formatTimeLabel } from "./utils";
   import {
     EVENT_PANEL_EDGE_MARGIN,
     EVENT_PANEL_MAX_WIDTH,
@@ -42,6 +42,7 @@
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Archive from "@lucide/svelte/icons/archive";
+  import Scissors from "@lucide/svelte/icons/scissors";
   import Music from "@lucide/svelte/icons/music";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import Calendar1 from "@lucide/svelte/icons/calendar-1";
@@ -62,6 +63,27 @@
   const TITLE_BAR_HEIGHT = EVENT_PANEL_TITLE_BAR_HEIGHT;
   const PANEL_HEIGHT_CONSTRAINT_TOLERANCE = 2;
 
+  type PanelSaveData = {
+    title: string;
+    start: string;
+    end: string;
+    color?: EventColor;
+    description: string;
+    recurrence?: RecurrenceConfig;
+    notifications?: number[];
+    pomodoroConfig?: PomodoroConfig;
+    allDay?: boolean;
+    location?: string;
+    url?: string;
+    transparency?: EventTransparency;
+    status?: EventStatus;
+    visibility?: EventVisibility;
+    meetingEnabled?: boolean;
+    attendees?: EventAttendee[];
+    localParticipationStatus?: AttendeeStatus;
+    guestPermissions?: GuestPermissions;
+  };
+
   let {
     mode,
     panelSessionKey = 0,
@@ -78,10 +100,13 @@
     readOnly = false,
     allowDeleteWhenReadOnly = false,
     skipInlineDeleteConfirm = false,
+    inlineEndEventConfirm = false,
+    lockStartControls = false,
     calendarIdentityEmail,
     loadFullEvent,
     onSave,
     onDelete,
+    onEndEvent,
     onClose,
     onChange,
     onInitialSync,
@@ -103,6 +128,8 @@
     readOnly?: boolean;
     allowDeleteWhenReadOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
+    inlineEndEventConfirm?: boolean;
+    lockStartControls?: boolean;
     calendarIdentityEmail?: string;
     /**
      * Fetches the panel detail row (description, attendees, organizer, etc.)
@@ -110,27 +137,9 @@
      * event. Normal edit opens preload details before mounting.
      */
     loadFullEvent?: (id: string) => Promise<CalendarEvent | undefined>;
-    onSave: (data: {
-      title: string;
-      start: string;
-      end: string;
-      color?: EventColor;
-      description: string;
-      recurrence?: RecurrenceConfig;
-      notifications?: number[];
-      pomodoroConfig?: PomodoroConfig;
-      allDay?: boolean;
-      location?: string;
-      url?: string;
-      transparency?: EventTransparency;
-      status?: EventStatus;
-      visibility?: EventVisibility;
-      meetingEnabled?: boolean;
-      attendees?: EventAttendee[];
-      localParticipationStatus?: AttendeeStatus;
-      guestPermissions?: GuestPermissions;
-    }, scope?: RecurringScope) => void;
+    onSave: (data: PanelSaveData, scope?: RecurringScope) => void;
     onDelete?: (id: string, scope?: RecurringScope) => void;
+    onEndEvent?: (data: PanelSaveData, scope?: RecurringScope) => void;
     onClose: () => void;
     onChange?: (data: Partial<CalendarEvent>) => void;
     onInitialSync?: (data: Partial<CalendarEvent>) => void;
@@ -139,8 +148,12 @@
   } = $props();
 
   const controlsDisabled = $derived(readOnly || parked);
+  const startControlsDisabled = $derived(controlsDisabled || lockStartControls);
   const deleteControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
   const scopeControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
+  const endEventAction = $derived(mode === "edit" && !!event && !!onEndEvent);
+  const generalDisabledAffordance = $derived(parked);
+  const startDisabledAffordance = $derived(parked || (lockStartControls && !readOnly));
 
   // ─── Core fields ────────────────────────────────────────────────
   let title = $state("");
@@ -225,7 +238,9 @@
   let deleteArmed = $state(false);
   let confirmDeleteBtn: HTMLButtonElement | undefined = $state();
   const deleteAction = $derived(event ? deleteActionForCalendarEvent(event) : "delete");
-  const deleteActionLabel = $derived(deleteAction === "archive" ? "Archive" : "Delete");
+  const deleteActionLabel = $derived(
+    endEventAction ? "End event" : deleteAction === "archive" ? "Archive" : "Delete",
+  );
 
   // ─── Date pickers ──────────────────────────────────────────────
   let datepickerOpen = $state(false);
@@ -250,6 +265,7 @@
   }
 
   function selectDpDay(dateStr: string, source?: "keyboard" | "pointer") {
+    if (startControlsDisabled) return;
     if (startDate && endDate) {
       const [oy, om, od] = startDate.split("-").map(Number);
       const [ey, em, ed] = endDate.split("-").map(Number);
@@ -276,7 +292,7 @@
   }
 
   function toggleDatepicker(source: "keyboard" | "pointer" = "pointer") {
-    if (controlsDisabled) return;
+    if (startControlsDisabled) return;
     timePickerTarget = null;
     timePickerKeyboardOpen = false;
     endDatepickerOpen = false;
@@ -334,7 +350,7 @@
   }
 
   function openTimePicker(target: "start" | "end", source: "keyboard" | "pointer" = "pointer") {
-    if (controlsDisabled) return;
+    if (controlsDisabled || (target === "start" && lockStartControls)) return;
     datepickerOpen = false;
     endDatepickerOpen = false;
     timePickerKeyboardOpen = source === "keyboard";
@@ -394,6 +410,7 @@
   }
 
   function handleTimeDraftInput(e: Event & { currentTarget: HTMLInputElement }, target: "start" | "end") {
+    if (target === "start" && lockStartControls) return;
     const inputType = "inputType" in e && typeof e.inputType === "string" ? e.inputType : "";
     const formatShortCompact = inputType !== "insertText" && inputType !== "deleteContentBackward";
     setTimeDraft(target, displayTimeDraft(e.currentTarget.value, formatShortCompact, preferences.calendarTimeFormat));
@@ -423,6 +440,10 @@
   }
 
   function commitTimeInput(target: "start" | "end"): boolean {
+    if (target === "start" && lockStartControls) {
+      restoreTimeInput("start");
+      return false;
+    }
     const previous = target === "start" ? startTime : endTime;
     const draft = target === "start" ? startTimeDraft : endTimeDraft;
     const result = commitTimeDraft(draft, previous, preferences.calendarTimeFormat);
@@ -445,6 +466,10 @@
   }
 
   function selectTime(time: string, source?: "keyboard" | "pointer") {
+    if (timePickerTarget === "start" && lockStartControls) {
+      closeTimePicker(source);
+      return;
+    }
     if (timePickerTarget === "start") {
       startTime = time;
       startTimeDraft = time;
@@ -468,7 +493,7 @@
 
   function beginTimeTypingFromPicker(digit: string) {
     const target = timePickerTarget;
-    if (!target || controlsDisabled || allDay) return;
+    if (!target || controlsDisabled || allDay || (target === "start" && lockStartControls)) return;
     timePickerTarget = null;
     timePickerKeyboardOpen = false;
     setTimeDraft(target, displayTimeDraft(digit, false, preferences.calendarTimeFormat));
@@ -483,12 +508,14 @@
   }
 
   function handleTimeInputClick(target: "start" | "end") {
+    if (controlsDisabled || (target === "start" && lockStartControls)) return;
     openTimePicker(target, "pointer");
     enterTimeInputEditMode(target);
     selectTimeInputText(target);
   }
 
   function beginTimeTypingFromNavigation(target: "start" | "end", text: string) {
+    if (target === "start" && lockStartControls) return;
     const draft = displayTimeDraft(text, false, preferences.calendarTimeFormat);
     if (!draft) return;
     if (timePickerTarget === target) {
@@ -502,6 +529,7 @@
   }
 
   function moveOpenTimePickerFromInput(target: "start" | "end", key: "ArrowUp" | "ArrowDown") {
+    if (target === "start" && lockStartControls) return false;
     if (timePickerTarget !== target) return false;
     timePickerKeyboardOpen = true;
     timePickerInputNavigation = {
@@ -937,6 +965,16 @@
     (onInitialSync ?? onChange)?.(buildHeavyInitPayload());
   });
 
+  $effect(() => {
+    if (!lockStartControls) return;
+    datepickerOpen = false;
+    if (timePickerTarget === "start") {
+      timePickerTarget = null;
+      timePickerKeyboardOpen = false;
+      restoreTimeInput("start");
+    }
+  });
+
   // Sync date/time from event prop when block is dragged/resized externally.
   // Only updates time fields, not title/description/etc. which the user may
   // have edited in the panel. The session's diff-based dirty tracking handles
@@ -1193,7 +1231,7 @@
   });
 
   // ─── Build data and handlers ────────────────────────────────────
-  function buildSaveData() {
+  function buildSaveData(): PanelSaveData {
     const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
     return {
       title: title.trim(),
@@ -1251,16 +1289,35 @@
     if (!parked && event && onDelete) onDelete(event.id, isRecurring ? scope : undefined);
   }
 
+  function handleEndEventClick() {
+    if (deleteControlsDisabled || !onEndEvent) return;
+    const data: PanelSaveData = {
+      ...buildSaveData(),
+      end: formatCalendarDate(new Date()),
+    };
+    deleteArmed = false;
+    onEndEvent(data, isRecurring ? scope : undefined);
+  }
+
   function confirmArmedDelete() {
     if (!deleteArmed) return false;
     deleteArmed = false;
-    handleDeleteClick();
+    if (endEventAction) handleEndEventClick();
+    else handleDeleteClick();
     return true;
   }
 
   function armOrConfirmDelete() {
-    if (mode !== "edit" || !event || !onDelete) return;
+    if (mode !== "edit" || !event || (!onDelete && !onEndEvent)) return;
     if (deleteControlsDisabled) return;
+    if (endEventAction) {
+      if (!inlineEndEventConfirm) {
+        handleEndEventClick();
+        return;
+      }
+      if (!confirmArmedDelete()) deleteArmed = true;
+      return;
+    }
     // For deletes that would stop the active pomodoro session, skip the
     // inline arm step and go straight to delete. The parent will show a
     // modal that acts as the confirmation.
@@ -1445,7 +1502,7 @@
   /**
    * Local keydown handler for input/textarea elements. It stops propagation
    * for normal text editing while explicitly letting the panel's own shortcuts
-   * (Mod+Enter save, Mod+D delete, Escape close) bubble up to the
+   * (Mod+Enter save, Mod+D end/delete, Escape close) bubble up to the
    * window-level listeners.
    */
   function inputKeydown(e: KeyboardEvent) {
@@ -1459,8 +1516,32 @@
     return cn(
       "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-0 py-1.5",
       "text-foreground",
+      disabledAffordanceClass(generalDisabledAffordance),
       extra,
     );
+  }
+
+  function metadataStartButtonClass(): string {
+    return cn(
+      "flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-none px-0 py-1.5",
+      "text-foreground",
+      disabledAffordanceClass(startDisabledAffordance),
+    );
+  }
+
+  function disabledAffordanceClass(show: boolean): string {
+    return show
+      ? "disabled:cursor-not-allowed disabled:opacity-60"
+      : "disabled:cursor-default disabled:opacity-100";
+  }
+
+  function startTimeShellStateClass(): string {
+    if (!startControlsDisabled) {
+      return timePickerTarget === "start"
+        ? "ring-1 ring-primary/60"
+        : "hover:bg-black/5 dark:hover:bg-black/15";
+    }
+    return startDisabledAffordance ? "cursor-not-allowed opacity-60" : "";
   }
 
   const METADATA_ICON_SIZE = 11;
@@ -1577,9 +1658,9 @@
         handleSave();
         return;
       }
-      // Mod + D: arm delete; press again to confirm. If the target is
-      // the active pomodoro block, the first press goes straight to the
-      // modal (see armOrConfirmDelete).
+      // Mod + D: end the active event or arm delete; press again to confirm.
+      // If delete would stop the active pomodoro block, the first press goes
+      // straight to the modal (see armOrConfirmDelete).
       if ((e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e)) {
         e.preventDefault();
         armOrConfirmDelete();
@@ -1699,8 +1780,16 @@
         <button bind:this={startDateButton}
           onclick={() => toggleDatepicker("pointer")}
           onkeydown={(e) => handleDateButtonKeydown(e, "start")}
-          class="date-chip max-w-full rounded py-0.5 text-event-panel-input-text
-            {controlsDisabled ? '' : datepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+          disabled={startControlsDisabled}
+          class={cn(
+            "date-chip max-w-full rounded py-0.5 text-event-panel-input-text",
+            disabledAffordanceClass(startDisabledAffordance),
+            startControlsDisabled
+              ? ""
+              : datepickerOpen
+                ? "ring-1 ring-primary/60"
+                : "hover:bg-black/5 dark:hover:bg-black/15",
+          )}>
           {shortDate}
         </button>
 
@@ -1733,7 +1822,7 @@
         <span
           class="time-input-shell rounded text-center text-event-panel-input-text
             {preferences.calendarTimeFormat === '12h' ? 'text-[0.8rem]' : 'text-[0.866667rem]'}
-            {controlsDisabled ? '' : timePickerTarget === 'start' ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}"
+            {startTimeShellStateClass()}"
           data-value={timeInputMirrorValue("start")}>
           <input bind:this={startTimeInput}
             type="text"
@@ -1743,10 +1832,13 @@
             oninput={(e) => handleTimeDraftInput(e, "start")}
             onblur={() => commitTimeInput("start")}
             onclick={() => handleTimeInputClick("start")}
-            disabled={controlsDisabled || allDay}
+            disabled={startControlsDisabled || allDay}
             maxlength={preferences.calendarTimeFormat === "12h" ? 7 : 5}
             placeholder={preferences.calendarTimeFormat === "12h" ? "h:mmam" : "HH:MM"}
-            class="time-input bg-transparent px-0 py-0.5 text-center outline-none"
+            class={cn(
+              "time-input bg-transparent px-0 py-0.5 text-center outline-none",
+              disabledAffordanceClass(startDisabledAffordance),
+            )}
             value={timeInputDisplayValue("start")}
             onkeydown={(e) => handleTimeInputKeydown(e, "start")} />
         </span>
@@ -1834,6 +1926,7 @@
       <!-- All day -->
       <button
         onclick={() => {
+          if (startControlsDisabled) return;
           timePickerTarget = null;
           timePickerKeyboardOpen = false;
           allDay = !allDay;
@@ -1870,9 +1963,9 @@
         onkeydown={(e) => handlePanelRovingKeydown(e, "metadata", 0, metadataItemCount)}
         data-panel-roving="metadata"
         data-roving-index="0"
-        tabindex={0}
-        disabled={controlsDisabled}
-        class={metadataButtonClass()}
+        tabindex={startControlsDisabled ? -1 : 0}
+        disabled={startControlsDisabled}
+        class={metadataStartButtonClass()}
       >
         {#if allDay}
           <Calendar1 size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
@@ -2018,35 +2111,39 @@
     )}
     style="background-color: var(--panel-bg);"
   >
-    {#if readOnly && !(allowDeleteWhenReadOnly && mode === "edit" && onDelete && event)}
+    {#if readOnly && !(allowDeleteWhenReadOnly && mode === "edit" && (onDelete || onEndEvent) && event)}
       <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[0.8rem] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
         Read only
       </div>
     {:else}
       <div class="panel-footer-actions flex">
-        {#if deleteArmed && mode === "edit" && onDelete && event}
+        {#if deleteArmed && mode === "edit" && event && (onDelete || onEndEvent) && (!endEventAction || inlineEndEventConfirm)}
           <button
             bind:this={confirmDeleteBtn}
-            onclick={() => { deleteArmed = false; handleDeleteClick(); }}
+            onclick={() => { deleteArmed = false; if (endEventAction) handleEndEventClick(); else handleDeleteClick(); }}
             disabled={deleteControlsDisabled}
             class="readonly-interactive flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-action-danger-armed-foreground bg-action-danger-armed">
-            {#if deleteAction === "archive"}
+            {#if endEventAction}
+              <Scissors size={14} strokeWidth={1.8} />
+            {:else if deleteAction === "archive"}
               <Archive size={14} strokeWidth={1.8} />
             {:else}
               <Trash2 size={14} strokeWidth={1.8} />
             {/if}
-            <span>Press again to {deleteAction} ({formatShortcut("Mod + D")})</span>
+            <span>Press again to {endEventAction ? "end event" : deleteAction} ({formatShortcut("Mod + D")})</span>
           </button>
         {:else}
-          {#if mode === "edit" && onDelete && event}
+          {#if mode === "edit" && (onDelete || onEndEvent) && event}
             <button onclick={armOrConfirmDelete}
               disabled={deleteControlsDisabled}
               class={cn(
                 "readonly-interactive event-panel-delete-icon-button flex w-10 shrink-0 items-center justify-center text-foreground",
               )}
               title={`${deleteActionLabel} (${formatShortcut("Mod + D")})`}>
-              {#if deleteAction === "archive"}
+              {#if endEventAction}
+                <Scissors size={14} strokeWidth={1.8} />
+              {:else if deleteAction === "archive"}
                 <Archive size={14} strokeWidth={1.8} />
               {:else}
                 <Trash2 size={14} strokeWidth={1.8} />

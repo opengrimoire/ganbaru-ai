@@ -11,6 +11,7 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import { getEventIndicatorState } from "./event-indicators";
+  import { shouldShowEventContour } from "./event-block-state";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Video from "@lucide/svelte/icons/video";
   import MapPin from "@lucide/svelte/icons/map-pin";
@@ -47,9 +48,6 @@
 
   const isDark = $derived(isThemeCalendarDark(theme));
 
-  // Events with IDs starting with __ are temporary (preview/pending) and should never animate
-  const isTemporaryEvent = $derived(positioned.event.id.startsWith("__"));
-
   const timeRange = $derived(
     formatTimeRange(
       positioned.event.start.split(" ")[1] ?? "",
@@ -67,6 +65,7 @@
     preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
   );
   const statusPatternClass = $derived(getEventStatusPatternClass(positioned.event));
+  const showContour = $derived(shouldShowEventContour({ editing, preview, grabbing }));
   const activeColors = $derived(
     usePastColors
       ? getPastEventColor(positioned.event.color, theme)
@@ -110,7 +109,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${timeRange}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {editing || preview || grabbing || isTemporaryEvent ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {showContour ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -256,7 +255,7 @@
     .event-location { display: block; }
   }
 
-  /* Disable layout transition for events being edited/created to avoid jank */
+  /* Disable layout transition for events with an explicit contour to avoid jank */
   .event-block-wrapper.event-editing {
     transition: none;
   }

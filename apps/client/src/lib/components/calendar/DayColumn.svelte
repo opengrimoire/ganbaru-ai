@@ -86,45 +86,66 @@
 
   // Layout-aware preview: include drag/create preview in layout computation
   // so overlapping events shift in real time to show the final result.
-  const previewEvent = $derived(dragPreview?.event ?? createPreview?.event ?? null);
+  const dragPreviewList = $derived(dragPreview ? [dragPreview] : []);
+  const previewEvents = $derived([
+    ...dragPreviewList.map((preview) => preview.event),
+    ...(createPreview ? [createPreview.event] : []),
+  ]);
 
   const layoutWithPreview = $derived.by(() => {
-    if (!previewEvent && !draggingEventId) {
-      return { items: positioned, preview: null as PositionedEvent | null };
+    if (previewEvents.length === 0 && !draggingEventId) {
+      return {
+        items: positioned,
+        dragPreviews: [] as PositionedEvent[],
+        createPreview: null as PositionedEvent | null,
+      };
     }
 
-    // Always exclude the dragged event (it may have moved to another day)
+    // Exclude dragged and replaced preview events so the preview block is
+    // laid out in the same column slot the saved block will use.
+    const previewEventIds = new Set(previewEvents.map((event) => event.id));
     const baseEvents = draggingEventId
-      ? dayEvents.filter(e => e.id !== draggingEventId)
-      : dayEvents;
+      ? dayEvents.filter(e => e.id !== draggingEventId && !previewEventIds.has(e.id))
+      : dayEvents.filter(e => !previewEventIds.has(e.id));
 
-    const eventsForLayout = previewEvent
-      ? [...baseEvents, previewEvent]
+    const eventsForLayout = previewEvents.length > 0
+      ? [...baseEvents, ...previewEvents]
       : baseEvents;
 
     const all = layoutEventsForDay(eventsForLayout, dateStr);
 
-    if (!previewEvent) {
-      return { items: all, preview: null as PositionedEvent | null };
+    if (previewEvents.length === 0) {
+      return {
+        items: all,
+        dragPreviews: [] as PositionedEvent[],
+        createPreview: null as PositionedEvent | null,
+      };
     }
 
-    const previewId = previewEvent.id;
+    const previewIds = new Set(previewEvents.map((event) => event.id));
+    const createPreviewId = createPreview?.event.id;
     const items: PositionedEvent[] = [];
-    let preview: PositionedEvent | null = null;
+    const dragPreviews: PositionedEvent[] = [];
+    let layoutedCreatePreview: PositionedEvent | null = null;
 
     for (const p of all) {
-      if (p.event.id === previewId) {
-        preview = p;
+      if (previewIds.has(p.event.id)) {
+        if (p.event.id === createPreviewId) {
+          layoutedCreatePreview = p;
+        } else {
+          dragPreviews.push(p);
+        }
       } else {
         items.push(p);
       }
     }
 
-    return { items, preview };
+    return { items, dragPreviews, createPreview: layoutedCreatePreview };
   });
 
   const effectivePositioned = $derived(layoutWithPreview.items);
-  const layoutedPreview = $derived(layoutWithPreview.preview);
+  const layoutedPreviews = $derived(layoutWithPreview.dragPreviews);
+  const layoutedCreatePreview = $derived(layoutWithPreview.createPreview);
   const renderedPositioned = $derived.by(() => {
     const minMinute = Math.max(0, visibleStartMinute - TIMED_RENDER_BUFFER_MINUTES);
     const maxMinute = Math.min(1440, visibleEndMinute + TIMED_RENDER_BUFFER_MINUTES);
@@ -151,9 +172,10 @@
       const { startMinute, endMinute } = effectiveMinuteRange(p.event, dateStr);
       ranges.push({ start: startMinute, end: endMinute });
     }
-    // Include drag preview if it has pomodoro config
-    if (dragPreview?.event.pomodoroConfig) {
-      const { startMinute, endMinute } = effectiveMinuteRange(dragPreview.event, dateStr);
+    // Include drag previews if they have pomodoro config.
+    for (const preview of dragPreviewList) {
+      if (!preview.event.pomodoroConfig) continue;
+      const { startMinute, endMinute } = effectiveMinuteRange(preview.event, dateStr);
       ranges.push({ start: startMinute, end: endMinute });
     }
     if (ranges.length === 0) return [];
@@ -303,14 +325,15 @@
           endMinute,
         };
       });
-    // Include drag preview for rail band previsualization
-    if (dragPreview?.event.pomodoroConfig) {
-      const { startMinute, endMinute } = effectiveMinuteRange(dragPreview.event, dateStr);
+    // Include drag previews for rail band previsualization.
+    for (const preview of dragPreviewList) {
+      if (!preview.event.pomodoroConfig) continue;
+      const { startMinute, endMinute } = effectiveMinuteRange(preview.event, dateStr);
       pomodoroEvents.push({
-        id: dragPreview.event.id,
-        config: dragPreview.event.pomodoroConfig,
-        startMs: parseCalendarDate(dragPreview.event.start).getTime(),
-        endMs: parseCalendarDate(dragPreview.event.end).getTime(),
+        id: preview.event.id,
+        config: preview.event.pomodoroConfig,
+        startMs: parseCalendarDate(preview.event.start).getTime(),
+        endMs: parseCalendarDate(preview.event.end).getTime(),
         startMinute,
         endMinute,
       });
@@ -679,15 +702,15 @@
     />
   {/each}
 
-  <!-- Drag preview (replaces the original block at the target position, layout-aware) -->
-  {#if dragPreview && layoutedPreview}
-    {@const lp = layoutedPreview}
-    {@const dragBase = getEventColor(dragPreview.event.color, theme)}
+  <!-- Drag previews replace the original block at the target position, layout-aware. -->
+  {#each layoutedPreviews as lp (lp.event.id)}
+    {@const previewEvent = lp.event}
+    {@const dragBase = getEventColor(previewEvent.color, theme)}
     {@const dragIconColor = `color-mix(in srgb, ${dragBase.text} 70%, ${dragBase.bg})`}
     {@const dragTimeColor = `color-mix(in srgb, ${dragBase.text} 80%, ${dragBase.bg})`}
     {@const dragLocationColor = `color-mix(in srgb, ${dragBase.text} 60%, ${dragBase.bg})`}
     {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
-    {@const dragIndicators = getEventIndicatorState(dragPreview.event)}
+    {@const dragIndicators = getEventIndicatorState(previewEvent)}
     <div
       class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[0.8rem] leading-tight"
       style="
@@ -723,23 +746,23 @@
           class:pr-5={dragIndicators.iconCount > 0 && dragIndicators.iconCount <= 2}
           class:pr-8={dragIndicators.iconCount > 2}
         >
-          {#if dragPreview.event.title}{dragPreview.event.title}{:else}(No title){/if}
+          {#if previewEvent.title}{previewEvent.title}{:else}(No title){/if}
         </div>
         {#if dragH > 32}
-          {@const st = dragPreview.event.start.split(" ")[1] ?? ""}
-          {@const et = dragPreview.event.end.split(" ")[1] ?? ""}
+          {@const st = previewEvent.start.split(" ")[1] ?? ""}
+          {@const et = previewEvent.end.split(" ")[1] ?? ""}
           <div class="truncate" style="color: {dragTimeColor};">{formatTimeRange(st, et, preferences.calendarTimeFormat, "compact")}</div>
         {/if}
-        {#if dragH > 48 && dragPreview.event.location}
-          <div class="truncate text-[0.666667rem]" style="color: {dragLocationColor};">{dragPreview.event.location}</div>
+        {#if dragH > 48 && previewEvent.location}
+          <div class="truncate text-[0.666667rem]" style="color: {dragLocationColor};">{previewEvent.location}</div>
         {/if}
       </div>
     </div>
-  {/if}
+  {/each}
 
   <!-- Create preview (new block being drawn, layout-aware) -->
-  {#if createPreview && layoutedPreview}
-    {@const lp = layoutedPreview}
+  {#if createPreview && layoutedCreatePreview}
+    {@const lp = layoutedCreatePreview}
     {@const createBase = getEventColor(undefined, theme)}
     {@const createTimeColor = `color-mix(in srgb, ${createBase.text} 80%, ${createBase.bg})`}
     {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
@@ -776,7 +799,7 @@
 
 <style>
   .preview-outline {
-    position: relative;
+    position: absolute;
     outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
     outline-offset: 0;
     transition: left 120ms ease-out, width 120ms ease-out;

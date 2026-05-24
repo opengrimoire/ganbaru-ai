@@ -75,6 +75,7 @@ type PomodoroWindowCommand =
     }
   | { kind: "dismiss-suspend"; resume: boolean }
   | { kind: "dismiss-idle"; resume: boolean }
+  | { kind: "complete-active-block-at"; endIso: string }
   | { kind: "stop-session" }
   | { kind: "pause" }
   | { kind: "start" }
@@ -341,6 +342,8 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
     case "dismiss-suspend":
     case "dismiss-idle":
       return typeof value.resume === "boolean";
+    case "complete-active-block-at":
+      return typeof value.endIso === "string";
     default:
       return false;
   }
@@ -1652,6 +1655,9 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
     case "dismiss-idle":
       void dismissIdle(command.resume);
       return;
+    case "complete-active-block-at":
+      void completeActiveBlockAtInternal(command.endIso);
+      return;
     case "stop-session":
       void stopSessionInternal();
       return;
@@ -2442,6 +2448,52 @@ async function stopSessionInternal(): Promise<void> {
   updateTray();
 }
 
+async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise<void> {
+  const parsedEndMs = Date.parse(endIso);
+  const normalizedEndIso = Number.isFinite(parsedEndMs)
+    ? new Date(parsedEndMs).toISOString()
+    : nowIso();
+
+  clearMusicPausedByPomodoro();
+  stopPausedOpportunityCountdown();
+  if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+    await markSegment(currentSegmentIndex, "interrupted", true, normalizedEndIso, "event_expired");
+    await skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+  } else if (activeRunId) {
+    await closeActiveRun(normalizedEndIso, "completed", "interrupted", "event_expired", "complete");
+  }
+
+  if (activeRunId) {
+    await closeActiveRun(normalizedEndIso, "completed", "interrupted", "event_expired", "complete");
+  }
+
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+  stopOvertime();
+  stopIdleChecking();
+  isRunning = false;
+  lastTickMs = null;
+  phaseEndTime = null;
+  if (!dismissedBlockId && activeBlockId) dismissedBlockId = activeBlockId;
+  activeBlockId = null;
+  activeRunId = null;
+  activeBlockEndMs = null;
+  idleTimeoutMs = null;
+  blockExpired = false;
+  suspendedAway = null;
+  idlePaused = null;
+  phase = "focus";
+  resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
+  currentCycle = 1;
+  completedPomodoros = 0;
+  sessionStartTime = null;
+  skipNextBreak = false;
+  resetFocusNotificationState();
+  updateTray();
+}
+
 function pauseSession(): void {
   if (!isRunning) return;
   isRunning = false;
@@ -2631,6 +2683,10 @@ export function getPomodoro() {
     async stopSession() {
       if (forwardWindowCommand({ kind: "stop-session" })) return;
       await stopSessionInternal();
+    },
+    async completeActiveBlockAt(endIso: string) {
+      if (forwardWindowCommand({ kind: "complete-active-block-at", endIso })) return;
+      await completeActiveBlockAtInternal(endIso);
     },
     pause() {
       if (forwardWindowCommand({ kind: "pause" })) return;

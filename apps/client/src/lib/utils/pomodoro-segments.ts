@@ -450,9 +450,12 @@ function emitFocusFillBands(
 ): void {
   const ranges = splitAroundPauses(startMs, endMs, pauseLog);
   for (const r of ranges) {
-    const topMinute = (r.start - dayStartMs) / 60000;
-    const heightMinutes = (r.end - r.start) / 60000;
-    if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
+    const rawTopMinute = (r.start - dayStartMs) / 60000;
+    const rawEndMinute = (r.end - dayStartMs) / 60000;
+    const topMinute = Math.max(rawTopMinute, ev.startMinute);
+    const endMinute = Math.min(rawEndMinute, ev.endMinute);
+    const heightMinutes = endMinute - topMinute;
+    if (heightMinutes > 0) {
       bands.push({ topMinute, heightMinutes, phase: "focus", status });
     }
   }

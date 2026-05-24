@@ -1569,6 +1569,8 @@ export function getCalendar() {
       const newEnd = changes.end
         ? String(changes.end)
         : `${splitDate} ${instanceEvent.end.split(" ")[1]}`;
+      const newStartDate = newStart.split(" ")[0];
+      const newExceptions = (parent.exceptions ?? []).filter((date) => date >= newStartDate);
       const merged = { ...parent, ...changes };
       const meetingEnabled = merged.meetingEnabled ?? hasMeetingState(merged);
       const recurrenceChanged = hasEventPatchKey(changes, "recurrence")
@@ -1583,6 +1585,8 @@ export function getCalendar() {
 
       const splitNotifJson = merged.notifications && merged.notifications.length > 0
         ? JSON.stringify(merged.notifications) : null;
+      const splitExceptionsJson = newExceptions.length > 0
+        ? JSON.stringify(newExceptions) : null;
       const homeZone = parent.timezone || localTimezone();
       // description and url are heavy columns. If `changes` carries them
       // (user edited via EventPanel after Step 3 lands), bind the new
@@ -1609,6 +1613,7 @@ export function getCalendar() {
           calendarId: parent.calendarId,
           color: merged.color ?? null,
           notifications: splitNotifJson,
+          exceptions: splitExceptionsJson,
           rrule,
           allDay: merged.allDay ?? false,
           location: merged.location ?? "",
@@ -1635,7 +1640,7 @@ export function getCalendar() {
         timezone: homeZone,
         recurrence: newRecurrence,
         recurringParentId: undefined,
-        exceptions: undefined,
+        exceptions: newExceptions.length > 0 ? newExceptions : undefined,
         pomodoroConfig: pomConfig,
       });
       rawBlocks = [...rawBlocks, newTemplate];

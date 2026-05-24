@@ -23,7 +23,7 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import X from "@lucide/svelte/icons/x";
   import { createEditSession } from "./edit-session.svelte";
-  import type { PanelAnchor } from "./edit-session.svelte";
+  import type { EditSessionState, PanelAnchor } from "./edit-session.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
   import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
@@ -40,11 +40,10 @@
     buildCreateDisplay,
     computeEditDisplay,
     buildRecurringCommitPlan,
-    dateDiffDays,
-    shiftDateStr,
     PENDING_CREATE_ID,
   } from "./display-events";
   import { executeRecurrenceCommitPlan } from "./recurrence-edit-executor";
+  import { endActiveEventWouldStopProductivity } from "./active-event-end";
   import {
     buildCalendarDeleteArchivePlan,
     type CalendarDeleteArchiveOutcome,
@@ -78,6 +77,8 @@
         readOnly: boolean;
         allowDeleteWhenReadOnly: boolean;
         skipInlineDeleteConfirm: boolean;
+        endActiveEventAvailable: boolean;
+        inlineEndEventConfirm: boolean;
       };
   type PanelRenderState =
     | {
@@ -110,7 +111,29 @@
         readOnly: boolean;
         allowDeleteWhenReadOnly: boolean;
         skipInlineDeleteConfirm: boolean;
+        endActiveEventAvailable: boolean;
+        inlineEndEventConfirm: boolean;
       };
+  type PanelSaveData = {
+    title: string;
+    start: string;
+    end: string;
+    color?: EventColor;
+    description: string;
+    recurrence?: RecurrenceConfig;
+    notifications?: number[];
+    pomodoroConfig?: PomodoroConfig;
+    allDay?: boolean;
+    meetingEnabled?: boolean;
+    location?: string;
+    url?: string;
+    transparency?: EventTransparency;
+    status?: EventStatus;
+    visibility?: EventVisibility;
+    attendees?: EventAttendee[];
+    localParticipationStatus?: AttendeeStatus;
+    guestPermissions?: GuestPermissions;
+  };
 
   const CREATE_CLOSE_GUARD_MS = 500;
 
@@ -261,12 +284,13 @@
       calendarStore.rawBlocks,
       storeEvents,
       { originalEvent: s.originalEvent, instanceEvent: s.instanceEvent, templateId: s.templateId },
-      session.changes,
+      session.dirty ? session.changes : {},
       session.scope,
       viewWindow,
       activeDate,
       currentDate,
       currentTime,
+      pomodoro.isActive ? pomodoro.activeBlockId ?? undefined : undefined,
     );
   });
 
@@ -277,11 +301,27 @@
       .filter((event) => visIds.has(event.calendarId));
   }
 
+  function activeBlockBelongsToTemplate(templateId: string, activeBlockId: string): boolean {
+    const visibleActive = currentVisibleStoreEvents().find((event) => event.id === activeBlockId);
+    if (visibleActive) {
+      return visibleActive.id === templateId || visibleActive.recurringParentId === templateId;
+    }
+
+    const rawActive = calendarStore.rawBlocks.find((event) => event.id === activeBlockId);
+    if (rawActive) {
+      return rawActive.id === templateId && !!rawActive.recurrence;
+    }
+
+    return activeBlockId.split("::")[0] === templateId;
+  }
+
   function activeDateForEditSession(templateId: string): string | undefined {
-    if (!pomodoro.activeBlockId) return undefined;
+    if (!pomodoro.isActive || !pomodoro.activeBlockId) return undefined;
+    if (!activeBlockBelongsToTemplate(templateId, pomodoro.activeBlockId)) return undefined;
     const parts = pomodoro.activeBlockId.split("::");
-    if (parts[0] !== templateId) return undefined;
-    return parts[1] ?? activePomodoroDate(pomodoro.activeBlockId);
+    return parts[1]
+      ?? activePomodoroDate(pomodoro.activeBlockId)
+      ?? currentVisibleStoreEvents().find((event) => event.id === pomodoro.activeBlockId)?.start.split(" ")[0];
   }
 
   function activePomodoroDate(activeId: string): string | undefined {
@@ -303,8 +343,16 @@
     if (!selectedEvent) throw new Error(`Calendar event '${id}' not found.`);
 
     const deleteScope = state.mode === "edit" && isRecurring(state.instanceEvent)
-      ? scope ?? session.scope
+      ? effectiveRecurringScope(state, scope)
       : undefined;
+
+    const recurringTemplateId = deleteScope
+      ? (selectedEvent.recurringParentId ?? selectedEvent.id).split("::")[0]
+      : undefined;
+    const activeDate = recurringTemplateId ? activeDateForEditSession(recurringTemplateId) : undefined;
+    const activeBlockId = pomodoro.isActive && (!recurringTemplateId || activeDate)
+      ? pomodoro.activeBlockId
+      : null;
 
     return buildCalendarDeleteArchivePlan({
       rawBlocks: calendarStore.rawBlocks,
@@ -313,8 +361,8 @@
       scope: deleteScope,
       now,
       activePomodoro: {
-        blockId: pomodoro.activeBlockId,
-        eventDate: pomodoro.activeBlockId ? activePomodoroDate(pomodoro.activeBlockId) : undefined,
+        blockId: activeBlockId,
+        eventDate: activeDate ?? (activeBlockId ? activePomodoroDate(activeBlockId) : undefined),
       },
     });
   }
@@ -347,11 +395,12 @@
             templateId: state.templateId,
           },
           data,
-          scope ?? session.scope,
+          isRecurring(state.instanceEvent) ? effectiveRecurringScope(state, scope) : scope ?? session.scope,
           viewWindow,
           activeDateForEditSession(state.templateId),
           currentDate,
           currentTime,
+          pomodoro.isActive ? pomodoro.activeBlockId ?? undefined : undefined,
         ).events,
       );
     }
@@ -439,6 +488,7 @@
   });
 
   let suppressEditingGlow = $state(false);
+  let endingActiveEvent = $state(false);
   let pendingEditEventId = $state<string | undefined>(undefined);
   const previewedIds = $derived(suppressEditingGlow ? new Set<string>() : displayResult.previewedIds);
   const editingId = $derived(suppressEditingGlow ? undefined : displayResult.editingId);
@@ -470,7 +520,9 @@
     try {
       return buildDeleteArchivePlanForEvent(
         session.state.instanceEvent.id,
-        isRecurring(session.state.instanceEvent) ? session.scope : undefined,
+        isRecurring(session.state.instanceEvent)
+          ? effectiveRecurringScope(session.state, session.scope)
+          : undefined,
       ).requiresActiveStop;
     } catch {
       return false;
@@ -483,7 +535,7 @@
     if (s.mode !== "edit") return false;
     const ev = s.originalEvent;
     if (!ev.pomodoroConfig) return false;
-    if (ev.id === pomodoro.activeBlockId) return false;
+    if (pomodoro.isActive && ev.id === pomodoro.activeBlockId) return false;
     return parseCalendarDate(ev.end).getTime() < Date.now();
   });
 
@@ -504,12 +556,14 @@
         mode: "edit",
         sessionKey: s.sessionKey,
         event: panelEvent,
-        recurringScopeEnabled: isRecurring(s.originalEvent),
+        recurringScopeEnabled: isRecurring(s.originalEvent) && !isSelectedActiveOccurrence(s),
         anchor: s.anchor,
         detailsLoaded: panelDetailsLoaded,
         readOnly: isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId),
         allowDeleteWhenReadOnly: isEditingLocked && !calendarsStore.isReadOnly(s.originalEvent.calendarId),
         skipInlineDeleteConfirm: deleteWouldStopSession,
+        endActiveEventAvailable: false,
+        inlineEndEventConfirm: false,
       };
     }
     return null;
@@ -534,6 +588,8 @@
       };
     }
     if (s.mode === "edit" && panelEvent) {
+      const selectedActive = endingActiveEvent || isSelectedActiveOccurrence(s);
+      const endWouldStopProductivity = !endingActiveEvent && selectedActiveEndWouldStopProductivity(s);
       return {
         parked: false,
         mode: "edit",
@@ -543,12 +599,14 @@
         anchor: s.anchor,
         initialAllDay: false,
         event: panelEvent,
-        recurringScopeEnabled: isRecurring(s.originalEvent),
+        recurringScopeEnabled: isRecurring(s.originalEvent) && !selectedActive,
         detailsLoaded: panelDetailsLoaded,
         externalDirty: session.dirty,
-        readOnly: isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId),
-        allowDeleteWhenReadOnly: isEditingLocked && !calendarsStore.isReadOnly(s.originalEvent.calendarId),
+        readOnly: !endingActiveEvent && (isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId)),
+        allowDeleteWhenReadOnly: !endingActiveEvent && isEditingLocked && !calendarsStore.isReadOnly(s.originalEvent.calendarId),
         skipInlineDeleteConfirm: deleteWouldStopSession,
+        endActiveEventAvailable: selectedActive,
+        inlineEndEventConfirm: selectedActive && !endWouldStopProductivity,
       };
     }
     if (!parkedPanelSnapshot) return null;
@@ -583,6 +641,8 @@
       readOnly: parkedPanelSnapshot.readOnly,
       allowDeleteWhenReadOnly: parkedPanelSnapshot.allowDeleteWhenReadOnly,
       skipInlineDeleteConfirm: parkedPanelSnapshot.skipInlineDeleteConfirm,
+      endActiveEventAvailable: parkedPanelSnapshot.endActiveEventAvailable,
+      inlineEndEventConfirm: parkedPanelSnapshot.inlineEndEventConfirm,
     };
   });
 
@@ -597,44 +657,38 @@
     return !!event.recurringParentId || !!event.recurrence;
   }
 
+  function isSelectedActiveOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
+    if (!pomodoro.isActive || !pomodoro.activeBlockId) return false;
+    if (!isRecurring(s.originalEvent)) return s.originalEvent.id === pomodoro.activeBlockId;
+    return activeDateForEditSession(s.templateId) === s.instanceEvent.start.split(" ")[0];
+  }
+
+  function selectedActiveEndWouldStopProductivity(
+    s: Extract<EditSessionState, { mode: "edit" }>,
+  ): boolean {
+    if (!isSelectedActiveOccurrence(s)) return false;
+    return endActiveEventWouldStopProductivity(
+      s.instanceEvent,
+      currentVisibleStoreEvents(),
+      new Date(),
+    );
+  }
+
+  function effectiveRecurringScope(
+    s: Extract<EditSessionState, { mode: "edit" }>,
+    requested?: RecurringScope,
+  ): RecurringScope {
+    return isSelectedActiveOccurrence(s) ? "this" : requested ?? session.scope;
+  }
+
   /** Would this save displace the active block out of the current time window? */
-  function wouldSaveStopSession(data: { start: string; end: string }, scope?: RecurringScope): boolean {
-    if (!pomodoro.activeBlockId || session.state.mode !== "edit") return false;
+  function wouldSaveStopSession(data: { start: string; end: string }, _scope?: RecurringScope): boolean {
+    if (!pomodoro.isActive || !pomodoro.activeBlockId || session.state.mode !== "edit") return false;
 
     const s = session.state;
-    const activeId = pomodoro.activeBlockId;
-
-    // Recurring scopes can still affect the active occurrence. If the new
-    // projected window no longer contains now, the active session must stop.
-    if (scope === "all" || scope === "following") {
-      const templateId = (s.instanceEvent.recurringParentId ?? s.instanceEvent.id).split("::")[0];
-      const activeRoot = activeId.includes("::") ? activeId.split("::")[0] : activeId;
-      if (activeRoot !== templateId) return false;
-
-      const todayStr = formatDatePart(new Date());
-      const selectedDate = s.instanceEvent.start.split(" ")[0];
-      const activeDate = activePomodoroDate(activeId);
-      if (activeDate !== todayStr) return false;
-      if (scope === "following" && activeDate < selectedDate) return false;
-
-      // Compute the new time window projected onto today
-      const newStartTime = data.start.split(" ")[1];
-      const newEndTime = data.end.split(" ")[1];
-      const dataStartDate = data.start.split(" ")[0];
-      const dataEndDate = data.end.split(" ")[0];
-      const endDaySpan = dateDiffDays(dataStartDate, dataEndDate);
-      const endDateForToday = endDaySpan !== 0 ? shiftDateStr(todayStr, endDaySpan) : todayStr;
-
-      const now = new Date();
-      const newStartMs = parseCalendarDate(`${todayStr} ${newStartTime}`).getTime();
-      const newEndMs = parseCalendarDate(`${endDateForToday} ${newEndTime}`).getTime();
-
-      // Session continues only if the new time window covers right now
-      return !(now.getTime() >= newStartMs && now.getTime() < newEndMs);
-    }
-
-    // Direct edit of active block (non-recurring or "this")
-    if (s.instanceEvent.id !== activeId) return false;
+    // Active recurring occurrences are isolated to this occurrence. Future
+    // "following" or "all" edits in the same series do not move the active run.
+    if (!isSelectedActiveOccurrence(s)) return false;
     const now = new Date();
     const newStart = parseCalendarDate(data.start);
     const newEnd = parseCalendarDate(data.end);
@@ -1280,6 +1334,35 @@
       return;
     }
 
+    if (!isRecurring(event) && pomodoro.isActive && pomodoro.activeBlockId === event.id) {
+      const originalInstance = visibleEvents.find((e) => e.id === event.id);
+      if (!originalInstance) return;
+
+      const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
+      const rect = el?.getBoundingClientRect();
+      const anchor: PanelAnchor = rect
+        ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+
+      if (session.dirty) {
+        requestConfirm(
+          "Your changes will be lost.",
+          async () => {
+            await loadEventPanel();
+            session.openEdit(originalInstance, anchor, originalInstance);
+            session.updateChanges({ start: event.start, end: event.end });
+          },
+          { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        );
+        return;
+      }
+
+      await loadEventPanel();
+      session.openEdit(originalInstance, anchor, originalInstance);
+      session.updateChanges({ start: event.start, end: event.end });
+      return;
+    }
+
     if (isRecurring(event)) {
       // Resolve the original instance before drag modified its position
       const originalInstance = visibleEvents.find((e) => e.id === event.id);
@@ -1399,26 +1482,66 @@
     };
   }
 
-  async function handlePanelSave(data: {
-    title: string;
-    start: string;
-    end: string;
-    color?: EventColor;
-    description: string;
-    recurrence?: RecurrenceConfig;
-    notifications?: number[];
-    pomodoroConfig?: PomodoroConfig;
-    allDay?: boolean;
-    meetingEnabled?: boolean;
-    location?: string;
-    url?: string;
-    transparency?: EventTransparency;
-    status?: EventStatus;
-    visibility?: EventVisibility;
-    attendees?: EventAttendee[];
-    localParticipationStatus?: AttendeeStatus;
-    guestPermissions?: GuestPermissions;
-  }, scope?: RecurringScope) {
+  async function persistPanelData(
+    data: PanelSaveData,
+    scope?: RecurringScope,
+    options: { syncActivePomodoro?: boolean } = {},
+  ): Promise<boolean> {
+    const s = session.state;
+    let saveRefreshedVisibleWindow = false;
+    const syncActivePomodoro = options.syncActivePomodoro ?? true;
+    if (s.mode === "closed") return false;
+    if (s.mode === "create") {
+      await calendarStore.addBlock({
+        title: data.title, start: data.start, end: data.end,
+        color: data.color, description: data.description,
+        recurrence: data.recurrence, notifications: data.notifications,
+        pomodoroConfig: data.pomodoroConfig,
+        allDay: data.allDay, location: data.location, url: data.url,
+        meetingEnabled: data.meetingEnabled,
+        transparency: data.transparency, status: data.status,
+        visibility: data.visibility, attendees: data.attendees,
+        localParticipationStatus: data.localParticipationStatus,
+        guestPermissions: data.guestPermissions,
+      });
+    } else if (s.mode === "edit") {
+      const instanceEvent = s.instanceEvent;
+      const isRec = isRecurring(s.originalEvent);
+
+      const effectiveScope = isRec ? effectiveRecurringScope(s, scope) : undefined;
+      if (isRec && effectiveScope) {
+        const now = new Date();
+        const activeDate = activeDateForEditSession(s.templateId);
+        const recurrencePlan = buildRecurringCommitPlan({
+          rawBlocks: calendarStore.rawBlocks,
+          templateId: s.templateId,
+          instanceEvent,
+          changes: data,
+          scope: effectiveScope,
+          activeBlockId: pomodoro.isActive && activeDate ? pomodoro.activeBlockId ?? undefined : undefined,
+          activeDate,
+          today: formatDatePart(now),
+          currentTime: formatCalendarDate(now).split(" ")[1],
+        });
+        const blockingDiagnostic = recurrencePlan.diagnostics.find((diagnostic) => diagnostic.severity === "error");
+        if (blockingDiagnostic) throw new Error(blockingDiagnostic.message);
+        await executeRecurrenceCommitPlan(recurrencePlan, {
+          calendarStore,
+          pomodoro,
+          window: viewWindow,
+        });
+        saveRefreshedVisibleWindow = recurrencePlan.requiresCanonicalRefresh;
+      } else {
+        const updated: CalendarEvent = { ...s.originalEvent, ...data };
+        await calendarStore.updateBlock(updated);
+        if (syncActivePomodoro) await syncSavedActivePomodoro(updated);
+      }
+    }
+
+    return saveRefreshedVisibleWindow;
+  }
+
+  async function handlePanelSave(data: PanelSaveData, scope?: RecurringScope) {
     // Gate: confirm before stopping the active pomodoro session.
     // stopSession() is deferred until after the save so hybrid logic still sees activeBlockId.
     if (!sessionStopPending && wouldSaveStopSession(data, scope)) {
@@ -1435,7 +1558,7 @@
 
     const s = session.state;
     let saveRefreshedVisibleWindow = false;
-    const suppressPomodoroAutoStart = s.mode === "edit" && !!pomodoro.activeBlockId;
+    const suppressPomodoroAutoStart = s.mode === "edit" && pomodoro.isActive && !!pomodoro.activeBlockId;
     // While save is in flight, hide edit outlines but keep the previewed
     // layout until canonical reload has updated the store. Capture from the
     // submitted save payload before suppressing preview recomputation.
@@ -1446,50 +1569,7 @@
     if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = true;
 
     try {
-      if (s.mode === "create") {
-        await calendarStore.addBlock({
-          title: data.title, start: data.start, end: data.end,
-          color: data.color, description: data.description,
-          recurrence: data.recurrence, notifications: data.notifications,
-          pomodoroConfig: data.pomodoroConfig,
-          allDay: data.allDay, location: data.location, url: data.url,
-          meetingEnabled: data.meetingEnabled,
-          transparency: data.transparency, status: data.status,
-          visibility: data.visibility, attendees: data.attendees,
-          localParticipationStatus: data.localParticipationStatus,
-          guestPermissions: data.guestPermissions,
-        });
-      } else if (s.mode === "edit") {
-        const instanceEvent = s.instanceEvent;
-        const isRec = isRecurring(s.originalEvent);
-
-        if (isRec && scope) {
-          const now = new Date();
-          const recurrencePlan = buildRecurringCommitPlan({
-            rawBlocks: calendarStore.rawBlocks,
-            templateId: s.templateId,
-            instanceEvent,
-            changes: data,
-            scope,
-            activeBlockId: pomodoro.activeBlockId ?? undefined,
-            activeDate: activeDateForEditSession(s.templateId),
-            today: formatDatePart(now),
-            currentTime: formatCalendarDate(now).split(" ")[1],
-          });
-          const blockingDiagnostic = recurrencePlan.diagnostics.find((diagnostic) => diagnostic.severity === "error");
-          if (blockingDiagnostic) throw new Error(blockingDiagnostic.message);
-          await executeRecurrenceCommitPlan(recurrencePlan, {
-            calendarStore,
-            pomodoro,
-            window: viewWindow,
-          });
-          saveRefreshedVisibleWindow = recurrencePlan.requiresCanonicalRefresh;
-        } else {
-          const updated: CalendarEvent = { ...s.originalEvent, ...data };
-          await calendarStore.updateBlock(updated);
-          await syncSavedActivePomodoro(updated);
-        }
-      }
+      saveRefreshedVisibleWindow = await persistPanelData(data, scope);
 
       // Stop session after all mutations complete because hybrid save logic needs activeBlockId intact.
       if (sessionStopPending) {
@@ -1509,6 +1589,66 @@
     }
   }
 
+  async function executeEndEvent(data: PanelSaveData, scope?: RecurringScope) {
+    const s = session.state;
+    if (s.mode !== "edit" || !isSelectedActiveOccurrence(s)) return;
+
+    const end = formatCalendarDate(new Date());
+    const endedData: PanelSaveData = { ...data, end };
+    const endIso = parseCalendarDate(end).toISOString();
+    const saveFreeze = buildSaveDisplayFreeze(endedData, scope);
+    let saveRefreshedVisibleWindow = false;
+    const suppressPomodoroAutoStart = pomodoro.isActive && !!pomodoro.activeBlockId;
+    endingActiveEvent = true;
+    suppressEditingGlow = true;
+    suppressEditPreview = true;
+    saveDisplayFreeze = saveFreeze;
+    if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = true;
+
+    try {
+      saveRefreshedVisibleWindow = await persistPanelData(endedData, scope, {
+        syncActivePomodoro: false,
+      });
+      await pomodoro.completeActiveBlockAt(endIso);
+      if (!saveRefreshedVisibleWindow) {
+        await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
+      }
+      closeSession();
+      await tick();
+    } finally {
+      if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = false;
+      endingActiveEvent = false;
+      suppressEditingGlow = false;
+      suppressEditPreview = false;
+      saveDisplayFreeze = null;
+    }
+  }
+
+  async function handleEndEvent(data: PanelSaveData, scope?: RecurringScope) {
+    if (endingActiveEvent) return;
+    const s = session.state;
+    if (s.mode !== "edit" || !isSelectedActiveOccurrence(s)) return;
+
+    if (selectedActiveEndWouldStopProductivity(s)) {
+      requestConfirm(
+        "The current focus session will stop.",
+        async () => {
+          await executeEndEvent(data, scope);
+        },
+        {
+          title: "Stop the focus session?",
+          yesLabel: "End event (Enter)",
+          noLabel: "Keep session (Esc)",
+          extraConfirmShortcut: (e) =>
+            (e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e),
+        },
+      );
+      return;
+    }
+
+    await executeEndEvent(data, scope);
+  }
+
   function eventDeleteOutcomeLabel(outcome: CalendarDeleteArchiveOutcome): string {
     if (outcome === "archive") return "Event archived";
     if (outcome === "mixed") return "Events deleted and archived";
@@ -1518,7 +1658,7 @@
   async function syncSavedActivePomodoro(event: CalendarEvent): Promise<void> {
     const activeId = pomodoro.activeBlockId;
     const config = event.pomodoroConfig;
-    if (!activeId || event.id !== activeId || !config) return;
+    if (!pomodoro.isActive || !activeId || event.id !== activeId || !config) return;
     await pomodoro.startFromBlock(
       activeId,
       {
@@ -1537,7 +1677,7 @@
     plan: CalendarDeleteArchivePlan,
     stopActiveSession: boolean,
   ): Promise<void> {
-    const activeBlockId = pomodoro.activeBlockId;
+    const activeBlockId = pomodoro.isActive ? pomodoro.activeBlockId : null;
     suppressEditPreview = true;
     saveDisplayFreeze = cloneDisplayEvents(plan.finalVisibleEvents);
 
@@ -1706,10 +1846,15 @@
       readOnly={panelRender.readOnly}
       allowDeleteWhenReadOnly={panelRender.allowDeleteWhenReadOnly}
       skipInlineDeleteConfirm={panelRender.skipInlineDeleteConfirm}
+      inlineEndEventConfirm={panelRender.mode === "edit" ? panelRender.inlineEndEventConfirm : false}
+      lockStartControls={panelRender.mode === "edit" ? panelRender.endActiveEventAvailable : false}
       calendarIdentityEmail={panelCalendarIdentityEmail}
       loadFullEvent={calendarStore.loadPanelEvent}
       onSave={handlePanelSave}
       onDelete={panelRender.mode === "edit" && !panelRender.parked ? handleDelete : undefined}
+      onEndEvent={panelRender.mode === "edit" && !panelRender.parked && panelRender.endActiveEventAvailable
+        ? handleEndEvent
+        : undefined}
       onChange={handlePanelChange}
       onInitialSync={handlePanelInitialSync}
       onClose={handlePanelClose}

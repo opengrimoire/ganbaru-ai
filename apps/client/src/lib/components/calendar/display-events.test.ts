@@ -239,6 +239,40 @@ describe("applyNonRecurring", () => {
     expect(result.events[0]?.localParticipationStatus).toBe("tentative");
   });
 
+  it("moves active single-event previews as one block when the draft still contains now", () => {
+    const evt = makeEvent({ start: "2026-03-20 09:00", end: "2026-03-20 13:00" });
+    const result = applyNonRecurring(
+      [evt],
+      evt,
+      { start: "2026-03-20 10:00", end: "2026-03-20 14:00" },
+      TEST_WINDOW,
+    );
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({
+      id: evt.id,
+      start: "2026-03-20 10:00",
+      end: "2026-03-20 14:00",
+    });
+  });
+
+  it("moves active single-event previews as one block when the draft starts after now", () => {
+    const evt = makeEvent({ start: "2026-03-20 09:00", end: "2026-03-20 13:00" });
+    const result = applyNonRecurring(
+      [evt],
+      evt,
+      { start: "2026-03-20 11:00", end: "2026-03-20 15:00" },
+      TEST_WINDOW,
+    );
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({
+      id: evt.id,
+      start: "2026-03-20 11:00",
+      end: "2026-03-20 15:00",
+    });
+  });
+
   it("expands preview instances when adding recurrence to a saved non-recurring event", () => {
     const evt = makeEvent();
     const other = makeEvent({ id: "evt2", title: "Other", start: "2026-03-20 14:00", end: "2026-03-20 15:00" });

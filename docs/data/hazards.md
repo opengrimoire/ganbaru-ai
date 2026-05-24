@@ -20,7 +20,7 @@ Situations most likely to produce bugs, data corruption, or confusing UX. Every 
 
 **Scenario, resize while running.** The user has a session active on "Study" 14:00-16:00. At 14:45, they drag the end edge to 15:00, shortening the event by an hour. The active run's block now expires in 15 minutes instead of 75. The system must re-evaluate the block boundary and schedule an earlier expiration. If the resize is not propagated to the timer, the session continues past the event boundary.
 
-**Scenario, delete while running.** The user tries to delete the active event. The system must close the active run first (`end_reason = stopped`), interrupt the active segment, close open pauses, write the stop event, and only then remove the calendar row. The pomodoro history survives with nullable live `event_id` links and immutable run snapshots.
+**Scenario, end while running.** The user wants to stop the active event now. The calendar panel offers End event instead of delete or archive. The system sets the event end time to now, closes the active run with `end_reason = completed`, interrupts the active segment with `end_reason = event_expired`, closes open pauses, and leaves the ended event visible as a past protected row. If the user archives that row afterward, the pomodoro history survives with nullable live `event_id` links and immutable run snapshots.
 
 **Scenario, convert away from pomodoro.** The user disables the pomodoro toggle on the active event. The system must stop the session (`end_reason = stopped`), save all segment data, and remove the rail rendering. Re-enabling pomodoro later starts a fresh session, no inheritance.
 

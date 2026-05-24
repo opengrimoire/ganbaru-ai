@@ -104,6 +104,8 @@ It must not appear merely because the user adds repeat to a saved non-recurring 
 
 It must appear for both the template's first occurrence and synthetic occurrences of a saved recurring series.
 
+It must not appear when the selected recurring occurrence is the active pomodoro event. In that case the effective scope is `Only this`, even if the previous panel state held `Following` or `All`.
+
 ## Projection contract
 
 Projection is pure. Given the same saved event rows, selected event, draft, scope, active session metadata, captured edit time, and visible window, it returns the same result without writing to the store or database.
@@ -120,7 +122,7 @@ The visible event list must include unchanged unrelated events exactly as they w
 
 Preview contour IDs must be a subset of the rendered event IDs. If a virtual event is previewed, it needs a stable virtual ID that cannot collide with persisted or synthetic IDs.
 
-For delete and archive, the scope selector uses the same affected-set preview model as editing. `Only this` contours the selected occurrence. `Following` contours the selected occurrence and later rendered occurrences in the same series. `All` contours all rendered occurrences in the series, including protected started occurrences. A protected occurrence may keep its current geometry and content in the preview, but the contour still communicates that the operation will archive it.
+For delete and archive, the scope selector uses the same affected-set preview model as editing. `Only this` contours the selected occurrence. From a future selected occurrence, `Following` contours the selected occurrence and later rendered occurrences in the same series. `All` contours all rendered occurrences only when the series has no protected history; otherwise it contours the mutable future rows that would disappear and leaves protected history unhighlighted. From a started selected occurrence, `Following` and `All` contour only started occurrences because history archive does not affect future mutable rows. A protected occurrence may keep its current geometry and content in the preview, but the contour still communicates that the operation will archive it.
 
 When the user confirms delete or archive, the UI applies the plan's final visible projection for the affected scope before sending one atomic backend batch. This projection is display-only. It prevents protected occurrence archive batches from disappearing one by one while the backend snapshots each occurrence and caps the template.
 
@@ -178,16 +180,17 @@ Preview shows the old template only before the selected occurrence and shows the
 
 `All` applies to the series as a whole while preserving past data.
 
-If recurrence remains set and there are no protected occurrences, Save may update the template directly. If protected occurrences exist, Save preserves them first. The preferred preservation mechanism is a capped historical template ending at the last protected occurrence, followed by a new mutable template beginning at the first mutable occurrence. Detached standalones are used when a protected or active occurrence needs its own identity or cannot be represented safely by the capped template.
+If recurrence remains set and there are no protected occurrences, Save may update the template directly. If protected occurrences exist, Save preserves them first. The preferred preservation mechanism is a capped historical template ending at the last protected occurrence, followed by a new mutable template beginning at the first mutable occurrence. Detached standalones are used when a protected occurrence needs its own event ID or cannot be represented safely by the capped template.
 
-If recurrence is cleared, Save collapses the mutable side of the series. The selected occurrence becomes the single non-recurring survivor for the mutable side with the draft fields. This is true even when the selected occurrence is synthetic and not the original template date. Protected history remains visible through a capped historical template or detached standalones. Active-session rules may also materialize an additional standalone event.
+If a protected active occurrence is in the affected series but is not the selected occurrence, it remains unchanged with the protected side of the series. Template-wide edits started from another occurrence do not move, retime, or rewrite that active occurrence.
+
+If recurrence is cleared, Save collapses the mutable side of the series. The selected occurrence becomes the single non-recurring survivor for the mutable side with the draft fields. This is true even when the selected occurrence is synthetic and not the original template date. Protected history remains visible through a capped historical template or detached standalones.
 
 Collapse must preserve invariant 7:
 
 - Any protected occurrence that would vanish, move, or change meaning remains visible with its original meaning.
 - A capped historical template is preferred when one template can preserve the protected range without rewriting it.
-- A detached standalone is required when an individual occurrence needs its own event ID, when the selected survivor cannot safely reuse the old template, or when an active occurrence would otherwise lose its identity.
-- Any active occurrence that would vanish and is not the selected survivor is materialized as a detached standalone event.
+- A detached standalone is required when an individual occurrence needs its own event ID or when the selected survivor cannot safely reuse the old template.
 - Runs and segments attached to materialized occurrences are transferred to their standalone event IDs.
 - The selected survivor receives any runs from the selected occurrence ID.
 - The old template is reused as the survivor only when reuse does not rewrite protected history. Otherwise it remains as the historical template or is converted only when deletion is legal.
@@ -215,17 +218,17 @@ Preview contours must be recomputed from scratch after each toggle. No contour I
 
 ## Active pomodoro sessions
 
-An active session must survive every recurrence edit.
+An active session must survive every recurrence edit, but an active selected occurrence cannot edit the repeat chain.
 
 If Save materializes, detaches, or otherwise changes the active occurrence's event ID, the active run's event references transfer to the new event ID.
 
 For `Only this`, an active selected occurrence transfers to the detached result. An active occurrence elsewhere in the same source series is unaffected because the source template continues unchanged except for the selected exception date.
 
-For `Following`, if the active selected occurrence is also the requested split point, active-session protection wins. The effective split point moves to the next occurrence after the active one. The active occurrence stays attached to the old template, and the old template is capped after that active occurrence. If repeat was cleared, no new recurring template is created and future occurrences after the active occurrence stop.
+For an active selected recurring occurrence, the panel hides the scope selector and Save uses `Only this`. Direct manipulation can only resize the bottom edge to change the end time. Moving the block, resizing its top edge, changing the panel start date or time, and toggling all-day are disabled because the start time already has pomodoro history.
 
-For `Following`, if the active occurrence is before the selected split point, it is unaffected. If the active occurrence is after the selected split point and recurrence remains set, the active run transfers to the corresponding occurrence ID in the new template. If repeat was cleared, the active occurrence would otherwise vanish, so Save materializes it as a standalone event and transfers the active run there before removing later generated occurrences.
+For `Following`, if the active occurrence is before the selected split point, it is unaffected. If the active occurrence is after the selected split point, Save materializes it unchanged as a standalone event and transfers the active run there before splitting the source series. The active occurrence does not move to the new template.
 
-For `All`, if the active selected occurrence becomes the collapse survivor, the active run transfers to that survivor. If the active occurrence is different from the selected survivor and collapse or a template-wide change would make it vanish, move, or change meaning, that active occurrence is detached before the template changes and the active run transfers to the standalone.
+For `All`, protected active occurrences are preserved like other protected history. A template-wide edit started from another occurrence does not move, retime, collapse, or detach the active occurrence merely to apply the new chain. Mutable occurrences after the protection boundary receive the edited fields.
 
 Projection never transfers a session. It only marks which transfer Save would perform.
 
