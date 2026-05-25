@@ -150,6 +150,7 @@
   const effectivePositioned = $derived(layoutWithPreview.items);
   const layoutedPreviews = $derived(layoutWithPreview.dragPreviews);
   const layoutedCreatePreview = $derived(layoutWithPreview.createPreview);
+  const layoutAnimationActive = $derived(!!dragPreview || !!createPreview || !!draggingEventId);
   const renderedPositioned = $derived.by(() => {
     const minMinute = Math.max(0, visibleStartMinute - TIMED_RENDER_BUFFER_MINUTES);
     const maxMinute = Math.min(1440, visibleEndMinute + TIMED_RENDER_BUFFER_MINUTES);
@@ -715,6 +716,7 @@
       editing={pos.event.id === editingId}
       preview={previewedIds?.has(pos.event.id) === true}
       grabbing={pos.event.id === grabbingId}
+      animateLayout={layoutAnimationActive}
       canDrag={!panelOpen || pos.event.id === editingId}
       isPast={!isPendingCreateEventId(pos.event.id) && (
         isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)

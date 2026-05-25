@@ -25,6 +25,7 @@
     editing = false,
     preview = false,
     grabbing = false,
+    animateLayout = false,
     canDrag = true,
     isPast = false,
     inResizeZone = false,
@@ -37,6 +38,7 @@
     editing?: boolean;
     preview?: boolean;
     grabbing?: boolean;
+    animateLayout?: boolean;
     canDrag?: boolean;
     isPast?: boolean;
     inResizeZone?: boolean;
@@ -108,7 +110,7 @@
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
   title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${timeRange}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {showContour ? 'event-editing' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {showContour ? 'event-editing' : ''} {animateLayout ? 'event-layout-transition' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
@@ -190,6 +192,9 @@
   .event-block-wrapper {
     container-type: size;
     container-name: event-block;
+  }
+
+  .event-block-wrapper.event-layout-transition {
     transition: left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
   }
 
