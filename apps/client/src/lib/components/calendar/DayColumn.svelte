@@ -736,6 +736,7 @@
     {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
     {@const dragIndicators = getEventIndicatorState(previewEvent)}
     <div
+      data-event-id={previewEvent.id}
       class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[0.8rem] leading-tight"
       style="
         top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);

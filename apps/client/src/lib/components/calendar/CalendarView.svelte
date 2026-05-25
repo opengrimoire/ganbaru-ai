@@ -1211,6 +1211,47 @@
     await openCreate();
   }
 
+  function fallbackPanelAnchor(): PanelAnchor {
+    return { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+  }
+
+  function panelAnchorFromRect(rect: DOMRect | undefined): PanelAnchor {
+    return rect
+      ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
+      : fallbackPanelAnchor();
+  }
+
+  function findRenderedEventElement(eventId: string): HTMLElement | undefined {
+    if (!containerEl) return undefined;
+    for (const el of containerEl.querySelectorAll<HTMLElement>("[data-event-id]")) {
+      if (el.dataset.eventId === eventId) return el;
+    }
+    return undefined;
+  }
+
+  function panelAnchorFromRenderedEvent(eventId: string): PanelAnchor {
+    const el = findRenderedEventElement(eventId);
+    if (!el) return fallbackPanelAnchor();
+
+    const eventRect = el.getBoundingClientRect();
+    const columnRect = el.closest("[data-day-column]")?.getBoundingClientRect();
+    if (columnRect) {
+      return {
+        x: columnRect.right,
+        y: eventRect.top,
+        width: columnRect.width,
+        height: eventRect.height,
+      };
+    }
+
+    return {
+      x: eventRect.right,
+      y: eventRect.top,
+      width: eventRect.width,
+      height: eventRect.height,
+    };
+  }
+
   async function handleEventClick(event: CalendarEvent, rect?: DOMRect): Promise<void> {
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
@@ -1224,9 +1265,7 @@
       return;
     }
 
-    const anchor: PanelAnchor = rect
-      ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
-      : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+    const anchor = panelAnchorFromRect(rect);
 
     const openEvent = async () => {
       const requestId = ++panelOpenRequestId;
@@ -1344,11 +1383,7 @@
       const originalInstance = visibleEvents.find((e) => e.id === event.id);
       if (!originalInstance) return;
 
-      const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
-      const rect = el?.getBoundingClientRect();
-      const anchor: PanelAnchor = rect
-        ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
-        : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+      const anchor = panelAnchorFromRenderedEvent(event.id);
 
       if (session.dirty) {
         requestConfirm(
@@ -1376,11 +1411,7 @@
 
       // If session is dirty, ask to discard before switching
       if (session.dirty) {
-        const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
-        const rect = el?.getBoundingClientRect();
-        const anchor: PanelAnchor = rect
-          ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
-          : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+        const anchor = panelAnchorFromRenderedEvent(event.id);
         requestConfirm(
           "Your changes will be lost.",
           async () => {
@@ -1397,11 +1428,7 @@
       }
 
       // Drag on recurring without panel open: open panel with changes
-      const el = containerEl?.querySelector(`[data-event-id="${event.id}"]`);
-      const rect = el?.getBoundingClientRect();
-      const anchor: PanelAnchor = rect
-        ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
-        : { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+      const anchor = panelAnchorFromRenderedEvent(event.id);
 
       await loadEventPanel();
       session.openEdit(originalInstance, anchor, originalInstance);
