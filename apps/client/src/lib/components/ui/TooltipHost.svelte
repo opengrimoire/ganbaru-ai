@@ -430,22 +430,10 @@
     overflow-wrap: anywhere;
     opacity: 0;
     pointer-events: none;
-    transition:
-      opacity 100ms ease,
-      transform 100ms ease;
-  }
-
-  .app-tooltip[data-placement="top"] {
-    transform: translateY(2px) scale(0.98);
-  }
-
-  .app-tooltip[data-placement="bottom"] {
-    transform: translateY(-2px) scale(0.98);
   }
 
   .app-tooltip.ready {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 
   .app-tooltip::after {

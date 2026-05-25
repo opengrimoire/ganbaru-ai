@@ -22,7 +22,7 @@ Used throughout the Svelte frontend. Provides type safety across the heavily int
 
 ### HTML / CSS
 
-Standard web rendering inside the Tauri webview. CSS handles a significant part of the ambient UI: backdrop blur, transitions on the edge panel and overlays, fullscreen break screen aesthetics, the Notion-like editor layout, visual novel dialogue presentation (planned).
+Standard web rendering inside the Tauri webview. CSS handles a significant part of the ambient UI: backdrop blur, transitions on the edge panel and overlays, fullscreen break screen aesthetics, the Notion-like editor layout, visual novel dialogue presentation (planned). Global app tooltips keep the hover delay, then paint at their final opacity and position with no entrance animation.
 
 ---
 
