@@ -6,6 +6,7 @@ import {
   buildCreateDisplay,
   computeEditDisplay,
   applyNonRecurring,
+  isPendingCreateEventId,
   PENDING_CREATE_ID,
 } from "./display-events";
 
@@ -58,6 +59,14 @@ describe("closedDisplay", () => {
     expect(result.events).toBe(events);
     expect(result.previewedIds.size).toBe(0);
     expect(result.editingId).toBeUndefined();
+  });
+});
+
+describe("isPendingCreateEventId", () => {
+  it("matches the create preview id and its expanded instances only", () => {
+    expect(isPendingCreateEventId(PENDING_CREATE_ID)).toBe(true);
+    expect(isPendingCreateEventId(`${PENDING_CREATE_ID}::2026-03-20`)).toBe(true);
+    expect(isPendingCreateEventId("evt1")).toBe(false);
   });
 });
 

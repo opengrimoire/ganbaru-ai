@@ -11,6 +11,7 @@ import {
   parseCalendarDate,
 } from "./utils";
 import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+import { isPendingCreateEventId } from "./display-events";
 
 let cursorStyle: HTMLStyleElement | null = null;
 
@@ -229,8 +230,9 @@ export function useDragController(config: DragControllerConfig) {
       return;
     }
 
-    // Locked events (past with completed progress): no drag/resize at all
-    if (config.isEventLocked?.(eventId)) {
+    // Locked saved events (past with completed progress): no drag/resize at all.
+    // Unsaved create previews stay editable until the user commits them.
+    if (!isPendingCreateEventId(eventId) && config.isEventLocked?.(eventId)) {
       dragState = null;
       return;
     }

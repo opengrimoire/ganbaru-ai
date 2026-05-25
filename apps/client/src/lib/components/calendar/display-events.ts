@@ -21,6 +21,10 @@ const fmtDate = (d: Date) =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const fmtTime = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
+export function isPendingCreateEventId(id: string): boolean {
+  return id === PENDING_CREATE_ID || id.startsWith(`${PENDING_CREATE_ID}::`);
+}
+
 function changeOr<K extends keyof CalendarEvent>(
   changes: Partial<CalendarEvent>,
   key: K,

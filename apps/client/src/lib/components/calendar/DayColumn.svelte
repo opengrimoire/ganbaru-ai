@@ -11,7 +11,7 @@
     formatTimeRange,
   } from "./utils";
   import { computeDayTimelineBands, isLatestSegmentFetchResponse } from "$lib/utils/pomodoro-segments";
-  import { PENDING_CREATE_ID } from "./display-events";
+  import { isPendingCreateEventId, PENDING_CREATE_ID } from "./display-events";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { dbUrl } from "$lib/api/db";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
@@ -455,6 +455,7 @@
     | { kind: "body"; eventId: string };
 
   function isPastTimedPosition(pos: PositionedEvent): boolean {
+    if (isPendingCreateEventId(pos.event.id)) return false;
     const range = effectiveMinuteRange(pos.event, dateStr);
     return isPast || (isToday && currentTimeMinute >= 0 && range.endMinute <= currentTimeMinute);
   }
@@ -462,7 +463,7 @@
   function canResizeEdge(pos: PositionedEvent, edge: "resize-top" | "resize-bottom"): boolean {
     if (isPastTimedPosition(pos)) return false;
     if (isActiveEvent?.(pos.event)) return edge === "resize-bottom";
-    if (isEventLocked?.(pos.event.id)) return false;
+    if (!isPendingCreateEventId(pos.event.id) && isEventLocked?.(pos.event.id)) return false;
     return true;
   }
 
@@ -715,7 +716,9 @@
       preview={previewedIds?.has(pos.event.id) === true}
       grabbing={pos.event.id === grabbingId}
       canDrag={!panelOpen || pos.event.id === editingId}
-      isPast={isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)}
+      isPast={!isPendingCreateEventId(pos.event.id) && (
+        isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)
+      )}
       inResizeZone={hoverResizeBlockId === pos.event.id}
       onclick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
       onprefetch={() => onEventPrefetch?.(pos.event)}
