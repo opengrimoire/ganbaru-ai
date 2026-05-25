@@ -97,6 +97,26 @@ describe("buildCreateDisplay", () => {
     expect(created?.meetingEnabled).toBe(true);
   });
 
+  it("lets a timed toggle override an all-day create preview", () => {
+    const preview = {
+      dateStr: "2026-03-20",
+      startMinute: 0,
+      endMinute: 0,
+      allDay: true,
+      endDateStr: "2026-03-20",
+    };
+    const result = buildCreateDisplay([], preview, {
+      start: "2026-03-20 14:00",
+      end: "2026-03-20 15:00",
+      allDay: undefined,
+    }, TEST_WINDOW);
+
+    const created = result.events.find((e) => e.id === PENDING_CREATE_ID);
+    expect(created?.allDay).toBeUndefined();
+    expect(created?.start).toBe("2026-03-20 14:00");
+    expect(created?.end).toBe("2026-03-20 15:00");
+  });
+
   it("expands recurring create preview", () => {
     const events: CalendarEvent[] = [];
     const preview = {

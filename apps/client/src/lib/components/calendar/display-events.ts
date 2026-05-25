@@ -63,7 +63,9 @@ export function buildCreateDisplay(
 
   // Use changes.end if available (panel provides correct cross-midnight end date),
   // otherwise fall back to the drag preview's same-day end
-  const isAllDay = preview.allDay || changes.allDay;
+  const isAllDay = hasChange(changes, "allDay")
+    ? changes.allDay === true
+    : preview.allDay === true;
   const startStr = changes.start ? String(changes.start) : `${preview.dateStr} ${fmtMin(preview.startMinute)}`;
   const endStr = changes.end
     ? String(changes.end)
