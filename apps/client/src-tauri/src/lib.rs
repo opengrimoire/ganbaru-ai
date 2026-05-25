@@ -736,6 +736,7 @@ pub fn run() {
             timezone_migration::calendar_load_timezone_hydration_rows,
             timezone_migration::calendar_apply_timezone_hydration,
             calendar_reads::calendar_load_window,
+            calendar_reads::calendar_load_pomodoro_scheduler_window,
             calendar_reads::calendar_load_panel_event,
             calendar_reads::calendar_load_full_event,
             calendar_reads::calendar_list_event_ids_for_calendar,

@@ -26,6 +26,7 @@ pub struct DbCalendarEventRow {
     transparency: String,
     status: String,
     local_rsvp_status: Option<String>,
+    created_at: String,
     rdate: Option<String>,
     focus_duration_minutes: Option<i64>,
     short_break_minutes: Option<i64>,
@@ -52,6 +53,7 @@ impl_sqlite_from_row!(DbCalendarEventRow {
     transparency,
     status,
     local_rsvp_status,
+    created_at,
     rdate,
     focus_duration_minutes,
     short_break_minutes,
@@ -171,6 +173,7 @@ pub struct DbFullEventRow {
     categories: Option<String>,
     geo: Option<String>,
     sequence: i64,
+    created_at: String,
     rdate: Option<String>,
     extended_properties: Option<String>,
     organizer: Option<String>,
@@ -213,6 +216,7 @@ impl_sqlite_from_row!(DbFullEventRow {
     categories,
     geo,
     sequence,
+    created_at,
     rdate,
     extended_properties,
     organizer,
@@ -281,6 +285,12 @@ pub struct CalendarWindowRows {
 }
 
 #[derive(Serialize)]
+pub struct CalendarPomodoroSchedulerRows {
+    events: Vec<DbCalendarEventRow>,
+    overrides: Vec<DbOverrideRow>,
+}
+
+#[derive(Serialize)]
 pub struct CalendarPanelEventRows {
     event: Option<DbFullEventRow>,
     attendees: Vec<DbAttendeeRow>,
@@ -306,7 +316,7 @@ const WINDOW_EVENTS_SQL: &str = r#"
            NULL AS notifications, NULL AS exceptions, ce.repeat_until,
            ce.all_day, ce.location, ce.transparency, ce.status,
            CASE WHEN ce.url <> '' THEN 1 ELSE 0 END AS has_call_link,
-           ce.meeting_enabled, ce.local_rsvp_status,
+           ce.meeting_enabled, ce.local_rsvp_status, ce.created_at,
            NULL AS rdate,
            pc.focus_duration_minutes, pc.short_break_minutes,
            pc.long_break_minutes, pc.pomodoro_count,
@@ -325,6 +335,33 @@ const WINDOW_EVENTS_SQL: &str = r#"
         )
       )
     ORDER BY ce.start_time ASC
+"#;
+
+const POMODORO_SCHEDULER_EVENTS_SQL: &str = r#"
+    SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
+           ce.calendar_id, ce.color, ce.rrule,
+           NULL AS notifications, NULL AS exceptions, ce.repeat_until,
+           ce.all_day, ce.location, ce.transparency, ce.status,
+           CASE WHEN ce.url <> '' THEN 1 ELSE 0 END AS has_call_link,
+           ce.meeting_enabled, ce.local_rsvp_status, ce.created_at,
+           NULL AS rdate,
+           pc.focus_duration_minutes, pc.short_break_minutes,
+           pc.long_break_minutes, pc.pomodoro_count,
+           pc.idle_timeout_minutes
+    FROM calendar_events ce
+    JOIN pomodoro_configs pc ON pc.event_id = ce.id
+    WHERE
+      (ce.rrule IS NOT NULL AND ce.rrule <> '')
+      OR EXISTS (SELECT 1 FROM calendar_event_rdates r WHERE r.event_id = ce.id)
+      OR (
+        (ce.rrule IS NULL OR ce.rrule = '')
+        AND NOT EXISTS (SELECT 1 FROM calendar_event_rdates r WHERE r.event_id = ce.id)
+        AND (
+          (ce.all_day = 1 AND substr(ce.end_time, 1, 10) >= ? AND substr(ce.start_time, 1, 10) <= ?)
+          OR (ce.all_day <> 1 AND ce.end_time >= ? AND ce.start_time < ?)
+        )
+      )
+    ORDER BY ce.start_time ASC, ce.created_at ASC
 "#;
 
 const WINDOW_OVERRIDES_SQL: &str = r#"
@@ -375,6 +412,7 @@ const FULL_EVENT_SQL: &str = r#"
              ELSE NULL
            END AS geo,
            ce.sequence,
+           ce.created_at,
            NULL AS rdate,
            NULL AS extended_properties,
            NULL AS organizer,
@@ -446,6 +484,42 @@ pub async fn calendar_load_window<R: Runtime>(
         attendees,
         total_event_count,
     })
+}
+
+#[tauri::command]
+pub async fn calendar_load_pomodoro_scheduler_window<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    window_start_date: String,
+    window_end_date: String,
+    window_start_utc: String,
+    window_end_exclusive_utc: String,
+) -> Result<CalendarPomodoroSchedulerRows, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let mut events = sqlx::query_as::<_, DbCalendarEventRow>(POMODORO_SCHEDULER_EVENTS_SQL)
+        .bind(&window_start_date)
+        .bind(&window_end_date)
+        .bind(&window_start_utc)
+        .bind(&window_end_exclusive_utc)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("load pomodoro scheduler events: {e}"))?;
+    hydrate_window_event_rows(&pool, &mut events).await?;
+
+    let overrides = if events.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as::<_, DbOverrideRow>(WINDOW_OVERRIDES_SQL)
+            .bind(&window_start_date)
+            .bind(&window_end_date)
+            .bind(&window_start_utc)
+            .bind(&window_end_exclusive_utc)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| format!("load pomodoro scheduler overrides: {e}"))?
+    };
+
+    Ok(CalendarPomodoroSchedulerRows { events, overrides })
 }
 
 #[tauri::command]
@@ -1229,12 +1303,23 @@ mod tests {
 
     #[test]
     fn window_queries_do_not_load_icalendar_preservation_json() {
-        for sql in [super::WINDOW_EVENTS_SQL, super::WINDOW_OVERRIDES_SQL] {
+        for sql in [
+            super::WINDOW_EVENTS_SQL,
+            super::POMODORO_SCHEDULER_EVENTS_SQL,
+            super::WINDOW_OVERRIDES_SQL,
+        ] {
             let lower = sql.to_ascii_lowercase();
             assert!(!lower.contains("icalendar_components"));
             assert!(!lower.contains("raw_jcal"));
             assert!(!lower.contains("projection_warnings"));
         }
+    }
+
+    #[test]
+    fn pomodoro_scheduler_query_is_pomodoro_scoped() {
+        let lower = super::POMODORO_SCHEDULER_EVENTS_SQL.to_ascii_lowercase();
+        assert!(lower.contains("join pomodoro_configs"));
+        assert!(!lower.contains("calendar_event_attendees"));
     }
 
     fn full_event_row(description: &str) -> DbFullEventRow {
@@ -1262,6 +1347,7 @@ mod tests {
             categories: None,
             geo: None,
             sequence: 0,
+            created_at: "2026-05-09T09:00:00Z".to_string(),
             rdate: None,
             extended_properties: None,
             organizer: None,

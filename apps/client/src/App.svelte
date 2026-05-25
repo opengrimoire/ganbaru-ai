@@ -13,6 +13,7 @@
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
+  import { selectActivePomodoroBlock } from "$lib/stores/pomodoro-scheduler";
   import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
   import { ensureDbUrl } from "$lib/api/db";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
@@ -346,42 +347,29 @@
     }
   }
 
-  function findActiveBlock() {
+  async function findActiveBlock(): Promise<CalendarEvent | undefined> {
     const now = new Date();
     const today = Temporal.Now.plainDateISO();
-    const events = calendar.eventsInWindow(
+    const events = await calendar.loadPomodoroSchedulerEvents(
       today.subtract({ days: 1 }),
       today.add({ days: 1 }),
     );
-    const active = events.filter((event) => {
-      if (!event.pomodoroConfig) return false;
-      const start = parseCalendarDate(event.start);
-      const end = parseCalendarDate(event.end);
-      return now >= start && now < end;
-    });
-    if (active.length === 0) return undefined;
-
-    // Prefer the block the pomodoro is already running on
-    if (pomodoro.activeBlockId) {
-      const current = active.find((e) => e.id === pomodoro.activeBlockId);
-      if (current) return current;
-    }
-
-    // Otherwise pick the one with the most remaining time
-    return active.reduce((best, e) => {
-      const bestEnd = parseCalendarDate(best.end).getTime();
-      const eEnd = parseCalendarDate(e.end).getTime();
-      return eEnd > bestEnd ? e : best;
+    return selectActivePomodoroBlock(events, {
+      now,
+      activeBlockId: pomodoro.activeBlockId,
     });
   }
 
   let trackedBlockSnapshot: CalendarEvent | null = null;
+  let activeBlockCheckRunning = false;
+  let activeBlockCheckQueued = false;
 
-  function checkActiveBlock() {
+  async function runActiveBlockCheck(): Promise<void> {
     if (!isMainWindow) return;
+    if (!calendar.loaded) return;
     if (showStopConfirm || reverting || suspendInfo || idleInfo || pomodoro.autoStartSuppressed) return;
 
-    const activeBlock = findActiveBlock();
+    const activeBlock = await findActiveBlock();
 
     // Clear dismissed block once its time window passes
     if (pomodoro.dismissedBlockId && activeBlock?.id !== pomodoro.dismissedBlockId) {
@@ -425,20 +413,28 @@
       trackedBlockSnapshot = null;
       pomodoro.stopSession();
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
-      // Block moved/deleted by user: offer revert dialog (or stop if deleted)
-      const parentId = pomodoro.activeBlockId.includes("::")
-        ? pomodoro.activeBlockId.split("::")[0]
-        : pomodoro.activeBlockId;
-      const blockExists = calendar.rawBlocks.some((b) => b.id === parentId);
-      if (blockExists) {
-        savedBlockState = trackedBlockSnapshot;
-        showStopConfirm = true;
-      } else {
-        trackedBlockSnapshot = null;
-        pomodoro.stopSession();
-      }
-    } else if (pomodoro.activeBlockId) {
-      pomodoro.stopSession();
+      // No overlapping scheduler candidate is not proof that the active event vanished.
+      // Explicit expiry and protected edit/delete paths own session stops.
+      return;
+    }
+  }
+
+  async function checkActiveBlock(): Promise<void> {
+    if (activeBlockCheckRunning) {
+      activeBlockCheckQueued = true;
+      return;
+    }
+
+    activeBlockCheckRunning = true;
+    try {
+      do {
+        activeBlockCheckQueued = false;
+        await runActiveBlockCheck();
+      } while (activeBlockCheckQueued);
+    } catch (e) {
+      console.warn("active pomodoro block check failed", e);
+    } finally {
+      activeBlockCheckRunning = false;
     }
   }
 
@@ -467,7 +463,7 @@
   $effect(() => {
     const _v = calendar.indexVersion;
     const _expired = pomodoro.blockExpired;
-    checkActiveBlock();
+    void checkActiveBlock();
   });
 
   $effect(() => {
@@ -482,7 +478,9 @@
 
   // Also poll for time-based transitions
   $effect(() => {
-    const id = setInterval(checkActiveBlock, ACTIVE_BLOCK_CHECK_INTERVAL_MS);
+    const id = setInterval(() => {
+      void checkActiveBlock();
+    }, ACTIVE_BLOCK_CHECK_INTERVAL_MS);
     return () => clearInterval(id);
   });
 

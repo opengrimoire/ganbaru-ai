@@ -216,6 +216,8 @@ export interface CalendarEvent {
   geo?: GeoCoordinates;
   /** RFC 5545 SEQUENCE: revision counter for change tracking. */
   sequence?: number;
+  /** Database creation timestamp. Used for deterministic scheduler tiebreakers. */
+  createdAt?: string;
   /** RFC 5545 RDATE: additional recurrence dates beyond the RRULE pattern. */
   rdate?: string[];
   /** Arbitrary extended properties (X-* from iCalendar). */

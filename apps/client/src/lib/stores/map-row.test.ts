@@ -34,6 +34,7 @@ function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
     transparency: "opaque",
     status: "confirmed",
     local_rsvp_status: null,
+    created_at: "2026-03-15T08:00:00Z",
     rdate: null,
     focus_duration_minutes: null,
     short_break_minutes: null,
@@ -69,6 +70,7 @@ describe("mapRow", () => {
     expect(result.end).toBe("2026-03-15 10:00");
     expect(result.timezone).toBe("America/New_York");
     expect(result.calendarId).toBe("local");
+    expect(result.createdAt).toBe("2026-03-15T08:00:00Z");
   });
 
   it("returns undefined for default values", () => {

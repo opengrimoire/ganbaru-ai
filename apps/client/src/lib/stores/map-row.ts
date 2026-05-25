@@ -38,6 +38,7 @@ export interface DbCalendarEvent {
   transparency: string;
   status: string;
   local_rsvp_status: string | null;
+  created_at: string;
   rdate: string | null;
   // LEFT JOIN pomodoro_configs
   focus_duration_minutes: number | null;
@@ -180,6 +181,7 @@ export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
   if (r.transparency === "transparent") slim.transparency = "transparent";
   if (r.status !== "confirmed") slim.status = r.status as EventStatus;
   if (r.local_rsvp_status) slim.localParticipationStatus = r.local_rsvp_status as AttendeeStatus;
+  if (r.created_at) slim.createdAt = r.created_at;
   const rdate = safeJsonParse<string[]>(r.rdate);
   if (rdate) slim.rdate = rdate;
   if (r.focus_duration_minutes != null) {

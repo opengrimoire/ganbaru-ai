@@ -541,6 +541,11 @@ interface CalendarWindowLoadRequest {
 }
 
 const windowCache = new BoundedWindowCache<CalendarWindowSnapshot>(WINDOW_CACHE_LIMIT);
+let pomodoroSchedulerWindowCache: {
+  key: string;
+  version: number;
+  promise: Promise<CalendarEvent[]>;
+} | null = null;
 let prefetchGeneration = 0;
 let foregroundWindowBusy = false;
 let foregroundWindowRequestId = 0;
@@ -582,6 +587,11 @@ interface CalendarWindowRows {
   overrides: DbOverride[];
   attendees: DbWindowAttendee[];
   total_event_count: number;
+}
+
+interface CalendarPomodoroSchedulerRows {
+  events: DbCalendarEvent[];
+  overrides: DbOverride[];
 }
 
 interface CalendarPanelEventRows {
@@ -1044,6 +1054,62 @@ async function reloadWindowFromDb(
   await loadWindowIntoState(windowStart, windowEnd, false, true);
 }
 
+async function loadPomodoroSchedulerEventsFromDb(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): Promise<CalendarEvent[]> {
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  const version = indexVersion;
+  if (
+    pomodoroSchedulerWindowCache &&
+    pomodoroSchedulerWindowCache.key === key &&
+    pomodoroSchedulerWindowCache.version === version
+  ) {
+    return pomodoroSchedulerWindowCache.promise;
+  }
+
+  const promise = (async () => {
+    const url = await ensureDbUrl();
+    const windowStartDate = windowStart.toString();
+    const windowEndDate = windowEnd.toString();
+    const windowEndExclusiveDate = windowEnd.add({ days: 1 }).toString();
+    const rows = await invoke<CalendarPomodoroSchedulerRows>(
+      "calendar_load_pomodoro_scheduler_window",
+      {
+        dbUrl: url,
+        windowStartDate,
+        windowEndDate,
+        windowStartUtc: wallClockToUtcIso(`${windowStartDate} 00:00`, renderZone),
+        windowEndExclusiveUtc: wallClockToUtcIso(`${windowEndExclusiveDate} 00:00`, renderZone),
+      },
+    );
+    const mapped = mapWindowRows(
+      {
+        events: rows.events,
+        overrides: rows.overrides,
+        attendees: [],
+        total_event_count: rows.events.length,
+      },
+      renderZone,
+    );
+    const expanded = await invoke<CalendarEvent[]>("calendar_expand_render_events", {
+      events: mapped,
+      windowStartDate,
+      windowEndDate,
+    });
+    return expanded.filter((event) => event.pomodoroConfig);
+  })().catch((error: unknown) => {
+    if (pomodoroSchedulerWindowCache?.promise === promise) {
+      pomodoroSchedulerWindowCache = null;
+    }
+    throw error;
+  });
+
+  pomodoroSchedulerWindowCache = { key, version, promise };
+  return promise;
+}
+
 function isCalendarWindowSyncPayload(value: unknown): value is CalendarWindowSyncPayload {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
@@ -1210,6 +1276,13 @@ export function getCalendar() {
       windowEnd: Temporal.PlainDate,
     ): Promise<void> {
       await reloadWindowFromDb(windowStart, windowEnd);
+    },
+
+    async loadPomodoroSchedulerEvents(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<CalendarEvent[]> {
+      return loadPomodoroSchedulerEventsFromDb(windowStart, windowEnd);
     },
 
     /**
