@@ -70,8 +70,8 @@ The rail renders exactly three visual states:
 | State | Color | When shown |
 |-------|-------|------------|
 | Filled | Green | Persisted focus segments, only the time the user was actually working (paused intervals excluded). Always in the past relative to the current time. |
-| Break | Gray (prominent) | Any break segment that ran (completed or active), plus projected future breaks. One uniform appearance regardless of past, current, or projected. |
-| Empty | Rail background (faint gray) | Everything else: future focus time, past time with no session, stopped gaps, idle, manual pause, suspend, unofficial break overtime, and break time that never started. |
+| Break | Gray (prominent) | Planned future breaks, active breaks, completed break time, legitimate break extensions, and the first 10 seconds after a break reaches 0. One uniform appearance regardless of past, current, or projected. |
+| Empty | Rail background (faint gray) | Everything else: future focus time, past time with no session, stopped gaps, idle, manual pause, suspend, unofficial break overtime after the 10 seconds of grace, and break time that never started. |
 
 There is no separate color for the active focus, no warmer green for "fresh" segments, no different shade for projected vs persisted breaks. The user reads the rail as "what is solid is real, what is gray is structure, what is empty is opportunity." Three shades, three meanings.
 
@@ -90,10 +90,10 @@ If any condition fails, no green is drawn for that range. There is no projection
 
 Breaks come from two sources:
 
-1. **Persisted break segments** (`status` `completed` or `active`): rendered as the official break allowance that actually ran, from `actual_start` to `min(actual_end or now, planned_end)`. If the user stays away after the planned break end, that overtime is empty rather than gray.
+1. **Persisted break segments** (`status` `completed` or `active`): rendered as the official break allowance that actually ran, from `actual_start` to `min(actual_end or now, planned_end + 10 seconds)`. User-requested break extensions move `planned_end`, so they are legitimate gray break time. If the user stays away longer than 10 seconds after the planned break end, the extra overtime is empty rather than gray.
 2. **Projected breaks**: computed from the run's config and current cycle position for future time within the event window. These represent where breaks will occur if the session continues.
 
-Break phases are written lazily like focus phases. A break that never begins has no segment row and produces no band. If a break begins and is cut short, the row records the short actual interval, and only the portion inside the planned break allowance renders gray.
+Break phases are written lazily like focus phases. A break that never begins has no segment row and produces no band. If a break begins and is cut short, the row records the short actual interval, and only the portion inside the planned break allowance plus the 10 seconds of grace renders gray.
 
 ### Projected breaks during a stop-and-restart gap
 

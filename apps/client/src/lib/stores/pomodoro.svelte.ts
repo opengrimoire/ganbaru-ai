@@ -18,8 +18,12 @@ import {
   DEFAULT_CONFIG,
   TIME_MULTIPLIER,
   NOTIFICATION_THRESHOLD,
+  BREAK_EXTENSION_SECONDS,
+  MAX_BREAK_EXTENSION_SECONDS,
+  BREAK_OVERTIME_RAIL_GRACE_SECONDS,
   MAX_BREAK_OVERTIME_SECONDS,
   limitRemainingSecondsToBlockEnd,
+  phaseDurationSeconds,
   isPomodoroSessionActive,
   decideTick,
   decideAdvancePhase,
@@ -132,7 +136,7 @@ const segmentEndReasons = new Map<string, PomodoroSegmentEndReason>();
 let segmentVersion = $state(0);
 
 // Tracks seconds elapsed after a break timer reaches 0 but before user acknowledgment.
-// Reactive ($state) so the accent bar derived recomputes and bands keep shifting.
+// Reactive ($state) so the rail derived recomputes during the grace window.
 let breakOvertimeSeconds = $state(0);
 let overtimeIntervalId: ReturnType<typeof setInterval> | null = null;
 let overtimeAlertIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -839,6 +843,10 @@ function resetFocusNotificationState(): void {
   focusExtensionUsed = false;
 }
 
+function isBreakPhase(value: PomodoroPhase | SegmentPhase): value is "short_break" | "long_break" {
+  return value === "short_break" || value === "long_break";
+}
+
 function canExtendFocusTime(addSeconds: number = FOCUS_EXTENSION_SECONDS): boolean {
   if (phase !== "focus" || focusExtensionUsed || !pomodoroSessionActive()) return false;
   if (addSeconds <= 0) return false;
@@ -852,6 +860,34 @@ function canExtendFocusTime(addSeconds: number = FOCUS_EXTENSION_SECONDS): boole
   );
   const extendedVisibleRemainingSeconds = limitRemainingSecondsToBlockEnd(
     currentWorkRemainingSeconds + addSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  return extendedVisibleRemainingSeconds > currentVisibleRemainingSeconds;
+}
+
+function usedBreakExtensionSeconds(): number {
+  if (!isBreakPhase(phase)) return 0;
+  const configuredBreakSeconds = phaseDurationSeconds(phase, config);
+  return Math.max(0, phaseWorkDurationSeconds - configuredBreakSeconds);
+}
+
+function canExtendBreakTime(addSeconds: number = BREAK_EXTENSION_SECONDS): boolean {
+  if (!isBreakPhase(phase) || !pomodoroSessionActive() || overtimeIntervalId !== null) return false;
+  if (addSeconds <= 0) return false;
+
+  const remainingExtensionSeconds = MAX_BREAK_EXTENSION_SECONDS - usedBreakExtensionSeconds();
+  if (remainingExtensionSeconds <= 0) return false;
+
+  const nowMs = Date.now();
+  const currentWorkRemainingSeconds = phaseWorkRemainingSeconds();
+  const currentVisibleRemainingSeconds = limitRemainingSecondsToBlockEnd(
+    currentWorkRemainingSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  const extendedVisibleRemainingSeconds = limitRemainingSecondsToBlockEnd(
+    currentWorkRemainingSeconds + Math.min(Math.ceil(addSeconds), remainingExtensionSeconds),
     activeBlockEndMs,
     nowMs,
   );
@@ -874,6 +910,51 @@ function addFocusTimeInternal(seconds: number = FOCUS_EXTENSION_SECONDS): void {
     persistSegmentToBackend(seg, "Failed to save focus extension:", true, occurredAt);
   }
   updateTray();
+}
+
+function addBreakTimeInternal(seconds: number = BREAK_EXTENSION_SECONDS): void {
+  if (!canExtendBreakTime(seconds)) return;
+
+  const requestedSeconds = Math.max(0, Math.ceil(seconds));
+  const remainingExtensionSeconds = MAX_BREAK_EXTENSION_SECONDS - usedBreakExtensionSeconds();
+  const allowedSeconds = Math.min(requestedSeconds, remainingExtensionSeconds);
+  const nowMs = Date.now();
+  const elapsedSeconds = actualPhaseElapsedSeconds();
+  const currentWorkRemainingSeconds = phaseWorkRemainingSeconds();
+  const currentVisibleRemainingSeconds = limitRemainingSecondsToBlockEnd(
+    currentWorkRemainingSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  const extendedVisibleRemainingSeconds = limitRemainingSecondsToBlockEnd(
+    currentWorkRemainingSeconds + allowedSeconds,
+    activeBlockEndMs,
+    nowMs,
+  );
+  const addedVisibleSeconds = extendedVisibleRemainingSeconds - currentVisibleRemainingSeconds;
+  if (addedVisibleSeconds <= 0) return;
+
+  setPhaseRemainingSeconds(currentWorkRemainingSeconds + addedVisibleSeconds, elapsedSeconds, nowMs);
+  if (phaseEndTime !== null) phaseEndTime = nowMs + remainingSeconds * 1000;
+
+  const seg = activeSegment();
+  if (seg && isBreakPhase(seg.phase) && seg.status === "active") {
+    seg.plannedEnd = new Date(new Date(seg.plannedEnd).getTime() + addedVisibleSeconds * 1000).toISOString();
+    persistSegmentToBackend(seg, "Failed to save break extension:", true);
+  }
+  updateTray();
+}
+
+function cappedActiveBreakEndIso(actualEndMs: number = Date.now()): string {
+  const seg = activeSegment();
+  if (!seg || !isBreakPhase(seg.phase)) return new Date(actualEndMs).toISOString();
+
+  const plannedEndMs = new Date(seg.plannedEnd).getTime();
+  const cappedEndMs = Math.min(
+    actualEndMs,
+    plannedEndMs + BREAK_OVERTIME_RAIL_GRACE_SECONDS * 1000,
+  );
+  return new Date(cappedEndMs).toISOString();
 }
 
 function addMinutesToIso(base: string, minutes: number): string {
@@ -1728,11 +1809,14 @@ function initListeners() {
   listen("pomodoro-break-acknowledged", () => {
     document.dispatchEvent(new Event("ganbaruai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
-      // Mark current break segment as completed
-      markSegment(currentSegmentIndex, "completed", true);
+      markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
       startFocusSession();
     }
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
+
+  listen<{ seconds: number }>("pomodoro-break-extended", (event) => {
+    addBreakTimeInternal(event.payload.seconds);
+  }).catch((e) => console.warn("Failed to listen for pomodoro-break-extended:", e));
 
   listen("idle-overlay-resume", () => {
     if (idlePaused) void dismissIdle(true);
@@ -2136,7 +2220,7 @@ function tick() {
           breakOvertimeSeconds += 1;
           publishWindowSnapshot();
           if (breakOvertimeSeconds >= MAX_BREAK_OVERTIME_SECONDS) {
-            markSegment(currentSegmentIndex, "completed", true);
+            markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
             startFocusSession();
           }
         }, 1000);
@@ -2265,7 +2349,7 @@ function advancePhase() {
     }
 
     case "break_to_focus": {
-      markSegment(currentSegmentIndex, "completed", true);
+      markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
       phase = "focus";
       setPhaseRemainingSeconds(result.remainingSeconds);
       resetFocusNotificationState();

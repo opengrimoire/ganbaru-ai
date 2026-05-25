@@ -28,13 +28,13 @@ The break screen has a small, deliberate control set.
 
 | Control | Effect |
 |---------|--------|
-| Default (no input) | Closes when the break timer reaches 0. The next focus phase starts automatically. |
-| `Ctrl+Shift+Space` | Adds 1 minute to the current break. Maximum 5 minutes added per break (so a 5-minute break can be extended to 10 minutes total, no further). |
+| Default (no input) | When the break timer reaches 0, the screen waits for the user to start the next focus phase. |
+| `Ctrl+Shift+Space` | Adds 1 minute to the current break. Maximum 3 minutes added per break. |
 | Three `Esc` presses in succession | Skips the break. The next focus phase starts immediately. |
 
 The three-press skip is intentionally awkward. A single Esc would let the user dismiss breaks reflexively, defeating the purpose. Three presses are fast enough that a determined user can skip in under two seconds, but slow enough that an absentminded press does not skip by accident.
 
-The Ctrl+Shift+Space chord adds a minute at a time, capped at 5 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
+The Ctrl+Shift+Space chord adds a minute at a time, capped at 3 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
 
 There is no "stop the session" control on the break screen. Stopping the session must go through the main window, which makes it a deliberate action rather than an impulse during a moment of resistance.
 
@@ -44,13 +44,13 @@ If the user does not interact with the break screen and the break timer reaches 
 
 Overtime is capped at `MAX_BREAK_OVERTIME_SECONDS` (1800 seconds = 30 minutes). During overtime:
 
-- The break mark on the rail keeps growing (the active break segment's `actual_end` is still null, so rendering uses now as the upper bound).
+- The break mark on the rail keeps growing for 10 seconds. After that grace window, the extra waiting time is empty on the rail, matching idle and pause gaps.
 - A reminder alert fires every 60 seconds prompting the user to start the next focus phase.
-- After 30 minutes of overtime, the system auto-advances to focus. The break segment is marked completed with `actual_end` set to the auto-advance moment.
+- After 30 minutes of overtime, the system auto-advances to focus. The break segment is marked completed, with `actual_end` capped at 10 seconds after the planned break end.
 
-The 30-minute cap exists to prevent indefinite overtime from corrupting analytics. A break that runs for 4 hours is not a break, it is a stop; the system chooses to advance rather than wait forever.
+The rail gives the user 10 seconds of grace to return without treating a long absence as break time. The 30 minute cap prevents the break screen from waiting forever if the user never comes back.
 
-**Example.** Focus ends at 09:25. The break screen appears with a 5-minute timer. The user does not acknowledge it. At 09:30 the timer reaches 0, overtime begins, the break mark on the rail keeps growing. At 09:35 the user finally clicks "start focus." The break segment is marked completed with `actual_end = 09:35` (10 minutes total instead of the planned 5). If the user still had not acknowledged by 10:00 (30 minutes of overtime), the system would auto-advance to focus, with the break recorded as a 35-minute break.
+**Example.** Focus ends at 09:25. The break screen appears with a 5-minute timer. The user does not acknowledge it. At 09:30 the timer reaches 0, overtime begins, and the break mark on the rail keeps growing until 09:30:10. At 09:35 the user clicks "start focus." The break segment is marked completed with `actual_end = 09:30:10`, and the 09:30:10 to 09:35 gap stays empty on the rail. If the user still had not acknowledged by 10:00, the system would auto-advance to focus with the same capped break end.
 
 ## Suspend and wake during break
 

@@ -7,6 +7,7 @@ import type {
   SegmentPhase,
   SegmentStatus,
 } from "$lib/components/calendar/types";
+import { BREAK_OVERTIME_RAIL_GRACE_SECONDS } from "$lib/stores/pomodoro-machine";
 
 /**
  * Compute the planned sequence of focus and break segments for a pomodoro
@@ -385,6 +386,12 @@ function phaseDurationMinutes(phase: SegmentPhase, config: PomodoroConfig): numb
   return config.shortBreakMinutes;
 }
 
+function cappedBreakBandEndMs(segment: PersistedSegment, endMs: number): number {
+  if (segment.phase === "focus") return endMs;
+  const plannedEndMs = new Date(segment.plannedEnd).getTime();
+  return Math.min(endMs, plannedEndMs + BREAK_OVERTIME_RAIL_GRACE_SECONDS * 1000);
+}
+
 function projectedActiveSegmentEndMs(
   activeSegment: PersistedSegment,
   remainingSeconds: number,
@@ -502,7 +509,8 @@ function projectActiveSegments(
 
     if (seg.status === "completed" || seg.status === "skipped" || seg.status === "interrupted") {
       const startMs = new Date(seg.actualStart ?? seg.plannedStart).getTime();
-      const endMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
+      const rawEndMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
+      const endMs = cappedBreakBandEndMs(seg, rawEndMs);
       if (seg.phase === "focus") {
         emitFocusFillBands(startMs, endMs, seg.pauseLog, dayStartMs, ev, seg.status, bands);
       } else {
@@ -525,8 +533,9 @@ function projectActiveSegments(
       } else {
         // Active break
         const startMs = new Date(seg.actualStart!).getTime();
+        const endMs = cappedBreakBandEndMs(seg, currentEndMs);
         const topMinute = (startMs - dayStartMs) / 60000;
-        const heightMinutes = (currentEndMs - startMs) / 60000;
+        const heightMinutes = (endMs - startMs) / 60000;
         if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
           bands.push({ topMinute, heightMinutes, phase: seg.phase, status: "active" });
         }
@@ -593,7 +602,8 @@ function projectPersistedSegments(
     if (seg.status === "planned") continue;
     if (!seg.actualStart) continue;
     const startMs = new Date(seg.actualStart).getTime();
-    const endMs = seg.actualEnd ? new Date(seg.actualEnd).getTime() : startMs;
+    const rawEndMs = seg.actualEnd ? new Date(seg.actualEnd).getTime() : startMs;
+    const endMs = cappedBreakBandEndMs(seg, rawEndMs);
     if (endMs <= startMs) continue;
     if (seg.phase === "focus") {
       emitFocusFillBands(startMs, endMs, seg.pauseLog, dayStartMs, ev, seg.status, bands);

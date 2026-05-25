@@ -925,6 +925,96 @@ describe("computeDayTimelineBands", () => {
     expect(focusBands[0].status).toBe("completed");
   });
 
+  it("active break overtime paints only the rail grace window", () => {
+    const ev = makeEvent("A", 10, 12);
+    const breakStartMs = DAY_MS + (10 * 60 + 40) * 60000;
+    const breakEndMs = breakStartMs + 5 * 60000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "short_break",
+          plannedStart: new Date(breakStartMs).toISOString(),
+          plannedEnd: new Date(breakEndMs).toISOString(),
+          actualStart: new Date(breakStartMs).toISOString(),
+          actualEnd: null,
+          pauseLog: [],
+          status: "active",
+        },
+      ],
+      remainingSeconds: 0,
+      phaseElapsedSeconds: 5 * 60,
+      phaseWorkDurationSeconds: 5 * 60,
+      currentConfig: DEFAULT_CONFIG,
+      breakOvertimeSeconds: 30,
+    };
+
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, breakEndMs + 30 * 1000);
+    const activeBreakBands = bands.filter((band) => band.phase === "short_break" && band.status === "active");
+
+    expect(activeBreakBands.length).toBe(1);
+    expect(activeBreakBands[0].topMinute).toBe(10 * 60 + 40);
+    expect(activeBreakBands[0].heightMinutes).toBeCloseTo(5 + 10 / 60);
+  });
+
+  it("legitimate break extension expands the gray break mark", () => {
+    const ev = makeEvent("A", 10, 12);
+    const breakStartMs = DAY_MS + (10 * 60 + 40) * 60000;
+    const extendedBreakEndMs = breakStartMs + 8 * 60000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "short_break",
+          plannedStart: new Date(breakStartMs).toISOString(),
+          plannedEnd: new Date(extendedBreakEndMs).toISOString(),
+          actualStart: new Date(breakStartMs).toISOString(),
+          actualEnd: null,
+          pauseLog: [],
+          status: "active",
+        },
+      ],
+      remainingSeconds: 3 * 60,
+      phaseElapsedSeconds: 5 * 60,
+      phaseWorkDurationSeconds: 8 * 60,
+      currentConfig: DEFAULT_CONFIG,
+      breakOvertimeSeconds: 0,
+    };
+
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, breakStartMs + 5 * 60000);
+    const activeBreakBands = bands.filter((band) => band.phase === "short_break" && band.status === "active");
+
+    expect(activeBreakBands.length).toBe(1);
+    expect(activeBreakBands[0].heightMinutes).toBe(8);
+  });
+
+  it("completed break overtime remains empty after the rail grace window", () => {
+    const ev = makeEvent("A", 10, 12);
+    const breakStartMs = DAY_MS + (10 * 60 + 40) * 60000;
+    const breakEndMs = breakStartMs + 5 * 60000;
+    const persistedSegments = new Map<string, PersistedSegment[]>();
+    persistedSegments.set("A", [
+      {
+        id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+        cycleNumber: 1, phase: "short_break",
+        plannedStart: new Date(breakStartMs).toISOString(),
+        plannedEnd: new Date(breakEndMs).toISOString(),
+        actualStart: new Date(breakStartMs).toISOString(),
+        actualEnd: new Date(breakEndMs + 2 * 60000).toISOString(),
+        pauseLog: [],
+        status: "completed",
+      },
+    ]);
+
+    const bands = computeDayTimelineBands([ev], null, DAY_MS, DAY_MS + 12 * 3600000, persistedSegments);
+    const breakBands = bands.filter((band) => band.phase === "short_break");
+
+    expect(breakBands.length).toBe(1);
+    expect(breakBands[0].heightMinutes).toBeCloseTo(5 + 10 / 60);
+  });
+
   it("persisted segments from past events produce focus fills", () => {
     const ev = makeEvent("A", 8, 10); // past event
     const segStartMs = DAY_MS + 8 * 3600000;

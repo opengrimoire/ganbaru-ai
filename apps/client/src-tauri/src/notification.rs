@@ -462,6 +462,9 @@ fn format_remaining(secs: u64) -> String {
 }
 
 #[cfg(target_os = "linux")]
+const MAX_BREAK_EXTENSION_MINUTES: u32 = 3;
+
+#[cfg(target_os = "linux")]
 fn set_markup_text(label: &gtk::Label, font: &str, color: &str, text: &str) {
     use gtk::prelude::LabelExt;
 
@@ -645,18 +648,19 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                 let shift = state.contains(gdk::ModifierType::SHIFT_MASK);
 
                 if key == gdk::keys::constants::space && ctrl && shift {
-                    // Ctrl+Shift+Space: extend break by 1 minute (max 5)
+                    // Ctrl+Shift+Space: extend break by 1 minute.
                     esc_press.set(0);
                     eh.set_markup(
                         "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
                     );
                     let added = extra_break.get();
-                    if added < 5 {
+                    if added < MAX_BREAK_EXTENSION_MINUTES {
                         extra_break.set(added + 1);
                         let et = end_time.get();
                         end_time.set(et + std::time::Duration::from_secs(60));
+                        let _ = app.emit("pomodoro-break-extended", AddTimePayload { seconds: 60 });
                         let total = added + 1;
-                        let remain = 5 - total;
+                        let remain = MAX_BREAK_EXTENSION_MINUTES - total;
                         if remain > 0 {
                             set_markup_text(
                                 &exh,
@@ -667,8 +671,13 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
                                 ),
                             );
                         } else {
-                            exh.set_markup(
-                                "<span font='Sans 11' foreground='#9CA3AF'>Break extended by 5 minutes (maximum reached)</span>"
+                            set_markup_text(
+                                &exh,
+                                "Sans 11",
+                                "#9CA3AF",
+                                &format!(
+                                    "Break extended by {MAX_BREAK_EXTENSION_MINUTES} minutes (maximum reached)"
+                                ),
                             );
                         }
                     }

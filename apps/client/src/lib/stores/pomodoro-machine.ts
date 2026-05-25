@@ -35,6 +35,9 @@ export const DEFAULT_CONFIG: PomodoroConfig = {
 export const TIME_MULTIPLIER = 60;
 export const SUSPEND_THRESHOLD_MS = 15_000;
 export const NOTIFICATION_THRESHOLD = 60;
+export const BREAK_EXTENSION_SECONDS = 60;
+export const MAX_BREAK_EXTENSION_SECONDS = 180;
+export const BREAK_OVERTIME_RAIL_GRACE_SECONDS = 10;
 export const MAX_BREAK_OVERTIME_SECONDS = 1800;
 
 // Utility functions
