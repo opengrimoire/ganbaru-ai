@@ -8,7 +8,6 @@ import {
   addDays,
   isSameDay,
   minuteOfDay,
-  minuteToTop,
   durationMinutes,
   snapToGrid,
   clampMinute,
@@ -19,11 +18,9 @@ import {
   layoutEventsForDay,
   effectiveMinuteRange,
   minuteOffsetToDateStr,
-  formatHour,
   formatTimeLabel,
   formatTimeRange,
   getHourInTimezone,
-  isValidCalendarTime,
   sanitizeCalendarTime,
   normalizeEventColor,
   EVENT_COLOR_OPTIONS,
@@ -36,7 +33,6 @@ import {
   getTimezoneCity,
   getTimezoneRegion,
   getTimezoneOffsetMinutes,
-  formatColumnHeaderAbbr,
   listAllTimezones,
   searchTimezones,
   deriveAcronymFromLongName,
@@ -172,14 +168,6 @@ describe("minuteOfDay", () => {
   });
 });
 
-describe("minuteToTop", () => {
-  it("converts minutes to pixel position", () => {
-    expect(minuteToTop(60, 48)).toBe(48); // 1 hour
-    expect(minuteToTop(30, 48)).toBe(24); // 30 min
-    expect(minuteToTop(0, 48)).toBe(0);
-  });
-});
-
 describe("durationMinutes", () => {
   it("calculates duration between two calendar dates", () => {
     expect(durationMinutes("2026-03-13 14:00", "2026-03-13 15:30")).toBe(90);
@@ -244,20 +232,6 @@ describe("visibleMinuteRangeForScroll", () => {
       stickyTop: 0,
       hourHeight: 60,
     })).toEqual({ startMinute: 0, endMinute: 1440 });
-  });
-});
-
-describe("formatHour", () => {
-  it("formats hour with leading zero", () => {
-    expect(formatHour(0)).toBe("00:00");
-    expect(formatHour(9)).toBe("09:00");
-    expect(formatHour(14)).toBe("14:00");
-  });
-
-  it("formats hour labels in 12-hour time", () => {
-    expect(formatHour(0, "12h")).toBe("12 am");
-    expect(formatHour(12, "12h")).toBe("12 pm");
-    expect(formatHour(14, "12h")).toBe("2 pm");
   });
 });
 
@@ -460,40 +434,6 @@ describe("layoutEventsForDay", () => {
   });
 });
 
-describe("calendar store time conversion round-trip", () => {
-  // These test the contract of toDbTime/toCalendarDate without importing private functions.
-  // The store stores "YYYY-MM-DD HH:MM:00" and loads back "YYYY-MM-DD HH:MM".
-
-  it("appending :00 and taking substring(0,16) is a lossless round-trip", () => {
-    const input = "2026-03-13 14:30";
-    const dbTime = input + ":00"; // toDbTime
-    const loaded = dbTime.substring(0, 16).replace("T", " "); // toCalendarDate
-    expect(loaded).toBe(input);
-  });
-
-  it("handles midnight correctly", () => {
-    const input = "2026-01-01 00:00";
-    const dbTime = input + ":00";
-    const loaded = dbTime.substring(0, 16).replace("T", " ");
-    expect(loaded).toBe(input);
-  });
-
-  it("handles 23:59 correctly", () => {
-    const input = "2026-12-31 23:59";
-    const dbTime = input + ":00";
-    const loaded = dbTime.substring(0, 16).replace("T", " ");
-    expect(loaded).toBe(input);
-  });
-
-  it("handles legacy ISO format from old data gracefully", () => {
-    // Old data stored as ISO: "2026-03-13T19:30:00.000Z"
-    // toCalendarDate strips timezone and uses UTC hours (known limitation for old data)
-    const isoString = "2026-03-13T19:30:00.000Z";
-    const loaded = isoString.substring(0, 16).replace("T", " ");
-    expect(loaded).toBe("2026-03-13 19:30");
-  });
-});
-
 // All-day event helpers
 
 describe("eventsForDay excludes all-day events", () => {
@@ -631,40 +571,6 @@ describe("layoutAllDayEventsForWeek", () => {
   });
 });
 
-// Time validation and sanitization tests
-
-describe("isValidCalendarTime", () => {
-  it("accepts valid YYYY-MM-DD HH:MM format", () => {
-    expect(isValidCalendarTime("2026-03-13 14:30")).toBe(true);
-    expect(isValidCalendarTime("2026-01-01 00:00")).toBe(true);
-    expect(isValidCalendarTime("2026-12-31 23:59")).toBe(true);
-  });
-
-  it("rejects invalid formats", () => {
-    expect(isValidCalendarTime("2026-03-13")).toBe(false); // missing time
-    expect(isValidCalendarTime("2026-03-13 14:30:00")).toBe(false); // has seconds
-    expect(isValidCalendarTime("2026/03/13 14:30")).toBe(false); // wrong separator
-    expect(isValidCalendarTime("03-13-2026 14:30")).toBe(false); // wrong date format
-    expect(isValidCalendarTime("")).toBe(false);
-    expect(isValidCalendarTime("invalid")).toBe(false);
-  });
-
-  it("rejects out of range values", () => {
-    expect(isValidCalendarTime("2026-13-01 12:00")).toBe(false); // month > 12
-    expect(isValidCalendarTime("2026-00-01 12:00")).toBe(false); // month = 0
-    expect(isValidCalendarTime("2026-03-32 12:00")).toBe(false); // day > 31
-    expect(isValidCalendarTime("2026-03-00 12:00")).toBe(false); // day = 0
-    expect(isValidCalendarTime("2026-03-13 24:00")).toBe(false); // hour > 23
-    expect(isValidCalendarTime("2026-03-13 12:60")).toBe(false); // minute > 59
-  });
-
-  it("rejects non-string inputs", () => {
-    expect(isValidCalendarTime(null as unknown as string)).toBe(false);
-    expect(isValidCalendarTime(undefined as unknown as string)).toBe(false);
-    expect(isValidCalendarTime(12345 as unknown as string)).toBe(false);
-  });
-});
-
 describe("sanitizeCalendarTime", () => {
   it("passes through valid times unchanged", () => {
     expect(sanitizeCalendarTime("2026-03-13 14:30")).toBe("2026-03-13 14:30");
@@ -705,46 +611,6 @@ describe("sanitizeCalendarTime", () => {
     expect(sanitizeCalendarTime("2026-03-13 00:00")).toBe("2026-03-13 00:00");
     expect(sanitizeCalendarTime("2026-03-13 23:59")).toBe("2026-03-13 23:59");
     expect(sanitizeCalendarTime("  2026-03-13 14:30  ")).toBe("2026-03-13 14:30"); // trims whitespace
-  });
-});
-
-describe("minuteOfDay", () => {
-  it("returns integer minutes", () => {
-    expect(minuteOfDay("2026-03-13 14:30")).toBe(870);
-    expect(minuteOfDay("2026-03-13 00:00")).toBe(0);
-    expect(minuteOfDay("2026-03-13 23:59")).toBe(1439);
-  });
-
-  it("handles missing time part", () => {
-    expect(minuteOfDay("2026-03-13")).toBe(0);
-  });
-});
-
-describe("snapToGrid", () => {
-  it("returns integer values", () => {
-    expect(Number.isInteger(snapToGrid(14.7, 15))).toBe(true);
-    expect(Number.isInteger(snapToGrid(30.5, 5))).toBe(true);
-    expect(Number.isInteger(snapToGrid(0, 30))).toBe(true);
-  });
-
-  it("snaps to nearest grid interval", () => {
-    expect(snapToGrid(7, 15)).toBe(0);
-    expect(snapToGrid(8, 15)).toBe(15);
-    expect(snapToGrid(22, 15)).toBe(15);
-    expect(snapToGrid(23, 15)).toBe(30);
-  });
-});
-
-describe("clampMinute", () => {
-  it("returns integer values", () => {
-    expect(Number.isInteger(clampMinute(100))).toBe(true);
-    expect(Number.isInteger(clampMinute(100.5))).toBe(true);
-  });
-
-  it("clamps to valid range", () => {
-    expect(clampMinute(-10)).toBe(0);
-    expect(clampMinute(1500)).toBe(1440);
-    expect(clampMinute(720)).toBe(720);
   });
 });
 
@@ -1046,41 +912,6 @@ describe("getTimezoneOffsetMinutes", () => {
 
   it("returns 0 for UTC", () => {
     expect(getTimezoneOffsetMinutes("UTC")).toBe(0);
-  });
-});
-
-describe("formatColumnHeaderAbbr", () => {
-  it("never returns a string starting with GMT followed by a sign", () => {
-    const zones = [
-      "Asia/Tokyo",
-      "Europe/London",
-      "Asia/Kolkata",
-      "Pacific/Honolulu",
-      "Australia/Sydney",
-      "America/Los_Angeles",
-      "Asia/Tehran",
-    ];
-    for (const tz of zones) {
-      expect(formatColumnHeaderAbbr(tz)).not.toMatch(/^GMT[+-]/);
-    }
-  });
-
-  it("returns either a named abbrev or a stripped offset for any zone", () => {
-    const zones = [
-      "Asia/Tokyo",
-      "Europe/London",
-      "Pacific/Honolulu",
-      "Asia/Kolkata",
-    ];
-    for (const tz of zones) {
-      const out = formatColumnHeaderAbbr(tz);
-      expect(out.length).toBeGreaterThan(0);
-      expect(out).toMatch(/^([A-Z]{2,5}|[+-]\d{1,2}(:\d{2})?)$/);
-    }
-  });
-
-  it("never returns an empty string", () => {
-    expect(formatColumnHeaderAbbr("Asia/Tehran").length).toBeGreaterThan(0);
   });
 });
 

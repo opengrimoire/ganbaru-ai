@@ -206,19 +206,10 @@ export function applyNonRecurring(
 
 export { PENDING_CREATE_ID };
 export {
-  applyAll,
-  applyFollowing,
-  applyThis,
   buildRecurringCommitPlan,
-  buildRecurringEditPlan,
-  dateDiffDays,
-  getRecurrenceFieldOperation,
-  shiftDateStr,
 } from "./recurrence-edit-plan";
 export type {
   DisplayResult,
   ExpansionWindow,
-  RecurrenceFieldOperation,
   RecurringCommitPlan,
-  RecurringEditPlan,
 } from "./recurrence-edit-plan";

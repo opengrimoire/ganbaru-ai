@@ -171,20 +171,6 @@ export function countDenseCalendarEvents(
   return denseCalendarDateRange(dataset, anchor).days * eventsPerDay(dataset);
 }
 
-export function countDenseTimedEvents(
-  dataset: BenchmarkDatasetProfile,
-  anchor: Date,
-): number {
-  return denseCalendarDateRange(dataset, anchor).days * timedEventsPerDay(dataset);
-}
-
-export function countDenseAllDayEvents(
-  dataset: BenchmarkDatasetProfile,
-  anchor: Date,
-): number {
-  return denseCalendarDateRange(dataset, anchor).days * ALL_DAY_EVENTS_PER_DAY;
-}
-
 function timedEventsPerDay(dataset: BenchmarkDatasetProfile): number {
   return HOURS_PER_DAY * dataset.stackCount;
 }

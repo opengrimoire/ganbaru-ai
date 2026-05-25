@@ -32,21 +32,12 @@ function makeSnapshot(overrides: Partial<TimerSnapshot> = {}): TimerSnapshot {
     remainingSeconds: 2400,
     currentCycle: 1,
     totalCycles: 4,
-    isRunning: true,
     config: { ...DEFAULT_CONFIG },
-    completedPomodoros: 0,
     skipNextBreak: false,
     notificationShown: false,
     phaseEndTime: NOW + 2400_000,
-    activeBlockId: "block-1",
     activeBlockEndMs: NOW + 3600_000,
-    blockExpired: false,
     lastTickMs: NOW - 1000,
-    sessionStartTime: new Date(NOW - 60_000).toISOString(),
-    hasOvertimeInterval: false,
-    suspendedAway: false,
-    idlePaused: false,
-    idleTimeoutMs: null,
     ...overrides,
   };
 }
@@ -638,7 +629,6 @@ describe("decideTransition", () => {
     phase: "focus",
     remainingSeconds: 1200, // 20 min left of 40 min focus -> 20 min accumulated
     currentCycle: 1,
-    totalCycles: 4,
     blockExpired: false,
   };
 
@@ -683,7 +673,6 @@ describe("decideTransition", () => {
         ...baseInput,
         remainingSeconds: 0,
         currentCycle: 4,
-        totalCycles: 4,
         newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25, cyclesBeforeLongBreak: 4 },
       };
       const result = decideTransition(input);

@@ -7,7 +7,6 @@ import {
   pickColorPickerGeometry,
   pickEventPanelLayout,
   pickThemeEditorGeometry,
-  pickToolbarItems,
 } from "./responsive";
 
 describe("classifyViewport", () => {
@@ -45,37 +44,6 @@ describe("isSizeClassAtLeast", () => {
     expect(isSizeClassAtLeast("wide", "regular")).toBe(true);
     expect(isSizeClassAtLeast("compact", "regular")).toBe(false);
     expect(isSizeClassAtLeast("micro", "micro")).toBe(true);
-  });
-});
-
-describe("pickToolbarItems", () => {
-  const items = [
-    { id: "close", width: 32, priority: 0, alwaysVisible: true },
-    { id: "timer", width: 32, priority: 1 },
-    { id: "settings", width: 32, priority: 2 },
-    { id: "help", width: 32, priority: 4 },
-    { id: "reset", width: 32, priority: 5 },
-  ] as const;
-
-  it("keeps always-visible items even when they exceed available width", () => {
-    expect(pickToolbarItems(items, 16)).toEqual({
-      visible: ["close"],
-      overflow: ["timer", "settings", "help", "reset"],
-    });
-  });
-
-  it("packs optional items by priority while preserving output order", () => {
-    expect(pickToolbarItems(items, 96)).toEqual({
-      visible: ["close", "timer", "settings"],
-      overflow: ["help", "reset"],
-    });
-  });
-
-  it("does not pack lower-priority items before higher-priority items", () => {
-    expect(pickToolbarItems(items, 128)).toEqual({
-      visible: ["close", "timer", "settings", "help"],
-      overflow: ["reset"],
-    });
   });
 });
 

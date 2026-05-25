@@ -5,13 +5,11 @@ import {
   clampHue,
   clampPercent,
   contrastRatio,
-  hexToHsv,
   hexToOklab,
   hexToRgb,
   hexToRgba,
   hsvToHex,
   hsvToRgb,
-  meetsWcag,
   normalizeHex,
   oklabToHex,
   oklabToRgb,
@@ -198,37 +196,6 @@ describe("rgbToHsv / hsvToRgb", () => {
   });
 });
 
-describe("hexToHsv / hsvToHex", () => {
-  it("round-trips representative hex colors", () => {
-    const samples = [
-      "#ff0000",
-      "#00ff00",
-      "#0000ff",
-      "#ffffff",
-      "#000000",
-      "#a1b2c3",
-      "#abcdef",
-      "#80a040",
-    ];
-    for (const hex of samples) {
-      const hsv = hexToHsv(hex);
-      expect(hsv).not.toBeNull();
-      if (!hsv) continue;
-      const back = hsvToHex(hsv.h, hsv.s, hsv.v);
-      const original = hexToRgb(hex);
-      const recovered = hexToRgb(back);
-      if (!original || !recovered) throw new Error("hex parse failed");
-      expect(Math.abs(original.r - recovered.r)).toBeLessThanOrEqual(1);
-      expect(Math.abs(original.g - recovered.g)).toBeLessThanOrEqual(1);
-      expect(Math.abs(original.b - recovered.b)).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it("returns null when given invalid hex", () => {
-    expect(hexToHsv("not-a-color")).toBeNull();
-  });
-});
-
 describe("blendHex", () => {
   it("returns a unchanged when weightA = 1", () => {
     expect(blendHex("#ff0000", "#0000ff", 1)).toBe("#ff0000");
@@ -296,24 +263,6 @@ describe("contrastRatio", () => {
   it("matches a known WCAG worked example", () => {
     // #777777 against #ffffff ~= 4.48:1 per WCAG Understanding SC 1.4.3.
     expect(contrastRatio("#777777", "#ffffff")).toBeCloseTo(4.48, 1);
-  });
-});
-
-describe("meetsWcag", () => {
-  it("AA body text requires 4.5:1", () => {
-    expect(meetsWcag("#ffffff", "#595959", "AA", "body")).toBe(true);
-    expect(meetsWcag("#ffffff", "#8a8a8a", "AA", "body")).toBe(false);
-  });
-
-  it("AA large/ui requires 3:1", () => {
-    expect(meetsWcag("#ffffff", "#949494", "AA", "large")).toBe(true);
-    expect(meetsWcag("#ffffff", "#b5b5b5", "AA", "ui")).toBe(false);
-  });
-
-  it("AAA body requires 7:1", () => {
-    // #666666 vs #ffffff ~5.7:1 (fails AAA body), #404040 vs #ffffff ~10.4:1 (passes).
-    expect(meetsWcag("#ffffff", "#666666", "AAA", "body")).toBe(false);
-    expect(meetsWcag("#ffffff", "#404040", "AAA", "body")).toBe(true);
   });
 });
 

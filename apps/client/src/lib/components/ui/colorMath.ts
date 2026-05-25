@@ -187,13 +187,6 @@ export function hsvToRgb(h: number, s: number, v: number): RgbColor {
   };
 }
 
-/** Convert a hex color directly to HSV. Returns null on bad input. */
-export function hexToHsv(input: string): HsvColor | null {
-  const rgb = hexToRgb(input);
-  if (!rgb) return null;
-  return rgbToHsv(rgb.r, rgb.g, rgb.b);
-}
-
 /** Convert HSV directly to a hex color string. */
 export function hsvToHex(h: number, s: number, v: number): string {
   const { r, g, b } = hsvToRgb(h, s, v);
@@ -267,28 +260,6 @@ export function contrastRatio(a: string, b: string): number {
   const lmax = Math.max(la, lb);
   const lmin = Math.min(la, lb);
   return (lmax + 0.05) / (lmin + 0.05);
-}
-
-/** WCAG level: minimum (AA) or enhanced (AAA). */
-export type WcagLevel = "AA" | "AAA";
-
-/**
- * Text-size class used to pick the WCAG threshold. `body` text targets
- * 4.5:1 at AA (7:1 at AAA); `large` text (18pt regular / 14pt bold) and
- * structural `ui` elements target 3:1 at AA (4.5:1 at AAA).
- */
-export type WcagSize = "body" | "large" | "ui";
-
-/** True when the contrast between `a` and `b` meets the WCAG threshold. */
-export function meetsWcag(
-  a: string,
-  b: string,
-  level: WcagLevel = "AA",
-  size: WcagSize = "body",
-): boolean {
-  const ratio = contrastRatio(a, b);
-  if (level === "AAA") return ratio >= (size === "body" ? 7 : 4.5);
-  return ratio >= (size === "body" ? 4.5 : 3);
 }
 
 /**

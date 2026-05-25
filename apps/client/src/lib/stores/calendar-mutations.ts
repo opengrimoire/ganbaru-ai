@@ -1,11 +1,6 @@
 import type { CalendarEvent } from "$lib/components/calendar/types";
 import { toDbTime } from "./map-row";
 
-export {
-  deleteActionForCalendarEvent,
-  type CalendarEventDeleteAction,
-} from "$lib/components/calendar/occurrence-protection";
-
 export interface CalendarEventMutationTarget {
   id: string;
   occurrenceStart: string | null;

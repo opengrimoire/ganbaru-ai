@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  calendarTimelineScrollDurationForDistance,
+  calendarTimelineScrollSpeedForDistance,
   calendarTimelineWheelMultiplierForDeltaPixels,
   CALENDAR_TIMELINE_LOW_DELTA_WHEEL_MULTIPLIER,
   CALENDAR_TIMELINE_WHEEL_MULTIPLIER,
@@ -37,17 +37,22 @@ describe("wheelDeltaToScrollPixels", () => {
     expect(multiplier).toBeLessThan(CALENDAR_TIMELINE_LOW_DELTA_WHEEL_MULTIPLIER);
   });
 
-  it("keeps normal calendar timeline scroll distances at the base duration", () => {
-    expect(calendarTimelineScrollDurationForDistance(102 * CALENDAR_TIMELINE_WHEEL_MULTIPLIER)).toBe(145);
-  });
+  it("keeps clipped and normal calendar timeline scroll distances at the base speed", () => {
+    const reference = 102 * CALENDAR_TIMELINE_WHEEL_MULTIPLIER;
 
-  it("shortens clipped calendar timeline scroll distances proportionally", () => {
-    expect(calendarTimelineScrollDurationForDistance(102 * CALENDAR_TIMELINE_WHEEL_MULTIPLIER / 4)).toBeCloseTo(36.25);
-    expect(calendarTimelineScrollDurationForDistance(1)).toBeCloseTo(1.15);
+    expect(calendarTimelineScrollSpeedForDistance(reference / 4)).toBeCloseTo(
+      calendarTimelineScrollSpeedForDistance(reference),
+    );
+    expect(calendarTimelineScrollSpeedForDistance(1)).toBeCloseTo(
+      calendarTimelineScrollSpeedForDistance(reference),
+    );
   });
 
   it("increases continuous scroll speed for accumulated long distances", () => {
-    expect(calendarTimelineScrollDurationForDistance(102 * CALENDAR_TIMELINE_WHEEL_MULTIPLIER * 2)).toBeCloseTo(145 * Math.SQRT2);
-    expect(calendarTimelineScrollDurationForDistance(102 * CALENDAR_TIMELINE_WHEEL_MULTIPLIER * 10)).toBeCloseTo(725);
+    const reference = 102 * CALENDAR_TIMELINE_WHEEL_MULTIPLIER;
+    const baseSpeed = calendarTimelineScrollSpeedForDistance(reference);
+
+    expect(calendarTimelineScrollSpeedForDistance(reference * 2)).toBeGreaterThan(baseSpeed);
+    expect(calendarTimelineScrollSpeedForDistance(reference * 10)).toBeCloseTo(baseSpeed * 2);
   });
 });

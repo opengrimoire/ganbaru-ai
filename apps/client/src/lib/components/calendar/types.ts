@@ -51,14 +51,6 @@ export interface RecurrenceConfig {
   end: RecurrenceEnd;
 }
 
-export type RecurrencePreset =
-  | "none"
-  | "daily"
-  | "weekdays"
-  | "weekly"
-  | "monthly"
-  | "yearly";
-
 export type RecurringScope = "this" | "following" | "all";
 
 export interface PomodoroConfig {
@@ -303,13 +295,6 @@ export interface PlannedSegment {
   phase: SegmentPhase;
   startOffsetMinutes: number;
   endOffsetMinutes: number;
-}
-
-export interface AccentBarBand {
-  topFraction: number;
-  heightFraction: number;
-  phase: SegmentPhase;
-  status?: SegmentStatus;
 }
 
 export type PauseReason = "idle" | "manual" | "suspend";

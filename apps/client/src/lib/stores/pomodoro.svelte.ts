@@ -158,21 +158,12 @@ function buildSnapshot(): TimerSnapshot {
     remainingSeconds,
     currentCycle,
     totalCycles,
-    isRunning,
     config,
-    completedPomodoros,
     skipNextBreak,
     notificationShown,
     phaseEndTime,
-    activeBlockId,
     activeBlockEndMs,
-    blockExpired,
     lastTickMs,
-    sessionStartTime,
-    hasOvertimeInterval: overtimeIntervalId !== null,
-    suspendedAway: suspendedAway !== null,
-    idlePaused: idlePaused !== null,
-    idleTimeoutMs,
   };
 }
 
@@ -1508,7 +1499,6 @@ async function transitionToBlock(
     remainingSeconds,
     elapsedFocusSeconds: phase === "focus" ? elapsedSeconds : undefined,
     currentCycle,
-    totalCycles,
     blockExpired,
   });
 

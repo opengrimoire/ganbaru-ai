@@ -15,21 +15,12 @@ export interface TimerSnapshot {
   remainingSeconds: number;
   currentCycle: number;
   totalCycles: number;
-  isRunning: boolean;
   config: PomodoroConfig;
-  completedPomodoros: number;
   skipNextBreak: boolean;
   notificationShown: boolean;
   phaseEndTime: number | null;
-  activeBlockId: string | null;
   activeBlockEndMs: number | null;
-  blockExpired: boolean;
   lastTickMs: number | null;
-  sessionStartTime: string | null;
-  hasOvertimeInterval: boolean;
-  suspendedAway: boolean;
-  idlePaused: boolean;
-  idleTimeoutMs: number | null;
 }
 
 // Constants
@@ -282,7 +273,6 @@ export interface TransitionInput {
   remainingSeconds: number;
   elapsedFocusSeconds?: number;
   currentCycle: number;
-  totalCycles: number;
   blockExpired: boolean;
 }
 

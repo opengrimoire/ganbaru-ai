@@ -1,9 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildBenchmarkSuitePreview,
-  formatBenchmarkMarkdown,
   formatBenchmarkSuiteMarkdown,
-  formatSampleCell,
 } from "./output";
 import { HARNESS_VERSION, HELD_NAVIGATION_DURATION_MS } from "./types";
 import type {
@@ -268,19 +266,9 @@ const IMPORT_RESULT: BenchmarkResult = {
   peakTotalMb: undefined,
 };
 
-describe("formatSampleCell", () => {
-  it("formats backend / frontend / network / total with one decimal except total", () => {
-    expect(formatSampleCell(sample("peak", 348, 245))).toBe("87.0 / 245.0 / 16.0 / 348");
-  });
-
-  it("returns 'n/a' for missing samples", () => {
-    expect(formatSampleCell(undefined)).toBe("n/a");
-  });
-});
-
-describe("formatBenchmarkMarkdown", () => {
+describe("formatBenchmarkSuiteMarkdown", () => {
   it("emits one metadata table and canonical held-navigation memory rows", () => {
-    const md = formatBenchmarkMarkdown(RESULT, {
+    const md = formatBenchmarkSuiteMarkdown([RESULT], {
       date: "2026-05-01",
       build: "9815ea5",
       env: "Linux Ubuntu 25.10, WebKitGTK 2.46",
@@ -305,20 +293,20 @@ describe("formatBenchmarkMarkdown", () => {
   });
 
   it("keeps every dataset for total-history idle memory", () => {
-    const md = formatBenchmarkMarkdown({
+    const md = formatBenchmarkSuiteMarkdown([{
       ...IDLE_MEMORY_RESULT,
       datasetPhases: [
         IDLE_MEMORY_RESULT.phaseB,
         mockPhase("B", 620, 390, 197_235, "dense-v1-r10y-s1-d1"),
       ],
-    }, { date: "2026-05-01" });
+    }], { date: "2026-05-01" });
     expect(md.includes("| 2026-05-01-ID | base-0 | Max")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | Max")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r10y-s1-d1 | Max")).toBe(true);
   });
 
   it("matches the golden snapshot so spacing changes are intentional", () => {
-    const md = formatBenchmarkMarkdown(RESULT, {
+    const md = formatBenchmarkSuiteMarkdown([RESULT], {
       date: "2026-05-01",
       build: "9815ea5",
       env: "Linux Ubuntu 25.10, WebKitGTK 2.46",
@@ -339,7 +327,7 @@ describe("formatBenchmarkMarkdown", () => {
         },
       },
     };
-    const md = formatBenchmarkMarkdown(partial, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([partial], { date: "2026-05-01" });
     expect(md.includes("Usable paint median ms")).toBe(true);
     expect(md.includes("n/a")).toBe(true);
   });
@@ -353,13 +341,13 @@ describe("formatBenchmarkMarkdown", () => {
         startupMs: undefined,
       },
     };
-    const md = formatBenchmarkMarkdown(partial, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([partial], { date: "2026-05-01" });
     expect(md.includes("Launch median ms")).toBe(true);
     expect(md.includes("n/a")).toBe(true);
   });
 
   it("renders startup boot rows with launch P95 as the rightmost column", () => {
-    const md = formatBenchmarkMarkdown(STARTUP_RESULT, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([STARTUP_RESULT], { date: "2026-05-01" });
     expect(md.includes("### Startup boot")).toBe(true);
     const header = md.split("\n").find((line) => line.startsWith("| Run | Dataset | Runs |"));
     expect(header?.endsWith("| Launch P95 ms |")).toBe(true);
@@ -372,13 +360,13 @@ describe("formatBenchmarkMarkdown", () => {
   });
 
   it("summarizes repeated startup launches with median as the headline value", () => {
-    const md = formatBenchmarkMarkdown(REPEATED_STARTUP_RESULT, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([REPEATED_STARTUP_RESULT], { date: "2026-05-01" });
     expect(md.includes("| 2026-05-01-ID | base-0 | 5 | 172 | 830 | 900 |")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | 5 | 520 | 1100 | 1200 |")).toBe(true);
   });
 
   it("renders latency rows in the reduced canonical shape", () => {
-    const md = formatBenchmarkMarkdown(METRIC_RESULT, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([METRIC_RESULT], { date: "2026-05-01" });
     expect(md.includes("### Calendar panel latency")).toBe(true);
     expect(md.includes("50 runs per action")).toBe(false);
     expect(md.includes("| Run | Dataset | Action | Median ms | P95 ms |")).toBe(true);
@@ -395,7 +383,7 @@ describe("formatBenchmarkMarkdown", () => {
   });
 
   it("does not render dataset shape checks as idle memory metrics", () => {
-    const md = formatBenchmarkMarkdown(IDLE_MEMORY_RESULT, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([IDLE_MEMORY_RESULT], { date: "2026-05-01" });
     expect(md.includes("### Idle memory")).toBe(true);
     expect(md.includes("| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |")).toBe(true);
     expect(md.includes("| Run | Dataset | Metric | Value | Unit |")).toBe(false);
@@ -404,7 +392,7 @@ describe("formatBenchmarkMarkdown", () => {
   });
 
   it("splits scalar metrics from repeated latency rows", () => {
-    const md = formatBenchmarkMarkdown(MIXED_METRIC_RESULT, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([MIXED_METRIC_RESULT], { date: "2026-05-01" });
     expect(md.includes("### Mixed metrics")).toBe(true);
     expect(md.includes("| Run | Dataset | Metric | Runs | Median ms | P95 ms |")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | base-0 | parse fixtures | 5 | 17 | 37 |")).toBe(true);
@@ -415,7 +403,7 @@ describe("formatBenchmarkMarkdown", () => {
   });
 
   it("keeps only 1000-event import scalar rows in the canonical scalar shape", () => {
-    const md = formatBenchmarkMarkdown(IMPORT_RESULT, { date: "2026-05-01" });
+    const md = formatBenchmarkSuiteMarkdown([IMPORT_RESULT], { date: "2026-05-01" });
     expect(md.includes("### Calendar import operations")).toBe(true);
     expect(md.includes("| Run | Dataset | Metric | Value ms |\n|---|---|---|---:|")).toBe(true);
     expect(md.includes("| 2026-05-01-ID | dense-v1-r1y-s1-d1 | bulk import 1000 add | 315 |")).toBe(true);

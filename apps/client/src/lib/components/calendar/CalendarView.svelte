@@ -39,9 +39,9 @@
     closedDisplay,
     buildCreateDisplay,
     computeEditDisplay,
-    buildRecurringCommitPlan,
     PENDING_CREATE_ID,
   } from "./display-events";
+  import { buildRecurringCommitPlan } from "./recurrence-edit-plan";
   import { executeRecurrenceCommitPlan } from "./recurrence-edit-executor";
   import { endActiveEventWouldStopProductivity } from "./active-event-end";
   import { activeRootId } from "./occurrence-protection";

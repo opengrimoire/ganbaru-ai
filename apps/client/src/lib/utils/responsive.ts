@@ -97,18 +97,6 @@ export interface RectMargins {
   left: number;
 }
 
-export interface ToolbarItem<TId extends string> {
-  id: TId;
-  width: number;
-  priority: number;
-  alwaysVisible?: boolean;
-}
-
-export interface ToolbarPacking<TId extends string> {
-  visible: TId[];
-  overflow: TId[];
-}
-
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
@@ -133,38 +121,6 @@ export function isSizeClassAtLeast(
   minimum: ViewportSizeClass,
 ): boolean {
   return compareSizeClasses(current, minimum) >= 0;
-}
-
-export function pickToolbarItems<TId extends string>(
-  items: readonly ToolbarItem<TId>[],
-  availableWidth: number,
-): ToolbarPacking<TId> {
-  const remainingWidth = finiteOrZero(availableWidth);
-  const visible = new Set<TId>();
-  let usedWidth = 0;
-
-  for (const item of items) {
-    if (!item.alwaysVisible) continue;
-    visible.add(item.id);
-    usedWidth += finiteOrZero(item.width);
-  }
-
-  const optionalItems = items
-    .map((item, index) => ({ item, index }))
-    .filter(({ item }) => !item.alwaysVisible)
-    .sort((a, b) => a.item.priority - b.item.priority || a.index - b.index);
-
-  for (const { item } of optionalItems) {
-    const itemWidth = finiteOrZero(item.width);
-    if (usedWidth + itemWidth > remainingWidth) continue;
-    visible.add(item.id);
-    usedWidth += itemWidth;
-  }
-
-  return {
-    visible: items.filter((item) => visible.has(item.id)).map((item) => item.id),
-    overflow: items.filter((item) => !visible.has(item.id)).map((item) => item.id),
-  };
 }
 
 export function getResponsivePanelWidth(

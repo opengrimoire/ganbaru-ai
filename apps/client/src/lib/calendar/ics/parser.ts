@@ -256,10 +256,6 @@ function firstJcalNumber(component: JcalComponent, name: string): number | undef
 	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function firstJcalValueType(component: JcalComponent, name: string): string | undefined {
-	return firstJcalProperty(component, name)?.[2];
-}
-
 function sourceFingerprint(text: string): string {
 	let hash = 0x811c9dc5;
 	for (const char of text) {

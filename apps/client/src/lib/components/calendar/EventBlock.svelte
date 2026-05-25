@@ -11,7 +11,6 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import { getEventIndicatorState } from "./event-indicators";
-  import { shouldShowEventContour } from "./event-block-state";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Video from "@lucide/svelte/icons/video";
   import MapPin from "@lucide/svelte/icons/map-pin";
@@ -65,7 +64,7 @@
     preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
   );
   const statusPatternClass = $derived(getEventStatusPatternClass(positioned.event));
-  const showContour = $derived(shouldShowEventContour({ editing, preview, grabbing }));
+  const showContour = $derived(editing || preview || grabbing);
   const activeColors = $derived(
     usePastColors
       ? getPastEventColor(positioned.event.color, theme)

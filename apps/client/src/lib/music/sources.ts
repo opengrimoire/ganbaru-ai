@@ -137,36 +137,6 @@ export function youtubeVideoSourceFromId(
   };
 }
 
-export function buildYouTubeEmbedUrl(source: YouTubeVideoSource | YouTubePlaylistSource): string {
-  const url = new URL("https://www.youtube.com/embed/");
-  if (source.kind === "youtube-video") {
-    url.pathname = `/embed/${encodeURIComponent(source.videoId)}`;
-  } else {
-    url.pathname = "/embed";
-    url.searchParams.set("listType", "playlist");
-    url.searchParams.set("list", source.playlistId);
-    if (source.videoId) {
-      url.pathname = `/embed/${encodeURIComponent(source.videoId)}`;
-    }
-  }
-  url.searchParams.set("enablejsapi", "1");
-  url.searchParams.set("origin", browserOrigin());
-  url.searchParams.set("widget_referrer", browserReferrer());
-  url.searchParams.set("playsinline", "1");
-  url.searchParams.set("controls", "0");
-  url.searchParams.set("disablekb", "1");
-  url.searchParams.set("fs", "0");
-  url.searchParams.set("iv_load_policy", "3");
-  url.searchParams.set("rel", "0");
-  if (source.startMs !== null) {
-    url.searchParams.set("start", Math.floor(source.startMs / 1000).toString());
-  }
-  if (source.endMs !== null) {
-    url.searchParams.set("end", Math.floor(source.endMs / 1000).toString());
-  }
-  return url.toString();
-}
-
 export function isYouTubeSource(source: MusicSource): source is YouTubeVideoSource | YouTubePlaylistSource {
   return source.kind === "youtube-video" || source.kind === "youtube-playlist";
 }
@@ -345,26 +315,4 @@ function parseColonTimestamp(value: string): number | null {
 
 function secondsToMs(seconds: number): number {
   return Math.max(0, Math.round(seconds * 1000));
-}
-
-function browserOrigin(): string {
-  if (
-    "location" in globalThis
-    && typeof globalThis.location?.origin === "string"
-    && /^https?:\/\//.test(globalThis.location.origin)
-  ) {
-    return globalThis.location.origin;
-  }
-  return "http://localhost";
-}
-
-function browserReferrer(): string {
-  if (
-    "location" in globalThis
-    && typeof globalThis.location?.href === "string"
-    && /^https?:\/\//.test(globalThis.location.href)
-  ) {
-    return globalThis.location.href;
-  }
-  return `${browserOrigin()}/`;
 }

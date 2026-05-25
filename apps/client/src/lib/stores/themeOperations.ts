@@ -183,7 +183,7 @@ function pickTokenSnapshot(
  * UserTheme requires sources, and the resolved tokens carry the right
  * starting points (canvas = --background, ink = --foreground, etc.).
  */
-export function synthesizeSourcesFromResolved(
+function synthesizeSourcesFromResolved(
   resolvedApp: Readonly<Record<string, string>>,
 ): ThemeSources {
   return {
@@ -205,7 +205,7 @@ export function synthesizeSourcesFromResolved(
  * this helper survives only for fields that don't fit the targeted paths:
  * displayName rename, eventPalette replacement, blendCanvas pin.
  */
-export type UserThemePatch = Partial<
+type UserThemePatch = Partial<
   Pick<UserTheme, "displayName" | "eventPalette" | "blendCanvas">
 >;
 

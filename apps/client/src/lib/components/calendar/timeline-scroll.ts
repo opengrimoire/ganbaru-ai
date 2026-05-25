@@ -63,12 +63,6 @@ export function calendarTimelineWheelMultiplierForDeltaPixels(deltaPixels: numbe
     (CALENDAR_TIMELINE_WHEEL_MULTIPLIER - CALENDAR_TIMELINE_LOW_DELTA_WHEEL_MULTIPLIER) * t;
 }
 
-export function calendarTimelineScrollDurationForDistance(distancePx: number): number {
-  const distance = Math.abs(distancePx);
-  if (!Number.isFinite(distance) || distance === 0) return 0;
-  return distance / calendarTimelineScrollSpeedForDistance(distance);
-}
-
 export function calendarTimelineScrollSpeedForDistance(distancePx: number): number {
   const distance = Math.abs(distancePx);
   if (!Number.isFinite(distance) || distance <= CALENDAR_TIMELINE_REFERENCE_SCROLL_DISTANCE_PX) {

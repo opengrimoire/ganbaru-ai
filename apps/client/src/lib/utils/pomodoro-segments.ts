@@ -1,7 +1,6 @@
 import type {
   PomodoroConfig,
   PlannedSegment,
-  AccentBarBand,
   PauseInterval,
   PersistedSegment,
   TimelineBand,
@@ -591,53 +590,4 @@ function projectPersistedSegments(
     }
   }
   return bands;
-}
-
-/**
- * Compute the focus score for a completed session.
- *
- * @param startMs - Session start timestamp (ms).
- * @param endMs - Session end timestamp (ms).
- * @param pauseLog - Pause intervals recorded while the segment timer was stopped.
- * @returns Ratio of actual focus time to total elapsed time (0.0 to 1.0).
- */
-export function computeFocusScore(
-  startMs: number,
-  endMs: number,
-  pauseLog: PauseInterval[],
-): number {
-  const totalMs = endMs - startMs;
-  if (totalMs <= 0) return 1.0;
-  let pauseMs = 0;
-  for (const pause of pauseLog) {
-    const ps = new Date(pause.startedAt).getTime();
-    const pe = pause.endedAt ? new Date(pause.endedAt).getTime() : endMs;
-    pauseMs += Math.max(0, Math.min(pe, endMs) - Math.max(ps, startMs));
-  }
-  return Math.round(Math.max(0, (totalMs - pauseMs) / totalMs) * 100) / 100;
-}
-
-/**
- * Convert planned segments to accent bar bands for UI rendering.
- * Only break segments produce bands (focus is the default fill).
- * @param segments - Array of planned segments.
- * @param eventDurationMinutes - Total event duration in minutes.
- * @param status - Status to assign to all bands (default "planned").
- * @returns Array of accent bar bands with position and phase info.
- */
-export function segmentsToAccentBands(
-  segments: PlannedSegment[],
-  eventDurationMinutes: number,
-  status: SegmentStatus = "planned",
-): AccentBarBand[] {
-  if (eventDurationMinutes <= 0) return [];
-
-  return segments
-    .filter((s) => s.phase !== "focus")
-    .map((s) => ({
-      topFraction: s.startOffsetMinutes / eventDurationMinutes,
-      heightFraction: (s.endOffsetMinutes - s.startOffsetMinutes) / eventDurationMinutes,
-      phase: s.phase,
-      status,
-    }));
 }

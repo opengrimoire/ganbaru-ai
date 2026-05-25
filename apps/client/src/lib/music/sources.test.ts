@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildYouTubeEmbedUrl,
   parseMusicSourceInput,
   parseTimestampMs,
   youtubeVideoSourceFromId,
@@ -112,36 +111,5 @@ describe("parseTimestampMs", () => {
   it("returns null for invalid timestamp text", () => {
     expect(parseTimestampMs("soon")).toBeNull();
     expect(parseTimestampMs("1x2m")).toBeNull();
-  });
-});
-
-describe("buildYouTubeEmbedUrl", () => {
-  it("adds iframe API parameters for videos", () => {
-    const result = parseMusicSourceInput("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10");
-    if (!result.source || result.source.kind !== "youtube-video") {
-      throw new Error("expected YouTube video");
-    }
-
-    const embed = new URL(buildYouTubeEmbedUrl(result.source));
-
-    expect(embed.pathname).toBe("/embed/dQw4w9WgXcQ");
-    expect(embed.searchParams.get("enablejsapi")).toBe("1");
-    expect(embed.searchParams.get("controls")).toBe("0");
-    expect(embed.searchParams.get("disablekb")).toBe("1");
-    expect(embed.searchParams.get("fs")).toBe("0");
-    expect(embed.searchParams.get("iv_load_policy")).toBe("3");
-    expect(embed.searchParams.get("widget_referrer")).toBeTruthy();
-    expect(embed.searchParams.get("start")).toBe("10");
-  });
-
-  it("keeps playlist queue videos as single-video embeds", () => {
-    const embed = new URL(buildYouTubeEmbedUrl(youtubeVideoSourceFromId("abcDEF_1234", {
-      playlistId: "PLabcdef",
-      playlistIndex: 2,
-    })));
-
-    expect(embed.pathname).toBe("/embed/abcDEF_1234");
-    expect(embed.searchParams.has("list")).toBe(false);
-    expect(embed.searchParams.has("listType")).toBe(false);
   });
 });

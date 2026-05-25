@@ -141,12 +141,6 @@ function formatMetricValue(metric: BenchmarkMetric | undefined): string {
     : Math.round(metric.value).toString();
 }
 
-/** Format one sample row's right-side cell, e.g. `87.0 / 245.0 / 15.8 / 348`. */
-export function formatSampleCell(s: SamplePoint | undefined): string {
-  if (!s) return "n/a";
-  return `${formatMb(s.backendMb)} / ${formatMb(s.frontendMb)} / ${formatMb(s.networkMb)} / ${formatTotalMb(s.totalMb)}`;
-}
-
 function metricsByLabel(phase: PhaseResult): Map<string, BenchmarkMetric> {
   const map = new Map<string, BenchmarkMetric>();
   for (const metric of phase.metrics ?? []) {
@@ -322,16 +316,6 @@ export function buildBenchmarkSuitePreview(
     metadata,
     sections,
   };
-}
-
-/**
- * Format a complete benchmark result as a canonical markdown block.
- */
-export function formatBenchmarkMarkdown(
-  result: BenchmarkResult,
-  opts: BenchmarkOutputOptions = {},
-): string {
-  return formatBenchmarkSuiteMarkdown([result], opts);
 }
 
 function buildSection(result: BenchmarkResult, run: string): BenchmarkPreviewSection | undefined {

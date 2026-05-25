@@ -350,16 +350,6 @@ export function getThemeById(
 }
 
 /**
- * List of registered theme IDs in insertion order. Defaults to built-ins;
- * pass a combined registry to include user themes.
- */
-export function themeIds(
-  registry: Readonly<Record<ThemeId, Theme>> = BUILTIN_THEME_REGISTRY,
-): ThemeId[] {
-  return Object.keys(registry);
-}
-
-/**
  * Compute the CSS custom property changes needed to apply a theme when
  * `previouslyApplied` tokens were set by the last theme.
  *

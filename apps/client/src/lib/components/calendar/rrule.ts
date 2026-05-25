@@ -2,12 +2,10 @@ import type {
   OrdinalWeekday,
   RecurrenceConfig,
   RecurrenceFrequency,
-  RecurrencePreset,
   Weekday,
 } from "./types";
 
 const ALL_WEEKDAYS: Weekday[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
-const WORK_WEEKDAYS: Weekday[] = ["MO", "TU", "WE", "TH", "FR"];
 
 const FREQ_MAP: Record<string, RecurrenceFrequency> = {
   DAILY: "daily",
@@ -239,59 +237,6 @@ export function rruleToRecurrence(
   if (wkst) config.wkst = wkst;
   return config;
 }
-
-// Presets
-
-export function presetToRecurrence(preset: RecurrencePreset): RecurrenceConfig | undefined {
-  switch (preset) {
-    case "none":
-      return undefined;
-    case "daily":
-      return { frequency: "daily", interval: 1, end: { type: "never" } };
-    case "weekdays":
-      return {
-        frequency: "weekly",
-        interval: 1,
-        weekdays: [...WORK_WEEKDAYS],
-        end: { type: "never" },
-      };
-    case "weekly":
-      return { frequency: "weekly", interval: 1, end: { type: "never" } };
-    case "monthly":
-      return { frequency: "monthly", interval: 1, end: { type: "never" } };
-    case "yearly":
-      return { frequency: "yearly", interval: 1, end: { type: "never" } };
-  }
-}
-
-export function recurrenceToPreset(config: RecurrenceConfig): RecurrencePreset | null {
-  if (config.end.type !== "never") return null;
-  if (config.interval !== 1) return null;
-  // Any BY* rule makes it non-preset
-  if (config.ordinalWeekdays || config.byMonthDay || config.byMonth ||
-      config.bySetPos || config.byYearDay || config.byWeekNo) return null;
-
-  switch (config.frequency) {
-    case "daily":
-      return config.weekdays ? null : "daily";
-    case "weekly": {
-      if (!config.weekdays || config.weekdays.length === 0) return "weekly";
-      if (
-        config.weekdays.length === WORK_WEEKDAYS.length &&
-        WORK_WEEKDAYS.every((d) => config.weekdays!.includes(d))
-      ) {
-        return "weekdays";
-      }
-      return null;
-    }
-    case "monthly":
-      return config.weekdays ? null : "monthly";
-    case "yearly":
-      return config.weekdays ? null : "yearly";
-  }
-}
-
-// Label formatting
 
 function formatMonthDay(dateStr: string): string {
   const datePart = dateStr.split("T")[0];

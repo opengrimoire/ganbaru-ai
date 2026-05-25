@@ -88,23 +88,6 @@ export function utcIsoToWallClock(utcIso: string, zone: string): string {
 }
 
 /**
- * Validate that a calendar time string is in the correct format.
- * Expected: "YYYY-MM-DD HH:MM" with integer hours (0-23) and minutes (0-59).
- */
-export function isValidCalendarTime(str: string): boolean {
-  if (typeof str !== "string") return false;
-  const match = str.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
-  if (!match) return false;
-  const [, , month, day, hour, minute] = match.map(Number);
-  return (
-    month >= 1 && month <= 12 &&
-    day >= 1 && day <= 31 &&
-    hour >= 0 && hour <= 23 &&
-    minute >= 0 && minute <= 59
-  );
-}
-
-/**
  * Sanitize a calendar time string to ensure clean "YYYY-MM-DD HH:MM" format.
  * Handles:
  * - Floating point minutes (rounds them)
@@ -259,10 +242,6 @@ export function minuteOfDay(dateStr: string): number {
   return h * 60 + m;
 }
 
-export function minuteToTop(minute: number, hourHeight: number): number {
-  return (minute / 60) * hourHeight;
-}
-
 export function durationMinutes(start: string, end: string): number {
   const s = parseCalendarDate(start);
   const e = parseCalendarDate(end);
@@ -322,13 +301,6 @@ export function formatTimeRange(
   if (startPeriod !== endPeriod) return `${startLabel} - ${endLabel}`;
 
   return `${startLabel.slice(0, -startPeriod.length)} - ${endLabel}`;
-}
-
-export function formatHour(
-  hour: number,
-  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
-): string {
-  return formatTimeLabel(`${String(hour).padStart(2, "0")}:00`, timeFormat);
 }
 
 export function formatMonthYear(date: Date): string {
@@ -443,17 +415,6 @@ export function getTimezoneOffsetMinutes(tz: string, date?: Date): number {
   const hours = Number(match[2] ?? "0");
   const minutes = Number(match[3] ?? "0");
   return sign * (hours * 60 + minutes);
-}
-
-/**
- * Strips the leading "GMT" from offset-form abbrevs so they fit a 46px
- * column. "GMT-10" becomes "-10", "GMT+5:30" becomes "+5:30", "PST" stays
- * "PST". Real abbrevs without a GMT prefix pass through unchanged.
- */
-export function formatColumnHeaderAbbr(tz: string, date?: Date): string {
-  const abbr = getTimezoneAbbr(tz, date);
-  const stripped = abbr.replace(/^GMT(?=[+-])/, "");
-  return stripped || abbr;
 }
 
 const DEPRECATED_TIMEZONE_IDS = new Set([

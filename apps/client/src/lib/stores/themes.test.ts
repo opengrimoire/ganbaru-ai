@@ -17,7 +17,6 @@ import {
   pickQuickToggleTarget,
   resolveCalCanvas,
   resolveCanvas,
-  themeIds,
   computeThemeTokenOps,
   generateThemeId,
   serializeTheme,
@@ -155,12 +154,6 @@ describe("theme registry", () => {
   it("registers light and dark built-in themes", () => {
     expect(BUILTIN_THEME_REGISTRY[lightTheme.id]).toBe(lightTheme);
     expect(BUILTIN_THEME_REGISTRY[darkTheme.id]).toBe(darkTheme);
-  });
-
-  it("exposes themeIds in insertion order", () => {
-    const ids = themeIds();
-    expect(ids).toContain("light");
-    expect(ids).toContain("dark");
   });
 
   it("default theme ID is registered", () => {

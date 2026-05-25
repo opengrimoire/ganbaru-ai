@@ -20,7 +20,6 @@ import {
   isSemanticSignalAppToken,
   lightTheme,
   serializeTheme,
-  type BuiltinTheme,
   type ThemeSources,
   type UserTheme,
 } from "./themes";
@@ -509,14 +508,5 @@ describe("normalizeDisplayName", () => {
 
   it("leaves short names untouched", () => {
     expect(normalizeDisplayName("Solarized")).toBe("Solarized");
-  });
-});
-
-describe("BuiltinTheme contract", () => {
-  it("light and dark are tagged as builtin", () => {
-    const a: BuiltinTheme = lightTheme;
-    const b: BuiltinTheme = darkTheme;
-    expect(a.kind).toBe("builtin");
-    expect(b.kind).toBe("builtin");
   });
 });

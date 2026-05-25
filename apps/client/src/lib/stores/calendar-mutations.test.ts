@@ -3,7 +3,6 @@ import type { CalendarEvent } from "$lib/components/calendar/types";
 import {
   buildCalendarEventMutationTarget,
   concreteRecurringOccurrenceForMutation,
-  deleteActionForCalendarEvent,
 } from "./calendar-mutations";
 
 describe("calendar event mutation targets", () => {
@@ -58,26 +57,4 @@ describe("calendar event mutation targets", () => {
     });
   });
 
-  it("uses archive for started events and delete for future events", () => {
-    const now = new Date("2026-05-23T12:00:00");
-    const started: CalendarEvent = {
-      id: "past",
-      title: "Past",
-      start: "2026-05-23 11:00",
-      end: "2026-05-23 12:00",
-      timezone: "UTC",
-      calendarId: "local",
-    };
-    const future: CalendarEvent = {
-      id: "future",
-      title: "Future",
-      start: "2026-05-23 13:00",
-      end: "2026-05-23 14:00",
-      timezone: "UTC",
-      calendarId: "local",
-    };
-
-    expect(deleteActionForCalendarEvent(started, now)).toBe("archive");
-    expect(deleteActionForCalendarEvent(future, now)).toBe("delete");
-  });
 });

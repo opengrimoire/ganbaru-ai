@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`formatBenchmarkMarkdown > matches the golden snapshot so spacing changes are intentional 1`] = `
+exports[`formatBenchmarkSuiteMarkdown > matches the golden snapshot so spacing changes are intentional 1`] = `
 "## Benchmark 2026-05-01-ID
 
 ### Run metadata

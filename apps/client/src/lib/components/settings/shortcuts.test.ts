@@ -3,7 +3,6 @@ import {
   SHORTCUT_GROUPS,
   filterShortcutGroups,
   normalizedShortcutQueryCandidates,
-  normalizedShortcutVariants,
 } from "./shortcuts";
 
 function matchingActions(query: string): string[] {
@@ -239,9 +238,4 @@ describe("shortcut search", () => {
     ]);
   });
 
-  it("creates searchable variants for shortcut alternatives", () => {
-    expect(normalizedShortcutVariants("Mod + Enter")).toEqual(
-      expect.arrayContaining(["ctrlenter", "cmdenter"]),
-    );
-  });
 });

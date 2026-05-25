@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  countDenseAllDayEvents,
   countDenseCalendarEvents,
-  countDenseTimedEvents,
   denseCalendarDateRange,
   generateDenseCalendarEvents,
 } from "./dense";
@@ -28,16 +26,12 @@ describe("benchmark dense calendar datasets", () => {
       endExclusive: "2027-04-30",
       days: 730,
     });
-    expect(countDenseTimedEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(17_520);
-    expect(countDenseAllDayEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(2_190);
     expect(countDenseCalendarEvents(DEFAULT_BENCHMARK_DATASET, ANCHOR)).toBe(19_710);
     expect(denseCalendarDateRange(LARGE_BENCHMARK_DATASET, ANCHOR)).toEqual({
       start: "2016-04-30",
       endExclusive: "2036-04-30",
       days: 7305,
     });
-    expect(countDenseTimedEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(175_320);
-    expect(countDenseAllDayEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(21_915);
     expect(countDenseCalendarEvents(LARGE_BENCHMARK_DATASET, ANCHOR)).toBe(197_235);
   });
 

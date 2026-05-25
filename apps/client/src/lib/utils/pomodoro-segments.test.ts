@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computePlannedSegments, segmentsToAccentBands, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands, computeFocusScore, isLatestSegmentFetchResponse } from "./pomodoro-segments";
-import type { PauseInterval, PersistedSegment, PomodoroConfig } from "$lib/components/calendar/types";
+import { computePlannedSegments, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands, isLatestSegmentFetchResponse } from "./pomodoro-segments";
+import type { PersistedSegment, PomodoroConfig } from "$lib/components/calendar/types";
 import type { TimelineEvent, ActivePomodoroState } from "./pomodoro-segments";
 
 const DEFAULT_CONFIG: PomodoroConfig = {
@@ -309,41 +309,6 @@ describe("computeTrailingCycleNumber", () => {
     expect(last.phase).toBe("short_break");
     expect(last.cycleNumber).toBe(3);
     expect(computeTrailingCycleNumber(segments)).toBe(4);
-  });
-});
-
-describe("segmentsToAccentBands", () => {
-  it("returns empty for no segments", () => {
-    expect(segmentsToAccentBands([], 100)).toEqual([]);
-  });
-
-  it("returns empty for zero duration", () => {
-    const segments = computePlannedSegments(DEFAULT_CONFIG, 40);
-    expect(segmentsToAccentBands(segments, 0)).toEqual([]);
-  });
-
-  it("filters out focus segments, keeps only breaks", () => {
-    const segments = computePlannedSegments(DEFAULT_CONFIG, 90);
-    const bands = segmentsToAccentBands(segments, 90);
-    expect(bands).toHaveLength(2);
-    expect(bands[0].phase).toBe("short_break");
-    expect(bands[1].phase).toBe("short_break");
-  });
-
-  it("computes correct fractions", () => {
-    // 90 min event: focus 0-40, break 40-45, focus 45-85
-    const segments = computePlannedSegments(DEFAULT_CONFIG, 90);
-    const bands = segmentsToAccentBands(segments, 90);
-    expect(bands[0].topFraction).toBeCloseTo(40 / 90);
-    expect(bands[0].heightFraction).toBeCloseTo(5 / 90);
-  });
-
-  it("assigns the given status to all bands", () => {
-    const segments = computePlannedSegments(DEFAULT_CONFIG, 90);
-    const bands = segmentsToAccentBands(segments, 90, "completed");
-    for (const b of bands) {
-      expect(b.status).toBe("completed");
-    }
   });
 });
 
@@ -1105,69 +1070,5 @@ describe("computeDayTimelineBands", () => {
     expect(focusBands[1].topMinute).toBe(505);
     // The actual_end is 8:40, so second band: 8:25-8:40 = 15 min
     expect(focusBands[1].heightMinutes).toBe(15);
-  });
-});
-
-describe("computeFocusScore", () => {
-  it("returns 1.0 with no pauses", () => {
-    const start = new Date("2024-01-15T10:00:00Z").getTime();
-    const end = new Date("2024-01-15T10:40:00Z").getTime();
-    expect(computeFocusScore(start, end, [])).toBe(1.0);
-  });
-
-  it("returns correct ratio with a single pause", () => {
-    const start = new Date("2024-01-15T10:00:00Z").getTime();
-    const end = new Date("2024-01-15T10:40:00Z").getTime();
-    // 10 minute pause out of 40 minutes = 30/40 = 0.75
-    const pauseLog: PauseInterval[] = [
-      { startedAt: "2024-01-15T10:10:00Z", endedAt: "2024-01-15T10:20:00Z", reason: "manual" },
-    ];
-    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
-  });
-
-  it("sums multiple pauses correctly", () => {
-    const start = new Date("2024-01-15T10:00:00Z").getTime();
-    const end = new Date("2024-01-15T10:40:00Z").getTime();
-    // Two 5-minute pauses = 10 min pause, 30/40 = 0.75
-    const pauseLog: PauseInterval[] = [
-      { startedAt: "2024-01-15T10:05:00Z", endedAt: "2024-01-15T10:10:00Z", reason: "manual" },
-      { startedAt: "2024-01-15T10:25:00Z", endedAt: "2024-01-15T10:30:00Z", reason: "idle" },
-    ];
-    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
-  });
-
-  it("clamps pause extending past end", () => {
-    const start = new Date("2024-01-15T10:00:00Z").getTime();
-    const end = new Date("2024-01-15T10:40:00Z").getTime();
-    // Pause from 10:30 to 11:00, but session ends at 10:40
-    // Effective pause = 10 min, score = 30/40 = 0.75
-    const pauseLog: PauseInterval[] = [
-      { startedAt: "2024-01-15T10:30:00Z", endedAt: "2024-01-15T11:00:00Z", reason: "manual" },
-    ];
-    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
-  });
-
-  it("handles open-ended pause (null resume) clamped to end", () => {
-    const start = new Date("2024-01-15T10:00:00Z").getTime();
-    const end = new Date("2024-01-15T10:40:00Z").getTime();
-    // Open pause from 10:30 to null, clamped to end = 10 min
-    const pauseLog: PauseInterval[] = [
-      { startedAt: "2024-01-15T10:30:00Z", endedAt: null, reason: "idle" },
-    ];
-    expect(computeFocusScore(start, end, pauseLog)).toBe(0.75);
-  });
-
-  it("returns 1.0 for zero duration", () => {
-    const t = new Date("2024-01-15T10:00:00Z").getTime();
-    expect(computeFocusScore(t, t, [])).toBe(1.0);
-  });
-
-  it("returns 0.0 when entire session is paused", () => {
-    const start = new Date("2024-01-15T10:00:00Z").getTime();
-    const end = new Date("2024-01-15T10:40:00Z").getTime();
-    const pauseLog: PauseInterval[] = [
-      { startedAt: "2024-01-15T10:00:00Z", endedAt: "2024-01-15T10:40:00Z", reason: "suspend" },
-    ];
-    expect(computeFocusScore(start, end, pauseLog)).toBe(0.0);
   });
 });

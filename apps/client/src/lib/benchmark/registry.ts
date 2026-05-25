@@ -146,10 +146,6 @@ export function getScenarioMetadataById(id: string): BenchmarkScenarioMetadata |
   return BENCHMARK_SCENARIOS.find((scenario) => scenario.id === id);
 }
 
-export function hasScenarioLoader(id: string): boolean {
-  return SCENARIO_LOADERS[id] !== undefined;
-}
-
 export async function loadScenarioById(id: string): Promise<BenchmarkScenario | undefined> {
   return SCENARIO_LOADERS[id]?.();
 }

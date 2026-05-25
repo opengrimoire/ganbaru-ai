@@ -3,7 +3,6 @@ import {
   BENCHMARK_SCENARIOS,
   BENCHMARK_SUITES,
   getScenarioMetadataById,
-  hasScenarioLoader,
   loadScenarioById,
 } from "./registry";
 import {
@@ -18,7 +17,6 @@ describe("benchmark registry", () => {
       expect(ids.has(metadata.id)).toBe(false);
       ids.add(metadata.id);
       expect(getScenarioMetadataById(metadata.id)).toEqual(metadata);
-      expect(hasScenarioLoader(metadata.id)).toBe(true);
     }
   });
 
@@ -55,9 +53,6 @@ describe("benchmark registry", () => {
     expect(getScenarioMetadataById("calendar-write-ops")).toBeUndefined();
     expect(getScenarioMetadataById("theme-persistence-ops")).toBeUndefined();
     expect(getScenarioMetadataById("pomodoro-persistence-ops")).toBeUndefined();
-    expect(hasScenarioLoader("calendar-write-ops")).toBe(false);
-    expect(hasScenarioLoader("theme-persistence-ops")).toBe(false);
-    expect(hasScenarioLoader("pomodoro-persistence-ops")).toBe(false);
   });
 
   it("runs only startup and idle across total-history dense datasets", () => {

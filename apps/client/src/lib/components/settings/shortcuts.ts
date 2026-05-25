@@ -153,13 +153,6 @@ function combinePartVariants(parts: readonly string[][]): string[][] {
   );
 }
 
-export function normalizedShortcutVariants(shortcut: string): string[] {
-  return unique([
-    normalizeText(shortcut),
-    ...combineVariants(rawShortcutParts(shortcut).map(keyPartVariants)),
-  ]);
-}
-
 function shortcutPartSequences(shortcut: string): string[][] {
   return combinePartVariants(rawShortcutParts(shortcut).map(keyPartVariants));
 }

@@ -14,7 +14,6 @@ import {
 import {
   contrastRatio,
   hexToOklab,
-  meetsWcag,
   relativeLuminance,
 } from "$lib/components/ui/colorMath";
 
@@ -102,7 +101,7 @@ const MUTED_BANDS: ReadonlyArray<{ fg: string; bg: string }> = [
 
 function assertAA(fgHex: string, bgHex: string, label: string) {
   const ratio = contrastRatio(fgHex, bgHex);
-  if (!meetsWcag(fgHex, bgHex, "AA", "body")) {
+  if (ratio < 4.5) {
     throw new Error(
       `${label}: fg ${fgHex} on bg ${bgHex} = ${ratio.toFixed(2)}:1, expected >= 4.5`,
     );

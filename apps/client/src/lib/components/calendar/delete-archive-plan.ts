@@ -519,27 +519,3 @@ export function buildCalendarDeleteArchivePlan(
     restore: { archivedEvents, snapshots },
   };
 }
-
-export function protectedRecurringOccurrencesForArchive(
-  template: CalendarEvent,
-  startDate: string,
-  endDate: string,
-  now: Date = new Date(),
-): CalendarEvent[] {
-  return protectedRecurringOccurrencesForRange(template, startDate, endDate, {
-    rawBlocks: [template],
-    visibleEvents: [],
-    selectedEvent: template,
-    now,
-  });
-}
-
-export function visibleEventsAfterRecurringDeleteScope(
-  events: CalendarEvent[],
-  templateId: string,
-  instanceDate: string,
-  scope: RecurringScope,
-): CalendarEvent[] {
-  const affected = recurringAffectedVisibleEvents(events, templateId, instanceDate, scope);
-  return finalVisibleEvents(events, new Set(affected.map((event) => event.id)));
-}
