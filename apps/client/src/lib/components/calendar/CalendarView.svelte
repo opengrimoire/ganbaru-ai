@@ -1169,43 +1169,58 @@
   }
 
   async function handleEventCreate(start: string, end: string, allDay?: boolean, createAnchor?: PanelAnchor) {
-    const requestId = ++panelOpenRequestId;
-    pendingEditEventId = undefined;
-    // Track that a create operation ended (prevents click-to-close)
-    lastDragEndTime = Date.now();
+    const openCreate = async () => {
+      const requestId = ++panelOpenRequestId;
+      pendingEditEventId = undefined;
+      // Track that a create operation ended (prevents click-to-close)
+      lastDragEndTime = Date.now();
 
-    const anchor: PanelAnchor = createAnchor
-      ?? { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
+      const anchor: PanelAnchor = createAnchor
+        ?? { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
 
-    const panelState = session.state.mode === "closed"
-      ? parkedPanelSnapshot ? "unpark" : "open"
-      : "switch";
-    perfMark("panel.start", {
-      mode: "create",
-      state: panelState,
-      module: EventPanel ? "loaded" : "cold",
-      request: requestId,
-    });
-    try {
-      const panelReady = ensureEventPanelReady(requestId);
-      session.openCreate(start, end, anchor, allDay);
-      perfMark("panel.state-open", { request: requestId });
-      if (panelReady) await panelReady;
-      if (requestId !== panelOpenRequestId) return;
-      markPanelPaintDone(requestId);
-    } catch (e) {
-      console.error("[CalendarView] open create panel failed:", e);
+      const panelState = session.state.mode === "closed"
+        ? parkedPanelSnapshot ? "unpark" : "open"
+        : "switch";
+      perfMark("panel.start", {
+        mode: "create",
+        state: panelState,
+        module: EventPanel ? "loaded" : "cold",
+        request: requestId,
+      });
+      try {
+        const panelReady = ensureEventPanelReady(requestId);
+        session.openCreate(start, end, anchor, allDay);
+        perfMark("panel.state-open", { request: requestId });
+        if (panelReady) await panelReady;
+        if (requestId !== panelOpenRequestId) return;
+        markPanelPaintDone(requestId);
+      } catch (e) {
+        console.error("[CalendarView] open create panel failed:", e);
+      }
+    };
+
+    if (session.dirty) {
+      requestConfirm(
+        "Your changes will be lost.",
+        openCreate,
+        { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+      );
+      return;
     }
+
+    await openCreate();
   }
 
   async function handleEventClick(event: CalendarEvent, rect?: DOMRect): Promise<void> {
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
-    // Already editing this exact event. Toggle panel closed if clean.
+    // Already editing this exact event. A clean panel is just a peek and can
+    // be toggled closed. Dirty edits stay open so the block click does not
+    // trigger discard confirmation.
     if (session.state.mode === "edit" && (
       session.state.originalEvent.id === event.id || editingId === event.id
     )) {
-      handlePanelClose();
+      if (!session.dirty) handlePanelClose();
       return;
     }
 
@@ -1431,17 +1446,26 @@
 
   function isPanelOrEventTarget(target: EventTarget | null): boolean {
     return target instanceof Element
-      && (target.closest("[data-event-id]") !== null || target.closest(".panel-root") !== null);
+      && (
+        target.closest("[data-event-id]") !== null
+        || target.closest("[data-create-preview]") !== null
+        || target.closest(".panel-root") !== null
+      );
   }
 
   function isConfirmDialogPanelTarget(target: EventTarget | null): boolean {
     return target instanceof Element && target.closest(".confirm-dialog") !== null;
   }
 
+  function isCalendarEditCloseTarget(target: EventTarget | null): boolean {
+    return target instanceof Element && target.closest("[data-calendar-edit-close-zone]") !== null;
+  }
+
   function handleOutsidePointerDown(e: PointerEvent) {
     if (confirmAction) return;
     if (session.state.mode === "closed") return;
     if (isPanelOrEventTarget(e.target)) return;
+    if (!isCalendarEditCloseTarget(e.target)) return;
 
     suppressOutsideClickUntil = performance.now() + 750;
     e.preventDefault();

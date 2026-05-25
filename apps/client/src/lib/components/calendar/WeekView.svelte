@@ -376,6 +376,13 @@
     });
   }
 
+  function isLockedCalendarEvent(id: string): boolean {
+    const ev = events.find((event) => event.id === id);
+    if (!ev) return false;
+    if (isActiveCalendarEvent(ev)) return false;
+    return parseCalendarDate(ev.end).getTime() < Date.now();
+  }
+
   const drag = useDragController({
     events: () => events,
     hourHeight: () => calZoom.hourHeight,
@@ -385,12 +392,7 @@
     onEventCreate: (s, e, anchor) => onEventCreate(s, e, false, anchor),
     canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
     isActiveEvent: isActiveCalendarEvent,
-    isEventLocked: (id) => {
-      const ev = events.find((e) => e.id === id);
-      if (!ev || !ev.pomodoroConfig) return false;
-      if (isActiveCalendarEvent(ev)) return false;
-      return parseCalendarDate(ev.end).getTime() < Date.now();
-    },
+    isEventLocked: isLockedCalendarEvent,
   });
 
   // All-day column bounds from header cells
@@ -519,6 +521,7 @@
       <!-- Event grid -->
       <div
         bind:this={allDayGridEl}
+        data-calendar-edit-close-zone
         class="relative grid"
         style="
           grid-column: span 7;
@@ -676,6 +679,7 @@
       <TimeGutter {timezones} {anchorDate} tzCount={tzCount} />
 
       <div
+        data-calendar-edit-close-zone
         class="relative grid"
         style="grid-column: span 7; grid-template-columns: subgrid;"
       >
@@ -703,6 +707,8 @@
               onEventPrefetch={onEventPrefetch}
               onDragStart={drag.handleDragStart}
               onCreateStart={drag.handleCreateStart}
+              isActiveEvent={isActiveCalendarEvent}
+              isEventLocked={isLockedCalendarEvent}
             />
           </div>
         {/each}

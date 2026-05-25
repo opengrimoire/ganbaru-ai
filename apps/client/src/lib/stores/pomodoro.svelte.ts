@@ -42,6 +42,7 @@ interface PomodoroWindowSnapshot {
   phase: PomodoroPhase;
   remainingSeconds: number;
   phaseTotalSeconds: number;
+  phaseWorkDurationSeconds: number;
   currentCycle: number;
   totalCycles: number;
   isRunning: boolean;
@@ -278,6 +279,7 @@ function isPomodoroWindowSnapshot(value: unknown): value is PomodoroWindowSnapsh
     isPomodoroPhase(value.phase) &&
     isNonNegativeNumber(value.remainingSeconds) &&
     isNonNegativeNumber(value.phaseTotalSeconds) &&
+    isNonNegativeNumber(value.phaseWorkDurationSeconds) &&
     isPositiveNumber(value.currentCycle) &&
     isPositiveNumber(value.totalCycles) &&
     typeof value.isRunning === "boolean" &&
@@ -352,6 +354,7 @@ function buildWindowSnapshot(): PomodoroWindowSnapshot {
     phase,
     remainingSeconds,
     phaseTotalSeconds,
+    phaseWorkDurationSeconds,
     currentCycle,
     totalCycles,
     isRunning,
@@ -376,6 +379,7 @@ function applyWindowSnapshot(snapshot: PomodoroWindowSnapshot): void {
   phase = snapshot.phase;
   remainingSeconds = snapshot.remainingSeconds;
   phaseTotalSeconds = snapshot.phaseTotalSeconds;
+  phaseWorkDurationSeconds = snapshot.phaseWorkDurationSeconds;
   currentCycle = snapshot.currentCycle;
   totalCycles = snapshot.totalCycles;
   isRunning = snapshot.isRunning;
@@ -2571,6 +2575,9 @@ export function getPomodoro() {
     },
     get phaseElapsedSeconds() {
       return phaseElapsedSeconds;
+    },
+    get phaseWorkDurationSeconds() {
+      return phaseWorkDurationSeconds;
     },
     get currentConfig() {
       return config;

@@ -43,6 +43,8 @@
     onEventPrefetch,
     onDragStart,
     onCreateStart,
+    isActiveEvent,
+    isEventLocked,
     editingId,
     previewedIds,
     draggingEventId,
@@ -70,6 +72,8 @@
     onEventPrefetch?: (event: CalendarEvent) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
     onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
+    isActiveEvent?: (event: CalendarEvent) => boolean;
+    isEventLocked?: (eventId: string) => boolean;
   } = $props();
 
   const isDark = $derived(isThemeCalendarDark(theme));
@@ -344,6 +348,7 @@
       segments: pomodoro.segments,
       remainingSeconds: pomodoro.remainingSeconds,
       phaseElapsedSeconds: pomodoro.phaseElapsedSeconds,
+      phaseWorkDurationSeconds: pomodoro.phaseWorkDurationSeconds,
       currentConfig: {
         focusDurationMinutes: pomodoro.currentConfig.focusMinutes,
         shortBreakMinutes: pomodoro.currentConfig.shortBreakMinutes,
@@ -449,6 +454,18 @@
     | { kind: "edge"; eventId: string; edge: "resize-top" | "resize-bottom" }
     | { kind: "body"; eventId: string };
 
+  function isPastTimedPosition(pos: PositionedEvent): boolean {
+    const range = effectiveMinuteRange(pos.event, dateStr);
+    return isPast || (isToday && currentTimeMinute >= 0 && range.endMinute <= currentTimeMinute);
+  }
+
+  function canResizeEdge(pos: PositionedEvent, edge: "resize-top" | "resize-bottom"): boolean {
+    if (isPastTimedPosition(pos)) return false;
+    if (isActiveEvent?.(pos.event)) return edge === "resize-bottom";
+    if (isEventLocked?.(pos.event.id)) return false;
+    return true;
+  }
+
   function findBlockHit(offsetX: number, offsetY: number, colWidth: number): BlockHit | null {
     const hh = getRenderedHourHeight();
     const threshold = getResizeThreshold();
@@ -475,10 +492,14 @@
       if (offsetY >= blockTopY && offsetY < blockBottomY) {
         // Mouse is inside this block. Check if near an edge.
         if (!pos.isClippedTop && Math.abs(offsetY - blockTopY) < threshold) {
-          return { kind: "edge", eventId: pos.event.id, edge: "resize-top" };
+          return canResizeEdge(pos, "resize-top")
+            ? { kind: "edge", eventId: pos.event.id, edge: "resize-top" }
+            : { kind: "body", eventId: pos.event.id };
         }
         if (!pos.isClippedBottom && Math.abs(offsetY - blockBottomY) < threshold) {
-          return { kind: "edge", eventId: pos.event.id, edge: "resize-bottom" };
+          return canResizeEdge(pos, "resize-bottom")
+            ? { kind: "edge", eventId: pos.event.id, edge: "resize-bottom" }
+            : { kind: "body", eventId: pos.event.id };
         }
         // Inside block but not near edge
         return { kind: "body", eventId: pos.event.id };

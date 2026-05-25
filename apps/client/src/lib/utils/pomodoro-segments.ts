@@ -168,6 +168,7 @@ export interface ActivePomodoroState {
   segments: PersistedSegment[];
   remainingSeconds: number;
   phaseElapsedSeconds?: number;
+  phaseWorkDurationSeconds?: number;
   currentConfig?: PomodoroConfig;
   breakOvertimeSeconds: number;
 }
@@ -255,6 +256,7 @@ export function computeDayTimelineBands(
         activeState.segments,
         activeState.remainingSeconds,
         activeState.phaseElapsedSeconds,
+        activeState.phaseWorkDurationSeconds,
         activeState.currentConfig,
         ev,
         dayStartMs,
@@ -390,11 +392,16 @@ function projectedActiveSegmentEndMs(
   nowMs: number,
   activeConfig?: PomodoroConfig,
   phaseElapsedSeconds?: number,
+  phaseWorkDurationSeconds?: number,
 ): number {
   const storedEndMs = nowMs + remainingSeconds * 1000;
-  if (samePomodoroConfig(activeConfig, ev.config)) return storedEndMs;
+  const sameConfig = samePomodoroConfig(activeConfig, ev.config);
+  if (sameConfig && phaseWorkDurationSeconds === undefined) return storedEndMs;
 
-  const targetDurationSeconds = phaseDurationMinutes(activeSegment.phase, ev.config) * 60;
+  const configuredDurationSeconds = phaseDurationMinutes(activeSegment.phase, ev.config) * 60;
+  const targetDurationSeconds = sameConfig
+    ? Math.max(0, phaseWorkDurationSeconds ?? configuredDurationSeconds)
+    : configuredDurationSeconds;
   const elapsedSeconds = phaseElapsedSeconds ?? Math.max(
     0,
     phaseDurationMinutes(activeSegment.phase, activeConfig ?? ev.config) * 60 - remainingSeconds,
@@ -468,6 +475,7 @@ function projectActiveSegments(
   segments: PersistedSegment[],
   remainingSeconds: number,
   phaseElapsedSeconds: number | undefined,
+  phaseWorkDurationSeconds: number | undefined,
   activeConfig: PomodoroConfig | undefined,
   ev: TimelineEvent,
   dayStartMs: number,
@@ -477,7 +485,15 @@ function projectActiveSegments(
   const activeIdx = segments.findIndex((s) => s.status === "active");
   const activeSegment = activeIdx >= 0 ? segments[activeIdx] : null;
   const currentEndMs = activeSegment
-    ? projectedActiveSegmentEndMs(activeSegment, remainingSeconds, ev, nowMs, activeConfig, phaseElapsedSeconds)
+    ? projectedActiveSegmentEndMs(
+        activeSegment,
+        remainingSeconds,
+        ev,
+        nowMs,
+        activeConfig,
+        phaseElapsedSeconds,
+        phaseWorkDurationSeconds,
+      )
     : nowMs + remainingSeconds * 1000;
 
   for (let i = 0; i < segments.length; i++) {

@@ -142,7 +142,10 @@
   </div>
 
   <!-- Week rows -->
-  <div class="grid min-h-0 flex-1 overflow-x-hidden" style="grid-template-rows: repeat({weeks.length}, minmax(0, 1fr));"
+  <div
+    data-calendar-edit-close-zone
+    class="grid min-h-0 flex-1 overflow-x-hidden"
+    style="grid-template-rows: repeat({weeks.length}, minmax(0, 1fr));"
   >
     {#each weeks as week, wi}
       <div
@@ -191,6 +194,7 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
+                data-event-id={evt.id}
                 class="month-event-surface relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[0.666667rem] {evtStatusPatternClass}"
                 style="
                   background-color: {evtColors.bg};

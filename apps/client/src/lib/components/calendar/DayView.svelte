@@ -328,6 +328,13 @@
     });
   }
 
+  function isLockedCalendarEvent(id: string): boolean {
+    const ev = events.find((event) => event.id === id);
+    if (!ev) return false;
+    if (isActiveCalendarEvent(ev)) return false;
+    return parseCalendarDate(ev.end).getTime() < Date.now();
+  }
+
   const drag = useDragController({
     events: () => events,
     hourHeight: () => calZoom.hourHeight,
@@ -337,12 +344,7 @@
     onEventCreate: (s, e, anchor) => onEventCreate(s, e, false, anchor),
     canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
     isActiveEvent: isActiveCalendarEvent,
-    isEventLocked: (id) => {
-      const ev = events.find((e) => e.id === id);
-      if (!ev || !ev.pomodoroConfig) return false;
-      if (isActiveCalendarEvent(ev)) return false;
-      return parseCalendarDate(ev.end).getTime() < Date.now();
-    },
+    isEventLocked: isLockedCalendarEvent,
   });
 </script>
 
@@ -417,7 +419,11 @@
       "
     >
       <div style="grid-column: span {tzCount};"></div>
-      <div class="flex min-w-0 flex-col px-1" style="padding-top: 2px; padding-bottom: 2px; gap: {ALL_DAY_GAP}px;">
+      <div
+        data-calendar-edit-close-zone
+        class="flex min-w-0 flex-col px-1"
+        style="padding-top: 2px; padding-bottom: 2px; gap: {ALL_DAY_GAP}px;"
+      >
         {#each allDayEvents.slice(0, allDayVisibleCount) as evt (evt.id)}
           <AllDayEventChip
             event={evt}
@@ -464,6 +470,7 @@
       <TimeGutter {timezones} {anchorDate} {tzCount} />
       <div
         data-day-column-shell
+        data-calendar-edit-close-zone
         class="relative min-w-0"
         style="border-left: 1px solid var(--cal-gridline);"
       >
@@ -488,6 +495,8 @@
           onEventPrefetch={onEventPrefetch}
           onDragStart={drag.handleDragStart}
           onCreateStart={drag.handleCreateStart}
+          isActiveEvent={isActiveCalendarEvent}
+          isEventLocked={isLockedCalendarEvent}
         />
       </div>
       </div>

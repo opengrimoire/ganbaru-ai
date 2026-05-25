@@ -849,6 +849,41 @@ describe("computeDayTimelineBands", () => {
     expect(breakBands.map((band) => band.topMinute)).toEqual([640, 685, 730, 775]);
   });
 
+  it("active event end preview restores focus time clipped by the old block end", () => {
+    const ev = makeEvent("A", 17, 20);
+    const segStartMs = DAY_MS + (18 * 60 + 50) * 60000;
+    const activeState: ActivePomodoroState = {
+      activeBlockId: "A",
+      segments: [
+        {
+          id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
+          cycleNumber: 1, phase: "focus",
+          plannedStart: new Date(segStartMs).toISOString(),
+          plannedEnd: new Date(segStartMs + 10 * 60000).toISOString(),
+          actualStart: new Date(segStartMs).toISOString(),
+          actualEnd: null,
+          pauseLog: [],
+          status: "active",
+        },
+      ],
+      remainingSeconds: 10 * 60,
+      phaseElapsedSeconds: 0,
+      phaseWorkDurationSeconds: 40 * 60,
+      currentConfig: DEFAULT_CONFIG,
+      breakOvertimeSeconds: 0,
+    };
+
+    const bands = computeDayTimelineBands([ev], activeState, DAY_MS, segStartMs);
+    const breakBands = bands.filter((band) => band.phase !== "focus");
+
+    expect(breakBands[0]).toEqual({
+      topMinute: 19 * 60 + 30,
+      heightMinutes: 5,
+      phase: "short_break",
+      status: "planned",
+    });
+  });
+
   it("completed focus segments show as filled", () => {
     const ev = makeEvent("A", 10, 12);
     const segStartMs = DAY_MS + 10 * 3600000;
