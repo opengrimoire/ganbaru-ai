@@ -95,7 +95,7 @@ export type CalendarColorDefaultMode =
  * a stored theme's stamp and this constant to render an opt-in "rebake"
  * banner so non-pinned colors do not silently drift across app updates.
  */
-export const DERIVATION_ENGINE_VERSION = 5;
+export const DERIVATION_ENGINE_VERSION = 6;
 
 /**
  * A built-in theme ships with the app, never persists to SQLite, and paints
@@ -561,8 +561,8 @@ export const THEME_TOKEN_ROW_ORDER = Object.freeze([
   { kind: "calendar", key: "--cal-bg" },
   { kind: "calendar", key: "--cal-gridline" },
   { kind: "calendar", key: "--cal-time-label" },
-  { kind: "calendar", key: "--cal-timeline-rail" },
   { kind: "calendar", key: "--cal-current-time" },
+  { kind: "calendar", key: "--cal-timeline-rail" },
   { kind: "calendar", key: "--cal-timeline-break" },
   { kind: "calendar", key: "--cal-timeline-focus" },
   { kind: "app", key: "--event-panel-bg" },
@@ -709,8 +709,8 @@ export const BASE_CALENDAR_TOKENS: Readonly<
     "--cal-time-label": "#646470",
     "--cal-timeline-rail": "#E5E7EB",
     "--cal-current-time": "#B83A3A",
-    "--cal-timeline-break": "#A1A1AA",
-    "--cal-timeline-focus": "#4ADE80",
+    "--cal-timeline-break": "#000000",
+    "--cal-timeline-focus": "#39965c",
   }),
   dark: Object.freeze({
     "--cal-bg": "#131314",
@@ -718,8 +718,8 @@ export const BASE_CALENDAR_TOKENS: Readonly<
     "--cal-time-label": "#9494A0",
     "--cal-timeline-rail": "#3F3F46",
     "--cal-current-time": "#B83A3A",
-    "--cal-timeline-break": "#71717A",
-    "--cal-timeline-focus": "#4ADE80",
+    "--cal-timeline-break": "#000000",
+    "--cal-timeline-focus": "#2a8049",
   }),
 });
 
@@ -824,13 +824,11 @@ const CAL_DERIVATION = {
 /**
  * Fractional walks for calendar tokens that land at specific OKLab-L
  * recessions against `cal-bg`. Calibrated from BASE_CALENDAR_TOKENS.dark.
- * --cal-time-label matches --muted-foreground's fraction (both land at
- * the same BASE hex #9494A0). --cal-timeline-break sits deeper toward
- * the cal-bg.
+ * --cal-time-label matches --muted-foreground's fraction; both land at
+ * the same BASE hex #9494A0.
  */
 const CAL_FRACTIONS = {
   calTimeLabel: 0.362173,
-  calTimelineBreak: 0.518908,
 } as const;
 
 /**
@@ -955,16 +953,16 @@ export function deriveAppTokens(
  * fully independent surface can isolate `--cal-bg`; pinned values win over
  * derived values during source edits and rebakes.
  *
- * Gridlines (and the timeline-break marker) are parked just above a
- * minimum-visibility contrast against `--cal-bg`. The target is
- * intentionally subtle (1.4:1) to match how the dark built-in renders its
+ * Gridlines are parked just above a minimum-visibility contrast against
+ * `--cal-bg`. The target is intentionally subtle (1.4:1) to match how the
+ * dark built-in renders its
  * grid: a 3:1 target produces gridlines noticeably more prominent than
  * the built-in's curated hex, which users read as "uglier" on clones.
  *
- * The semantic tokens (current time, timeline focus) are intentionally
- * omitted: those colors carry hard-coded meaning (red for "now", green
- * for focus) that does not reduce to the source palette, so the resolver
- * falls through to the base CSS defaults for them.
+ * The semantic marker tokens (current time, timeline break, timeline
+ * focus) are intentionally omitted: those colors carry hard-coded meaning
+ * that does not reduce to the source palette, so the resolver falls
+ * through to the base CSS defaults for them.
  */
 export function deriveCalendarTokens(
   sources: ThemeSources,
@@ -994,11 +992,6 @@ export function deriveCalendarTokens(
       CAL_FRACTIONS.calTimeLabel,
     ),
     "--cal-timeline-rail": shiftPerceptualL(calCanvas, timelineRailDelta),
-    "--cal-timeline-break": walkFraction(
-      anchorFor(calCanvas),
-      calCanvas,
-      CAL_FRACTIONS.calTimelineBreak,
-    ),
   };
 }
 

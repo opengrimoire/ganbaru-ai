@@ -958,7 +958,7 @@ describe("computeDayTimelineBands", () => {
     expect(activeBreakBands[0].heightMinutes).toBeCloseTo(5 + 10 / 60);
   });
 
-  it("legitimate break extension expands the gray break mark", () => {
+  it("legitimate break extension expands the break mark", () => {
     const ev = makeEvent("A", 10, 12);
     const breakStartMs = DAY_MS + (10 * 60 + 40) * 60000;
     const extendedBreakEndMs = breakStartMs + 8 * 60000;

@@ -426,11 +426,11 @@ describe("deriveCalendarTokens", () => {
     expect(derived["--cal-gridline"]).toBeDefined();
     expect(derived["--cal-time-label"]).toBeDefined();
     expect(derived["--cal-timeline-rail"]).toBeDefined();
-    expect(derived["--cal-timeline-break"]).toBeDefined();
-    // current-time (red "now" line) and timeline-focus (green pomodoro
-    // marker) carry hard-coded semantic meaning and stay undefined in
-    // the derivation so the base CSS defaults win.
+    // current-time, timeline-break, and timeline-focus carry hard-coded
+    // semantic meaning and stay undefined in the derivation so the base
+    // CSS defaults win.
     expect(derived["--cal-current-time"]).toBeUndefined();
+    expect(derived["--cal-timeline-break"]).toBeUndefined();
     expect(derived["--cal-timeline-focus"]).toBeUndefined();
   });
 
@@ -493,29 +493,21 @@ describe("deriveCalendarTokens", () => {
       const ratio = contrastRatio(tokens["--cal-time-label"], tokens["--cal-bg"]);
       expect(ratio).toBeGreaterThanOrEqual(3.0);
     });
-
-    it(`timeline break sits at or above 3:1 against the calendar canvas (${base})`, () => {
-      const tokens = deriveCalendarTokens(sources);
-      const ratio = contrastRatio(
-        tokens["--cal-timeline-break"],
-        tokens["--cal-bg"],
-      );
-      expect(ratio).toBeGreaterThanOrEqual(3.0);
-    });
   }
 
-  it("flips time label and timeline break dark when canvas goes light but ink stays light", () => {
+  it("flips time label dark when canvas goes light but ink stays light", () => {
     const inverted: ThemeSources = { ...DARK_SOURCES, canvas: "#FFFFFF" };
     const tokens = deriveCalendarTokens(inverted);
-    for (const key of ["--cal-time-label", "--cal-timeline-break"] as const) {
-      const ratio = contrastRatio(tokens[key], tokens["--cal-bg"]);
-      if (ratio < 3) {
-        throw new Error(
-          `direction-sync ${key} (${tokens[key]}) on --cal-bg (${tokens["--cal-bg"]}) = ${ratio.toFixed(2)}:1`,
-        );
-      }
-      expect(ratio).toBeGreaterThanOrEqual(3);
+    const ratio = contrastRatio(
+      tokens["--cal-time-label"],
+      tokens["--cal-bg"],
+    );
+    if (ratio < 3) {
+      throw new Error(
+        `direction-sync --cal-time-label (${tokens["--cal-time-label"]}) on --cal-bg (${tokens["--cal-bg"]}) = ${ratio.toFixed(2)}:1`,
+      );
     }
+    expect(ratio).toBeGreaterThanOrEqual(3);
   });
 
   /**
@@ -532,7 +524,6 @@ describe("deriveCalendarTokens", () => {
       "--cal-gridline",
       "--cal-time-label",
       "--cal-timeline-rail",
-      "--cal-timeline-break",
     ];
     for (const key of approxKeys) {
       const drift = Math.abs(

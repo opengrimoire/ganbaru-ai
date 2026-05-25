@@ -34,7 +34,7 @@ Situations most likely to produce bugs, data corruption, or confusing UX. Every 
 
 **Scenario, crash during phase transition.** The focus phase ends at 14:25. The system needs to (a) update the focus segment to `completed`, (b) create the break segment. If the app crashes after (a) but before (b), recovery finds a completed focus segment with no following break. The system does not retroactively insert a break; the missing break is treated as a skipped break.
 
-**Scenario, laptop suspend during focus.** The user closes the laptop at 14:20 during a focus phase that started at 14:00. The last heartbeat is at 14:20. The user opens the laptop at 16:00. Recovery detects the last heartbeat is far behind current time. The active segment's actual end is set to 14:20 (the last heartbeat), status becomes `interrupted`. The idle gap from 14:20 to 16:00 is empty rail (gray). The user sees a prompt to start a new session.
+**Scenario, laptop suspend during focus.** The user closes the laptop at 14:20 during a focus phase that started at 14:00. The last heartbeat is at 14:20. The user opens the laptop at 16:00. Recovery detects the last heartbeat is far behind current time. The active segment's actual end is set to 14:20 (the last heartbeat), status becomes `interrupted`. The idle gap from 14:20 to 16:00 is empty rail. The user sees a prompt to start a new session.
 
 **Scenario, crash during pause write.** The user triggers a pause at 14:30. The system needs to insert a row into `pomodoro_pauses`. If it crashes before the write commits, recovery finds no pause record. The segment's green fill extends to the last heartbeat, which is correct (the user was focusing up to that point, the pause had not been saved). No data is fabricated.
 

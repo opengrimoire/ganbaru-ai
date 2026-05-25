@@ -69,6 +69,26 @@ describe("theme editor model", () => {
     expect(CALENDAR_GROUPS.length).toBeGreaterThan(0);
   });
 
+  it("places the empty rail picker before the break marker picker", () => {
+    const surfaceGroup = SOURCE_GROUPS.find(
+      (group) => group.id === "calendar-surface",
+    );
+    const detailsGroup = SOURCE_GROUPS.find(
+      (group) => group.id === "calendar-details",
+    );
+    expect(surfaceGroup?.rows).not.toContainEqual({
+      kind: "single",
+      key: "--cal-timeline-rail",
+      scope: "cal",
+    });
+    expect(detailsGroup?.rows).toMatchObject([
+      { key: "--cal-current-time" },
+      { key: "--cal-timeline-rail" },
+      { key: "--cal-timeline-break" },
+      { key: "--cal-timeline-focus" },
+    ]);
+  });
+
   it("provides visible labels and descriptions for every row", () => {
     for (const group of SOURCE_GROUPS) {
       expect(group.title.length).toBeGreaterThan(0);

@@ -264,8 +264,8 @@
   --cal-current-time: #B83A3A;
   --cal-hover: rgba(0, 0, 20, 0.04);
   --cal-timeline-rail: #E5E7EB;
-  --cal-timeline-break: #A1A1AA;
-  --cal-timeline-focus: #4ADE80;
+  --cal-timeline-break: #000000;
+  --cal-timeline-focus: #39965c;
   --cal-scrollbar-thumb: var(--muted);
   --cal-scrollbar-thumb-hover: var(--muted-foreground);
   --cal-header-row-h: 42px;
@@ -279,8 +279,8 @@
   --cal-current-time: #B83A3A;
   --cal-hover: rgba(255, 255, 255, 0.04);
   --cal-timeline-rail: #3F3F46;
-  --cal-timeline-break: #71717A;
-  --cal-timeline-focus: #4ADE80;
+  --cal-timeline-break: #000000;
+  --cal-timeline-focus: #2a8049;
 }
 
 /* Hide native scrollbar (custom scrollbar replaces it) */

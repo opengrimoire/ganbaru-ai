@@ -175,8 +175,8 @@ export const CALENDAR_TOKEN_INFO: Record<string, TokenInfo> = {
     description: "Horizontal line marking the current time",
   },
   "--cal-timeline-rail": {
-    title: "Session rail track",
-    description: "Background strip beside an event during a pomodoro",
+    title: "Empty rail",
+    description: "Color of empty parts of the pomodoro session rail",
   },
   "--cal-timeline-break": {
     title: "Break marker",
@@ -256,21 +256,21 @@ export const SOURCE_GROUPS: SourceGroup[] = [
     id: "calendar-surface",
     sourceKey: null,
     title: "Calendar surface",
-    description: "Calendar background, gridlines, and timeline",
+    description: "Calendar background, gridlines, and time labels",
     rows: [
       { kind: "single", key: "--cal-bg", scope: "cal" },
       { kind: "single", key: "--cal-gridline", scope: "cal" },
       { kind: "single", key: "--cal-time-label", scope: "cal" },
-      { kind: "single", key: "--cal-timeline-rail", scope: "cal" },
     ],
   },
   {
     id: "calendar-details",
     sourceKey: null,
     title: "Calendar details",
-    description: "Semantic markers and accents on the calendar grid",
+    description: "Rail states and accents on the calendar grid",
     rows: [
       { kind: "single", key: "--cal-current-time", scope: "cal" },
+      { kind: "single", key: "--cal-timeline-rail", scope: "cal" },
       { kind: "single", key: "--cal-timeline-break", scope: "cal" },
       { kind: "single", key: "--cal-timeline-focus", scope: "cal" },
     ],
