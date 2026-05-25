@@ -1,4 +1,4 @@
-export type CalendarViewMode = "week" | "day" | "month";
+export type CalendarViewMode = "week" | "workweek" | "day" | "month";
 
 /**
  * Index into a theme's eventPalette array. Valid range is 0..PALETTE_SIZE-1

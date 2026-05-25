@@ -5,7 +5,8 @@
     PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import {
-    addDays, computeViewWindow, formatCalendarDate, formatDatePart,
+    addDays, adjacentWorkCycleAnchor, computeViewWindow, formatCalendarDate, formatDatePart,
+    getWeekDays, getWorkCycleDays,
     getEventSurfaceStatusForIdentity, getLocalTimezone, parseCalendarDate,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
@@ -252,6 +253,11 @@
   // the edit-flow preview. Held-arrow nav stays cheap because anchor changes
   // are coalesced to one viewport update per animation frame.
   const viewWindow = $derived(computeViewWindow(anchorDate, viewMode));
+  const multiDayRangeDays = $derived.by(() => {
+    if (viewMode === "week") return getWeekDays(anchorDate);
+    if (viewMode === "workweek") return getWorkCycleDays(anchorDate);
+    return [];
+  });
 
   $effect(() => {
     if (!calendarStore.loaded) return;
@@ -940,6 +946,7 @@
     const delta = direction === "forward" ? 1 : -1;
     const base = currentAnchor();
     if (viewMode === "week") return addDays(base, 7 * delta);
+    if (viewMode === "workweek") return adjacentWorkCycleAnchor(base, direction);
     if (viewMode === "day") return addDays(base, delta);
     const d = new Date(base);
     const targetMonth = d.getMonth() + delta;
@@ -1775,8 +1782,8 @@
   }
 
   function handleDayHeaderClick() {
-    pushHistory("week", anchorDate);
-    viewMode = "week";
+    pushHistory("workweek", anchorDate);
+    viewMode = "workweek";
   }
 </script>
 
@@ -1792,9 +1799,10 @@
   />
 
   <div bind:this={viewWrapperEl} class="min-w-0 flex-1 overflow-hidden" style="background-color: var(--cal-bg);">
-    {#if viewMode === "week"}
+    {#if viewMode === "week" || viewMode === "workweek"}
       <WeekView
         {anchorDate}
+        days={multiDayRangeDays}
         events={visibleEvents}
         {eventsByDay}
         theme={theme.current}

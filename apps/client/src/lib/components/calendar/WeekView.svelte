@@ -2,7 +2,6 @@
   import type { CalendarEvent, PositionedAllDayEvent } from "./types";
   import type { DayNameFormat, TimezoneAbbrMode } from "./utils";
   import {
-    getWeekDays,
     formatDayName,
     formatDatePart,
     layoutAllDayEventsForWeek,
@@ -34,6 +33,7 @@
 
   let {
     anchorDate,
+    days = [] as Date[],
     events,
     eventsByDay,
     theme,
@@ -55,6 +55,7 @@
     onDayHeaderClick,
   }: {
     anchorDate: Date;
+    days?: Date[];
     events: CalendarEvent[];
     eventsByDay: Map<string, CalendarEvent[]>;
     theme: Theme;
@@ -84,7 +85,8 @@
   const ALL_DAY_PAD = 2;
   const ALL_DAY_MAX_VISIBLE = 2;
 
-  const weekDays = $derived(getWeekDays(anchorDate));
+  const visibleDays = $derived(days.length > 0 ? days : [anchorDate]);
+  const dayCount = $derived(visibleDays.length);
 
   // Structurally memoize all-day layout: when the grid positions haven't changed
   // (same event IDs at same row/col/span), reuse the previous position objects so
@@ -92,7 +94,7 @@
   // all-day CSS Grid banner from relayouting on every edit-session state change.
   let _prevAllDay: PositionedAllDayEvent[] = [];
   const allDayPositioned = $derived.by(() => {
-    const next = layoutAllDayEventsForWeek(events, weekDays);
+    const next = layoutAllDayEventsForWeek(events, visibleDays);
     if (next.length !== _prevAllDay.length) { _prevAllDay = next; return next; }
     let layoutSame = true;
     for (let i = 0; i < next.length; i++) {
@@ -119,7 +121,7 @@
   const allDayMaxRow = $derived(allDayPositioned.length > 0 ? Math.max(...allDayPositioned.map((p) => p.row)) + 1 : 0);
   const tzCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
-    `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) repeat(7, 1fr)`,
+    `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) repeat(${dayCount}, 1fr)`,
   );
 
   let allDayExpanded = $state(false);
@@ -128,8 +130,8 @@
   // +1 row for the "+N more" button when collapsed
   const allDayGridRows = $derived(allDayCollapsible && !allDayExpanded ? allDayVisibleRows + 1 : allDayVisibleRows);
 
-  // Reset expanded state on week change
-  $effect(() => { void anchorDate; allDayExpanded = false; });
+  // Reset expanded state on range change.
+  $effect(() => { void visibleDays; allDayExpanded = false; });
 
   let headerCells: HTMLElement[] = $state([]);
   let dayFormat: DayNameFormat = $state("short");
@@ -349,18 +351,18 @@
   function getColumnDate(clientX: number): string {
     const gridEl = scrollContainer?.querySelector(".week-grid");
     const cols = gridEl?.querySelectorAll(".day-col");
-    if (!cols?.length) return formatDatePart(weekDays[0]);
+    if (!cols?.length) return formatDatePart(visibleDays[0]);
 
     for (let i = 0; i < cols.length; i++) {
       const rect = cols[i].getBoundingClientRect();
       if (clientX >= rect.left && clientX < rect.right) {
-        return formatDatePart(weekDays[i]);
+        return formatDatePart(visibleDays[i]);
       }
     }
     // Fallback: closest edge
     const firstRect = cols[0].getBoundingClientRect();
-    if (clientX < firstRect.left) return formatDatePart(weekDays[0]);
-    return formatDatePart(weekDays[6]);
+    if (clientX < firstRect.left) return formatDatePart(visibleDays[0]);
+    return formatDatePart(visibleDays[dayCount - 1]);
   }
 
   const pomodoroStore = getPomodoro();
@@ -406,7 +408,7 @@
 
   const allDayDrag = useAllDayDragController({
     events: () => events,
-    weekDays: () => weekDays,
+    days: () => visibleDays,
     getColumnBounds: getAllDayColumnBounds,
     getPositionedEvents: () => allDayPositioned,
     onEventUpdate: (e) => onEventUpdate(e),
@@ -422,11 +424,11 @@
 
   // Per-column count of hidden events when collapsed
   const allDayOverflowPerCol = $derived.by(() => {
-    if (!allDayCollapsible || allDayExpanded) return new Array(7).fill(0) as number[];
-    const counts = new Array(7).fill(0) as number[];
+    if (!allDayCollapsible || allDayExpanded) return new Array(dayCount).fill(0) as number[];
+    const counts = new Array(dayCount).fill(0) as number[];
     for (const pos of allDayPositioned) {
       if (pos.row >= ALL_DAY_MAX_VISIBLE) {
-        for (let c = pos.startCol; c < pos.startCol + pos.spanCols; c++) {
+        for (let c = pos.startCol; c < pos.startCol + pos.spanCols && c < counts.length; c++) {
           counts[c]++;
         }
       }
@@ -488,9 +490,9 @@
 
       <div
         class="grid"
-        style="grid-column: span 7; grid-template-columns: subgrid;"
+        style="grid-column: span {dayCount}; grid-template-columns: subgrid;"
       >
-        {#each weekDays as day, i}
+        {#each visibleDays as day, i}
           {@const past = formatDatePart(day) < todayStr}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
@@ -549,7 +551,7 @@
         data-calendar-edit-close-zone
         class="relative grid"
         style="
-          grid-column: span 7;
+          grid-column: span {dayCount};
           grid-template-columns: subgrid;
           grid-template-rows: repeat({allDayEffectiveRows}, {ALL_DAY_ROW_H}px);
           padding: {ALL_DAY_PAD}px 0;
@@ -557,7 +559,7 @@
         "
       >
         <!-- Column measurement targets -->
-        {#each weekDays as day, i}
+        {#each visibleDays as day, i}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
@@ -584,8 +586,8 @@
           <div
             class="absolute flex items-center px-0.5"
             style="
-              left: {(pos.startCol / 7) * 100}%;
-              width: {(pos.spanCols / 7) * 100}%;
+              left: {(pos.startCol / dayCount) * 100}%;
+              width: {(pos.spanCols / dayCount) * 100}%;
               top: {ALL_DAY_PAD + pos.row * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
               height: {ALL_DAY_ROW_H}px;
               z-index: 2;
@@ -617,8 +619,8 @@
               <div
                 class="absolute z-3 flex cursor-pointer items-center px-1.5 text-[0.666667rem] text-muted-foreground hover:text-foreground"
                 style="
-                  left: {(i / 7) * 100}%;
-                  width: {(1 / 7) * 100}%;
+                  left: {(i / dayCount) * 100}%;
+                  width: {(1 / dayCount) * 100}%;
                   top: {ALL_DAY_PAD + ALL_DAY_MAX_VISIBLE * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
                   height: {ALL_DAY_ROW_H}px;
                 "
@@ -639,8 +641,8 @@
           <div
             class="pointer-events-none absolute flex items-center px-0.5"
             style="
-              left: {(dp.startCol / 7) * 100}%;
-              width: {(dp.spanCols / 7) * 100}%;
+              left: {(dp.startCol / dayCount) * 100}%;
+              width: {(dp.spanCols / dayCount) * 100}%;
               top: {ALL_DAY_PAD + dp.row * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
               height: {ALL_DAY_ROW_H}px;
               z-index: 10;
@@ -711,10 +713,10 @@
       <div
         data-calendar-edit-close-zone
         class="relative grid"
-        style="grid-column: span 7; grid-template-columns: subgrid;"
+        style="grid-column: span {dayCount}; grid-template-columns: subgrid;"
       >
         <HourGridlines />
-        {#each weekDays as day, i}
+        {#each visibleDays as day, i}
           {@const dateStr = formatDatePart(day)}
           <div data-day-column-shell class="day-col min-w-0" style="border-left: 1px solid var(--cal-gridline);">
             <DayColumn

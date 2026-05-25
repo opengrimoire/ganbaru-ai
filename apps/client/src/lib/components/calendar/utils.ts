@@ -1,5 +1,6 @@
 import type {
   CalendarEvent,
+  CalendarViewMode,
   EventColor,
   PositionedAllDayEvent,
   PositionedEvent,
@@ -149,6 +150,41 @@ export function getWeekDays(anchorDate: Date): Date[] {
   });
 }
 
+export function workCycleRangeForDate(anchorDate: Date): { start: Date; end: Date } {
+  const day = anchorDate.getDay();
+  const start = new Date(anchorDate);
+  const offset = day === 0 ? -1 : day === 6 ? 0 : 1 - day;
+  start.setDate(anchorDate.getDate() + offset);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + (start.getDay() === 6 ? 1 : 4));
+  return { start, end };
+}
+
+export function getWorkCycleDays(anchorDate: Date): Date[] {
+  const { start, end } = workCycleRangeForDate(anchorDate);
+  const days: Date[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
+
+export function adjacentWorkCycleAnchor(
+  anchorDate: Date,
+  direction: "back" | "forward",
+): Date {
+  const { start } = workCycleRangeForDate(anchorDate);
+  const weekendRange = start.getDay() === 6;
+  const delta = direction === "forward"
+    ? weekendRange ? 2 : 5
+    : weekendRange ? -5 : -2;
+  return addDays(start, delta);
+}
+
 export function addDays(date: Date, n: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + n);
@@ -211,11 +247,18 @@ export function getMonthGrid(year: number, month: number): Date[][] {
  */
 export function computeViewWindow(
   anchor: Date,
-  mode: "day" | "week" | "month",
+  mode: CalendarViewMode,
 ): { start: Temporal.PlainDate; end: Temporal.PlainDate } {
   if (mode === "day") {
     const d = Temporal.PlainDate.from(formatDatePart(anchor));
     return { start: d.subtract({ days: 1 }), end: d.add({ days: 1 }) };
+  }
+  if (mode === "workweek") {
+    const { start, end } = workCycleRangeForDate(anchor);
+    return {
+      start: Temporal.PlainDate.from(formatDatePart(start)).subtract({ days: 1 }),
+      end: Temporal.PlainDate.from(formatDatePart(end)).add({ days: 1 }),
+    };
   }
   if (mode === "week") {
     const monday = startOfWeek(anchor);

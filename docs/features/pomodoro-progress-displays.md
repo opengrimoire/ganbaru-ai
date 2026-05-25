@@ -1,6 +1,6 @@
 # Pomodoro progress displays
 
-The pomodoro system surfaces progress in three places: a small ring in the title bar, a ring in the system tray, and a vertical timeline rail in the calendar day and week views. They serve different purposes (always-visible, OS-level, and in-context) and follow different rendering rules, but they share one principle: each shows only what the user needs to make a decision in the next minute, not the full history of the session.
+The pomodoro system surfaces progress in three places: a small ring in the title bar, a ring in the system tray, and a vertical timeline rail in the calendar day, work-cycle, and week views. They serve different purposes (always-visible, OS-level, and in-context) and follow different rendering rules, but they share one principle: each shows only what the user needs to make a decision in the next minute, not the full history of the session.
 
 This doc covers what each surface shows, when each is visible, and why the design favors near-future information over comprehensive readouts.
 
@@ -47,9 +47,9 @@ The tray ring is the most ambient surface: it sits in the user's peripheral visi
 
 When clicked, the tray icon opens or focuses the main window. The tray menu offers session controls without needing the main window: `Pause pomodoro` or `Resume pomodoro`, `Extend focus 3 minutes` once per focus period when the event window has room, `Go to break now` during focus, and `Start focus now` during breaks. Those Pomodoro actions stay visible but disabled when no session is active, matching the Music controls. The tray music status shows only the active media title when one is loaded, without redundant status or category prefixes. Shuffle remains controlled from the Music view rather than from the tray menu.
 
-## Vertical timeline rail (calendar day and week views)
+## Vertical timeline rail (calendar day and multi-day views)
 
-The rail is a narrow vertical strip on the left edge of each day column, showing the day's pomodoro activity in time-aligned bands. Unlike the rings, the rail is contextual: it appears only in day view and week view, where the day column gives time a vertical extent that the rail can map onto.
+The rail is a narrow vertical strip on the left edge of each day column, showing the day's pomodoro activity in time-aligned bands. Unlike the rings, the rail is contextual: it appears only in day view, work-cycle view, and week view, where the day column gives time a vertical extent that the rail can map onto.
 
 The rail is the densest of the three displays. It conveys:
 
@@ -111,12 +111,12 @@ A semi-transparent overlay covers the column from midnight to the current time. 
 
 ### When the rail is hidden
 
-The rail is rendered in day view and week view, never in month view. The reasons:
+The rail is rendered in day view, work-cycle view, and week view, never in month view. The reasons:
 
 - Month view cells are too small for a 6px rail to convey meaningful detail.
 - Month view is a planning surface, not a working surface. The user looking at month view is asking "what is on my schedule" not "how is my session going."
 
-Within day and week views, the rail is shown for any day that has at least one pomodoro event. Days with only non-pomodoro events have no rail.
+Within day, work-cycle, and week views, the rail is shown for any day that has at least one pomodoro event. Days with only non-pomodoro events have no rail.
 
 ## When each surface is shown or hidden
 
@@ -124,7 +124,7 @@ Within day and week views, the rail is shown for any day that has at least one p
 |---------|-----------|-------------|
 | Title bar ring | App window is open and a focus phase is active, including manual pause while the event window is still active | Break phase, no active session, or event deadline passed |
 | Tray ring | A focus phase is active, including manual pause while the event window is still active, regardless of window state | Break phase, no active session, or event deadline passed |
-| Rail | Day view or week view, day has at least one pomodoro event | Month view, days with no pomodoro events |
+| Rail | Day view, work-cycle view, or week view, day has at least one pomodoro event | Month view, days with no pomodoro events |
 
 The tray ring and title bar ring are deliberately the same shape and the same metric (focus countdown). The user does not have to learn two visualizations; they learn one and read it from whichever surface is convenient.
 

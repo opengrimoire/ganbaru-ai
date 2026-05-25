@@ -45,10 +45,16 @@
     onDaySelect: (date: Date) => void;
   } = $props();
 
-  const viewOptions: { mode: CalendarViewMode; label: string; shortcuts: string[] }[] = [
-    { mode: "day", label: "1d", shortcuts: ["1"] },
-    { mode: "week", label: "7d", shortcuts: ["2"] },
-    { mode: "month", label: "31d", shortcuts: ["3"] },
+  const viewOptions: {
+    mode: CalendarViewMode;
+    label: string;
+    title: string;
+    shortcuts: string[];
+  }[] = [
+    { mode: "day", label: "1d", title: "Day view", shortcuts: ["1"] },
+    { mode: "workweek", label: "5d", title: "Work cycle view", shortcuts: ["2"] },
+    { mode: "week", label: "7d", title: "Week view", shortcuts: ["3"] },
+    { mode: "month", label: "31d", title: "Month view", shortcuts: ["4"] },
   ];
   const todayShortcuts = ["0"] as const;
 
@@ -80,9 +86,13 @@
           break;
         case "2":
           e.preventDefault();
-          onViewChange("week");
+          onViewChange("workweek");
           break;
         case "3":
+          e.preventDefault();
+          onViewChange("week");
+          break;
+        case "4":
           e.preventDefault();
           onViewChange("month");
           break;
@@ -96,7 +106,7 @@
   const isOnToday = $derived(isToday(anchorDate));
   const anchorDateStr = $derived(formatDatePart(anchorDate));
   const pickerHighlightMode = $derived(
-    viewMode === "day" ? "day" : viewMode === "week" ? "week" : "none",
+    viewMode === "day" ? "day" : viewMode === "week" ? "week" : viewMode === "workweek" ? "workweek" : "none",
   );
 
   function handleHeaderClick() {
@@ -222,7 +232,7 @@
         class="rounded-md px-2.5 py-1 text-xs font-medium {viewMode === opt.mode
           ? 'bg-card text-card-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-        title="{opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1)} view ({shortcutTitle(opt.shortcuts)})"
+        title="{opt.title} ({shortcutTitle(opt.shortcuts)})"
       >
         {opt.label}
       </button>

@@ -23,6 +23,17 @@ describe("adjacentCalendarWindowRequests", () => {
     ]);
   });
 
+  it("uses work-cycle strides for margin-expanded weekday and weekend windows", () => {
+    expect(ranges("2026-04-26", "2026-05-02")).toEqual([
+      "2026-05-01..2026-05-04",
+      "2026-04-24..2026-04-27",
+    ]);
+    expect(ranges("2026-05-01", "2026-05-04")).toEqual([
+      "2026-05-03..2026-05-09",
+      "2026-04-26..2026-05-02",
+    ]);
+  });
+
   it("uses neighboring month windows for margin-expanded month windows", () => {
     expect(ranges("2026-03-29", "2026-05-11")).toEqual([
       "2026-04-26..2026-06-08",

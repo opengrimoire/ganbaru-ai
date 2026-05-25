@@ -25,7 +25,7 @@ const CLICK_THRESHOLD = 5;
 const EDGE_ZONE = 8;
 export interface AllDayDragControllerConfig {
   events: () => CalendarEvent[];
-  weekDays: () => Date[];
+  days: () => Date[];
   getColumnBounds: () => DOMRect[];
   getPositionedEvents: () => PositionedAllDayEvent[];
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
@@ -51,8 +51,15 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
   }
 
   function dateStrForCol(col: number): string {
-    const days = config.weekDays();
+    const days = config.days();
     return formatDatePart(days[Math.max(0, Math.min(col, days.length - 1))]);
+  }
+
+  function shiftDateStr(dateStr: string, daysDelta: number): string {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() + daysDelta);
+    return formatDatePart(date);
   }
 
   // Existing event drag (move / resize)
@@ -66,15 +73,15 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
     const bounds = config.getColumnBounds();
     if (bounds.length === 0) return;
 
-    const days = config.weekDays();
+    const days = config.days();
     const dayStrs = days.map((d) => formatDatePart(d));
     const startDate = event.start.split(" ")[0];
     const endDate = event.end.split(" ")[0];
 
-    const weekStart = dayStrs[0];
-    const weekEnd = dayStrs[dayStrs.length - 1];
-    const clippedStart = startDate < weekStart ? weekStart : startDate;
-    const clippedEnd = endDate > weekEnd ? weekEnd : endDate;
+    const rangeStart = dayStrs[0];
+    const rangeEnd = dayStrs[dayStrs.length - 1];
+    const clippedStart = startDate < rangeStart ? rangeStart : startDate;
+    const clippedEnd = endDate > rangeEnd ? rangeEnd : endDate;
 
     const startCol = dayStrs.indexOf(clippedStart);
     const endCol = dayStrs.indexOf(clippedEnd);
@@ -91,9 +98,9 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
     let type: AllDayDragState["type"] = "move";
     if (chipEl) {
       const rect = chipEl.getBoundingClientRect();
-      if (e.clientX - rect.left <= EDGE_ZONE && startDate >= weekStart) {
+      if (e.clientX - rect.left <= EDGE_ZONE && startDate >= rangeStart) {
         type = "resize-start";
-      } else if (rect.right - e.clientX <= EDGE_ZONE && endDate <= weekEnd) {
+      } else if (rect.right - e.clientX <= EDGE_ZONE && endDate <= rangeEnd) {
         type = "resize-end";
       }
     }
@@ -142,7 +149,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
       const colDelta = currentCol - columnFromX(dragState.pointerStartX, dragState.columnBounds);
       newStartCol = dragState.originStartCol + colDelta;
       newSpanCols = dragState.originSpanCols;
-      // Clamp within week bounds
+      // Clamp within visible range bounds.
       if (newStartCol < 0) newStartCol = 0;
       if (newStartCol + newSpanCols > maxCol) newStartCol = maxCol - newSpanCols;
     } else if (dragState.type === "resize-start") {
@@ -199,8 +206,21 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
 
     // Always notify parent that drag ended (sets lastDragEndTime to prevent panel close).
     // The parent checks if position actually changed before doing DB update.
-    const newStartDate = dateStrForCol(preview.startCol);
-    const newEndDate = dateStrForCol(preview.startCol + preview.spanCols - 1);
+    const visibleStartDate = dateStrForCol(preview.startCol);
+    const visibleEndDate = dateStrForCol(preview.startCol + preview.spanCols - 1);
+    const eventStartDate = event.start.split(" ")[0];
+    const eventEndDate = event.end.split(" ")[0];
+    const colDelta = preview.startCol - state.originStartCol;
+    const newStartDate = state.type === "move"
+      ? shiftDateStr(eventStartDate, colDelta)
+      : state.type === "resize-start"
+        ? visibleStartDate
+        : eventStartDate;
+    const newEndDate = state.type === "move"
+      ? shiftDateStr(eventEndDate, colDelta)
+      : state.type === "resize-end"
+        ? visibleEndDate
+        : eventEndDate;
     await config.onEventUpdate({
       ...event,
       start: `${newStartDate} 00:00`,

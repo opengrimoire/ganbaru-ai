@@ -8,6 +8,7 @@
     SHORT_MONTHS,
     DAY_LETTERS,
   } from "./date-picker-utils";
+  import { workCycleRangeForDate } from "./utils";
 
   let {
     selectedDate,
@@ -22,7 +23,7 @@
     selectedDate: string;
     minDate?: string;
     small?: boolean;
-    highlightMode?: "day" | "week" | "none";
+    highlightMode?: "day" | "week" | "workweek" | "none";
     highlightToday?: boolean;
     activeHighlight?: "accent" | "primary";
     onselect: (dateStr: string, source?: "keyboard" | "pointer") => void;
@@ -81,11 +82,15 @@
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
 
-  const selectedWeekRange = $derived.by(() => {
-    if (highlightMode !== "week") return undefined;
+  const selectedRange = $derived.by(() => {
+    if (highlightMode !== "week" && highlightMode !== "workweek") return undefined;
     const parsed = parseDateParts(activeDateStr);
     if (!parsed) return undefined;
     const selected = new Date(parsed.year, parsed.month - 1, parsed.day);
+    if (highlightMode === "workweek") {
+      const range = workCycleRangeForDate(selected);
+      return { start: formatDateStr(range.start), end: formatDateStr(range.end) };
+    }
     const mondayOffset = selected.getDay() === 0 ? -6 : 1 - selected.getDay();
     const start = new Date(selected);
     start.setDate(selected.getDate() + mondayOffset);
@@ -337,10 +342,10 @@
     return highlightMode === "day" && day.dateStr === activeDateStr;
   }
 
-  function dayIsInWeek(day: DatePickerDay): boolean {
-    return !!selectedWeekRange
-      && day.dateStr >= selectedWeekRange.start
-      && day.dateStr <= selectedWeekRange.end;
+  function dayIsInSelectedRange(day: DatePickerDay): boolean {
+    return !!selectedRange
+      && day.dateStr >= selectedRange.start
+      && day.dateStr <= selectedRange.end;
   }
 
   function activeDayStyle(): string {
@@ -466,7 +471,7 @@
             ? "background-color: var(--primary); color: var(--primary-foreground); font-weight: 700;"
             : dayIsSelected(day)
               ? activeDayStyle()
-            : dayIsInWeek(day)
+            : dayIsInSelectedRange(day)
               ? "background-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--foreground);"
               : belowMin
                 ? "color: color-mix(in srgb, var(--foreground) 20%, var(--background));"

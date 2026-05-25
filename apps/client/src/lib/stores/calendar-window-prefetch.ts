@@ -16,6 +16,8 @@ export function adjacentCalendarWindowRequests(
   const spanDays = windowStart.until(windowEnd).days + 1;
   if (!Number.isFinite(spanDays)) return [];
   if (spanDays === 3) return shiftWindowByDays(windowStart, windowEnd, 1);
+  if (spanDays === 4) return adjacentWeekendWorkCycleWindows(windowStart, windowEnd);
+  if (spanDays === 7) return adjacentWeekdayWorkCycleWindows(windowStart, windowEnd);
   if (spanDays === 9) return shiftWindowByDays(windowStart, windowEnd, 7);
   if (spanDays === 44) return adjacentMonthWindows(windowStart);
   return [];
@@ -34,6 +36,38 @@ function shiftWindowByDays(
     {
       start: windowStart.subtract({ days }),
       end: windowEnd.subtract({ days }),
+    },
+  ];
+}
+
+function adjacentWeekdayWorkCycleWindows(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): CalendarWindowRange[] {
+  return [
+    {
+      start: windowEnd.subtract({ days: 1 }),
+      end: windowEnd.add({ days: 2 }),
+    },
+    {
+      start: windowStart.subtract({ days: 2 }),
+      end: windowStart.add({ days: 1 }),
+    },
+  ];
+}
+
+function adjacentWeekendWorkCycleWindows(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): CalendarWindowRange[] {
+  return [
+    {
+      start: windowEnd.subtract({ days: 1 }),
+      end: windowEnd.add({ days: 5 }),
+    },
+    {
+      start: windowStart.subtract({ days: 5 }),
+      end: windowStart.add({ days: 1 }),
     },
   ];
 }

@@ -15,9 +15,11 @@ This doc covers the user-facing calendar surface: views, the event model, intera
 
 ## View modes
 
-Three views, switched from the navigation bar.
+Four views, switched from the navigation bar.
 
 **Day view.** A single day column, full-height. Best for a deep look at one day's schedule, especially when running a pomodoro (the rail is most readable here). All-day events appear as chips at the top.
+
+**Work-cycle view.** An adaptive 5d/2d range. Weekday ranges show Monday through Friday. Navigating forward from a weekday range shows the weekend, Saturday and Sunday, then the next weekday range. Navigating backward follows the same cycle in reverse. It uses the same timeline, all-day band, drag behavior, and pomodoro rail as week view.
 
 **Week view.** Seven day columns side by side, labeled with weekday names and dates. Best for planning. The rail appears in each day column independently, scoped to that day's runs and events.
 
@@ -49,7 +51,7 @@ Event notifications are transient native desktop notifications, not sound-only a
 
 ## Interactions
 
-The day and week views support direct manipulation:
+The day, work-cycle, and week views support direct manipulation:
 
 - **Click and drag on empty space** creates a new event. The drag defines the time range. Releasing opens the edit panel anchored at the new block.
 - **Click on empty space** creates a one-hour event starting at the clicked time.
@@ -91,7 +93,7 @@ Past read-only event panels keep editing controls locked, but the Meeting sectio
 
 ## Smooth scrolling and zoom
 
-The day and week timed grid uses one shared wheel path for the timeline, the custom scrollbar, the all-day band, and modified wheel input on the separated day-name header. Wheel deltas are normalized by delta mode and multiplied so normal wheel ticks cover more distance, with a stronger multiplier for lighter deltas so gentle wheel movement starts more easily. The final movement uses a continuous-speed target animation: wheel input accumulates a target scroll position, and one animation loop moves toward it without easing, deceleration, or a momentum tail. Single-tick movement uses the base speed. Longer accumulated target distances can raise the active speed during the same scroll burst, but the speed is not reduced while finishing the burst, which avoids an end-settle feeling. The day-name and all-day header band sits outside the timeline scroll container so it stays visually stable while the timed grid scrolls beneath it.
+The timed grid in day, work-cycle, and week views uses one shared wheel path for the timeline, the custom scrollbar, the all-day band, and modified wheel input on the separated day-name header. Wheel deltas are normalized by delta mode and multiplied so normal wheel ticks cover more distance, with a stronger multiplier for lighter deltas so gentle wheel movement starts more easily. The final movement uses a continuous-speed target animation: wheel input accumulates a target scroll position, and one animation loop moves toward it without easing, deceleration, or a momentum tail. Single-tick movement uses the base speed. Longer accumulated target distances can raise the active speed during the same scroll burst, but the speed is not reduced while finishing the burst, which avoids an end-settle feeling. The day-name and all-day header band sits outside the timeline scroll container so it stays visually stable while the timed grid scrolls beneath it.
 
 Vertical zoom maps minutes to pixels. The discrete zoom levels are percentage steps `[50%, 75%, 100%, 125%, 150%, 200%, 300%, 400%]`, where 100% is 50 pixels per hour. The header `-` and `+` controls and the Shift + - and Shift + + shortcuts snap to the nearest level. Shift + 0 resets the calendar timeline zoom while preserving the visible time position where possible.
 
@@ -101,13 +103,13 @@ Calendar rendering is windowed. The frontend asks Rust for the visible date rang
 
 Rapid navigation is latest-wins. If the user holds an arrow key or a scripted driver sends many forward/back requests, stale intermediate windows must not each force a full row map, recurrence expansion, state apply, and paint. The app may finish a native query that has already started, but once a newer target exists it should skip stale mapping, stale expansion where possible, and stale state application.
 
-The store keeps only a small bounded cache of render windows. Day and week views prefetch adjacent windows after a successful foreground load so normal previous/next navigation can swap from cache without blanking. Mutations clear the cache so saved edits, imports, deletes, detach, and split operations cannot reuse stale render state.
+The store keeps only a small bounded cache of render windows. Day, work-cycle, and week views prefetch adjacent windows after a successful foreground load so normal previous/next navigation can swap from cache without blanking. Mutations clear the cache so saved edits, imports, deletes, detach, and split operations cannot reuse stale render state.
 
 Held keyboard navigation is gated. It fires one immediate navigation for a normal key press, then after the hold delay runs repeat ticks at a fixed cadence. Each tick navigates once only when no anchor commit is pending. Foreground window loads are latest-wins and must not delay the repeat cadence; a new held tick may supersede a stale load target. Busy main-thread frames naturally delay or skip timer callbacks, and missed repeats are not replayed later. Background prefetch must not block held-key motion. Keyup and blur cancel future held-repeat ticks immediately. The release-tail speed-log mark only measures the final settle after the app receives keyup, not the physical delay before the browser can process keyup if the main thread is already blocked.
 
 ## All-day events
 
-All-day events render in a band at the top of the day or week view. They span columns when the event covers multiple days. Within the band, events stack into rows so that overlapping all-day events all remain visible.
+All-day events render in a band at the top of the day, work-cycle, or week view. They span columns when the event covers multiple days. Within the band, events stack into rows so that overlapping all-day events all remain visible.
 
 Drag-to-create still works in the all-day band (drag across day columns to set the date range). Resizing changes the start or end date by a whole day at a time, since there is no time component.
 

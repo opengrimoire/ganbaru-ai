@@ -5,6 +5,8 @@ import {
   formatDatePart,
   startOfWeek,
   getWeekDays,
+  getWorkCycleDays,
+  adjacentWorkCycleAnchor,
   addDays,
   isSameDay,
   minuteOfDay,
@@ -121,6 +123,46 @@ describe("getWeekDays", () => {
     expect(days).toHaveLength(7);
     expect(days[0].getDay()).toBe(1); // Monday
     expect(days[6].getDay()).toBe(0); // Sunday
+  });
+});
+
+describe("getWorkCycleDays", () => {
+  it("returns Monday through Friday for weekday anchors", () => {
+    const days = getWorkCycleDays(new Date(2026, 3, 29));
+    expect(days.map(formatDatePart)).toEqual([
+      "2026-04-27",
+      "2026-04-28",
+      "2026-04-29",
+      "2026-04-30",
+      "2026-05-01",
+    ]);
+  });
+
+  it("returns Saturday and Sunday for weekend anchors", () => {
+    expect(getWorkCycleDays(new Date(2026, 4, 2)).map(formatDatePart)).toEqual([
+      "2026-05-02",
+      "2026-05-03",
+    ]);
+    expect(getWorkCycleDays(new Date(2026, 4, 3)).map(formatDatePart)).toEqual([
+      "2026-05-02",
+      "2026-05-03",
+    ]);
+  });
+});
+
+describe("adjacentWorkCycleAnchor", () => {
+  it("moves from weekdays to weekend and back", () => {
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 3, 29), "forward")))
+      .toBe("2026-05-02");
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 3, 29), "back")))
+      .toBe("2026-04-25");
+  });
+
+  it("moves from weekend to neighboring weekdays", () => {
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 4, 2), "forward")))
+      .toBe("2026-05-04");
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 4, 2), "back")))
+      .toBe("2026-04-27");
   });
 });
 
@@ -555,6 +597,28 @@ describe("layoutAllDayEventsForWeek", () => {
     expect(result).toHaveLength(1);
     expect(result[0].startCol).toBe(0); // Clipped to Mon
     expect(result[0].spanCols).toBe(3); // Mon-Tue-Wed
+  });
+
+  it("lays out all-day events across a five-day work range", () => {
+    const workDays = weekDays.slice(0, 5);
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-10 00:00", end: "2026-03-13 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, workDays);
+    expect(result).toHaveLength(1);
+    expect(result[0].startCol).toBe(1);
+    expect(result[0].spanCols).toBe(4);
+  });
+
+  it("lays out all-day events across a two-day weekend range", () => {
+    const weekendDays = weekDays.slice(5);
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-13 00:00", end: "2026-03-15 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, weekendDays);
+    expect(result).toHaveLength(1);
+    expect(result[0].startCol).toBe(0);
+    expect(result[0].spanCols).toBe(2);
   });
 
   it("excludes events entirely outside the week", () => {
@@ -1137,6 +1201,18 @@ describe("computeViewWindow", () => {
     // 2026-05-03 is a Sunday. startOfWeek -> 2026-04-27.
     const w = computeViewWindow(new Date(2026, 4, 3), "week");
     expect(w.start.toString()).toBe("2026-04-26");
+    expect(w.end.toString()).toBe("2026-05-04");
+  });
+
+  it("workweek mode: weekday anchors return Monday-Friday plus margin", () => {
+    const w = computeViewWindow(new Date(2026, 3, 29), "workweek");
+    expect(w.start.toString()).toBe("2026-04-26");
+    expect(w.end.toString()).toBe("2026-05-02");
+  });
+
+  it("workweek mode: weekend anchors return Saturday-Sunday plus margin", () => {
+    const w = computeViewWindow(new Date(2026, 4, 3), "workweek");
+    expect(w.start.toString()).toBe("2026-05-01");
     expect(w.end.toString()).toBe("2026-05-04");
   });
 
