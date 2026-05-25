@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Temporal } from "@js-temporal/polyfill";
-import { adjacentCalendarWindowRequests } from "./calendar-window-prefetch";
+import { adjacentCalendarWindowRequests, calendarWindowCovers } from "./calendar-window-prefetch";
 
 function date(value: string): Temporal.PlainDate {
   return Temporal.PlainDate.from(value);
@@ -12,6 +12,21 @@ function ranges(start: string, end: string): string[] {
 }
 
 describe("adjacentCalendarWindowRequests", () => {
+  it("detects whether one loaded window fully covers another", () => {
+    expect(calendarWindowCovers(
+      date("2026-04-26"),
+      date("2026-05-04"),
+      date("2026-04-29"),
+      date("2026-05-01"),
+    )).toBe(true);
+    expect(calendarWindowCovers(
+      date("2026-04-29"),
+      date("2026-05-01"),
+      date("2026-04-26"),
+      date("2026-05-04"),
+    )).toBe(false);
+  });
+
   it("uses visible strides for margin-expanded day and week windows", () => {
     expect(ranges("2026-04-29", "2026-05-01")).toEqual([
       "2026-04-30..2026-05-02",

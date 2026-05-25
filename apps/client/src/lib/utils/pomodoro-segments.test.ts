@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { computePlannedSegments, computeTrailingFocusMinutes, computeTrailingCycleNumber, computeDayTimelineBands, isLatestSegmentFetchResponse } from "./pomodoro-segments";
+import {
+  computeDayTimelineBands,
+  computePlannedSegments,
+  computeTrailingCycleNumber,
+  computeTrailingFocusMinutes,
+} from "./pomodoro-segments";
 import type { PersistedSegment, PomodoroConfig } from "$lib/components/calendar/types";
 import type { TimelineEvent, ActivePomodoroState } from "./pomodoro-segments";
 
@@ -10,14 +15,6 @@ const DEFAULT_CONFIG: PomodoroConfig = {
   pomodoroCount: 4,
   idleTimeoutMinutes: null,
 };
-
-describe("isLatestSegmentFetchResponse", () => {
-  it("rejects stale segment fetch responses", () => {
-    expect(isLatestSegmentFetchResponse("1|a,b", "1|a,b")).toBe(true);
-    expect(isLatestSegmentFetchResponse("1|a,b", "2|a,b")).toBe(false);
-    expect(isLatestSegmentFetchResponse("1|a,b", "1|a,c")).toBe(false);
-  });
-});
 
 describe("computePlannedSegments", () => {
   it("returns empty for zero or negative duration", () => {

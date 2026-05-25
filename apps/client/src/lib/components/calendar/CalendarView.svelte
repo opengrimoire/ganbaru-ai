@@ -2,7 +2,7 @@
   import type {
     CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventStatus, EventSurfaceStatus,
     EventTransparency, EventVisibility, GuestPermissions, AttendeeStatus,
-    PomodoroConfig, RecurrenceConfig, RecurringScope,
+    PersistedSegment, PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import {
     addDays, adjacentWorkCycleAnchor, computeViewWindow, formatCalendarDate, formatDatePart,
@@ -29,6 +29,8 @@
   import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
   import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import { getCalendarNavHandle } from "./nav-handle.svelte";
+  import { dbUrl } from "$lib/api/db";
+  import { invoke } from "@tauri-apps/api/core";
   import {
     HeldNavigationController,
     NAV_HOLD_DELAY_MS,
@@ -52,6 +54,13 @@
     type CalendarDeleteArchivePlan,
     type CalendarDeleteArchiveRestoreSnapshot,
   } from "./delete-archive-plan";
+  import {
+    mapPomodoroSegmentRows,
+    pomodoroSegmentSnapshotKey,
+    queryPomodoroSegmentEventIds,
+    visiblePomodoroEventIds,
+    type DbPomodoroSegmentRow,
+  } from "./pomodoro-rail-segments";
 
   const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
@@ -227,6 +236,8 @@
     return `${ny}-${nm}-${nd}`;
   }
 
+  type ViewState = { mode: CalendarViewMode; date: Date };
+
   let viewMode: CalendarViewMode = $state("week");
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
@@ -249,20 +260,13 @@
   let panelSurfaceStatus = $state<EventSurfaceStatus | undefined>(undefined);
   let panelSurfaceStatusEventId = $state<string | undefined>(undefined);
 
-  // Visible-viewport window. Drives both the store's expansion index and
-  // the edit-flow preview. Held-arrow nav stays cheap because anchor changes
-  // are coalesced to one viewport update per animation frame.
+  // Visible viewport window. Navigation commits this target only after the
+  // matching event and rail snapshots are ready.
   const viewWindow = $derived(computeViewWindow(anchorDate, viewMode));
   const multiDayRangeDays = $derived.by(() => {
     if (viewMode === "week") return getWeekDays(anchorDate);
     if (viewMode === "workweek") return getWorkCycleDays(anchorDate);
     return [];
-  });
-
-  $effect(() => {
-    if (!calendarStore.loaded) return;
-    void calendarStore.loadWindow(viewWindow.start, viewWindow.end)
-      .catch((e) => console.error("[CalendarView] load window failed:", e));
   });
 
   // Keep the headless handle's cached view mode in sync so external drivers
@@ -271,11 +275,15 @@
     getCalendarNavHandle().reportViewMode(viewMode);
   });
 
-  const displayResult = $derived.by(() => {
+  function visibleStoreEventsForWindow(window: typeof viewWindow): CalendarEvent[] {
     const visIds = calendarsStore.visibleIds;
-    const storeEvents = calendarStore
-      .eventsInWindow(viewWindow.start, viewWindow.end)
-      .filter((e) => visIds.has(e.calendarId));
+    return calendarStore
+      .eventsInWindow(window.start, window.end)
+      .filter((event) => visIds.has(event.calendarId));
+  }
+
+  const displayResult = $derived.by(() => {
+    const storeEvents = visibleStoreEventsForWindow(viewWindow);
     if (saveDisplayFreeze) return closedDisplay(saveDisplayFreeze);
     const s = session.state;
     if (s.mode === "closed") return closedDisplay(storeEvents);
@@ -302,10 +310,7 @@
   });
 
   function currentVisibleStoreEvents(): CalendarEvent[] {
-    const visIds = calendarsStore.visibleIds;
-    return calendarStore
-      .eventsInWindow(viewWindow.start, viewWindow.end)
-      .filter((event) => visIds.has(event.calendarId));
+    return visibleStoreEventsForWindow(viewWindow);
   }
 
   function activeBlockBelongsToTemplate(templateId: string, activeBlockId: string): boolean {
@@ -436,6 +441,94 @@
         ? { ...event, surfaceStatus: panelSurfaceStatus }
         : event,
     );
+  });
+  let persistedSegmentsByEvent = $state<ReadonlyMap<string, PersistedSegment[]>>(new Map());
+  let persistedSegmentsSnapshotKey = $state("");
+  let persistedSegmentsRequestSeq = 0;
+
+  function shouldLoadRailSegmentsFor(mode: CalendarViewMode): boolean {
+    return mode === "day" || mode === "workweek" || mode === "week";
+  }
+
+  async function loadPersistedSegmentsForEvents(
+    events: readonly CalendarEvent[],
+  ): Promise<{
+    key: string;
+    map: ReadonlyMap<string, PersistedSegment[]>;
+  }> {
+    const visibleIds = visiblePomodoroEventIds(events);
+    const key = pomodoroSegmentSnapshotKey(pomodoro.segmentVersion, visibleIds);
+    if (key === persistedSegmentsSnapshotKey) {
+      return { key, map: persistedSegmentsByEvent };
+    }
+    if (visibleIds.length === 0) {
+      return { key, map: new Map() };
+    }
+
+    const rows = await invoke<DbPomodoroSegmentRow[]>("pomodoro_load_segments_for_events", {
+      dbUrl: dbUrl(),
+      eventIds: queryPomodoroSegmentEventIds(visibleIds),
+    });
+    return {
+      key,
+      map: mapPomodoroSegmentRows(rows, visibleIds),
+    };
+  }
+
+  async function ensurePersistedSegmentsForTarget(
+    target: ViewState,
+  ): Promise<{
+    key: string;
+    map: ReadonlyMap<string, PersistedSegment[]>;
+  }> {
+    if (!shouldLoadRailSegmentsFor(target.mode)) {
+      return { key: "", map: new Map() };
+    }
+    const targetWindow = computeViewWindow(target.date, target.mode);
+    return loadPersistedSegmentsForEvents(visibleStoreEventsForWindow(targetWindow));
+  }
+
+  function applyPersistedSegmentsSnapshot(
+    snapshot: {
+      key: string;
+      map: ReadonlyMap<string, PersistedSegment[]>;
+    },
+  ): void {
+    if (snapshot.key === persistedSegmentsSnapshotKey && snapshot.map === persistedSegmentsByEvent) return;
+    persistedSegmentsSnapshotKey = snapshot.key;
+    persistedSegmentsByEvent = snapshot.map;
+  }
+
+  function refreshPersistedSegmentsForCurrentView(): void {
+    const seq = ++persistedSegmentsRequestSeq;
+    const target: ViewState = { mode: viewMode, date: new Date(anchorDate) };
+    void ensurePersistedSegmentsForTarget(target)
+      .then((snapshot) => {
+        if (seq !== persistedSegmentsRequestSeq) return;
+        applyPersistedSegmentsSnapshot(snapshot);
+      })
+      .catch((error) => {
+        if (seq !== persistedSegmentsRequestSeq) return;
+        console.warn("[CalendarView] Failed to load pomodoro rail segments:", error);
+        applyPersistedSegmentsSnapshot({ key: "", map: new Map() });
+      });
+  }
+
+  $effect(() => {
+    if (!calendarStore.loaded) return;
+    if (!calendarStore.hasWindow(viewWindow.start, viewWindow.end)) return;
+    void pomodoro.segmentVersion;
+    void visibleEvents;
+    refreshPersistedSegmentsForCurrentView();
+  });
+  let lastSameAnchorPrefetchKey = "";
+  $effect(() => {
+    if (!calendarStore.loaded) return;
+    if (!calendarStore.hasWindow(viewWindow.start, viewWindow.end)) return;
+    const key = `${viewMode}:${formatDatePart(anchorDate)}`;
+    if (key === lastSameAnchorPrefetchKey) return;
+    lastSameAnchorPrefetchKey = key;
+    calendarStore.prefetchWindows(sameAnchorPrefetchRequests({ mode: viewMode, date: anchorDate }));
   });
   let bootUsablePaintMarked = false;
 
@@ -698,7 +791,6 @@
 
   // View history for Alt+Left/Right navigation (capped at 50)
   const VIEW_HISTORY_LIMIT = 50;
-  type ViewState = { mode: CalendarViewMode; date: Date };
   let history: ViewState[] = $state([{ mode: "week", date: new Date() }]);
   let historyIndex = $state(0);
   let isNavigatingHistory = false;
@@ -718,8 +810,7 @@
     if (historyIndex <= 0) return;
     historyIndex--;
     isNavigatingHistory = true;
-    viewMode = history[historyIndex].mode;
-    anchorDate = history[historyIndex].date;
+    void requestCalendarTarget(history[historyIndex], { history: false, reason: "history" });
     isNavigatingHistory = false;
   }
 
@@ -727,8 +818,7 @@
     if (historyIndex >= history.length - 1) return;
     historyIndex++;
     isNavigatingHistory = true;
-    viewMode = history[historyIndex].mode;
-    anchorDate = history[historyIndex].date;
+    void requestCalendarTarget(history[historyIndex], { history: false, reason: "history" });
     isNavigatingHistory = false;
   }
 
@@ -942,12 +1032,21 @@
     mark: markHeldNav,
   });
 
+  let pendingTarget: ViewState | null = null;
+  let targetCommitPromise: Promise<void> | null = null;
+  let targetRequestSeq = 0;
+
+  function currentTargetState(): ViewState {
+    return pendingTarget ?? { mode: viewMode, date: anchorDate };
+  }
+
   function targetAnchorForNavigation(direction: "forward" | "back"): Date {
     const delta = direction === "forward" ? 1 : -1;
-    const base = currentAnchor();
-    if (viewMode === "week") return addDays(base, 7 * delta);
-    if (viewMode === "workweek") return adjacentWorkCycleAnchor(base, direction);
-    if (viewMode === "day") return addDays(base, delta);
+    const currentTarget = currentTargetState();
+    const base = currentTarget.date;
+    if (currentTarget.mode === "week") return addDays(base, 7 * delta);
+    if (currentTarget.mode === "workweek") return adjacentWorkCycleAnchor(base, direction);
+    if (currentTarget.mode === "day") return addDays(base, delta);
     const d = new Date(base);
     const targetMonth = d.getMonth() + delta;
     d.setDate(1);
@@ -957,14 +1056,14 @@
 
   function canRepeatHeldNavigation(direction: "forward" | "back"): boolean {
     if (
-      pendingAnchor !== null
-      || anchorRaf !== 0
+      pendingTarget !== null
       || calendarStore.foregroundWindowLoadBusy
-      || !calendarStore.isWindowCurrent(viewWindow.start, viewWindow.end)
+      || !calendarStore.hasWindow(viewWindow.start, viewWindow.end)
     ) {
       return false;
     }
-    const targetWindow = computeViewWindow(targetAnchorForNavigation(direction), viewMode);
+    const targetMode = currentTargetState().mode;
+    const targetWindow = computeViewWindow(targetAnchorForNavigation(direction), targetMode);
     return calendarStore.hasWindow(targetWindow.start, targetWindow.end);
   }
 
@@ -1001,11 +1100,7 @@
   }
 
   async function waitForNavigationSettled(): Promise<void> {
-    if (anchorRaf !== 0) {
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve());
-      });
-    }
+    if (targetCommitPromise) await targetCommitPromise;
     await tick();
     await calendarStore.whenForegroundWindowIdle();
     await tick();
@@ -1100,7 +1195,12 @@
     const unregisterNav = navHandle.register({
       navigate,
       setViewMode: (mode) => changeView(mode),
-      setAnchorDate: (date) => { anchorDate = date; },
+      setAnchorDate: (date) => {
+        void requestCalendarTarget({ mode: currentTargetState().mode, date }, {
+          history: false,
+          reason: "programmatic",
+        });
+      },
       openVisibleEvent: openVisibleEventForBenchmark,
       getVisibleEventCount: getVisibleEventCountForBenchmark,
       openCreatePanel: openCreatePanelForBenchmark,
@@ -1113,39 +1213,78 @@
       unregisterNav();
       stopArrowScroll();
       stopNavHold();
-      if (anchorRaf !== 0) {
-        cancelAnimationFrame(anchorRaf);
-        anchorRaf = 0;
-      }
-      pendingAnchor = null;
+      pendingTarget = null;
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("keyup", handleKeyup);
       window.removeEventListener("blur", handleBlur);
     };
   });
 
-  // Scripted and wheel navigation can arrive faster than paint. Coalesce
-  // anchor mutations to one commit per frame and always base the next step on
-  // the latest pending target. Held keyboard navigation is separately gated
-  // before it reaches this point.
-  let pendingAnchor: Date | null = null;
-  let anchorRaf = 0;
-  function currentAnchor(): Date {
-    return pendingAnchor ?? anchorDate;
+  function sameAnchorPrefetchRequests(target: ViewState): Array<{
+    start: typeof viewWindow.start;
+    end: typeof viewWindow.end;
+  }> {
+    const modes: CalendarViewMode[] = ["day", "workweek", "week", "month"];
+    const seen = new Set<string>();
+    const requests: Array<{ start: typeof viewWindow.start; end: typeof viewWindow.end }> = [];
+    for (const mode of modes) {
+      const requestWindow = computeViewWindow(target.date, mode);
+      const key = `${requestWindow.start.toString()}..${requestWindow.end.toString()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (calendarStore.hasWindow(requestWindow.start, requestWindow.end)) continue;
+      requests.push(requestWindow);
+    }
+    return requests;
   }
-  function commitAnchor(next: Date) {
-    pendingAnchor = next;
-    if (anchorRaf !== 0) return;
-    anchorRaf = requestAnimationFrame(() => {
-      anchorRaf = 0;
-      if (pendingAnchor) anchorDate = pendingAnchor;
-      pendingAnchor = null;
-      perfMark("nav.anchor-committed");
-      tick().then(() => {
-        perfMark("nav.display-ready", { count: visibleEvents.length });
-        requestAnimationFrame(() => perfMark("nav.paint-done"));
-      });
-    });
+
+  function requestCalendarTarget(
+    target: ViewState,
+    options: {
+      history: boolean;
+      reason: "history" | "nav" | "programmatic" | "view";
+    },
+  ): Promise<void> {
+    const requestId = ++targetRequestSeq;
+    const normalizedTarget: ViewState = { mode: target.mode, date: new Date(target.date) };
+    pendingTarget = normalizedTarget;
+    const targetWindow = computeViewWindow(normalizedTarget.date, normalizedTarget.mode);
+
+    const promise = (async () => {
+      try {
+        await calendarStore.ensureWindowReady(targetWindow.start, targetWindow.end);
+        if (requestId !== targetRequestSeq) return;
+        const segmentSnapshot = await ensurePersistedSegmentsForTarget(normalizedTarget);
+        if (requestId !== targetRequestSeq) return;
+
+        if (options.history) pushHistory(normalizedTarget.mode, normalizedTarget.date);
+        applyPersistedSegmentsSnapshot(segmentSnapshot);
+        viewMode = normalizedTarget.mode;
+        anchorDate = normalizedTarget.date;
+        void calendarStore.loadWindow(targetWindow.start, targetWindow.end)
+          .catch((error) => console.error("[CalendarView] target state apply failed:", error));
+        pendingTarget = null;
+        calendarStore.prefetchWindows(sameAnchorPrefetchRequests(normalizedTarget));
+        void tick().then(() => {
+          perfMark(
+            options.reason === "view" ? "view.mounted" : "nav.display-ready",
+            { count: visibleEvents.length },
+          );
+          requestAnimationFrame(() => {
+            perfMark(options.reason === "view" ? "view.paint-done" : "nav.paint-done");
+          });
+        });
+      } catch (error) {
+        if (requestId !== targetRequestSeq) return;
+        pendingTarget = null;
+        console.error("[CalendarView] target commit failed:", error);
+      } finally {
+        if (requestId === targetRequestSeq) targetCommitPromise = null;
+      }
+    })();
+
+    targetCommitPromise = promise;
+    return promise;
   }
 
   function navigate(
@@ -1154,11 +1293,17 @@
   ) {
     perfMark("nav.start", { dir: direction, source });
     if (direction === "today") {
-      commitAnchor(new Date());
+      void requestCalendarTarget(
+        { mode: currentTargetState().mode, date: new Date() },
+        { history: false, reason: "nav" },
+      );
       return;
     }
 
-    commitAnchor(targetAnchorForNavigation(direction));
+    void requestCalendarTarget(
+      { mode: currentTargetState().mode, date: targetAnchorForNavigation(direction) },
+      { history: false, reason: "nav" },
+    );
   }
 
   function handleWheelNavigate(direction: "back" | "forward") {
@@ -1167,12 +1312,10 @@
 
   function changeView(mode: CalendarViewMode) {
     perfMark("view.start", { from: viewMode, to: mode });
-    pushHistory(mode, anchorDate);
-    viewMode = mode;
-    tick().then(() => {
-      perfMark("view.mounted", { count: visibleEvents.length });
-      requestAnimationFrame(() => perfMark("view.paint-done"));
-    });
+    void requestCalendarTarget(
+      { mode, date: currentTargetState().date },
+      { history: true, reason: "view" },
+    );
   }
 
   async function handleEventCreate(start: string, end: string, allDay?: boolean, createAnchor?: PanelAnchor) {
@@ -1770,20 +1913,18 @@
   }
 
   function handleDayClickFromMonth(date: Date) {
-    pushHistory("day", date);
-    anchorDate = date;
-    viewMode = "day";
+    void requestCalendarTarget({ mode: "day", date }, { history: true, reason: "view" });
   }
 
   function handleWeekDayHeaderClick(date: Date) {
-    pushHistory("day", date);
-    anchorDate = date;
-    viewMode = "day";
+    void requestCalendarTarget({ mode: "day", date }, { history: true, reason: "view" });
   }
 
   function handleDayHeaderClick() {
-    pushHistory("workweek", anchorDate);
-    viewMode = "workweek";
+    void requestCalendarTarget(
+      { mode: "workweek", date: currentTargetState().date },
+      { history: true, reason: "view" },
+    );
   }
 </script>
 
@@ -1795,7 +1936,12 @@
     {viewMode}
     onNavigate={navigate}
     onViewChange={changeView}
-    onDaySelect={(date) => { anchorDate = date; }}
+    onDaySelect={(date) => {
+      void requestCalendarTarget({ mode: currentTargetState().mode, date }, {
+        history: false,
+        reason: "programmatic",
+      });
+    }}
   />
 
   <div bind:this={viewWrapperEl} class="min-w-0 flex-1 overflow-hidden" style="background-color: var(--cal-bg);">
@@ -1810,6 +1956,7 @@
         {tzAbbrMode}
         editingId={visualEditingId}
         {previewedIds}
+        {persistedSegmentsByEvent}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -1833,6 +1980,7 @@
         {tzAbbrMode}
         editingId={visualEditingId}
         {previewedIds}
+        {persistedSegmentsByEvent}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}

@@ -190,6 +190,19 @@ describe("BoundedWindowCache", () => {
     expect(cache.has("c")).toBe(true);
   });
 
+  it("finds the first matching entry without changing recency", () => {
+    const cache = new BoundedWindowCache<number>(2);
+    cache.set("a", 1);
+    cache.set("b", 2);
+
+    expect(cache.find((value) => value > 1)).toBe(2);
+    cache.set("c", 3);
+
+    expect(cache.has("a")).toBe(false);
+    expect(cache.has("b")).toBe(true);
+    expect(cache.has("c")).toBe(true);
+  });
+
   it("clears every cached window before a forced reload", () => {
     const cache = new BoundedWindowCache<number>(3);
     cache.set("current", 1);

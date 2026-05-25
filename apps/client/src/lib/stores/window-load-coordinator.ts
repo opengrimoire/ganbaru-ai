@@ -182,6 +182,13 @@ export class BoundedWindowCache<TValue> {
     return value;
   }
 
+  find(predicate: (value: TValue, key: string) => boolean): TValue | undefined {
+    for (const [key, value] of this.#entries) {
+      if (predicate(value, key)) return value;
+    }
+    return undefined;
+  }
+
   set(key: string, value: TValue): void {
     if (this.#entries.has(key)) this.#entries.delete(key);
     this.#entries.set(key, value);

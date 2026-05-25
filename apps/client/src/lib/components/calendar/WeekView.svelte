@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CalendarEvent, PositionedAllDayEvent } from "./types";
+  import type { CalendarEvent, PersistedSegment, PositionedAllDayEvent } from "./types";
   import type { DayNameFormat, TimezoneAbbrMode } from "./utils";
   import {
     formatDayName,
@@ -45,6 +45,7 @@
     onEventCreate,
     editingId,
     previewedIds,
+    persistedSegmentsByEvent = new Map<string, PersistedSegment[]>(),
     initialScrollMinute = -1,
     onScrollChange,
     onAddTimezone,
@@ -67,6 +68,7 @@
     onEventCreate: (start: string, end: string, allDay?: boolean, anchor?: PanelAnchor) => void;
     editingId?: string;
     previewedIds?: Set<string>;
+    persistedSegmentsByEvent?: ReadonlyMap<string, PersistedSegment[]>;
     initialScrollMinute?: number;
     onScrollChange?: (minute: number) => void;
     onAddTimezone?: (tz: string) => void;
@@ -728,6 +730,7 @@
               {currentTimeMinute}
               {editingId}
               {previewedIds}
+              {persistedSegmentsByEvent}
               draggingEventId={drag.dragPreview ? drag.dragState?.eventId : undefined}
               grabbingId={drag.grabbingId ?? undefined}
               didDrag={drag.didDrag}

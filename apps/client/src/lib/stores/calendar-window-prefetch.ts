@@ -5,6 +5,16 @@ export interface CalendarWindowRange {
   end: Temporal.PlainDate;
 }
 
+export function calendarWindowCovers(
+  outerStart: Temporal.PlainDate,
+  outerEnd: Temporal.PlainDate,
+  innerStart: Temporal.PlainDate,
+  innerEnd: Temporal.PlainDate,
+): boolean {
+  return Temporal.PlainDate.compare(outerStart, innerStart) <= 0
+    && Temporal.PlainDate.compare(outerEnd, innerEnd) >= 0;
+}
+
 /**
  * Calendar render windows include a one-day margin on both sides. Adjacent
  * prefetch must move by the visible view stride, not by the loaded span.

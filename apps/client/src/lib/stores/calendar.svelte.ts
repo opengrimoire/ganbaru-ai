@@ -46,7 +46,7 @@ import {
 } from "./calendar-mutations";
 import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
 import { calendarDisplayName } from "$lib/calendar/calendar-display";
-import { adjacentCalendarWindowRequests } from "./calendar-window-prefetch";
+import { adjacentCalendarWindowRequests, calendarWindowCovers } from "./calendar-window-prefetch";
 import {
   BoundedWindowCache,
   LatestWindowLoadCoordinator,
@@ -511,14 +511,15 @@ let windowEvents = $state<CalendarEvent[]>([]);
 let loaded = $state(false);
 let totalEventCount = $state(0);
 let currentWindowKey: string | null = null;
+let currentWindowRenderZone: string | null = null;
 let currentWindowStart: Temporal.PlainDate | null = null;
 let currentWindowEnd: Temporal.PlainDate | null = null;
 let batchDepth = 0;
 const PANEL_EVENT_CACHE_LIMIT = 64;
 const panelEventCache = new Map<string, Promise<CalendarEvent | undefined>>();
-const WINDOW_CACHE_LIMIT = 5;
+const WINDOW_CACHE_LIMIT = 12;
 
-type CalendarWindowLoadMode = "apply" | "prefetch";
+type CalendarWindowLoadMode = "apply" | "ensure" | "prefetch";
 
 interface CalendarWindowSnapshot {
   key: string;
@@ -527,6 +528,7 @@ interface CalendarWindowSnapshot {
   windowEnd: Temporal.PlainDate;
   rawBlocks: CalendarEvent[];
   windowEvents: CalendarEvent[];
+  expansionIndex: ExpansionIndex;
   totalEventCount: number;
 }
 
@@ -755,6 +757,29 @@ function calendarWindowKey(
   return `${renderZone}:${windowStart.toString()}:${windowEnd.toString()}`;
 }
 
+function currentWindowCovers(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  renderZone: string,
+): boolean {
+  return loaded
+    && currentWindowStart !== null
+    && currentWindowEnd !== null
+    && currentWindowRenderZone === renderZone
+    && calendarWindowCovers(currentWindowStart, currentWindowEnd, windowStart, windowEnd);
+}
+
+function findCachedWindowCovering(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  renderZone: string,
+): CalendarWindowSnapshot | undefined {
+  return windowCache.find((snapshot) =>
+    snapshot.renderZone === renderZone
+    && calendarWindowCovers(snapshot.windowStart, snapshot.windowEnd, windowStart, windowEnd)
+  );
+}
+
 function windowQueueKey(mode: CalendarWindowLoadMode, key: string): string {
   return `${mode}:${key}`;
 }
@@ -783,12 +808,15 @@ function markWindowLoadEvent(event: WindowLoadEvent<CalendarWindowLoadRequest>):
 function applyWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
   rawBlocks = snapshot.rawBlocks;
   windowEvents = snapshot.windowEvents;
+  expansionIndex = snapshot.expansionIndex;
   totalEventCount = snapshot.totalEventCount;
   currentWindowKey = snapshot.key;
+  currentWindowRenderZone = snapshot.renderZone;
   currentWindowStart = snapshot.windowStart;
   currentWindowEnd = snapshot.windowEnd;
   loaded = true;
-  invalidate(false, false);
+  panelEventCache.clear();
+  indexVersion++;
   perfMark("window.applied", {
     rows: snapshot.rawBlocks.length,
     expanded: snapshot.windowEvents.length,
@@ -870,11 +898,19 @@ async function runWindowLoadRequest(
     windowStart,
     windowEnd,
     markBoot,
+    force,
     mode,
   } = request;
   const url = await ensureDbUrl();
   const windowStartDate = windowStart.toString();
   const windowEndDate = windowEnd.toString();
+  if (!force && !markBoot && mode !== "apply") {
+    const cached = findCachedWindowCovering(windowStart, windowEnd, renderZone);
+    if (cached || currentWindowCovers(windowStart, windowEnd, renderZone)) {
+      perfMark("window.load-covered", { mode });
+      return "applied";
+    }
+  }
   const windowEndExclusiveDate = windowEnd.add({ days: 1 }).toString();
   const rows = await invoke<CalendarWindowRows>("calendar_load_window", {
     dbUrl: url,
@@ -927,6 +963,7 @@ async function runWindowLoadRequest(
     windowEnd,
     rawBlocks: mapped,
     windowEvents: expanded,
+    expansionIndex: buildExpansionIndex(mapped),
     totalEventCount: rows.total_event_count,
   };
   rememberWindowSnapshot(snapshot);
@@ -957,8 +994,9 @@ async function loadWindowIntoState(
   const renderZone = localTimezone();
   const key = calendarWindowKey(windowStart, windowEnd, renderZone);
   if (!force && !markBoot && loaded && currentWindowKey === key) return;
+  if (!force && !markBoot && currentWindowCovers(windowStart, windowEnd, renderZone)) return;
   if (!force && !markBoot) {
-    const cached = windowCache.get(key);
+    const cached = windowCache.get(key) ?? findCachedWindowCovering(windowStart, windowEnd, renderZone);
     if (cached) {
       const foregroundId = ++foregroundWindowRequestId;
       foregroundWindowBusy = false;
@@ -1002,7 +1040,8 @@ async function prefetchWindow(
   if (generation !== prefetchGeneration || !loaded) return;
   const renderZone = localTimezone();
   const key = calendarWindowKey(windowStart, windowEnd, renderZone);
-  if (currentWindowKey === key || windowCache.has(key)) return;
+  if (currentWindowCovers(windowStart, windowEnd, renderZone)
+    || findCachedWindowCovering(windowStart, windowEnd, renderZone)) return;
 
   await windowLoadCoordinator.enqueue(windowQueueKey("prefetch", key), {
     key,
@@ -1015,10 +1054,51 @@ async function prefetchWindow(
   });
 }
 
+async function ensureWindowSnapshotReady(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): Promise<void> {
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  if (currentWindowCovers(windowStart, windowEnd, renderZone)
+    || findCachedWindowCovering(windowStart, windowEnd, renderZone)) return;
+
+  prefetchGeneration++;
+  const foregroundId = beginForegroundWindowLoad();
+  try {
+    await windowLoadCoordinator.enqueue(windowQueueKey("ensure", key), {
+      key,
+      renderZone,
+      windowStart,
+      windowEnd,
+      markBoot: false,
+      force: false,
+      mode: "ensure",
+    });
+  } finally {
+    finishForegroundWindowLoad(foregroundId);
+  }
+}
+
 function scheduleAdjacentPrefetch(snapshot: CalendarWindowSnapshot): void {
   const requests = adjacentWindowRequests(snapshot);
   if (requests.length === 0) return;
   const generation = ++prefetchGeneration;
+
+  void (async () => {
+    for (const request of requests) {
+      if (generation !== prefetchGeneration) return;
+      await prefetchWindow(request.start, request.end, generation);
+    }
+  })();
+}
+
+function scheduleWindowPrefetches(requests: Array<{
+  start: Temporal.PlainDate;
+  end: Temporal.PlainDate;
+}>): void {
+  if (requests.length === 0) return;
+  const generation = prefetchGeneration;
 
   void (async () => {
     for (const request of requests) {
@@ -1183,13 +1263,21 @@ export function getCalendar() {
       windowEnd: Temporal.PlainDate,
     ): CalendarEvent[] {
       void indexVersion;
-      const key = calendarWindowKey(windowStart, windowEnd, localTimezone());
+      const renderZone = localTimezone();
+      const key = calendarWindowKey(windowStart, windowEnd, renderZone);
       if (currentWindowKey === key) {
         return windowEvents;
       }
+      if (currentWindowCovers(windowStart, windowEnd, renderZone)) {
+        return eventsInWindowFromIndex(getIndex(), windowStart, windowEnd);
+      }
       const cached = windowCache.peek(key);
       if (cached) return cached.windowEvents;
-      return eventsInWindowFromIndex(getIndex(), windowStart, windowEnd);
+      const covering = findCachedWindowCovering(windowStart, windowEnd, renderZone);
+      if (covering) {
+        return eventsInWindowFromIndex(covering.expansionIndex, windowStart, windowEnd);
+      }
+      return [];
     },
 
     /**
@@ -1232,8 +1320,23 @@ export function getCalendar() {
       windowStart: Temporal.PlainDate,
       windowEnd: Temporal.PlainDate,
     ): boolean {
-      const key = calendarWindowKey(windowStart, windowEnd, localTimezone());
-      return currentWindowKey === key || windowCache.has(key);
+      const renderZone = localTimezone();
+      return currentWindowCovers(windowStart, windowEnd, renderZone)
+        || findCachedWindowCovering(windowStart, windowEnd, renderZone) !== undefined;
+    },
+
+    async ensureWindowReady(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<void> {
+      await ensureWindowSnapshotReady(windowStart, windowEnd);
+    },
+
+    prefetchWindows(requests: Array<{
+      start: Temporal.PlainDate;
+      end: Temporal.PlainDate;
+    }>): void {
+      scheduleWindowPrefetches(requests);
     },
 
     async whenWindowIdle(): Promise<void> {

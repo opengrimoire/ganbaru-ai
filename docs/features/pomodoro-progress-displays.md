@@ -59,6 +59,8 @@ The rail is the densest of the three displays. It conveys:
 
 It is described in detail in this section because, unlike the rings, the rail's rules interact with overlap, containment, and inheritance rules from elsewhere.
 
+When switching between day, work-cycle, and week views, the calendar loads the visible view's persisted pomodoro segment snapshot before committing the new view. Day columns receive that snapshot as render input instead of starting their own per-column queries, so focus fills and break marks appear together with the events rather than flashing from a planned state to a persisted state after mount.
+
 ### Visual structure
 
 When the day has multiple pomodoro events, their time ranges merge into contiguous rail containers (the union of overlapping ranges). Within a container, the rail renders bands at each minute according to the rules below. Between containers (no pomodoro events), the rail is absent.

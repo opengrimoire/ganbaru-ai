@@ -65,8 +65,8 @@
   }
 
   // Keyboard shortcuts for view switching and "today". Arrow-key navigation is
-  // owned by CalendarView so the throttle, stale-event drop, and rAF anchor
-  // coalescer apply uniformly. Adding a second listener here would let
+  // owned by CalendarView so target readiness gating and stale-event drops
+  // apply uniformly. Adding a second listener here would let
   // auto-repeat keydowns bypass the gate and drain the queue for seconds
   // after the user releases the key.
   onMount(() => {

@@ -10,12 +10,9 @@
     getEventColor,
     formatTimeRange,
   } from "./utils";
-  import { computeDayTimelineBands, isLatestSegmentFetchResponse } from "$lib/utils/pomodoro-segments";
+  import { computeDayTimelineBands } from "$lib/utils/pomodoro-segments";
   import { isPendingCreateEventId, PENDING_CREATE_ID } from "./display-events";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
-  import { dbUrl } from "$lib/api/db";
-  import { mark as perfMark } from "$lib/stores/perflog.svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import EventBlock from "./EventBlock.svelte";
   import { getEventIndicatorState } from "./event-indicators";
   import { CALENDAR_ZOOM_FRAME_EVENT, getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
@@ -50,6 +47,7 @@
     draggingEventId,
     grabbingId,
     didDrag = false,
+    persistedSegmentsByEvent = new Map<string, PersistedSegment[]>(),
     visibleStartMinute = 0,
     visibleEndMinute = 1440,
   }: {
@@ -66,6 +64,7 @@
     draggingEventId?: string;
     grabbingId?: string;
     didDrag?: boolean;
+    persistedSegmentsByEvent?: ReadonlyMap<string, PersistedSegment[]>;
     visibleStartMinute?: number;
     visibleEndMinute?: number;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
@@ -204,101 +203,6 @@
   });
 
 
-  // Load persisted segments from DB for all pomodoro events on this day
-  interface DbSegmentRow {
-    id: string;
-    event_id: string;
-    event_date: string;
-    run_id: string;
-    cycle_number: number;
-    phase: string;
-    planned_start: string;
-    planned_end: string;
-    actual_start: string | null;
-    actual_end: string | null;
-    pauses: PersistedSegment["pauseLog"];
-    status: string;
-  }
-
-  let persistedSegmentsMap = $state(new Map<string, PersistedSegment[]>());
-  // Snapshot key of the last fetch we kicked off. Plain `let`, not `$state`,
-  // so reading or writing it does not participate in reactivity. The effect
-  // still subscribes to its real deps (segmentVersion, positioned,
-  // activeBlockId, draggingEventId), but parents that recreate `events`
-  // every frame during a drag (CalendarView's displayResult re-runs on every
-  // createPreview update) no longer cause hundreds of redundant SQL queries
-  // per gesture. Both the segment version and the eventId set are checked,
-  // so a real DB write or a real event-set change still triggers a refetch.
-  let lastFetchKey = "";
-
-  $effect(() => {
-    const segVer = pomodoro.segmentVersion;
-    const positionedEventIds = positioned
-      .filter((p) => p.event.pomodoroConfig && p.event.id !== draggingEventId)
-      .map((p) => p.event.id);
-    const previewEventIds = dragPreview?.event.pomodoroConfig
-      ? [dragPreview.event.id]
-      : [];
-    const eventIds = Array.from(new Set([...positionedEventIds, ...previewEventIds])).sort();
-    const queryEventIds = Array.from(new Set(
-      eventIds.flatMap((id) => id.includes("::") ? [id, id.split("::")[0]] : [id]),
-    )).sort();
-    // Skip mark emission for the no-pomodoro path so a 1Hz effect on a column
-    // with no pomodoro events does not flood the diagnostics ring buffer.
-    if (eventIds.length === 0) {
-      const emptyKey = `${segVer}|`;
-      if (lastFetchKey === emptyKey) return;
-      lastFetchKey = emptyKey;
-      if (persistedSegmentsMap.size > 0) persistedSegmentsMap = new Map();
-      return;
-    }
-    const fetchKey = `${segVer}|${eventIds.join(",")}`;
-    if (fetchKey === lastFetchKey) return;
-    lastFetchKey = fetchKey;
-    const requestFetchKey = fetchKey;
-    const tStart = performance.now();
-    perfMark("col.effect-start", { date: dateStr, eventCount: eventIds.length });
-    const visibleIds = new Set(eventIds);
-    invoke<DbSegmentRow[]>("pomodoro_load_segments_for_events", {
-      dbUrl: dbUrl(),
-      eventIds: queryEventIds,
-    }).then((rows) => {
-      if (!isLatestSegmentFetchResponse(requestFetchKey, lastFetchKey)) return;
-      const map = new Map<string, PersistedSegment[]>();
-      for (const r of rows) {
-        const virtualId = `${r.event_id}::${r.event_date}`;
-        const mapKey = visibleIds.has(r.event_id)
-          ? r.event_id
-          : visibleIds.has(virtualId)
-            ? virtualId
-            : r.event_id;
-        const seg: PersistedSegment = {
-          id: r.id,
-          eventId: mapKey,
-          eventDate: r.event_date,
-          runId: r.run_id,
-          cycleNumber: r.cycle_number,
-          phase: r.phase as PersistedSegment["phase"],
-          plannedStart: r.planned_start,
-          plannedEnd: r.planned_end,
-          actualStart: r.actual_start,
-          actualEnd: r.actual_end,
-          pauseLog: r.pauses,
-          status: r.status as PersistedSegment["status"],
-        };
-        const arr = map.get(mapKey) ?? [];
-        arr.push(seg);
-        map.set(mapKey, arr);
-      }
-      persistedSegmentsMap = map;
-      perfMark("col.effect-done", {
-        date: dateStr,
-        ms: Math.round((performance.now() - tStart) * 10) / 10,
-        rows: rows.length,
-      });
-    }).catch((e) => console.warn("[DayColumn] Failed to load segments:", e));
-  });
-
   const timelineBands = $derived.by(() => {
     void pomodoro.breakOvertimeSeconds;
     void currentTimeMinute; // re-run every second (even during pause)
@@ -358,7 +262,7 @@
         idleTimeoutMinutes: null,
       },
       breakOvertimeSeconds: pomodoro.breakOvertimeSeconds,
-    }, dayStartMs, nowMs, persistedSegmentsMap);
+    }, dayStartMs, nowMs, persistedSegmentsByEvent);
   });
 
   function timelineBandKey(band: TimelineBand, index: number): string {
