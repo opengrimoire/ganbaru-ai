@@ -133,6 +133,7 @@
 
   const ALL_DAY_ROW_H = 21;
   const ALL_DAY_GAP = 1;
+  const ALL_DAY_PAD = 2;
   const ALL_DAY_MAX_VISIBLE = 2;
 
   const today = $derived(formatDatePart(anchorDate) === todayStr);
@@ -346,6 +347,16 @@
     isActiveEvent: isActiveCalendarEvent,
     isEventLocked: isLockedCalendarEvent,
   });
+
+  function allDayCreateAnchorFromHeader(target: HTMLElement): PanelAnchor {
+    const rect = target.getBoundingClientRect();
+    return {
+      x: rect.right,
+      y: rect.bottom + ALL_DAY_PAD,
+      width: rect.width,
+      height: ALL_DAY_ROW_H,
+    };
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -400,7 +411,12 @@
           style="height: 6px;"
           onclick={(e) => {
             e.stopPropagation();
-            onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+            onEventCreate(
+              `${dateStr} 00:00`,
+              `${dateStr} 00:00`,
+              true,
+              allDayCreateAnchorFromHeader(e.currentTarget as HTMLElement),
+            );
           }}
         ></div>
       </div>
@@ -422,7 +438,7 @@
       <div
         data-calendar-edit-close-zone
         class="flex min-w-0 flex-col px-1"
-        style="padding-top: 2px; padding-bottom: 2px; gap: {ALL_DAY_GAP}px;"
+        style="padding-top: {ALL_DAY_PAD}px; padding-bottom: {ALL_DAY_PAD}px; gap: {ALL_DAY_GAP}px;"
       >
         {#each allDayEvents.slice(0, allDayVisibleCount) as evt (evt.id)}
           <AllDayEventChip

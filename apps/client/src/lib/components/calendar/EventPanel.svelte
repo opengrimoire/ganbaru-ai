@@ -710,6 +710,7 @@
   let eventPanelScrollEl: HTMLDivElement | undefined = $state();
   let eventPanelContentEl: HTMLDivElement | undefined = $state();
   let panelHeight = $state(0);
+  let panelPositionReady = $state(false);
   let pinnedBottom = $state(0);
   let pinnedDragY = 0;
   let dragOffset = $state({ x: 0, y: 0 });
@@ -816,6 +817,8 @@
     saving = false;
     deleteArmed = false;
     initialized = false;
+    panelHeight = 0;
+    panelPositionReady = parked;
 
     if (mode === "edit" && event) {
       title = event.title;
@@ -947,6 +950,15 @@
         }
       });
     }
+
+    if (!parked) {
+      const measureKey = key;
+      tick().then(() => {
+        if (lastInitKey === measureKey && !parked) {
+          measurePanelNaturalHeight();
+        }
+      });
+    }
   });
 
   // Heavy-field init: runs once per fullEvent arrival. The setInitialChanges
@@ -1040,8 +1052,9 @@
   });
 
 
-  // Pin base position when anchor changes; read panelHeight without tracking
-  // so height changes from expanding sections don't reposition the panel.
+  // Pin base position when anchor changes. A newly opened panel waits for
+  // its first real height measurement before becoming visible, then later
+  // height changes from expanding sections do not reposition the panel.
   // Skip repositioning if the user has manually dragged the panel.
   $effect(() => {
     const _a = anchor;
@@ -1049,14 +1062,20 @@
     const width = panelWidth;
     const vw = viewport.width;
     const vh = viewport.height;
+    const panel = panelEl;
+    const ph = panelPositionReady ? untrack(() => panelHeight) : panelHeight;
+    if (!panel || ph <= 0) {
+      if (!parked) panelPositionReady = false;
+      return;
+    }
     if (!panelCanDrag) {
       dragOffset = { x: 0, y: 0 };
       pinnedBottom = 0;
       userDragged = false;
+      panelPositionReady = true;
       return;
     }
     if (userDragged) return;
-    const ph = untrack(() => panelHeight) || DEFAULT_PANEL_HEIGHT;
     const availableHeight = Math.max(
       96,
       getEventPanelUsableHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP),
@@ -1080,6 +1099,7 @@
     baseLeft = clampFloatingLeft(left, vw, width);
     baseTop = clampFloatingTop(top, vh, visibleHeight);
     dragOffset = { x: 0, y: 0 };
+    panelPositionReady = true;
   });
 
   // ─── Dirty tracking ────────────────────────────────────────────
@@ -1694,7 +1714,7 @@
   data-readonly={controlsDisabled || undefined}
   data-parked={parked || undefined}
   aria-hidden={parked || undefined}
-  style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {parked ? parkedPanelStyle : panelStyle} background-color: var(--panel-bg); visibility: {initialized && !parked ? 'visible' : 'hidden'};"
+  style="box-shadow: 0 0 2px 0px var(--panel-edge), 0 1px 2px var(--panel-shadow); {parked ? parkedPanelStyle : panelStyle} background-color: var(--panel-bg); visibility: {initialized && panelPositionReady && !parked ? 'visible' : 'hidden'};"
   onclick={handlePanelClick}
   onkeydown={handlePanelArrowKeydown}
 >

@@ -434,6 +434,26 @@
     return counts;
   });
 
+  function allDayCreateAnchorFromHeader(target: HTMLElement): PanelAnchor {
+    const rect = target.getBoundingClientRect();
+    return {
+      x: rect.right,
+      y: rect.bottom + ALL_DAY_PAD,
+      width: rect.width,
+      height: ALL_DAY_ROW_H,
+    };
+  }
+
+  function allDayCreateAnchorFromGrid(target: HTMLElement): PanelAnchor {
+    const rect = target.getBoundingClientRect();
+    return {
+      x: rect.right,
+      y: rect.top + ALL_DAY_PAD,
+      width: rect.width,
+      height: ALL_DAY_ROW_H,
+    };
+  }
+
   </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -496,7 +516,12 @@
               onclick={(e) => {
                 e.stopPropagation();
                 const dateStr = formatDatePart(day);
-                onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+                onEventCreate(
+                  `${dateStr} 00:00`,
+                  `${dateStr} 00:00`,
+                  true,
+                  allDayCreateAnchorFromHeader(e.currentTarget as HTMLElement),
+                );
               }}
             ></div>
           </div>
@@ -541,7 +566,12 @@
             onclick={(e) => {
               e.stopPropagation();
               const dateStr = formatDatePart(day);
-              onEventCreate(`${dateStr} 00:00`, `${dateStr} 00:00`, true);
+              onEventCreate(
+                `${dateStr} 00:00`,
+                `${dateStr} 00:00`,
+                true,
+                allDayCreateAnchorFromGrid(e.currentTarget as HTMLElement),
+              );
             }}
           ></div>
         {/each}
