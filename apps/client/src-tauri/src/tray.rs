@@ -9,13 +9,15 @@ use tauri::{
 
 const ICON_SIZE: u32 = 32;
 const RING_WIDTH: f64 = 3.5;
+const RING_REMAINING_COLOR: (u8, u8, u8) = (240, 240, 240);
+const RING_EMPTY_COLOR: (u8, u8, u8) = (90, 90, 90);
 const PAUSED_PULSE_FRAME_COUNT: u8 = 22;
 const PAUSED_PULSE_AMOUNTS: [f64; 22] = [
     0.0, 0.0, 0.0, 0.0, 0.0, 0.067, 0.25, 0.5, 0.75, 0.933, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.933,
     0.75, 0.5, 0.25, 0.067, 0.0,
 ];
 #[cfg(target_os = "linux")]
-const LINUX_TRAY_ICON_VERSION: u8 = 5;
+const LINUX_TRAY_ICON_VERSION: u8 = 6;
 
 #[derive(Debug, Clone)]
 struct PomodoroTrayState {
@@ -119,10 +121,8 @@ static POMODORO_STATUS_ITEM: Mutex<Option<MenuItem<tauri::Wry>>> = Mutex::new(No
 static MUSIC_STATUS_ITEM: Mutex<Option<MenuItem<tauri::Wry>>> = Mutex::new(None);
 
 fn ring_progress_color(paused_pulse_frame: Option<u8>) -> (u8, u8, u8) {
-    let white: (u8, u8, u8) = (240, 240, 240);
-    let empty_gray: (u8, u8, u8) = (110, 110, 110);
     let Some(frame) = paused_pulse_frame else {
-        return white;
+        return RING_REMAINING_COLOR;
     };
     let amount = PAUSED_PULSE_AMOUNTS[(frame % PAUSED_PULSE_FRAME_COUNT) as usize];
     let mix = |from: u8, to: u8| -> u8 {
@@ -131,9 +131,9 @@ fn ring_progress_color(paused_pulse_frame: Option<u8>) -> (u8, u8, u8) {
             .clamp(0.0, 255.0) as u8
     };
     (
-        mix(white.0, empty_gray.0),
-        mix(white.1, empty_gray.1),
-        mix(white.2, empty_gray.2),
+        mix(RING_REMAINING_COLOR.0, RING_EMPTY_COLOR.0),
+        mix(RING_REMAINING_COLOR.1, RING_EMPTY_COLOR.1),
+        mix(RING_REMAINING_COLOR.2, RING_EMPTY_COLOR.2),
     )
 }
 
@@ -157,7 +157,6 @@ fn render_progress_icon_with_pause(
     let outer_r = center - 0.5;
     let inner_r = outer_r - RING_WIDTH;
 
-    let gray: (u8, u8, u8) = (110, 110, 110);
     let progress_color = ring_progress_color(paused_pulse_frame);
     let progress = normalize_progress(progress);
 
@@ -178,12 +177,12 @@ fn render_progress_icon_with_pause(
                     let normalized = (normalized + 0.5) % 1.0;
 
                     if normalized <= progress {
-                        gray
+                        RING_EMPTY_COLOR
                     } else {
                         progress_color
                     }
                 } else {
-                    gray
+                    RING_EMPTY_COLOR
                 };
 
                 let idx = (y * size + x) * 4;
@@ -635,7 +634,15 @@ mod tests {
     fn active_zero_progress_renders_remaining_ring() {
         let pixels = render_progress_icon(0.0, true);
 
-        assert!(has_ring_pixel_with_color(&pixels, (240, 240, 240)));
+        assert!(has_ring_pixel_with_color(&pixels, RING_REMAINING_COLOR));
+    }
+
+    #[test]
+    fn inactive_zero_progress_renders_empty_ring() {
+        let pixels = render_progress_icon(0.0, false);
+
+        assert!(has_ring_pixel_with_color(&pixels, RING_EMPTY_COLOR));
+        assert!(!has_ring_pixel_with_color(&pixels, RING_REMAINING_COLOR));
     }
 
     #[test]
@@ -650,8 +657,8 @@ mod tests {
     fn active_positive_progress_renders_progress_arc() {
         let pixels = render_progress_icon(0.5, true);
 
-        assert!(has_ring_pixel_with_color(&pixels, (240, 240, 240)));
-        assert!(has_ring_pixel_with_color(&pixels, (110, 110, 110)));
+        assert!(has_ring_pixel_with_color(&pixels, RING_REMAINING_COLOR));
+        assert!(has_ring_pixel_with_color(&pixels, RING_EMPTY_COLOR));
     }
 
     #[test]
@@ -661,8 +668,18 @@ mod tests {
         let bottom_idx =
             (((ICON_SIZE as usize - 3) * ICON_SIZE as usize) + (ICON_SIZE as usize / 2)) * 4;
 
-        assert_eq!(&pixels[top_idx..top_idx + 3], &[110, 110, 110]);
-        assert_eq!(&pixels[bottom_idx..bottom_idx + 3], &[240, 240, 240]);
+        assert_eq!(
+            &pixels[top_idx..top_idx + 3],
+            &[RING_EMPTY_COLOR.0, RING_EMPTY_COLOR.1, RING_EMPTY_COLOR.2,]
+        );
+        assert_eq!(
+            &pixels[bottom_idx..bottom_idx + 3],
+            &[
+                RING_REMAINING_COLOR.0,
+                RING_REMAINING_COLOR.1,
+                RING_REMAINING_COLOR.2,
+            ]
+        );
     }
 
     #[test]
@@ -702,6 +719,6 @@ mod tests {
     fn paused_progress_peak_renders_empty_gray_remaining_ring() {
         let pixels = render_progress_icon_with_pause(0.0, true, Some(12));
 
-        assert!(has_ring_pixel_with_color(&pixels, (110, 110, 110)));
+        assert!(has_ring_pixel_with_color(&pixels, RING_EMPTY_COLOR));
     }
 }

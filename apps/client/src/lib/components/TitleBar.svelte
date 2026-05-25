@@ -963,7 +963,7 @@
               r="8"
               fill="none"
               stroke-width={POMODORO_RING_STROKE_WIDTH}
-              class={isActive ? TITLE_BAR_SUBTLE_STROKE_CLASS : TITLE_BAR_ICON_STROKE_CLASS}
+              class={TITLE_BAR_SUBTLE_STROKE_CLASS}
             />
             {#if isActive}
               <circle
