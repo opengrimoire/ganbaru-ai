@@ -2150,6 +2150,39 @@ pub fn migrations() -> Vec<Migration> {
         version: 24,
         description: "harden calendar persistence and add event archives",
         sql: CALENDAR_HARDENING_SQL,
+    },
+    Migration {
+        version: 25,
+        description: "support object values in iCalendar preservation",
+        sql: "
+            CREATE TABLE icalendar_value_nodes_with_objects (
+                id TEXT PRIMARY KEY,
+                property_id TEXT REFERENCES icalendar_component_properties(id) ON DELETE CASCADE,
+                parameter_id TEXT REFERENCES icalendar_property_parameters(id) ON DELETE CASCADE,
+                parent_node_id TEXT REFERENCES icalendar_value_nodes_with_objects(id) ON DELETE CASCADE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                value_kind TEXT NOT NULL CHECK(value_kind IN ('array', 'object', 'text', 'number', 'boolean', 'null')),
+                object_key TEXT,
+                text_value TEXT,
+                number_value REAL,
+                boolean_value INTEGER
+            );
+            INSERT INTO icalendar_value_nodes_with_objects
+                (id, property_id, parameter_id, parent_node_id, sort_order,
+                 value_kind, object_key, text_value, number_value, boolean_value)
+            SELECT
+                id, property_id, parameter_id, parent_node_id, sort_order,
+                value_kind, NULL, text_value, number_value, boolean_value
+            FROM icalendar_value_nodes;
+            DROP TABLE icalendar_value_nodes;
+            ALTER TABLE icalendar_value_nodes_with_objects RENAME TO icalendar_value_nodes;
+            CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_property
+                ON icalendar_value_nodes(property_id, parent_node_id, sort_order);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_parameter
+                ON icalendar_value_nodes(parameter_id, parent_node_id, sort_order);
+            CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_parent
+                ON icalendar_value_nodes(parent_node_id, sort_order);
+        ",
     }]
 }
 

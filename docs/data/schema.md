@@ -78,7 +78,7 @@ Component properties, parameters, nested values, and projection warnings are chi
 
 - `icalendar_component_properties`: component_id, name, value_type, sort_order.
 - `icalendar_property_parameters`: property_id, name, sort_order.
-- `icalendar_value_nodes`: recursive scalar or array nodes for property values and parameter values.
+- `icalendar_value_nodes`: recursive scalar, array, or object nodes for property values and parameter values. Object child rows store their member name in `object_key`.
 - `icalendar_component_projection_warnings`: component_id, message, sort_order.
 
 ### `calendar_events`

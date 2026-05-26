@@ -1177,6 +1177,30 @@ fn load_value_node<'a>(
                 }
                 Ok(Value::Array(children))
             }
+            "object" => {
+                let child_rows = sqlx::query(
+                    "SELECT id, object_key FROM icalendar_value_nodes
+                 WHERE parent_node_id = ?
+                 ORDER BY sort_order ASC",
+                )
+                .bind(node_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| format!("load iCalendar object values: {e}"))?;
+                let mut object = serde_json::Map::new();
+                for child_row in child_rows {
+                    let child_id: String = child_row
+                        .try_get("id")
+                        .map_err(|e| format!("read object child id: {e}"))?;
+                    let object_key: Option<String> = child_row
+                        .try_get("object_key")
+                        .map_err(|e| format!("read object_key: {e}"))?;
+                    if let Some(key) = object_key {
+                        object.insert(key, load_value_node(pool, &child_id).await?);
+                    }
+                }
+                Ok(Value::Object(object))
+            }
             "text" => {
                 let value: Option<String> = row
                     .try_get("text_value")
@@ -1236,9 +1260,10 @@ fn calendar_icalendar_export_metadata(methods: Vec<String>) -> CalendarIcalendar
 #[cfg(test)]
 mod tests {
     use super::{
-        calendar_icalendar_export_metadata, sanitize_full_event_row, sanitize_full_override_rows,
-        DbFullEventRow, DbFullOverrideRow,
+        calendar_icalendar_export_metadata, load_component_value, sanitize_full_event_row,
+        sanitize_full_override_rows, DbFullEventRow, DbFullOverrideRow,
     };
+    use serde_json::json;
 
     #[test]
     fn sanitizes_full_event_description_before_returning_rows() {
@@ -1322,6 +1347,80 @@ mod tests {
         assert!(!lower.contains("calendar_event_attendees"));
     }
 
+    #[test]
+    fn loads_icalendar_object_value_nodes() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+            sqlx::query(
+                "INSERT INTO icalendar_objects
+                    (id, calendar_id, source_kind, source_name, source_fingerprint,
+                     created_at, updated_at)
+                 VALUES ('object-1', 'local', 'import-file', 'source.ics',
+                         'fingerprint', '2026-05-09', '2026-05-09')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO icalendar_components
+                    (id, object_id, calendar_id, component_type, preservation_status,
+                     sort_order, created_at, updated_at)
+                 VALUES ('component-1', 'object-1', 'local', 'vevent',
+                         'partial', 0, '2026-05-09', '2026-05-09')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO icalendar_component_properties
+                    (id, component_id, name, value_type, sort_order)
+                 VALUES ('property-1', 'component-1', 'rrule', 'recur', 0)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO icalendar_value_nodes
+                    (id, property_id, sort_order, value_kind)
+                 VALUES ('value-1', 'property-1', 0, 'object')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO icalendar_value_nodes
+                    (id, property_id, parent_node_id, sort_order, value_kind,
+                     object_key, text_value)
+                 VALUES ('value-1-freq', 'property-1', 'value-1', 0, 'text',
+                         'freq', 'DAILY')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO icalendar_value_nodes
+                    (id, property_id, parent_node_id, sort_order, value_kind,
+                     object_key, number_value)
+                 VALUES ('value-1-count', 'property-1', 'value-1', 1, 'number',
+                         'count', 3)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let component = load_component_value(&pool, "component-1").await.unwrap();
+
+            assert_eq!(
+                component,
+                json!([
+                    "vevent",
+                    [["rrule", {}, "recur", { "freq": "DAILY", "count": 3.0 }]],
+                    []
+                ]),
+            );
+        });
+    }
+
     fn full_event_row(description: &str) -> DbFullEventRow {
         DbFullEventRow {
             id: "event-1".to_string(),
@@ -1366,5 +1465,15 @@ mod tests {
             pomodoro_count: None,
             idle_timeout_minutes: None,
         }
+    }
+
+    async fn migrated_memory_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+        pool
     }
 }

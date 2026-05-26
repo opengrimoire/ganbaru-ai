@@ -128,7 +128,7 @@ RFC 7265 jCal remains the in-memory parser and serializer shape, but SQLite stor
 - property names
 - parameter names and values
 - value types
-- multi-value structure
+- multi-value structure, including jCal array and object values
 - nested components
 - extension fields
 

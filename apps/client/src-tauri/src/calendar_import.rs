@@ -617,12 +617,15 @@ async fn store_jcal_component(
                 .map_err(|e| format!("insert iCalendar parameter: {e}"))?;
                 store_value_node(
                     tx,
-                    None,
-                    Some(&parameter_id),
-                    None,
-                    0,
                     param_value,
-                    &format!("{parameter_id}:value"),
+                    ValueNodeInsert {
+                        property_id: None,
+                        parameter_id: Some(&parameter_id),
+                        parent_node_id: None,
+                        sort_order: 0,
+                        node_id: format!("{parameter_id}:value"),
+                        object_key: None,
+                    },
                 )
                 .await?;
             }
@@ -631,12 +634,15 @@ async fn store_jcal_component(
         for (value_index, property_value) in property_array.iter().skip(3).enumerate() {
             store_value_node(
                 tx,
-                Some(&property_id),
-                None,
-                None,
-                value_index as i64,
                 property_value,
-                &format!("{property_id}:value:{value_index}"),
+                ValueNodeInsert {
+                    property_id: Some(&property_id),
+                    parameter_id: None,
+                    parent_node_id: None,
+                    sort_order: value_index as i64,
+                    node_id: format!("{property_id}:value:{value_index}"),
+                    object_key: None,
+                },
             )
             .await?;
         }
@@ -644,18 +650,24 @@ async fn store_jcal_component(
     Ok(())
 }
 
-fn store_value_node<'a>(
-    tx: &'a mut Transaction<'_, Sqlite>,
+struct ValueNodeInsert<'a> {
     property_id: Option<&'a str>,
     parameter_id: Option<&'a str>,
-    parent_node_id: Option<&'a str>,
+    parent_node_id: Option<String>,
     sort_order: i64,
+    node_id: String,
+    object_key: Option<String>,
+}
+
+fn store_value_node<'a>(
+    tx: &'a mut Transaction<'_, Sqlite>,
     value: &'a Value,
-    node_id: &'a str,
+    target: ValueNodeInsert<'a>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
     Box::pin(async move {
         let (value_kind, text_value, number_value, boolean_value) = match value {
             Value::Array(_) => ("array", None, None, None),
+            Value::Object(_) => ("object", None, None, None),
             Value::String(text) => ("text", Some(text.as_str()), None, None),
             Value::Number(number) => ("number", None, number.as_f64(), None),
             Value::Bool(boolean) => (
@@ -665,22 +677,20 @@ fn store_value_node<'a>(
                 Some(if *boolean { 1_i64 } else { 0_i64 }),
             ),
             Value::Null => ("null", None, None, None),
-            Value::Object(_) => {
-                return Err("iCalendar jCal values cannot be objects".to_string());
-            }
         };
         sqlx::query(
             "INSERT INTO icalendar_value_nodes
                 (id, property_id, parameter_id, parent_node_id, sort_order,
-                 value_kind, text_value, number_value, boolean_value)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 value_kind, object_key, text_value, number_value, boolean_value)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(node_id)
-        .bind(property_id)
-        .bind(parameter_id)
-        .bind(parent_node_id)
-        .bind(sort_order)
+        .bind(&target.node_id)
+        .bind(target.property_id)
+        .bind(target.parameter_id)
+        .bind(target.parent_node_id.as_deref())
+        .bind(target.sort_order)
         .bind(value_kind)
+        .bind(target.object_key.as_deref())
         .bind(text_value)
         .bind(number_value)
         .bind(boolean_value)
@@ -692,12 +702,32 @@ fn store_value_node<'a>(
             for (index, child) in items.iter().enumerate() {
                 store_value_node(
                     tx,
-                    property_id,
-                    parameter_id,
-                    Some(node_id),
-                    index as i64,
                     child,
-                    &format!("{node_id}:child:{index}"),
+                    ValueNodeInsert {
+                        property_id: target.property_id,
+                        parameter_id: target.parameter_id,
+                        parent_node_id: Some(target.node_id.clone()),
+                        sort_order: index as i64,
+                        node_id: format!("{}:child:{index}", target.node_id),
+                        object_key: None,
+                    },
+                )
+                .await?;
+            }
+        }
+        if let Value::Object(map) = value {
+            for (index, (key, child)) in map.iter().enumerate() {
+                store_value_node(
+                    tx,
+                    child,
+                    ValueNodeInsert {
+                        property_id: target.property_id,
+                        parameter_id: target.parameter_id,
+                        parent_node_id: Some(target.node_id.clone()),
+                        sort_order: index as i64,
+                        node_id: format!("{}:member:{index}", target.node_id),
+                        object_key: Some(key.clone()),
+                    },
                 )
                 .await?;
             }
@@ -1600,6 +1630,40 @@ mod tests {
             assert_eq!(object_count, 1);
             assert_eq!(component_count, 3);
             assert_eq!(nested_parent_count, 2);
+        });
+    }
+
+    #[test]
+    fn stores_icalendar_preserved_object_values() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            let mut tx = pool.begin().await.unwrap();
+            let mut preservation = preservation_payload("source.ics");
+            preservation.objects[0].components[0].raw_jcal =
+                r#"["vevent",[["rrule",{},"recur",{"freq":"DAILY","count":3}]],[]]"#.to_string();
+
+            replace_preservation(&mut tx, "local", "2026-05-09 10:00:00", &preservation)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let object_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM icalendar_value_nodes WHERE value_kind = 'object'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let freq_value: String = sqlx::query_scalar(
+                "SELECT text_value
+                 FROM icalendar_value_nodes
+                 WHERE object_key = 'freq'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(object_count, 1);
+            assert_eq!(freq_value, "DAILY");
         });
     }
 
