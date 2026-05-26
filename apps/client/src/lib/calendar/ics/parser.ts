@@ -821,6 +821,8 @@ function calendarEventBaseFromComponent(
 				? "UTC"
 				: deviceZone;
 
+	const sourceUid = (component.getFirstPropertyValue("uid") as string | null) ?? undefined;
+	const summary = (component.getFirstPropertyValue("summary") as string | null) ?? "";
 	let endUtc: string;
 	let allDayEndDate = startDate;
 	const dtendProp = component.getFirstProperty("dtend");
@@ -860,13 +862,7 @@ function calendarEventBaseFromComponent(
 			endUtc = startUtc;
 		}
 	} else {
-		const startInstant = Temporal.Instant.from(startUtc);
-		endUtc = startInstant.add({ minutes: 30 }).toString();
-		warnings.push(
-			`Event missing DTEND/DURATION (UID=${
-				(component.getFirstPropertyValue("uid") as string | null) ?? "?"
-			}); defaulted to 30 minutes.`,
-		);
+		endUtc = startUtc;
 	}
 
 	// In-memory wall-clock is anchored to the device zone (matching `mapRow`
@@ -876,8 +872,6 @@ function calendarEventBaseFromComponent(
 	const start = isAllDay ? `${startDate} 00:00` : utcIsoToWallClock(startUtc, deviceZone);
 	const end = isAllDay ? `${allDayEndDate} 00:00` : utcIsoToWallClock(endUtc, deviceZone);
 
-	const sourceUid = (component.getFirstPropertyValue("uid") as string | null) ?? undefined;
-	const summary = (component.getFirstPropertyValue("summary") as string | null) ?? "";
 	const rawDescription = (component.getFirstPropertyValue("description") as string | null) ?? undefined;
 	const location = (component.getFirstPropertyValue("location") as string | null) ?? undefined;
 	const conferenceUrl = googleConferenceUrl(component);

@@ -178,7 +178,7 @@ describe("parseIcs", () => {
 			expect(e.end).toMatch(/16:30$/);
 		});
 
-		it("defaults to a 30-minute event when both DTEND and DURATION are missing", () => {
+		it("keeps timed events with no DTEND or DURATION as zero-duration events", () => {
 			const ics = wrap(
 				vevent(
 					"UID:no-end@example.com",
@@ -189,10 +189,10 @@ describe("parseIcs", () => {
 			);
 			const result = parseIcs(ics);
 			expect(result.events).toHaveLength(1);
-			expect(result.warnings.some((w) => w.includes("DTEND"))).toBe(true);
+			expect(result.warnings).toHaveLength(0);
 			const e = result.events[0];
 			expect(e.start).toMatch(/14:00$/);
-			expect(e.end).toMatch(/14:30$/);
+			expect(e.end).toMatch(/14:00$/);
 		});
 	});
 
