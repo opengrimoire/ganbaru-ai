@@ -16,6 +16,7 @@ const PAUSED_PULSE_AMOUNTS: [f64; 22] = [
     0.0, 0.0, 0.0, 0.0, 0.0, 0.067, 0.25, 0.5, 0.75, 0.933, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.933,
     0.75, 0.5, 0.25, 0.067, 0.0,
 ];
+const MUSIC_TRAY_STATUS_MAX_CHARS: usize = 25;
 #[cfg(target_os = "linux")]
 const LINUX_TRAY_ICON_VERSION: u8 = 6;
 
@@ -298,6 +299,23 @@ fn music_status_text(state: &MusicTrayState) -> String {
     }
 }
 
+fn truncate_tray_menu_label(value: &str, max_chars: usize) -> String {
+    let char_count = value.chars().count();
+    if char_count <= max_chars {
+        return value.to_string();
+    }
+
+    let prefix_chars = max_chars.saturating_sub(3);
+    let mut label = value.chars().take(prefix_chars).collect::<String>();
+    label = label.trim_end().to_string();
+    label.push_str("...");
+    label
+}
+
+fn music_menu_status_text(state: &MusicTrayState) -> String {
+    truncate_tray_menu_label(&music_status_text(state), MUSIC_TRAY_STATUS_MAX_CHARS)
+}
+
 fn tray_tooltip(state: &TrayState) -> String {
     let pomodoro = if pomodoro_active(&state.pomodoro) {
         format!(
@@ -343,10 +361,11 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         *stored = Some(pomodoro_status.clone());
     }
 
-    let music_status = MenuItemBuilder::with_id("music_status", music_status_text(&state.music))
-        .enabled(false)
-        .build(app)
-        .map_err(|e| e.to_string())?;
+    let music_status =
+        MenuItemBuilder::with_id("music_status", music_menu_status_text(&state.music))
+            .enabled(false)
+            .build(app)
+            .map_err(|e| e.to_string())?;
     {
         let mut stored = MUSIC_STATUS_ITEM.lock().unwrap();
         *stored = Some(music_status.clone());
@@ -518,7 +537,7 @@ fn apply_tray_state(app: &AppHandle, state: &TrayState) -> Result<(), String> {
     {
         let item = MUSIC_STATUS_ITEM.lock().unwrap();
         if let Some(ref status_item) = *item {
-            let _ = status_item.set_text(music_status_text(&state.music));
+            let _ = status_item.set_text(music_menu_status_text(&state.music));
         }
     }
 
@@ -720,5 +739,44 @@ mod tests {
         let pixels = render_progress_icon_with_pause(0.0, true, Some(12));
 
         assert!(has_ring_pixel_with_color(&pixels, RING_EMPTY_COLOR));
+    }
+
+    #[test]
+    fn long_music_menu_status_is_truncated() {
+        let full_title =
+            "Christopher Larkin - Hollow Knight (Original Soundtrack) - 09 City of Tears";
+        let state = MusicTrayState {
+            status: "playing".to_string(),
+            title: Some(full_title.to_string()),
+            can_play_pause: true,
+            can_previous: true,
+            can_next: true,
+        };
+
+        let label = music_menu_status_text(&state);
+
+        assert!(label.chars().count() <= MUSIC_TRAY_STATUS_MAX_CHARS);
+        assert!(label.starts_with("Christopher Larkin"));
+        assert!(label.ends_with("..."));
+        assert_ne!(label, full_title);
+    }
+
+    #[test]
+    fn full_music_status_stays_available_for_tooltip() {
+        let state = MusicTrayState {
+            status: "playing".to_string(),
+            title: Some(
+                "Christopher Larkin - Hollow Knight (Original Soundtrack) - 09 City of Tears"
+                    .to_string(),
+            ),
+            can_play_pause: true,
+            can_previous: true,
+            can_next: true,
+        };
+
+        assert_eq!(
+            music_status_text(&state),
+            "Christopher Larkin - Hollow Knight (Original Soundtrack) - 09 City of Tears"
+        );
     }
 }
