@@ -173,14 +173,17 @@ fn pick_open_path(
     title: &str,
     filter_name: &str,
     extensions: &[&str],
+    start_directory: Option<PathBuf>,
 ) -> Result<Option<PathBuf>, String> {
-    app.dialog()
+    let mut picker = app
+        .dialog()
         .file()
         .set_title(title)
-        .add_filter(filter_name, extensions)
-        .blocking_pick_file()
-        .map(dialog_path)
-        .transpose()
+        .add_filter(filter_name, extensions);
+    if let Some(directory) = start_directory {
+        picker = picker.set_directory(directory);
+    }
+    picker.blocking_pick_file().map(dialog_path).transpose()
 }
 
 fn pick_save_path(
@@ -378,6 +381,7 @@ pub async fn vault_pick_and_read_ics_import(
         "Import calendar",
         "iCalendar (.ics or .zip)",
         &["ics", "zip"],
+        existing_downloads_directory(&app),
     )?
     else {
         return Ok(None);
@@ -425,7 +429,7 @@ pub async fn vault_pick_and_write_ics_export(
 pub async fn vault_pick_and_read_theme_json(
     app: tauri::AppHandle,
 ) -> Result<Option<String>, String> {
-    let Some(path) = pick_open_path(&app, "Import theme", "Theme JSON", &["json"])? else {
+    let Some(path) = pick_open_path(&app, "Import theme", "Theme JSON", &["json"], None)? else {
         return Ok(None);
     };
     require_extension(&path, &["json"], "theme import")?;

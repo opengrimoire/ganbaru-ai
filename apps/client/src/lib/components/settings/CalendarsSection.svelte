@@ -9,10 +9,13 @@
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import type { Calendar } from "$lib/components/calendar/types";
   import { calendarDisplayName, calendarImportDate } from "$lib/calendar/calendar-display";
+  import ActionToast from "$lib/components/ui/ActionToast.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   const calendarsStore = getCalendars();
   const calendarStore = getCalendar();
+  const MAX_VISIBLE_IMPORT_WARNINGS = 8;
+  const TOAST_TIMEOUT_MS = 5_000;
 
   /**
    * One `.ics` entry as returned by the Rust import command. `name` is
@@ -34,6 +37,7 @@
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingDelete = $state<Calendar | undefined>(undefined);
   let counts = $state<Record<string, number>>({});
+  let importWarnings = $state<string[]>([]);
 
   /**
    * Live progress reporter for `.ics.zip` imports. `total` is set once
@@ -57,7 +61,41 @@
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       toast = undefined;
-    }, 2400);
+    }, TOAST_TIMEOUT_MS);
+  }
+
+  function dismissToast(): void {
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+      toastTimer = undefined;
+    }
+    toast = undefined;
+  }
+
+  function errorMessage(err: unknown, fallback: string): string {
+    if (err instanceof Error && err.message.trim()) return err.message;
+    if (typeof err === "string" && err.trim()) return err;
+    return fallback;
+  }
+
+  function visibleImportWarnings(warnings: string[]): string[] {
+    const uniqueWarnings = Array.from(new Set(warnings));
+    const visibleWarnings = uniqueWarnings.slice(0, MAX_VISIBLE_IMPORT_WARNINGS);
+    const hiddenCount = uniqueWarnings.length - visibleWarnings.length;
+    if (hiddenCount > 0) {
+      visibleWarnings.push(`${hiddenCount} more warning${hiddenCount === 1 ? "" : "s"} not shown.`);
+    }
+    return visibleWarnings;
+  }
+
+  function importButtonLabel(): string {
+    if (!isImporting) return "Import calendar";
+    if (!importProgress) return "Importing calendar";
+
+    const entryCount = importProgress.total > 1
+      ? ` (${importProgress.current}/${importProgress.total})`
+      : "";
+    return `Importing ${importProgress.label}${entryCount}`;
   }
 
   async function refreshCounts() {
@@ -126,6 +164,7 @@
     if (isImporting) return;
 
     isImporting = true;
+    importWarnings = [];
     try {
       const entries = await invoke<IcsZipEntry[] | null>("vault_pick_and_read_ics_import");
       if (!entries) return;
@@ -154,6 +193,7 @@
       }
 
       if (totals.calendars === 0) {
+        importWarnings = visibleImportWarnings(totals.warnings);
         flashToast(totals.warnings[0] ?? "No events found in file.");
         return;
       }
@@ -161,16 +201,19 @@
       const summaryLine = summarizeTotals(totals);
       if (totals.warnings.length > 0) {
         for (const w of totals.warnings) console.warn("[ics import]", w);
+        importWarnings = visibleImportWarnings(totals.warnings);
         flashToast(
           `${summaryLine} (with ${totals.warnings.length} warning${totals.warnings.length === 1 ? "" : "s"})`,
         );
       } else {
+        importWarnings = [];
         flashToast(summaryLine);
       }
       await refreshCounts();
     } catch (err) {
       console.error("ics import failed", err);
-      flashToast(err instanceof Error ? err.message : "Import failed.");
+      importWarnings = [];
+      flashToast(errorMessage(err, "Import failed."));
     } finally {
       isImporting = false;
       importProgress = undefined;
@@ -188,7 +231,7 @@
       if (saved) flashToast("Exported to file.");
     } catch (err) {
       console.error("ics export failed", err);
-      flashToast(err instanceof Error ? err.message : "Export failed.");
+      flashToast(errorMessage(err, "Export failed."));
     }
   }
 
@@ -207,7 +250,7 @@
       flashToast(`Deleted "${calendarDisplayName(target)}".`);
     } catch (err) {
       console.error("delete calendar failed", err);
-      flashToast(err instanceof Error ? err.message : "Delete failed.");
+      flashToast(errorMessage(err, "Delete failed."));
     }
   }
 
@@ -223,18 +266,17 @@
     </div>
   </header>
 
-  {#if isImporting && importProgress}
-    <div
-      class="flex items-center gap-2 px-1 py-1 text-[0.8rem] text-muted-foreground"
+  {#if importWarnings.length > 0}
+    <section
+      class="mx-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-[0.766667rem] text-foreground"
     >
-      <LoaderCircle size={12} strokeWidth={2.25} class="animate-spin" />
-      <span class="truncate">
-        Importing {importProgress.label}
-        {#if importProgress.total > 1}
-          ({importProgress.current}/{importProgress.total})
-        {/if}
-      </span>
-    </div>
+      <h3 class="font-medium">Import warnings</h3>
+      <ul class="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
+        {#each importWarnings as warning}
+          <li>{warning}</li>
+        {/each}
+      </ul>
+    </section>
   {/if}
 
   <div class="flex flex-col gap-3">
@@ -256,7 +298,7 @@
           <div class="mt-0.5 flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
             <span>{counts[cal.id] ?? 0} event{counts[cal.id] === 1 ? "" : "s"}</span>
             {#if importDate}
-              <span>imported {importDate}</span>
+              <span>imported on {importDate}</span>
             {/if}
           </div>
         </div>
@@ -274,8 +316,8 @@
             <button
               type="button"
               disabled
-              title="The local calendar can't be deleted"
               aria-label="Local calendar can't be deleted"
+              data-app-tooltip-disabled="true"
               class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-md border border-border/60 bg-muted/30 text-muted-foreground/35"
             >
               <Trash2 size={12} strokeWidth={2.25} />
@@ -285,6 +327,7 @@
               type="button"
               onclick={() => handleDelete(cal)}
               aria-label={`Delete ${displayName}`}
+              data-app-tooltip-disabled="true"
               class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-destructive transition-colors hover:bg-destructive/10 dark:bg-transparent"
             >
               <Trash2 size={12} strokeWidth={2.25} />
@@ -298,25 +341,20 @@
         type="button"
         onclick={handleImport}
         disabled={isImporting}
-        class="flex h-7 w-fit items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+        class="flex h-7 min-w-0 max-w-full items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       >
         {#if isImporting}
-          <LoaderCircle size={13} strokeWidth={2.25} class="animate-spin" />
-          <span>Importing calendar</span>
+          <LoaderCircle size={13} strokeWidth={2.25} class="shrink-0 animate-spin" />
         {:else}
-          <Upload size={13} strokeWidth={2.25} />
-          <span>Import calendar</span>
+          <Upload size={13} strokeWidth={2.25} class="shrink-0" />
         {/if}
+        <span class="truncate">{importButtonLabel()}</span>
       </button>
     </div>
   </div>
 
   {#if toast}
-    <div
-      class="pointer-events-none fixed bottom-6 left-1/2 z-80 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-1.5 text-[0.8rem] text-foreground shadow-lg"
-    >
-      {toast}
-    </div>
+    <ActionToast message={toast} onDismiss={dismissToast} />
   {/if}
 </div>
 

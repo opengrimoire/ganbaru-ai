@@ -21,8 +21,8 @@
   import WeekView from "./WeekView.svelte";
   import DayView from "./DayView.svelte";
   import MonthView from "./MonthView.svelte";
+  import ActionToast from "$lib/components/ui/ActionToast.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
-  import X from "@lucide/svelte/icons/x";
   import { createEditSession } from "./edit-session.svelte";
   import type { EditSessionState, PanelAnchor } from "./edit-session.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
@@ -2062,28 +2062,13 @@
   {/if}
 
   {#if deleteUndoToast}
-    <div
-      role="status"
-      aria-live="polite"
-      class="fixed bottom-4 left-1/2 z-70 flex w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 items-center gap-3 rounded-md border border-border bg-popover px-3 py-2 text-[0.866667rem] text-popover-foreground shadow-lg"
-    >
-      <span class="min-w-0 flex-1 truncate">{deleteUndoToast.label}</span>
-      <button
-        type="button"
-        class="rounded-sm px-2 py-1 text-[0.8rem] font-medium text-popover-foreground underline decoration-popover-foreground/40 underline-offset-2 transition-colors hover:bg-accent hover:text-accent-foreground hover:no-underline focus:outline-none focus:ring-1 focus:ring-ring"
-        onclick={undoDeletedEvent}
-      >
-        Undo
-      </button>
-      <button
-        type="button"
-        class="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        onclick={dismissDeleteUndoToast}
-      >
-        <span class="sr-only">Dismiss event notification</span>
-        <X size={14} strokeWidth={2} aria-hidden="true" />
-      </button>
-    </div>
+    <ActionToast
+      message={deleteUndoToast.label}
+      actionLabel="Undo"
+      dismissLabel="Dismiss event notification"
+      onAction={undoDeletedEvent}
+      onDismiss={dismissDeleteUndoToast}
+    />
   {/if}
 
 </div>

@@ -18,15 +18,34 @@ function makeCalendar(overrides: Partial<Calendar> = {}): Calendar {
   };
 }
 
+const expectedDateFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+const expectedTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function expectedLocalDate(value: string): string {
+  return expectedDateFormatter.format(new Date(`${value}T12:00:00`));
+}
+
+function expectedLocalTimestamp(value: string): string {
+  const date = new Date(value);
+  return `${expectedDateFormatter.format(date)} at ${expectedTimeFormatter.format(date)}`;
+}
+
 describe("calendar display helpers", () => {
   it("uses the .ics source filename as the imported calendar label", () => {
     const calendar = makeCalendar({
       name: "Imported from old-label@example.com (2026-05-14)",
       source: "ics",
-      sourceUrl: "victorgarcia322ac@gmail.com.ics",
+      sourceUrl: "person@example.com.ics",
     });
 
-    expect(calendarDisplayName(calendar)).toBe("victorgarcia322ac@gmail.com");
+    expect(calendarDisplayName(calendar)).toBe("person@example.com");
   });
 
   it("falls back to legacy imported names when source_url is unavailable", () => {
@@ -36,16 +55,28 @@ describe("calendar display helpers", () => {
     });
 
     expect(calendarDisplayName(calendar)).toBe("old-label@example.com");
-    expect(calendarImportDate(calendar)).toBe("2026-05-14");
+    expect(calendarImportDate(calendar)).toBe(expectedLocalDate("2026-05-14"));
+  });
+
+  it("formats imported timestamps in the local date and time", () => {
+    const timestamp = "2026-05-26T00:33:21.944Z";
+    const calendar = makeCalendar({
+      createdAt: timestamp,
+      source: "ics",
+      sourceUrl: "person@example.com.ics",
+    });
+
+    expect(calendarImportDate(calendar)).toBe(expectedLocalTimestamp(timestamp));
+    expect(calendarImportDate(calendar)).not.toBe(timestamp);
   });
 
   it("derives an identity email from the source filename", () => {
     const calendar = makeCalendar({
       source: "ics",
-      sourceUrl: "victorgarcia322ac@gmail.com.ics",
+      sourceUrl: "person@example.com.ics",
     });
 
-    expect(calendarIdentityEmail(calendar)).toBe("victorgarcia322ac@gmail.com");
+    expect(calendarIdentityEmail(calendar)).toBe("person@example.com");
   });
 
   it("does not derive identities from non-email imported calendar names", () => {
