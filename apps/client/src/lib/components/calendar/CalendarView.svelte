@@ -257,6 +257,7 @@
   // When saving edits, suppress preview computation to prevent flash
   // (store updates before session closes, so preview would briefly conflict)
   let suppressEditPreview = $state(false);
+  let panelCommitHidden = $state(false);
   let saveDisplayFreeze = $state<CalendarEvent[] | null>(null);
   let panelSurfaceStatus = $state<EventSurfaceStatus | undefined>(undefined);
   let panelSurfaceStatusEventId = $state<string | undefined>(undefined);
@@ -659,6 +660,7 @@
   }
 
   const panelRender = $derived.by<PanelRenderState | null>(() => {
+    if (panelCommitHidden) return null;
     const s = session.state;
     if (s.mode === "create") {
       return {
@@ -849,15 +851,25 @@
   }
 
   const DELETE_UNDO_TIMEOUT_MS = 5_000;
+  const SAVE_SUCCESS_TOAST_TIMEOUT_MS = 3_000;
 
   interface DeleteUndoToast {
     id: string;
-    restore: () => Promise<void>;
+    pending: boolean;
+    restore?: () => Promise<void>;
     label: string;
+  }
+
+  interface SaveToast {
+    id: string;
+    pending: boolean;
+    message: string;
   }
 
   let deleteUndoToast: DeleteUndoToast | null = $state(null);
   let deleteUndoTimer: ReturnType<typeof setTimeout> | undefined;
+  let saveSuccessToast: SaveToast | null = $state(null);
+  let saveSuccessTimer: ReturnType<typeof setTimeout> | undefined;
 
   function clearDeleteUndoTimer(): void {
     if (deleteUndoTimer) {
@@ -871,19 +883,63 @@
     deleteUndoToast = null;
   }
 
-  function showDeleteUndoToast(label: string, restore: () => Promise<void>): void {
+  function showDeletePendingToast(label: string): string {
     clearDeleteUndoTimer();
     const id = crypto.randomUUID();
-    deleteUndoToast = { id, restore, label };
+    deleteUndoToast = { id, pending: true, label };
+    return id;
+  }
+
+  function dismissDeleteToastIfCurrent(id: string): void {
+    if (deleteUndoToast?.id === id) dismissDeleteUndoToast();
+  }
+
+  function showDeleteUndoToast(id: string, label: string, restore?: () => Promise<void>): void {
+    clearDeleteUndoTimer();
+    if (deleteUndoToast?.id !== id) return;
+    deleteUndoToast = { id, pending: false, restore, label };
     deleteUndoTimer = setTimeout(() => {
       if (deleteUndoToast?.id === id) deleteUndoToast = null;
       deleteUndoTimer = undefined;
     }, DELETE_UNDO_TIMEOUT_MS);
   }
 
+  function clearSaveSuccessTimer(): void {
+    if (saveSuccessTimer) {
+      clearTimeout(saveSuccessTimer);
+      saveSuccessTimer = undefined;
+    }
+  }
+
+  function dismissSaveSuccessToast(): void {
+    clearSaveSuccessTimer();
+    saveSuccessToast = null;
+  }
+
+  function showSavePendingToast(): string {
+    clearSaveSuccessTimer();
+    const id = crypto.randomUUID();
+    saveSuccessToast = { id, pending: true, message: "Saving..." };
+    return id;
+  }
+
+  function dismissSaveToastIfCurrent(id: string): void {
+    if (saveSuccessToast?.id === id) dismissSaveSuccessToast();
+  }
+
+  function showSaveSuccessToast(id: string): void {
+    clearSaveSuccessTimer();
+    if (saveSuccessToast?.id !== id) return;
+    saveSuccessToast = { id, pending: false, message: "Saved" };
+    saveSuccessTimer = setTimeout(() => {
+      if (saveSuccessToast?.id === id) saveSuccessToast = null;
+      saveSuccessTimer = undefined;
+    }, SAVE_SUCCESS_TOAST_TIMEOUT_MS);
+  }
+
   async function undoDeletedEvent(): Promise<void> {
     const toast = deleteUndoToast;
-    if (!toast) return;
+    if (!toast?.restore) return;
     dismissDeleteUndoToast();
     try {
       await toast.restore();
@@ -948,6 +1004,7 @@
 
   onDestroy(() => {
     clearDeleteUndoTimer();
+    clearSaveSuccessTimer();
   });
 
   // Confirmation dialog
@@ -1328,6 +1385,8 @@
   }
 
   async function handleEventCreate(start: string, end: string, allDay?: boolean, createAnchor?: PanelAnchor) {
+    if (panelCommitHidden) return;
+
     const openCreate = async () => {
       const requestId = ++panelOpenRequestId;
       pendingEditEventId = undefined;
@@ -1412,6 +1471,7 @@
   }
 
   async function handleEventClick(event: CalendarEvent, rect?: DOMRect): Promise<void> {
+    if (panelCommitHidden) return;
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
     // Already editing this exact event. A clean panel is just a peek and can
@@ -1515,6 +1575,8 @@
   }
 
   async function handleEventUpdate(event: CalendarEvent) {
+    if (panelCommitHidden) return;
+
     // Track that a drag operation ended (prevents click-to-close)
     lastDragEndTime = Date.now();
 
@@ -1617,6 +1679,7 @@
   }
 
   function handlePanelClose() {
+    if (panelCommitHidden) return;
     panelOpenRequestId++;
     pendingEditEventId = undefined;
     if (session.dirty) {
@@ -1649,6 +1712,7 @@
 
   function handleOutsidePointerDown(e: PointerEvent) {
     if (confirmAction) return;
+    if (panelCommitHidden) return;
     if (session.state.mode === "closed") return;
     if (isPanelOrEventTarget(e.target)) return;
     if (!isCalendarEditCloseTarget(e.target)) return;
@@ -1766,8 +1830,10 @@
     const saveFreeze = buildSaveDisplayFreeze(data, scope);
     suppressEditingGlow = true;
     suppressEditPreview = true;
+    panelCommitHidden = true;
     saveDisplayFreeze = saveFreeze;
     if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = true;
+    const saveToastId = showSavePendingToast();
 
     try {
       saveRefreshedVisibleWindow = await persistPanelData(data, scope);
@@ -1781,11 +1847,16 @@
         await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
       }
       closeSession();
+      showSaveSuccessToast(saveToastId);
       await tick();
     } finally {
+      if (saveSuccessToast?.id === saveToastId && saveSuccessToast.pending) {
+        dismissSaveToastIfCurrent(saveToastId);
+      }
       if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = false;
       suppressEditingGlow = false;
       suppressEditPreview = false;
+      panelCommitHidden = false;
       saveDisplayFreeze = null;
     }
   }
@@ -1856,6 +1927,12 @@
     return "Event deleted";
   }
 
+  function eventDeletePendingLabel(outcome: CalendarDeleteArchiveOutcome): string {
+    if (outcome === "archive") return "Archiving...";
+    if (outcome === "mixed") return "Deleting and archiving...";
+    return "Deleting...";
+  }
+
   async function syncSavedActivePomodoro(event: CalendarEvent): Promise<void> {
     const activeId = pomodoro.activeBlockId;
     const config = event.pomodoroConfig;
@@ -1880,7 +1957,9 @@
   ): Promise<void> {
     const activeBlockId = pomodoro.isActive ? pomodoro.activeBlockId : null;
     suppressEditPreview = true;
+    panelCommitHidden = true;
     saveDisplayFreeze = cloneDisplayEvents(plan.finalVisibleEvents);
+    const deleteToastId = showDeletePendingToast(eventDeletePendingLabel(plan.outcome));
 
     try {
       const restoreDeleted = await buildRestoreCallbackForDeletePlan(plan);
@@ -1891,9 +1970,13 @@
       await calendarStore.applyDeleteArchivePlan(plan.operations);
       await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
       closeSession();
-      if (restoreDeleted) showDeleteUndoToast(eventDeleteOutcomeLabel(plan.outcome), restoreDeleted);
+      showDeleteUndoToast(deleteToastId, eventDeleteOutcomeLabel(plan.outcome), restoreDeleted);
     } finally {
+      if (deleteUndoToast?.id === deleteToastId && deleteUndoToast.pending) {
+        dismissDeleteToastIfCurrent(deleteToastId);
+      }
       suppressEditPreview = false;
+      panelCommitHidden = false;
       saveDisplayFreeze = null;
     }
   }
@@ -2073,10 +2156,23 @@
   {#if deleteUndoToast}
     <ActionToast
       message={deleteUndoToast.label}
-      actionLabel="Undo"
+      actionLabel={!deleteUndoToast.pending && deleteUndoToast.restore ? "Undo" : undefined}
+      reserveActionLabel="Undo"
+      controlsVisible={!deleteUndoToast.pending}
       dismissLabel="Dismiss event notification"
       onAction={undoDeletedEvent}
       onDismiss={dismissDeleteUndoToast}
+    />
+  {/if}
+
+  {#if saveSuccessToast}
+    <ActionToast
+      message={saveSuccessToast.message}
+      variant="success"
+      stacked={!!deleteUndoToast}
+      controlsVisible={!saveSuccessToast.pending}
+      dismissLabel="Dismiss save notification"
+      onDismiss={dismissSaveSuccessToast}
     />
   {/if}
 

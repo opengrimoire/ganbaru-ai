@@ -44,7 +44,6 @@
   import Archive from "@lucide/svelte/icons/archive";
   import Scissors from "@lucide/svelte/icons/scissors";
   import Music from "@lucide/svelte/icons/music";
-  import CircleCheck from "@lucide/svelte/icons/circle-check";
   import Calendar1 from "@lucide/svelte/icons/calendar-1";
   import Clock4 from "@lucide/svelte/icons/clock-4";
   import Ban from "@lucide/svelte/icons/ban";
@@ -137,7 +136,7 @@
      * event. Normal edit opens preload details before mounting.
      */
     loadFullEvent?: (id: string) => Promise<CalendarEvent | undefined>;
-    onSave: (data: PanelSaveData, scope?: RecurringScope) => void;
+    onSave: (data: PanelSaveData, scope?: RecurringScope) => void | Promise<void>;
     onDelete?: (id: string, scope?: RecurringScope) => void;
     onEndEvent?: (data: PanelSaveData, scope?: RecurringScope) => void;
     onClose: () => void;
@@ -770,7 +769,7 @@
   let lastHeavyAppliedKey = "";
   let initialized = $state(false);
   let fullEvent = $state<CalendarEvent | null>(null);
-  let saving = $state(false);
+  let savePending = $state(false);
   const showHeavySections = $derived(mode === "create" || detailsLoaded || fullEvent);
 
   function resetExitAnimation() {
@@ -814,7 +813,7 @@
     lastInitKey = key;
     lastHeavyAppliedKey = "";
     resetExitAnimation();
-    saving = false;
+    savePending = false;
     deleteArmed = false;
     initialized = false;
     panelHeight = 0;
@@ -1297,25 +1296,18 @@
     };
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (parked) return;
     if (controlsDisabled) return;
-    if (saving || !saveReady) return;
+    if (savePending || !saveReady) return;
     const data = buildSaveData();
     const s = isRecurring ? scope : undefined;
-    if (!panelEl) { onSave(data, s); return; }
-
-    saving = true;
-
-    setTimeout(() => {
-      panelEl!.animate(
-        [
-          { transform: "scale(1)", opacity: 1 },
-          { transform: "scale(0.95)", opacity: 0 },
-        ],
-        { duration: 80, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" },
-      ).onfinish = () => onSave(data, s);
-    }, 200);
+    savePending = true;
+    try {
+      await onSave(data, s);
+    } finally {
+      savePending = false;
+    }
   }
   function handleDeleteClick() {
     if (deleteControlsDisabled) return;
@@ -2191,18 +2183,13 @@
             </div>
           {:else}
           <button onclick={handleSave}
-            disabled={controlsDisabled}
+            disabled={controlsDisabled || savePending || !saveReady}
             class="flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem]
-              {saving || saveReady
+              {saveReady
                 ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'
                 : 'text-muted-foreground cursor-not-allowed'}"
-            style="background-color: {saving || saveReady ? '' : 'var(--panel-contrast)'};">
-            {#if saving}
-              <CircleCheck size={14} />
-              <span>Saved</span>
-            {:else}
-              <span>Save ({formatShortcut("Mod + Enter")})</span>
-            {/if}
+            style="background-color: {saveReady ? '' : 'var(--panel-contrast)'};">
+            <span>Save ({formatShortcut("Mod + Enter")})</span>
           </button>
           {/if}
         {/if}

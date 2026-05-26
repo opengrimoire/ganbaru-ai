@@ -134,13 +134,13 @@ Preview contour IDs must be a subset of the rendered event IDs. If a virtual eve
 
 For delete and archive, the scope selector uses the same affected-set preview model as editing. `Only this` contours the selected occurrence. From a future selected occurrence, `Following` contours the selected occurrence and later rendered occurrences in the same series. `All` contours all rendered occurrences only when the series has no protected history; otherwise it contours the mutable future rows that would disappear and leaves protected history unhighlighted. From a started selected occurrence, `Following` and `All` contour only started occurrences because history archive does not affect future mutable rows. A protected occurrence may keep its current geometry and content in the preview, but the contour still communicates that the operation will archive it.
 
-When the user confirms delete or archive, the UI applies the plan's final visible projection for the affected scope before sending one atomic backend batch. This projection is display-only. It prevents protected occurrence archive batches from disappearing one by one while the backend snapshots each occurrence and caps the template.
+When the user confirms delete or archive, the UI closes the event panel, shows the pending delete or archive toast, and applies the plan's final visible projection for the affected scope before sending one atomic backend batch. This projection is display-only. It prevents protected occurrence archive batches from disappearing one by one while the backend snapshots each occurrence and caps the template.
 
 ## Save contract
 
 Save executes the same semantic commit plan projection would produce for the current draft, scope, active metadata, captured edit time, and visible window. The implementation may reuse the exact plan object or recompute it from the same normalized inputs, but it must not independently decide what recurrence operation means.
 
-When Save starts, the submitted projection may remain visually frozen until the canonical refresh completes. This freeze is display-only: it must not detach, split, collapse, delete, transfer sessions, or write data before Save executes the commit plan.
+When Save starts, the event panel closes, the app shows the pending save toast, and the submitted projection may remain visually frozen until the canonical refresh completes. This freeze is display-only: it must not detach, split, collapse, delete, transfer sessions, or write data before Save executes the commit plan.
 
 Save translates the commit plan to one backend recurrence batch. The batch may update templates, detach occurrences, split series, and transfer the active run reference, and those writes must commit or roll back together. Single-operation backend commands remain available for compatibility, but the normal recurrence Save path must not sequence them independently.
 

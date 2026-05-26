@@ -3,21 +3,24 @@
 GanbaruAI does not provide a general calendar undo or redo stack. Calendar
 creates, edits, moves, resizes, and recurrence edits are committed directly.
 
-Delete is the only reversible calendar action in the UI. After an event delete,
-the calendar shows a bottom toast for 5 seconds:
+Delete and archive are the only reversible calendar actions in the UI. When an
+event delete or archive starts, the panel closes and the calendar shows a bottom
+toast with `Deleting...` or `Archiving...`. After persistence succeeds, the same
+toast becomes the undo toast for 5 seconds:
 
-- Message: `Event deleted`
+- Message: `Event deleted`, `Event archived`, or `Events deleted and archived`
 - Action: `Undo`
 - Dismiss: close button
 
 If the user clicks `Undo` before the toast expires, the app restores the event
-from the in-memory snapshot captured before deletion. If the toast expires, is
-dismissed, or the app closes, the delete remains permanent.
+from the in-memory snapshot captured before deletion or archive. If the toast
+expires, is dismissed, or the app closes, the delete or archive remains
+permanent.
 
 ## Scope
 
-The delete toast covers the calendar delete flows that are available from the
-event panel:
+The undo toast covers the calendar delete and archive flows that are available
+from the event panel:
 
 - A normal event delete restores the deleted event row.
 - A recurring `this` delete restores the previous exception list.
