@@ -1,8 +1,9 @@
 /**
- * Week-view forward-nav scenario. Dispatches the same ArrowRight keydown and
- * keyup events used by a physical held key, then observes CalendarView's real
- * held-navigation controller. This keeps the memory stress representative of
- * a user holding the right arrow instead of a benchmark-only controller.
+ * Week-view forward-nav scenario. Dispatches the same initial ArrowRight
+ * keydown, native repeat keydown, and keyup events used by a physical held
+ * key, then observes CalendarView's real held-navigation controller. This
+ * keeps the memory stress representative of a user holding the right arrow
+ * instead of a benchmark-only controller.
  *
  * Seeding lays down a versioned dense calendar in the isolated
  * benchmark DB so the dense dataset compares across builds. `cleanup` is a no-op:
@@ -10,6 +11,7 @@
  * per-calendar deletion would be redundant.
  */
 import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
+import { NAV_HOLD_DELAY_MS } from "$lib/components/calendar/held-navigation";
 import {
   DEFAULT_BENCHMARK_DATASET,
   HELD_NAVIGATION_DURATION_MS,
@@ -30,7 +32,7 @@ export const calendarNavScenario: BenchmarkScenario = {
   id: "calendar-nav",
   label: "Calendar week-view nav",
   description:
-    "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against the 1-year practical dense calendar. The isolated benchmark DB keeps your real calendar untouched.",
+    "Dispatches initial and repeated ArrowRight keydown events plus keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against the 1-year practical dense calendar. The isolated benchmark DB keeps your real calendar untouched.",
   workload: {
     kind: "stress-memory",
     question: "How much memory does repeated week navigation use?",
@@ -78,7 +80,9 @@ export const calendarNavScenario: BenchmarkScenario = {
     }
 
     try {
-      await waitForMs(HELD_NAVIGATION_DURATION_MS, signal);
+      await waitForMs(NAV_HOLD_DELAY_MS, signal);
+      dispatchRightArrow("keydown", true);
+      await waitForMs(Math.max(0, HELD_NAVIGATION_DURATION_MS - NAV_HOLD_DELAY_MS), signal);
     } finally {
       dispatchRightArrow("keyup");
       stopObserving();
@@ -106,10 +110,11 @@ export const calendarNavScenario: BenchmarkScenario = {
   },
 };
 
-function dispatchRightArrow(type: "keydown" | "keyup"): void {
+function dispatchRightArrow(type: "keydown" | "keyup", repeat = false): void {
   window.dispatchEvent(new KeyboardEvent(type, {
     key: "ArrowRight",
     code: "ArrowRight",
+    repeat,
     bubbles: true,
     cancelable: true,
   }));

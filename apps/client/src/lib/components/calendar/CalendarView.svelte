@@ -1035,6 +1035,7 @@
   let pendingTarget: ViewState | null = null;
   let targetCommitPromise: Promise<void> | null = null;
   let targetRequestSeq = 0;
+  let targetPaintPending = false;
 
   function currentTargetState(): ViewState {
     return pendingTarget ?? { mode: viewMode, date: anchorDate };
@@ -1057,6 +1058,7 @@
   function canRepeatHeldNavigation(direction: "forward" | "back"): boolean {
     if (
       pendingTarget !== null
+      || targetPaintPending
       || calendarStore.foregroundWindowLoadBusy
       || !calendarStore.hasWindow(viewWindow.start, viewWindow.end)
     ) {
@@ -1070,11 +1072,13 @@
   function startNavHold(
     key: HeldNavigationKey,
     direction: "forward" | "back",
+    repeated = false,
   ) {
     if (heldNavigation.activeKey === key) {
-      heldNavigation.repeatFromKeydown(key);
+      if (repeated) heldNavigation.armRepeatsFromKeydown(key);
       return;
     }
+    if (repeated) return;
     heldNavigation.start(key, direction);
   }
 
@@ -1149,14 +1153,14 @@
       } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
-          startNavHold("ArrowLeft", "back");
+          startNavHold("ArrowLeft", "back", e.repeat);
         } else if (e.key === "ArrowRight") {
           e.preventDefault();
-          startNavHold("ArrowRight", "forward");
+          startNavHold("ArrowRight", "forward", e.repeat);
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
           if (viewMode === "month") {
-            startNavHold(e.key, e.key === "ArrowUp" ? "back" : "forward");
+            startNavHold(e.key, e.key === "ArrowUp" ? "back" : "forward", e.repeat);
           } else {
             startArrowScroll(e.key === "ArrowUp" ? -1 : 1);
           }
@@ -1214,6 +1218,7 @@
       stopArrowScroll();
       stopNavHold();
       pendingTarget = null;
+      targetPaintPending = false;
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("keyup", handleKeyup);
       window.removeEventListener("blur", handleBlur);
@@ -1248,6 +1253,7 @@
     const requestId = ++targetRequestSeq;
     const normalizedTarget: ViewState = { mode: target.mode, date: new Date(target.date) };
     pendingTarget = normalizedTarget;
+    targetPaintPending = true;
     const targetWindow = computeViewWindow(normalizedTarget.date, normalizedTarget.mode);
 
     const promise = (async () => {
@@ -1266,17 +1272,21 @@
         pendingTarget = null;
         calendarStore.prefetchWindows(sameAnchorPrefetchRequests(normalizedTarget));
         void tick().then(() => {
+          if (requestId !== targetRequestSeq) return;
           perfMark(
             options.reason === "view" ? "view.mounted" : "nav.display-ready",
             { count: visibleEvents.length },
           );
           requestAnimationFrame(() => {
+            if (requestId !== targetRequestSeq) return;
+            targetPaintPending = false;
             perfMark(options.reason === "view" ? "view.paint-done" : "nav.paint-done");
           });
         });
       } catch (error) {
         if (requestId !== targetRequestSeq) return;
         pendingTarget = null;
+        targetPaintPending = false;
         console.error("[CalendarView] target commit failed:", error);
       } finally {
         if (requestId === targetRequestSeq) targetCommitPromise = null;

@@ -68,7 +68,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenarioMetadata[] = [
     id: "calendar-nav",
     label: "Calendar week-view nav",
     description:
-      "Dispatches ArrowRight keydown and keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against the 1-year practical dense calendar.",
+      "Dispatches initial and repeated ArrowRight keydown events plus keyup for a 3-second hold, using the same window keyboard handler and held-navigation controller as a physical right-arrow hold. It runs against the 1-year practical dense calendar.",
     workload: {
       kind: "stress-memory",
       question: "How much memory does repeated week navigation use?",

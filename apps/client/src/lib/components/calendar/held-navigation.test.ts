@@ -50,6 +50,7 @@ describe("HeldNavigationController", () => {
 
       expect(() => {
         controller.start("ArrowRight", "forward");
+        controller.armRepeatsFromKeydown("ArrowRight");
         controller.stop("ArrowRight");
       }).not.toThrow();
     } finally {
@@ -91,6 +92,10 @@ describe("HeldNavigationController", () => {
     vi.advanceTimersByTime(279);
     expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
 
+    controller.armRepeatsFromKeydown("ArrowRight");
+    vi.advanceTimersByTime(0);
+    expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
+
     vi.advanceTimersByTime(1);
     expect(navigations).toEqual([
       { direction: "forward", source: "key" },
@@ -110,38 +115,31 @@ describe("HeldNavigationController", () => {
     ]);
   });
 
-  it("uses repeated keydown events as a repeat driver", () => {
-    let now = 0;
-    const timerId = 0 as unknown as ReturnType<typeof setTimeout>;
+  it("uses native repeated keydown only to arm the controlled repeat timer", () => {
+    vi.useFakeTimers();
     const navigations: Navigation[] = [];
     const controller = new HeldNavigationController({
       holdDelayMs: 280,
       repeatMs: 120,
       navigate: (direction, source) => navigations.push({ direction, source }),
       canRepeat: () => true,
-      setTimer: () => timerId,
-      clearTimer: () => undefined,
-      now: () => now,
     });
 
     controller.start("ArrowRight", "forward");
-    now = 279;
-    controller.repeatFromKeydown("ArrowRight");
-    expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
-
-    now = 280;
-    controller.repeatFromKeydown("ArrowRight");
+    vi.advanceTimersByTime(280);
+    controller.armRepeatsFromKeydown("ArrowRight");
+    vi.advanceTimersByTime(0);
     expect(navigations).toEqual([
       { direction: "forward", source: "key" },
       { direction: "forward", source: "hold-repeat" },
     ]);
 
-    now = 399;
-    controller.repeatFromKeydown("ArrowRight");
+    controller.armRepeatsFromKeydown("ArrowRight");
+    controller.armRepeatsFromKeydown("ArrowRight");
+    controller.armRepeatsFromKeydown("ArrowRight");
     expect(navigations).toHaveLength(2);
 
-    now = 400;
-    controller.repeatFromKeydown("ArrowRight");
+    vi.advanceTimersByTime(120);
     expect(navigations).toEqual([
       { direction: "forward", source: "key" },
       { direction: "forward", source: "hold-repeat" },
@@ -164,6 +162,8 @@ describe("HeldNavigationController", () => {
 
     controller.start("ArrowRight", "forward");
     vi.advanceTimersByTime(280);
+    controller.armRepeatsFromKeydown("ArrowRight");
+    vi.advanceTimersByTime(0);
     vi.advanceTimersByTime(120);
 
     expect(navigations).toEqual([{ direction: "forward", source: "key" }]);
@@ -196,8 +196,12 @@ describe("HeldNavigationController", () => {
 
     controller.start("ArrowRight", "forward");
     vi.advanceTimersByTime(280);
+    controller.armRepeatsFromKeydown("ArrowRight");
+    vi.advanceTimersByTime(0);
     controller.start("ArrowLeft", "back");
     vi.advanceTimersByTime(280);
+    controller.armRepeatsFromKeydown("ArrowLeft");
+    vi.advanceTimersByTime(0);
 
     expect(directions).toEqual(["forward", "back"]);
     expect(navigations).toEqual([
@@ -220,6 +224,8 @@ describe("HeldNavigationController", () => {
 
     controller.start("ArrowRight", "forward");
     vi.advanceTimersByTime(280);
+    controller.armRepeatsFromKeydown("ArrowRight");
+    vi.advanceTimersByTime(0);
     controller.stop("ArrowRight");
     ready = true;
     vi.advanceTimersByTime(1_000);
@@ -239,6 +245,7 @@ describe("HeldNavigationController", () => {
 
     controller.start("ArrowRight", "forward");
     vi.advanceTimersByTime(279);
+    controller.armRepeatsFromKeydown("ArrowRight");
     controller.start("ArrowLeft", "back");
 
     expect(navigations).toEqual([
@@ -250,6 +257,8 @@ describe("HeldNavigationController", () => {
     expect(navigations).toHaveLength(2);
 
     vi.advanceTimersByTime(279);
+    controller.armRepeatsFromKeydown("ArrowLeft");
+    vi.advanceTimersByTime(0);
     expect(navigations).toEqual([
       { direction: "forward", source: "key" },
       { direction: "back", source: "key" },

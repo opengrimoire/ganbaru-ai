@@ -44,12 +44,11 @@ export class HeldNavigationController {
 
   #key: HeldNavigationKey | null = null;
   #direction: HeldNavigationDirection | null = null;
-  #holdTimer: TimerId | null = null;
   #repeatTimer: TimerId | null = null;
   #generation = 0;
   #repeats = 0;
   #startedAt = 0;
-  #lastRepeatAt: number | null = null;
+  #repeatArmed = false;
 
   constructor(opts: HeldNavigationControllerOptions) {
     this.#holdDelayMs = opts.holdDelayMs;
@@ -76,23 +75,27 @@ export class HeldNavigationController {
     this.#direction = direction;
     this.#repeats = 0;
     this.#startedAt = this.#now();
-    this.#lastRepeatAt = null;
+    this.#repeatArmed = false;
     this.#mark?.({ type: "hold-start", key, direction });
     this.#navigate(direction, "key");
+  }
 
-    this.#holdTimer = this.#setTimer(() => {
-      this.#holdTimer = null;
+  armRepeatsFromKeydown(key: HeldNavigationKey): void {
+    if (this.#key !== key) return;
+    if (this.#repeatArmed) return;
+    this.#repeatArmed = true;
+
+    const generation = this.#generation;
+    const elapsedMs = this.#now() - this.#startedAt;
+    const delayMs = Math.max(0, this.#holdDelayMs - elapsedMs);
+    this.#repeatTimer = this.#setTimer(() => {
+      this.#repeatTimer = null;
       if (!this.#isActive(generation)) {
         this.#mark?.({ type: "repeat-cancelled", key, stage: "delay" });
         return;
       }
       this.#runRepeatTick(generation, key);
-    }, this.#holdDelayMs);
-  }
-
-  repeatFromKeydown(key: HeldNavigationKey): void {
-    if (this.#key !== key) return;
-    this.#tryRepeat(this.#generation, key);
+    }, delayMs);
   }
 
   stop(key?: HeldNavigationKey): HeldNavigationKey | null {
@@ -103,16 +106,13 @@ export class HeldNavigationController {
     this.#generation++;
     this.#key = null;
     this.#direction = null;
+    this.#repeatArmed = false;
     this.#clearTimers();
     this.#mark?.({ type: "hold-stop", key: stoppedKey, repeats: this.#repeats });
     return stoppedKey;
   }
 
   #clearTimers(): void {
-    if (this.#holdTimer !== null) {
-      this.#clearTimer(this.#holdTimer);
-      this.#holdTimer = null;
-    }
     if (this.#repeatTimer !== null) {
       this.#clearTimer(this.#repeatTimer);
       this.#repeatTimer = null;
@@ -144,7 +144,6 @@ export class HeldNavigationController {
     if (!this.#isActive(generation)) return;
     const now = this.#now();
     if (now - this.#startedAt < this.#holdDelayMs) return;
-    if (this.#lastRepeatAt !== null && now - this.#lastRepeatAt < this.#repeatMs) return;
 
     const direction = this.#direction;
     if (direction === null) return;
@@ -153,7 +152,6 @@ export class HeldNavigationController {
       return;
     }
 
-    this.#lastRepeatAt = now;
     this.#repeats++;
     this.#mark?.({ type: "repeat", key, direction, repeats: this.#repeats });
     this.#navigate(direction, "hold-repeat");
