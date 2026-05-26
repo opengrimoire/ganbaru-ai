@@ -41,7 +41,7 @@ Key Tauri v2 capabilities used in this project:
 - **`set_fullscreen` + `set_decorations(false)` + `set_transparent`**. Combined to produce the fullscreen break screen that covers the taskbar and acts as a custom screen saver during Pomodoro breaks.
 - **`setIgnoreCursorEvents`**. Allows the custom notification window to be non-interactive when desired, so it does not interrupt work in other apps.
 - **Tray icon API.** The app lives in the system tray when not focused, essential for an always-running productivity tool.
-- **`tauri-plugin-native-messaging`**. Bridges the browser extension with the Tauri backend for website blocking and work environment switching.
+- **Native messaging host binary.** The repo-owned `ganbaruai-native-messaging` Rust binary lets Chromium-based browser extensions ask the local app state whether a page should be blocked.
 - **File system plugin.** Reading and writing markdown files and vault assets to disk.
 
 **Desktop-only features** (not available on mobile due to OS sandboxing): process management, native messaging, global mouse position polling, always-on-top multi-window, edge panel, work environment switching, fullscreen break overlay, desktop activity monitoring.
@@ -397,7 +397,7 @@ The custom block page is a minimal, fully designed HTML page served by the exten
 
 ### Native Messaging API
 
-The protocol connecting the browser extension to the Tauri backend via stdin/stdout JSON messages. `tauri-plugin-native-messaging` handles the Tauri side. Same mechanism used by RescueTime, 1Password, and similar apps.
+The protocol connecting the browser extension to the local Rust native host via stdin/stdout JSON messages. The host reads GanbaruAI's local config and Pomodoro runtime state, then returns allow or block decisions to the extension. This keeps browser data local and avoids adding a separate browser bridge dependency.
 
 ---
 

@@ -39,6 +39,7 @@ mod media_player;
 mod music;
 mod notification;
 mod pomodoro;
+mod procrastination_stopper;
 mod recurrence;
 mod themes;
 mod timezone_migration;
@@ -775,6 +776,7 @@ pub fn run() {
             pomodoro::pomodoro_heartbeat,
             pomodoro::pomodoro_record_run_event,
             pomodoro::pomodoro_recover_open_runs,
+            procrastination_stopper::procrastination_stopper_write_state,
             themes::theme_insert,
             themes::theme_replace_content,
             themes::theme_delete,

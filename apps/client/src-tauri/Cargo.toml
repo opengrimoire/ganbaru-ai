@@ -5,6 +5,7 @@ description = "GanbaruAI desktop app"
 authors = ["GanbaruAI"]
 license = "AGPL-3.0-only"
 edition = "2021"
+default-run = "ganbaruai"
 
 [lib]
 name = "desktop_lib"

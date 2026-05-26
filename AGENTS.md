@@ -73,9 +73,9 @@ apps/
   server/: (planned) Hocuspocus sync server (self-hostable)
 packages/
   shared-types/: TypeScript types shared across workspaces
-extensions/: (planned)
+extensions/
   chrome/: Chrome extension (manifest v3)
-  firefox/: Firefox extension
+  firefox/: (planned) Firefox extension
 Cargo.toml: cargo workspace root
 turbo.json: Turborepo task config
 pnpm-workspace.yaml: workspace definition

@@ -10,6 +10,7 @@
   import AppearanceSection from "./AppearanceSection.svelte";
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import MusicSection from "./MusicSection.svelte";
+  import ProcrastinationStopperSection from "./ProcrastinationStopperSection.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
@@ -42,6 +43,7 @@
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "calendars", label: "Calendar", icon: CalendarDays },
     { id: "music", label: "Music", icon: Music },
+    { id: "stopper", label: "Stopper", icon: SettingsIcon },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   ];
 
@@ -248,6 +250,8 @@
           {/if}
         {:else if activeSection === "music"}
           <MusicSection />
+        {:else if activeSection === "stopper"}
+          <ProcrastinationStopperSection />
         {:else if activeSection === "shortcuts"}
           <ShortcutsSection />
         {/if}

@@ -4,6 +4,19 @@ The procrastination stopper enforces the browsing and app rules that belong to t
 
 The stopper is not a separate productivity tool. It is a guardrail attached to the calendar, Pomodoro, and work environment systems. The user plans the work context once, then GanbaruAI applies the matching rules while the session is active.
 
+## Current implementation status
+
+The current desktop implementation is an early Chrome and Brave development slice:
+
+- `extensions/chrome` is a Manifest V3 unpacked extension named GanbaruAI.
+- `ganbaruai-native-messaging` is a repo-owned native messaging host binary built from Rust.
+- The app writes a small runtime state file when Pomodoro state changes.
+- The native host reads the runtime state and `vault/config.json`, then decides whether a requested host should be blocked.
+- Settings > Stopper supports enable or disable, block during breaks, blocked hosts, allowed hosts, and a rule tester.
+- Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
+
+This is intentionally smaller than the full spec below. It supports host-level blocking during Pomodoro sessions first. Work environment rules, category presets, temporary access analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
+
 ## Purpose
 
 The stopper exists to reduce the cost of staying on task during vulnerable moments:

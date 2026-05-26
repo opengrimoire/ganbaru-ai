@@ -27,7 +27,7 @@ Anti-procrastination project manager for life and work. Free, local, open-source
 | **Kanban board** | Backlog/planned/in-progress/done columns, priority tiers (easy/medium/hard/epic), estimated pomodoro count, task-to-session linking | Available |
 | **Note-taking** | Tiptap block editor with slash commands, markdown storage on disk, bidirectional backlinks indexed in SQLite | Planned |
 | **Daily diary** | Morning and evening entry forms, mood/energy/sleep tracking, personal baselines for AI suggestions | Planned |
-| **Procrastination stopper** | Browser extension (Chrome, Firefox) with URL blocking and content-aware filtering; mobile app-level blocking | Planned |
+| **Procrastination stopper** | Chromium-based development extension that blocks configured hosts during active Pomodoro focus sessions; Firefox, richer rules, and mobile app-level blocking are planned | Early desktop slice |
 | **Work environments** | Saved configs per session block: apps to open/close, browser tabs, playlist, blocker rules. Auto-activated by the calendar | Planned |
 | **Edge panel** | Always-on-top sidebar with live pomodoro timer, quick-add tasks, music controls, active environment name | Planned |
 | **Music player** | Local file playback (Symphonia/FFmpeg), YouTube via IFrame API, playlists tied to session blocks and environments | Planned |
@@ -65,6 +65,38 @@ pnpm tauri dev              # desktop app with hot reload
 pnpm tauri android dev      # Android (planned)
 pnpm tauri ios dev          # iOS (planned)
 ```
+
+### Browser extension local testing
+
+The procrastination stopper extension is tested as an unpacked Chromium extension during development. The same flow applies to Chrome, Chromium, Brave, and Edge. The browser-specific parts are the extensions page URL and the last argument passed to the native host registration script.
+
+From the repo root, build the native messaging host:
+
+```bash
+pnpm -w run build:native-host
+```
+
+Open the browser's extensions page, enable developer mode, load the `extensions/chrome` folder as an unpacked extension, copy the extension id, then register the native host:
+
+```bash
+node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|chromium|brave|edge>
+```
+
+For Brave, this helper builds the native host and opens the extensions page:
+
+```bash
+pnpm -w run setup:brave-extension
+```
+
+After first setup, keep `pnpm tauri dev` running, configure Settings > Stopper in the app, start a Pomodoro focus session, and open a blocked host such as `reddit.com`.
+
+For repeat testing:
+
+- App UI changes usually hot reload through `pnpm tauri dev`.
+- Rust command changes need `pnpm tauri dev` restarted.
+- Native host changes need `pnpm -w run build:native-host`.
+- Extension HTML, CSS, JS, manifest, or icon changes need the reload button on the extension card in the browser's extensions page.
+- Removing and adding the unpacked extension gives it a new id, so the native host registration command must be run again.
 
 ### Build
 
