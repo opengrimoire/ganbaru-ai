@@ -58,6 +58,7 @@ The day, work-cycle, and week views support direct manipulation:
 - **Click on an event** opens the edit panel anchored at the block.
 - **Drag an event body** moves it. The pointer snaps to a configurable minute granularity.
 - **Drag the top or bottom edge** resizes from that side. The opposite edge stays put.
+- **Past imported events are read-only.** Events from imported or external calendars cannot be edited after they have ended. The panel remains inspectable, including Meeting details, and still offers archive. Save, field edits, drag, and resize are unavailable.
 - **Active event start edits are locked.** Body drag, top-edge resize, start date, start time, and all-day conversion are disabled because they would change a start that already has pomodoro history. The bottom edge and end fields remain editable.
 - **Active event panel action** replaces delete or archive with **End event**. The action uses a scissors icon and sets the event end time to now, which lets the pomodoro run close as an event that has already ended. If no other overlapping pomodoro event can take over, the user confirms with the standard "Stop the focus session?" modal. If another overlapping pomodoro event exists, End event uses the same inline red confirmation pattern as archive/delete. The ended event can be archived afterward from its past-event state.
 - **Esc, click outside, or pressing Save** closes the edit panel.

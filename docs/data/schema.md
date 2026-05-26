@@ -25,7 +25,7 @@ Top-level grouping for events. Lets the user keep their local data in `local` wh
 | `color` | text | Per-calendar color hex (`''` to inherit from theme). Reserved for future per-calendar UI. |
 | `source` | text | `'local'` for the built-in calendar, `'ics'` for `.ics` imports. Future values: `'subscription'`, `'google'`, `'caldav'`. |
 | `visible` | integer | 0 or 1. Toggled per calendar in the (planned) calendars panel. |
-| `read_only` | integer | 0 or 1. Reserved for read-only sources (subscriptions, shared). Imported `.ics` rows are writable today. |
+| `read_only` | integer | 0 or 1. Reserved for read-only sources (subscriptions, shared). Imported `.ics` calendars use 0 so current and future rows can be edited, but the calendar edit UI locks past imported events while still allowing archive. |
 | `source_url` | text or null | Origin of the calendar. For `.ics` imports, the file's basename (used to dedupe re-imports of the same file). For future subscriptions, the URL. |
 | `last_synced` | ISO datetime or null | When the calendar last fetched from its source. Reserved for subscriptions. |
 | `created_at` | ISO datetime | Row creation time. |

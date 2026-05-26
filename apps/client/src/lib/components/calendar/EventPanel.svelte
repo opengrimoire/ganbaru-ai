@@ -1299,6 +1299,7 @@
 
   function handleSave() {
     if (parked) return;
+    if (controlsDisabled) return;
     if (saving || !saveReady) return;
     const data = buildSaveData();
     const s = isRecurring ? scope : undefined;
@@ -2186,7 +2187,7 @@
           {#if readOnly}
             <div class="flex flex-1 cursor-not-allowed items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-muted-foreground"
               style="background-color: var(--panel-contrast);">
-              <span>Read-only (Ctrl + D to archive)</span>
+              <span>Read-only ({formatShortcut("Mod + D")} to archive)</span>
             </div>
           {:else}
           <button onclick={handleSave}

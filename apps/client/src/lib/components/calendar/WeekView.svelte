@@ -6,7 +6,6 @@
     formatDatePart,
     layoutAllDayEventsForWeek,
     getEventColor,
-    parseCalendarDate,
     GUTTER_WIDTH_PER_TZ,
     visibleMinuteRangeForScroll,
   } from "./utils";
@@ -21,6 +20,7 @@
   import { useDragController } from "./useDragController.svelte";
   import { useAllDayDragController } from "./useAllDayDragController.svelte";
   import { eventMatchesActiveOccurrence } from "./occurrence-protection";
+  import { hasCalendarEventEnded } from "./event-edit-permissions";
   import type { PanelAnchor } from "./edit-session.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -384,7 +384,7 @@
     const ev = events.find((event) => event.id === id);
     if (!ev) return false;
     if (isActiveCalendarEvent(ev)) return false;
-    return parseCalendarDate(ev.end).getTime() < Date.now();
+    return hasCalendarEventEnded(ev);
   }
 
   const drag = useDragController({
@@ -415,6 +415,7 @@
     getPositionedEvents: () => allDayPositioned,
     onEventUpdate: (e) => onEventUpdate(e),
     canDrag: (id) => editingId ? id === editingId : !previewedIds || !previewedIds.has(id),
+    isEventLocked: isLockedCalendarEvent,
   });
 
   const allDayEffectiveRows = $derived.by(() => {
@@ -603,7 +604,7 @@
               editing={editingId === pos.event.id}
               preview={previewedIds?.has(pos.event.id) ?? false}
               grabbing={allDayDrag.grabbingId === pos.event.id}
-              canDrag={!editingId || pos.event.id === editingId}
+              canDrag={(!editingId || pos.event.id === editingId) && !isLockedCalendarEvent(pos.event.id)}
               isPast={endDateStr < todayStr}
               onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
               onprefetch={() => onEventPrefetch?.(pos.event)}

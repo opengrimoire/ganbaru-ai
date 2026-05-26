@@ -48,6 +48,7 @@
   import { executeRecurrenceCommitPlan } from "./recurrence-edit-executor";
   import { endActiveEventWouldStopProductivity } from "./active-event-end";
   import { activeRootId } from "./occurrence-protection";
+  import { getCalendarEventEditLock } from "./event-edit-permissions";
   import {
     buildCalendarDeleteArchivePlan,
     type CalendarDeleteArchiveOutcome,
@@ -619,14 +620,12 @@
     }
   });
 
-  // Past pomodoro events are read-only (completed work is sacred)
-  const isEditingLocked = $derived.by(() => {
+  const selectedEditLock = $derived.by(() => {
     const s = session.state;
-    if (s.mode !== "edit") return false;
-    const ev = s.originalEvent;
-    if (!ev.pomodoroConfig) return false;
-    if (pomodoro.isActive && ev.id === pomodoro.activeBlockId) return false;
-    return parseCalendarDate(ev.end).getTime() < Date.now();
+    if (s.mode !== "edit") return { locked: false, allowArchive: false };
+    return getCalendarEventEditLock(s.originalEvent, calendarsStore.list, {
+      isActivePomodoroEvent: isSelectedActiveOccurrence(s),
+    });
   });
 
   function snapshotCurrentPanel(): ParkedPanelSnapshot | null {
@@ -649,8 +648,8 @@
         recurringScopeEnabled: isRecurring(s.originalEvent) && !isSelectedActiveOccurrence(s),
         anchor: s.anchor,
         detailsLoaded: panelDetailsLoaded,
-        readOnly: isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId),
-        allowDeleteWhenReadOnly: isEditingLocked && !calendarsStore.isReadOnly(s.originalEvent.calendarId),
+        readOnly: selectedEditLock.locked,
+        allowDeleteWhenReadOnly: selectedEditLock.locked && selectedEditLock.allowArchive,
         skipInlineDeleteConfirm: deleteWouldStopSession,
         endActiveEventAvailable: false,
         inlineEndEventConfirm: false,
@@ -692,8 +691,8 @@
         recurringScopeEnabled: isRecurring(s.originalEvent) && !selectedActive,
         detailsLoaded: panelDetailsLoaded,
         externalDirty: session.dirty,
-        readOnly: !endingActiveEvent && (isEditingLocked || calendarsStore.isReadOnly(s.originalEvent.calendarId)),
-        allowDeleteWhenReadOnly: !endingActiveEvent && isEditingLocked && !calendarsStore.isReadOnly(s.originalEvent.calendarId),
+        readOnly: !endingActiveEvent && selectedEditLock.locked,
+        allowDeleteWhenReadOnly: !endingActiveEvent && selectedEditLock.locked && selectedEditLock.allowArchive,
         skipInlineDeleteConfirm: deleteWouldStopSession,
         endActiveEventAvailable: selectedActive,
         inlineEndEventConfirm: selectedActive && !endWouldStopProductivity,

@@ -5,7 +5,6 @@
     formatDatePart,
     formatDayName,
     allDayEventsForDay,
-    parseCalendarDate,
     GUTTER_WIDTH_PER_TZ,
     visibleMinuteRangeForScroll,
   } from "./utils";
@@ -18,6 +17,7 @@
   import AllDayEventChip from "./AllDayEventChip.svelte";
   import { useDragController } from "./useDragController.svelte";
   import { eventMatchesActiveOccurrence } from "./occurrence-protection";
+  import { hasCalendarEventEnded } from "./event-edit-permissions";
   import type { PanelAnchor } from "./edit-session.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -335,7 +335,7 @@
     const ev = events.find((event) => event.id === id);
     if (!ev) return false;
     if (isActiveCalendarEvent(ev)) return false;
-    return parseCalendarDate(ev.end).getTime() < Date.now();
+    return hasCalendarEventEnded(ev);
   }
 
   const drag = useDragController({

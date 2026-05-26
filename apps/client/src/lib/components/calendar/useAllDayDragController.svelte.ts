@@ -30,6 +30,7 @@ export interface AllDayDragControllerConfig {
   getPositionedEvents: () => PositionedAllDayEvent[];
   onEventUpdate: (event: CalendarEvent) => void | Promise<void>;
   canDrag?: (eventId: string) => boolean;
+  isEventLocked?: (eventId: string) => boolean;
 }
 
 export function useAllDayDragController(config: AllDayDragControllerConfig) {
@@ -66,6 +67,7 @@ export function useAllDayDragController(config: AllDayDragControllerConfig) {
 
   function handleDragStart(eventId: string, e: PointerEvent) {
     if (config.canDrag && !config.canDrag(eventId)) return;
+    if (config.isEventLocked?.(eventId)) return;
 
     const event = config.events().find((ev) => ev.id === eventId);
     if (!event) return;
