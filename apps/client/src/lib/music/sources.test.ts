@@ -65,13 +65,13 @@ describe("parseMusicSourceInput", () => {
   });
 
   it("parses local absolute paths", () => {
-    const result = parseMusicSourceInput("/home/victor/Music/focus.flac");
+    const result = parseMusicSourceInput("/home/person/Music/focus.flac");
 
     expect(result.error).toBeNull();
     expect(result.source).toMatchObject({
       kind: "local-file",
-      path: "/home/victor/Music/focus.flac",
-      identity: "local:/home/victor/Music/focus.flac",
+      path: "/home/person/Music/focus.flac",
+      identity: "local:/home/person/Music/focus.flac",
       title: "focus",
     });
   });

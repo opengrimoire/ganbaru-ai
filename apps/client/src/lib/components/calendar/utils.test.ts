@@ -911,9 +911,9 @@ describe("getEventSurfaceStatusForIdentity", () => {
     expect(getEventSurfaceStatusForIdentity({
       surfaceAttendees: [
         { email: "other@example.com", status: "accepted" },
-        { email: "Victor@Example.com", status: "tentative" },
+        { email: "Person@Example.com", status: "tentative" },
       ],
-    }, "victor@example.com")).toBe("tentative");
+    }, "person@example.com")).toBe("tentative");
   });
 
   it("falls back to local participation status without an identity or matching attendee", () => {
@@ -921,7 +921,7 @@ describe("getEventSurfaceStatusForIdentity", () => {
       surfaceAttendees: [{ email: "other@example.com", status: "declined" }],
     };
     expect(getEventSurfaceStatusForIdentity(event, undefined)).toBeUndefined();
-    expect(getEventSurfaceStatusForIdentity(event, "victor@example.com")).toBeUndefined();
+    expect(getEventSurfaceStatusForIdentity(event, "person@example.com")).toBeUndefined();
     expect(getEventSurfaceStatusForIdentity({
       ...event,
       localParticipationStatus: "needs-action",
@@ -929,7 +929,7 @@ describe("getEventSurfaceStatusForIdentity", () => {
     expect(getEventSurfaceStatusForIdentity({
       ...event,
       localParticipationStatus: "tentative",
-    }, "victor@example.com")).toBe("tentative");
+    }, "person@example.com")).toBe("tentative");
   });
 });
 
