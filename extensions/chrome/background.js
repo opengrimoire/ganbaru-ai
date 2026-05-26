@@ -1,7 +1,6 @@
 const HOST_NAME = "org.opengrimoire.ganbaruai.stopper";
-const TEMP_ALLOW_MINUTES = 5;
-const TEMP_ALLOW_STORAGE_KEY = "temporaryAllowedHosts";
 const STATUS_STORAGE_KEY = "status";
+const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
 const recentRedirects = new Map();
 
 function sendNativeMessage(message) {
@@ -35,47 +34,6 @@ function hostFromUrl(url) {
   }
 }
 
-function hostMatchesRule(host, ruleHost) {
-  return host === ruleHost || host.endsWith(`.${ruleHost}`);
-}
-
-async function getTemporaryAllowedHosts() {
-  const stored = await chrome.storage.local.get(TEMP_ALLOW_STORAGE_KEY);
-  const value = stored[TEMP_ALLOW_STORAGE_KEY];
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-async function isTemporarilyAllowed(host) {
-  const allowedHosts = await getTemporaryAllowedHosts();
-  const now = Date.now();
-  let changed = false;
-
-  for (const [ruleHost, expiresAt] of Object.entries(allowedHosts)) {
-    if (typeof expiresAt !== "number" || expiresAt <= now) {
-      delete allowedHosts[ruleHost];
-      changed = true;
-      continue;
-    }
-    if (hostMatchesRule(host, ruleHost)) {
-      if (changed) {
-        await chrome.storage.local.set({ [TEMP_ALLOW_STORAGE_KEY]: allowedHosts });
-      }
-      return true;
-    }
-  }
-
-  if (changed) {
-    await chrome.storage.local.set({ [TEMP_ALLOW_STORAGE_KEY]: allowedHosts });
-  }
-  return false;
-}
-
-async function allowHostTemporarily(host) {
-  const allowedHosts = await getTemporaryAllowedHosts();
-  allowedHosts[host] = Date.now() + TEMP_ALLOW_MINUTES * 60 * 1000;
-  await chrome.storage.local.set({ [TEMP_ALLOW_STORAGE_KEY]: allowedHosts });
-}
-
 async function updateStatus(status) {
   await chrome.storage.local.set({
     [STATUS_STORAGE_KEY]: {
@@ -90,21 +48,35 @@ async function updateStatus(status) {
   });
 }
 
-function blockedPageUrl(originalUrl, decision) {
+function blockedPageStore() {
+  return chrome.storage.session ?? chrome.storage.local;
+}
+
+async function storeBlockedPageState(originalUrl, decision) {
+  const host = decision.host ?? hostFromUrl(originalUrl);
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  await blockedPageStore().set({
+    [`${BLOCKED_PAGE_STORAGE_PREFIX}${id}`]: {
+      host,
+      remainingSeconds: typeof decision.remainingSeconds === "number"
+        ? decision.remainingSeconds
+        : null,
+      createdAt: Date.now(),
+    },
+  });
+  return id;
+}
+
+function blockedPageUrl(blockedPageId) {
   const params = new URLSearchParams();
-  params.set("url", originalUrl);
-  if (decision.host) params.set("host", decision.host);
-  if (decision.matchedRuleName) params.set("rule", decision.matchedRuleName);
-  if (typeof decision.remainingSeconds === "number") {
-    params.set("remaining", String(decision.remainingSeconds));
-  }
+  params.set("blocked", blockedPageId);
   return chrome.runtime.getURL(`blocked.html?${params.toString()}`);
 }
 
 async function decideAndRedirect(tabId, url) {
   if (!isSupportedPageUrl(url)) return;
   const host = hostFromUrl(url);
-  if (!host || await isTemporarilyAllowed(host)) return;
+  if (!host) return;
   const redirectKey = `${tabId}:${url}`;
   const lastRedirect = recentRedirects.get(redirectKey);
   if (typeof lastRedirect === "number" && Date.now() - lastRedirect < 3000) return;
@@ -123,7 +95,8 @@ async function decideAndRedirect(tabId, url) {
       if (value < cutoff) recentRedirects.delete(key);
     }
   }
-  await chrome.tabs.update(tabId, { url: blockedPageUrl(url, decision) });
+  const blockedPageId = await storeBlockedPageState(url, decision);
+  await chrome.tabs.update(tabId, { url: blockedPageUrl(blockedPageId) });
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -146,19 +119,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await updateStatus(state);
         sendResponse(state);
       });
-    return true;
-  }
-
-  if (message.type === "allow_temporary") {
-    const host = typeof message.host === "string" ? message.host : null;
-    const url = typeof message.url === "string" ? message.url : null;
-    if (!host || !url || !sender.tab?.id) {
-      sendResponse({ ok: false });
-      return false;
-    }
-    allowHostTemporarily(host)
-      .then(() => chrome.tabs.update(sender.tab.id, { url }))
-      .then(() => sendResponse({ ok: true }));
     return true;
   }
 

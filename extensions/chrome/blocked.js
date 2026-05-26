@@ -1,34 +1,57 @@
 const params = new URLSearchParams(location.search);
-const originalUrl = params.get("url") ?? "";
-const host = params.get("host") ?? "";
-const rule = params.get("rule") ?? "";
-const remaining = Number(params.get("remaining") ?? "0");
+const blockedPageId = params.get("blocked") ?? "";
 
-const hostEl = document.getElementById("host");
-const ruleEl = document.getElementById("rule");
+const titleEl = document.getElementById("blocked-title");
 const remainingEl = document.getElementById("remaining");
-const backButton = document.getElementById("back");
-const allowButton = document.getElementById("allow");
 const closeButton = document.getElementById("close");
+const faviconEl = document.getElementById("favicon");
 
-hostEl.textContent = host;
-ruleEl.textContent = rule;
+const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
+
+function blockedPageStore() {
+  return chrome.storage.session ?? chrome.storage.local;
+}
+
+function faviconUrl(siteHost) {
+  const pageUrl = `https://${siteHost}/`;
+  const encoded = encodeURIComponent(pageUrl);
+  return chrome.runtime.getURL(`/_favicon/?pageUrl=${encoded}&size=64`);
+}
+
+function displayHost(siteHost) {
+  return siteHost.replace(/^www\./i, "");
+}
+
+async function loadBlockedPageState() {
+  if (!blockedPageId) return null;
+  const key = `${BLOCKED_PAGE_STORAGE_PREFIX}${blockedPageId}`;
+  const stored = await blockedPageStore().get(key);
+  return stored[key] ?? null;
+}
+
+const state = await loadBlockedPageState();
+const host = typeof state?.host === "string" ? state.host : "";
+const remaining = typeof state?.remainingSeconds === "number" ? state.remainingSeconds : 0;
+
+titleEl.textContent = `${host ? displayHost(host) : "This site"} is blocked`;
 remainingEl.textContent = Number.isFinite(remaining) && remaining > 0
   ? `${Math.ceil(remaining / 60)} min left in focus`
-  : "";
+  : "Focus session active";
 
-backButton.addEventListener("click", () => {
-  history.back();
+if (host) faviconEl.src = faviconUrl(host);
+faviconEl.addEventListener("load", () => {
+  faviconEl.hidden = false;
 });
-
-allowButton.addEventListener("click", () => {
-  chrome.runtime.sendMessage({
-    type: "allow_temporary",
-    host,
-    url: originalUrl,
-  });
+faviconEl.addEventListener("error", () => {
+  faviconEl.hidden = true;
 });
 
 closeButton.addEventListener("click", () => {
-  chrome.runtime.sendMessage({ type: "close_tab" });
+  chrome.tabs.getCurrent((tab) => {
+    if (tab?.id) {
+      chrome.tabs.remove(tab.id);
+      return;
+    }
+    chrome.runtime.sendMessage({ type: "close_tab" });
+  });
 });
