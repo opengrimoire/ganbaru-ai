@@ -12,6 +12,7 @@ import {
   minuteOfDay,
   durationMinutes,
   snapToGrid,
+  snapSimpleClickStartMinute,
   clampMinute,
   eventsForDay,
   allDayEventsForDay,
@@ -237,6 +238,29 @@ describe("snapToGrid", () => {
   it("snaps to custom grid size", () => {
     expect(snapToGrid(20, 30)).toBe(30);
     expect(snapToGrid(14, 30)).toBe(0);
+  });
+});
+
+describe("snapSimpleClickStartMinute", () => {
+  it("uses the hour start for simple clicks in the first half of an hour", () => {
+    expect(snapSimpleClickStartMinute(600)).toBe(600);
+    expect(snapSimpleClickStartMinute(614.9)).toBe(600);
+    expect(snapSimpleClickStartMinute(629.9)).toBe(600);
+  });
+
+  it("uses the half-hour start for simple clicks in the second half of an hour", () => {
+    expect(snapSimpleClickStartMinute(630)).toBe(630);
+    expect(snapSimpleClickStartMinute(644.9)).toBe(630);
+    expect(snapSimpleClickStartMinute(659.9)).toBe(630);
+  });
+
+  it("does not round a simple click to the nearest grid mark", () => {
+    expect(snapSimpleClickStartMinute(615)).toBe(600);
+    expect(snapSimpleClickStartMinute(645)).toBe(630);
+  });
+
+  it("keeps the last possible simple click inside the current day", () => {
+    expect(snapSimpleClickStartMinute(1440)).toBe(1410);
   });
 });
 

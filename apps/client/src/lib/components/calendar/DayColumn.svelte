@@ -1,11 +1,13 @@
 <script lang="ts">
   import type { CalendarEvent, PositionedEvent, PersistedSegment, TimelineBand } from "./types";
+  import type { CreateStartTiming } from "./useDragController.svelte";
   import {
     layoutEventsForDay,
     effectiveMinuteRange,
     formatDatePart,
     parseCalendarDate,
     snapToGrid,
+    snapSimpleClickStartMinute,
     clampMinute,
     getEventColor,
     formatTimeRange,
@@ -70,7 +72,7 @@
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventPrefetch?: (event: CalendarEvent) => void;
     onDragStart: (eventId: string, e: PointerEvent, forceEdge?: "resize-top" | "resize-bottom") => void;
-    onCreateStart: (dateStr: string, minute: number, e: PointerEvent) => void;
+    onCreateStart: (dateStr: string, timing: CreateStartTiming, e: PointerEvent) => void;
     isActiveEvent?: (event: CalendarEvent) => boolean;
     isEventLocked?: (eventId: string) => boolean;
   } = $props();
@@ -421,19 +423,20 @@
     return hit?.kind === "edge" ? { eventId: hit.eventId, edge: hit.edge } : null;
   }
 
-  function getCreateMinuteFromOffset(offsetY: number): number {
+  function getCreateTimingFromOffset(offsetY: number): CreateStartTiming {
     const hh = getRenderedHourHeight();
     const rawMinute = (offsetY / hh) * 60;
-    let minute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
+    const clickMinute = snapSimpleClickStartMinute(rawMinute);
+    let selectionMinute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
     if (isToday && currentTimeMinute >= 0) {
       const currentTimeY = (currentTimeMinute / 60) * hh;
       if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
-        minute = Math.floor(currentTimeMinute);
+        selectionMinute = Math.floor(currentTimeMinute);
       }
     }
 
-    return minute;
+    return { selectionMinute, clickMinute };
   }
 
   function updateHoverStateFromClientPoint(
@@ -487,9 +490,9 @@
     if (panelOpen) return;
 
     // Calculate minute from actual click position
-    const minute = getCreateMinuteFromOffset(colOffsetY);
+    const timing = getCreateTimingFromOffset(colOffsetY);
 
-    onCreateStart(dateStr, minute, e);
+    onCreateStart(dateStr, timing, e);
   }
 
   function handleParentScroll() {
@@ -533,9 +536,9 @@
     const offsetY = e.clientY - colRect.top;
     const rawMinute = (offsetY / getRenderedHourHeight()) * 60;
     if (visibleRailSegments.some(seg => seg.start <= rawMinute && seg.end >= rawMinute)) return;
-    const minute = getCreateMinuteFromOffset(offsetY);
+    const timing = getCreateTimingFromOffset(offsetY);
 
-    onCreateStart(dateStr, minute, e);
+    onCreateStart(dateStr, timing, e);
   }
 </script>
 

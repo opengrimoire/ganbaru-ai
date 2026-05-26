@@ -38,6 +38,11 @@ const CREATE_HOLD_PREVIEW_DELAY_MS = 160;
 const CREATE_DRAG_THRESHOLD_PX = 3;
 const EVENT_DRAG_THRESHOLD_PX = 3;
 
+export interface CreateStartTiming {
+  selectionMinute: number;
+  clickMinute: number;
+}
+
 export interface DragControllerConfig {
   events: () => CalendarEvent[];
   hourHeight: () => number;
@@ -63,6 +68,7 @@ export function useDragController(config: DragControllerConfig) {
   let createState = $state<{
     dateStr: string;
     anchorMinute: number;
+    clickStartMinute: number;
     columnEl: HTMLElement;
     pointerStartX: number;
     pointerStartY: number;
@@ -429,16 +435,18 @@ export function useDragController(config: DragControllerConfig) {
 
   // Create-by-drag
 
-  function handleCreateStart(dateStr: string, minute: number, e: PointerEvent) {
+  function handleCreateStart(dateStr: string, timing: CreateStartTiming, e: PointerEvent) {
     if (dragState) return; // don't start create while an event drag is active
 
     const columnEl = (e.target as HTMLElement).closest("[data-day-column-shell]") as HTMLElement | null;
     if (!columnEl) return;
 
-    const roundedMinute = Math.round(minute);
+    const roundedSelectionMinute = Math.round(timing.selectionMinute);
+    const roundedClickMinute = Math.round(timing.clickMinute);
     createState = {
       dateStr,
-      anchorMinute: roundedMinute,
+      anchorMinute: roundedSelectionMinute,
+      clickStartMinute: roundedClickMinute,
       columnEl,
       pointerStartX: e.clientX,
       pointerStartY: e.clientY,
@@ -543,9 +551,9 @@ export function useDragController(config: DragControllerConfig) {
 
     if (state?.mode === "pending") {
       const endMinute = clampMinute(
-        Math.min(state.anchorMinute + DEFAULT_CLICK_EVENT_MINUTES, 1440),
+        Math.min(state.clickStartMinute + DEFAULT_CLICK_EVENT_MINUTES, 1440),
       );
-      const preview = buildPreview(state.dateStr, state.anchorMinute, endMinute);
+      const preview = buildPreview(state.dateStr, state.clickStartMinute, endMinute);
       createPreviewDate = state.dateStr;
       createPreview = preview;
       await tick();

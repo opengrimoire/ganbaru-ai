@@ -789,6 +789,11 @@ export function snapToGrid(minute: number, gridMinutes: number = 10): number {
   return Math.round(minute / gridMinutes) * gridMinutes;
 }
 
+export function snapSimpleClickStartMinute(minute: number): number {
+  const bounded = Math.max(0, Math.min(1439, minute));
+  return Math.floor(bounded / 30) * 30;
+}
+
 export function clampMinute(minute: number): number {
   return Math.max(0, Math.min(1440, Math.round(minute)));
 }
