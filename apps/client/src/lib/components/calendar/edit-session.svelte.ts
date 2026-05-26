@@ -1,6 +1,7 @@
 import type {
   CalendarEvent, EventColor, GuestPermissions, PomodoroConfig, RecurrenceConfig, RecurringScope,
 } from "./types";
+import { recurrenceConfigsEqual } from "./rrule";
 
 export type PanelAnchor = { x: number; y: number; width: number; height: number };
 
@@ -152,6 +153,12 @@ export function isDirtyDiff(
   for (const key of Object.keys(changes)) {
     const a = (changes as Record<string, unknown>)[key];
     const b = (baseline as Record<string, unknown>)[key];
+    if (key === "recurrence") {
+      if (!recurrenceConfigsEqual(a as RecurrenceConfig | undefined, b as RecurrenceConfig | undefined)) {
+        return true;
+      }
+      continue;
+    }
     if (!fieldEqual(a, b)) return true;
   }
   return false;

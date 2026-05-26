@@ -129,6 +129,28 @@ describe("isDirtyDiff", () => {
     expect(isDirtyDiff(different, baseline)).toBe(true);
   });
 
+  it("treats equivalent recurrence selector order as clean", () => {
+    const baseline: Partial<CalendarEvent> = {
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["FR", "MO"],
+        end: { type: "never" },
+      },
+    };
+    const changes: Partial<CalendarEvent> = {
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "FR"],
+        wkst: "MO",
+        end: { type: "never" },
+      },
+    };
+
+    expect(isDirtyDiff(changes, baseline)).toBe(false);
+  });
+
   it("treats a toggled-off-then-on notification set as clean", () => {
     const baseline = { notifications: [0, 30] };
     // User toggled notifications off: changes has undefined.

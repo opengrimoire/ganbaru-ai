@@ -389,6 +389,85 @@ describe("recurrence edit planner", () => {
     });
   });
 
+  it("plans only-this edits with equivalent reordered recurrence as standalone", () => {
+    const template = makeRecurringTemplate({
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["FR", "MO"],
+        end: { type: "never" },
+      },
+    });
+    const inst21 = makeInstance(template, "2027-06-21");
+
+    const plan = buildRecurringCommitPlan({
+      rawBlocks: [template],
+      templateId: template.id,
+      instanceEvent: inst21,
+      changes: {
+        title: "Changed",
+        recurrence: {
+          frequency: "weekly",
+          interval: 1,
+          weekdays: ["MO", "FR"],
+          wkst: "MO",
+          end: { type: "never" },
+        },
+      },
+      scope: "this",
+      today: "2027-06-10",
+      currentTime: "12:00",
+    });
+
+    expect(plan.recurrenceOperation.kind).toBe("unchanged");
+    expect(plan.operations[0]).toMatchObject({
+      type: "detach-occurrence",
+      target: "standalone",
+      patch: { title: "Changed", recurrence: undefined },
+    });
+  });
+
+  it("projects only-this edits with equivalent reordered recurrence as non-recurring", () => {
+    const template = makeRecurringTemplate({
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["FR", "MO"],
+        end: { type: "never" },
+      },
+    });
+    const inst21 = makeInstance(template, "2027-06-21");
+
+    const result = buildRecurringEditPlan({
+      rawBlocks: [template],
+      storeEvents: [inst21],
+      originalEvent: inst21,
+      instanceEvent: inst21,
+      templateId: template.id,
+      changes: {
+        title: "Changed",
+        recurrence: {
+          frequency: "weekly",
+          interval: 1,
+          weekdays: ["MO", "FR"],
+          wkst: "MO",
+          end: { type: "never" },
+        },
+      },
+      scope: "this",
+      window: TEST_WINDOW,
+      currentDate: "2027-06-10",
+      currentTime: "12:00",
+    }).display;
+
+    expect(result.events[0]).toMatchObject({
+      id: inst21.id,
+      title: "Changed",
+      recurrence: undefined,
+      recurringParentId: undefined,
+    });
+  });
+
   it("plans following clear as a split to one selected survivor", () => {
     const template = makeRecurringTemplate();
     const inst20 = makeInstance(template, "2027-06-20");

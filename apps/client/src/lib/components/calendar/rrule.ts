@@ -39,6 +39,73 @@ const FREQ_UNIT_PLURAL: Record<RecurrenceFrequency, string> = {
 };
 
 const BYDAY_RE = /^(-?\d+)?([A-Z]{2})$/;
+const WEEKDAY_ORDER = new Map<Weekday, number>(
+  ALL_WEEKDAYS.map((day, index) => [day, index]),
+);
+
+function compareWeekdays(a: Weekday, b: Weekday): number {
+  return (WEEKDAY_ORDER.get(a) ?? 0) - (WEEKDAY_ORDER.get(b) ?? 0);
+}
+
+function uniqueSortedNumbers(values: number[] | undefined): number[] | undefined {
+  if (!values || values.length === 0) return undefined;
+  return [...new Set(values)].sort((a, b) => a - b);
+}
+
+function uniqueSortedWeekdays(values: Weekday[] | undefined): Weekday[] | undefined {
+  if (!values || values.length === 0) return undefined;
+  return [...new Set(values)].sort(compareWeekdays);
+}
+
+function ordinalWeekdayKey(value: OrdinalWeekday): string {
+  return `${value.ordinal ?? ""}:${value.day}`;
+}
+
+function uniqueSortedOrdinalWeekdays(
+  values: OrdinalWeekday[] | undefined,
+): OrdinalWeekday[] | undefined {
+  if (!values || values.length === 0) return undefined;
+  const deduped = new Map<string, OrdinalWeekday>();
+  for (const value of values) {
+    deduped.set(ordinalWeekdayKey(value), value.ordinal == null
+      ? { day: value.day }
+      : { day: value.day, ordinal: value.ordinal });
+  }
+  const result = [...deduped.values()].sort((a, b) => {
+    const weekdayDiff = compareWeekdays(a.day, b.day);
+    if (weekdayDiff !== 0) return weekdayDiff;
+    return (a.ordinal ?? 0) - (b.ordinal ?? 0);
+  });
+  return result.length > 0 ? result : undefined;
+}
+
+function canonicalizeRecurrenceConfig(config: RecurrenceConfig): RecurrenceConfig {
+  const ordinalWeekdays = uniqueSortedOrdinalWeekdays(config.ordinalWeekdays);
+  return {
+    frequency: config.frequency,
+    interval: config.interval,
+    end: config.end,
+    weekdays: ordinalWeekdays ? undefined : uniqueSortedWeekdays(config.weekdays),
+    ordinalWeekdays,
+    byMonthDay: uniqueSortedNumbers(config.byMonthDay),
+    byMonth: uniqueSortedNumbers(config.byMonth),
+    bySetPos: uniqueSortedNumbers(config.bySetPos),
+    byYearDay: uniqueSortedNumbers(config.byYearDay),
+    byWeekNo: uniqueSortedNumbers(config.byWeekNo),
+    wkst: config.wkst && config.wkst !== "MO" ? config.wkst : undefined,
+  };
+}
+
+export function recurrenceConfigsEqual(
+  a: RecurrenceConfig | undefined,
+  b: RecurrenceConfig | undefined,
+): boolean {
+  if (a === b) return true;
+  if (a === undefined && b === undefined) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(canonicalizeRecurrenceConfig(a))
+    === JSON.stringify(canonicalizeRecurrenceConfig(b));
+}
 
 /**
  * Parse a single BYDAY token like "MO", "2TU", or "-1FR".

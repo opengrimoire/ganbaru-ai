@@ -20,7 +20,7 @@ import {
   templateEndForDate,
   templateEventIdForDate,
 } from "$lib/components/calendar/recurrence-commit-helpers";
-import { recurrenceToRrule } from "$lib/components/calendar/rrule";
+import { recurrenceConfigsEqual, recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
 import {
   buildExpansionIndex,
@@ -221,15 +221,6 @@ function hasEventPatchKey<K extends keyof CalendarEvent>(
   key: K,
 ): boolean {
   return Object.prototype.hasOwnProperty.call(changes, key);
-}
-
-function recurrenceConfigsEqual(
-  a: RecurrenceConfig | undefined,
-  b: RecurrenceConfig | undefined,
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**

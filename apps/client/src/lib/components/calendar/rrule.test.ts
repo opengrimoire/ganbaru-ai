@@ -3,6 +3,7 @@ import {
   recurrenceToRrule,
   rruleToRecurrence,
   formatRecurrenceLabel,
+  recurrenceConfigsEqual,
 } from "./rrule";
 import type { RecurrenceConfig } from "./types";
 
@@ -336,6 +337,43 @@ describe("RRULE round-trips for BY* rules", () => {
     expect(config.ordinalWeekdays).toEqual([{ day: "TH", ordinal: 4 }]);
     // Serializer emits BYDAY before BYMONTH
     expect(recurrenceToRrule(config)).toBe("FREQ=YEARLY;BYDAY=4TH;BYMONTH=11");
+  });
+});
+
+describe("recurrenceConfigsEqual", () => {
+  it("treats selector order and default week start as equivalent", () => {
+    expect(recurrenceConfigsEqual(
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["FR", "MO"],
+        wkst: "MO",
+        end: { type: "never" },
+      },
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "FR"],
+        end: { type: "never" },
+      },
+    )).toBe(true);
+  });
+
+  it("distinguishes real recurrence changes", () => {
+    expect(recurrenceConfigsEqual(
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "FR"],
+        end: { type: "never" },
+      },
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO"],
+        end: { type: "never" },
+      },
+    )).toBe(false);
   });
 });
 

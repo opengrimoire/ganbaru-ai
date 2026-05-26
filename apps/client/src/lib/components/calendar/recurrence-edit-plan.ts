@@ -1,6 +1,7 @@
 import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent, RecurrenceConfig, RecurringScope } from "./types";
 import { expandRecurring, fmtYMD, parseYMD } from "./recurrence";
+import { recurrenceConfigsEqual } from "./rrule";
 import {
   calendarDateTime,
   calendarEventDatePart,
@@ -187,10 +188,18 @@ export function hasVisibleEventChanges(
 ): boolean {
   for (const key of DISPLAY_CHANGE_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
-    if (!fieldEqual(
-      normalizeVisibleChangeValue(key, changes[key]),
-      normalizeVisibleChangeValue(key, originalEvent[key]),
-    )) {
+    const changedValue = normalizeVisibleChangeValue(key, changes[key]);
+    const originalValue = normalizeVisibleChangeValue(key, originalEvent[key]);
+    if (key === "recurrence") {
+      if (!recurrenceFieldValuesEqual(
+        changedValue as RecurrenceConfig | undefined,
+        originalValue as RecurrenceConfig | undefined,
+      )) {
+        return true;
+      }
+      continue;
+    }
+    if (!fieldEqual(changedValue, originalValue)) {
       return true;
     }
   }
@@ -208,10 +217,7 @@ export function recurrenceFieldValuesEqual(
   a: RecurrenceConfig | undefined,
   b: RecurrenceConfig | undefined,
 ): boolean {
-  if (a === b) return true;
-  if (a === undefined && b === undefined) return true;
-  if (a === undefined || b === undefined) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
+  return recurrenceConfigsEqual(a, b);
 }
 
 export function getRecurrenceFieldOperation(
@@ -737,11 +743,12 @@ export function applyThis(
   if (!hasVisibleEventChanges(originalEvent, changes)) {
     return unchangedEditDisplay(events, targetId);
   }
+  const recurrenceOperation = getRecurrenceFieldOperation(originalEvent.recurrence, changes);
 
   const merged = {
     ...originalEvent,
     ...changes,
-    recurrence: hasChange(changes, "recurrence") ? changes.recurrence : undefined,
+    recurrence: recurrenceOperation.kind === "set" ? recurrenceOperation.value : undefined,
     recurringParentId: undefined,
     exceptions: undefined,
   };
@@ -930,7 +937,7 @@ export function applyFollowing(
     ? String(splitPatch.end)
     : splitSourceEvent.end;
   const recurrenceChanged = hasChange(splitPatch, "recurrence")
-    && !fieldEqual(splitPatch.recurrence, template.recurrence);
+    && !recurrenceConfigsEqual(splitPatch.recurrence, template.recurrence);
   const newRecurrence: RecurrenceConfig | undefined = recurrenceChanged
     ? splitPatch.recurrence
     : template.recurrence
