@@ -61,7 +61,7 @@ cd apps/client
 pnpm tauri dev
 ```
 
-Open GanbaruAI, go to Settings > Stopper, enable blocking, and add hosts such as:
+Open GanbaruAI, go to Settings > Doomscrolling, enable blocking, and add hosts such as:
 
 ```text
 reddit.com
@@ -89,7 +89,7 @@ You do not need to remove the extension for normal changes.
 
 1. Start GanbaruAI with `pnpm tauri dev`.
 2. Confirm the extension popup says connected.
-3. In GanbaruAI, open Settings > Stopper.
+3. In GanbaruAI, open Settings > Doomscrolling.
 4. Enable blocking and add `reddit.com` to blocked hosts.
 5. Start a Pomodoro focus phase.
 6. Open `https://reddit.com`.
@@ -121,7 +121,7 @@ You do not need to remove the extension for normal changes.
 
    Add `chromium`, `brave`, or `edge` as the second argument when testing in those browsers.
 
-5. Start GanbaruAI, open Settings, then Stopper. Enable blocking and add blocked hosts such as:
+5. Start GanbaruAI, open Settings, then Doomscrolling. Enable blocking and add blocked hosts such as:
 
    ```text
    reddit.com
@@ -130,7 +130,7 @@ You do not need to remove the extension for normal changes.
 
 6. Start a Pomodoro focus phase and open one of the blocked sites.
 
-The extension defaults to fail open. If the native host is not registered, Stopper is disabled, no focus phase is active, or the app has not written a fresh runtime state, it will not block pages.
+The extension defaults to fail open. If the native host is not registered, Doomscrolling is disabled, no focus phase is active, or the app has not written a fresh runtime state, it will not block pages.
 
 ## Troubleshooting
 
@@ -144,7 +144,7 @@ node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|c
 
 **The extension is loaded but never blocks.**
 
-Check that GanbaruAI is running, Settings > Stopper is enabled, the blocked host is saved without `https://`, and a Pomodoro focus phase is active.
+Check that GanbaruAI is running, Settings > Doomscrolling is enabled, the blocked host is saved without `https://`, and a Pomodoro focus phase is active.
 
 **The app window opens but looks blank.**
 

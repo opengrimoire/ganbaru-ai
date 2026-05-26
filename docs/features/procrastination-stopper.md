@@ -12,7 +12,7 @@ The current desktop implementation is an early Chrome and Brave development slic
 - `ganbaruai-native-messaging` is a repo-owned native messaging host binary built from Rust.
 - The app writes a small runtime state file when Pomodoro state changes.
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested host should be blocked.
-- Settings > Stopper supports enable or disable, block during breaks, blocked hosts, allowed hosts, and a rule tester.
+- Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, blocked hosts, allowed hosts, and a rule tester.
 - Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
 
 This is intentionally smaller than the full spec below. It supports host-level blocking during Pomodoro sessions first. Work environment rules, category presets, temporary access analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.

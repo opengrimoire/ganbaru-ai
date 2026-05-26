@@ -3,6 +3,7 @@
   import { cn } from "$lib/utils";
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import GlobeOff from "@lucide/svelte/icons/globe-off";
   import Keyboard from "@lucide/svelte/icons/keyboard";
   import Music from "@lucide/svelte/icons/music";
   import SettingsIcon from "@lucide/svelte/icons/settings";
@@ -43,7 +44,7 @@
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "calendars", label: "Calendar", icon: CalendarDays },
     { id: "music", label: "Music", icon: Music },
-    { id: "stopper", label: "Stopper", icon: SettingsIcon },
+    { id: "stopper", label: "Doomscrolling", icon: GlobeOff },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   ];
 

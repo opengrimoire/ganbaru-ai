@@ -30,8 +30,11 @@ export function getProcrastinationStopper() {
     get enabled(): boolean {
       return config.enabled;
     },
-    get blockDuringBreaks(): boolean {
-      return config.blockDuringBreaks;
+    get blockDuringShortBreaks(): boolean {
+      return config.blockDuringShortBreaks;
+    },
+    get blockDuringLongBreaks(): boolean {
+      return config.blockDuringLongBreaks;
     },
     get blockedHosts(): readonly string[] {
       return config.blockedHosts;
@@ -48,8 +51,11 @@ export function getProcrastinationStopper() {
     setEnabled(enabled: boolean): void {
       update({ enabled });
     },
-    setBlockDuringBreaks(blockDuringBreaks: boolean): void {
-      update({ blockDuringBreaks });
+    setBlockDuringShortBreaks(blockDuringShortBreaks: boolean): void {
+      update({ blockDuringShortBreaks });
+    },
+    setBlockDuringLongBreaks(blockDuringLongBreaks: boolean): void {
+      update({ blockDuringLongBreaks });
     },
     setBlockedHostsText(text: string): void {
       update({ blockedHosts: parseStopperHosts(text) });

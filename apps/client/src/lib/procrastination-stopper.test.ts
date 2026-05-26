@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_PROCRASTINATION_STOPPER_CONFIG,
   evaluateStopperUrl,
   normalizeProcrastinationStopperConfig,
   normalizeStopperHost,
@@ -32,6 +33,10 @@ describe("parseStopperHosts", () => {
 });
 
 describe("normalizeProcrastinationStopperConfig", () => {
+  it("defaults all blocking toggles to enabled", () => {
+    expect(normalizeProcrastinationStopperConfig(null)).toEqual(DEFAULT_PROCRASTINATION_STOPPER_CONFIG);
+  });
+
   it("normalizes malformed config without throwing", () => {
     expect(normalizeProcrastinationStopperConfig({
       enabled: true,
@@ -40,9 +45,19 @@ describe("normalizeProcrastinationStopperConfig", () => {
       allowedHosts: "docs.example.com",
     })).toEqual({
       enabled: true,
-      blockDuringBreaks: false,
+      blockDuringShortBreaks: true,
+      blockDuringLongBreaks: true,
       blockedHosts: ["reddit.com", "youtube.com"],
       allowedHosts: [],
+    });
+  });
+
+  it("uses the legacy break toggle for both break types", () => {
+    expect(normalizeProcrastinationStopperConfig({
+      blockDuringBreaks: false,
+    })).toMatchObject({
+      blockDuringShortBreaks: false,
+      blockDuringLongBreaks: false,
     });
   });
 });
@@ -51,7 +66,8 @@ describe("evaluateStopperUrl", () => {
   it("blocks subdomains of blocked hosts", () => {
     const decision = evaluateStopperUrl("https://old.reddit.com/r/all", {
       enabled: true,
-      blockDuringBreaks: false,
+      blockDuringShortBreaks: true,
+      blockDuringLongBreaks: true,
       blockedHosts: ["reddit.com"],
       allowedHosts: [],
     });
@@ -65,7 +81,8 @@ describe("evaluateStopperUrl", () => {
   it("lets allowed hosts override blocked parent domains", () => {
     const decision = evaluateStopperUrl("https://music.youtube.com/playlist?list=1", {
       enabled: true,
-      blockDuringBreaks: false,
+      blockDuringShortBreaks: true,
+      blockDuringLongBreaks: true,
       blockedHosts: ["youtube.com"],
       allowedHosts: ["music.youtube.com"],
     });

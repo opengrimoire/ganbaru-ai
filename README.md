@@ -88,7 +88,7 @@ For Brave, this helper builds the native host and opens the extensions page:
 pnpm -w run setup:brave-extension
 ```
 
-After first setup, keep `pnpm tauri dev` running, configure Settings > Stopper in the app, start a Pomodoro focus session, and open a blocked host such as `reddit.com`.
+After first setup, keep `pnpm tauri dev` running, configure Settings > Doomscrolling in the app, start a Pomodoro focus session, and open a blocked host such as `reddit.com`.
 
 For repeat testing:
 

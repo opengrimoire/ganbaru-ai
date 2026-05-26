@@ -49,7 +49,8 @@ struct RuntimeState {
 #[derive(Debug, Clone)]
 struct StopperConfig {
     enabled: bool,
-    block_during_breaks: bool,
+    block_during_short_breaks: bool,
+    block_during_long_breaks: bool,
     blocked_hosts: Vec<String>,
     allowed_hosts: Vec<String>,
 }
@@ -209,15 +210,22 @@ fn read_config(path: &std::path::Path) -> Option<StopperConfig> {
     let contents = std::fs::read_to_string(path).ok()?;
     let value: Value = serde_json::from_str(&contents).ok()?;
     let stopper = value.get("procrastinationStopper")?;
+    let legacy_block_during_breaks = stopper.get("blockDuringBreaks").and_then(Value::as_bool);
     Some(StopperConfig {
         enabled: stopper
             .get("enabled")
             .and_then(Value::as_bool)
-            .unwrap_or(false),
-        block_during_breaks: stopper
-            .get("blockDuringBreaks")
+            .unwrap_or(true),
+        block_during_short_breaks: stopper
+            .get("blockDuringShortBreaks")
             .and_then(Value::as_bool)
-            .unwrap_or(false),
+            .or(legacy_block_during_breaks)
+            .unwrap_or(true),
+        block_during_long_breaks: stopper
+            .get("blockDuringLongBreaks")
+            .and_then(Value::as_bool)
+            .or(legacy_block_during_breaks)
+            .unwrap_or(true),
         blocked_hosts: read_host_array(stopper.get("blockedHosts")),
         allowed_hosts: read_host_array(stopper.get("allowedHosts")),
     })
@@ -241,8 +249,9 @@ fn read_host_array(value: Option<&Value>) -> Vec<String> {
 
 fn default_config() -> StopperConfig {
     StopperConfig {
-        enabled: false,
-        block_during_breaks: false,
+        enabled: true,
+        block_during_short_breaks: true,
+        block_during_long_breaks: true,
         blocked_hosts: Vec::new(),
         allowed_hosts: Vec::new(),
     }
@@ -271,7 +280,7 @@ fn runtime_status(snapshot: &StateSnapshot) -> (bool, String, Option<i64>, Optio
             false,
             "inactive".to_string(),
             None,
-            Some("stopper disabled".to_string()),
+            Some("Doomscrolling disabled".to_string()),
         );
     }
 
@@ -321,7 +330,8 @@ fn should_enforce(snapshot: &StateSnapshot, response: &mut NativeResponse) -> bo
     }
     match response.phase.as_str() {
         "focus" => true,
-        "short_break" | "long_break" => snapshot.config.block_during_breaks,
+        "short_break" => snapshot.config.block_during_short_breaks,
+        "long_break" => snapshot.config.block_during_long_breaks,
         _ => false,
     }
 }
@@ -427,14 +437,34 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
 
 #[cfg(test)]
 mod tests {
-    use super::{decide_host, host_from_url, host_matches_rule, StopperConfig};
+    use super::{
+        decide_host, host_from_url, host_matches_rule, should_enforce, NativeResponse,
+        StateSnapshot, StopperConfig,
+    };
 
     fn config() -> StopperConfig {
         StopperConfig {
             enabled: true,
-            block_during_breaks: false,
+            block_during_short_breaks: true,
+            block_during_long_breaks: true,
             blocked_hosts: vec!["reddit.com".to_string(), "youtube.com".to_string()],
             allowed_hosts: vec!["music.youtube.com".to_string()],
+        }
+    }
+
+    fn response_for_phase(phase: &str) -> NativeResponse {
+        NativeResponse {
+            message_type: "decision",
+            host_name: super::HOST_NAME,
+            connected: true,
+            active: true,
+            phase: phase.to_string(),
+            remaining_seconds: Some(60),
+            blocked: false,
+            host: None,
+            matched_rule_name: None,
+            reason: None,
+            environment_name: "GanbaruAI",
         }
     }
 
@@ -470,5 +500,22 @@ mod tests {
             decision.matched_rule_name.as_deref(),
             Some("blocked host: reddit.com")
         );
+    }
+
+    #[test]
+    fn enforces_short_and_long_break_settings_independently() {
+        let mut config = config();
+        config.block_during_short_breaks = true;
+        config.block_during_long_breaks = false;
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config,
+            runtime: None,
+        };
+        let mut short_break = response_for_phase("short_break");
+        let mut long_break = response_for_phase("long_break");
+
+        assert!(should_enforce(&snapshot, &mut short_break));
+        assert!(!should_enforce(&snapshot, &mut long_break));
     }
 }

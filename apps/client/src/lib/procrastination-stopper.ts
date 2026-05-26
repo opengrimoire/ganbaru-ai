@@ -1,6 +1,7 @@
 export interface ProcrastinationStopperConfig {
   enabled: boolean;
-  blockDuringBreaks: boolean;
+  blockDuringShortBreaks: boolean;
+  blockDuringLongBreaks: boolean;
   blockedHosts: string[];
   allowedHosts: string[];
 }
@@ -12,8 +13,9 @@ export interface ProcrastinationStopperDecision {
 }
 
 export const DEFAULT_PROCRASTINATION_STOPPER_CONFIG: ProcrastinationStopperConfig = Object.freeze({
-  enabled: false,
-  blockDuringBreaks: false,
+  enabled: true,
+  blockDuringShortBreaks: true,
+  blockDuringLongBreaks: true,
   blockedHosts: [],
   allowedHosts: [],
 });
@@ -85,13 +87,19 @@ export function normalizeProcrastinationStopperConfig(value: unknown): Procrasti
     return { ...DEFAULT_PROCRASTINATION_STOPPER_CONFIG };
   }
   const record = value as Record<string, unknown>;
+  const legacyBlockDuringBreaks = typeof record.blockDuringBreaks === "boolean"
+    ? record.blockDuringBreaks
+    : null;
   return {
     enabled: typeof record.enabled === "boolean"
       ? record.enabled
       : DEFAULT_PROCRASTINATION_STOPPER_CONFIG.enabled,
-    blockDuringBreaks: typeof record.blockDuringBreaks === "boolean"
-      ? record.blockDuringBreaks
-      : DEFAULT_PROCRASTINATION_STOPPER_CONFIG.blockDuringBreaks,
+    blockDuringShortBreaks: typeof record.blockDuringShortBreaks === "boolean"
+      ? record.blockDuringShortBreaks
+      : legacyBlockDuringBreaks ?? DEFAULT_PROCRASTINATION_STOPPER_CONFIG.blockDuringShortBreaks,
+    blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
+      ? record.blockDuringLongBreaks
+      : legacyBlockDuringBreaks ?? DEFAULT_PROCRASTINATION_STOPPER_CONFIG.blockDuringLongBreaks,
     blockedHosts: normalizeHostArray(record.blockedHosts),
     allowedHosts: normalizeHostArray(record.allowedHosts),
   };
