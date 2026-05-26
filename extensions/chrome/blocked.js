@@ -2,15 +2,19 @@ const params = new URLSearchParams(location.search);
 const blockedPageId = params.get("blocked") ?? "";
 
 const titleEl = document.getElementById("blocked-title");
+const copyEl = document.querySelector(".blocked-copy");
 const remainingEl = document.getElementById("remaining");
-const closeButton = document.getElementById("close");
+const actionButton = document.getElementById("close");
 const faviconEl = document.getElementById("favicon");
 
-const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
+let latestOriginalUrl = "";
+let latestBlocked = true;
+let refreshTimeoutId = null;
+let restoringOriginalUrl = false;
 
-function blockedPageStore() {
-  return chrome.storage.session ?? chrome.storage.local;
-}
+titleEl.textContent = "This site is blocked";
+copyEl.textContent = "Stay strong and keep moving forward.";
+remainingEl.textContent = "Focus session active";
 
 function faviconUrl(siteHost) {
   const pageUrl = `https://${siteHost}/`;
@@ -22,23 +26,38 @@ function displayHost(siteHost) {
   return siteHost.replace(/^www\./i, "");
 }
 
-async function loadBlockedPageState() {
-  if (!blockedPageId) return null;
-  const key = `${BLOCKED_PAGE_STORAGE_PREFIX}${blockedPageId}`;
-  const stored = await blockedPageStore().get(key);
-  return stored[key] ?? null;
+function requestBlockedPageState() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "refresh_blocked_page", id: blockedPageId }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(response ?? null);
+    });
+  });
 }
 
-const state = await loadBlockedPageState();
-const host = typeof state?.host === "string" ? state.host : "";
-const remaining = typeof state?.remainingSeconds === "number" ? state.remainingSeconds : 0;
+function renderBlockedState(state) {
+  const host = typeof state?.host === "string" ? state.host : "";
+  const remaining = typeof state?.remainingSeconds === "number" ? state.remainingSeconds : 0;
+  latestOriginalUrl = typeof state?.originalUrl === "string" ? state.originalUrl : latestOriginalUrl;
+  latestBlocked = state?.blocked !== false;
 
-titleEl.textContent = `${host ? displayHost(host) : "This site"} is blocked`;
-remainingEl.textContent = Number.isFinite(remaining) && remaining > 0
-  ? `${Math.ceil(remaining / 60)} min left in focus`
-  : "Focus session active";
+  if (latestBlocked) {
+    titleEl.textContent = `${host ? displayHost(host) : "This site"} is blocked`;
+    copyEl.textContent = "Stay strong and keep moving forward.";
+    remainingEl.textContent = Number.isFinite(remaining) && remaining > 0
+      ? `${Math.ceil(remaining / 60)} min left in focus`
+      : "Focus session active";
+    actionButton.textContent = "Close tab";
+  } else {
+    restoreOriginalUrl();
+  }
 
-if (host) faviconEl.src = faviconUrl(host);
+  if (host && !faviconEl.src) faviconEl.src = faviconUrl(host);
+}
+
 faviconEl.addEventListener("load", () => {
   faviconEl.hidden = false;
 });
@@ -46,12 +65,57 @@ faviconEl.addEventListener("error", () => {
   faviconEl.hidden = true;
 });
 
-closeButton.addEventListener("click", () => {
+async function refreshBlockedPage() {
+  if (refreshTimeoutId !== null) {
+    clearTimeout(refreshTimeoutId);
+    refreshTimeoutId = null;
+  }
+  const state = await requestBlockedPageState();
+  if (state?.ok) renderBlockedState(state);
+  if (state?.blocked === false) return;
+
+  const delayMs = document.hidden ? 30_000 : 5_000;
+  refreshTimeoutId = setTimeout(refreshBlockedPage, delayMs);
+}
+
+function resetRefreshTimer() {
+  if (refreshTimeoutId !== null) clearTimeout(refreshTimeoutId);
+  refreshTimeoutId = setTimeout(refreshBlockedPage, document.hidden ? 30_000 : 1_000);
+}
+
+function clearBlockedPageState() {
+  if (!blockedPageId) return;
+  chrome.runtime.sendMessage({ type: "clear_blocked_page", id: blockedPageId });
+}
+
+function restoreOriginalUrl() {
+  if (restoringOriginalUrl || !latestOriginalUrl) return;
+  restoringOriginalUrl = true;
+  clearBlockedPageState();
   chrome.tabs.getCurrent((tab) => {
     if (tab?.id) {
+      chrome.tabs.update(tab.id, { url: latestOriginalUrl });
+      return;
+    }
+    location.replace(latestOriginalUrl);
+  });
+}
+
+document.addEventListener("visibilitychange", resetRefreshTimer);
+
+actionButton.addEventListener("click", () => {
+  chrome.tabs.getCurrent((tab) => {
+    if (tab?.id) {
+      if (!latestBlocked && latestOriginalUrl) {
+        restoreOriginalUrl();
+        return;
+      }
+      clearBlockedPageState();
       chrome.tabs.remove(tab.id);
       return;
     }
     chrome.runtime.sendMessage({ type: "close_tab" });
   });
 });
+
+await refreshBlockedPage();

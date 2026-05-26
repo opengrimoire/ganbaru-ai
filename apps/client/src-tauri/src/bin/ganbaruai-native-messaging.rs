@@ -17,6 +17,7 @@ struct NativeRequest {
     message_type: String,
     url: Option<String>,
     host: Option<String>,
+    log_event: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -95,7 +96,7 @@ fn run() -> Result<NativeResponse, String> {
                 let decision = decide_host(&host, &snapshot.config);
                 response.blocked = decision.blocked;
                 response.matched_rule_name = decision.matched_rule_name;
-                if response.blocked {
+                if response.blocked && request.log_event.unwrap_or(true) {
                     log_block_event(&snapshot, &host, response.matched_rule_name.as_deref());
                 }
             }

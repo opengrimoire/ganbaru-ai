@@ -11,6 +11,7 @@
     "128": "icons/icon-128.png"
   },
   "permissions": [
+    "alarms",
     "favicon",
     "nativeMessaging",
     "storage",
