@@ -361,7 +361,7 @@
 {#if pendingDelete}
   <ConfirmDialog
     title="Delete calendar"
-    message={`Delete "${calendarDisplayName(pendingDelete)}" and all of its ${counts[pendingDelete.id] ?? 0} event(s)? This cannot be undone.`}
+    message={`Delete "${calendarDisplayName(pendingDelete)}" and all of its ${counts[pendingDelete.id] ?? 0} event(s)? This cannot be undone`}
     confirmLabel="Delete (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmDelete}

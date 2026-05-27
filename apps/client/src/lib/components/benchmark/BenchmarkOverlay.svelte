@@ -35,12 +35,12 @@
   const confirmMessage = $derived.by(() => {
     const labels = runner.pendingScenarioLabels;
     const prefix = runner.pendingMode === "suite"
-      ? `Runs ${labels.length} benchmarks sequentially against isolated databases.`
-      : "Restarts the app a few times against an isolated database.";
+      ? `Runs ${labels.length} benchmarks sequentially against isolated databases`
+      : "Restarts the app a few times against an isolated database";
     const listed = runner.pendingMode === "suite"
       ? `\n\nScenarios:\n${labels.map((label) => `- ${label}`).join("\n")}`
       : "";
-    return `${prefix}\nYour real calendar is not touched. A desktop notification fires when the run finishes.${listed}`;
+    return `${prefix}\nYour real calendar is not touched. A desktop notification fires when the run finishes${listed}`;
   });
 
   function copyMarkdown() {

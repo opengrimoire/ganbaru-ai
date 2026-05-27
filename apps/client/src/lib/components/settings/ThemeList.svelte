@@ -326,8 +326,8 @@
 {#if pendingDelete}
   {@const target = themeStore.registry[pendingDelete]}
   <ConfirmDialog
-    title="Delete theme"
-    message={`Delete "${target?.displayName ?? "this theme"}"? This cannot be undone.`}
+    title={`Delete ${target?.displayName ?? "this theme"}?`}
+    message="This cannot be undone"
     confirmLabel="Delete (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmDelete}

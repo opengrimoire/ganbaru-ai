@@ -20,6 +20,7 @@
     ProcrastinationStopperMode,
   } from "$lib/procrastination-stopper";
   import { getProcrastinationStopper } from "$lib/stores/procrastination-stopper.svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
   const stopper = getProcrastinationStopper();
@@ -39,6 +40,12 @@
     add: (text: string) => boolean;
     remove: (website: string) => void;
     setEnabled: (website: string, enabled: boolean) => void;
+  }
+
+  interface PendingWebsiteAction {
+    type: "disable" | "delete";
+    kind: WebsiteListKind;
+    host: string;
   }
 
   const modeOptions: ReadonlyArray<{
@@ -123,6 +130,7 @@
   let extensionStatus = $state<ProcrastinationStopperExtensionStatus | null>(null);
   let extensionStatusLoading = $state(true);
   let extensionStatusError = $state<string | null>(null);
+  let pendingWebsiteAction = $state<PendingWebsiteAction | null>(null);
   const extensionStatusConnected = $derived(extensionStatus?.connected === true);
 
   function addWebsite(section: WebsiteListSection): void {
@@ -141,6 +149,56 @@
   function submitAdd(event: SubmitEvent, section: WebsiteListSection): void {
     event.preventDefault();
     addWebsite(section);
+  }
+
+  function requestHostEnabledChange(section: WebsiteListSection, host: string, enabled: boolean): void {
+    if (enabled) {
+      section.setEnabled(host, true);
+      return;
+    }
+    pendingWebsiteAction = {
+      type: "disable",
+      kind: section.kind,
+      host,
+    };
+  }
+
+  function requestHostDelete(section: WebsiteListSection, host: string): void {
+    pendingWebsiteAction = {
+      type: "delete",
+      kind: section.kind,
+      host,
+    };
+  }
+
+  function confirmWebsiteAction(): void {
+    if (!pendingWebsiteAction) return;
+    const { type, kind, host } = pendingWebsiteAction;
+    const section = websiteSections[kind];
+    if (type === "disable") {
+      section.setEnabled(host, false);
+    } else {
+      section.remove(host);
+    }
+    pendingWebsiteAction = null;
+  }
+
+  function cancelWebsiteAction(): void {
+    pendingWebsiteAction = null;
+  }
+
+  function pendingWebsiteActionTitle(action: PendingWebsiteAction): string {
+    return action.type === "disable" ? `Disable ${action.host}?` : `Delete ${action.host}?`;
+  }
+
+  function pendingWebsiteActionMessage(action: PendingWebsiteAction): string {
+    return action.type === "disable"
+      ? "It will stay in the list but will not affect browser blocking until you enable it again"
+      : "This cannot be undone";
+  }
+
+  function pendingWebsiteActionConfirmLabel(action: PendingWebsiteAction): string {
+    return action.type === "disable" ? "Disable (Enter)" : "Delete (Enter)";
   }
 
   function extensionStatusTitle(): string {
@@ -218,19 +276,14 @@
       {#if websiteErrors[section.kind]}
         <div class="px-1 pt-1.5 text-[0.8rem] text-destructive">{websiteErrors[section.kind]}</div>
       {/if}
-      {@render websiteRows(section.websites(), section.setEnabled, section.remove, section.emptyText)}
+      {@render websiteRows(section)}
     </div>
   </div>
 {/snippet}
 
-{#snippet websiteRows(
-  websites: readonly ProcrastinationStopperHostRule[],
-  setHostEnabled: (host: string, enabled: boolean) => void,
-  removeHost: (host: string) => void,
-  emptyText: string,
-)}
+{#snippet websiteRows(section: WebsiteListSection)}
   <div class="flex flex-col">
-    {#each websites as website (website.host)}
+    {#each section.websites() as website (website.host)}
       <div
         class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5"
         role="group"
@@ -246,7 +299,7 @@
         </span>
         <button
           type="button"
-          onclick={() => setHostEnabled(website.host, !website.enabled)}
+          onclick={() => requestHostEnabledChange(section, website.host, !website.enabled)}
           aria-label={website.enabled ? `Disable ${website.host}` : `Enable ${website.host}`}
           data-app-tooltip-disabled="true"
           class="flex h-7 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground hover:bg-accent dark:bg-transparent"
@@ -261,17 +314,17 @@
         </button>
         <button
           type="button"
-          onclick={() => removeHost(website.host)}
+          onclick={() => requestHostDelete(section, website.host)}
           aria-label={`Remove ${website.host}`}
           data-app-tooltip-disabled="true"
-          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-destructive/10 hover:text-destructive dark:bg-transparent"
+          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
           <Trash2 size={13} strokeWidth={2} />
         </button>
       </div>
     {:else}
       <div class="px-1 py-1.5 text-[0.8rem] text-muted-foreground">
-        {emptyText}
+        {section.emptyText}
       </div>
     {/each}
   </div>
@@ -393,3 +446,14 @@
     {/if}
   </fieldset>
 </div>
+
+{#if pendingWebsiteAction}
+  <ConfirmDialog
+    title={pendingWebsiteActionTitle(pendingWebsiteAction)}
+    message={pendingWebsiteActionMessage(pendingWebsiteAction)}
+    confirmLabel={pendingWebsiteActionConfirmLabel(pendingWebsiteAction)}
+    cancelLabel="Cancel (Esc)"
+    onConfirm={confirmWebsiteAction}
+    onCancel={cancelWebsiteAction}
+  />
+{/if}

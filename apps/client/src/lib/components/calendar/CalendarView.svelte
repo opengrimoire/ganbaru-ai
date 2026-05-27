@@ -1419,7 +1419,7 @@
 
     if (session.dirty) {
       requestConfirm(
-        "Your changes will be lost.",
+        "Your changes will be lost",
         openCreate,
         { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
@@ -1529,7 +1529,7 @@
 
     if (session.dirty) {
       requestConfirm(
-        "Your changes will be lost.",
+        "Your changes will be lost",
         async () => { await openEvent(); },
         { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
@@ -1608,7 +1608,7 @@
 
       if (session.dirty) {
         requestConfirm(
-          "Your changes will be lost.",
+          "Your changes will be lost",
           async () => {
             await loadEventPanel();
             session.openEdit(originalInstance, anchor, originalInstance);
@@ -1634,7 +1634,7 @@
       if (session.dirty) {
         const anchor = panelAnchorFromRenderedEvent(event.id);
         requestConfirm(
-          "Your changes will be lost.",
+          "Your changes will be lost",
           async () => {
             // Open with the pre-drag instance as originalEvent so the
             // session baseline starts from pre-drag values before the drag
@@ -1684,7 +1684,7 @@
     pendingEditEventId = undefined;
     if (session.dirty) {
       requestConfirm(
-        "Your changes will be lost.",
+        "Your changes will be lost",
         async () => { closeSession(); },
         { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
       );
@@ -1811,7 +1811,7 @@
     // stopSession() is deferred until after the save so hybrid logic still sees activeBlockId.
     if (!sessionStopPending && wouldSaveStopSession(data, scope)) {
       requestConfirm(
-        "The current focus session will stop.",
+        "The current focus session will stop",
         async () => {
           sessionStopPending = true;
           await handlePanelSave(data, scope);
@@ -1903,7 +1903,7 @@
 
     if (selectedActiveEndWouldStopProductivity(s)) {
       requestConfirm(
-        "The current focus session will stop.",
+        "The current focus session will stop",
         async () => {
           await executeEndEvent(data, scope);
         },
@@ -1986,7 +1986,7 @@
     if (plan.requiresActiveStop) {
       const actionVerb = plan.outcome === "archive" ? "archive" : "delete";
       requestConfirm(
-        `The current focus session will stop before this event is ${actionVerb === "archive" ? "archived" : "deleted"}.`,
+        `The current focus session will stop before this event is ${actionVerb === "archive" ? "archived" : "deleted"}`,
         async () => {
           await executeDeleteArchivePlan(plan, true);
         },

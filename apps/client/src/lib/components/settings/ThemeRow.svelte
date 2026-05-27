@@ -124,8 +124,8 @@
     <button
       type="button"
       onclick={onDelete}
-      title={isBuiltin ? "Built-in themes can't be deleted" : "Delete"}
       aria-label="Delete theme"
+      data-app-tooltip-disabled="true"
       disabled={isBuiltin}
       class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent"
     >

@@ -557,7 +557,7 @@
   {#if showStopConfirm}
     <ConfirmDialog
       title="Stop the focus session?"
-      message="All focus features will stop."
+      message="All focus features will stop"
       confirmLabel="Stop session (Enter)"
       cancelLabel="Undo changes (Esc)"
       onConfirm={confirmStop}
@@ -568,7 +568,7 @@
   {#if suspendInfo}
     <ConfirmDialog
       title="Resume focus session?"
-      message="You were away for {formatAwayDuration(suspendInfo.awaySeconds)}."
+      message="You were away for {formatAwayDuration(suspendInfo.awaySeconds)}"
       confirmLabel="Resume (Enter)"
       cancelLabel="Stop session (Esc)"
       danger={false}

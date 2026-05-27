@@ -22,6 +22,7 @@
   } = $props();
 
   let dialogEl: HTMLDivElement | undefined = $state();
+  const displayMessage = $derived(message.replace(/\.\s*$/u, ""));
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onConfirm(); return; }
@@ -75,9 +76,9 @@
     <div class="mb-5 text-left">
       {#if title}
         <h2 class="mb-1 text-[1rem] font-semibold text-foreground">{title}</h2>
-        <p class="text-[0.866667rem] text-foreground whitespace-pre-line">{message}</p>
+        <p class="text-[0.866667rem] text-foreground whitespace-pre-line">{displayMessage}</p>
       {:else}
-        <p class="text-[1rem] font-semibold text-foreground whitespace-pre-line">{message}</p>
+        <p class="text-[1rem] font-semibold text-foreground whitespace-pre-line">{displayMessage}</p>
       {/if}
     </div>
     <div class="flex items-center justify-start gap-2">

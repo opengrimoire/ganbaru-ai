@@ -1443,7 +1443,7 @@
 {#if showResetSequenceConfirm}
   <ConfirmDialog
     title="Open reset confirmation?"
-    message="You pressed the hidden reset shortcut 10 times. Continue only if you meant to erase the app data."
+    message="You pressed the hidden reset shortcut 10 times. Continue only if you meant to erase the app data"
     confirmLabel="Continue (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={() => {
@@ -1457,7 +1457,7 @@
 {#if showResetConfirm}
   <ConfirmDialog
     title="Reset everything?"
-    message="All data will be permanently deleted."
+    message="All data will be permanently deleted"
     confirmLabel="Reset everything (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmReset}
@@ -1468,7 +1468,7 @@
 {#if showCloseConfirm}
   <ConfirmDialog
     title="Close the app?"
-    message="All productivity features will stop working."
+    message="All productivity features will stop working"
     confirmLabel="Close anyway (Enter)"
     cancelLabel="Stay (Esc)"
     onConfirm={confirmClose}
