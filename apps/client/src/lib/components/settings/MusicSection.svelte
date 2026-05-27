@@ -11,7 +11,7 @@
     <div class="flex flex-col gap-3">
       <ToggleSetting
         label="Pause if the focus session is paused"
-        description="Pauses Music when you pause an active focus phase, then resumes it when focus continues."
+        description="Pauses music while focus is paused, then resumes when focus continues"
         checked={preferences.musicPauseOnPomodoroPause}
         onChange={(checked) => preferences.setMusicPauseOnPomodoroPause(checked)}
       />

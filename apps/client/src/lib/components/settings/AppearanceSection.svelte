@@ -151,7 +151,7 @@
       />
       <CustomSelect
         label="Time format"
-        description="Changes calendar labels only. Event times stay stored as 24-hour values."
+        description="Show times as 12h or 24h"
         value={preferences.calendarTimeFormat}
         options={timeFormatOptions}
         onChange={(value) => {
