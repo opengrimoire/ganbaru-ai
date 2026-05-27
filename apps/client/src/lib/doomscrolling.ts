@@ -1,8 +1,184 @@
 export type DoomscrollingMode = "blacklist" | "whitelist";
 
+export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
+  {
+    id: "social-media",
+    label: "Social media",
+    description: "Repeated checking for updates, reactions, comments, and novelty",
+    hosts: [
+      "facebook.com",
+      "instagram.com",
+      "x.com",
+      "twitter.com",
+      "tiktok.com",
+      "reddit.com",
+      "threads.net",
+      "bsky.app",
+      "snapchat.com",
+      "pinterest.com",
+      "linkedin.com",
+    ],
+  },
+  {
+    id: "streaming",
+    label: "Streaming",
+    description: "Passive continuation turns short breaks into long sessions",
+    hosts: [
+      "youtube.com",
+      "netflix.com",
+      "hulu.com",
+      "disneyplus.com",
+      "primevideo.com",
+      "twitch.tv",
+      "max.com",
+      "peacocktv.com",
+      "crunchyroll.com",
+    ],
+  },
+  {
+    id: "news",
+    label: "News",
+    description: "Repeated checking without any immediate action needed",
+    hosts: [
+      "cnn.com",
+      "bbc.com",
+      "nytimes.com",
+      "washingtonpost.com",
+      "theguardian.com",
+      "reuters.com",
+      "apnews.com",
+      "nbcnews.com",
+      "foxnews.com",
+    ],
+  },
+  {
+    id: "sports",
+    label: "Sports",
+    description: "Scores and rumors encourage frequent checking",
+    hosts: [
+      "espn.com",
+      "bleacherreport.com",
+      "cbssports.com",
+      "foxsports.com",
+      "skysports.com",
+      "nba.com",
+      "nfl.com",
+      "mlb.com",
+      "nhl.com",
+      "fifa.com",
+    ],
+  },
+  {
+    id: "porn",
+    label: "Porn",
+    description: "High-intensity instant reward quickly overrides task intent",
+    hosts: [
+      "pornhub.com",
+      "xvideos.com",
+      "xnxx.com",
+      "xhamster.com",
+      "redtube.com",
+      "youporn.com",
+      "spankbang.com",
+    ],
+  },
+  {
+    id: "gambling",
+    label: "Gambling",
+    description: "Variable rewards encourage one more try behavior",
+    hosts: [
+      "stake.com",
+      "draftkings.com",
+      "fanduel.com",
+      "bet365.com",
+      "betmgm.com",
+      "caesars.com",
+      "bovada.lv",
+      "pokerstars.com",
+    ],
+  },
+  {
+    id: "gaming",
+    label: "Gaming",
+    description: "In-game goals chain together and delay returning to work",
+    hosts: [
+      "steampowered.com",
+      "epicgames.com",
+      "roblox.com",
+      "battle.net",
+      "xbox.com",
+      "playstation.com",
+      "itch.io",
+      "speedrun.com",
+    ],
+  },
+  {
+    id: "shopping",
+    label: "Shopping",
+    description: "Browsing, comparing, and wishlisting can replace actual work",
+    hosts: [
+      "amazon.com",
+      "ebay.com",
+      "aliexpress.com",
+      "temu.com",
+      "walmart.com",
+      "target.com",
+      "etsy.com",
+      "shein.com",
+      "bestbuy.com",
+    ],
+  },
+  {
+    id: "dating",
+    label: "Dating",
+    description: "Match and message checking creates validation loops",
+    hosts: [
+      "tinder.com",
+      "bumble.com",
+      "hinge.co",
+      "okcupid.com",
+      "match.com",
+      "pof.com",
+      "grindr.com",
+      "happn.com",
+    ],
+  },
+  {
+    id: "trading",
+    label: "Trading",
+    description: "Constantly changing prices encourage compulsive monitoring",
+    hosts: [
+      "robinhood.com",
+      "coinbase.com",
+      "binance.com",
+      "tradingview.com",
+      "etoro.com",
+      "kraken.com",
+      "marketwatch.com",
+      "seekingalpha.com",
+      "coinmarketcap.com",
+      "coingecko.com",
+    ],
+  },
+] as const;
+
+export type DoomscrollingCategoryId = (typeof DOOMSCROLLING_CATEGORY_DEFINITIONS)[number]["id"];
+
 export interface DoomscrollingHostRule {
   host: string;
   enabled: boolean;
+}
+
+export interface DoomscrollingCategoryRule {
+  id: DoomscrollingCategoryId;
+  enabled: boolean;
+}
+
+export interface DoomscrollingCustomCategoryStack {
+  id: string;
+  name: string;
+  enabled: boolean;
+  hosts: DoomscrollingHostRule[];
 }
 
 export interface DoomscrollingConfig {
@@ -10,6 +186,8 @@ export interface DoomscrollingConfig {
   enabled: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
+  blockedCategories: DoomscrollingCategoryRule[];
+  customCategoryStacks: DoomscrollingCustomCategoryStack[];
   blockedHosts: DoomscrollingHostRule[];
   exceptionHosts: DoomscrollingHostRule[];
   allowedHosts: DoomscrollingHostRule[];
@@ -21,15 +199,36 @@ export interface DoomscrollingDecision {
   matchedRule: string | null;
 }
 
+const DOOMSCROLLING_CATEGORY_IDS = new Set<string>(
+  DOOMSCROLLING_CATEGORY_DEFINITIONS.map((category) => category.id),
+);
+
+function defaultCategoryRules(): DoomscrollingCategoryRule[] {
+  return DOOMSCROLLING_CATEGORY_DEFINITIONS.map((category) => ({
+    id: category.id,
+    enabled: true,
+  }));
+}
+
 export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
   mode: "blacklist",
   enabled: true,
   blockDuringShortBreaks: true,
   blockDuringLongBreaks: true,
+  blockedCategories: defaultCategoryRules(),
+  customCategoryStacks: [],
   blockedHosts: [],
   exceptionHosts: [],
   allowedHosts: [],
 });
+
+export function isDoomscrollingCategoryId(value: string): value is DoomscrollingCategoryId {
+  return DOOMSCROLLING_CATEGORY_IDS.has(value);
+}
+
+export function getDoomscrollingCategoryDefinition(id: DoomscrollingCategoryId) {
+  return DOOMSCROLLING_CATEGORY_DEFINITIONS.find((category) => category.id === id);
+}
 
 function stripUrlParts(input: string): string {
   const trimmed = input.trim();
@@ -113,6 +312,75 @@ function normalizeHostRules(value: unknown): DoomscrollingHostRule[] {
   return rules;
 }
 
+function normalizeCategoryRuleValue(value: unknown): DoomscrollingCategoryRule | null {
+  if (typeof value === "string" && isDoomscrollingCategoryId(value)) {
+    return { id: value, enabled: true };
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || !isDoomscrollingCategoryId(record.id)) return null;
+  return {
+    id: record.id,
+    enabled: record.enabled === true,
+  };
+}
+
+function normalizeCategoryRules(value: unknown): DoomscrollingCategoryRule[] {
+  const rules = defaultCategoryRules();
+  if (!Array.isArray(value)) return rules;
+  const byId = new Map<DoomscrollingCategoryId, DoomscrollingCategoryRule>(
+    rules.map((rule) => [rule.id, rule]),
+  );
+  for (const item of value) {
+    const rule = normalizeCategoryRuleValue(item);
+    if (!rule) continue;
+    byId.set(rule.id, rule);
+  }
+  return rules.map((rule) => byId.get(rule.id) ?? rule);
+}
+
+function normalizeCustomCategoryStackId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const id = value.trim();
+  if (!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(id)) return null;
+  return id;
+}
+
+export function normalizeDoomscrollingCustomCategoryStackName(input: string): string | null {
+  const name = input.trim().replace(/\s+/g, " ").slice(0, 60);
+  return name.length > 0 ? name : null;
+}
+
+function normalizeCustomCategoryStackValue(value: unknown): DoomscrollingCustomCategoryStack | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const id = normalizeCustomCategoryStackId(record.id);
+  const name = typeof record.name === "string"
+    ? normalizeDoomscrollingCustomCategoryStackName(record.name)
+    : null;
+  const hosts = normalizeHostRules(record.hosts);
+  if (!id || !name || hosts.length === 0) return null;
+  return {
+    id,
+    name,
+    enabled: record.enabled !== false,
+    hosts,
+  };
+}
+
+function normalizeCustomCategoryStacks(value: unknown): DoomscrollingCustomCategoryStack[] {
+  if (!Array.isArray(value)) return [];
+  const seenIds = new Set<string>();
+  const stacks: DoomscrollingCustomCategoryStack[] = [];
+  for (const item of value) {
+    const stack = normalizeCustomCategoryStackValue(item);
+    if (!stack || seenIds.has(stack.id)) continue;
+    seenIds.add(stack.id);
+    stacks.push(stack);
+  }
+  return stacks;
+}
+
 function normalizeMode(value: unknown): DoomscrollingMode {
   return value === "whitelist" || value === "blacklist"
     ? value
@@ -141,6 +409,8 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
     blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
       ? record.blockDuringLongBreaks
       : legacyBlockDuringBreaks ?? DEFAULT_DOOMSCROLLING_CONFIG.blockDuringLongBreaks,
+    blockedCategories: normalizeCategoryRules(record.blockedCategories),
+    customCategoryStacks: normalizeCustomCategoryStacks(record.customCategoryStacks),
     blockedHosts: normalizeHostRules(record.blockedHosts),
     exceptionHosts: hasExceptionHosts
       ? normalizeHostRules(record.exceptionHosts)
@@ -153,6 +423,11 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
 
 export function doomscrollingHostMatchesRule(host: string, ruleHost: string): boolean {
   return host === ruleHost || host.endsWith(`.${ruleHost}`);
+}
+
+function categoryRuleMatchesHost(host: string, categoryId: DoomscrollingCategoryId): boolean {
+  const category = getDoomscrollingCategoryDefinition(categoryId);
+  return category?.hosts.some((ruleHost) => doomscrollingHostMatchesRule(host, ruleHost)) ?? false;
 }
 
 /**
@@ -204,6 +479,22 @@ export function evaluateDoomscrollingUrl(
     const blockedHost = blockedRule.host;
     if (doomscrollingHostMatchesRule(host, blockedHost)) {
       return { blocked: true, host, matchedRule: `blocked host: ${blockedHost}` };
+    }
+  }
+  for (const stack of config.customCategoryStacks) {
+    if (!stack.enabled) continue;
+    for (const stackRule of stack.hosts) {
+      if (!stackRule.enabled) continue;
+      if (doomscrollingHostMatchesRule(host, stackRule.host)) {
+        return { blocked: true, host, matchedRule: `custom stack: ${stack.name}` };
+      }
+    }
+  }
+  for (const categoryRule of config.blockedCategories) {
+    if (!categoryRule.enabled) continue;
+    if (categoryRuleMatchesHost(host, categoryRule.id)) {
+      const category = getDoomscrollingCategoryDefinition(categoryRule.id);
+      return { blocked: true, host, matchedRule: `category: ${category?.label ?? categoryRule.id}` };
     }
   }
   return { blocked: false, host, matchedRule: null };

@@ -11,6 +11,164 @@ const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
 const STALE_STATE_SECONDS: i64 = 180;
 
+struct BuiltInCategory {
+    id: &'static str,
+    label: &'static str,
+    hosts: &'static [&'static str],
+}
+
+const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
+    BuiltInCategory {
+        id: "social-media",
+        label: "Social media",
+        hosts: &[
+            "facebook.com",
+            "instagram.com",
+            "x.com",
+            "twitter.com",
+            "tiktok.com",
+            "reddit.com",
+            "threads.net",
+            "bsky.app",
+            "snapchat.com",
+            "pinterest.com",
+            "linkedin.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "streaming",
+        label: "Streaming",
+        hosts: &[
+            "youtube.com",
+            "netflix.com",
+            "hulu.com",
+            "disneyplus.com",
+            "primevideo.com",
+            "twitch.tv",
+            "max.com",
+            "peacocktv.com",
+            "crunchyroll.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "news",
+        label: "News",
+        hosts: &[
+            "cnn.com",
+            "bbc.com",
+            "nytimes.com",
+            "washingtonpost.com",
+            "theguardian.com",
+            "reuters.com",
+            "apnews.com",
+            "nbcnews.com",
+            "foxnews.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "sports",
+        label: "Sports",
+        hosts: &[
+            "espn.com",
+            "bleacherreport.com",
+            "cbssports.com",
+            "foxsports.com",
+            "skysports.com",
+            "nba.com",
+            "nfl.com",
+            "mlb.com",
+            "nhl.com",
+            "fifa.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "porn",
+        label: "Porn",
+        hosts: &[
+            "pornhub.com",
+            "xvideos.com",
+            "xnxx.com",
+            "xhamster.com",
+            "redtube.com",
+            "youporn.com",
+            "spankbang.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "gambling",
+        label: "Gambling",
+        hosts: &[
+            "stake.com",
+            "draftkings.com",
+            "fanduel.com",
+            "bet365.com",
+            "betmgm.com",
+            "caesars.com",
+            "bovada.lv",
+            "pokerstars.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "gaming",
+        label: "Gaming",
+        hosts: &[
+            "steampowered.com",
+            "epicgames.com",
+            "roblox.com",
+            "battle.net",
+            "xbox.com",
+            "playstation.com",
+            "itch.io",
+            "speedrun.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "shopping",
+        label: "Shopping",
+        hosts: &[
+            "amazon.com",
+            "ebay.com",
+            "aliexpress.com",
+            "temu.com",
+            "walmart.com",
+            "target.com",
+            "etsy.com",
+            "shein.com",
+            "bestbuy.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "dating",
+        label: "Dating",
+        hosts: &[
+            "tinder.com",
+            "bumble.com",
+            "hinge.co",
+            "okcupid.com",
+            "match.com",
+            "pof.com",
+            "grindr.com",
+            "happn.com",
+        ],
+    },
+    BuiltInCategory {
+        id: "trading",
+        label: "Trading",
+        hosts: &[
+            "robinhood.com",
+            "coinbase.com",
+            "binance.com",
+            "tradingview.com",
+            "etoro.com",
+            "kraken.com",
+            "marketwatch.com",
+            "seekingalpha.com",
+            "coinmarketcap.com",
+            "coingecko.com",
+        ],
+    },
+];
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NativeRequest {
@@ -55,11 +213,20 @@ enum DoomscrollingMode {
 }
 
 #[derive(Debug, Clone)]
+struct CustomCategoryStack {
+    id: String,
+    name: String,
+    hosts: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 struct DoomscrollingConfig {
     mode: DoomscrollingMode,
     enabled: bool,
     block_during_short_breaks: bool,
     block_during_long_breaks: bool,
+    blocked_category_ids: Vec<String>,
+    custom_category_stacks: Vec<CustomCategoryStack>,
     blocked_hosts: Vec<String>,
     exception_hosts: Vec<String>,
     allowed_hosts: Vec<String>,
@@ -287,6 +454,10 @@ fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
             .and_then(Value::as_bool)
             .or(legacy_block_during_breaks)
             .unwrap_or(true),
+        blocked_category_ids: read_category_array(doomscrolling.get("blockedCategories")),
+        custom_category_stacks: read_custom_category_stacks(
+            doomscrolling.get("customCategoryStacks"),
+        ),
         blocked_hosts: read_host_array(doomscrolling.get("blockedHosts")),
         exception_hosts: if has_exception_hosts {
             read_host_array(doomscrolling.get("exceptionHosts"))
@@ -309,6 +480,107 @@ fn read_mode(doomscrolling: &Value) -> (DoomscrollingMode, bool) {
         Some("blacklist") => (DoomscrollingMode::Blacklist, true),
         _ => (DoomscrollingMode::Blacklist, false),
     }
+}
+
+fn built_in_category(id: &str) -> Option<&'static BuiltInCategory> {
+    BUILT_IN_CATEGORIES
+        .iter()
+        .find(|category| category.id == id)
+}
+
+fn default_built_in_category_ids() -> Vec<String> {
+    BUILT_IN_CATEGORIES
+        .iter()
+        .map(|category| category.id.to_string())
+        .collect()
+}
+
+fn read_category_array(value: Option<&Value>) -> Vec<String> {
+    let Some(Value::Array(items)) = value else {
+        return default_built_in_category_ids();
+    };
+    let mut categories = Vec::new();
+    for item in items {
+        let Some(id) = read_category_rule(item) else {
+            continue;
+        };
+        if !categories.contains(&id) {
+            categories.push(id);
+        }
+    }
+    categories
+}
+
+fn read_category_rule(item: &Value) -> Option<String> {
+    match item {
+        Value::String(id) if built_in_category(id).is_some() => Some(id.clone()),
+        Value::Object(record) => {
+            if record.get("enabled").and_then(Value::as_bool) != Some(true) {
+                return None;
+            }
+            let id = record.get("id").and_then(Value::as_str)?;
+            built_in_category(id).map(|category| category.id.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn read_custom_category_stacks(value: Option<&Value>) -> Vec<CustomCategoryStack> {
+    let Some(Value::Array(items)) = value else {
+        return Vec::new();
+    };
+    let mut stacks = Vec::new();
+    for item in items {
+        let Some(stack) = read_custom_category_stack(item) else {
+            continue;
+        };
+        if !stacks
+            .iter()
+            .any(|existing: &CustomCategoryStack| existing.id == stack.id)
+        {
+            stacks.push(stack);
+        }
+    }
+    stacks
+}
+
+fn read_custom_category_stack(item: &Value) -> Option<CustomCategoryStack> {
+    let Value::Object(record) = item else {
+        return None;
+    };
+    if record.get("enabled").and_then(Value::as_bool) == Some(false) {
+        return None;
+    }
+    let id = record.get("id").and_then(Value::as_str)?.trim();
+    if id.is_empty() || id.len() > 80 {
+        return None;
+    }
+    let name = record
+        .get("name")
+        .and_then(Value::as_str)
+        .map(normalize_custom_category_stack_name)?;
+    if name.is_empty() {
+        return None;
+    }
+    let hosts = read_host_array(record.get("hosts"));
+    if hosts.is_empty() {
+        return None;
+    }
+    Some(CustomCategoryStack {
+        id: id.to_string(),
+        name,
+        hosts,
+    })
+}
+
+fn normalize_custom_category_stack_name(input: &str) -> String {
+    input
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(60)
+        .collect()
 }
 
 fn read_host_array(value: Option<&Value>) -> Vec<String> {
@@ -349,6 +621,8 @@ fn default_config() -> DoomscrollingConfig {
         enabled: true,
         block_during_short_breaks: true,
         block_during_long_breaks: true,
+        blocked_category_ids: default_built_in_category_ids(),
+        custom_category_stacks: Vec::new(),
         blocked_hosts: Vec::new(),
         exception_hosts: Vec::new(),
         allowed_hosts: Vec::new(),
@@ -480,6 +754,31 @@ fn decide_host(host: &str, config: &DoomscrollingConfig) -> HostDecision {
                     };
                 }
             }
+            for stack in &config.custom_category_stacks {
+                for stack_host in &stack.hosts {
+                    if host_matches_rule(host, stack_host) {
+                        return HostDecision {
+                            blocked: true,
+                            matched_rule_name: Some(format!("custom stack: {}", stack.name)),
+                        };
+                    }
+                }
+            }
+            for category_id in &config.blocked_category_ids {
+                let Some(category) = built_in_category(category_id) else {
+                    continue;
+                };
+                if category
+                    .hosts
+                    .iter()
+                    .any(|category_host| host_matches_rule(host, category_host))
+                {
+                    return HostDecision {
+                        blocked: true,
+                        matched_rule_name: Some(format!("category: {}", category.label)),
+                    };
+                }
+            }
             HostDecision {
                 blocked: false,
                 matched_rule_name: None,
@@ -523,6 +822,15 @@ fn rules_fingerprint(config: &DoomscrollingConfig) -> String {
     feed_fingerprint_bool(&mut hash, config.enabled);
     feed_fingerprint_bool(&mut hash, config.block_during_short_breaks);
     feed_fingerprint_bool(&mut hash, config.block_during_long_breaks);
+    feed_fingerprint_hosts(&mut hash, "category", &config.blocked_category_ids);
+    feed_fingerprint(&mut hash, "custom_stack");
+    for stack in &config.custom_category_stacks {
+        feed_fingerprint(&mut hash, &stack.id);
+        feed_fingerprint(&mut hash, &stack.name);
+        for host in &stack.hosts {
+            feed_fingerprint(&mut hash, host);
+        }
+    }
     feed_fingerprint_hosts(&mut hash, "blocked", &config.blocked_hosts);
     feed_fingerprint_hosts(&mut hash, "exception", &config.exception_hosts);
     feed_fingerprint_hosts(&mut hash, "allowed", &config.allowed_hosts);
@@ -607,6 +915,8 @@ mod tests {
             enabled: true,
             block_during_short_breaks: true,
             block_during_long_breaks: true,
+            blocked_category_ids: Vec::new(),
+            custom_category_stacks: Vec::new(),
             blocked_hosts: vec!["reddit.com".to_string(), "youtube.com".to_string()],
             exception_hosts: vec!["music.youtube.com".to_string()],
             allowed_hosts: vec!["github.com".to_string()],
@@ -659,6 +969,42 @@ mod tests {
     }
 
     #[test]
+    fn reads_only_enabled_built_in_categories() {
+        let value = serde_json::json!([
+            "social-media",
+            { "id": "streaming", "enabled": false },
+            { "id": "news", "enabled": true },
+            { "id": "unknown", "enabled": true }
+        ]);
+        assert_eq!(
+            super::read_category_array(Some(&value)),
+            vec!["social-media".to_string(), "news".to_string()]
+        );
+    }
+
+    #[test]
+    fn reads_enabled_custom_category_stacks() {
+        let value = serde_json::json!([
+            {
+                "id": "research-traps",
+                "name": "  Research traps  ",
+                "hosts": ["news.ycombinator.com", { "host": "reddit.com", "enabled": false }]
+            },
+            {
+                "id": "disabled",
+                "name": "Disabled",
+                "enabled": false,
+                "hosts": ["example.com"]
+            }
+        ]);
+        let stacks = super::read_custom_category_stacks(Some(&value));
+        assert_eq!(stacks.len(), 1);
+        assert_eq!(stacks[0].id, "research-traps");
+        assert_eq!(stacks[0].name, "Research traps");
+        assert_eq!(stacks[0].hosts, vec!["news.ycombinator.com".to_string()]);
+    }
+
+    #[test]
     fn lets_exceptions_override_blocked_parent_domains() {
         let decision = decide_host("music.youtube.com", &config());
         assert!(!decision.blocked);
@@ -675,6 +1021,36 @@ mod tests {
         assert_eq!(
             decision.matched_rule_name.as_deref(),
             Some("blocked host: reddit.com")
+        );
+    }
+
+    #[test]
+    fn blocks_enabled_built_in_categories() {
+        let mut config = config();
+        config.blocked_hosts.clear();
+        config.blocked_category_ids = vec!["social-media".to_string()];
+        let decision = decide_host("old.reddit.com", &config);
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("category: Social media")
+        );
+    }
+
+    #[test]
+    fn blocks_enabled_custom_category_stacks() {
+        let mut config = config();
+        config.blocked_hosts.clear();
+        config.custom_category_stacks = vec![super::CustomCategoryStack {
+            id: "research-traps".to_string(),
+            name: "Research traps".to_string(),
+            hosts: vec!["news.ycombinator.com".to_string()],
+        }];
+        let decision = decide_host("news.ycombinator.com", &config);
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("custom stack: Research traps")
         );
     }
 
@@ -721,16 +1097,22 @@ mod tests {
 
     #[test]
     fn rules_fingerprint_changes_when_mode_or_rules_change() {
-        let mut config = config();
-        let base = super::rules_fingerprint(&config);
+        let mut changed_config = config();
+        let base = super::rules_fingerprint(&changed_config);
 
-        config.mode = DoomscrollingMode::Whitelist;
-        assert_ne!(super::rules_fingerprint(&config), base);
+        changed_config.mode = DoomscrollingMode::Whitelist;
+        assert_ne!(super::rules_fingerprint(&changed_config), base);
 
-        config.mode = DoomscrollingMode::Blacklist;
-        config
+        changed_config.mode = DoomscrollingMode::Blacklist;
+        changed_config
             .blocked_hosts
             .push("news.ycombinator.com".to_string());
-        assert_ne!(super::rules_fingerprint(&config), base);
+        assert_ne!(super::rules_fingerprint(&changed_config), base);
+
+        let mut category_config = config();
+        category_config
+            .blocked_category_ids
+            .push("news".to_string());
+        assert_ne!(super::rules_fingerprint(&category_config), base);
     }
 }

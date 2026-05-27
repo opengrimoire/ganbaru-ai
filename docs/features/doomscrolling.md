@@ -13,12 +13,13 @@ The current desktop implementation is an early Chrome and Brave development slic
 - The app writes a small runtime state file when Pomodoro state changes.
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
 - The native host writes a small local connection status file each time the extension contacts it. The app uses this to show whether a browser extension has connected recently.
-- Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, exceptions, and allowed websites.
-- The current `doomscrolling` config uses `mode`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Legacy string entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
+- Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, blocked categories, custom category stacks, exceptions, and allowed websites.
+- Blacklist mode presents built-in and custom categories as category pills. The New category pill opens the custom category form, websites are entered as list items, and custom category deletion lives inside the edit form.
+- The current `doomscrolling` config uses `mode`, `blockedCategories`, `customCategoryStacks`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Built-in categories are enabled by default. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Category stacks store a name, enabled state, and normalized hosts. Legacy string website entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
 - The native host includes a rules fingerprint in state responses so the extension rechecks already open tabs when website rules change during an active focus or break phase.
 - Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
 
-This is intentionally smaller than the full spec below. It supports domain-level blocking during Pomodoro sessions first. Work environment rules, category presets, temporary access analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
+This is intentionally smaller than the full spec below. It supports domain-level blocking and preset categories during Pomodoro sessions first. Work environment rules, temporary access analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
 
 ## Purpose
 
@@ -93,9 +94,10 @@ Core rule kinds:
 - **Allowed keyword.** Allows a page when the title, URL, or supported site metadata contains task-relevant keywords.
 - **Blocked keyword.** Blocks a page when title, URL, or supported metadata contains distracting terms.
 - **Allowed channel or creator.** Allows specific supported content sources such as a YouTube channel.
-- **Category preset.** A named local preset such as social media, video, short-form video, news, shopping, or forums. Presets expand to ordinary domain and pattern rules that the user can inspect.
+- **Blocked category.** A local preset such as social media, streaming, news, sports, porn, gambling, gaming, shopping, dating, or trading. Presets expand to ordinary domain rules.
+- **Custom category stack.** A user-named group of domains that can be enabled, disabled, edited, or deleted as one unit.
 
-Initial Chrome implementation should support blocked domains, allowed domains, blocked URL patterns, allowed URL patterns, and category presets. Keyword and channel rules can ship once site metadata extraction is stable.
+Initial Chrome implementation should support blocked domains, allowed domains, blocked categories, and custom category stacks. URL pattern, keyword, and channel rules can ship once matching and site metadata extraction are stable.
 
 ## Rule precedence
 
@@ -449,8 +451,8 @@ Stage 5, optional AI relevance:
 - Should break browsing be globally configurable, per environment, or both?
 - How much URL path detail should analytics expose by default?
 - Should temporary access require a typed reason in strict environments?
-- Which category presets are safe to ship as defaults without creating regional bias?
-- Should user-defined categories be part of the first implementation or wait until after presets prove useful?
+- Which additional regional category presets are worth maintaining?
+- Should custom category stacks support editing individual hosts inline, or stay as delete-and-recreate bundles until rule editing is broader?
 
 ## Related docs
 

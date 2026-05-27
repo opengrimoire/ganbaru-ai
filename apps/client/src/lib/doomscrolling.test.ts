@@ -5,11 +5,46 @@ import {
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingHost,
   parseDoomscrollingHosts,
+  type DoomscrollingCategoryId,
+  type DoomscrollingConfig,
   type DoomscrollingHostRule,
 } from "./doomscrolling";
 
 function hostRule(host: string, enabled = true): DoomscrollingHostRule {
   return { host, enabled };
+}
+
+function categoryRule(id: DoomscrollingCategoryId, enabled = true) {
+  return { id, enabled };
+}
+
+function disabledCategoryRules(): DoomscrollingConfig["blockedCategories"] {
+  return DEFAULT_DOOMSCROLLING_CONFIG.blockedCategories.map((rule) => ({
+    ...rule,
+    enabled: false,
+  }));
+}
+
+function categoryRulesWith(
+  id: DoomscrollingCategoryId,
+  enabled = true,
+): DoomscrollingConfig["blockedCategories"] {
+  return disabledCategoryRules().map((rule) => ({
+    ...rule,
+    enabled: rule.id === id ? enabled : rule.enabled,
+  }));
+}
+
+function config(partial: Partial<DoomscrollingConfig>): DoomscrollingConfig {
+  return {
+    ...DEFAULT_DOOMSCROLLING_CONFIG,
+    blockedCategories: disabledCategoryRules(),
+    customCategoryStacks: [],
+    blockedHosts: [],
+    exceptionHosts: [],
+    allowedHosts: [],
+    ...partial,
+  };
 }
 
 describe("normalizeDoomscrollingHost", () => {
@@ -38,8 +73,10 @@ describe("parseDoomscrollingHosts", () => {
 });
 
 describe("normalizeDoomscrollingConfig", () => {
-  it("defaults all blocking toggles to enabled", () => {
-    expect(normalizeDoomscrollingConfig(null)).toEqual(DEFAULT_DOOMSCROLLING_CONFIG);
+  it("defaults all blocking toggles and built-in categories to enabled", () => {
+    const normalized = normalizeDoomscrollingConfig(null);
+    expect(normalized).toEqual(DEFAULT_DOOMSCROLLING_CONFIG);
+    expect(normalized.blockedCategories.every((rule) => rule.enabled)).toBe(true);
   });
 
   it("normalizes malformed config without throwing", () => {
@@ -53,6 +90,8 @@ describe("normalizeDoomscrollingConfig", () => {
       enabled: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
+      blockedCategories: DEFAULT_DOOMSCROLLING_CONFIG.blockedCategories,
+      customCategoryStacks: [],
       blockedHosts: [hostRule("reddit.com"), hostRule("youtube.com")],
       exceptionHosts: [],
       allowedHosts: [],
@@ -100,19 +139,55 @@ describe("normalizeDoomscrollingConfig", () => {
       blockDuringLongBreaks: false,
     });
   });
+
+  it("normalizes built-in categories and custom category stacks", () => {
+    const normalized = normalizeDoomscrollingConfig({
+      blockedCategories: [
+        "social-media",
+        { id: "streaming", enabled: false },
+        { id: "news", enabled: true },
+        { id: "unknown", enabled: true },
+      ],
+      customCategoryStacks: [
+        {
+          id: "research-traps",
+          name: "  Research traps  ",
+          enabled: false,
+          hosts: ["news.ycombinator.com", "https://reddit.com/r/programming", "*"],
+        },
+        {
+          id: "bad id",
+          name: "Invalid",
+          hosts: ["example.com"],
+        },
+      ],
+    });
+    expect(normalized.blockedCategories.find((rule) => rule.id === "social-media")).toEqual(
+      categoryRule("social-media"),
+    );
+    expect(normalized.blockedCategories.find((rule) => rule.id === "streaming")).toEqual(
+      categoryRule("streaming", false),
+    );
+    expect(normalized.blockedCategories.find((rule) => rule.id === "news")).toEqual(
+      categoryRule("news"),
+    );
+    expect(normalized.customCategoryStacks).toEqual([
+      {
+        id: "research-traps",
+        name: "Research traps",
+        enabled: false,
+        hosts: [hostRule("news.ycombinator.com"), hostRule("reddit.com")],
+      },
+    ]);
+  });
 });
 
 describe("evaluateDoomscrollingUrl", () => {
   it("blocks subdomains of blocked hosts", () => {
-    const decision = evaluateDoomscrollingUrl("https://old.reddit.com/r/all", {
+    const decision = evaluateDoomscrollingUrl("https://old.reddit.com/r/all", config({
       mode: "blacklist",
-      enabled: true,
-      blockDuringShortBreaks: true,
-      blockDuringLongBreaks: true,
       blockedHosts: [hostRule("reddit.com")],
-      exceptionHosts: [],
-      allowedHosts: [],
-    });
+    }));
     expect(decision).toEqual({
       blocked: true,
       host: "old.reddit.com",
@@ -121,72 +196,83 @@ describe("evaluateDoomscrollingUrl", () => {
   });
 
   it("lets exceptions override blocked parent domains", () => {
-    const decision = evaluateDoomscrollingUrl("https://music.youtube.com/playlist?list=1", {
+    const decision = evaluateDoomscrollingUrl("https://music.youtube.com/playlist?list=1", config({
       mode: "blacklist",
-      enabled: true,
-      blockDuringShortBreaks: true,
-      blockDuringLongBreaks: true,
       blockedHosts: [hostRule("youtube.com")],
       exceptionHosts: [hostRule("music.youtube.com")],
-      allowedHosts: [],
-    });
+    }));
     expect(decision.blocked).toBe(false);
     expect(decision.matchedRule).toBe("exception: music.youtube.com");
   });
 
   it("blocks domains outside whitelist mode", () => {
-    const decision = evaluateDoomscrollingUrl("https://reddit.com/r/all", {
+    const decision = evaluateDoomscrollingUrl("https://reddit.com/r/all", config({
       mode: "whitelist",
-      enabled: true,
-      blockDuringShortBreaks: true,
-      blockDuringLongBreaks: true,
-      blockedHosts: [],
-      exceptionHosts: [],
       allowedHosts: [hostRule("github.com")],
-    });
+    }));
     expect(decision.blocked).toBe(true);
     expect(decision.matchedRule).toBe("not in whitelist");
   });
 
   it("allows domains inside whitelist mode", () => {
-    const decision = evaluateDoomscrollingUrl("https://docs.github.com/en", {
+    const decision = evaluateDoomscrollingUrl("https://docs.github.com/en", config({
       mode: "whitelist",
-      enabled: true,
-      blockDuringShortBreaks: true,
-      blockDuringLongBreaks: true,
-      blockedHosts: [],
-      exceptionHosts: [],
       allowedHosts: [hostRule("github.com")],
-    });
+    }));
     expect(decision.blocked).toBe(false);
     expect(decision.matchedRule).toBe("whitelist: github.com");
   });
 
   it("ignores disabled blacklist rules", () => {
-    const decision = evaluateDoomscrollingUrl("https://reddit.com/r/all", {
+    const decision = evaluateDoomscrollingUrl("https://reddit.com/r/all", config({
       mode: "blacklist",
-      enabled: true,
-      blockDuringShortBreaks: true,
-      blockDuringLongBreaks: true,
       blockedHosts: [hostRule("reddit.com", false)],
-      exceptionHosts: [],
-      allowedHosts: [],
-    });
+    }));
     expect(decision.blocked).toBe(false);
     expect(decision.matchedRule).toBeNull();
   });
 
   it("ignores disabled whitelist rules", () => {
-    const decision = evaluateDoomscrollingUrl("https://docs.github.com/en", {
+    const decision = evaluateDoomscrollingUrl("https://docs.github.com/en", config({
       mode: "whitelist",
-      enabled: true,
-      blockDuringShortBreaks: true,
-      blockDuringLongBreaks: true,
-      blockedHosts: [],
-      exceptionHosts: [],
       allowedHosts: [hostRule("github.com", false)],
-    });
+    }));
     expect(decision.blocked).toBe(true);
     expect(decision.matchedRule).toBe("not in whitelist");
+  });
+
+  it("blocks enabled built-in categories in blacklist mode", () => {
+    const decision = evaluateDoomscrollingUrl("https://old.reddit.com/r/all", config({
+      mode: "blacklist",
+      blockedCategories: categoryRulesWith("social-media"),
+    }));
+    expect(decision.blocked).toBe(true);
+    expect(decision.matchedRule).toBe("category: Social media");
+  });
+
+  it("blocks enabled custom category stacks in blacklist mode", () => {
+    const decision = evaluateDoomscrollingUrl("https://news.ycombinator.com/item?id=1", config({
+      mode: "blacklist",
+      customCategoryStacks: [
+        {
+          id: "research-traps",
+          name: "Research traps",
+          enabled: true,
+          hosts: [hostRule("news.ycombinator.com")],
+        },
+      ],
+    }));
+    expect(decision.blocked).toBe(true);
+    expect(decision.matchedRule).toBe("custom stack: Research traps");
+  });
+
+  it("ignores blacklist categories while in whitelist mode", () => {
+    const decision = evaluateDoomscrollingUrl("https://old.reddit.com/r/all", config({
+      mode: "whitelist",
+      blockedCategories: categoryRulesWith("social-media"),
+      allowedHosts: [hostRule("reddit.com")],
+    }));
+    expect(decision.blocked).toBe(false);
+    expect(decision.matchedRule).toBe("whitelist: reddit.com");
   });
 });

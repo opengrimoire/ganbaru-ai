@@ -83,7 +83,7 @@ You do not need to remove the extension for normal changes.
   ```
 
 - Extension HTML, CSS, JS, manifest, or icon changes need the reload button on the GanbaruAI card in the browser's extensions page.
-- Changing Doomscrolling modes or website lists while a focus or break phase is active is picked up by the extension on the next state poll.
+- Changing Doomscrolling modes, categories, or website lists while a focus or break phase is active is picked up by the extension on the next state poll.
 - Removing and adding the unpacked extension gives it a new id. If that happens, run the native host registration command again with the new id.
 
 ## Smoke test checklist

@@ -1,14 +1,31 @@
 import {
   DEFAULT_DOOMSCROLLING_CONFIG,
   normalizeDoomscrollingConfig,
+  normalizeDoomscrollingCustomCategoryStackName,
   parseDoomscrollingHosts,
+  type DoomscrollingCategoryId,
+  type DoomscrollingCategoryRule,
   type DoomscrollingConfig,
+  type DoomscrollingCustomCategoryStack,
   type DoomscrollingHostRule,
   type DoomscrollingMode,
 } from "$lib/doomscrolling";
 import { getConfigKey, setConfigKey } from "$lib/vault/config";
 
 const CONFIG_KEY = "doomscrolling";
+
+export type AddDoomscrollingCustomCategoryStackResult =
+  | "added"
+  | "invalid-name"
+  | "invalid-hosts"
+  | "duplicate-name";
+
+export type UpdateDoomscrollingCustomCategoryStackResult =
+  | "updated"
+  | "missing"
+  | "invalid-name"
+  | "invalid-hosts"
+  | "duplicate-name";
 
 function loadSavedConfig(): DoomscrollingConfig {
   const saved = getConfigKey<unknown>(CONFIG_KEY, undefined);
@@ -57,6 +74,51 @@ function setHostEnabled(
   return existingHosts.map((rule) => rule.host === host ? { ...rule, enabled } : rule);
 }
 
+function setCategoryEnabled(
+  categories: readonly DoomscrollingCategoryRule[],
+  id: DoomscrollingCategoryId,
+  enabled: boolean,
+): DoomscrollingCategoryRule[] {
+  return categories.map((rule) => rule.id === id ? { ...rule, enabled } : rule);
+}
+
+function slugifyCustomCategoryStackName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "custom-stack";
+}
+
+function createCustomCategoryStackId(name: string): string {
+  const suffix = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${slugifyCustomCategoryStackName(name).slice(0, 48)}-${suffix}`;
+}
+
+function setCustomCategoryStackEnabled(
+  stacks: readonly DoomscrollingCustomCategoryStack[],
+  id: string,
+  enabled: boolean,
+): DoomscrollingCustomCategoryStack[] {
+  return stacks.map((stack) => stack.id === id ? { ...stack, enabled } : stack);
+}
+
+function removeCustomCategoryStack(
+  stacks: readonly DoomscrollingCustomCategoryStack[],
+  id: string,
+): DoomscrollingCustomCategoryStack[] {
+  return stacks.filter((stack) => stack.id !== id);
+}
+
+function duplicateCustomCategoryStackName(name: string, currentId: string | null): boolean {
+  const normalizedName = name.toLowerCase();
+  return config.customCategoryStacks.some((stack) => (
+    stack.id !== currentId && stack.name.toLowerCase() === normalizedName
+  ));
+}
+
 export function getDoomscrolling() {
   return {
     get enabled(): boolean {
@@ -70,6 +132,12 @@ export function getDoomscrolling() {
     },
     get blockDuringLongBreaks(): boolean {
       return config.blockDuringLongBreaks;
+    },
+    get blockedCategories(): readonly DoomscrollingCategoryRule[] {
+      return config.blockedCategories;
+    },
+    get customCategoryStacks(): readonly DoomscrollingCustomCategoryStack[] {
+      return config.customCategoryStacks;
     },
     get blockedHosts(): readonly DoomscrollingHostRule[] {
       return config.blockedHosts;
@@ -91,6 +159,68 @@ export function getDoomscrolling() {
     },
     setBlockDuringLongBreaks(blockDuringLongBreaks: boolean): void {
       update({ blockDuringLongBreaks });
+    },
+    setBlockedCategoryEnabled(id: DoomscrollingCategoryId, enabled: boolean): void {
+      update({ blockedCategories: setCategoryEnabled(config.blockedCategories, id, enabled) });
+    },
+    addCustomCategoryStack(
+      nameInput: string,
+      hostsInput: string,
+    ): AddDoomscrollingCustomCategoryStackResult {
+      const name = normalizeDoomscrollingCustomCategoryStackName(nameInput);
+      if (!name) return "invalid-name";
+      const hosts = parseDoomscrollingHosts(hostsInput).map((host) => ({ host, enabled: true }));
+      if (hosts.length === 0) return "invalid-hosts";
+      if (duplicateCustomCategoryStackName(name, null)) return "duplicate-name";
+      const existingIds = new Set(config.customCategoryStacks.map((stack) => stack.id));
+      let id = createCustomCategoryStackId(name);
+      while (existingIds.has(id)) {
+        id = createCustomCategoryStackId(name);
+      }
+      update({
+        customCategoryStacks: [
+          ...config.customCategoryStacks,
+          {
+            id,
+            name,
+            enabled: true,
+            hosts,
+          },
+        ],
+      });
+      return "added";
+    },
+    updateCustomCategoryStack(
+      id: string,
+      nameInput: string,
+      hostsInput: string,
+    ): UpdateDoomscrollingCustomCategoryStackResult {
+      const name = normalizeDoomscrollingCustomCategoryStackName(nameInput);
+      if (!name) return "invalid-name";
+      const hosts = parseDoomscrollingHosts(hostsInput).map((host) => ({ host, enabled: true }));
+      if (hosts.length === 0) return "invalid-hosts";
+      if (duplicateCustomCategoryStackName(name, id)) return "duplicate-name";
+      let found = false;
+      const customCategoryStacks = config.customCategoryStacks.map((stack) => {
+        if (stack.id !== id) return stack;
+        found = true;
+        return {
+          ...stack,
+          name,
+          hosts,
+        };
+      });
+      if (!found) return "missing";
+      update({ customCategoryStacks });
+      return "updated";
+    },
+    removeCustomCategoryStack(id: string): void {
+      update({ customCategoryStacks: removeCustomCategoryStack(config.customCategoryStacks, id) });
+    },
+    setCustomCategoryStackEnabled(id: string, enabled: boolean): void {
+      update({
+        customCategoryStacks: setCustomCategoryStackEnabled(config.customCategoryStacks, id, enabled),
+      });
     },
     addBlockedHostsText(text: string): boolean {
       const merged = mergeHosts(config.blockedHosts, text);
