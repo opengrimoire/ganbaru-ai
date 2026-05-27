@@ -62,6 +62,12 @@
     host: string;
   }
 
+  type BrowserConfigurationToggle = "focus" | "shortBreaks" | "longBreaks";
+
+  interface PendingBrowserConfigurationAction {
+    toggle: BrowserConfigurationToggle;
+  }
+
   interface PendingCategoryAction {
     type: "disable";
     categoryId: DoomscrollingCategoryId;
@@ -78,6 +84,7 @@
 
   type PendingAction =
     | { target: "website"; action: PendingWebsiteAction }
+    | { target: "browserConfiguration"; action: PendingBrowserConfigurationAction }
     | { target: "category"; action: PendingCategoryAction }
     | { target: "customStack"; action: PendingCustomStackAction }
     | { target: "customStackDraftHost"; action: PendingCustomStackDraftHostAction };
@@ -404,6 +411,30 @@
     }
   }
 
+  function setBrowserConfigurationToggle(
+    toggle: BrowserConfigurationToggle,
+    checked: boolean,
+  ): void {
+    if (toggle === "focus") {
+      doomscrolling.setEnabled(checked);
+    } else if (toggle === "shortBreaks") {
+      doomscrolling.setBlockDuringShortBreaks(checked);
+    } else {
+      doomscrolling.setBlockDuringLongBreaks(checked);
+    }
+  }
+
+  function requestBrowserConfigurationToggleChange(
+    toggle: BrowserConfigurationToggle,
+    checked: boolean,
+  ): void {
+    if (checked) {
+      setBrowserConfigurationToggle(toggle, true);
+      return;
+    }
+    pendingAction = { target: "browserConfiguration", action: { toggle } };
+  }
+
   function confirmPendingAction(): void {
     if (!pendingAction) return;
     if (pendingAction.target === "website") {
@@ -414,6 +445,8 @@
       } else {
         section.remove(host);
       }
+    } else if (pendingAction.target === "browserConfiguration") {
+      setBrowserConfigurationToggle(pendingAction.action.toggle, false);
     } else if (pendingAction.target === "category") {
       doomscrolling.setBlockedCategoryEnabled(pendingAction.action.categoryId, false);
     } else if (pendingAction.target === "customStackDraftHost") {
@@ -442,6 +475,11 @@
         ? `Disable ${action.action.host}?`
         : `Delete ${action.action.host}?`;
     }
+    if (action.target === "browserConfiguration") {
+      if (action.action.toggle === "focus") return "Turn off browser blocking during focus?";
+      if (action.action.toggle === "shortBreaks") return "Allow websites during short breaks?";
+      return "Allow websites during long breaks?";
+    }
     if (action.target === "category") {
       const category = getDoomscrollingCategoryDefinition(action.action.categoryId);
       return `Allow the ${category?.label ?? "category"} category?`;
@@ -462,6 +500,15 @@
         ? "It will stay in the list but will not affect browser blocking until you enable it again"
         : "This cannot be undone";
     }
+    if (action.target === "browserConfiguration") {
+      if (action.action.toggle === "focus") {
+        return "Website rules will not apply during focus sessions until you enable this again";
+      }
+      if (action.action.toggle === "shortBreaks") {
+        return "Website rules will not apply during short breaks until you enable this again";
+      }
+      return "Website rules will not apply during long breaks until you enable this again";
+    }
     if (action.target === "category") {
       return "This category will stop blocking its websites until you enable it again";
     }
@@ -476,6 +523,9 @@
   function pendingActionConfirmLabel(action: PendingAction): string {
     if (action.target === "website") {
       return action.action.type === "disable" ? "Disable (Enter)" : "Delete (Enter)";
+    }
+    if (action.target === "browserConfiguration") {
+      return action.action.toggle === "focus" ? "Turn off (Enter)" : "Allow (Enter)";
     }
     if (action.target === "category") return "Disable (Enter)";
     if (action.target === "customStackDraftHost") return "Delete (Enter)";
@@ -863,7 +913,7 @@
         label="Enable during focus"
         description="Apply website rules while a focus session is running"
         checked={doomscrolling.enabled}
-        onChange={(checked) => doomscrolling.setEnabled(checked)}
+        onChange={(checked) => requestBrowserConfigurationToggleChange("focus", checked)}
       />
 
       <fieldset
@@ -879,13 +929,13 @@
             label="Block during short breaks"
             description="Apply website rules during short breaks"
             checked={doomscrolling.blockDuringShortBreaks}
-            onChange={(checked) => doomscrolling.setBlockDuringShortBreaks(checked)}
+            onChange={(checked) => requestBrowserConfigurationToggleChange("shortBreaks", checked)}
           />
           <ToggleSetting
             label="Block during long breaks"
             description="Apply website rules during long breaks"
             checked={doomscrolling.blockDuringLongBreaks}
-            onChange={(checked) => doomscrolling.setBlockDuringLongBreaks(checked)}
+            onChange={(checked) => requestBrowserConfigurationToggleChange("longBreaks", checked)}
           />
         </div>
 
