@@ -866,7 +866,7 @@
                   "flex min-h-0 w-full items-start gap-2.5 rounded-md border px-3 py-2 text-left leading-normal disabled:cursor-not-allowed max-[360px]:gap-2 max-[360px]:px-2.5",
                   active
                     ? "border-foreground/25 bg-foreground/5 text-foreground"
-                    : "border-border bg-transparent text-foreground",
+                    : "border-border/60 bg-transparent text-muted-foreground opacity-70",
                 )}
                 aria-pressed={active}
               >
