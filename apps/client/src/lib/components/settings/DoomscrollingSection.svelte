@@ -108,8 +108,8 @@
       kind: "blocked",
       id: "doomscrolling-blocked-websites",
       heading: "Blocked websites",
-      description: "Add domains like reddit.com or youtube.com",
-      placeholder: "reddit.com",
+      description: "Block selected domains when browser blocking is active. Example: youtube.com",
+      placeholder: "Enter a domain...",
       emptyText: "No blocked websites yet",
       errorText: "Enter a valid domain. Example: domain.com",
       websites: () => doomscrolling.blockedHosts,
@@ -121,8 +121,8 @@
       kind: "exception",
       id: "doomscrolling-exception-websites",
       heading: "Exceptions",
-      description: "Keep specific subdomains available inside blacklist mode",
-      placeholder: "music.youtube.com",
+      description: "Allow specific subdomains inside blocked domains. Example: music.youtube.com",
+      placeholder: "Enter a domain...",
       emptyText: "No exceptions yet",
       errorText: "Enter a valid domain. Example: domain.com",
       websites: () => doomscrolling.exceptionHosts,
@@ -134,8 +134,8 @@
       kind: "allowed",
       id: "doomscrolling-allowed-websites",
       heading: "Allowed websites",
-      description: "Everything else is blocked in whitelist mode",
-      placeholder: "github.com",
+      description: "Only these domains stay available in whitelist mode. Example: github.com",
+      placeholder: "Enter a domain...",
       emptyText: "No allowed websites yet",
       errorText: "Enter a valid domain. Example: domain.com",
       websites: () => doomscrolling.allowedHosts,
@@ -649,8 +649,8 @@
                 oninput={() => clearCustomStackError("hosts")}
                 type="text"
                 spellcheck="false"
-                placeholder="domain.com"
-                class="flex h-7 min-w-0 flex-1 bg-transparent px-1 font-mono text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
+                placeholder="Enter a domain..."
+                class="flex h-7 min-w-0 flex-1 bg-transparent px-1 text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
               />
               <button
                 type="submit"
@@ -664,7 +664,7 @@
             <div class="flex flex-col">
               {#each customStackDraft.hosts as host (host)}
                 <div class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5">
-                  <span class="flex h-7 min-w-0 flex-1 items-center truncate px-1 font-mono text-[0.8rem] leading-snug text-foreground">
+                  <span class="flex h-7 min-w-0 flex-1 items-center truncate px-1 text-[0.8rem] leading-snug text-foreground">
                     {host}
                   </span>
                   <button
@@ -716,7 +716,7 @@
           type="text"
           spellcheck="false"
           placeholder={section.placeholder}
-          class="flex h-7 min-w-0 flex-1 items-center bg-transparent px-1 font-mono text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
+          class="flex h-7 min-w-0 flex-1 items-center bg-transparent px-1 text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
         />
         <button
           type="submit"
@@ -745,7 +745,7 @@
       >
         <span
           class={cn(
-            "flex h-7 min-w-0 flex-1 items-center truncate px-1 font-mono text-[0.8rem] leading-snug text-foreground",
+            "flex h-7 min-w-0 flex-1 items-center truncate px-1 text-[0.8rem] leading-snug text-foreground",
             !website.enabled && "opacity-50 line-through",
           )}
         >
