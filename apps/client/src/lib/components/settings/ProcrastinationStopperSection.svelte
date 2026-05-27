@@ -252,7 +252,7 @@
     </div>
     <div class="flex flex-col">
       <form
-        class="flex h-8 items-center gap-3 border-b border-border/80 transition-colors focus-within:border-ring"
+        class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5 focus-within:border-ring"
         onsubmit={(event) => submitAdd(event, section)}
       >
         <input
@@ -262,12 +262,12 @@
           type="text"
           spellcheck="false"
           placeholder={section.placeholder}
-          class="h-8 min-w-0 flex-1 bg-transparent px-1 font-mono text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
+          class="flex h-7 min-w-0 flex-1 items-center bg-transparent px-1 font-mono text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
         />
         <button
           type="submit"
           disabled={!websiteDrafts[section.kind].trim()}
-          class="flex h-8 shrink-0 items-center justify-center gap-1.5 px-1 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          class="flex h-7 shrink-0 items-center justify-center gap-1.5 px-1 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus size={13} strokeWidth={2.25} />
           <span>Add</span>
@@ -323,7 +323,7 @@
         </button>
       </div>
     {:else}
-      <div class="px-1 py-1.5 text-[0.8rem] text-muted-foreground">
+      <div class="flex h-10 items-center border-b border-border/70 px-1 text-[0.8rem] text-muted-foreground">
         {section.emptyText}
       </div>
     {/each}
