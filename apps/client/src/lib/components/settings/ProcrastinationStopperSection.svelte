@@ -44,13 +44,13 @@
     {
       mode: "blacklist",
       label: "Blacklist mode",
-      description: "Block selected websites while everything else stays available",
+      description: "Blocks listed websites",
       icon: ShieldX,
     },
     {
       mode: "whitelist",
       label: "Whitelist mode",
-      description: "Only allow selected websites while everything else is blocked",
+      description: "Only allows listed websites",
       icon: ShieldCheck,
     },
   ];
@@ -72,7 +72,7 @@
       kind: "exception",
       id: "doomscrolling-exception-websites",
       heading: "Exceptions",
-      description: "Keep specific subdomains available inside Blacklist mode",
+      description: "Keep specific subdomains available inside blacklist mode",
       placeholder: "music.youtube.com",
       emptyText: "No exceptions yet",
       errorText: "Enter a domain like music.youtube.com",
@@ -84,7 +84,7 @@
       kind: "allowed",
       id: "doomscrolling-allowed-websites",
       heading: "Allowed websites",
-      description: "Everything else is blocked in Whitelist mode",
+      description: "Everything else is blocked in whitelist mode",
       placeholder: "github.com",
       emptyText: "No allowed websites yet",
       errorText: "Enter a domain like github.com",
@@ -300,10 +300,10 @@
           <div class="min-w-0">
             <h3 class="text-[0.866667rem] text-foreground">Website mode</h3>
             <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-              Choose whether Doomscrolling blocks selected websites or only allows selected websites
+              Choose whether listed websites are blocked or allowed
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1">
+          <div class="grid grid-cols-2 items-start gap-2 max-[560px]:grid-cols-1">
             {#each modeOptions as option}
               {@const Icon = option.icon}
               {@const active = stopper.mode === option.mode}
@@ -311,7 +311,7 @@
                 type="button"
                 onclick={() => stopper.setMode(option.mode)}
                 class={cn(
-                  "flex min-h-18 items-start gap-2.5 rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed",
+                  "flex min-h-0 w-full items-start gap-2.5 rounded-md border px-3 py-2 text-left leading-normal transition-colors disabled:cursor-not-allowed max-[360px]:gap-2 max-[360px]:px-2.5",
                   active
                     ? "border-primary bg-accent/70 text-foreground"
                     : "border-border bg-background/60 text-foreground hover:bg-accent/40 dark:bg-transparent",
@@ -319,9 +319,9 @@
                 aria-pressed={active}
               >
                 <Icon size={16} strokeWidth={2} class="mt-0.5 shrink-0" />
-                <span class="min-w-0">
-                  <span class="block text-[0.866667rem] font-medium">{option.label}</span>
-                  <span class="mt-0.5 block text-[0.8rem] text-muted-foreground">{option.description}</span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-[0.866667rem] font-medium leading-snug">{option.label}</span>
+                  <span class="mt-0.5 block text-[0.8rem] leading-snug text-muted-foreground">{option.description}</span>
                 </span>
               </button>
             {/each}
