@@ -44,11 +44,35 @@ describe("normalizeProcrastinationStopperConfig", () => {
       blockedHosts: ["Reddit.com", "*", "youtube.com"],
       allowedHosts: "docs.example.com",
     })).toEqual({
+      mode: "blacklist",
       enabled: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
       blockedHosts: ["reddit.com", "youtube.com"],
+      exceptionHosts: [],
       allowedHosts: [],
+    });
+  });
+
+  it("migrates legacy allowed hosts into blacklist exceptions", () => {
+    expect(normalizeProcrastinationStopperConfig({
+      allowedHosts: ["music.youtube.com"],
+    })).toMatchObject({
+      mode: "blacklist",
+      exceptionHosts: ["music.youtube.com"],
+      allowedHosts: [],
+    });
+  });
+
+  it("keeps whitelist allowed hosts separate from blacklist exceptions", () => {
+    expect(normalizeProcrastinationStopperConfig({
+      mode: "whitelist",
+      exceptionHosts: ["music.youtube.com"],
+      allowedHosts: ["github.com"],
+    })).toMatchObject({
+      mode: "whitelist",
+      exceptionHosts: ["music.youtube.com"],
+      allowedHosts: ["github.com"],
     });
   });
 
@@ -65,10 +89,12 @@ describe("normalizeProcrastinationStopperConfig", () => {
 describe("evaluateStopperUrl", () => {
   it("blocks subdomains of blocked hosts", () => {
     const decision = evaluateStopperUrl("https://old.reddit.com/r/all", {
+      mode: "blacklist",
       enabled: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
       blockedHosts: ["reddit.com"],
+      exceptionHosts: [],
       allowedHosts: [],
     });
     expect(decision).toEqual({
@@ -78,15 +104,45 @@ describe("evaluateStopperUrl", () => {
     });
   });
 
-  it("lets allowed hosts override blocked parent domains", () => {
+  it("lets exceptions override blocked parent domains", () => {
     const decision = evaluateStopperUrl("https://music.youtube.com/playlist?list=1", {
+      mode: "blacklist",
       enabled: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
       blockedHosts: ["youtube.com"],
-      allowedHosts: ["music.youtube.com"],
+      exceptionHosts: ["music.youtube.com"],
+      allowedHosts: [],
     });
     expect(decision.blocked).toBe(false);
-    expect(decision.matchedRule).toBe("allowed host: music.youtube.com");
+    expect(decision.matchedRule).toBe("exception: music.youtube.com");
+  });
+
+  it("blocks domains outside whitelist mode", () => {
+    const decision = evaluateStopperUrl("https://reddit.com/r/all", {
+      mode: "whitelist",
+      enabled: true,
+      blockDuringShortBreaks: true,
+      blockDuringLongBreaks: true,
+      blockedHosts: [],
+      exceptionHosts: [],
+      allowedHosts: ["github.com"],
+    });
+    expect(decision.blocked).toBe(true);
+    expect(decision.matchedRule).toBe("not in whitelist");
+  });
+
+  it("allows domains inside whitelist mode", () => {
+    const decision = evaluateStopperUrl("https://docs.github.com/en", {
+      mode: "whitelist",
+      enabled: true,
+      blockDuringShortBreaks: true,
+      blockDuringLongBreaks: true,
+      blockedHosts: [],
+      exceptionHosts: [],
+      allowedHosts: ["github.com"],
+    });
+    expect(decision.blocked).toBe(false);
+    expect(decision.matchedRule).toBe("whitelist: github.com");
   });
 });

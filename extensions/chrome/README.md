@@ -61,7 +61,7 @@ cd apps/client
 pnpm tauri dev
 ```
 
-Open GanbaruAI, go to Settings > Doomscrolling, enable blocking, and add hosts such as:
+Open GanbaruAI, go to Settings > Doomscrolling, keep Blacklist mode selected, enable blocking, and add blocked websites such as:
 
 ```text
 reddit.com
@@ -83,6 +83,7 @@ You do not need to remove the extension for normal changes.
   ```
 
 - Extension HTML, CSS, JS, manifest, or icon changes need the reload button on the GanbaruAI card in the browser's extensions page.
+- Changing Doomscrolling modes or website lists while a focus or break phase is active is picked up by the extension on the next state poll.
 - Removing and adding the unpacked extension gives it a new id. If that happens, run the native host registration command again with the new id.
 
 ## Smoke test checklist
@@ -90,12 +91,13 @@ You do not need to remove the extension for normal changes.
 1. Start GanbaruAI with `pnpm tauri dev`.
 2. Confirm the extension popup says connected.
 3. In GanbaruAI, open Settings > Doomscrolling.
-4. Enable blocking and add `reddit.com` to blocked hosts.
+4. Keep Blacklist mode selected, enable blocking, and add `reddit.com` to blocked websites.
 5. Start a Pomodoro focus phase.
 6. Open `https://reddit.com`.
 7. Confirm the browser redirects to the GanbaruAI block page.
-8. Click the extension popup and confirm the last blocked host is shown.
-9. Stop the Pomodoro session and confirm the site is allowed again.
+8. Click the extension popup and confirm the last blocked website is shown.
+9. Add another blocked website in GanbaruAI while focus is still active, wait for the next state poll, and confirm an already open tab for that website redirects.
+10. Stop the Pomodoro session and confirm the site is allowed again.
 
 ## Manual install
 
@@ -121,7 +123,7 @@ You do not need to remove the extension for normal changes.
 
    Add `chromium`, `brave`, or `edge` as the second argument when testing in those browsers.
 
-5. Start GanbaruAI, open Settings, then Doomscrolling. Enable blocking and add blocked hosts such as:
+5. Start GanbaruAI, open Settings, then Doomscrolling. Keep Blacklist mode selected, enable blocking, and add blocked websites such as:
 
    ```text
    reddit.com
@@ -144,7 +146,7 @@ node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|c
 
 **The extension is loaded but never blocks.**
 
-Check that GanbaruAI is running, Settings > Doomscrolling is enabled, the blocked host is saved without `https://`, and a Pomodoro focus phase is active.
+Check that GanbaruAI is running, Settings > Doomscrolling is enabled, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
 
 **The app window opens but looks blank.**
 

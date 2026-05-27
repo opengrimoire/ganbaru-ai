@@ -30,6 +30,7 @@ struct NativeResponse {
     active: bool,
     phase: String,
     remaining_seconds: Option<i64>,
+    rules_fingerprint: String,
     blocked: bool,
     host: Option<String>,
     matched_rule_name: Option<String>,
@@ -47,11 +48,19 @@ struct RuntimeState {
 }
 
 #[derive(Debug, Clone)]
+enum StopperMode {
+    Blacklist,
+    Whitelist,
+}
+
+#[derive(Debug, Clone)]
 struct StopperConfig {
+    mode: StopperMode,
     enabled: bool,
     block_during_short_breaks: bool,
     block_during_long_breaks: bool,
     blocked_hosts: Vec<String>,
+    exception_hosts: Vec<String>,
     allowed_hosts: Vec<String>,
 }
 
@@ -72,6 +81,7 @@ fn main() {
             active: false,
             phase: "inactive".to_string(),
             remaining_seconds: None,
+            rules_fingerprint: "unavailable".to_string(),
             blocked: false,
             host: None,
             matched_rule_name: None,
@@ -210,8 +220,12 @@ fn read_config(path: &std::path::Path) -> Option<StopperConfig> {
     let contents = std::fs::read_to_string(path).ok()?;
     let value: Value = serde_json::from_str(&contents).ok()?;
     let stopper = value.get("procrastinationStopper")?;
+    let (mode, has_mode) = read_mode(stopper);
+    let has_exception_hosts = matches!(stopper.get("exceptionHosts"), Some(Value::Array(_)));
+    let legacy_allowed_hosts = read_host_array(stopper.get("allowedHosts"));
     let legacy_block_during_breaks = stopper.get("blockDuringBreaks").and_then(Value::as_bool);
     Some(StopperConfig {
+        mode,
         enabled: stopper
             .get("enabled")
             .and_then(Value::as_bool)
@@ -227,8 +241,27 @@ fn read_config(path: &std::path::Path) -> Option<StopperConfig> {
             .or(legacy_block_during_breaks)
             .unwrap_or(true),
         blocked_hosts: read_host_array(stopper.get("blockedHosts")),
-        allowed_hosts: read_host_array(stopper.get("allowedHosts")),
+        exception_hosts: if has_exception_hosts {
+            read_host_array(stopper.get("exceptionHosts"))
+        } else if has_mode {
+            Vec::new()
+        } else {
+            legacy_allowed_hosts.clone()
+        },
+        allowed_hosts: if has_mode {
+            legacy_allowed_hosts
+        } else {
+            Vec::new()
+        },
     })
+}
+
+fn read_mode(stopper: &Value) -> (StopperMode, bool) {
+    match stopper.get("mode").and_then(Value::as_str) {
+        Some("whitelist") => (StopperMode::Whitelist, true),
+        Some("blacklist") => (StopperMode::Blacklist, true),
+        _ => (StopperMode::Blacklist, false),
+    }
 }
 
 fn read_host_array(value: Option<&Value>) -> Vec<String> {
@@ -249,10 +282,12 @@ fn read_host_array(value: Option<&Value>) -> Vec<String> {
 
 fn default_config() -> StopperConfig {
     StopperConfig {
+        mode: StopperMode::Blacklist,
         enabled: true,
         block_during_short_breaks: true,
         block_during_long_breaks: true,
         blocked_hosts: Vec::new(),
+        exception_hosts: Vec::new(),
         allowed_hosts: Vec::new(),
     }
 }
@@ -266,6 +301,7 @@ fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
         active,
         phase,
         remaining_seconds,
+        rules_fingerprint: rules_fingerprint(&snapshot.config),
         blocked: false,
         host: None,
         matched_rule_name: None,
@@ -348,26 +384,86 @@ fn decide_host(host: &str, config: &StopperConfig) -> HostDecision {
             matched_rule_name: Some("browser safety allowlist".to_string()),
         };
     }
-    for allowed_host in &config.allowed_hosts {
-        if host_matches_rule(host, allowed_host) {
-            return HostDecision {
-                blocked: false,
-                matched_rule_name: Some(format!("allowed host: {allowed_host}")),
-            };
-        }
-    }
-    for blocked_host in &config.blocked_hosts {
-        if host_matches_rule(host, blocked_host) {
-            return HostDecision {
+
+    match config.mode {
+        StopperMode::Whitelist => {
+            for allowed_host in &config.allowed_hosts {
+                if host_matches_rule(host, allowed_host) {
+                    return HostDecision {
+                        blocked: false,
+                        matched_rule_name: Some(format!("whitelist: {allowed_host}")),
+                    };
+                }
+            }
+            HostDecision {
                 blocked: true,
-                matched_rule_name: Some(format!("blocked host: {blocked_host}")),
-            };
+                matched_rule_name: Some("not in whitelist".to_string()),
+            }
+        }
+        StopperMode::Blacklist => {
+            for exception_host in &config.exception_hosts {
+                if host_matches_rule(host, exception_host) {
+                    return HostDecision {
+                        blocked: false,
+                        matched_rule_name: Some(format!("exception: {exception_host}")),
+                    };
+                }
+            }
+            for blocked_host in &config.blocked_hosts {
+                if host_matches_rule(host, blocked_host) {
+                    return HostDecision {
+                        blocked: true,
+                        matched_rule_name: Some(format!("blocked host: {blocked_host}")),
+                    };
+                }
+            }
+            HostDecision {
+                blocked: false,
+                matched_rule_name: None,
+            }
         }
     }
-    HostDecision {
-        blocked: false,
-        matched_rule_name: None,
+}
+
+impl StopperMode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            StopperMode::Blacklist => "blacklist",
+            StopperMode::Whitelist => "whitelist",
+        }
     }
+}
+
+fn feed_fingerprint(hash: &mut u64, value: &str) {
+    for byte in value.as_bytes() {
+        *hash ^= u64::from(*byte);
+        *hash = hash.wrapping_mul(1_099_511_628_211);
+    }
+    *hash ^= 0xff;
+    *hash = hash.wrapping_mul(1_099_511_628_211);
+}
+
+fn feed_fingerprint_bool(hash: &mut u64, value: bool) {
+    feed_fingerprint(hash, if value { "1" } else { "0" });
+}
+
+fn feed_fingerprint_hosts(hash: &mut u64, label: &str, hosts: &[String]) {
+    feed_fingerprint(hash, label);
+    for host in hosts {
+        feed_fingerprint(hash, host);
+    }
+}
+
+fn rules_fingerprint(config: &StopperConfig) -> String {
+    let mut hash = 14_695_981_039_346_656_037_u64;
+    feed_fingerprint(&mut hash, config.mode.as_str());
+    feed_fingerprint_bool(&mut hash, config.enabled);
+    feed_fingerprint_bool(&mut hash, config.block_during_short_breaks);
+    feed_fingerprint_bool(&mut hash, config.block_during_long_breaks);
+    feed_fingerprint_hosts(&mut hash, "blocked", &config.blocked_hosts);
+    feed_fingerprint_hosts(&mut hash, "exception", &config.exception_hosts);
+    feed_fingerprint_hosts(&mut hash, "allowed", &config.allowed_hosts);
+    format!("{hash:016x}")
 }
 
 fn normalized_request_host(request: &NativeRequest) -> Option<String> {
@@ -439,16 +535,18 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
 mod tests {
     use super::{
         decide_host, host_from_url, host_matches_rule, should_enforce, NativeResponse,
-        StateSnapshot, StopperConfig,
+        StateSnapshot, StopperConfig, StopperMode,
     };
 
     fn config() -> StopperConfig {
         StopperConfig {
+            mode: StopperMode::Blacklist,
             enabled: true,
             block_during_short_breaks: true,
             block_during_long_breaks: true,
             blocked_hosts: vec!["reddit.com".to_string(), "youtube.com".to_string()],
-            allowed_hosts: vec!["music.youtube.com".to_string()],
+            exception_hosts: vec!["music.youtube.com".to_string()],
+            allowed_hosts: vec!["github.com".to_string()],
         }
     }
 
@@ -460,6 +558,7 @@ mod tests {
             active: true,
             phase: phase.to_string(),
             remaining_seconds: Some(60),
+            rules_fingerprint: "test".to_string(),
             blocked: false,
             host: None,
             matched_rule_name: None,
@@ -483,12 +582,12 @@ mod tests {
     }
 
     #[test]
-    fn allows_specific_subdomain_before_blocking_parent() {
+    fn lets_exceptions_override_blocked_parent_domains() {
         let decision = decide_host("music.youtube.com", &config());
         assert!(!decision.blocked);
         assert_eq!(
             decision.matched_rule_name.as_deref(),
-            Some("allowed host: music.youtube.com")
+            Some("exception: music.youtube.com")
         );
     }
 
@@ -517,5 +616,44 @@ mod tests {
 
         assert!(should_enforce(&snapshot, &mut short_break));
         assert!(!should_enforce(&snapshot, &mut long_break));
+    }
+
+    #[test]
+    fn blocks_hosts_outside_whitelist_mode() {
+        let mut config = config();
+        config.mode = StopperMode::Whitelist;
+        let decision = decide_host("reddit.com", &config);
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("not in whitelist")
+        );
+    }
+
+    #[test]
+    fn allows_hosts_inside_whitelist_mode() {
+        let mut config = config();
+        config.mode = StopperMode::Whitelist;
+        let decision = decide_host("docs.github.com", &config);
+        assert!(!decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("whitelist: github.com")
+        );
+    }
+
+    #[test]
+    fn rules_fingerprint_changes_when_mode_or_rules_change() {
+        let mut config = config();
+        let base = super::rules_fingerprint(&config);
+
+        config.mode = StopperMode::Whitelist;
+        assert_ne!(super::rules_fingerprint(&config), base);
+
+        config.mode = StopperMode::Blacklist;
+        config
+            .blocked_hosts
+            .push("news.ycombinator.com".to_string());
+        assert_ne!(super::rules_fingerprint(&config), base);
     }
 }

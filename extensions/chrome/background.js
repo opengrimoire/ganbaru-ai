@@ -2,7 +2,7 @@ const HOST_NAME = "org.opengrimoire.ganbaruai.stopper";
 const STATUS_STORAGE_KEY = "status";
 const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
 const recentRedirects = new Map();
-let lastActiveStateKey = "";
+let lastEnforcementStateKey = "";
 
 function sendNativeMessage(message) {
   return new Promise((resolve) => {
@@ -35,32 +35,38 @@ function hostFromUrl(url) {
   }
 }
 
-async function updateStatus(status) {
-  const nextActiveStateKey = [
-    status?.active === true ? "1" : "0",
-    typeof status?.phase === "string" ? status.phase : "inactive",
-  ].join("|");
-  const becameEnforcing = nextActiveStateKey !== lastActiveStateKey
-    && (status?.active === true)
+function isActiveEnforcementPhase(status) {
+  return status?.active === true
     && (
       status?.phase === "focus" ||
       status?.phase === "short_break" ||
       status?.phase === "long_break"
     );
-  lastActiveStateKey = nextActiveStateKey;
+}
+
+async function updateStatus(status) {
+  const nextEnforcementStateKey = [
+    status?.active === true ? "1" : "0",
+    typeof status?.phase === "string" ? status.phase : "inactive",
+    typeof status?.rulesFingerprint === "string" ? status.rulesFingerprint : "unknown",
+  ].join("|");
+  const shouldRecheckOpenTabs = nextEnforcementStateKey !== lastEnforcementStateKey
+    && isActiveEnforcementPhase(status);
+  lastEnforcementStateKey = nextEnforcementStateKey;
 
   await chrome.storage.local.set({
     [STATUS_STORAGE_KEY]: {
-      connected: status.connected === true,
-      active: status.active === true,
-      phase: typeof status.phase === "string" ? status.phase : "inactive",
-      remainingSeconds: typeof status.remainingSeconds === "number" ? status.remainingSeconds : null,
-      reason: typeof status.reason === "string" ? status.reason : null,
-      lastBlockedHost: typeof status.lastBlockedHost === "string" ? status.lastBlockedHost : null,
+      connected: status?.connected === true,
+      active: status?.active === true,
+      phase: typeof status?.phase === "string" ? status.phase : "inactive",
+      remainingSeconds: typeof status?.remainingSeconds === "number" ? status.remainingSeconds : null,
+      reason: typeof status?.reason === "string" ? status.reason : null,
+      rulesFingerprint: typeof status?.rulesFingerprint === "string" ? status.rulesFingerprint : null,
+      lastBlockedHost: typeof status?.lastBlockedHost === "string" ? status.lastBlockedHost : null,
       updatedAt: new Date().toISOString(),
     },
   });
-  if (becameEnforcing) {
+  if (shouldRecheckOpenTabs) {
     void recheckOpenTabs();
   }
 }

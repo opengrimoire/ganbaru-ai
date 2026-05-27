@@ -1,8 +1,12 @@
+export type ProcrastinationStopperMode = "blacklist" | "whitelist";
+
 export interface ProcrastinationStopperConfig {
+  mode: ProcrastinationStopperMode;
   enabled: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
   blockedHosts: string[];
+  exceptionHosts: string[];
   allowedHosts: string[];
 }
 
@@ -13,10 +17,12 @@ export interface ProcrastinationStopperDecision {
 }
 
 export const DEFAULT_PROCRASTINATION_STOPPER_CONFIG: ProcrastinationStopperConfig = Object.freeze({
+  mode: "blacklist",
   enabled: true,
   blockDuringShortBreaks: true,
   blockDuringLongBreaks: true,
   blockedHosts: [],
+  exceptionHosts: [],
   allowedHosts: [],
 });
 
@@ -73,13 +79,15 @@ export function parseStopperHosts(input: string): string[] {
   return hosts;
 }
 
-export function serializeStopperHosts(hosts: readonly string[]): string {
-  return hosts.join("\n");
-}
-
 function normalizeHostArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return parseStopperHosts(value.filter((item) => typeof item === "string").join("\n"));
+}
+
+function normalizeMode(value: unknown): ProcrastinationStopperMode {
+  return value === "whitelist" || value === "blacklist"
+    ? value
+    : DEFAULT_PROCRASTINATION_STOPPER_CONFIG.mode;
 }
 
 export function normalizeProcrastinationStopperConfig(value: unknown): ProcrastinationStopperConfig {
@@ -87,10 +95,14 @@ export function normalizeProcrastinationStopperConfig(value: unknown): Procrasti
     return { ...DEFAULT_PROCRASTINATION_STOPPER_CONFIG };
   }
   const record = value as Record<string, unknown>;
+  const hasMode = record.mode === "blacklist" || record.mode === "whitelist";
+  const hasExceptionHosts = Array.isArray(record.exceptionHosts);
   const legacyBlockDuringBreaks = typeof record.blockDuringBreaks === "boolean"
     ? record.blockDuringBreaks
     : null;
+  const legacyAllowedHosts = normalizeHostArray(record.allowedHosts);
   return {
+    mode: normalizeMode(record.mode),
     enabled: typeof record.enabled === "boolean"
       ? record.enabled
       : DEFAULT_PROCRASTINATION_STOPPER_CONFIG.enabled,
@@ -101,7 +113,12 @@ export function normalizeProcrastinationStopperConfig(value: unknown): Procrasti
       ? record.blockDuringLongBreaks
       : legacyBlockDuringBreaks ?? DEFAULT_PROCRASTINATION_STOPPER_CONFIG.blockDuringLongBreaks,
     blockedHosts: normalizeHostArray(record.blockedHosts),
-    allowedHosts: normalizeHostArray(record.allowedHosts),
+    exceptionHosts: hasExceptionHosts
+      ? normalizeHostArray(record.exceptionHosts)
+      : hasMode
+        ? []
+        : legacyAllowedHosts,
+    allowedHosts: hasMode ? legacyAllowedHosts : [],
   };
 }
 
@@ -131,9 +148,22 @@ export function evaluateStopperUrl(
     return { blocked: false, host: null, matchedRule: null };
   }
 
-  for (const allowedHost of config.allowedHosts) {
-    if (stopperHostMatchesRule(host, allowedHost)) {
-      return { blocked: false, host, matchedRule: `allowed host: ${allowedHost}` };
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".localhost")) {
+    return { blocked: false, host, matchedRule: "browser safety allowlist" };
+  }
+
+  if (config.mode === "whitelist") {
+    for (const allowedHost of config.allowedHosts) {
+      if (stopperHostMatchesRule(host, allowedHost)) {
+        return { blocked: false, host, matchedRule: `whitelist: ${allowedHost}` };
+      }
+    }
+    return { blocked: true, host, matchedRule: "not in whitelist" };
+  }
+
+  for (const exceptionHost of config.exceptionHosts) {
+    if (stopperHostMatchesRule(host, exceptionHost)) {
+      return { blocked: false, host, matchedRule: `exception: ${exceptionHost}` };
     }
   }
   for (const blockedHost of config.blockedHosts) {

@@ -11,11 +11,13 @@ The current desktop implementation is an early Chrome and Brave development slic
 - `extensions/chrome` is a Manifest V3 unpacked extension named GanbaruAI.
 - `ganbaruai-native-messaging` is a repo-owned native messaging host binary built from Rust.
 - The app writes a small runtime state file when Pomodoro state changes.
-- The native host reads the runtime state and `vault/config.json`, then decides whether a requested host should be blocked.
-- Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, blocked hosts, allowed hosts, and a rule tester.
+- The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
+- Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, exceptions, and allowed websites.
+- The current `procrastinationStopper` config uses `mode`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
+- The native host includes a rules fingerprint in state responses so the extension rechecks already open tabs when website rules change during an active focus or break phase.
 - Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
 
-This is intentionally smaller than the full spec below. It supports host-level blocking during Pomodoro sessions first. Work environment rules, category presets, temporary access analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
+This is intentionally smaller than the full spec below. It supports domain-level blocking during Pomodoro sessions first. Work environment rules, category presets, temporary access analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
 
 ## Purpose
 
@@ -96,7 +98,7 @@ Initial Chrome implementation should support blocked domains, allowed domains, b
 
 ## Rule precedence
 
-Rule precedence must be deterministic and visible in the app's rule tester:
+Rule precedence must be deterministic and visible when the app explains a blocked page:
 
 1. Emergency and browser safety allowlist.
 2. Temporary session allow.
@@ -253,20 +255,11 @@ The environment editor should include a blocker section with:
 - Toggle: enable blocker for this environment.
 - Focus policy: off, normal, strict.
 - Break policy: relaxed, same as focus, allow only break sites.
-- Blocked domains and categories.
-- Allowed sites and task resources.
+- Website mode: Blacklist mode or Whitelist mode.
+- Blacklist mode rules: blocked domains, categories, and exceptions.
+- Whitelist mode rules: allowed sites and task resources.
 - Supported site rules, such as YouTube channels or playlists.
 - Temporary access defaults.
-- A rule tester input.
-
-The rule tester is important. The user should be able to paste a URL and see:
-
-- Allowed or blocked.
-- Which rule won.
-- Whether the decision changes during focus, break, or no session.
-- What to add if the result is wrong.
-
-This prevents the rule editor from becoming guesswork.
 
 ## Suggested defaults
 
@@ -366,7 +359,7 @@ Some browser pages should never be blocked:
 - Native messaging setup pages or local GanbaruAI setup pages.
 - Authentication pages required for the user's configured AI or sync provider.
 
-The safety allowlist should be built in and appear in the rule tester as `browser safety allowlist`.
+The safety allowlist should be built in and shown as `browser safety allowlist` when the app explains a blocked page.
 
 ## Work environment tab actions
 
@@ -416,7 +409,7 @@ Stage 1, Chrome minimum:
 - Environment blocker rules compiled from domain and URL pattern rules.
 - Redirect blocked top-level navigations to the extension block page.
 - Log block events with redacted URL data.
-- App environment editor with blocked domains, allowed domains, break policy, and rule tester.
+- App environment editor with website mode, blocked domains, exceptions, allowed domains, and break policy.
 
 Stage 2, session quality:
 
