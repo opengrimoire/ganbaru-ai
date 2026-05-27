@@ -26,9 +26,10 @@
     role="switch"
     aria-checked={checked}
     aria-label={label}
+    data-app-tooltip-disabled="true"
     onclick={() => onChange(!checked)}
     class={cn(
-      "inline-flex h-6 w-10 shrink-0 items-center rounded-full border p-0.5 transition-colors",
+      "inline-flex h-6 w-10 shrink-0 items-center rounded-full border p-0.5 transition-colors disabled:cursor-not-allowed",
       checked
         ? "border-primary bg-primary"
         : "border-border bg-secondary",

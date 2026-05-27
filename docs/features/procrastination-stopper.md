@@ -12,6 +12,7 @@ The current desktop implementation is an early Chrome and Brave development slic
 - `ganbaruai-native-messaging` is a repo-owned native messaging host binary built from Rust.
 - The app writes a small runtime state file when Pomodoro state changes.
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
+- The native host writes a small local connection status file each time the extension contacts it. The app uses this to show whether a browser extension has connected recently.
 - Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, exceptions, and allowed websites.
 - The current `procrastinationStopper` config uses `mode`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
 - The native host includes a rules fingerprint in state responses so the extension rechecks already open tabs when website rules change during an active focus or break phase.
@@ -190,6 +191,8 @@ Reasons:
 A future strict mode can fail closed during focus, but it must be explicit, easy to disable from the app, and carefully documented.
 
 When the app is running but the extension is missing or disconnected, the app should show a small setup warning on Pomodoro and work environment surfaces. It should not block the user from starting focus.
+
+The current app settings view shows this as a recent connection check for the current app session. A fresh timestamp from this app run means the extension is installed, enabled, and able to talk to GanbaruAI. A missing, stale, or older-session timestamp means the browser is closed, the extension is disabled or missing, or native messaging is not registered. The app should not claim to know which of those is true unless the browser reports it directly.
 
 ## Block page UX
 

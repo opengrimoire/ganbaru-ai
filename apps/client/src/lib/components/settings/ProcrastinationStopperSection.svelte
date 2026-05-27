@@ -1,15 +1,24 @@
 <script lang="ts">
+  import { onMount, type Component } from "svelte";
+  import CircleAlert from "@lucide/svelte/icons/circle-alert";
+  import CircleCheck from "@lucide/svelte/icons/circle-check";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Plus from "@lucide/svelte/icons/plus";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import ShieldX from "@lucide/svelte/icons/shield-x";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { type Component } from "svelte";
+  import {
+    getProcrastinationStopperExtensionStatus,
+    type ProcrastinationStopperExtensionStatus,
+  } from "$lib/api/procrastination-stopper";
+  import { appSessionStartedAt } from "$lib/stores/app-session";
   import { cn } from "$lib/utils";
   import type { ProcrastinationStopperMode } from "$lib/procrastination-stopper";
   import { getProcrastinationStopper } from "$lib/stores/procrastination-stopper.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
   const stopper = getProcrastinationStopper();
+  const EXTENSION_STATUS_POLL_MS = 15_000;
 
   type WebsiteListKind = "blocked" | "exception" | "allowed";
 
@@ -102,6 +111,10 @@
     exception: "",
     allowed: "",
   });
+  let extensionStatus = $state<ProcrastinationStopperExtensionStatus | null>(null);
+  let extensionStatusLoading = $state(true);
+  let extensionStatusError = $state<string | null>(null);
+  const extensionStatusConnected = $derived(extensionStatus?.connected === true);
 
   function addWebsite(section: WebsiteListSection): void {
     if (section.add(websiteDrafts[section.kind])) {
@@ -120,6 +133,35 @@
     event.preventDefault();
     addWebsite(section);
   }
+
+  function extensionStatusTitle(): string {
+    if (extensionStatusError && !extensionStatus) return "Browser extension status unavailable";
+    if (extensionStatusLoading && !extensionStatus) return "Checking browser extension";
+    return extensionStatusConnected
+      ? "Browser extension connected"
+      : "Browser extension not connected";
+  }
+
+  async function refreshExtensionStatus(): Promise<void> {
+    if (!extensionStatus) extensionStatusLoading = true;
+    try {
+      extensionStatus = await getProcrastinationStopperExtensionStatus(appSessionStartedAt);
+      extensionStatusError = null;
+    } catch (err) {
+      console.warn("Failed to read browser extension connection status:", err);
+      extensionStatusError = err instanceof Error ? err.message : String(err);
+    } finally {
+      extensionStatusLoading = false;
+    }
+  }
+
+  onMount(() => {
+    void refreshExtensionStatus();
+    const intervalId = setInterval(() => {
+      void refreshExtensionStatus();
+    }, EXTENSION_STATUS_POLL_MS);
+    return () => clearInterval(intervalId);
+  });
 </script>
 
 {#snippet modeWebsiteSection(title: string, sections: readonly WebsiteListSection[])}
@@ -191,67 +233,118 @@
 {/snippet}
 
 <div class="flex flex-col gap-6">
+  <div
+    class={cn(
+      "flex min-h-9 items-center rounded-md border bg-background/60 px-3 py-1.5 transition-colors dark:bg-transparent",
+      extensionStatusLoading && !extensionStatus
+        ? "border-border text-muted-foreground"
+        : extensionStatusConnected
+          ? "border-border text-foreground"
+          : "border-destructive/35 bg-destructive/5 text-destructive",
+    )}
+    aria-live="polite"
+  >
+    <div class="flex min-w-0 items-center gap-2.5">
+      <span
+        class="flex h-5 w-5 shrink-0 items-center justify-center"
+        aria-hidden="true"
+      >
+        {#if extensionStatusLoading && !extensionStatus}
+          <LoaderCircle size={14} strokeWidth={2.25} class="animate-spin" />
+        {:else if extensionStatusConnected}
+          <CircleCheck size={14} strokeWidth={2.25} />
+        {:else}
+          <CircleAlert size={14} strokeWidth={2.25} />
+        {/if}
+      </span>
+      <div class="min-w-0 truncate text-[0.866667rem] font-medium">
+        {extensionStatusTitle()}
+      </div>
+    </div>
+  </div>
+
   <section class="flex flex-col gap-4">
     <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Browser configuration</h2>
-    <div class="flex flex-col gap-3" aria-label="Blocking schedule">
+    <div class="flex flex-col gap-3">
       <ToggleSetting
         label="Enable during focus"
         description="Apply website rules while a focus session is running"
         checked={stopper.enabled}
         onChange={(checked) => stopper.setEnabled(checked)}
       />
-      <ToggleSetting
-        label="Block during short breaks"
-        description="Apply website rules during short breaks"
-        checked={stopper.blockDuringShortBreaks}
-        onChange={(checked) => stopper.setBlockDuringShortBreaks(checked)}
-      />
-      <ToggleSetting
-        label="Block during long breaks"
-        description="Apply website rules during long breaks"
-        checked={stopper.blockDuringLongBreaks}
-        onChange={(checked) => stopper.setBlockDuringLongBreaks(checked)}
-      />
-    </div>
 
-    <div class="flex flex-col gap-2 px-1">
-      <div class="min-w-0">
-        <h3 class="text-[0.866667rem] text-foreground">Website mode</h3>
-        <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-          Choose whether Doomscrolling blocks selected websites or only allows selected websites
+      <fieldset
+        disabled={!stopper.enabled}
+        aria-disabled={!stopper.enabled}
+        class={cn(
+          "m-0 flex min-w-0 flex-col gap-4 border-0 p-0 transition-opacity",
+          !stopper.enabled && "opacity-50",
+        )}
+      >
+        <div class="flex flex-col gap-3" aria-label="Blocking schedule">
+          <ToggleSetting
+            label="Block during short breaks"
+            description="Apply website rules during short breaks"
+            checked={stopper.blockDuringShortBreaks}
+            onChange={(checked) => stopper.setBlockDuringShortBreaks(checked)}
+          />
+          <ToggleSetting
+            label="Block during long breaks"
+            description="Apply website rules during long breaks"
+            checked={stopper.blockDuringLongBreaks}
+            onChange={(checked) => stopper.setBlockDuringLongBreaks(checked)}
+          />
         </div>
-      </div>
-      <div class="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1">
-        {#each modeOptions as option}
-          {@const Icon = option.icon}
-          {@const active = stopper.mode === option.mode}
-          <button
-            type="button"
-            onclick={() => stopper.setMode(option.mode)}
-            class={cn(
-              "flex min-h-18 items-start gap-2.5 rounded-md border px-3 py-2 text-left transition-colors",
-              active
-                ? "border-primary bg-accent/70 text-foreground"
-                : "border-border bg-background/60 text-foreground hover:bg-accent/40 dark:bg-transparent",
-            )}
-            aria-pressed={active}
-          >
-            <Icon size={16} strokeWidth={2} class="mt-0.5 shrink-0" />
-            <span class="min-w-0">
-              <span class="block text-[0.866667rem] font-medium">{option.label}</span>
-              <span class="mt-0.5 block text-[0.8rem] text-muted-foreground">{option.description}</span>
-            </span>
-          </button>
-        {/each}
-      </div>
+
+        <div class="flex flex-col gap-2 px-1">
+          <div class="min-w-0">
+            <h3 class="text-[0.866667rem] text-foreground">Website mode</h3>
+            <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
+              Choose whether Doomscrolling blocks selected websites or only allows selected websites
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1">
+            {#each modeOptions as option}
+              {@const Icon = option.icon}
+              {@const active = stopper.mode === option.mode}
+              <button
+                type="button"
+                onclick={() => stopper.setMode(option.mode)}
+                class={cn(
+                  "flex min-h-18 items-start gap-2.5 rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed",
+                  active
+                    ? "border-primary bg-accent/70 text-foreground"
+                    : "border-border bg-background/60 text-foreground hover:bg-accent/40 dark:bg-transparent",
+                )}
+                aria-pressed={active}
+              >
+                <Icon size={16} strokeWidth={2} class="mt-0.5 shrink-0" />
+                <span class="min-w-0">
+                  <span class="block text-[0.866667rem] font-medium">{option.label}</span>
+                  <span class="mt-0.5 block text-[0.8rem] text-muted-foreground">{option.description}</span>
+                </span>
+              </button>
+            {/each}
+          </div>
+        </div>
+      </fieldset>
     </div>
   </section>
 
-  <div class="h-px bg-border/70" aria-hidden="true"></div>
+  <fieldset
+    disabled={!stopper.enabled}
+    aria-disabled={!stopper.enabled}
+    class={cn(
+      "m-0 flex min-w-0 flex-col gap-6 border-0 p-0 transition-opacity",
+      !stopper.enabled && "opacity-50",
+    )}
+  >
+    <div class="h-px bg-border/70" aria-hidden="true"></div>
 
-  {#if stopper.mode === "blacklist"}
-    {@render modeWebsiteSection("Blacklist mode", blacklistWebsiteSections)}
-  {:else}
-    {@render modeWebsiteSection("Whitelist mode", whitelistWebsiteSections)}
-  {/if}
+    {#if stopper.mode === "blacklist"}
+      {@render modeWebsiteSection("Blacklist mode", blacklistWebsiteSections)}
+    {:else}
+      {@render modeWebsiteSection("Whitelist mode", whitelistWebsiteSections)}
+    {/if}
+  </fieldset>
 </div>

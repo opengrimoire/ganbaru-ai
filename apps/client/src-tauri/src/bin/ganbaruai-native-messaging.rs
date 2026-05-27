@@ -2,10 +2,11 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const HOST_NAME: &str = "org.opengrimoire.ganbaruai.stopper";
 const STATE_FILE: &str = "procrastination-stopper-state.json";
+const EXTENSION_CONNECTION_FILE: &str = "procrastination-stopper-extension-status.json";
 const EVENTS_FILE: &str = "procrastination-stopper-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
 const STALE_STATE_SECONDS: i64 = 180;
@@ -98,6 +99,11 @@ fn main() {
 fn run() -> Result<NativeResponse, String> {
     let request = read_native_message()?;
     let snapshot = load_snapshot();
+    if let Err(err) =
+        record_extension_connection(snapshot.config_dir.as_deref(), &request.message_type)
+    {
+        eprintln!("failed to record extension connection: {err}");
+    }
     let mut response = response_from_snapshot(&snapshot);
 
     if request.message_type == "decide_url" {
@@ -122,6 +128,45 @@ fn run() -> Result<NativeResponse, String> {
     }
 
     Ok(response)
+}
+
+fn write_text_file_atomically(path: &Path, contents: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "connection status path has no parent".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "connection status path has no file name".to_string())?
+        .to_string_lossy();
+    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    {
+        let mut file = std::fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        file.write_all(contents.as_bytes())
+            .map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())
+}
+
+fn extension_connection_dir(config_dir: Option<&Path>) -> Option<PathBuf> {
+    config_dir
+        .map(Path::to_path_buf)
+        .or_else(|| config_dir_candidates().into_iter().next())
+}
+
+fn record_extension_connection(
+    config_dir: Option<&Path>,
+    message_type: &str,
+) -> Result<(), String> {
+    let dir = extension_connection_dir(config_dir)
+        .ok_or_else(|| "app config directory is unavailable".to_string())?;
+    let payload = serde_json::json!({
+        "lastSeenAt": now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
+        "lastMessageType": message_type,
+    });
+    let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
+    write_text_file_atomically(&dir.join(EXTENSION_CONNECTION_FILE), &json)
 }
 
 fn read_native_message() -> Result<NativeRequest, String> {

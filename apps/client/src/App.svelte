@@ -16,6 +16,7 @@
   import { selectActivePomodoroBlock } from "$lib/stores/pomodoro-scheduler";
   import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
   import { ensureDbUrl } from "$lib/api/db";
+  import "$lib/stores/app-session";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { Temporal } from "@js-temporal/polyfill";
