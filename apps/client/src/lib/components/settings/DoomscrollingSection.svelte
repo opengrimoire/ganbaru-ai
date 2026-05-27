@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount, type Component } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
@@ -32,6 +34,11 @@
 
   const doomscrolling = getDoomscrolling();
   const EXTENSION_STATUS_POLL_MS = 15_000;
+  const EXTENSION_STARTUP_GRACE_MS = 45_000;
+  const EXTENSION_STARTUP_PENDING_REASONS = new Set([
+    "connection is from an older app session",
+    "no extension connection has been recorded",
+  ]);
 
   type WebsiteListKind = "blocked" | "exception" | "allowed";
 
@@ -178,6 +185,21 @@
   let customCategoryFormOpen = $state(false);
   let customCategoryEditingId = $state<string | null>(null);
   const extensionStatusConnected = $derived(extensionStatus?.connected === true);
+  const extensionStatusWaitingForFirstConnection = $derived.by(() => {
+    if (!extensionStatus || extensionStatus.connected) return false;
+    if (!extensionStatus.reason || !EXTENSION_STARTUP_PENDING_REASONS.has(extensionStatus.reason)) {
+      return false;
+    }
+    const sessionStartedAtMs = Date.parse(appSessionStartedAt);
+    const checkedAtMs = Date.parse(extensionStatus.checkedAt);
+    if (!Number.isFinite(sessionStartedAtMs) || !Number.isFinite(checkedAtMs)) return false;
+    return checkedAtMs - sessionStartedAtMs <= EXTENSION_STARTUP_GRACE_MS;
+  });
+  const extensionStatusShowInstallAction = $derived(
+    extensionStatus !== null
+      && !extensionStatus.connected
+      && !extensionStatusWaitingForFirstConnection,
+  );
 
   function addWebsite(section: WebsiteListSection): void {
     if (section.add(websiteDrafts[section.kind])) {
@@ -463,9 +485,18 @@
   function extensionStatusTitle(): string {
     if (extensionStatusError && !extensionStatus) return "Browser extension status unavailable";
     if (extensionStatusLoading && !extensionStatus) return "Checking browser extension";
+    if (extensionStatusWaitingForFirstConnection) return "Waiting for browser extension";
     return extensionStatusConnected
       ? "Browser extension connected"
       : "Browser extension not connected";
+  }
+
+  async function openExtensionInstallDocs(): Promise<void> {
+    try {
+      await invoke("doomscrolling_open_extension_install_docs");
+    } catch (err) {
+      console.warn("Failed to open extension install docs:", err);
+    }
   }
 
   async function refreshExtensionStatus(): Promise<void> {
@@ -787,8 +818,8 @@
 <div class="flex flex-col gap-6">
   <div
     class={cn(
-      "flex min-h-9 items-center rounded-md border bg-background/60 px-3 py-1.5 transition-colors dark:bg-transparent",
-      extensionStatusLoading && !extensionStatus
+      "flex min-h-9 flex-wrap items-center justify-between gap-2 rounded-md border bg-background/60 px-3 py-1.5 transition-colors dark:bg-transparent",
+      (extensionStatusLoading && !extensionStatus) || extensionStatusWaitingForFirstConnection
         ? "border-border text-muted-foreground"
         : extensionStatusConnected
           ? "border-border text-foreground"
@@ -801,7 +832,7 @@
         class="flex h-5 w-5 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
-        {#if extensionStatusLoading && !extensionStatus}
+        {#if (extensionStatusLoading && !extensionStatus) || extensionStatusWaitingForFirstConnection}
           <LoaderCircle size={14} strokeWidth={2.25} class="animate-spin" />
         {:else if extensionStatusConnected}
           <CircleCheck size={14} strokeWidth={2.25} />
@@ -813,6 +844,16 @@
         {extensionStatusTitle()}
       </div>
     </div>
+    {#if extensionStatusShowInstallAction}
+      <button
+        type="button"
+        onclick={openExtensionInstallDocs}
+        class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+      >
+        <span>Install extension</span>
+        <ExternalLink size={12} strokeWidth={2.25} />
+      </button>
+    {/if}
   </div>
 
   <section class="flex flex-col gap-4">

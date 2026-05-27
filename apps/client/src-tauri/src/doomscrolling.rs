@@ -2,11 +2,14 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
+use std::process::Stdio;
 use tauri::{Manager, Runtime};
 
 const STATE_FILE: &str = "doomscrolling-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
+const EXTENSION_INSTALL_README_URL: &str =
+    "https://github.com/opengrimoire/GanbaruAI/blob/dev/extensions/chrome/README.md";
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -70,6 +73,42 @@ fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
 
 fn now_utc() -> DateTime<Utc> {
     std::time::SystemTime::now().into()
+}
+
+#[cfg(target_os = "linux")]
+fn open_fixed_url(url: &str) -> Result<(), String> {
+    std::process::Command::new("xdg-open")
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("open browser: {e}"))
+}
+
+#[cfg(target_os = "macos")]
+fn open_fixed_url(url: &str) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("open browser: {e}"))
+}
+
+#[cfg(windows)]
+fn open_fixed_url(url: &str) -> Result<(), String> {
+    std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("open browser: {e}"))
 }
 
 fn disconnected_extension_status(
@@ -174,6 +213,11 @@ pub fn doomscrolling_get_extension_status<R: Runtime>(
         ),
         Err(err) => Err(format!("read extension connection status: {err}")),
     }
+}
+
+#[tauri::command]
+pub fn doomscrolling_open_extension_install_docs() -> Result<(), String> {
+    open_fixed_url(EXTENSION_INSTALL_README_URL)
 }
 
 #[cfg(test)]

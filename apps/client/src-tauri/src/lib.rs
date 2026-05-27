@@ -777,6 +777,7 @@ pub fn run() {
             pomodoro::pomodoro_record_run_event,
             pomodoro::pomodoro_recover_open_runs,
             doomscrolling::doomscrolling_get_extension_status,
+            doomscrolling::doomscrolling_open_extension_install_docs,
             doomscrolling::doomscrolling_write_state,
             themes::theme_insert,
             themes::theme_replace_content,
