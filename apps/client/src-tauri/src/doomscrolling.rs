@@ -19,6 +19,123 @@ const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
     "GanbaruAI (dev)",
     "org.opengrimoire.ganbaruai",
     "org.opengrimoire.ganbaruai.dev",
+    "Activity Monitor",
+    "Advanced Network Configuration",
+    "Calculator",
+    "Characters",
+    "Clocks",
+    "Command Prompt",
+    "Console",
+    "Control Panel",
+    "Disk Utility",
+    "Disk Usage Analyzer",
+    "Disks",
+    "Event Viewer",
+    "Extension Manager",
+    "Extensions",
+    "File Explorer",
+    "Files",
+    "Finder",
+    "Fonts",
+    "GDebi Package Installer",
+    "GNOME System Monitor",
+    "Help",
+    "Htop",
+    "IBus Preferences",
+    "Input Method",
+    "Keychain Access",
+    "Language Support",
+    "Logs",
+    "Notepad",
+    "Passwords and Keys",
+    "Power Statistics",
+    "PowerShell",
+    "Settings",
+    "Startup Applications",
+    "System Monitor",
+    "System Preferences",
+    "System Settings",
+    "Task Manager",
+    "Terminal",
+    "Text Editor",
+    "UXTerm",
+    "Windows Explorer",
+    "Windows PowerShell",
+    "XTerm",
+];
+const PROTECTED_DESKTOP_PROCESS_NAMES: &[&str] = &[
+    "Activity Monitor",
+    "bash",
+    "cmd",
+    "cmd.exe",
+    "conhost.exe",
+    "ControlCenter",
+    "csrss.exe",
+    "dash",
+    "dbus-broker",
+    "dbus-daemon",
+    "dllhost.exe",
+    "Dock",
+    "dwm.exe",
+    "electron",
+    "explorer.exe",
+    "Finder",
+    "fish",
+    "flatpak",
+    "gnome-control-center",
+    "gnome-keyring-daemon",
+    "gnome-shell",
+    "gnome-terminal",
+    "gnome-terminal-server",
+    "ibus-daemon",
+    "java",
+    "javaw",
+    "javaw.exe",
+    "kitty",
+    "konsole",
+    "kwin_wayland",
+    "kwin_x11",
+    "launchd",
+    "loginwindow",
+    "mmc.exe",
+    "mutter",
+    "node",
+    "plasmashell",
+    "PowerShell",
+    "powershell.exe",
+    "pwsh",
+    "pwsh.exe",
+    "python",
+    "python3",
+    "python3.11",
+    "python3.12",
+    "pythonw.exe",
+    "regedit.exe",
+    "rundll32.exe",
+    "services.exe",
+    "sh",
+    "ShellExperienceHost.exe",
+    "sihost.exe",
+    "snap",
+    "StartMenuExperienceHost.exe",
+    "svchost.exe",
+    "System Settings",
+    "SystemUIServer",
+    "taskmgr.exe",
+    "Terminal",
+    "wezterm",
+    "winlogon.exe",
+    "WindowsTerminal.exe",
+    "WindowServer",
+    "wt.exe",
+    "wscript.exe",
+    "xdg-desktop-portal",
+    "xdg-desktop-portal-gnome",
+    "xdg-desktop-portal-gtk",
+    "Xorg",
+    "XTerm",
+    "Xwayland",
+    "zsh",
 ];
 
 #[derive(Deserialize, Serialize)]
@@ -168,7 +285,16 @@ fn is_protected_desktop_app_name(name: &str) -> bool {
     let key = app_name_key(name);
     PROTECTED_DESKTOP_APP_NAMES
         .iter()
+        .chain(PROTECTED_DESKTOP_PROCESS_NAMES.iter())
         .any(|protected_name| app_name_key(protected_name) == key)
+}
+
+fn is_protected_desktop_app_candidate(app: &DoomscrollingDesktopAppCandidate) -> bool {
+    is_protected_desktop_app_name(&app.name)
+        || app
+            .process_names
+            .iter()
+            .any(|name| is_protected_desktop_app_name(name))
 }
 
 fn normalize_app_candidate_name(name: &str) -> Option<String> {
@@ -210,6 +336,9 @@ fn sort_and_deduplicate_candidates(
 ) -> Vec<DoomscrollingDesktopAppCandidate> {
     let mut by_name = HashMap::<String, DoomscrollingDesktopAppCandidate>::new();
     for app in candidates {
+        if is_protected_desktop_app_candidate(&app) {
+            continue;
+        }
         if let Some(name) = normalize_app_candidate_name(&app.name) {
             let key = app_name_key(&name);
             by_name
@@ -304,6 +433,108 @@ fn process_name_from_exec(exec: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
+fn decode_desktop_entry_list(value: &str) -> Vec<String> {
+    value
+        .split(';')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(decode_desktop_entry_value)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn current_desktop_names() -> Vec<String> {
+    std::env::var("XDG_CURRENT_DESKTOP")
+        .unwrap_or_default()
+        .split([':', ';'])
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn linux_entry_matches_current_desktop(only_show_in: &[String], not_show_in: &[String]) -> bool {
+    let current_desktops = current_desktop_names();
+    if !not_show_in.is_empty()
+        && current_desktops.iter().any(|desktop| {
+            not_show_in
+                .iter()
+                .any(|blocked| blocked.eq_ignore_ascii_case(desktop))
+        })
+    {
+        return false;
+    }
+    only_show_in.is_empty()
+        || current_desktops.iter().any(|desktop| {
+            only_show_in
+                .iter()
+                .any(|allowed| allowed.eq_ignore_ascii_case(desktop))
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn linux_desktop_entry_is_system_utility(name: &str, categories: &[String], detail: &str) -> bool {
+    let detail_key = app_name_key(detail);
+    if detail_key.starts_with("gnome-") && detail_key.contains("-panel.desktop") {
+        return true;
+    }
+    if detail_key.starts_with("xdg-desktop-portal")
+        || detail_key.starts_with("gcr-")
+        || detail_key.starts_with("nm-")
+        || detail_key.starts_with("org.freedesktop.ibus.")
+        || detail_key.starts_with("org.gnome.shell.")
+        || detail_key.starts_with("org.gnome.settings.")
+    {
+        return true;
+    }
+    if is_protected_desktop_app_name(name) {
+        return true;
+    }
+
+    let has_category = |category: &str| {
+        categories
+            .iter()
+            .any(|item| item.eq_ignore_ascii_case(category))
+    };
+    let has_any_category = |items: &[&str]| items.iter().any(|item| has_category(item));
+
+    if has_any_category(&[
+        "Calculator",
+        "Clock",
+        "ConsoleOnly",
+        "Core",
+        "DesktopSettings",
+        "Documentation",
+        "FileManager",
+        "HardwareSettings",
+        "Monitor",
+        "Security",
+        "Settings",
+        "TerminalEmulator",
+        "X-GNOME-Settings-Panel",
+        "X-GNOME-Utilities",
+        "X-XFCE-SettingsDialog",
+        "X-Unity-Settings-Panel",
+    ]) {
+        return true;
+    }
+
+    has_category("System")
+        && !has_any_category(&[
+            "AudioVideo",
+            "Development",
+            "Game",
+            "Graphics",
+            "Network",
+            "Office",
+            "Player",
+            "Recorder",
+            "WebBrowser",
+        ])
+}
+
+#[cfg(target_os = "linux")]
 fn parse_desktop_entry(contents: &str, detail: String) -> Option<DoomscrollingDesktopAppCandidate> {
     let mut in_desktop_entry = false;
     let mut entry_type: Option<String> = None;
@@ -311,6 +542,9 @@ fn parse_desktop_entry(contents: &str, detail: String) -> Option<DoomscrollingDe
     let mut exec: Option<String> = None;
     let mut hidden = false;
     let mut no_display = false;
+    let mut categories = Vec::new();
+    let mut only_show_in = Vec::new();
+    let mut not_show_in = Vec::new();
 
     for raw_line in contents.lines() {
         let line = raw_line.trim();
@@ -333,6 +567,9 @@ fn parse_desktop_entry(contents: &str, detail: String) -> Option<DoomscrollingDe
             "Exec" => exec = Some(decode_desktop_entry_value(value.trim())),
             "Hidden" => hidden = value.trim().eq_ignore_ascii_case("true"),
             "NoDisplay" => no_display = value.trim().eq_ignore_ascii_case("true"),
+            "Categories" => categories = decode_desktop_entry_list(value.trim()),
+            "OnlyShowIn" => only_show_in = decode_desktop_entry_list(value.trim()),
+            "NotShowIn" => not_show_in = decode_desktop_entry_list(value.trim()),
             _ => {}
         }
     }
@@ -342,10 +579,14 @@ fn parse_desktop_entry(contents: &str, detail: String) -> Option<DoomscrollingDe
         || entry_type
             .as_deref()
             .is_some_and(|value| value != "Application")
+        || !linux_entry_matches_current_desktop(&only_show_in, &not_show_in)
     {
         return None;
     }
     let name = normalize_app_candidate_name(name.as_deref()?)?;
+    if linux_desktop_entry_is_system_utility(&name, &categories, &detail) {
+        return None;
+    }
     let process_names = exec
         .as_deref()
         .and_then(process_name_from_exec)
@@ -668,6 +909,13 @@ fn validate_close_process_id(process_id: u32) -> Result<(), String> {
     if process_id <= 1 || process_id == std::process::id() {
         return Err("refusing to close protected process".to_string());
     }
+    let process_path = PathBuf::from("/proc").join(process_id.to_string());
+    if read_linux_process_name(&process_path)
+        .iter()
+        .any(|name| is_protected_desktop_app_name(name))
+    {
+        return Err("refusing to close protected process".to_string());
+    }
     Ok(())
 }
 
@@ -828,7 +1076,7 @@ mod tests {
     use super::{
         extension_status_from_file_contents, normalize_app_candidate_name,
         sort_and_deduplicate_candidates, validate_state, DoomscrollingDesktopAppCandidate,
-        DoomscrollingRuntimeState,
+        DoomscrollingDesktopAppRuleInput, DoomscrollingRuntimeState,
     };
     use chrono::{DateTime, Utc};
 
@@ -928,8 +1176,24 @@ mod tests {
     }
 
     #[test]
+    fn recognizes_protected_desktop_app_and_process_names() {
+        assert!(super::is_protected_desktop_app_name("GanbaruAI"));
+        assert!(super::is_protected_desktop_app_name("Terminal"));
+        assert!(super::is_protected_desktop_app_name("gnome-shell"));
+        assert!(super::is_protected_desktop_app_name("python3.12"));
+        assert!(super::is_protected_desktop_app_name("explorer.exe"));
+        assert!(!super::is_protected_desktop_app_name("Steam"));
+    }
+
+    #[test]
     fn sorts_and_deduplicates_desktop_app_candidates() {
         let apps = sort_and_deduplicate_candidates(vec![
+            DoomscrollingDesktopAppCandidate {
+                name: "Terminal".to_string(),
+                source: "Installed app".to_string(),
+                detail: Some("terminal.desktop".to_string()),
+                process_names: vec!["gnome-terminal".to_string()],
+            },
             DoomscrollingDesktopAppCandidate {
                 name: "Steam".to_string(),
                 source: "Installed app".to_string(),
@@ -954,6 +1218,25 @@ mod tests {
             apps.iter().map(|app| app.name.as_str()).collect::<Vec<_>>(),
             vec!["Discord", "Steam"]
         );
+    }
+
+    #[test]
+    fn desktop_rule_matchers_skip_protected_process_names() {
+        let matchers = super::desktop_rule_matchers(vec![
+            DoomscrollingDesktopAppRuleInput {
+                name: "Terminal".to_string(),
+                match_names: vec!["gnome-terminal".to_string()],
+            },
+            DoomscrollingDesktopAppRuleInput {
+                name: "Steam".to_string(),
+                match_names: vec!["sh".to_string(), "steam".to_string()],
+            },
+        ]);
+
+        assert!(!matchers.contains_key("terminal"));
+        assert!(!matchers.contains_key("gnome-terminal"));
+        assert!(!matchers.contains_key("sh"));
+        assert_eq!(matchers.get("steam").map(String::as_str), Some("Steam"));
     }
 
     #[cfg(target_os = "linux")]
@@ -995,6 +1278,33 @@ Name=Hidden app
 NoDisplay=true
 "#,
             "hidden.desktop".to_string(),
+        )
+        .is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn skips_linux_system_utility_desktop_entries() {
+        assert!(super::parse_desktop_entry(
+            r#"
+[Desktop Entry]
+Type=Application
+Name=Settings
+Categories=GNOME;GTK;Settings;
+Exec=gnome-control-center
+"#,
+            "org.gnome.Settings.desktop".to_string(),
+        )
+        .is_none());
+        assert!(super::parse_desktop_entry(
+            r#"
+[Desktop Entry]
+Type=Application
+Name=System Monitor
+Categories=GNOME;GTK;System;Monitor;
+Exec=gnome-system-monitor
+"#,
+            "org.gnome.SystemMonitor.desktop".to_string(),
         )
         .is_none());
     }

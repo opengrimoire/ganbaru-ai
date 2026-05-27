@@ -160,7 +160,7 @@
       <div class="min-w-0">
         <h2 class="text-[1rem] font-semibold text-foreground">{title}</h2>
         <p class="mt-0.5 text-[0.8rem] text-muted-foreground">
-          Pick an app from your installed apps
+          System apps are hidden so they cannot be closed by mistake
         </p>
       </div>
       <button

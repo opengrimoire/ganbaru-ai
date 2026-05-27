@@ -258,7 +258,7 @@
 
 {#if activePickerSection}
   <DoomscrollingAppSelector
-    title="Add blocked app"
+    title="Choose an app to block"
     existingNames={existingAppNames(activePickerSection)}
     protectAppSelf
     onAdd={addPickedApp}

@@ -95,6 +95,15 @@ describe("normalizeDoomscrollingAppName", () => {
     expect(isProtectedDoomscrollingDesktopAppName("org.opengrimoire.ganbaruai.dev")).toBe(true);
     expect(isProtectedDoomscrollingDesktopAppName("Steam")).toBe(false);
   });
+
+  it("recognizes protected system app and runtime names", () => {
+    expect(isProtectedDoomscrollingDesktopAppName("Terminal")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("System Monitor")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("gnome-shell")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("python3.12")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("explorer.exe")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("Discord")).toBe(false);
+  });
 });
 
 describe("normalizeDoomscrollingConfig", () => {
@@ -219,6 +228,7 @@ describe("normalizeDoomscrollingConfig", () => {
           { name: " steam ", enabled: false },
           { name: "Discord", enabled: false },
           { name: "Calculator", matchNames: ["gnome-calculator"] },
+          { name: "Terminal", matchNames: ["gnome-terminal"] },
         ],
         allowedApps: [
           "ganbaruai",
@@ -234,7 +244,6 @@ describe("normalizeDoomscrollingConfig", () => {
         blockedApps: [
           appRule("Steam"),
           appRule("Discord", false),
-          { name: "Calculator", enabled: true, matchNames: ["Calculator", "gnome-calculator"] },
         ],
       },
     });
