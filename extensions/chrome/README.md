@@ -1,6 +1,6 @@
-# GanbaruAI Chrome extension
+# GanbaruAI Chromium extension
 
-This is the Chrome and Chromium-based browser implementation of Doomscrolling.
+This is the Chromium-based anti-doomscrolling extension.
 
 During development it runs as an unpacked extension and talks to the local native messaging host named `org.opengrimoire.ganbaruai.doomscrolling`.
 
