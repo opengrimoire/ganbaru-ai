@@ -1,12 +1,16 @@
 import {
   DEFAULT_DOOMSCROLLING_CONFIG,
+  isProtectedDoomscrollingDesktopAppName,
+  normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingCustomCategoryStackName,
   parseDoomscrollingHosts,
+  type DoomscrollingAppRule,
   type DoomscrollingCategoryId,
   type DoomscrollingCategoryRule,
   type DoomscrollingConfig,
   type DoomscrollingCustomCategoryStack,
+  type DoomscrollingDesktopConfig,
   type DoomscrollingHostRule,
   type DoomscrollingMode,
 } from "$lib/doomscrolling";
@@ -43,6 +47,10 @@ function update(partial: Partial<DoomscrollingConfig>): void {
   persist({ ...config, ...partial });
 }
 
+function updateDesktop(partial: Partial<DoomscrollingDesktopConfig>): void {
+  update({ desktop: { ...config.desktop, ...partial } });
+}
+
 function mergeHosts(
   existingHosts: readonly DoomscrollingHostRule[],
   input: string,
@@ -72,6 +80,67 @@ function setHostEnabled(
   enabled: boolean,
 ): DoomscrollingHostRule[] {
   return existingHosts.map((rule) => rule.host === host ? { ...rule, enabled } : rule);
+}
+
+function appRuleKey(name: string): string {
+  return name.toLowerCase();
+}
+
+interface DoomscrollingAppRuleInput {
+  name: string;
+  matchNames?: readonly string[];
+}
+
+function appRuleInput(
+  input: string | DoomscrollingAppRuleInput,
+): DoomscrollingAppRule | null {
+  const name = normalizeDoomscrollingAppName(typeof input === "string" ? input : input.name);
+  if (!name || isProtectedDoomscrollingDesktopAppName(name)) return null;
+  const seen = new Set<string>();
+  const matchNames: string[] = [];
+  const rawMatchNames = typeof input === "string" ? [name] : [name, ...(input.matchNames ?? [])];
+  for (const rawMatchName of rawMatchNames) {
+    const matchName = normalizeDoomscrollingAppName(rawMatchName);
+    if (!matchName || isProtectedDoomscrollingDesktopAppName(matchName)) continue;
+    const key = appRuleKey(matchName);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    matchNames.push(matchName);
+  }
+  return {
+    name,
+    enabled: true,
+    matchNames: matchNames.length > 0 ? matchNames : [name],
+  };
+}
+
+function mergeApps(
+  existingApps: readonly DoomscrollingAppRule[],
+  input: string | DoomscrollingAppRuleInput,
+): DoomscrollingAppRule[] | null {
+  const rule = appRuleInput(input);
+  if (!rule) return null;
+  const key = appRuleKey(rule.name);
+  if (existingApps.some((rule) => appRuleKey(rule.name) === key)) return existingApps.slice();
+  return [...existingApps, rule];
+}
+
+function removeApp(
+  existingApps: readonly DoomscrollingAppRule[],
+  name: string,
+): DoomscrollingAppRule[] {
+  const key = appRuleKey(name);
+  return existingApps.filter((rule) => appRuleKey(rule.name) !== key);
+}
+
+function setAppEnabled(
+  existingApps: readonly DoomscrollingAppRule[],
+  name: string,
+  enabled: boolean,
+): DoomscrollingAppRule[] {
+  if (isProtectedDoomscrollingDesktopAppName(name)) return existingApps.slice();
+  const key = appRuleKey(name);
+  return existingApps.map((rule) => appRuleKey(rule.name) === key ? { ...rule, enabled } : rule);
 }
 
 function setCategoryEnabled(
@@ -148,6 +217,18 @@ export function getDoomscrolling() {
     get allowedHosts(): readonly DoomscrollingHostRule[] {
       return config.allowedHosts;
     },
+    get desktopEnabled(): boolean {
+      return config.desktop.enabled;
+    },
+    get desktopBlockDuringShortBreaks(): boolean {
+      return config.desktop.blockDuringShortBreaks;
+    },
+    get desktopBlockDuringLongBreaks(): boolean {
+      return config.desktop.blockDuringLongBreaks;
+    },
+    get blockedApps(): readonly DoomscrollingAppRule[] {
+      return config.desktop.blockedApps;
+    },
     setMode(mode: DoomscrollingMode): void {
       update({ mode });
     },
@@ -159,6 +240,15 @@ export function getDoomscrolling() {
     },
     setBlockDuringLongBreaks(blockDuringLongBreaks: boolean): void {
       update({ blockDuringLongBreaks });
+    },
+    setDesktopEnabled(enabled: boolean): void {
+      updateDesktop({ enabled });
+    },
+    setDesktopBlockDuringShortBreaks(blockDuringShortBreaks: boolean): void {
+      updateDesktop({ blockDuringShortBreaks });
+    },
+    setDesktopBlockDuringLongBreaks(blockDuringLongBreaks: boolean): void {
+      updateDesktop({ blockDuringLongBreaks });
     },
     setBlockedCategoryEnabled(id: DoomscrollingCategoryId, enabled: boolean): void {
       update({ blockedCategories: setCategoryEnabled(config.blockedCategories, id, enabled) });
@@ -240,6 +330,18 @@ export function getDoomscrolling() {
       update({ allowedHosts: merged });
       return true;
     },
+    addBlockedAppsText(text: string): boolean {
+      const merged = mergeApps(config.desktop.blockedApps, text);
+      if (!merged) return false;
+      updateDesktop({ blockedApps: merged });
+      return true;
+    },
+    addBlockedApp(name: string, matchNames: readonly string[]): boolean {
+      const merged = mergeApps(config.desktop.blockedApps, { name, matchNames });
+      if (!merged) return false;
+      updateDesktop({ blockedApps: merged });
+      return true;
+    },
     removeBlockedHost(host: string): void {
       update({ blockedHosts: removeHost(config.blockedHosts, host) });
     },
@@ -249,6 +351,9 @@ export function getDoomscrolling() {
     removeAllowedHost(host: string): void {
       update({ allowedHosts: removeHost(config.allowedHosts, host) });
     },
+    removeBlockedApp(name: string): void {
+      updateDesktop({ blockedApps: removeApp(config.desktop.blockedApps, name) });
+    },
     setBlockedHostEnabled(host: string, enabled: boolean): void {
       update({ blockedHosts: setHostEnabled(config.blockedHosts, host, enabled) });
     },
@@ -257,6 +362,9 @@ export function getDoomscrolling() {
     },
     setAllowedHostEnabled(host: string, enabled: boolean): void {
       update({ allowedHosts: setHostEnabled(config.allowedHosts, host, enabled) });
+    },
+    setBlockedAppEnabled(name: string, enabled: boolean): void {
+      updateDesktop({ blockedApps: setAppEnabled(config.desktop.blockedApps, name, enabled) });
     },
     reset(): void {
       persist({ ...DEFAULT_DOOMSCROLLING_CONFIG });

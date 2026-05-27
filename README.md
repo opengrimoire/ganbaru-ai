@@ -27,7 +27,7 @@ Anti-procrastination project manager for life and work. Free, local, open-source
 | **Kanban board** | Backlog/planned/in-progress/done columns, priority tiers (easy/medium/hard/epic), estimated pomodoro count, task-to-session linking | Available |
 | **Note-taking** | Tiptap block editor with slash commands, markdown storage on disk, bidirectional backlinks indexed in SQLite | Planned |
 | **Daily diary** | Morning and evening entry forms, mood/energy/sleep tracking, personal baselines for AI suggestions | Planned |
-| **Doomscrolling** | Chromium-based development extension that blocks configured websites and category stacks during active Pomodoro focus sessions; Firefox, richer rules, and mobile app-level blocking are planned | Early desktop slice |
+| **Doomscrolling** | Chromium-based development extension that blocks configured websites and category stacks during active Pomodoro focus sessions; desktop app blocking includes a blocklist, an on-demand app picker, and automatic Linux app closing, while Firefox, richer rules, and mobile app-level blocking are planned | Early desktop slice |
 | **Work environments** | Saved configs per session block: apps to open/close, browser tabs, playlist, blocker rules. Auto-activated by the calendar | Planned |
 | **Edge panel** | Always-on-top sidebar with live pomodoro timer, quick-add tasks, music controls, active environment name | Planned |
 | **Music player** | Local file playback (Symphonia/FFmpeg), YouTube via IFrame API, playlists tied to session blocks and environments | Planned |
@@ -88,7 +88,7 @@ For Brave, this helper builds the native host and opens the extensions page:
 pnpm -w run setup:brave-extension
 ```
 
-After first setup, keep `pnpm tauri dev` running, configure Settings > Doomscrolling in the app, keep Blacklist mode selected, start a Pomodoro focus session, and open a blocked website such as `reddit.com`.
+After first setup, keep `pnpm tauri dev` running, configure Settings > Doomscrolling > Browser settings in the app, keep Blacklist mode selected, start a Pomodoro focus session, and open a blocked website such as `reddit.com`.
 
 For repeat testing:
 

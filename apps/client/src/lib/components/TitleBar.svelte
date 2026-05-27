@@ -1487,6 +1487,7 @@
     <Modal
       onClose={() => settingsLauncher.close()}
       initialSection={settingsLauncher.targetSection}
+      initialDoomscrollingTab={settingsLauncher.targetDoomscrollingTab}
     />
   {/if}
 {/if}

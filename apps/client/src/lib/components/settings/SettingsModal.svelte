@@ -16,12 +16,17 @@
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
-  import type { SectionId } from "./types";
+  import type { DoomscrollingSettingsTab, SectionId } from "./types";
 
   let {
     onClose,
     initialSection,
-  }: { onClose: () => void; initialSection?: SectionId } = $props();
+    initialDoomscrollingTab,
+  }: {
+    onClose: () => void;
+    initialSection?: SectionId;
+    initialDoomscrollingTab?: DoomscrollingSettingsTab;
+  } = $props();
 
   const themeEditor = getThemeEditor();
   const viewport = getViewport();
@@ -252,7 +257,7 @@
         {:else if activeSection === "music"}
           <MusicSection />
         {:else if activeSection === "doomscrolling"}
-          <DoomscrollingSection />
+          <DoomscrollingSection initialTab={initialDoomscrollingTab} />
         {:else if activeSection === "shortcuts"}
           <ShortcutsSection />
         {/if}

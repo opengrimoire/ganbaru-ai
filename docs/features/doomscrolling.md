@@ -13,13 +13,14 @@ The current desktop implementation is an early Chrome and Brave development slic
 - The app writes a small runtime state file when Pomodoro state changes.
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
 - The native host writes a small local connection status file each time the extension contacts it. The app uses this to show whether a browser extension has connected recently.
-- Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, blocked categories, custom category stacks, exceptions, and allowed websites.
+- Settings > Doomscrolling is split into Browser settings and Desktop settings. Browser settings supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, blocked categories, custom category stacks, exceptions, and allowed websites.
+- Desktop settings uses the same schedule controls for local app rules, but desktop app blocking is blocklist-only. Adding an app opens an on-demand installed-app picker, so the app does not continuously scan the system. Adding or removing an app from the picker requires confirmation because blocked apps can be closed automatically during configured Pomodoro phases. GanbaruAI is protected and cannot be added to blocked apps. On Linux, active blocked apps are closed automatically during protected Pomodoro phases and the app shows an OS notification explaining where to change the setting, capped to five notifications per minute.
 - Blacklist mode presents built-in and custom categories as category pills. The New category pill opens the custom category form, websites are entered as list items, and custom category deletion lives inside the edit form.
-- The current `doomscrolling` config uses `mode`, `blockedCategories`, `customCategoryStacks`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Built-in categories are enabled by default. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Category stacks store a name, enabled state, and normalized hosts. Legacy string website entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
+- The current browser `doomscrolling` config uses `mode`, `blockedCategories`, `customCategoryStacks`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Built-in categories are enabled by default. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Category stacks store a name, enabled state, and normalized hosts. Legacy string website entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions. Desktop app rules live under `doomscrolling.desktop` with schedule toggles and a blocked app list. Legacy desktop `mode` and `allowedApps` fields are ignored.
 - The native host includes a rules fingerprint in state responses so the extension rechecks already open tabs when website rules change during an active focus or break phase.
 - Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
 
-This is intentionally smaller than the full spec below. It supports domain-level blocking and preset categories during Pomodoro sessions first. Work environment rules, temporary access analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
+This is intentionally smaller than the full spec below. It supports domain-level browser blocking, preset categories, and automatic Linux desktop app closing during Pomodoro sessions first. Work environment rules, access-change analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
 
 ## Purpose
 
@@ -104,7 +105,7 @@ Initial Chrome implementation should support blocked domains, allowed domains, b
 Rule precedence must be deterministic and visible when the app explains a blocked page:
 
 1. Emergency and browser safety allowlist.
-2. Temporary session allow.
+2. Explicit session allow.
 3. Explicit per-event allow.
 4. Explicit per-event block.
 5. Explicit environment allow.
@@ -200,43 +201,38 @@ The current app settings view shows this as a recent connection check for the cu
 
 The block page is intentionally minimal. It should show:
 
-- The GanbaruAI name or icon.
-- A short message: `Blocked during focus`.
-- The active environment name.
-- The matched rule name.
+- The normalized site host once, formatted as `[host] is blocked`.
+- A short steady message: `Stay strong and keep moving forward`.
 - Remaining focus time, if a Pomodoro focus phase is active.
-- Primary action: return to previous allowed page or close tab.
-- Secondary action: request temporary access.
-- Small link: open GanbaruAI settings.
+- Primary action: close tab.
 
 It should not show:
 
+- The GanbaruAI name as page content.
+- The blocked URL more than once.
 - Motivation quotes.
 - XP, streaks, badges, or character dialogue.
 - Daily stats or total blocked count.
 - Animated backgrounds.
 - A long explanation of procrastination.
 - A feed of recent blocked pages.
+- Temporary access controls on the block page.
 
 The block page itself must not become a reward or distraction.
 
-## Temporary access
+## False positives and access changes
 
-Temporary access is useful when the user hit a false positive or needs a blocked site for the current task.
+The block page should not offer quick bypass controls. The default recovery action is to close the tab and continue the session.
 
-Supported access scopes:
+When the user hit a false positive or needs a blocked site for the current task, the change should happen in GanbaruAI settings where the rule context is visible. Future access-change flows can support:
 
-- **This page for 5 minutes.** Allows the normalized URL pattern for the current tab.
-- **This domain for this focus period.** Allows the domain until the current focus phase ends.
-- **This domain for this session.** Allows the domain until the current Pomodoro run ends.
+- Adding an exception in Blacklist mode.
+- Adding a site to Whitelist mode.
+- Disabling a website rule, category, category stack, or desktop app rule.
 
-The first click should not grant access immediately. It should open a compact prompt with:
+Any flow that changes access from a blocked surface should require confirmation and explain the scope before applying the change.
 
-- Reason field, optional by default but stored if provided.
-- Duration or scope picker.
-- Confirm button with a short delay for stricter environments.
-
-The app should log temporary access separately from block events. Analytics can then distinguish "blocked and abandoned" from "blocked but intentionally allowed."
+The app should log access changes separately from block events. Analytics can then distinguish "blocked and abandoned" from "blocked but intentionally changed."
 
 ## Extension popup UX
 
@@ -247,7 +243,7 @@ The popup is a compact status surface. It should show:
 - Pomodoro phase and remaining time when active.
 - Current rule mode: strict focus, relaxed break, manual environment, morning routine, inactive.
 - Last blocked domain, if any, without query string.
-- Buttons: open GanbaruAI, test current page, request temporary access when the current tab is blocked.
+- Buttons: open GanbaruAI and test the current page.
 
 The popup should not expose full rule editing. It can link to the app's environment editor. Keeping editing in the app avoids duplicated settings UI and keeps the browser extension small.
 
@@ -264,7 +260,7 @@ The environment editor should include a blocker section with:
 - Blacklist mode rules: blocked domains, categories, and exceptions.
 - Whitelist mode rules: allowed sites and task resources.
 - Supported site rules, such as YouTube channels or playlists.
-- Temporary access defaults.
+- False-positive handling defaults.
 
 ## Suggested defaults
 
@@ -399,7 +395,7 @@ Tab closing must be conservative. The app should not close user tabs by default.
 
 **A page becomes blocked after it is already open.** On state changes, the extension should recheck active tabs and redirect newly blocked pages where browser APIs allow it.
 
-**A page becomes allowed after temporary access.** The extension should reload or navigate back to the original URL only after the user confirms. Automatic navigation can be surprising.
+**A page becomes allowed after an access change.** The extension should reload or navigate back to the original URL only after the user confirms. Automatic navigation can be surprising.
 
 **Incognito or private windows.** Disabled by default. If the user enables extension access in private browsing, the app should label private events separately and keep the same local-only rules.
 
@@ -418,7 +414,7 @@ Stage 1, Chrome minimum:
 
 Stage 2, session quality:
 
-- Temporary access flow.
+- False-positive and access-change flow.
 - Recheck active tabs on state changes.
 - Category presets.
 - App setup diagnostics for missing native host or missing extension.
@@ -450,7 +446,7 @@ Stage 5, optional AI relevance:
 - Should strict mode ever fail closed when the extension loses contact with the app?
 - Should break browsing be globally configurable, per environment, or both?
 - How much URL path detail should analytics expose by default?
-- Should temporary access require a typed reason in strict environments?
+- Should access changes from a blocked surface require a typed reason in strict environments?
 - Which additional regional category presets are worth maintaining?
 - Should custom category stacks support editing individual hosts inline, or stay as delete-and-recreate bundles until rule editing is broader?
 

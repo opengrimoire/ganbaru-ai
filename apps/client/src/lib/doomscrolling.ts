@@ -1,5 +1,19 @@
 export type DoomscrollingMode = "blacklist" | "whitelist";
 
+export const DOOMSCROLLING_PROTECTED_DESKTOP_APPS = [
+  {
+    name: "GanbaruAI",
+    aliases: [
+      "ganbaruai",
+      "ganbaruai-dev",
+      "GanbaruAI Dev",
+      "GanbaruAI (dev)",
+      "org.opengrimoire.ganbaruai",
+      "org.opengrimoire.ganbaruai.dev",
+    ],
+  },
+] as const;
+
 export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
   {
     id: "social-media",
@@ -169,6 +183,12 @@ export interface DoomscrollingHostRule {
   enabled: boolean;
 }
 
+export interface DoomscrollingAppRule {
+  name: string;
+  enabled: boolean;
+  matchNames: string[];
+}
+
 export interface DoomscrollingCategoryRule {
   id: DoomscrollingCategoryId;
   enabled: boolean;
@@ -181,6 +201,13 @@ export interface DoomscrollingCustomCategoryStack {
   hosts: DoomscrollingHostRule[];
 }
 
+export interface DoomscrollingDesktopConfig {
+  enabled: boolean;
+  blockDuringShortBreaks: boolean;
+  blockDuringLongBreaks: boolean;
+  blockedApps: DoomscrollingAppRule[];
+}
+
 export interface DoomscrollingConfig {
   mode: DoomscrollingMode;
   enabled: boolean;
@@ -191,6 +218,7 @@ export interface DoomscrollingConfig {
   blockedHosts: DoomscrollingHostRule[];
   exceptionHosts: DoomscrollingHostRule[];
   allowedHosts: DoomscrollingHostRule[];
+  desktop: DoomscrollingDesktopConfig;
 }
 
 export interface DoomscrollingDecision {
@@ -210,6 +238,26 @@ function defaultCategoryRules(): DoomscrollingCategoryRule[] {
   }));
 }
 
+function defaultDesktopConfig(): DoomscrollingDesktopConfig {
+  return {
+    enabled: true,
+    blockDuringShortBreaks: true,
+    blockDuringLongBreaks: true,
+    blockedApps: [],
+  };
+}
+
+function protectedDesktopAppKeys(): Set<string> {
+  const keys = new Set<string>();
+  for (const app of DOOMSCROLLING_PROTECTED_DESKTOP_APPS) {
+    keys.add(appRuleKey(app.name));
+    for (const alias of app.aliases) {
+      keys.add(appRuleKey(alias));
+    }
+  }
+  return keys;
+}
+
 export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
   mode: "blacklist",
   enabled: true,
@@ -220,6 +268,7 @@ export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
   blockedHosts: [],
   exceptionHosts: [],
   allowedHosts: [],
+  desktop: defaultDesktopConfig(),
 });
 
 export function isDoomscrollingCategoryId(value: string): value is DoomscrollingCategoryId {
@@ -283,6 +332,24 @@ export function parseDoomscrollingHosts(input: string): string[] {
   return hosts;
 }
 
+/**
+ * Normalize user-entered desktop app names.
+ *
+ * @param input - A visible app name or executable name entered by the user.
+ * @returns The normalized app name, or null when the input is empty.
+ */
+export function normalizeDoomscrollingAppName(input: string): string | null {
+  const name = input.trim().replace(/\s+/g, " ").slice(0, 80);
+  if (name.length === 0) return null;
+  if (/[\u0000-\u001f]/.test(name)) return null;
+  return name;
+}
+
+export function isProtectedDoomscrollingDesktopAppName(input: string): boolean {
+  const name = normalizeDoomscrollingAppName(input);
+  return name ? protectedDesktopAppKeys().has(appRuleKey(name)) : false;
+}
+
 function normalizeHostRuleValue(value: unknown): DoomscrollingHostRule | null {
   if (typeof value === "string") {
     const host = normalizeDoomscrollingHost(value);
@@ -307,6 +374,60 @@ function normalizeHostRules(value: unknown): DoomscrollingHostRule[] {
     const rule = normalizeHostRuleValue(item);
     if (!rule || seen.has(rule.host)) continue;
     seen.add(rule.host);
+    rules.push(rule);
+  }
+  return rules;
+}
+
+function appRuleKey(name: string): string {
+  return name.toLowerCase();
+}
+
+function normalizeAppRuleValue(value: unknown): DoomscrollingAppRule | null {
+  if (typeof value === "string") {
+    const name = normalizeDoomscrollingAppName(value);
+    return name ? { name, enabled: true, matchNames: [name] } : null;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.name !== "string") return null;
+  const name = normalizeDoomscrollingAppName(record.name);
+  if (!name) return null;
+  const matchNames = normalizeAppRuleMatchNames(name, record.matchNames);
+  return {
+    name,
+    enabled: record.enabled !== false,
+    matchNames,
+  };
+}
+
+function normalizeAppRuleMatchNames(name: string, value: unknown): string[] {
+  const seen = new Set<string>();
+  const matchNames: string[] = [];
+  const candidates = Array.isArray(value) ? [name, ...value] : [name];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const matchName = normalizeDoomscrollingAppName(candidate);
+    if (!matchName) continue;
+    const key = appRuleKey(matchName);
+    if (protectedDesktopAppKeys().has(key) || seen.has(key)) continue;
+    seen.add(key);
+    matchNames.push(matchName);
+  }
+  return matchNames.length > 0 ? matchNames : [name];
+}
+
+function normalizeAppRules(value: unknown, includeProtectedApps = false): DoomscrollingAppRule[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const rules: DoomscrollingAppRule[] = [];
+  for (const item of value) {
+    const rule = normalizeAppRuleValue(item);
+    if (!rule) continue;
+    const key = appRuleKey(rule.name);
+    if (!includeProtectedApps && protectedDesktopAppKeys().has(key)) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
     rules.push(rule);
   }
   return rules;
@@ -387,9 +508,35 @@ function normalizeMode(value: unknown): DoomscrollingMode {
     : DEFAULT_DOOMSCROLLING_CONFIG.mode;
 }
 
+function normalizeDesktopConfig(value: unknown): DoomscrollingDesktopConfig {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return defaultDesktopConfig();
+  }
+  const record = value as Record<string, unknown>;
+  const legacyBlockDuringBreaks = typeof record.blockDuringBreaks === "boolean"
+    ? record.blockDuringBreaks
+    : null;
+  return {
+    enabled: typeof record.enabled === "boolean"
+      ? record.enabled
+      : true,
+    blockDuringShortBreaks: typeof record.blockDuringShortBreaks === "boolean"
+      ? record.blockDuringShortBreaks
+      : legacyBlockDuringBreaks ?? true,
+    blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
+      ? record.blockDuringLongBreaks
+      : legacyBlockDuringBreaks ?? true,
+    blockedApps: normalizeAppRules(record.blockedApps),
+  };
+}
+
 export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfig {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { ...DEFAULT_DOOMSCROLLING_CONFIG };
+    return {
+      ...DEFAULT_DOOMSCROLLING_CONFIG,
+      blockedCategories: defaultCategoryRules(),
+      desktop: defaultDesktopConfig(),
+    };
   }
   const record = value as Record<string, unknown>;
   const hasMode = record.mode === "blacklist" || record.mode === "whitelist";
@@ -418,6 +565,7 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
         ? []
         : legacyAllowedHosts,
     allowedHosts: hasMode ? legacyAllowedHosts : [],
+    desktop: normalizeDesktopConfig(record.desktop),
   };
 }
 

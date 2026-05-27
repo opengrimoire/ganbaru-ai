@@ -1480,6 +1480,53 @@ pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: S
     });
 }
 
+#[tauri::command]
+pub fn show_doomscrolling_desktop_block_notification(app: tauri::AppHandle, app_name: String) {
+    std::thread::spawn(move || {
+        let app_name = app_name
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(80)
+            .collect::<String>();
+        let app_name = if app_name.is_empty() {
+            "The blocked app".to_string()
+        } else {
+            app_name
+        };
+        let body = escape_notification_markup(&format!(
+            "{app_name} was closed because it is blocked by your desktop rules. Change this in Settings > Doomscrolling > Desktop settings (or click this notification)"
+        ));
+        let result = Notification::new()
+            .appname("GanbaruAI")
+            .summary("App closed by GanbaruAI")
+            .body(&body)
+            .action("default", "Open desktop settings")
+            .timeout(10_000)
+            .hint(Hint::Category("device".into()))
+            .hint(Hint::DesktopEntry("ganbaruai".into()))
+            .hint(Hint::Transient(true))
+            .hint(Hint::SoundName("message-new-instant".into()))
+            .show();
+
+        match result {
+            Ok(handle) => {
+                handle.wait_for_action(|action| {
+                    if action == "default" {
+                        let _ = app.emit("doomscrolling-open-desktop-settings", ());
+                        focus_main_window(app.clone());
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("Failed to show doomscrolling desktop block notification: {e}");
+            }
+        }
+    });
+}
+
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;

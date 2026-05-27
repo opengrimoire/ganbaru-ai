@@ -4,3 +4,5 @@
  * type their requests against the same identifier set.
  */
 export type SectionId = "appearance" | "calendars" | "music" | "doomscrolling" | "shortcuts";
+
+export type DoomscrollingSettingsTab = "browser" | "desktop";

@@ -8,6 +8,8 @@
   } from "$lib/navigation";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
+  import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
+  import { getDoomscrollingDesktopBlocker } from "$lib/stores/doomscrolling-desktop-blocker.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
@@ -50,14 +52,18 @@
   const nav = getNavigation();
   const calendar = getCalendar();
   const calendars = getCalendars();
+  const doomscrolling = getDoomscrolling();
+  const desktopBlocker = getDoomscrollingDesktopBlocker();
   const pomodoro = getPomodoro();
   const zoom = getZoom();
   const settingsLauncher = getSettingsLauncher();
   const viewport = getViewport();
   const detachedWindows = getDetachedWindows();
   let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
+  let unlistenDoomscrollingDesktopSettingsOpen: UnlistenFn | null = null;
   const ACTIVE_BLOCK_CHECK_INTERVAL_MS = 1000;
   const EVENT_NOTIFICATION_CHECK_INTERVAL_MS = 1000;
+  const DESKTOP_BLOCKING_CHECK_INTERVAL_MS = 5_000;
 
   let isMaximized = $state(true);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
@@ -162,6 +168,13 @@
           unlistenCalendarNotificationOpen = unlisten;
         })
         .catch((e) => console.error("Failed to listen for calendar notification opens:", e));
+      listen("doomscrolling-open-desktop-settings", () => {
+        settingsLauncher.open("doomscrolling", { doomscrollingTab: "desktop" });
+      })
+        .then((unlisten) => {
+          unlistenDoomscrollingDesktopSettingsOpen = unlisten;
+        })
+        .catch((e) => console.error("Failed to listen for doomscrolling settings opens:", e));
     }
 
     // Valid benchmark boots are claimed before normal calendar hydration so
@@ -227,10 +240,16 @@
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", checkZone);
     const zoneIntervalId = setInterval(checkZone, 60_000);
+    const desktopBlockerIntervalId = isMainWindow
+      ? setInterval(checkDesktopAppBlocking, DESKTOP_BLOCKING_CHECK_INTERVAL_MS)
+      : null;
+    checkDesktopAppBlocking();
 
     return () => {
       unlistenCalendarNotificationOpen?.();
       unlistenCalendarNotificationOpen = null;
+      unlistenDoomscrollingDesktopSettingsOpen?.();
+      unlistenDoomscrollingDesktopSettingsOpen = null;
       document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
       document.removeEventListener("contextmenu", blockNativeContextMenu, { capture: true });
       document.removeEventListener("pointerdown", markPointerFocus, { capture: true });
@@ -239,7 +258,18 @@
       window.removeEventListener("focus", checkZone);
       clearTimeout(startupMemoryTimerId);
       clearInterval(zoneIntervalId);
+      if (desktopBlockerIntervalId) clearInterval(desktopBlockerIntervalId);
     };
+  });
+
+  $effect(() => {
+    const _running = pomodoro.isRunning;
+    const _phase = pomodoro.phase;
+    const _enabled = doomscrolling.desktopEnabled;
+    const _shortBreaks = doomscrolling.desktopBlockDuringShortBreaks;
+    const _longBreaks = doomscrolling.desktopBlockDuringLongBreaks;
+    const _rules = doomscrolling.blockedApps;
+    checkDesktopAppBlocking();
   });
 
   $effect(() => {
@@ -290,6 +320,22 @@
     if (hours > 0) return `${hours}h`;
     if (minutes > 0) return `${minutes}m`;
     return `${totalSeconds}s`;
+  }
+
+  function desktopAppBlockingActive(): boolean {
+    if (!isMainWindow || !pomodoro.isRunning || !doomscrolling.desktopEnabled) return false;
+    if (pomodoro.phase === "focus") return true;
+    if (pomodoro.phase === "short_break") return doomscrolling.desktopBlockDuringShortBreaks;
+    if (pomodoro.phase === "long_break") return doomscrolling.desktopBlockDuringLongBreaks;
+    return false;
+  }
+
+  function checkDesktopAppBlocking(): void {
+    if (!desktopAppBlockingActive()) {
+      desktopBlocker.clear();
+      return;
+    }
+    void desktopBlocker.check(doomscrolling.blockedApps);
   }
 
   function handleKeydown(e: KeyboardEvent) {

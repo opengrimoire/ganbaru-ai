@@ -19,6 +19,24 @@ export interface DoomscrollingExtensionStatus {
   reason: string | null;
 }
 
+export interface DoomscrollingDesktopAppCandidate {
+  name: string;
+  source: string;
+  detail: string | null;
+  processNames: string[];
+}
+
+export interface DoomscrollingDesktopAppRulePayload {
+  name: string;
+  matchNames: string[];
+}
+
+export interface DoomscrollingRunningDesktopAppMatch {
+  appName: string;
+  processName: string;
+  processId: number;
+}
+
 export async function writeDoomscrollingRuntimeState(
   state: DoomscrollingRuntimeState,
 ): Promise<void> {
@@ -32,4 +50,25 @@ export async function getDoomscrollingExtensionStatus(
     "doomscrolling_get_extension_status",
     { freshAfter: freshAfter ?? null },
   );
+}
+
+export async function listDoomscrollingDesktopApps(): Promise<DoomscrollingDesktopAppCandidate[]> {
+  return await invoke<DoomscrollingDesktopAppCandidate[]>("doomscrolling_list_desktop_apps");
+}
+
+export async function listBlockedDoomscrollingDesktopAppMatches(
+  apps: readonly DoomscrollingDesktopAppRulePayload[],
+): Promise<DoomscrollingRunningDesktopAppMatch[]> {
+  return await invoke<DoomscrollingRunningDesktopAppMatch[]>(
+    "doomscrolling_list_blocked_desktop_app_matches",
+    { apps },
+  );
+}
+
+export async function closeDoomscrollingDesktopApp(processId: number): Promise<void> {
+  await invoke("doomscrolling_close_desktop_app", { processId });
+}
+
+export async function showDoomscrollingDesktopBlockNotification(appName: string): Promise<void> {
+  await invoke("show_doomscrolling_desktop_block_notification", { appName });
 }

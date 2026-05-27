@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DOOMSCROLLING_CONFIG,
   evaluateDoomscrollingUrl,
+  isProtectedDoomscrollingDesktopAppName,
+  normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingHost,
   parseDoomscrollingHosts,
+  type DoomscrollingAppRule,
   type DoomscrollingCategoryId,
   type DoomscrollingConfig,
   type DoomscrollingHostRule,
 } from "./doomscrolling";
+
+function appRule(name: string, enabled = true): DoomscrollingAppRule {
+  return { name, enabled, matchNames: [name] };
+}
 
 function hostRule(host: string, enabled = true): DoomscrollingHostRule {
   return { host, enabled };
@@ -72,6 +79,24 @@ describe("parseDoomscrollingHosts", () => {
   });
 });
 
+describe("normalizeDoomscrollingAppName", () => {
+  it("keeps user-facing app names while trimming whitespace", () => {
+    expect(normalizeDoomscrollingAppName("  Visual   Studio Code  ")).toBe("Visual Studio Code");
+  });
+
+  it("rejects empty app names", () => {
+    expect(normalizeDoomscrollingAppName("   ")).toBeNull();
+  });
+
+  it("recognizes protected GanbaruAI app names", () => {
+    expect(isProtectedDoomscrollingDesktopAppName("GanbaruAI")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("ganbaruai")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("org.opengrimoire.ganbaruai")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("org.opengrimoire.ganbaruai.dev")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("Steam")).toBe(false);
+  });
+});
+
 describe("normalizeDoomscrollingConfig", () => {
   it("defaults all blocking toggles and built-in categories to enabled", () => {
     const normalized = normalizeDoomscrollingConfig(null);
@@ -95,6 +120,7 @@ describe("normalizeDoomscrollingConfig", () => {
       blockedHosts: [hostRule("reddit.com"), hostRule("youtube.com")],
       exceptionHosts: [],
       allowedHosts: [],
+      desktop: DEFAULT_DOOMSCROLLING_CONFIG.desktop,
     });
   });
 
@@ -179,6 +205,39 @@ describe("normalizeDoomscrollingConfig", () => {
         hosts: [hostRule("news.ycombinator.com"), hostRule("reddit.com")],
       },
     ]);
+  });
+
+  it("normalizes desktop app rules as a blocklist separate from browser rules", () => {
+    expect(normalizeDoomscrollingConfig({
+      desktop: {
+        mode: "whitelist",
+        enabled: false,
+        blockDuringBreaks: false,
+        blockedApps: [
+          "Steam",
+          "GanbaruAI",
+          { name: " steam ", enabled: false },
+          { name: "Discord", enabled: false },
+          { name: "Calculator", matchNames: ["gnome-calculator"] },
+        ],
+        allowedApps: [
+          "ganbaruai",
+          "Visual Studio Code",
+          { name: "Firefox", enabled: false },
+        ],
+      },
+    })).toMatchObject({
+      desktop: {
+        enabled: false,
+        blockDuringShortBreaks: false,
+        blockDuringLongBreaks: false,
+        blockedApps: [
+          appRule("Steam"),
+          appRule("Discord", false),
+          { name: "Calculator", enabled: true, matchNames: ["Calculator", "gnome-calculator"] },
+        ],
+      },
+    });
   });
 });
 

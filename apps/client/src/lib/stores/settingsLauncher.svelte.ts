@@ -12,25 +12,34 @@
  * stale targeting.
  */
 
-import type { SectionId } from "$lib/components/settings/types";
+import type { DoomscrollingSettingsTab, SectionId } from "$lib/components/settings/types";
+
+interface SettingsLaunchOptions {
+  doomscrollingTab?: DoomscrollingSettingsTab;
+}
 
 class SettingsLauncherStore {
   isOpen = $state(false);
   targetSection = $state<SectionId | undefined>(undefined);
+  targetDoomscrollingTab = $state<DoomscrollingSettingsTab | undefined>(undefined);
 
   /**
    * Request that the Settings modal open. Pass `section` to land on a
    * specific section; omit it to keep the previously selected section
    * (defaulting to Appearance on first open).
    */
-  open(section?: SectionId) {
+  open(section?: SectionId, options: SettingsLaunchOptions = {}) {
     this.targetSection = section;
+    this.targetDoomscrollingTab = section === "doomscrolling"
+      ? options.doomscrollingTab
+      : undefined;
     this.isOpen = true;
   }
 
   close() {
     this.isOpen = false;
     this.targetSection = undefined;
+    this.targetDoomscrollingTab = undefined;
   }
 }
 
