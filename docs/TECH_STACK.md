@@ -490,7 +490,7 @@ The skill tree visualization, visual novel NPC interactions, Will system, contra
 
 Tauri v2 has official iOS and Android support. The mobile app shares the Svelte frontend, Tiptap editor, Yjs sync layer, and SQLite database with the desktop app. It is not a separate product; it is the same app with a mobile-appropriate layout and a focused subset of features.
 
-Features available on mobile: note editor, calendar view and editing, Pomodoro timer (with notification-based breaks instead of fullscreen overlay), daily diary (morning and evening entries), sleep alarm (triggers diary flows and morning playlist), procrastination stopper (app-level blocking during scheduled focus times and mornings), collaborative workspaces, sync.
+Features available on mobile: note editor, calendar view and editing, Pomodoro timer (with notification-based breaks instead of fullscreen overlay), daily diary (morning and evening entries), sleep alarm (triggers diary flows and morning playlist), Doomscrolling (app-level blocking during scheduled focus times and mornings), collaborative workspaces, sync.
 
 Features unavailable on mobile due to OS sandboxing: work environment switching (opening/closing desktop apps, arranging browser tabs), edge panel, fullscreen break overlay, always-on-top windows, desktop activity monitoring.
 

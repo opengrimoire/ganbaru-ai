@@ -81,7 +81,7 @@ Multi-window desktop features that make GanbaruAI an always-present productivity
 - Edge panel: quick-access module icons, live Pomodoro timer indicator, active work environment name, quick-add Kanban task, task checkboxes for current session. Initially triggered by keyboard shortcut (global mouse polling added later)
 - Work environment management: saved configurations (apps to open/close, browser tabs, blocker rules, playlist assignment), automatic activation when session block starts, app open/close via sysinfo + std::process::Command
 - Chrome browser extension (manifest v3): native messaging bridge to Tauri backend, URL blocklist enforcement, redirect to branded block page, tab management for environment switching
-- Procrastination stopper: blocker trigger events logged as productivity analytics
+- Doomscrolling: blocker trigger events logged as productivity analytics
 
 **Depends on:** phase 1 (Pomodoro timer, calendar session blocks, Kanban tasks), phase 3 (diary for break screen context)
 
@@ -231,7 +231,7 @@ Tauri v2 mobile builds delivering a focused subset of the desktop experience.
 - Sleep alarm: iOS UNNotificationRequest with alarm-style scheduling, Android AlarmManager with SCHEDULE_EXACT_ALARM permission
 - Alarm-to-diary flow: morning alarm dismissal triggers morning diary, morning playlist starts; setting evening alarm triggers evening diary
 - Sleep duration tracking: alarm-set to dismissal time, feeds into sleep quality suggestions
-- App-level procrastination blocking: iOS Screen Time API (Family Controls framework), Android UsageStatsManager, with graceful degradation when permissions unavailable
+- App-level Doomscrolling: iOS Screen Time API (Family Controls framework), Android UsageStatsManager, with graceful degradation when permissions unavailable
 - Mobile Pomodoro: notification-based breaks (no fullscreen overlay), timer continues in background
 - Mobile calendar and notes: full editing capability, synced via phase 9
 - Mobile sync: connects to Hocuspocus server from phase 9
@@ -258,7 +258,7 @@ The general-user AI path, advanced AI capabilities, and external access layer. B
 - BYOK configuration UI: API key management (stored locally), model selection, provider setup with guided instructions, consent controls
 - Natural language calendar management: "move my 3pm session to tomorrow", AI modifies events via CLI
 - Mood-aware motivation: using diary mood/energy baselines, AI adapts communication and suggests schedule adjustments
-- Content-specific procrastination detection: LLM analyzes page content (not just URLs) for task relevance, smarter blocking on YouTube and similar platforms
+- Content-specific browsing relevance detection: LLM analyzes page content (not just URLs) for task relevance, smarter blocking on YouTube and similar platforms
 - Local LLM diary analysis: small local models (via Ollama) analyze diary language for goal-setting, reflection quality, mood trends, no data leaves the device
 - MCP server: exposes GanbaruAI data to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally
 - MCP client: consumes external MCP servers for integrations (email, external calendars)
@@ -288,7 +288,7 @@ Every system from the product spec is accounted for:
 | Note-taking (Tiptap, markdown, backlinks)                        | 2             |
 | Daily diary (morning/evening)                                    | 3             |
 | Consistency tracking                                             | 3             |
-| Procrastination stopper (desktop/browser)                        | 4             |
+| Doomscrolling (desktop/browser)                                  | 4             |
 | Work environment management                                      | 4             |
 | Edge panel                                                       | 4             |
 | Multi-window (break overlay, notification)                       | 4             |
@@ -311,7 +311,7 @@ Every system from the product spec is accounted for:
 | Collaborative workspaces                                         | 9             |
 | Mobile (Tauri v2, iOS/Android)                                   | 10            |
 | Sleep alarm (mobile)                                              | 10            |
-| Procrastination stopper (mobile/app-level)                       | 10            |
+| Doomscrolling (mobile/app-level)                                 | 10            |
 | BYOK chat widget (OpenAI, compatible APIs, Ollama)               | 11            |
 | AI: natural language calendar management                         | 11            |
 | AI: mood-aware motivation                                        | 11            |

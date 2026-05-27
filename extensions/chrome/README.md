@@ -1,8 +1,8 @@
 # GanbaruAI Chrome extension
 
-This is the Chrome and Chromium-based browser implementation of the procrastination stopper.
+This is the Chrome and Chromium-based browser implementation of Doomscrolling.
 
-During development it runs as an unpacked extension and talks to the local native messaging host named `org.opengrimoire.ganbaruai.stopper`.
+During development it runs as an unpacked extension and talks to the local native messaging host named `org.opengrimoire.ganbaruai.doomscrolling`.
 
 ## What gets installed
 

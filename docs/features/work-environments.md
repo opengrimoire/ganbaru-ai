@@ -12,7 +12,7 @@ This doc is a placeholder. Deeper design comes in a later pass.
 | Apps to close or minimize | Discord, browser windows from a different env |
 | Browser tabs | A list of URLs opened in a designated browser window or group |
 | Music playlist | Local file, YouTube playlist, or environment-default playlist |
-| Blocker rules | Which sites and apps are off-limits (see `features/procrastination-stopper.md`) |
+| Blocker rules | Which sites and apps are off-limits (see `features/doomscrolling.md`) |
 | Edge panel context | Which project context to display |
 
 ## How activation works
@@ -41,12 +41,12 @@ Per-block overrides are possible (e.g., the same template but a different playli
 
 ## Why desktop-only
 
-Environment management requires controlling other applications (opening, closing, focusing windows). Mobile sandboxing prohibits this. On mobile, the procrastination stopper's app-level blocking is the closest equivalent, but it does not orchestrate apps the way a desktop environment does.
+Environment management requires controlling other applications (opening, closing, focusing windows). Mobile sandboxing prohibits this. On mobile, Doomscrolling's app-level blocking is the closest equivalent, but it does not orchestrate apps the way a desktop environment does.
 
 ## Linkage to other systems
 
 - **Calendar:** the source of activation triggers.
 - **Music:** plays the assigned playlist.
-- **Procrastination stopper:** enforces the assigned rules.
+- **Doomscrolling:** enforces the assigned rules.
 - **Edge panel:** displays the environment name and the relevant project context.
 - **Pomodoro:** runs alongside; the timer is independent of the environment but typically pairs with one.

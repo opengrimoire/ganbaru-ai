@@ -4,13 +4,13 @@ use std::io::Write;
 use std::path::PathBuf;
 use tauri::{Manager, Runtime};
 
-const STATE_FILE: &str = "procrastination-stopper-state.json";
-const EXTENSION_CONNECTION_FILE: &str = "procrastination-stopper-extension-status.json";
+const STATE_FILE: &str = "doomscrolling-state.json";
+const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProcrastinationStopperRuntimeState {
+pub struct DoomscrollingRuntimeState {
     active: bool,
     phase: String,
     active_run_id: Option<String>,
@@ -21,14 +21,14 @@ pub struct ProcrastinationStopperRuntimeState {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProcrastinationStopperExtensionConnectionFile {
+struct DoomscrollingExtensionConnectionFile {
     last_seen_at: String,
     last_message_type: Option<String>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProcrastinationStopperExtensionStatus {
+pub struct DoomscrollingExtensionStatus {
     connected: bool,
     last_seen_at: Option<String>,
     last_message_type: Option<String>,
@@ -51,10 +51,10 @@ fn extension_connection_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Pa
     Ok(path)
 }
 
-fn validate_state(state: &ProcrastinationStopperRuntimeState) -> Result<(), String> {
+fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
     match state.phase.as_str() {
         "inactive" | "focus" | "short_break" | "long_break" => {}
-        other => return Err(format!("unsupported stopper phase '{other}'")),
+        other => return Err(format!("unsupported doomscrolling phase '{other}'")),
     }
     if state
         .remaining_seconds
@@ -75,8 +75,8 @@ fn now_utc() -> DateTime<Utc> {
 fn disconnected_extension_status(
     checked_at: DateTime<Utc>,
     reason: impl Into<String>,
-) -> ProcrastinationStopperExtensionStatus {
-    ProcrastinationStopperExtensionStatus {
+) -> DoomscrollingExtensionStatus {
+    DoomscrollingExtensionStatus {
         connected: false,
         last_seen_at: None,
         last_message_type: None,
@@ -90,10 +90,8 @@ fn extension_status_from_file_contents(
     contents: &str,
     checked_at: DateTime<Utc>,
     fresh_after: Option<DateTime<Utc>>,
-) -> ProcrastinationStopperExtensionStatus {
-    let Ok(record) =
-        serde_json::from_str::<ProcrastinationStopperExtensionConnectionFile>(contents)
-    else {
+) -> DoomscrollingExtensionStatus {
+    let Ok(record) = serde_json::from_str::<DoomscrollingExtensionConnectionFile>(contents) else {
         return disconnected_extension_status(checked_at, "connection status file is invalid");
     };
     let Ok(last_seen_at) = DateTime::parse_from_rfc3339(&record.last_seen_at) else {
@@ -105,7 +103,7 @@ fn extension_status_from_file_contents(
         .max(0);
     let before_current_app_session = fresh_after
         .is_some_and(|minimum_seen_at| last_seen_at.with_timezone(&Utc) < minimum_seen_at);
-    ProcrastinationStopperExtensionStatus {
+    DoomscrollingExtensionStatus {
         connected: age_seconds <= EXTENSION_CONNECTION_STALE_SECONDS && !before_current_app_session,
         last_seen_at: Some(record.last_seen_at),
         last_message_type: record.last_message_type,
@@ -142,9 +140,9 @@ fn write_text_file_atomically(path: &std::path::Path, contents: &str) -> Result<
 }
 
 #[tauri::command]
-pub fn procrastination_stopper_write_state<R: Runtime>(
+pub fn doomscrolling_write_state<R: Runtime>(
     app: tauri::AppHandle<R>,
-    state: ProcrastinationStopperRuntimeState,
+    state: DoomscrollingRuntimeState,
 ) -> Result<(), String> {
     validate_state(&state)?;
     let path = state_path(&app)?;
@@ -153,10 +151,10 @@ pub fn procrastination_stopper_write_state<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn procrastination_stopper_get_extension_status<R: Runtime>(
+pub fn doomscrolling_get_extension_status<R: Runtime>(
     app: tauri::AppHandle<R>,
     fresh_after: Option<String>,
-) -> Result<ProcrastinationStopperExtensionStatus, String> {
+) -> Result<DoomscrollingExtensionStatus, String> {
     let checked_at = now_utc();
     let fresh_after = fresh_after
         .as_deref()
@@ -180,13 +178,11 @@ pub fn procrastination_stopper_get_extension_status<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        extension_status_from_file_contents, validate_state, ProcrastinationStopperRuntimeState,
-    };
+    use super::{extension_status_from_file_contents, validate_state, DoomscrollingRuntimeState};
     use chrono::{DateTime, Utc};
 
-    fn state(phase: &str) -> ProcrastinationStopperRuntimeState {
-        ProcrastinationStopperRuntimeState {
+    fn state(phase: &str) -> DoomscrollingRuntimeState {
+        DoomscrollingRuntimeState {
             active: phase != "inactive",
             phase: phase.to_string(),
             active_run_id: None,

@@ -10,20 +10,20 @@
   import ShieldX from "@lucide/svelte/icons/shield-x";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import {
-    getProcrastinationStopperExtensionStatus,
-    type ProcrastinationStopperExtensionStatus,
-  } from "$lib/api/procrastination-stopper";
+    getDoomscrollingExtensionStatus,
+    type DoomscrollingExtensionStatus,
+  } from "$lib/api/doomscrolling";
   import { appSessionStartedAt } from "$lib/stores/app-session";
   import { cn } from "$lib/utils";
   import type {
-    ProcrastinationStopperHostRule,
-    ProcrastinationStopperMode,
-  } from "$lib/procrastination-stopper";
-  import { getProcrastinationStopper } from "$lib/stores/procrastination-stopper.svelte";
+    DoomscrollingHostRule,
+    DoomscrollingMode,
+  } from "$lib/doomscrolling";
+  import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
-  const stopper = getProcrastinationStopper();
+  const doomscrolling = getDoomscrolling();
   const EXTENSION_STATUS_POLL_MS = 15_000;
 
   type WebsiteListKind = "blocked" | "exception" | "allowed";
@@ -36,7 +36,7 @@
     placeholder: string;
     emptyText: string;
     errorText: string;
-    websites: () => readonly ProcrastinationStopperHostRule[];
+    websites: () => readonly DoomscrollingHostRule[];
     add: (text: string) => boolean;
     remove: (website: string) => void;
     setEnabled: (website: string, enabled: boolean) => void;
@@ -49,7 +49,7 @@
   }
 
   const modeOptions: ReadonlyArray<{
-    mode: ProcrastinationStopperMode;
+    mode: DoomscrollingMode;
     label: string;
     description: string;
     icon: Component;
@@ -77,10 +77,10 @@
       placeholder: "reddit.com",
       emptyText: "No blocked websites yet",
       errorText: "Enter a valid domain. Example: domain.com",
-      websites: () => stopper.blockedHosts,
-      add: (text: string) => stopper.addBlockedHostsText(text),
-      remove: (website: string) => stopper.removeBlockedHost(website),
-      setEnabled: (website: string, enabled: boolean) => stopper.setBlockedHostEnabled(website, enabled),
+      websites: () => doomscrolling.blockedHosts,
+      add: (text: string) => doomscrolling.addBlockedHostsText(text),
+      remove: (website: string) => doomscrolling.removeBlockedHost(website),
+      setEnabled: (website: string, enabled: boolean) => doomscrolling.setBlockedHostEnabled(website, enabled),
     },
     exception: {
       kind: "exception",
@@ -90,10 +90,10 @@
       placeholder: "music.youtube.com",
       emptyText: "No exceptions yet",
       errorText: "Enter a valid domain. Example: domain.com",
-      websites: () => stopper.exceptionHosts,
-      add: (text: string) => stopper.addExceptionHostsText(text),
-      remove: (website: string) => stopper.removeExceptionHost(website),
-      setEnabled: (website: string, enabled: boolean) => stopper.setExceptionHostEnabled(website, enabled),
+      websites: () => doomscrolling.exceptionHosts,
+      add: (text: string) => doomscrolling.addExceptionHostsText(text),
+      remove: (website: string) => doomscrolling.removeExceptionHost(website),
+      setEnabled: (website: string, enabled: boolean) => doomscrolling.setExceptionHostEnabled(website, enabled),
     },
     allowed: {
       kind: "allowed",
@@ -103,10 +103,10 @@
       placeholder: "github.com",
       emptyText: "No allowed websites yet",
       errorText: "Enter a valid domain. Example: domain.com",
-      websites: () => stopper.allowedHosts,
-      add: (text: string) => stopper.addAllowedHostsText(text),
-      remove: (website: string) => stopper.removeAllowedHost(website),
-      setEnabled: (website: string, enabled: boolean) => stopper.setAllowedHostEnabled(website, enabled),
+      websites: () => doomscrolling.allowedHosts,
+      add: (text: string) => doomscrolling.addAllowedHostsText(text),
+      remove: (website: string) => doomscrolling.removeAllowedHost(website),
+      setEnabled: (website: string, enabled: boolean) => doomscrolling.setAllowedHostEnabled(website, enabled),
     },
   } satisfies Record<WebsiteListKind, WebsiteListSection>;
   const blacklistWebsiteSections: readonly WebsiteListSection[] = [
@@ -127,7 +127,7 @@
     exception: "",
     allowed: "",
   });
-  let extensionStatus = $state<ProcrastinationStopperExtensionStatus | null>(null);
+  let extensionStatus = $state<DoomscrollingExtensionStatus | null>(null);
   let extensionStatusLoading = $state(true);
   let extensionStatusError = $state<string | null>(null);
   let pendingWebsiteAction = $state<PendingWebsiteAction | null>(null);
@@ -212,7 +212,7 @@
   async function refreshExtensionStatus(): Promise<void> {
     if (!extensionStatus) extensionStatusLoading = true;
     try {
-      extensionStatus = await getProcrastinationStopperExtensionStatus(appSessionStartedAt);
+      extensionStatus = await getDoomscrollingExtensionStatus(appSessionStartedAt);
       extensionStatusError = null;
     } catch (err) {
       console.warn("Failed to read browser extension connection status:", err);
@@ -367,30 +367,30 @@
       <ToggleSetting
         label="Enable during focus"
         description="Apply website rules while a focus session is running"
-        checked={stopper.enabled}
-        onChange={(checked) => stopper.setEnabled(checked)}
+        checked={doomscrolling.enabled}
+        onChange={(checked) => doomscrolling.setEnabled(checked)}
       />
 
       <fieldset
-        disabled={!stopper.enabled}
-        aria-disabled={!stopper.enabled}
+        disabled={!doomscrolling.enabled}
+        aria-disabled={!doomscrolling.enabled}
         class={cn(
           "m-0 flex min-w-0 flex-col gap-4 border-0 p-0 transition-opacity",
-          !stopper.enabled && "opacity-50",
+          !doomscrolling.enabled && "opacity-50",
         )}
       >
         <div class="flex flex-col gap-3" aria-label="Blocking schedule">
           <ToggleSetting
             label="Block during short breaks"
             description="Apply website rules during short breaks"
-            checked={stopper.blockDuringShortBreaks}
-            onChange={(checked) => stopper.setBlockDuringShortBreaks(checked)}
+            checked={doomscrolling.blockDuringShortBreaks}
+            onChange={(checked) => doomscrolling.setBlockDuringShortBreaks(checked)}
           />
           <ToggleSetting
             label="Block during long breaks"
             description="Apply website rules during long breaks"
-            checked={stopper.blockDuringLongBreaks}
-            onChange={(checked) => stopper.setBlockDuringLongBreaks(checked)}
+            checked={doomscrolling.blockDuringLongBreaks}
+            onChange={(checked) => doomscrolling.setBlockDuringLongBreaks(checked)}
           />
         </div>
 
@@ -404,10 +404,10 @@
           <div class="grid grid-cols-2 items-start gap-2 max-[560px]:grid-cols-1">
             {#each modeOptions as option}
               {@const Icon = option.icon}
-              {@const active = stopper.mode === option.mode}
+              {@const active = doomscrolling.mode === option.mode}
               <button
                 type="button"
-                onclick={() => stopper.setMode(option.mode)}
+                onclick={() => doomscrolling.setMode(option.mode)}
                 class={cn(
                   "flex min-h-0 w-full items-start gap-2.5 rounded-md border px-3 py-2 text-left leading-normal transition-colors disabled:cursor-not-allowed max-[360px]:gap-2 max-[360px]:px-2.5",
                   active
@@ -430,16 +430,16 @@
   </section>
 
   <fieldset
-    disabled={!stopper.enabled}
-    aria-disabled={!stopper.enabled}
+    disabled={!doomscrolling.enabled}
+    aria-disabled={!doomscrolling.enabled}
     class={cn(
       "m-0 flex min-w-0 flex-col gap-6 border-0 p-0 transition-opacity",
-      !stopper.enabled && "opacity-50",
+      !doomscrolling.enabled && "opacity-50",
     )}
   >
     <div class="h-px bg-border/70" aria-hidden="true"></div>
 
-    {#if stopper.mode === "blacklist"}
+    {#if doomscrolling.mode === "blacklist"}
       {@render modeWebsiteSection("Blacklist mode", blacklistWebsiteSections)}
     {:else}
       {@render modeWebsiteSection("Whitelist mode", whitelistWebsiteSections)}

@@ -4,10 +4,10 @@ use serde_json::Value;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-const HOST_NAME: &str = "org.opengrimoire.ganbaruai.stopper";
-const STATE_FILE: &str = "procrastination-stopper-state.json";
-const EXTENSION_CONNECTION_FILE: &str = "procrastination-stopper-extension-status.json";
-const EVENTS_FILE: &str = "procrastination-stopper-events.jsonl";
+const HOST_NAME: &str = "org.opengrimoire.ganbaruai.doomscrolling";
+const STATE_FILE: &str = "doomscrolling-state.json";
+const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
+const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
 const STALE_STATE_SECONDS: i64 = 180;
 
@@ -49,14 +49,14 @@ struct RuntimeState {
 }
 
 #[derive(Debug, Clone)]
-enum StopperMode {
+enum DoomscrollingMode {
     Blacklist,
     Whitelist,
 }
 
 #[derive(Debug, Clone)]
-struct StopperConfig {
-    mode: StopperMode,
+struct DoomscrollingConfig {
+    mode: DoomscrollingMode,
     enabled: bool,
     block_during_short_breaks: bool,
     block_during_long_breaks: bool,
@@ -68,7 +68,7 @@ struct StopperConfig {
 #[derive(Debug)]
 struct StateSnapshot {
     config_dir: Option<PathBuf>,
-    config: StopperConfig,
+    config: DoomscrollingConfig,
     runtime: Option<RuntimeState>,
 }
 
@@ -261,33 +261,35 @@ fn read_runtime_state(path: &std::path::Path) -> Option<RuntimeState> {
     serde_json::from_str(&contents).ok()
 }
 
-fn read_config(path: &std::path::Path) -> Option<StopperConfig> {
+fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
     let contents = std::fs::read_to_string(path).ok()?;
     let value: Value = serde_json::from_str(&contents).ok()?;
-    let stopper = value.get("procrastinationStopper")?;
-    let (mode, has_mode) = read_mode(stopper);
-    let has_exception_hosts = matches!(stopper.get("exceptionHosts"), Some(Value::Array(_)));
-    let legacy_allowed_hosts = read_host_array(stopper.get("allowedHosts"));
-    let legacy_block_during_breaks = stopper.get("blockDuringBreaks").and_then(Value::as_bool);
-    Some(StopperConfig {
+    let doomscrolling = value.get("doomscrolling")?;
+    let (mode, has_mode) = read_mode(doomscrolling);
+    let has_exception_hosts = matches!(doomscrolling.get("exceptionHosts"), Some(Value::Array(_)));
+    let legacy_allowed_hosts = read_host_array(doomscrolling.get("allowedHosts"));
+    let legacy_block_during_breaks = doomscrolling
+        .get("blockDuringBreaks")
+        .and_then(Value::as_bool);
+    Some(DoomscrollingConfig {
         mode,
-        enabled: stopper
+        enabled: doomscrolling
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        block_during_short_breaks: stopper
+        block_during_short_breaks: doomscrolling
             .get("blockDuringShortBreaks")
             .and_then(Value::as_bool)
             .or(legacy_block_during_breaks)
             .unwrap_or(true),
-        block_during_long_breaks: stopper
+        block_during_long_breaks: doomscrolling
             .get("blockDuringLongBreaks")
             .and_then(Value::as_bool)
             .or(legacy_block_during_breaks)
             .unwrap_or(true),
-        blocked_hosts: read_host_array(stopper.get("blockedHosts")),
+        blocked_hosts: read_host_array(doomscrolling.get("blockedHosts")),
         exception_hosts: if has_exception_hosts {
-            read_host_array(stopper.get("exceptionHosts"))
+            read_host_array(doomscrolling.get("exceptionHosts"))
         } else if has_mode {
             Vec::new()
         } else {
@@ -301,11 +303,11 @@ fn read_config(path: &std::path::Path) -> Option<StopperConfig> {
     })
 }
 
-fn read_mode(stopper: &Value) -> (StopperMode, bool) {
-    match stopper.get("mode").and_then(Value::as_str) {
-        Some("whitelist") => (StopperMode::Whitelist, true),
-        Some("blacklist") => (StopperMode::Blacklist, true),
-        _ => (StopperMode::Blacklist, false),
+fn read_mode(doomscrolling: &Value) -> (DoomscrollingMode, bool) {
+    match doomscrolling.get("mode").and_then(Value::as_str) {
+        Some("whitelist") => (DoomscrollingMode::Whitelist, true),
+        Some("blacklist") => (DoomscrollingMode::Blacklist, true),
+        _ => (DoomscrollingMode::Blacklist, false),
     }
 }
 
@@ -341,9 +343,9 @@ fn read_host_rule(item: &Value) -> Option<String> {
     }
 }
 
-fn default_config() -> StopperConfig {
-    StopperConfig {
-        mode: StopperMode::Blacklist,
+fn default_config() -> DoomscrollingConfig {
+    DoomscrollingConfig {
+        mode: DoomscrollingMode::Blacklist,
         enabled: true,
         block_during_short_breaks: true,
         block_during_long_breaks: true,
@@ -438,7 +440,7 @@ struct HostDecision {
     matched_rule_name: Option<String>,
 }
 
-fn decide_host(host: &str, config: &StopperConfig) -> HostDecision {
+fn decide_host(host: &str, config: &DoomscrollingConfig) -> HostDecision {
     if is_safety_allowed_host(host) {
         return HostDecision {
             blocked: false,
@@ -447,7 +449,7 @@ fn decide_host(host: &str, config: &StopperConfig) -> HostDecision {
     }
 
     match config.mode {
-        StopperMode::Whitelist => {
+        DoomscrollingMode::Whitelist => {
             for allowed_host in &config.allowed_hosts {
                 if host_matches_rule(host, allowed_host) {
                     return HostDecision {
@@ -461,7 +463,7 @@ fn decide_host(host: &str, config: &StopperConfig) -> HostDecision {
                 matched_rule_name: Some("not in whitelist".to_string()),
             }
         }
-        StopperMode::Blacklist => {
+        DoomscrollingMode::Blacklist => {
             for exception_host in &config.exception_hosts {
                 if host_matches_rule(host, exception_host) {
                     return HostDecision {
@@ -486,11 +488,11 @@ fn decide_host(host: &str, config: &StopperConfig) -> HostDecision {
     }
 }
 
-impl StopperMode {
+impl DoomscrollingMode {
     fn as_str(&self) -> &'static str {
         match self {
-            StopperMode::Blacklist => "blacklist",
-            StopperMode::Whitelist => "whitelist",
+            DoomscrollingMode::Blacklist => "blacklist",
+            DoomscrollingMode::Whitelist => "whitelist",
         }
     }
 }
@@ -515,7 +517,7 @@ fn feed_fingerprint_hosts(hash: &mut u64, label: &str, hosts: &[String]) {
     }
 }
 
-fn rules_fingerprint(config: &StopperConfig) -> String {
+fn rules_fingerprint(config: &DoomscrollingConfig) -> String {
     let mut hash = 14_695_981_039_346_656_037_u64;
     feed_fingerprint(&mut hash, config.mode.as_str());
     feed_fingerprint_bool(&mut hash, config.enabled);
@@ -595,13 +597,13 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
 #[cfg(test)]
 mod tests {
     use super::{
-        decide_host, host_from_url, host_matches_rule, should_enforce, NativeResponse,
-        StateSnapshot, StopperConfig, StopperMode,
+        decide_host, host_from_url, host_matches_rule, should_enforce, DoomscrollingConfig,
+        DoomscrollingMode, NativeResponse, StateSnapshot,
     };
 
-    fn config() -> StopperConfig {
-        StopperConfig {
-            mode: StopperMode::Blacklist,
+    fn config() -> DoomscrollingConfig {
+        DoomscrollingConfig {
+            mode: DoomscrollingMode::Blacklist,
             enabled: true,
             block_during_short_breaks: true,
             block_during_long_breaks: true,
@@ -696,7 +698,7 @@ mod tests {
     #[test]
     fn blocks_hosts_outside_whitelist_mode() {
         let mut config = config();
-        config.mode = StopperMode::Whitelist;
+        config.mode = DoomscrollingMode::Whitelist;
         let decision = decide_host("reddit.com", &config);
         assert!(decision.blocked);
         assert_eq!(
@@ -708,7 +710,7 @@ mod tests {
     #[test]
     fn allows_hosts_inside_whitelist_mode() {
         let mut config = config();
-        config.mode = StopperMode::Whitelist;
+        config.mode = DoomscrollingMode::Whitelist;
         let decision = decide_host("docs.github.com", &config);
         assert!(!decision.blocked);
         assert_eq!(
@@ -722,10 +724,10 @@ mod tests {
         let mut config = config();
         let base = super::rules_fingerprint(&config);
 
-        config.mode = StopperMode::Whitelist;
+        config.mode = DoomscrollingMode::Whitelist;
         assert_ne!(super::rules_fingerprint(&config), base);
 
-        config.mode = StopperMode::Blacklist;
+        config.mode = DoomscrollingMode::Blacklist;
         config
             .blocked_hosts
             .push("news.ycombinator.com".to_string());

@@ -1,49 +1,49 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_PROCRASTINATION_STOPPER_CONFIG,
-  evaluateStopperUrl,
-  normalizeProcrastinationStopperConfig,
-  normalizeStopperHost,
-  parseStopperHosts,
-  type ProcrastinationStopperHostRule,
-} from "./procrastination-stopper";
+  DEFAULT_DOOMSCROLLING_CONFIG,
+  evaluateDoomscrollingUrl,
+  normalizeDoomscrollingConfig,
+  normalizeDoomscrollingHost,
+  parseDoomscrollingHosts,
+  type DoomscrollingHostRule,
+} from "./doomscrolling";
 
-function hostRule(host: string, enabled = true): ProcrastinationStopperHostRule {
+function hostRule(host: string, enabled = true): DoomscrollingHostRule {
   return { host, enabled };
 }
 
-describe("normalizeStopperHost", () => {
+describe("normalizeDoomscrollingHost", () => {
   it("accepts copied URLs and lowercases hosts", () => {
-    expect(normalizeStopperHost("https://WWW.Reddit.com/r/all?x=1")).toBe("www.reddit.com");
+    expect(normalizeDoomscrollingHost("https://WWW.Reddit.com/r/all?x=1")).toBe("www.reddit.com");
   });
 
   it("accepts wildcard-style host input by storing the base host", () => {
-    expect(normalizeStopperHost("*.youtube.com")).toBe("youtube.com");
+    expect(normalizeDoomscrollingHost("*.youtube.com")).toBe("youtube.com");
   });
 
   it("rejects unsafe or unsupported host rules", () => {
-    expect(normalizeStopperHost("")).toBeNull();
-    expect(normalizeStopperHost("*")).toBeNull();
-    expect(normalizeStopperHost("https://user@example.com")).toBeNull();
+    expect(normalizeDoomscrollingHost("")).toBeNull();
+    expect(normalizeDoomscrollingHost("*")).toBeNull();
+    expect(normalizeDoomscrollingHost("https://user@example.com")).toBeNull();
   });
 });
 
-describe("parseStopperHosts", () => {
+describe("parseDoomscrollingHosts", () => {
   it("deduplicates normalized hosts while keeping first-seen order", () => {
-    expect(parseStopperHosts("reddit.com, https://reddit.com/r/all\nnews.ycombinator.com")).toEqual([
+    expect(parseDoomscrollingHosts("reddit.com, https://reddit.com/r/all\nnews.ycombinator.com")).toEqual([
       "reddit.com",
       "news.ycombinator.com",
     ]);
   });
 });
 
-describe("normalizeProcrastinationStopperConfig", () => {
+describe("normalizeDoomscrollingConfig", () => {
   it("defaults all blocking toggles to enabled", () => {
-    expect(normalizeProcrastinationStopperConfig(null)).toEqual(DEFAULT_PROCRASTINATION_STOPPER_CONFIG);
+    expect(normalizeDoomscrollingConfig(null)).toEqual(DEFAULT_DOOMSCROLLING_CONFIG);
   });
 
   it("normalizes malformed config without throwing", () => {
-    expect(normalizeProcrastinationStopperConfig({
+    expect(normalizeDoomscrollingConfig({
       enabled: true,
       blockDuringBreaks: "yes",
       blockedHosts: ["Reddit.com", "*", "youtube.com"],
@@ -60,7 +60,7 @@ describe("normalizeProcrastinationStopperConfig", () => {
   });
 
   it("normalizes disabled host rules without dropping them", () => {
-    expect(normalizeProcrastinationStopperConfig({
+    expect(normalizeDoomscrollingConfig({
       blockedHosts: [
         { host: "Reddit.com", enabled: false },
         { host: "https://youtube.com/watch?v=1" },
@@ -71,7 +71,7 @@ describe("normalizeProcrastinationStopperConfig", () => {
   });
 
   it("migrates legacy allowed hosts into blacklist exceptions", () => {
-    expect(normalizeProcrastinationStopperConfig({
+    expect(normalizeDoomscrollingConfig({
       allowedHosts: ["music.youtube.com"],
     })).toMatchObject({
       mode: "blacklist",
@@ -81,7 +81,7 @@ describe("normalizeProcrastinationStopperConfig", () => {
   });
 
   it("keeps whitelist allowed hosts separate from blacklist exceptions", () => {
-    expect(normalizeProcrastinationStopperConfig({
+    expect(normalizeDoomscrollingConfig({
       mode: "whitelist",
       exceptionHosts: ["music.youtube.com"],
       allowedHosts: ["github.com"],
@@ -93,7 +93,7 @@ describe("normalizeProcrastinationStopperConfig", () => {
   });
 
   it("uses the legacy break toggle for both break types", () => {
-    expect(normalizeProcrastinationStopperConfig({
+    expect(normalizeDoomscrollingConfig({
       blockDuringBreaks: false,
     })).toMatchObject({
       blockDuringShortBreaks: false,
@@ -102,9 +102,9 @@ describe("normalizeProcrastinationStopperConfig", () => {
   });
 });
 
-describe("evaluateStopperUrl", () => {
+describe("evaluateDoomscrollingUrl", () => {
   it("blocks subdomains of blocked hosts", () => {
-    const decision = evaluateStopperUrl("https://old.reddit.com/r/all", {
+    const decision = evaluateDoomscrollingUrl("https://old.reddit.com/r/all", {
       mode: "blacklist",
       enabled: true,
       blockDuringShortBreaks: true,
@@ -121,7 +121,7 @@ describe("evaluateStopperUrl", () => {
   });
 
   it("lets exceptions override blocked parent domains", () => {
-    const decision = evaluateStopperUrl("https://music.youtube.com/playlist?list=1", {
+    const decision = evaluateDoomscrollingUrl("https://music.youtube.com/playlist?list=1", {
       mode: "blacklist",
       enabled: true,
       blockDuringShortBreaks: true,
@@ -135,7 +135,7 @@ describe("evaluateStopperUrl", () => {
   });
 
   it("blocks domains outside whitelist mode", () => {
-    const decision = evaluateStopperUrl("https://reddit.com/r/all", {
+    const decision = evaluateDoomscrollingUrl("https://reddit.com/r/all", {
       mode: "whitelist",
       enabled: true,
       blockDuringShortBreaks: true,
@@ -149,7 +149,7 @@ describe("evaluateStopperUrl", () => {
   });
 
   it("allows domains inside whitelist mode", () => {
-    const decision = evaluateStopperUrl("https://docs.github.com/en", {
+    const decision = evaluateDoomscrollingUrl("https://docs.github.com/en", {
       mode: "whitelist",
       enabled: true,
       blockDuringShortBreaks: true,
@@ -163,7 +163,7 @@ describe("evaluateStopperUrl", () => {
   });
 
   it("ignores disabled blacklist rules", () => {
-    const decision = evaluateStopperUrl("https://reddit.com/r/all", {
+    const decision = evaluateDoomscrollingUrl("https://reddit.com/r/all", {
       mode: "blacklist",
       enabled: true,
       blockDuringShortBreaks: true,
@@ -177,7 +177,7 @@ describe("evaluateStopperUrl", () => {
   });
 
   it("ignores disabled whitelist rules", () => {
-    const decision = evaluateStopperUrl("https://docs.github.com/en", {
+    const decision = evaluateDoomscrollingUrl("https://docs.github.com/en", {
       mode: "whitelist",
       enabled: true,
       blockDuringShortBreaks: true,

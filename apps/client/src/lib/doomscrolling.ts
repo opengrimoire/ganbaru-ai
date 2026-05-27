@@ -1,27 +1,27 @@
-export type ProcrastinationStopperMode = "blacklist" | "whitelist";
+export type DoomscrollingMode = "blacklist" | "whitelist";
 
-export interface ProcrastinationStopperHostRule {
+export interface DoomscrollingHostRule {
   host: string;
   enabled: boolean;
 }
 
-export interface ProcrastinationStopperConfig {
-  mode: ProcrastinationStopperMode;
+export interface DoomscrollingConfig {
+  mode: DoomscrollingMode;
   enabled: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
-  blockedHosts: ProcrastinationStopperHostRule[];
-  exceptionHosts: ProcrastinationStopperHostRule[];
-  allowedHosts: ProcrastinationStopperHostRule[];
+  blockedHosts: DoomscrollingHostRule[];
+  exceptionHosts: DoomscrollingHostRule[];
+  allowedHosts: DoomscrollingHostRule[];
 }
 
-export interface ProcrastinationStopperDecision {
+export interface DoomscrollingDecision {
   blocked: boolean;
   host: string | null;
   matchedRule: string | null;
 }
 
-export const DEFAULT_PROCRASTINATION_STOPPER_CONFIG: ProcrastinationStopperConfig = Object.freeze({
+export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
   mode: "blacklist",
   enabled: true,
   blockDuringShortBreaks: true,
@@ -50,7 +50,7 @@ function stripUrlParts(input: string): string {
  * @param input - A domain, host, or URL copied from the browser.
  * @returns The normalized host, or null when the input is not a valid host rule.
  */
-export function normalizeStopperHost(input: string): string | null {
+export function normalizeDoomscrollingHost(input: string): string | null {
   if (input.includes("@")) return null;
   const withoutProtocol = stripUrlParts(input).toLowerCase();
   const withoutWildcard = withoutProtocol.startsWith("*.") ? withoutProtocol.slice(2) : withoutProtocol;
@@ -72,11 +72,11 @@ export function normalizeStopperHost(input: string): string | null {
  * @param input - Hosts separated by newlines, commas, semicolons, or spaces.
  * @returns Deduplicated normalized hosts in first-seen order.
  */
-export function parseStopperHosts(input: string): string[] {
+export function parseDoomscrollingHosts(input: string): string[] {
   const seen = new Set<string>();
   const hosts: string[] = [];
   for (const part of input.split(/[\s,;]+/)) {
-    const host = normalizeStopperHost(part);
+    const host = normalizeDoomscrollingHost(part);
     if (!host || seen.has(host)) continue;
     seen.add(host);
     hosts.push(host);
@@ -84,15 +84,15 @@ export function parseStopperHosts(input: string): string[] {
   return hosts;
 }
 
-function normalizeHostRuleValue(value: unknown): ProcrastinationStopperHostRule | null {
+function normalizeHostRuleValue(value: unknown): DoomscrollingHostRule | null {
   if (typeof value === "string") {
-    const host = normalizeStopperHost(value);
+    const host = normalizeDoomscrollingHost(value);
     return host ? { host, enabled: true } : null;
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   if (typeof record.host !== "string") return null;
-  const host = normalizeStopperHost(record.host);
+  const host = normalizeDoomscrollingHost(record.host);
   if (!host) return null;
   return {
     host,
@@ -100,10 +100,10 @@ function normalizeHostRuleValue(value: unknown): ProcrastinationStopperHostRule 
   };
 }
 
-function normalizeHostRules(value: unknown): ProcrastinationStopperHostRule[] {
+function normalizeHostRules(value: unknown): DoomscrollingHostRule[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
-  const rules: ProcrastinationStopperHostRule[] = [];
+  const rules: DoomscrollingHostRule[] = [];
   for (const item of value) {
     const rule = normalizeHostRuleValue(item);
     if (!rule || seen.has(rule.host)) continue;
@@ -113,15 +113,15 @@ function normalizeHostRules(value: unknown): ProcrastinationStopperHostRule[] {
   return rules;
 }
 
-function normalizeMode(value: unknown): ProcrastinationStopperMode {
+function normalizeMode(value: unknown): DoomscrollingMode {
   return value === "whitelist" || value === "blacklist"
     ? value
-    : DEFAULT_PROCRASTINATION_STOPPER_CONFIG.mode;
+    : DEFAULT_DOOMSCROLLING_CONFIG.mode;
 }
 
-export function normalizeProcrastinationStopperConfig(value: unknown): ProcrastinationStopperConfig {
+export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfig {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { ...DEFAULT_PROCRASTINATION_STOPPER_CONFIG };
+    return { ...DEFAULT_DOOMSCROLLING_CONFIG };
   }
   const record = value as Record<string, unknown>;
   const hasMode = record.mode === "blacklist" || record.mode === "whitelist";
@@ -134,13 +134,13 @@ export function normalizeProcrastinationStopperConfig(value: unknown): Procrasti
     mode: normalizeMode(record.mode),
     enabled: typeof record.enabled === "boolean"
       ? record.enabled
-      : DEFAULT_PROCRASTINATION_STOPPER_CONFIG.enabled,
+      : DEFAULT_DOOMSCROLLING_CONFIG.enabled,
     blockDuringShortBreaks: typeof record.blockDuringShortBreaks === "boolean"
       ? record.blockDuringShortBreaks
-      : legacyBlockDuringBreaks ?? DEFAULT_PROCRASTINATION_STOPPER_CONFIG.blockDuringShortBreaks,
+      : legacyBlockDuringBreaks ?? DEFAULT_DOOMSCROLLING_CONFIG.blockDuringShortBreaks,
     blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
       ? record.blockDuringLongBreaks
-      : legacyBlockDuringBreaks ?? DEFAULT_PROCRASTINATION_STOPPER_CONFIG.blockDuringLongBreaks,
+      : legacyBlockDuringBreaks ?? DEFAULT_DOOMSCROLLING_CONFIG.blockDuringLongBreaks,
     blockedHosts: normalizeHostRules(record.blockedHosts),
     exceptionHosts: hasExceptionHosts
       ? normalizeHostRules(record.exceptionHosts)
@@ -151,21 +151,21 @@ export function normalizeProcrastinationStopperConfig(value: unknown): Procrasti
   };
 }
 
-export function stopperHostMatchesRule(host: string, ruleHost: string): boolean {
+export function doomscrollingHostMatchesRule(host: string, ruleHost: string): boolean {
   return host === ruleHost || host.endsWith(`.${ruleHost}`);
 }
 
 /**
- * Evaluate a URL against the current host-only stopper rules.
+ * Evaluate a URL against the current host-only doomscrolling rules.
  *
  * @param url - Browser URL to evaluate.
- * @param config - Stopper configuration.
+ * @param config - Doomscrolling configuration.
  * @returns A decision that explains the matching host rule.
  */
-export function evaluateStopperUrl(
+export function evaluateDoomscrollingUrl(
   url: string,
-  config: ProcrastinationStopperConfig,
-): ProcrastinationStopperDecision {
+  config: DoomscrollingConfig,
+): DoomscrollingDecision {
   let host: string;
   try {
     const parsed = new URL(url);
@@ -185,7 +185,7 @@ export function evaluateStopperUrl(
     for (const allowedRule of config.allowedHosts) {
       if (!allowedRule.enabled) continue;
       const allowedHost = allowedRule.host;
-      if (stopperHostMatchesRule(host, allowedHost)) {
+      if (doomscrollingHostMatchesRule(host, allowedHost)) {
         return { blocked: false, host, matchedRule: `whitelist: ${allowedHost}` };
       }
     }
@@ -195,14 +195,14 @@ export function evaluateStopperUrl(
   for (const exceptionRule of config.exceptionHosts) {
     if (!exceptionRule.enabled) continue;
     const exceptionHost = exceptionRule.host;
-    if (stopperHostMatchesRule(host, exceptionHost)) {
+    if (doomscrollingHostMatchesRule(host, exceptionHost)) {
       return { blocked: false, host, matchedRule: `exception: ${exceptionHost}` };
     }
   }
   for (const blockedRule of config.blockedHosts) {
     if (!blockedRule.enabled) continue;
     const blockedHost = blockedRule.host;
-    if (stopperHostMatchesRule(host, blockedHost)) {
+    if (doomscrollingHostMatchesRule(host, blockedHost)) {
       return { blocked: true, host, matchedRule: `blocked host: ${blockedHost}` };
     }
   }

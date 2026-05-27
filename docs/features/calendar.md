@@ -1,6 +1,6 @@
 # Calendar
 
-The calendar is the anchor of the app. Every other feature ties back to a time block: pomodoro sessions auto-start when their event begins, work environments activate, music playlists roll, the procrastination stopper enforces its rules. If the calendar is wrong, everything downstream is wrong. The calendar therefore prioritizes correctness over breadth: a small number of thoroughly-handled mechanics rather than every property a heavy calendar app exposes.
+The calendar is the anchor of the app. Every other feature ties back to a time block: pomodoro sessions auto-start when their event begins, work environments activate, music playlists roll, Doomscrolling enforces its rules. If the calendar is wrong, everything downstream is wrong. The calendar therefore prioritizes correctness over breadth: a small number of thoroughly-handled mechanics rather than every property a heavy calendar app exposes.
 
 Recurrence math, structural operations on recurring series, and conflict resolution between overlapping blocks each have their own documents:
 

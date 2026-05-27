@@ -6,7 +6,7 @@ This document describes every system in GanbaruAI, how each system works interna
 
 ## App identity
 
-GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first productivity app for desktop and mobile. It unifies a calendar, Kanban board, Pomodoro system, note-taking, sleep alarm, daily diary, procrastination stopper, music player, work environment management, and project management into one interconnected experience.
+GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first productivity app for desktop and mobile. It unifies a calendar, Kanban board, Pomodoro system, note-taking, sleep alarm, daily diary, Doomscrolling, music player, work environment management, and project management into one interconnected experience.
 
 Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v2) is a first-class secondary target that shares the same codebase but offers a focused subset of features.
 
@@ -48,7 +48,7 @@ The Pomodoro timer is the heartbeat of the app. Every productivity signal flows 
 
 **Session structure:** a standard Pomodoro cycle is 25 minutes of focus followed by a 5-minute break. Every 4 cycles, a longer break (15-30 minutes) occurs. These defaults are configurable. Sessions are grouped into session blocks defined in the calendar.
 
-**During a focus period:** the procrastination stopper is active, the work environment is enforced, screen activity is monitored for productivity analytics (app switches, active tool use, idle time), and the music player continues the focus playlist.
+**During a focus period:** Doomscrolling is active, the work environment is enforced, screen activity is monitored for productivity analytics (app switches, active tool use, idle time), and the music player continues the focus playlist.
 
 **During a break:** the break screen appears fullscreen (desktop only, covering the taskbar and acting as a custom screen saver). The break screen shows: a countdown timer, session completion stats, an option to extend the break, and the break playlist. On mobile, the break is a notification-based timer without the fullscreen overlay.
 
@@ -80,7 +80,7 @@ Diary entries are stored as dated markdown files in the vault and indexed in SQL
 
 An intelligent alarm system specific to the mobile app. It serves three purposes: waking the user, triggering the morning diary, and triggering the evening diary.
 
-**Morning:** the alarm rings, the user dismisses it, and the morning diary screen appears immediately. The morning media player playlist starts (configurable: calm music, a podcast, white noise, etc.). The procrastination stopper activates according to the user's configured morning rules (e.g., social media blocked until the first session block starts).
+**Morning:** the alarm rings, the user dismisses it, and the morning diary screen appears immediately. The morning media player playlist starts (configurable: calm music, a podcast, white noise, etc.). Doomscrolling activates according to the user's configured morning rules (e.g., social media blocked until the first session block starts).
 
 **Evening:** when the user sets tomorrow's alarm, the evening diary screen appears. After completing it, the app can optionally show a summary of the day's productivity as a wind-down review.
 
@@ -100,7 +100,7 @@ A local-first media player (Rodio and Symphonia for Rust-backed local audio, pla
 
 The music player is accessible from the edge panel for quick controls (play/pause, skip, volume) without leaving the current context.
 
-### Procrastination stopper
+### Doomscrolling
 
 Two implementations depending on platform:
 
@@ -285,9 +285,9 @@ Session blocks reference Kanban tasks. The edge panel updates to show the releva
 
 Session blocks reference playlists. When the block activates, the assigned playlist starts. Break playlists start when the Pomodoro timer enters break phase.
 
-### Pomodoro → Procrastination stopper
+### Pomodoro → Doomscrolling
 
-During focus periods, the stopper is active with the current session block's blocker rules. During breaks, the stopper may relax rules (configurable per environment). Blocker trigger events during focus periods are logged for productivity analytics.
+During focus periods, Doomscrolling is active with the current session block's blocker rules. During breaks, Doomscrolling may relax rules (configurable per environment). Blocker trigger events during focus periods are logged for productivity analytics.
 
 ### Pomodoro → Music
 
@@ -317,11 +317,11 @@ Morning alarm dismissal triggers the morning diary. Setting the evening alarm tr
 
 The morning alarm dismissal starts the morning playlist. This can be a gentle wake-up playlist, a podcast, or any configured audio.
 
-### Sleep alarm → Procrastination stopper
+### Sleep alarm → Doomscrolling
 
-Morning blocker rules activate immediately upon alarm dismissal. If the user configured "no social media until first session block," the stopper enforces it from the moment they wake up.
+Morning blocker rules activate immediately upon alarm dismissal. If the user configured "no social media until first session block," Doomscrolling enforces it from the moment they wake up.
 
-### Work environment → Procrastination stopper
+### Work environment → Doomscrolling
 
 Each work environment template includes its own blocker ruleset. Switching environments (manually or via calendar) updates the active blocker rules.
 
@@ -380,7 +380,7 @@ The data split: documents (notes, diary, project docs) are markdown files on dis
 
 ## Mobile experience
 
-Mobile is a focused subset: note editor, calendar view and editing, Pomodoro timer, daily diary, sleep alarm, procrastination stopper (app-level blocking), BYOK AI chat, sync.
+Mobile is a focused subset: note editor, calendar view and editing, Pomodoro timer, daily diary, sleep alarm, Doomscrolling (app-level blocking), BYOK AI chat, sync.
 
 Mobile does not include: work environment management, edge panel, fullscreen break overlay, browser extension, always-on-top windows. These features require desktop OS-level access that mobile sandboxing prohibits.
 
@@ -396,7 +396,7 @@ The integrated AI panel (terminal and BYOK chat) provides the foundation. These 
 
 **Mood-aware motivation:** using diary mood/energy baselines, the AI adapts its communication style and suggests schedule adjustments on low-energy days.
 
-**Content-specific procrastination detection:** the LLM analyzes page content (not just URLs) to determine if browsing is task-relevant, enabling smarter blocking on platforms like YouTube.
+**Content-specific browsing relevance detection:** the LLM analyzes page content (not just URLs) to determine if browsing is task-relevant, enabling smarter blocking on platforms like YouTube.
 
 **Local LLM diary analysis:** small local models (via Ollama) analyze diary language for goal-setting patterns, reflection quality, and mood trends without any API calls or data leaving the device.
 

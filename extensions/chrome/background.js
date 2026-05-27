@@ -1,4 +1,4 @@
-const HOST_NAME = "org.opengrimoire.ganbaruai.stopper";
+const HOST_NAME = "org.opengrimoire.ganbaruai.doomscrolling";
 const STATUS_STORAGE_KEY = "status";
 const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
 const recentRedirects = new Map();

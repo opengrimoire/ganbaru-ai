@@ -1,8 +1,8 @@
-# Procrastination stopper
+# Doomscrolling
 
-The procrastination stopper enforces the browsing and app rules that belong to the user's current work context. On desktop, the first implementation is a Chrome extension for Chromium-based browsers. Firefox follows later with the same product behavior where the browser APIs allow it. On mobile, the same feature becomes app-level blocking through platform-specific screen time APIs.
+Doomscrolling enforces the browsing and app rules that belong to the user's current work context. On desktop, the first implementation is a Chrome extension for Chromium-based browsers. Firefox follows later with the same product behavior where the browser APIs allow it. On mobile, the same feature becomes app-level blocking through platform-specific screen time APIs.
 
-The stopper is not a separate productivity tool. It is a guardrail attached to the calendar, Pomodoro, and work environment systems. The user plans the work context once, then GanbaruAI applies the matching rules while the session is active.
+Doomscrolling is not a separate productivity tool. It is a guardrail attached to the calendar, Pomodoro, and work environment systems. The user plans the work context once, then GanbaruAI applies the matching rules while the session is active.
 
 ## Current implementation status
 
@@ -14,7 +14,7 @@ The current desktop implementation is an early Chrome and Brave development slic
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
 - The native host writes a small local connection status file each time the extension contacts it. The app uses this to show whether a browser extension has connected recently.
 - Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, exceptions, and allowed websites.
-- The current `procrastinationStopper` config uses `mode`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Legacy string entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
+- The current `doomscrolling` config uses `mode`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Legacy string entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
 - The native host includes a rules fingerprint in state responses so the extension rechecks already open tabs when website rules change during an active focus or break phase.
 - Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
 
@@ -22,7 +22,7 @@ This is intentionally smaller than the full spec below. It supports domain-level
 
 ## Purpose
 
-The stopper exists to reduce the cost of staying on task during vulnerable moments:
+Doomscrolling exists to reduce the cost of staying on task during vulnerable moments:
 
 - The first minutes of a focus period, when the user has not yet warmed up.
 - Context switches, when the user opens a browser for a valid reason and drifts.
@@ -55,7 +55,7 @@ It should make the desired action easier than the distracted action. It should n
 
 ## Activation model
 
-The stopper has three activation sources:
+Doomscrolling has three activation sources:
 
 - **Pomodoro focus.** The normal desktop path. Rules are enforced during focus phases of an active session when the event has an assigned work environment with blocker rules.
 - **Work environment activation.** Manual environment activation can apply blocker rules even without a scheduled Pomodoro session. This supports ad-hoc work.

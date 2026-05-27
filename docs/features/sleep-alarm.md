@@ -1,6 +1,6 @@
 # Sleep alarm
 
-A mobile-only feature that wakes the user, triggers the morning diary entry, and triggers the evening diary entry when tomorrow's alarm is set. Integrates with the diary, music, and procrastination stopper.
+A mobile-only feature that wakes the user, triggers the morning diary entry, and triggers the evening diary entry when tomorrow's alarm is set. Integrates with the diary, music, and Doomscrolling.
 
 This doc is a placeholder. Deeper design comes in a later pass.
 
@@ -14,7 +14,7 @@ The alarm runs on the device that is by the user's bed. That is almost always th
 2. User dismisses the alarm.
 3. The morning diary screen appears immediately (see `features/diary.md`).
 4. The morning playlist starts (see `features/music.md`).
-5. The procrastination stopper activates with the user's morning rules (e.g., social media blocked until the first session block starts).
+5. Doomscrolling activates with the user's morning rules (e.g., social media blocked until the first session block starts).
 
 The flow is meant to be friction-free on the user side: dismiss the alarm, fill in five quick fields, and the day is set up.
 
@@ -35,5 +35,5 @@ The system records the time from when the alarm was set to when it was dismissed
 
 - **Diary:** triggers morning and evening entries.
 - **Music:** triggers morning playlist on alarm dismissal.
-- **Procrastination stopper:** activates morning rules immediately on dismissal.
+- **Doomscrolling:** activates morning rules immediately on dismissal.
 - **AI panel:** sleep duration informs personal energy baselines.

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PomodoroPhase } from "@ganbaruai/shared-types";
 
-export interface ProcrastinationStopperRuntimeState {
+export interface DoomscrollingRuntimeState {
   active: boolean;
   phase: PomodoroPhase | "inactive";
   activeRunId: string | null;
@@ -10,7 +10,7 @@ export interface ProcrastinationStopperRuntimeState {
   updatedAt: string;
 }
 
-export interface ProcrastinationStopperExtensionStatus {
+export interface DoomscrollingExtensionStatus {
   connected: boolean;
   lastSeenAt: string | null;
   lastMessageType: string | null;
@@ -19,17 +19,17 @@ export interface ProcrastinationStopperExtensionStatus {
   reason: string | null;
 }
 
-export async function writeProcrastinationStopperRuntimeState(
-  state: ProcrastinationStopperRuntimeState,
+export async function writeDoomscrollingRuntimeState(
+  state: DoomscrollingRuntimeState,
 ): Promise<void> {
-  await invoke("procrastination_stopper_write_state", { state });
+  await invoke("doomscrolling_write_state", { state });
 }
 
-export async function getProcrastinationStopperExtensionStatus(
+export async function getDoomscrollingExtensionStatus(
   freshAfter?: string,
-): Promise<ProcrastinationStopperExtensionStatus> {
-  return await invoke<ProcrastinationStopperExtensionStatus>(
-    "procrastination_stopper_get_extension_status",
+): Promise<DoomscrollingExtensionStatus> {
+  return await invoke<DoomscrollingExtensionStatus>(
+    "doomscrolling_get_extension_status",
     { freshAfter: freshAfter ?? null },
   );
 }

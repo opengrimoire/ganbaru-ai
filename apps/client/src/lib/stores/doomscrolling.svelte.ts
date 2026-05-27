@@ -1,36 +1,36 @@
 import {
-  DEFAULT_PROCRASTINATION_STOPPER_CONFIG,
-  normalizeProcrastinationStopperConfig,
-  parseStopperHosts,
-  type ProcrastinationStopperConfig,
-  type ProcrastinationStopperHostRule,
-  type ProcrastinationStopperMode,
-} from "$lib/procrastination-stopper";
+  DEFAULT_DOOMSCROLLING_CONFIG,
+  normalizeDoomscrollingConfig,
+  parseDoomscrollingHosts,
+  type DoomscrollingConfig,
+  type DoomscrollingHostRule,
+  type DoomscrollingMode,
+} from "$lib/doomscrolling";
 import { getConfigKey, setConfigKey } from "$lib/vault/config";
 
-const CONFIG_KEY = "procrastinationStopper";
+const CONFIG_KEY = "doomscrolling";
 
-function loadSavedConfig(): ProcrastinationStopperConfig {
+function loadSavedConfig(): DoomscrollingConfig {
   const saved = getConfigKey<unknown>(CONFIG_KEY, undefined);
-  return normalizeProcrastinationStopperConfig(saved);
+  return normalizeDoomscrollingConfig(saved);
 }
 
-let config = $state<ProcrastinationStopperConfig>(loadSavedConfig());
+let config = $state<DoomscrollingConfig>(loadSavedConfig());
 
-function persist(next: ProcrastinationStopperConfig): void {
+function persist(next: DoomscrollingConfig): void {
   config = next;
   setConfigKey(CONFIG_KEY, next);
 }
 
-function update(partial: Partial<ProcrastinationStopperConfig>): void {
+function update(partial: Partial<DoomscrollingConfig>): void {
   persist({ ...config, ...partial });
 }
 
 function mergeHosts(
-  existingHosts: readonly ProcrastinationStopperHostRule[],
+  existingHosts: readonly DoomscrollingHostRule[],
   input: string,
-): ProcrastinationStopperHostRule[] | null {
-  const hosts = parseStopperHosts(input);
+): DoomscrollingHostRule[] | null {
+  const hosts = parseDoomscrollingHosts(input);
   if (hosts.length === 0) return null;
   const seen = new Set(existingHosts.map((rule) => rule.host));
   const merged = [...existingHosts];
@@ -43,26 +43,26 @@ function mergeHosts(
 }
 
 function removeHost(
-  existingHosts: readonly ProcrastinationStopperHostRule[],
+  existingHosts: readonly DoomscrollingHostRule[],
   host: string,
-): ProcrastinationStopperHostRule[] {
+): DoomscrollingHostRule[] {
   return existingHosts.filter((rule) => rule.host !== host);
 }
 
 function setHostEnabled(
-  existingHosts: readonly ProcrastinationStopperHostRule[],
+  existingHosts: readonly DoomscrollingHostRule[],
   host: string,
   enabled: boolean,
-): ProcrastinationStopperHostRule[] {
+): DoomscrollingHostRule[] {
   return existingHosts.map((rule) => rule.host === host ? { ...rule, enabled } : rule);
 }
 
-export function getProcrastinationStopper() {
+export function getDoomscrolling() {
   return {
     get enabled(): boolean {
       return config.enabled;
     },
-    get mode(): ProcrastinationStopperMode {
+    get mode(): DoomscrollingMode {
       return config.mode;
     },
     get blockDuringShortBreaks(): boolean {
@@ -71,16 +71,16 @@ export function getProcrastinationStopper() {
     get blockDuringLongBreaks(): boolean {
       return config.blockDuringLongBreaks;
     },
-    get blockedHosts(): readonly ProcrastinationStopperHostRule[] {
+    get blockedHosts(): readonly DoomscrollingHostRule[] {
       return config.blockedHosts;
     },
-    get exceptionHosts(): readonly ProcrastinationStopperHostRule[] {
+    get exceptionHosts(): readonly DoomscrollingHostRule[] {
       return config.exceptionHosts;
     },
-    get allowedHosts(): readonly ProcrastinationStopperHostRule[] {
+    get allowedHosts(): readonly DoomscrollingHostRule[] {
       return config.allowedHosts;
     },
-    setMode(mode: ProcrastinationStopperMode): void {
+    setMode(mode: DoomscrollingMode): void {
       update({ mode });
     },
     setEnabled(enabled: boolean): void {
@@ -129,7 +129,7 @@ export function getProcrastinationStopper() {
       update({ allowedHosts: setHostEnabled(config.allowedHosts, host, enabled) });
     },
     reset(): void {
-      persist({ ...DEFAULT_PROCRASTINATION_STOPPER_CONFIG });
+      persist({ ...DEFAULT_DOOMSCROLLING_CONFIG });
     },
   };
 }

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HOST_NAME = "org.opengrimoire.ganbaruai.stopper";
+const HOST_NAME = "org.opengrimoire.ganbaruai.doomscrolling";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../..");
 
@@ -72,7 +72,7 @@ mkdirSync(dir, { recursive: true });
 const manifestPath = join(dir, `${HOST_NAME}.json`);
 const manifest = {
   name: HOST_NAME,
-  description: "GanbaruAI procrastination stopper native host",
+  description: "GanbaruAI doomscrolling native host",
   path: hostPath,
   type: "stdio",
   allowed_origins: [`chrome-extension://${extensionId}/`],

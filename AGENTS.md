@@ -6,7 +6,7 @@ Features a highly interconnected:
 - Calendar
 - Pomodoro
 - Projects (pending)
-- Mindless browsing stopper (pending)
+- Doomscrolling (pending)
 - Note-taking (pending)
 - Sleep alarm (pending)
 - Daily diary (pending)

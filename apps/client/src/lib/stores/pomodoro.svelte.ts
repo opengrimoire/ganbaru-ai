@@ -6,7 +6,7 @@ import type {
   SegmentPhase,
 } from "$lib/components/calendar/types";
 import { dbUrl } from "$lib/api/db";
-import { writeProcrastinationStopperRuntimeState } from "$lib/api/procrastination-stopper";
+import { writeDoomscrollingRuntimeState } from "$lib/api/doomscrolling";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
@@ -155,9 +155,9 @@ let suspendedAway = $state<{ awaySeconds: number } | null>(null);
 let idleTimeoutMs: number | null = null; // null = disabled
 let idleCheckIntervalId: ReturnType<typeof setInterval> | null = null;
 let idlePaused = $state<{ idleSeconds: number; nativeOverlay: boolean } | null>(null);
-let lastStopperStateKey = "";
+let lastDoomscrollingStateKey = "";
 
-function writeCurrentStopperRuntimeState(force = false): void {
+function writeCurrentDoomscrollingRuntimeState(force = false): void {
   if (!pomodoroCoordinator) return;
   const minuteBucket = Math.ceil(remainingSeconds / 60);
   const active = isRunning && activeRunId !== null;
@@ -168,17 +168,17 @@ function writeCurrentStopperRuntimeState(force = false): void {
     activeBlockId ?? "",
     String(minuteBucket),
   ].join("|");
-  if (!force && stateKey === lastStopperStateKey) return;
-  lastStopperStateKey = stateKey;
+  if (!force && stateKey === lastDoomscrollingStateKey) return;
+  lastDoomscrollingStateKey = stateKey;
 
-  writeProcrastinationStopperRuntimeState({
+  writeDoomscrollingRuntimeState({
     active,
     phase: active ? phase : "inactive",
     activeRunId,
     activeBlockId,
     remainingSeconds: active ? remainingSeconds : null,
     updatedAt: nowIso(),
-  }).catch((err) => console.warn("procrastination stopper state write failed", err));
+  }).catch((err) => console.warn("doomscrolling state write failed", err));
 }
 
 // Snapshot builder
@@ -431,7 +431,7 @@ function applyWindowSnapshot(snapshot: PomodoroWindowSnapshot): void {
 
 function publishWindowSnapshot(): void {
   if (!pomodoroCoordinator) return;
-  writeCurrentStopperRuntimeState();
+  writeCurrentDoomscrollingRuntimeState();
   emit(
     POMODORO_WINDOW_SYNC_EVENT,
     createWindowSyncEnvelope(buildWindowSnapshot()),
@@ -1710,7 +1710,7 @@ interface PomodoroTrayUpdatePayload {
 function updateTray(options: UpdateTrayOptions = {}) {
   if (options.publishSnapshot !== false) publishWindowSnapshot();
   if (!pomodoroCoordinator) return;
-  writeCurrentStopperRuntimeState();
+  writeCurrentDoomscrollingRuntimeState();
   syncPausedTrayPulse();
   const isActive = pomodoroSessionActive();
   const update: PomodoroTrayUpdatePayload = {

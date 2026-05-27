@@ -72,7 +72,7 @@ The app does not initiate any network traffic without an explicit user-configure
 
 - Sync goes to the user's chosen Hocuspocus server.
 - AI calls go to the user's chosen provider (OpenAI API, OpenAI-compatible provider, another explicitly configured provider, or local Ollama).
-- The procrastination stopper extension only talks to the local Tauri backend.
+- Doomscrolling extension only talks to the local Tauri backend.
 - No update check, no crash report, no usage analytics, no font loading from CDNs, no analytics scripts in the webview.
 
 A network filter (e.g. Little Snitch on macOS, an outbound firewall on Linux) should see no traffic from GanbaruAI when the user has not configured sync or AI. This is testable, and it is part of the project's brand.
