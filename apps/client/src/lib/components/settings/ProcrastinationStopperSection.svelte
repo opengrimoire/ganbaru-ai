@@ -4,6 +4,8 @@
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Plus from "@lucide/svelte/icons/plus";
+  import Power from "@lucide/svelte/icons/power";
+  import PowerOff from "@lucide/svelte/icons/power-off";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import ShieldX from "@lucide/svelte/icons/shield-x";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -13,7 +15,10 @@
   } from "$lib/api/procrastination-stopper";
   import { appSessionStartedAt } from "$lib/stores/app-session";
   import { cn } from "$lib/utils";
-  import type { ProcrastinationStopperMode } from "$lib/procrastination-stopper";
+  import type {
+    ProcrastinationStopperHostRule,
+    ProcrastinationStopperMode,
+  } from "$lib/procrastination-stopper";
   import { getProcrastinationStopper } from "$lib/stores/procrastination-stopper.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
@@ -30,9 +35,10 @@
     placeholder: string;
     emptyText: string;
     errorText: string;
-    websites: () => readonly string[];
+    websites: () => readonly ProcrastinationStopperHostRule[];
     add: (text: string) => boolean;
     remove: (website: string) => void;
+    setEnabled: (website: string, enabled: boolean) => void;
   }
 
   const modeOptions: ReadonlyArray<{
@@ -63,10 +69,11 @@
       description: "Add domains like reddit.com or youtube.com",
       placeholder: "reddit.com",
       emptyText: "No blocked websites yet",
-      errorText: "Enter a domain like reddit.com",
+      errorText: "Enter a valid domain. Example: domain.com",
       websites: () => stopper.blockedHosts,
       add: (text: string) => stopper.addBlockedHostsText(text),
       remove: (website: string) => stopper.removeBlockedHost(website),
+      setEnabled: (website: string, enabled: boolean) => stopper.setBlockedHostEnabled(website, enabled),
     },
     exception: {
       kind: "exception",
@@ -75,10 +82,11 @@
       description: "Keep specific subdomains available inside blacklist mode",
       placeholder: "music.youtube.com",
       emptyText: "No exceptions yet",
-      errorText: "Enter a domain like music.youtube.com",
+      errorText: "Enter a valid domain. Example: domain.com",
       websites: () => stopper.exceptionHosts,
       add: (text: string) => stopper.addExceptionHostsText(text),
       remove: (website: string) => stopper.removeExceptionHost(website),
+      setEnabled: (website: string, enabled: boolean) => stopper.setExceptionHostEnabled(website, enabled),
     },
     allowed: {
       kind: "allowed",
@@ -87,10 +95,11 @@
       description: "Everything else is blocked in whitelist mode",
       placeholder: "github.com",
       emptyText: "No allowed websites yet",
-      errorText: "Enter a domain like github.com",
+      errorText: "Enter a valid domain. Example: domain.com",
       websites: () => stopper.allowedHosts,
       add: (text: string) => stopper.addAllowedHostsText(text),
       remove: (website: string) => stopper.removeAllowedHost(website),
+      setEnabled: (website: string, enabled: boolean) => stopper.setAllowedHostEnabled(website, enabled),
     },
   } satisfies Record<WebsiteListKind, WebsiteListSection>;
   const blacklistWebsiteSections: readonly WebsiteListSection[] = [
@@ -183,49 +192,85 @@
         {section.description}
       </div>
     </div>
-    <form class="flex gap-2 max-[480px]:flex-col" onsubmit={(event) => submitAdd(event, section)}>
-      <input
-        id={section.id}
-        bind:value={websiteDrafts[section.kind]}
-        oninput={() => clearWebsiteError(section.kind)}
-        type="text"
-        spellcheck="false"
-        placeholder={section.placeholder}
-        class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-3 font-mono text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
-      />
-      <button
-        type="submit"
-        disabled={!websiteDrafts[section.kind].trim()}
-        class="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
+    <div class="flex flex-col">
+      <form
+        class="flex h-8 items-center gap-3 border-b border-border/80 transition-colors focus-within:border-ring"
+        onsubmit={(event) => submitAdd(event, section)}
       >
-        <Plus size={13} strokeWidth={2.25} />
-        <span>Add</span>
-      </button>
-    </form>
-    {#if websiteErrors[section.kind]}
-      <div class="text-[0.8rem] text-destructive">{websiteErrors[section.kind]}</div>
-    {/if}
-    {@render websiteRows(section.websites(), section.remove, section.emptyText)}
+        <input
+          id={section.id}
+          bind:value={websiteDrafts[section.kind]}
+          oninput={() => clearWebsiteError(section.kind)}
+          type="text"
+          spellcheck="false"
+          placeholder={section.placeholder}
+          class="h-8 min-w-0 flex-1 bg-transparent px-1 font-mono text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
+        />
+        <button
+          type="submit"
+          disabled={!websiteDrafts[section.kind].trim()}
+          class="flex h-8 shrink-0 items-center justify-center gap-1.5 px-1 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Plus size={13} strokeWidth={2.25} />
+          <span>Add</span>
+        </button>
+      </form>
+      {#if websiteErrors[section.kind]}
+        <div class="px-1 pt-1.5 text-[0.8rem] text-destructive">{websiteErrors[section.kind]}</div>
+      {/if}
+      {@render websiteRows(section.websites(), section.setEnabled, section.remove, section.emptyText)}
+    </div>
   </div>
 {/snippet}
 
-{#snippet websiteRows(websites: readonly string[], removeHost: (host: string) => void, emptyText: string)}
-  <div class="flex flex-col gap-1.5">
-    {#each websites as website (website)}
-      <div class="flex h-9 items-center justify-between gap-3 rounded-md border border-border bg-background/60 px-3 dark:bg-transparent">
-        <span class="flex h-7 min-w-0 flex-1 items-center truncate font-mono text-[0.8rem] leading-none text-foreground">{website}</span>
+{#snippet websiteRows(
+  websites: readonly ProcrastinationStopperHostRule[],
+  setHostEnabled: (host: string, enabled: boolean) => void,
+  removeHost: (host: string) => void,
+  emptyText: string,
+)}
+  <div class="flex flex-col">
+    {#each websites as website (website.host)}
+      <div
+        class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5"
+        role="group"
+        aria-label={website.enabled ? website.host : `${website.host} disabled`}
+      >
+        <span
+          class={cn(
+            "flex h-7 min-w-0 flex-1 items-center truncate px-1 font-mono text-[0.8rem] leading-snug text-foreground",
+            !website.enabled && "opacity-50 line-through",
+          )}
+        >
+          {website.host}
+        </span>
         <button
           type="button"
-          onclick={() => removeHost(website)}
-          aria-label={`Remove ${website}`}
+          onclick={() => setHostEnabled(website.host, !website.enabled)}
+          aria-label={website.enabled ? `Disable ${website.host}` : `Enable ${website.host}`}
           data-app-tooltip-disabled="true"
-          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          class="flex h-7 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground hover:bg-accent dark:bg-transparent"
         >
-          <Trash2 size={13} strokeWidth={2.25} />
+          {#if website.enabled}
+            <PowerOff size={13} strokeWidth={2} class="shrink-0" />
+            <span>Enabled</span>
+          {:else}
+            <Power size={13} strokeWidth={2} class="shrink-0" />
+            <span>Disabled</span>
+          {/if}
+        </button>
+        <button
+          type="button"
+          onclick={() => removeHost(website.host)}
+          aria-label={`Remove ${website.host}`}
+          data-app-tooltip-disabled="true"
+          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-destructive/10 hover:text-destructive dark:bg-transparent"
+        >
+          <Trash2 size={13} strokeWidth={2} />
         </button>
       </div>
     {:else}
-      <div class="rounded-md border border-dashed border-border px-3 py-2 text-[0.8rem] text-muted-foreground">
+      <div class="px-1 py-1.5 text-[0.8rem] text-muted-foreground">
         {emptyText}
       </div>
     {/each}

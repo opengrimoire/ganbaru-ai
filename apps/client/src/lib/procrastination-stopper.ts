@@ -1,13 +1,18 @@
 export type ProcrastinationStopperMode = "blacklist" | "whitelist";
 
+export interface ProcrastinationStopperHostRule {
+  host: string;
+  enabled: boolean;
+}
+
 export interface ProcrastinationStopperConfig {
   mode: ProcrastinationStopperMode;
   enabled: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
-  blockedHosts: string[];
-  exceptionHosts: string[];
-  allowedHosts: string[];
+  blockedHosts: ProcrastinationStopperHostRule[];
+  exceptionHosts: ProcrastinationStopperHostRule[];
+  allowedHosts: ProcrastinationStopperHostRule[];
 }
 
 export interface ProcrastinationStopperDecision {
@@ -79,9 +84,33 @@ export function parseStopperHosts(input: string): string[] {
   return hosts;
 }
 
-function normalizeHostArray(value: unknown): string[] {
+function normalizeHostRuleValue(value: unknown): ProcrastinationStopperHostRule | null {
+  if (typeof value === "string") {
+    const host = normalizeStopperHost(value);
+    return host ? { host, enabled: true } : null;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.host !== "string") return null;
+  const host = normalizeStopperHost(record.host);
+  if (!host) return null;
+  return {
+    host,
+    enabled: record.enabled !== false,
+  };
+}
+
+function normalizeHostRules(value: unknown): ProcrastinationStopperHostRule[] {
   if (!Array.isArray(value)) return [];
-  return parseStopperHosts(value.filter((item) => typeof item === "string").join("\n"));
+  const seen = new Set<string>();
+  const rules: ProcrastinationStopperHostRule[] = [];
+  for (const item of value) {
+    const rule = normalizeHostRuleValue(item);
+    if (!rule || seen.has(rule.host)) continue;
+    seen.add(rule.host);
+    rules.push(rule);
+  }
+  return rules;
 }
 
 function normalizeMode(value: unknown): ProcrastinationStopperMode {
@@ -100,7 +129,7 @@ export function normalizeProcrastinationStopperConfig(value: unknown): Procrasti
   const legacyBlockDuringBreaks = typeof record.blockDuringBreaks === "boolean"
     ? record.blockDuringBreaks
     : null;
-  const legacyAllowedHosts = normalizeHostArray(record.allowedHosts);
+  const legacyAllowedHosts = normalizeHostRules(record.allowedHosts);
   return {
     mode: normalizeMode(record.mode),
     enabled: typeof record.enabled === "boolean"
@@ -112,9 +141,9 @@ export function normalizeProcrastinationStopperConfig(value: unknown): Procrasti
     blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
       ? record.blockDuringLongBreaks
       : legacyBlockDuringBreaks ?? DEFAULT_PROCRASTINATION_STOPPER_CONFIG.blockDuringLongBreaks,
-    blockedHosts: normalizeHostArray(record.blockedHosts),
+    blockedHosts: normalizeHostRules(record.blockedHosts),
     exceptionHosts: hasExceptionHosts
-      ? normalizeHostArray(record.exceptionHosts)
+      ? normalizeHostRules(record.exceptionHosts)
       : hasMode
         ? []
         : legacyAllowedHosts,
@@ -153,7 +182,9 @@ export function evaluateStopperUrl(
   }
 
   if (config.mode === "whitelist") {
-    for (const allowedHost of config.allowedHosts) {
+    for (const allowedRule of config.allowedHosts) {
+      if (!allowedRule.enabled) continue;
+      const allowedHost = allowedRule.host;
       if (stopperHostMatchesRule(host, allowedHost)) {
         return { blocked: false, host, matchedRule: `whitelist: ${allowedHost}` };
       }
@@ -161,12 +192,16 @@ export function evaluateStopperUrl(
     return { blocked: true, host, matchedRule: "not in whitelist" };
   }
 
-  for (const exceptionHost of config.exceptionHosts) {
+  for (const exceptionRule of config.exceptionHosts) {
+    if (!exceptionRule.enabled) continue;
+    const exceptionHost = exceptionRule.host;
     if (stopperHostMatchesRule(host, exceptionHost)) {
       return { blocked: false, host, matchedRule: `exception: ${exceptionHost}` };
     }
   }
-  for (const blockedHost of config.blockedHosts) {
+  for (const blockedRule of config.blockedHosts) {
+    if (!blockedRule.enabled) continue;
+    const blockedHost = blockedRule.host;
     if (stopperHostMatchesRule(host, blockedHost)) {
       return { blocked: true, host, matchedRule: `blocked host: ${blockedHost}` };
     }

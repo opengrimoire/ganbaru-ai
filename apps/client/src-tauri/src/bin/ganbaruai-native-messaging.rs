@@ -315,7 +315,7 @@ fn read_host_array(value: Option<&Value>) -> Vec<String> {
     };
     let mut hosts = Vec::new();
     for item in items {
-        let Some(host) = item.as_str().and_then(normalize_host_rule) else {
+        let Some(host) = read_host_rule(item) else {
             continue;
         };
         if !hosts.contains(&host) {
@@ -323,6 +323,22 @@ fn read_host_array(value: Option<&Value>) -> Vec<String> {
         }
     }
     hosts
+}
+
+fn read_host_rule(item: &Value) -> Option<String> {
+    match item {
+        Value::String(host) => normalize_host_rule(host),
+        Value::Object(record) => {
+            if record.get("enabled").and_then(Value::as_bool) == Some(false) {
+                return None;
+            }
+            record
+                .get("host")
+                .and_then(Value::as_str)
+                .and_then(normalize_host_rule)
+        }
+        _ => None,
+    }
 }
 
 fn default_config() -> StopperConfig {
@@ -624,6 +640,20 @@ mod tests {
     fn matches_subdomains_only_on_boundaries() {
         assert!(host_matches_rule("old.reddit.com", "reddit.com"));
         assert!(!host_matches_rule("badreddit.com", "reddit.com"));
+    }
+
+    #[test]
+    fn reads_legacy_and_enabled_structured_hosts() {
+        let value = serde_json::json!([
+            "Reddit.com",
+            { "host": "youtube.com", "enabled": false },
+            { "host": "Docs.GitHub.com" },
+            { "host": "reddit.com" }
+        ]);
+        assert_eq!(
+            super::read_host_array(Some(&value)),
+            vec!["reddit.com".to_string(), "docs.github.com".to_string()]
+        );
     }
 
     #[test]

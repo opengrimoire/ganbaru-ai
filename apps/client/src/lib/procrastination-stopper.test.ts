@@ -5,7 +5,12 @@ import {
   normalizeProcrastinationStopperConfig,
   normalizeStopperHost,
   parseStopperHosts,
+  type ProcrastinationStopperHostRule,
 } from "./procrastination-stopper";
+
+function hostRule(host: string, enabled = true): ProcrastinationStopperHostRule {
+  return { host, enabled };
+}
 
 describe("normalizeStopperHost", () => {
   it("accepts copied URLs and lowercases hosts", () => {
@@ -48,9 +53,20 @@ describe("normalizeProcrastinationStopperConfig", () => {
       enabled: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
-      blockedHosts: ["reddit.com", "youtube.com"],
+      blockedHosts: [hostRule("reddit.com"), hostRule("youtube.com")],
       exceptionHosts: [],
       allowedHosts: [],
+    });
+  });
+
+  it("normalizes disabled host rules without dropping them", () => {
+    expect(normalizeProcrastinationStopperConfig({
+      blockedHosts: [
+        { host: "Reddit.com", enabled: false },
+        { host: "https://youtube.com/watch?v=1" },
+      ],
+    })).toMatchObject({
+      blockedHosts: [hostRule("reddit.com", false), hostRule("youtube.com")],
     });
   });
 
@@ -59,7 +75,7 @@ describe("normalizeProcrastinationStopperConfig", () => {
       allowedHosts: ["music.youtube.com"],
     })).toMatchObject({
       mode: "blacklist",
-      exceptionHosts: ["music.youtube.com"],
+      exceptionHosts: [hostRule("music.youtube.com")],
       allowedHosts: [],
     });
   });
@@ -71,8 +87,8 @@ describe("normalizeProcrastinationStopperConfig", () => {
       allowedHosts: ["github.com"],
     })).toMatchObject({
       mode: "whitelist",
-      exceptionHosts: ["music.youtube.com"],
-      allowedHosts: ["github.com"],
+      exceptionHosts: [hostRule("music.youtube.com")],
+      allowedHosts: [hostRule("github.com")],
     });
   });
 
@@ -93,7 +109,7 @@ describe("evaluateStopperUrl", () => {
       enabled: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
-      blockedHosts: ["reddit.com"],
+      blockedHosts: [hostRule("reddit.com")],
       exceptionHosts: [],
       allowedHosts: [],
     });
@@ -110,8 +126,8 @@ describe("evaluateStopperUrl", () => {
       enabled: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
-      blockedHosts: ["youtube.com"],
-      exceptionHosts: ["music.youtube.com"],
+      blockedHosts: [hostRule("youtube.com")],
+      exceptionHosts: [hostRule("music.youtube.com")],
       allowedHosts: [],
     });
     expect(decision.blocked).toBe(false);
@@ -126,7 +142,7 @@ describe("evaluateStopperUrl", () => {
       blockDuringLongBreaks: true,
       blockedHosts: [],
       exceptionHosts: [],
-      allowedHosts: ["github.com"],
+      allowedHosts: [hostRule("github.com")],
     });
     expect(decision.blocked).toBe(true);
     expect(decision.matchedRule).toBe("not in whitelist");
@@ -140,9 +156,37 @@ describe("evaluateStopperUrl", () => {
       blockDuringLongBreaks: true,
       blockedHosts: [],
       exceptionHosts: [],
-      allowedHosts: ["github.com"],
+      allowedHosts: [hostRule("github.com")],
     });
     expect(decision.blocked).toBe(false);
     expect(decision.matchedRule).toBe("whitelist: github.com");
+  });
+
+  it("ignores disabled blacklist rules", () => {
+    const decision = evaluateStopperUrl("https://reddit.com/r/all", {
+      mode: "blacklist",
+      enabled: true,
+      blockDuringShortBreaks: true,
+      blockDuringLongBreaks: true,
+      blockedHosts: [hostRule("reddit.com", false)],
+      exceptionHosts: [],
+      allowedHosts: [],
+    });
+    expect(decision.blocked).toBe(false);
+    expect(decision.matchedRule).toBeNull();
+  });
+
+  it("ignores disabled whitelist rules", () => {
+    const decision = evaluateStopperUrl("https://docs.github.com/en", {
+      mode: "whitelist",
+      enabled: true,
+      blockDuringShortBreaks: true,
+      blockDuringLongBreaks: true,
+      blockedHosts: [],
+      exceptionHosts: [],
+      allowedHosts: [hostRule("github.com", false)],
+    });
+    expect(decision.blocked).toBe(true);
+    expect(decision.matchedRule).toBe("not in whitelist");
   });
 });

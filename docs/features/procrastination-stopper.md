@@ -14,7 +14,7 @@ The current desktop implementation is an early Chrome and Brave development slic
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
 - The native host writes a small local connection status file each time the extension contacts it. The app uses this to show whether a browser extension has connected recently.
 - Settings > Doomscrolling supports enable or disable, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, exceptions, and allowed websites.
-- The current `procrastinationStopper` config uses `mode`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
+- The current `procrastinationStopper` config uses `mode`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Legacy string entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions.
 - The native host includes a rules fingerprint in state responses so the extension rechecks already open tabs when website rules change during an active focus or break phase.
 - Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
 
