@@ -61,7 +61,7 @@
       kind: "blocked",
       id: "doomscrolling-blocked-apps",
       heading: "Blocked apps",
-    description: "Block selected apps when desktop blocking is active. Example: Steam",
+      description: "Block selected apps when desktop blocking is active. Example: Steam",
       placeholder: "Enter an app...",
       emptyText: "No blocked apps yet",
       errorText: "Enter an app name. Example: Steam",
@@ -214,7 +214,7 @@
 
 <div class="flex flex-col gap-6">
   <DoomscrollingConfigurationSection
-    title="Desktop configuration"
+    title="Desktop app configuration"
     enabled={doomscrolling.desktopEnabled}
     blockDuringShortBreaks={doomscrolling.desktopBlockDuringShortBreaks}
     blockDuringLongBreaks={doomscrolling.desktopBlockDuringLongBreaks}

@@ -5,4 +5,4 @@
  */
 export type SectionId = "appearance" | "calendars" | "music" | "doomscrolling" | "shortcuts";
 
-export type DoomscrollingSettingsTab = "browser" | "desktop";
+export type DoomscrollingSettingsTab = "browser" | "mobile" | "desktop";

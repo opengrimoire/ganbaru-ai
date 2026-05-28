@@ -1497,13 +1497,13 @@ pub fn show_doomscrolling_desktop_block_notification(app: tauri::AppHandle, app_
             app_name
         };
         let body = escape_notification_markup(&format!(
-            "{app_name} was closed because it is blocked by your desktop rules. Change this in Settings > Doomscrolling > Desktop settings (or click this notification)"
+            "{app_name} was closed because it is blocked by your desktop rules. Change this in Settings > Doomscrolling > Desktop apps (or click this notification)"
         ));
         let result = Notification::new()
             .appname("GanbaruAI")
             .summary("App closed by GanbaruAI")
             .body(&body)
-            .action("default", "Open desktop settings")
+            .action("default", "Open desktop apps")
             .timeout(10_000)
             .hint(Hint::Category("device".into()))
             .hint(Hint::DesktopEntry("ganbaruai".into()))

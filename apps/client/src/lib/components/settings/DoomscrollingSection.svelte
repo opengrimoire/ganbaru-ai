@@ -2,6 +2,7 @@
   import { cn } from "$lib/utils";
   import type { DoomscrollingSettingsTab } from "./types";
   import DoomscrollingBrowserSettings from "./DoomscrollingBrowserSettings.svelte";
+  import DoomscrollingMobileSettings from "./DoomscrollingMobileSettings.svelte";
   import DoomscrollingDesktopSettings from "./DoomscrollingDesktopSettings.svelte";
 
   let {
@@ -14,8 +15,9 @@
     id: DoomscrollingSettingsTab;
     label: string;
   }> = [
-    { id: "browser", label: "Browser settings" },
-    { id: "desktop", label: "Desktop settings" },
+    { id: "browser", label: "Browser" },
+    { id: "mobile", label: "Mobile apps" },
+    { id: "desktop", label: "Desktop apps" },
   ];
 
   let activeTab = $state<DoomscrollingSettingsTab>("browser");
@@ -27,7 +29,7 @@
 
 <div class="flex flex-col gap-6">
   <div
-    class="grid grid-cols-2 gap-1 rounded-md border border-border bg-card p-1 dark:bg-transparent"
+    class="grid grid-cols-3 gap-1 rounded-md border border-border bg-card p-1 dark:bg-transparent"
     role="tablist"
     aria-label="Doomscrolling settings"
   >
@@ -52,6 +54,8 @@
 
   {#if activeTab === "browser"}
     <DoomscrollingBrowserSettings />
+  {:else if activeTab === "mobile"}
+    <DoomscrollingMobileSettings />
   {:else}
     <DoomscrollingDesktopSettings />
   {/if}
