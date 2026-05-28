@@ -1,17 +1,44 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sqlx_core::raw_sql::raw_sql;
+use sqlx_sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::OnceLock;
 
 const HOST_NAME: &str = "org.opengrimoire.ganbaruai.doomscrolling";
 const STATE_FILE: &str = "doomscrolling-state.json";
+const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
 const STALE_STATE_SECONDS: i64 = 180;
+const LIMIT_STATE_STALE_SECONDS: i64 = 300;
+const ALLOWED_USAGE_DATABASE_FILES: &[&str] =
+    &["ganbaruai.db", "ganbaruai-dev.db", "ganbaruai-benchmark.db"];
+const USAGE_SAMPLE_TABLE_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS doomscrolling_usage_samples (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        source_type TEXT NOT NULL CHECK (source_type IN ('website', 'desktop-app', 'mobile-app')),
+        source_key TEXT NOT NULL CHECK (trim(source_key) <> ''),
+        display_name TEXT,
+        started_at INTEGER NOT NULL CHECK (started_at >= 0),
+        elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds > 0 AND elapsed_seconds <= 86400),
+        local_date TEXT NOT NULL CHECK (
+            length(local_date) = 10
+            AND substr(local_date, 5, 1) = '-'
+            AND substr(local_date, 8, 1) = '-'
+        ),
+        created_at INTEGER NOT NULL CHECK (created_at >= 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_doomscrolling_usage_samples_date_source
+        ON doomscrolling_usage_samples(local_date, source_type, source_key);
+    CREATE INDEX IF NOT EXISTS idx_doomscrolling_usage_samples_started
+        ON doomscrolling_usage_samples(started_at);
+";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,6 +92,12 @@ struct NativeRequest {
     url: Option<String>,
     host: Option<String>,
     log_event: Option<bool>,
+    source_type: Option<String>,
+    source_key: Option<String>,
+    display_name: Option<String>,
+    elapsed_seconds: Option<i64>,
+    started_at: Option<i64>,
+    local_date: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -108,6 +141,41 @@ struct CustomCategoryStack {
 }
 
 #[derive(Debug, Clone)]
+enum UsageLimitSource {
+    Website {
+        host: String,
+    },
+    DesktopApp {
+        name: String,
+        match_names: Vec<String>,
+    },
+    Category {
+        id: String,
+    },
+    CustomStack {
+        id: String,
+    },
+    MobileApp {
+        name: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct UsageLimit {
+    id: String,
+    name: String,
+    enabled: bool,
+    minutes_per_day: i64,
+    sources: Vec<UsageLimitSource>,
+}
+
+#[derive(Debug, Clone)]
+struct UsageLimitsConfig {
+    enabled: bool,
+    items: Vec<UsageLimit>,
+}
+
+#[derive(Debug, Clone)]
 struct DoomscrollingConfig {
     mode: DoomscrollingMode,
     enabled: bool,
@@ -119,6 +187,7 @@ struct DoomscrollingConfig {
     blocked_hosts: Vec<String>,
     exception_hosts: Vec<String>,
     allowed_hosts: Vec<String>,
+    limits: UsageLimitsConfig,
 }
 
 #[derive(Debug)]
@@ -126,6 +195,38 @@ struct StateSnapshot {
     config_dir: Option<PathBuf>,
     config: DoomscrollingConfig,
     runtime: Option<RuntimeState>,
+    limit_state: Option<LimitState>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LimitState {
+    local_date: String,
+    updated_at: String,
+    database_file_name: Option<String>,
+    limits: Vec<LimitStateItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LimitStateItem {
+    id: String,
+    used_seconds: i64,
+    limit_seconds: i64,
+    remaining_seconds: i64,
+    exhausted: bool,
+}
+
+#[derive(Debug)]
+struct UsageSample {
+    id: String,
+    source_type: String,
+    source_key: String,
+    display_name: Option<String>,
+    started_at: i64,
+    elapsed_seconds: i64,
+    local_date: String,
+    created_at: i64,
 }
 
 fn main() {
@@ -165,16 +266,35 @@ fn run() -> Result<NativeResponse, String> {
     if request.message_type == "decide_url" {
         if let Some(host) = normalized_request_host(&request) {
             response.host = Some(host.clone());
-            if should_enforce(&snapshot, &mut response) {
-                let decision = decide_url(&host, request.url.as_deref(), &snapshot.config);
-                response.blocked = decision.blocked;
-                response.matched_rule_name = decision.matched_rule_name;
-                if response.blocked && request.log_event.unwrap_or(true) {
-                    log_block_event(&snapshot, &host, response.matched_rule_name.as_deref());
-                }
+            let regular_rules_active = should_enforce(&snapshot, &mut response);
+            let decision = decide_url_with_limits(
+                &host,
+                request.url.as_deref(),
+                &snapshot.config,
+                snapshot.limit_state.as_ref(),
+                regular_rules_active,
+            );
+            response.blocked = decision.blocked;
+            response.matched_rule_name = decision.matched_rule_name;
+            if response.blocked && request.log_event.unwrap_or(true) {
+                log_block_event(&snapshot, &host, response.matched_rule_name.as_deref());
             }
         } else {
             response.reason = Some("unsupported or invalid URL".to_string());
+        }
+    } else if request.message_type == "record_usage" {
+        match normalize_usage_sample(&request) {
+            Ok(sample) => {
+                match record_usage_sample(
+                    snapshot.config_dir.as_deref(),
+                    snapshot.limit_state.as_ref(),
+                    sample,
+                ) {
+                    Ok(()) => {}
+                    Err(reason) => response.reason = Some(reason),
+                }
+            }
+            Err(reason) => response.reason = Some(reason),
         }
     } else if request.message_type != "get_state" {
         response.reason = Some(format!(
@@ -264,10 +384,14 @@ fn load_snapshot() -> StateSnapshot {
     let runtime = config_dir
         .as_ref()
         .and_then(|dir| read_runtime_state(&dir.join(STATE_FILE)));
+    let limit_state = config_dir
+        .as_ref()
+        .and_then(|dir| read_limit_state(&dir.join(LIMIT_STATE_FILE)));
     StateSnapshot {
         config_dir,
         config,
         runtime,
+        limit_state,
     }
 }
 
@@ -317,6 +441,12 @@ fn read_runtime_state(path: &std::path::Path) -> Option<RuntimeState> {
     serde_json::from_str(&contents).ok()
 }
 
+fn read_limit_state(path: &std::path::Path) -> Option<LimitState> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    let state: LimitState = serde_json::from_str(&contents).ok()?;
+    limit_state_is_fresh(&state).then_some(state)
+}
+
 fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
     let contents = std::fs::read_to_string(path).ok()?;
     let value: Value = serde_json::from_str(&contents).ok()?;
@@ -364,6 +494,7 @@ fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
         } else {
             Vec::new()
         },
+        limits: read_usage_limits_config(doomscrolling.get("limits")),
     })
 }
 
@@ -466,6 +597,234 @@ fn read_custom_category_stack(item: &Value) -> Option<CustomCategoryStack> {
     })
 }
 
+fn read_usage_limits_config(value: Option<&Value>) -> UsageLimitsConfig {
+    let Some(Value::Object(record)) = value else {
+        return UsageLimitsConfig {
+            enabled: true,
+            items: Vec::new(),
+        };
+    };
+    let mut limits = Vec::new();
+    let mut seen_ids = HashSet::new();
+    if let Some(Value::Array(items)) = record.get("items") {
+        for item in items {
+            let Some(limit) = read_usage_limit(item) else {
+                continue;
+            };
+            if seen_ids.insert(limit.id.clone()) {
+                limits.push(limit);
+            }
+        }
+    }
+    UsageLimitsConfig {
+        enabled: record.get("enabled").and_then(Value::as_bool) != Some(false),
+        items: limits,
+    }
+}
+
+fn read_usage_limit(item: &Value) -> Option<UsageLimit> {
+    let Value::Object(record) = item else {
+        return None;
+    };
+    let id = normalize_limit_id(record.get("id").and_then(Value::as_str)?)?;
+    let name = normalize_usage_limit_name(record.get("name").and_then(Value::as_str)?)?;
+    let minutes_per_day = record.get("minutesPerDay").and_then(Value::as_i64)?;
+    if !(1..=1440).contains(&minutes_per_day) {
+        return None;
+    }
+    let sources = read_usage_limit_sources(record.get("sources")?)?;
+    Some(UsageLimit {
+        id,
+        name,
+        enabled: record.get("enabled").and_then(Value::as_bool) != Some(false),
+        minutes_per_day,
+        sources,
+    })
+}
+
+fn normalize_limit_id(value: &str) -> Option<String> {
+    let id = value.trim();
+    if id.is_empty()
+        || id.len() > 80
+        || !id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+    {
+        return None;
+    }
+    Some(id.to_string())
+}
+
+fn normalize_usage_limit_name(input: &str) -> Option<String> {
+    let name = input
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(80)
+        .collect::<String>();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn read_usage_limit_sources(value: &Value) -> Option<Vec<UsageLimitSource>> {
+    let Value::Array(items) = value else {
+        return None;
+    };
+    let mut sources = Vec::new();
+    let mut seen = HashSet::new();
+    for item in items {
+        let Some(source) = read_usage_limit_source(item) else {
+            continue;
+        };
+        let key = usage_limit_source_key(&source);
+        if !seen.insert(key) {
+            return None;
+        }
+        sources.push(source);
+    }
+    (!sources.is_empty()).then_some(sources)
+}
+
+fn source_type(record: &serde_json::Map<String, Value>) -> Option<&str> {
+    let raw = record
+        .get("type")
+        .or_else(|| record.get("kind"))
+        .or_else(|| record.get("sourceType"))?
+        .as_str()?;
+    match raw {
+        "website" => Some("website"),
+        "desktop-app" | "desktopApp" => Some("desktop-app"),
+        "category" | "builtInCategory" => Some("category"),
+        "custom-stack" | "customCategoryStack" => Some("custom-stack"),
+        "mobile-app" | "mobileApp" => Some("mobile-app"),
+        _ => None,
+    }
+}
+
+fn string_field<'a>(record: &'a serde_json::Map<String, Value>, primary: &str) -> Option<&'a str> {
+    record
+        .get(primary)
+        .or_else(|| record.get("value"))
+        .and_then(Value::as_str)
+}
+
+fn read_usage_limit_source(item: &Value) -> Option<UsageLimitSource> {
+    if let Value::String(host) = item {
+        return normalize_host_rule(host).map(|host| UsageLimitSource::Website { host });
+    }
+    let Value::Object(record) = item else {
+        return None;
+    };
+    match source_type(record)? {
+        "website" => {
+            let host = normalize_host_rule(string_field(record, "host")?)?;
+            Some(UsageLimitSource::Website { host })
+        }
+        "desktop-app" => {
+            let name = normalize_app_name(string_field(record, "name")?)?;
+            if is_protected_app_name(&name) {
+                return None;
+            }
+            let mut match_names = Vec::new();
+            let mut seen = HashSet::new();
+            for candidate in std::iter::once(name.as_str()).chain(
+                record
+                    .get("matchNames")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str),
+            ) {
+                let Some(match_name) = normalize_app_name(candidate) else {
+                    continue;
+                };
+                if is_protected_app_name(&match_name) {
+                    continue;
+                }
+                let key = match_name.to_lowercase();
+                if seen.insert(key) {
+                    match_names.push(match_name);
+                }
+            }
+            if match_names.is_empty() {
+                return None;
+            }
+            Some(UsageLimitSource::DesktopApp { name, match_names })
+        }
+        "category" => {
+            let id = string_field(record, "id")?;
+            built_in_category(id).map(|category| UsageLimitSource::Category {
+                id: category.id.clone(),
+            })
+        }
+        "custom-stack" => {
+            let id = normalize_limit_id(string_field(record, "id")?)?;
+            Some(UsageLimitSource::CustomStack { id })
+        }
+        "mobile-app" => {
+            let name = normalize_app_name(string_field(record, "name")?)?;
+            Some(UsageLimitSource::MobileApp { name })
+        }
+        _ => None,
+    }
+}
+
+fn normalize_app_name(input: &str) -> Option<String> {
+    let name = input
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(80)
+        .collect::<String>();
+    if name.is_empty() || name.chars().any(char::is_control) {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn is_protected_app_name(name: &str) -> bool {
+    let key = name.trim().to_lowercase();
+    let protected = [
+        "ganbaruai",
+        "ganbaruai-dev",
+        "terminal",
+        "gnome-terminal",
+        "system monitor",
+        "gnome-shell",
+        "explorer.exe",
+        "taskmgr.exe",
+        "python",
+        "python3",
+        "python3.12",
+        "sh",
+        "bash",
+        "zsh",
+    ];
+    protected.iter().any(|name| *name == key)
+}
+
+fn usage_limit_source_key(source: &UsageLimitSource) -> String {
+    match source {
+        UsageLimitSource::Website { host } => format!("website:{host}"),
+        UsageLimitSource::DesktopApp { name, match_names } => {
+            format!(
+                "desktop-app:{}:{}",
+                name.to_lowercase(),
+                match_names.join("|").to_lowercase()
+            )
+        }
+        UsageLimitSource::Category { id } => format!("category:{id}"),
+        UsageLimitSource::CustomStack { id } => format!("custom-stack:{id}"),
+        UsageLimitSource::MobileApp { name } => format!("mobile-app:{}", name.to_lowercase()),
+    }
+}
+
 fn normalize_custom_category_stack_name(input: &str) -> String {
     input
         .split_whitespace()
@@ -520,6 +879,10 @@ fn default_config() -> DoomscrollingConfig {
         blocked_hosts: Vec::new(),
         exception_hosts: Vec::new(),
         allowed_hosts: Vec::new(),
+        limits: UsageLimitsConfig {
+            enabled: true,
+            items: Vec::new(),
+        },
     }
 }
 
@@ -532,7 +895,7 @@ fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
         active,
         phase,
         remaining_seconds,
-        rules_fingerprint: rules_fingerprint(&snapshot.config),
+        rules_fingerprint: rules_fingerprint(&snapshot.config, snapshot.limit_state.as_ref()),
         blocked: false,
         host: None,
         matched_rule_name: None,
@@ -608,6 +971,32 @@ struct HostDecision {
     matched_rule_name: Option<String>,
 }
 
+fn decide_url_with_limits(
+    host: &str,
+    url: Option<&str>,
+    config: &DoomscrollingConfig,
+    limit_state: Option<&LimitState>,
+    regular_rules_active: bool,
+) -> HostDecision {
+    let regular_decision = regular_rules_active.then(|| decide_url(host, url, config));
+    if let Some(decision) = &regular_decision {
+        if decision.blocked {
+            return HostDecision {
+                blocked: decision.blocked,
+                matched_rule_name: decision.matched_rule_name.clone(),
+            };
+        }
+    }
+    let limit_decision = decide_url_limit(host, config, limit_state);
+    if limit_decision.blocked {
+        return limit_decision;
+    }
+    regular_decision.unwrap_or(HostDecision {
+        blocked: false,
+        matched_rule_name: None,
+    })
+}
+
 fn decide_url(host: &str, url: Option<&str>, config: &DoomscrollingConfig) -> HostDecision {
     if is_safety_allowed_host(host) {
         return HostDecision {
@@ -677,6 +1066,78 @@ fn decide_url(host: &str, url: Option<&str>, config: &DoomscrollingConfig) -> Ho
     }
 }
 
+fn decide_url_limit(
+    host: &str,
+    config: &DoomscrollingConfig,
+    limit_state: Option<&LimitState>,
+) -> HostDecision {
+    if is_safety_allowed_host(host) || !config.limits.enabled {
+        return HostDecision {
+            blocked: false,
+            matched_rule_name: None,
+        };
+    }
+    let Some(limit_state) = limit_state else {
+        return HostDecision {
+            blocked: false,
+            matched_rule_name: None,
+        };
+    };
+    for limit in &config.limits.items {
+        if !limit.enabled {
+            continue;
+        }
+        let Some(total) = limit_state
+            .limits
+            .iter()
+            .find(|total| total.id == limit.id && total.exhausted)
+        else {
+            continue;
+        };
+        if total.used_seconds < total.limit_seconds {
+            continue;
+        }
+        if limit
+            .sources
+            .iter()
+            .any(|source| limit_source_matches_host(source, host, config))
+        {
+            return HostDecision {
+                blocked: true,
+                matched_rule_name: Some(format!("daily limit: {}", limit.name)),
+            };
+        }
+    }
+    HostDecision {
+        blocked: false,
+        matched_rule_name: None,
+    }
+}
+
+fn limit_source_matches_host(
+    source: &UsageLimitSource,
+    host: &str,
+    config: &DoomscrollingConfig,
+) -> bool {
+    match source {
+        UsageLimitSource::Website { host: source_host } => host_matches_rule(host, source_host),
+        UsageLimitSource::Category { id } => {
+            built_in_category(id).is_some_and(|category| category_matches_host(host, category))
+        }
+        UsageLimitSource::CustomStack { id } => config
+            .custom_category_stacks
+            .iter()
+            .find(|stack| &stack.id == id)
+            .is_some_and(|stack| {
+                stack
+                    .hosts
+                    .iter()
+                    .any(|stack_host| host_matches_rule(host, stack_host))
+            }),
+        UsageLimitSource::DesktopApp { .. } | UsageLimitSource::MobileApp { .. } => false,
+    }
+}
+
 fn category_matches_url(host: &str, url: Option<&str>, category: &BuiltInCategory) -> bool {
     if category
         .hosts
@@ -702,6 +1163,17 @@ fn category_matches_url(host: &str, url: Option<&str>, category: &BuiltInCategor
         .reddit_subreddit_keywords
         .iter()
         .any(|keyword| subreddit.contains(keyword))
+}
+
+fn category_matches_host(host: &str, category: &BuiltInCategory) -> bool {
+    category
+        .hosts
+        .iter()
+        .any(|category_host| host_matches_rule(host, category_host))
+        || category
+            .domain_keywords
+            .iter()
+            .any(|keyword| host.contains(keyword))
 }
 
 impl DoomscrollingMode {
@@ -733,7 +1205,7 @@ fn feed_fingerprint_hosts(hash: &mut u64, label: &str, hosts: &[String]) {
     }
 }
 
-fn rules_fingerprint(config: &DoomscrollingConfig) -> String {
+fn rules_fingerprint(config: &DoomscrollingConfig, limit_state: Option<&LimitState>) -> String {
     let mut hash = 14_695_981_039_346_656_037_u64;
     feed_fingerprint(&mut hash, "built_in_categories");
     feed_fingerprint(&mut hash, BUILT_IN_CATEGORIES_JSON);
@@ -754,6 +1226,30 @@ fn rules_fingerprint(config: &DoomscrollingConfig) -> String {
     feed_fingerprint_hosts(&mut hash, "blocked", &config.blocked_hosts);
     feed_fingerprint_hosts(&mut hash, "exception", &config.exception_hosts);
     feed_fingerprint_hosts(&mut hash, "allowed", &config.allowed_hosts);
+    feed_fingerprint_bool(&mut hash, config.limits.enabled);
+    feed_fingerprint(&mut hash, "limits");
+    for limit in &config.limits.items {
+        feed_fingerprint(&mut hash, &limit.id);
+        feed_fingerprint(&mut hash, &limit.name);
+        feed_fingerprint_bool(&mut hash, limit.enabled);
+        feed_fingerprint(&mut hash, &limit.minutes_per_day.to_string());
+        for source in &limit.sources {
+            feed_fingerprint(&mut hash, &usage_limit_source_key(source));
+        }
+    }
+    if let Some(limit_state) = limit_state {
+        feed_fingerprint(&mut hash, &limit_state.local_date);
+        if let Some(database_file_name) = &limit_state.database_file_name {
+            feed_fingerprint(&mut hash, database_file_name);
+        }
+        for limit in &limit_state.limits {
+            feed_fingerprint(&mut hash, &limit.id);
+            feed_fingerprint(&mut hash, &limit.used_seconds.to_string());
+            feed_fingerprint(&mut hash, &limit.limit_seconds.to_string());
+            feed_fingerprint(&mut hash, &limit.remaining_seconds.to_string());
+            feed_fingerprint_bool(&mut hash, limit.exhausted);
+        }
+    }
     format!("{hash:016x}")
 }
 
@@ -763,6 +1259,169 @@ fn normalized_request_host(request: &NativeRequest) -> Option<String> {
         .as_deref()
         .and_then(normalize_host_rule)
         .or_else(|| request.url.as_deref().and_then(host_from_url))
+}
+
+fn normalize_usage_sample(request: &NativeRequest) -> Result<UsageSample, String> {
+    let source_type = request
+        .source_type
+        .as_deref()
+        .ok_or_else(|| "usage sourceType is required".to_string())?;
+    if !matches!(source_type, "website" | "desktop-app" | "mobile-app") {
+        return Err(format!("unsupported usage source type '{source_type}'"));
+    }
+    let raw_source_key = request
+        .source_key
+        .as_deref()
+        .or(request.host.as_deref())
+        .ok_or_else(|| "usage sourceKey is required".to_string())?;
+    let source_key = match source_type {
+        "website" => normalize_host_rule(raw_source_key)
+            .ok_or_else(|| "usage website host is invalid".to_string())?,
+        "desktop-app" | "mobile-app" => normalize_app_name(raw_source_key)
+            .ok_or_else(|| "usage app name is invalid".to_string())?
+            .to_lowercase(),
+        _ => unreachable!(),
+    };
+    if source_type == "desktop-app" && is_protected_app_name(&source_key) {
+        return Err("protected desktop apps cannot be tracked".to_string());
+    }
+    let elapsed_seconds = request
+        .elapsed_seconds
+        .ok_or_else(|| "usage elapsedSeconds is required".to_string())?;
+    if elapsed_seconds <= 0 || elapsed_seconds > 86_400 {
+        return Err("usage elapsedSeconds must be between 1 and 86400".to_string());
+    }
+    let started_at = request
+        .started_at
+        .ok_or_else(|| "usage startedAt is required".to_string())?;
+    if started_at < 0 {
+        return Err("usage startedAt must be non-negative".to_string());
+    }
+    let local_date = request
+        .local_date
+        .clone()
+        .ok_or_else(|| "usage localDate is required".to_string())?;
+    if !valid_local_date(&local_date) {
+        return Err("usage localDate must use yyyy-mm-dd".to_string());
+    }
+    let display_name = request.display_name.as_ref().and_then(|value| {
+        let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+        (!normalized.is_empty()).then(|| normalized.chars().take(120).collect::<String>())
+    });
+    Ok(UsageSample {
+        id: format!(
+            "ext-{}-{}-{}",
+            started_at,
+            now_epoch_ms(),
+            std::process::id()
+        ),
+        source_type: source_type.to_string(),
+        source_key,
+        display_name,
+        started_at,
+        elapsed_seconds,
+        local_date,
+        created_at: now_epoch_ms(),
+    })
+}
+
+fn valid_local_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
+}
+
+fn now_epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0)
+}
+
+fn fallback_usage_database_file_name(config_dir: &Path) -> &'static str {
+    let file_name = config_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if file_name.ends_with(".dev") {
+        "ganbaruai-dev.db"
+    } else {
+        "ganbaruai.db"
+    }
+}
+
+fn usage_database_file_name(config_dir: &Path, limit_state: Option<&LimitState>) -> &'static str {
+    limit_state
+        .and_then(|state| state.database_file_name.as_deref())
+        .and_then(|file_name| {
+            ALLOWED_USAGE_DATABASE_FILES
+                .iter()
+                .copied()
+                .find(|allowed| *allowed == file_name)
+        })
+        .unwrap_or_else(|| fallback_usage_database_file_name(config_dir))
+}
+
+fn usage_db_path(config_dir: &Path, limit_state: Option<&LimitState>) -> PathBuf {
+    config_dir.join(usage_database_file_name(config_dir, limit_state))
+}
+
+fn record_usage_sample(
+    config_dir: Option<&Path>,
+    limit_state: Option<&LimitState>,
+    sample: UsageSample,
+) -> Result<(), String> {
+    let config_dir = config_dir.ok_or_else(|| "app config directory is unavailable".to_string())?;
+    let db_path = usage_db_path(config_dir, limit_state);
+    if !db_path.exists() {
+        return Err("usage database is unavailable".to_string());
+    }
+    tauri::async_runtime::block_on(async move {
+        let db_url = format!(
+            "sqlite:{}",
+            db_path
+                .to_str()
+                .ok_or_else(|| "usage database path contains non-utf8 characters".to_string())?
+        );
+        let options = SqliteConnectOptions::from_str(&db_url)
+            .map_err(|e| format!("parse usage database url: {e}"))?;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .map_err(|e| format!("connect usage database: {e}"))?;
+        raw_sql("PRAGMA busy_timeout=5000")
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("usage database busy timeout: {e}"))?;
+        raw_sql(USAGE_SAMPLE_TABLE_SQL)
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("ensure usage sample table: {e}"))?;
+        sqlx_core::query::query(
+            "INSERT OR IGNORE INTO doomscrolling_usage_samples
+                (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(sample.id)
+        .bind(sample.source_type)
+        .bind(sample.source_key)
+        .bind(sample.display_name)
+        .bind(sample.started_at)
+        .bind(sample.elapsed_seconds)
+        .bind(sample.local_date)
+        .bind(sample.created_at)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("record usage sample: {e}"))?;
+        pool.close().await;
+        Ok(())
+    })
 }
 
 fn host_from_url(url: &str) -> Option<String> {
@@ -815,6 +1474,26 @@ fn now_utc() -> DateTime<Utc> {
     std::time::SystemTime::now().into()
 }
 
+fn limit_state_is_fresh(state: &LimitState) -> bool {
+    if !valid_local_date(&state.local_date) {
+        return false;
+    }
+    if state
+        .database_file_name
+        .as_deref()
+        .is_some_and(|file_name| !ALLOWED_USAGE_DATABASE_FILES.contains(&file_name))
+    {
+        return false;
+    }
+    let Ok(updated_at) = DateTime::parse_from_rfc3339(&state.updated_at) else {
+        return false;
+    };
+    let age_seconds = (now_utc() - updated_at.with_timezone(&Utc))
+        .num_seconds()
+        .max(0);
+    age_seconds <= LIMIT_STATE_STALE_SECONDS
+}
+
 fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Option<&str>) {
     let Some(config_dir) = &snapshot.config_dir else {
         return;
@@ -841,8 +1520,9 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
 mod tests {
     use super::{
         decide_url, host_from_url, host_matches_rule, should_enforce, DoomscrollingConfig,
-        DoomscrollingMode, NativeResponse, StateSnapshot,
+        DoomscrollingMode, NativeResponse, StateSnapshot, UsageLimitsConfig,
     };
+    use chrono::SecondsFormat;
 
     fn config() -> DoomscrollingConfig {
         DoomscrollingConfig {
@@ -856,6 +1536,10 @@ mod tests {
             blocked_hosts: vec!["reddit.com".to_string(), "youtube.com".to_string()],
             exception_hosts: vec!["music.youtube.com".to_string()],
             allowed_hosts: vec!["github.com".to_string()],
+            limits: UsageLimitsConfig {
+                enabled: true,
+                items: Vec::new(),
+            },
         }
     }
 
@@ -957,6 +1641,118 @@ mod tests {
         assert_eq!(
             decision.matched_rule_name.as_deref(),
             Some("blocked host: reddit.com")
+        );
+    }
+
+    #[test]
+    fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
+        let mut config = config();
+        config.blocked_hosts.clear();
+        config.limits.items = vec![super::UsageLimit {
+            id: "youtube".to_string(),
+            name: "YouTube".to_string(),
+            enabled: true,
+            minutes_per_day: 10,
+            sources: vec![super::UsageLimitSource::Website {
+                host: "youtube.com".to_string(),
+            }],
+        }];
+        let limit_state = super::LimitState {
+            local_date: "2026-05-28".to_string(),
+            updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
+            database_file_name: Some("ganbaruai-dev.db".to_string()),
+            limits: vec![super::LimitStateItem {
+                id: "youtube".to_string(),
+                used_seconds: 600,
+                limit_seconds: 600,
+                remaining_seconds: 0,
+                exhausted: true,
+            }],
+        };
+
+        let decision = super::decide_url_with_limits(
+            "music.youtube.com",
+            None,
+            &config,
+            Some(&limit_state),
+            false,
+        );
+
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("daily limit: YouTube")
+        );
+    }
+
+    #[test]
+    fn active_focus_rules_win_over_limit_blocks() {
+        let mut config = config();
+        config.limits.items = vec![super::UsageLimit {
+            id: "reddit".to_string(),
+            name: "Reddit limit".to_string(),
+            enabled: true,
+            minutes_per_day: 10,
+            sources: vec![super::UsageLimitSource::Website {
+                host: "reddit.com".to_string(),
+            }],
+        }];
+        let limit_state = super::LimitState {
+            local_date: "2026-05-28".to_string(),
+            updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
+            database_file_name: Some("ganbaruai-dev.db".to_string()),
+            limits: vec![super::LimitStateItem {
+                id: "reddit".to_string(),
+                used_seconds: 600,
+                limit_seconds: 600,
+                remaining_seconds: 0,
+                exhausted: true,
+            }],
+        };
+
+        let decision = super::decide_url_with_limits(
+            "old.reddit.com",
+            None,
+            &config,
+            Some(&limit_state),
+            true,
+        );
+
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("blocked host: reddit.com")
+        );
+    }
+
+    #[test]
+    fn uses_limit_state_database_file_for_usage_samples() {
+        let config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaruai");
+        let limit_state = super::LimitState {
+            local_date: "2026-05-28".to_string(),
+            updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
+            database_file_name: Some("ganbaruai-dev.db".to_string()),
+            limits: Vec::new(),
+        };
+
+        assert_eq!(
+            super::usage_db_path(config_dir, Some(&limit_state)),
+            config_dir.join("ganbaruai-dev.db")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_config_dir_database_file_for_old_limit_state() {
+        let prod_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaruai");
+        let dev_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaruai.dev");
+
+        assert_eq!(
+            super::usage_db_path(prod_config_dir, None),
+            prod_config_dir.join("ganbaruai.db")
+        );
+        assert_eq!(
+            super::usage_db_path(dev_config_dir, None),
+            dev_config_dir.join("ganbaruai-dev.db")
         );
     }
 
@@ -1123,6 +1919,7 @@ mod tests {
             config_dir: None,
             config,
             runtime: None,
+            limit_state: None,
         };
         let mut short_break = response_for_phase("short_break");
         let mut long_break = response_for_phase("long_break");
@@ -1140,6 +1937,7 @@ mod tests {
             config_dir: None,
             config,
             runtime: None,
+            limit_state: None,
         };
         let mut focus = response_for_phase("focus");
         let mut short_break = response_for_phase("short_break");
@@ -1175,21 +1973,21 @@ mod tests {
     #[test]
     fn rules_fingerprint_changes_when_mode_or_rules_change() {
         let mut changed_config = config();
-        let base = super::rules_fingerprint(&changed_config);
+        let base = super::rules_fingerprint(&changed_config, None);
 
         changed_config.mode = DoomscrollingMode::Whitelist;
-        assert_ne!(super::rules_fingerprint(&changed_config), base);
+        assert_ne!(super::rules_fingerprint(&changed_config, None), base);
 
         changed_config.mode = DoomscrollingMode::Blacklist;
         changed_config
             .blocked_hosts
             .push("news.ycombinator.com".to_string());
-        assert_ne!(super::rules_fingerprint(&changed_config), base);
+        assert_ne!(super::rules_fingerprint(&changed_config, None), base);
 
         let mut category_config = config();
         category_config
             .blocked_category_ids
             .push("news".to_string());
-        assert_ne!(super::rules_fingerprint(&category_config), base);
+        assert_ne!(super::rules_fingerprint(&category_config, None), base);
     }
 }

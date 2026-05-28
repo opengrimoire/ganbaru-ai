@@ -37,6 +37,50 @@ export interface DoomscrollingRunningDesktopAppMatch {
   processId: number;
 }
 
+export interface DoomscrollingUsageSamplePayload {
+  id?: string;
+  sourceType: "website" | "desktop-app" | "mobile-app";
+  sourceKey: string;
+  displayName: string | null;
+  startedAt: number;
+  elapsedSeconds: number;
+  localDate: string;
+}
+
+export interface DoomscrollingUsageSampleRow {
+  id: string;
+  sourceType: "website" | "desktop-app" | "mobile-app";
+  sourceKey: string;
+  displayName: string | null;
+  startedAt: number;
+  elapsedSeconds: number;
+  localDate: string;
+  createdAt: number;
+}
+
+export interface DoomscrollingLimitStateItem {
+  id: string;
+  usedSeconds: number;
+  limitSeconds: number;
+  remainingSeconds: number;
+  exhausted: boolean;
+}
+
+export interface DoomscrollingLimitState {
+  localDate: string;
+  updatedAt: string;
+  databaseFileName: "ganbaruai.db" | "ganbaruai-dev.db" | "ganbaruai-benchmark.db";
+  limits: DoomscrollingLimitStateItem[];
+}
+
+export interface DoomscrollingForegroundDesktopAppStatus {
+  available: boolean;
+  appName: string | null;
+  processName: string | null;
+  processId: number | null;
+  reason: string | null;
+}
+
 export async function writeDoomscrollingRuntimeState(
   state: DoomscrollingRuntimeState,
 ): Promise<void> {
@@ -71,4 +115,33 @@ export async function closeDoomscrollingDesktopApp(processId: number): Promise<v
 
 export async function showDoomscrollingDesktopBlockNotification(appName: string): Promise<void> {
   await invoke("show_doomscrolling_desktop_block_notification", { appName });
+}
+
+export async function recordDoomscrollingUsageSample(
+  dbUrl: string,
+  sample: DoomscrollingUsageSamplePayload,
+): Promise<void> {
+  await invoke("doomscrolling_record_usage_sample", { dbUrl, sample });
+}
+
+export async function listDoomscrollingUsageSamples(
+  dbUrl: string,
+  localDate: string,
+): Promise<DoomscrollingUsageSampleRow[]> {
+  return await invoke<DoomscrollingUsageSampleRow[]>(
+    "doomscrolling_list_usage_samples",
+    { dbUrl, localDate },
+  );
+}
+
+export async function writeDoomscrollingLimitState(
+  state: DoomscrollingLimitState,
+): Promise<void> {
+  await invoke("doomscrolling_write_limit_state", { state });
+}
+
+export async function getForegroundDoomscrollingDesktopApp(): Promise<DoomscrollingForegroundDesktopAppStatus> {
+  return await invoke<DoomscrollingForegroundDesktopAppStatus>(
+    "doomscrolling_get_foreground_desktop_app",
+  );
 }

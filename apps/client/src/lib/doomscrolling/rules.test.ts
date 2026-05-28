@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeDoomscrollingLimitDailyTotals,
   DEFAULT_DOOMSCROLLING_CONFIG,
+  doomscrollingWebsiteUsageSampleFromUrl,
+  evaluateDoomscrollingWebsiteLimit,
   evaluateDoomscrollingUrl,
   isProtectedDoomscrollingDesktopAppName,
+  matchesDoomscrollingLimitSource,
   normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingHost,
@@ -11,6 +15,8 @@ import {
   type DoomscrollingCategoryId,
   type DoomscrollingConfig,
   type DoomscrollingHostRule,
+  type DoomscrollingUsageLimit,
+  type DoomscrollingUsageSample,
 } from "./rules";
 
 function appRule(name: string, enabled = true): DoomscrollingAppRule {
@@ -50,7 +56,42 @@ function config(partial: Partial<DoomscrollingConfig>): DoomscrollingConfig {
     blockedHosts: [],
     exceptionHosts: [],
     allowedHosts: [],
+    limits: { enabled: true, items: [] },
     ...partial,
+  };
+}
+
+function limit(partial: Partial<DoomscrollingUsageLimit>): DoomscrollingUsageLimit {
+  return {
+    id: "limit-1",
+    name: "Daily limit",
+    enabled: true,
+    kind: "individual",
+    minutesPerDay: 30,
+    sources: [{ type: "website", host: "youtube.com" }],
+    ...partial,
+  };
+}
+
+function websiteSample(host: string, elapsedSeconds: number, localDate = "2026-05-28"): DoomscrollingUsageSample {
+  return {
+    sourceType: "website",
+    sourceKey: host,
+    displayName: host,
+    elapsedSeconds,
+    startedAt: 1_779_923_600_000,
+    localDate,
+  };
+}
+
+function desktopSample(appName: string, elapsedSeconds: number, localDate = "2026-05-28"): DoomscrollingUsageSample {
+  return {
+    sourceType: "desktop-app",
+    sourceKey: appName,
+    displayName: appName,
+    elapsedSeconds,
+    startedAt: 1_779_923_600_000,
+    localDate,
   };
 }
 
@@ -131,6 +172,7 @@ describe("normalizeDoomscrollingConfig", () => {
       exceptionHosts: [],
       allowedHosts: [],
       desktop: DEFAULT_DOOMSCROLLING_CONFIG.desktop,
+      limits: DEFAULT_DOOMSCROLLING_CONFIG.limits,
     });
   });
 
@@ -263,6 +305,215 @@ describe("normalizeDoomscrollingConfig", () => {
         ],
       },
     });
+  });
+
+  it("normalizes valid and legacy daily usage limits", () => {
+    const normalized = normalizeDoomscrollingConfig({
+      limits: {
+        enabled: true,
+        items: [
+          {
+            id: "youtube",
+            name: "  YouTube  ",
+            enabled: false,
+            kind: "individual",
+            minutesPerDay: 45.8,
+            sources: [
+              "https://youtube.com/watch?v=1",
+              { kind: "desktopApp", name: "FreeTube", matchNames: ["freetube"] },
+              { kind: "builtInCategory", id: "streaming" },
+              { kind: "customCategoryStack", id: "research-traps" },
+              { kind: "mobileApp", name: "YouTube", platform: "Android" },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(normalized.limits.items).toEqual([
+      {
+        id: "youtube",
+        name: "YouTube",
+        enabled: false,
+        kind: "individual",
+        minutesPerDay: 45,
+        sources: [
+          { type: "website", host: "youtube.com" },
+          { type: "desktop-app", name: "FreeTube", matchNames: ["FreeTube"] },
+          { type: "category", id: "streaming" },
+          { type: "custom-stack", id: "research-traps" },
+          { type: "mobile-app", name: "YouTube", platform: "android" },
+        ],
+      },
+    ]);
+  });
+
+  it("rejects invalid daily usage limits", () => {
+    const normalized = normalizeDoomscrollingConfig({
+      limits: {
+        items: [
+          { id: "bad-minutes", name: "Bad", minutesPerDay: 0, sources: ["youtube.com"] },
+          { id: "bad-name", name: "   ", minutesPerDay: 30, sources: ["youtube.com"] },
+          {
+            id: "duplicate-sources",
+            name: "Duplicate sources",
+            minutesPerDay: 30,
+            sources: ["youtube.com", "https://youtube.com/watch?v=1"],
+          },
+          {
+            id: "protected-app",
+            name: "Protected app",
+            minutesPerDay: 30,
+            sources: [{ type: "desktop-app", name: "Terminal" }],
+          },
+        ],
+      },
+    });
+
+    expect(normalized.limits.items).toEqual([]);
+  });
+});
+
+describe("Doomscrolling usage limit matching", () => {
+  it("matches website hosts, subdomains, categories, custom stacks, and desktop app names", () => {
+    const cfg = config({
+      customCategoryStacks: [
+        {
+          id: "research-traps",
+          name: "Research traps",
+          enabled: true,
+          hosts: [hostRule("news.ycombinator.com")],
+        },
+      ],
+    });
+
+    expect(matchesDoomscrollingLimitSource(
+      { type: "website", host: "youtube.com" },
+      websiteSample("music.youtube.com", 60),
+      cfg,
+    )).toBe(true);
+    expect(matchesDoomscrollingLimitSource(
+      { type: "category", id: "streaming" },
+      websiteSample("watch-anime.example", 60),
+      cfg,
+    )).toBe(true);
+    expect(matchesDoomscrollingLimitSource(
+      { type: "custom-stack", id: "research-traps" },
+      websiteSample("news.ycombinator.com", 60),
+      cfg,
+    )).toBe(true);
+    expect(matchesDoomscrollingLimitSource(
+      { type: "desktop-app", name: "FreeTube", matchNames: ["FreeTube", "freetube"] },
+      desktopSample("freetube", 60),
+      cfg,
+    )).toBe(true);
+  });
+
+  it("sums linked sources into one individual limit", () => {
+    const cfg = config({
+      limits: {
+        enabled: true,
+        items: [
+          limit({
+            id: "youtube",
+            name: "YouTube",
+            kind: "individual",
+            minutesPerDay: 10,
+            sources: [
+              { type: "website", host: "youtube.com" },
+              { type: "desktop-app", name: "FreeTube", matchNames: ["FreeTube", "freetube"] },
+            ],
+          }),
+        ],
+      },
+    });
+
+    const totals = computeDoomscrollingLimitDailyTotals(cfg, [
+      websiteSample("youtube.com", 120),
+      websiteSample("music.youtube.com", 60),
+      desktopSample("freetube", 180),
+    ], "2026-05-28");
+
+    expect(totals).toMatchObject([{ limitId: "youtube", usedSeconds: 360 }]);
+  });
+
+  it("sums several sources into one group limit", () => {
+    const cfg = config({
+      limits: {
+        enabled: true,
+        items: [
+          limit({
+            id: "social",
+            name: "Social media",
+            kind: "group",
+            minutesPerDay: 60,
+            sources: [
+              { type: "category", id: "social-media" },
+              { type: "website", host: "discord.com" },
+            ],
+          }),
+        ],
+      },
+    });
+
+    const totals = computeDoomscrollingLimitDailyTotals(cfg, [
+      websiteSample("old.reddit.com", 300),
+      websiteSample("discord.com", 120),
+    ], "2026-05-28");
+
+    expect(totals).toMatchObject([{ limitId: "social", usedSeconds: 420 }]);
+  });
+
+  it("resets totals by local date", () => {
+    const cfg = config({
+      limits: {
+        enabled: true,
+        items: [limit({ id: "youtube", minutesPerDay: 10 })],
+      },
+    });
+
+    const totals = computeDoomscrollingLimitDailyTotals(cfg, [
+      websiteSample("youtube.com", 600, "2026-05-27"),
+      websiteSample("youtube.com", 120, "2026-05-28"),
+    ], "2026-05-28");
+
+    expect(totals).toMatchObject([{ limitId: "youtube", usedSeconds: 120 }]);
+  });
+
+  it("blocks websites whose matching limit is exhausted", () => {
+    const cfg = config({
+      limits: {
+        enabled: true,
+        items: [limit({ id: "youtube", name: "YouTube", minutesPerDay: 10 })],
+      },
+    });
+
+    const decision = evaluateDoomscrollingWebsiteLimit("https://music.youtube.com/watch", cfg, [
+      {
+        limitId: "youtube",
+        usedSeconds: 600,
+        limitSeconds: 600,
+        remainingSeconds: 0,
+        exhausted: true,
+      },
+    ]);
+
+    expect(decision).toEqual({
+      blocked: true,
+      host: "music.youtube.com",
+      limitId: "youtube",
+      limitName: "YouTube",
+      matchedRule: "daily limit: YouTube",
+    });
+  });
+
+  it("does not count blocked extension pages as website usage", () => {
+    expect(doomscrollingWebsiteUsageSampleFromUrl(
+      "chrome-extension://abcdefghijklmnopabcdefghijklmnop/blocked.html",
+      30,
+      1_779_923_600_000,
+      "2026-05-28",
+    )).toBeNull();
   });
 });
 

@@ -4,9 +4,10 @@
   import DoomscrollingBrowserSettings from "./DoomscrollingBrowserSettings.svelte";
   import DoomscrollingMobileSettings from "./DoomscrollingMobileSettings.svelte";
   import DoomscrollingDesktopSettings from "./DoomscrollingDesktopSettings.svelte";
+  import DoomscrollingLimitsSettings from "./DoomscrollingLimitsSettings.svelte";
 
   let {
-    initialTab = "browser",
+    initialTab = "limits",
   }: {
     initialTab?: DoomscrollingSettingsTab;
   } = $props();
@@ -15,12 +16,13 @@
     id: DoomscrollingSettingsTab;
     label: string;
   }> = [
+    { id: "limits", label: "Limits" },
     { id: "browser", label: "Browser" },
     { id: "mobile", label: "Mobile apps" },
     { id: "desktop", label: "Desktop apps" },
   ];
 
-  let activeTab = $state<DoomscrollingSettingsTab>("browser");
+  let activeTab = $state<DoomscrollingSettingsTab>("limits");
 
   $effect.pre(() => {
     activeTab = initialTab;
@@ -29,7 +31,7 @@
 
 <div class="flex flex-col gap-6">
   <div
-    class="grid grid-cols-3 gap-1 rounded-md border border-border bg-card p-1 dark:bg-transparent"
+    class="grid grid-cols-2 gap-1 rounded-md border border-border bg-card p-1 min-[500px]:grid-cols-4 dark:bg-transparent"
     role="tablist"
     aria-label="Doomscrolling settings"
   >
@@ -52,7 +54,9 @@
     {/each}
   </div>
 
-  {#if activeTab === "browser"}
+  {#if activeTab === "limits"}
+    <DoomscrollingLimitsSettings />
+  {:else if activeTab === "browser"}
     <DoomscrollingBrowserSettings />
   {:else if activeTab === "mobile"}
     <DoomscrollingMobileSettings />

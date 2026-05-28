@@ -13,6 +13,7 @@
   "permissions": [
     "alarms",
     "favicon",
+    "idle",
     "nativeMessaging",
     "storage",
     "tabs",

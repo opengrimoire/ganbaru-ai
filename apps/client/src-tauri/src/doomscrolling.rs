@@ -1,5 +1,7 @@
+use crate::db_path::connect_sqlite;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -8,7 +10,10 @@ use tauri::{Manager, Runtime};
 
 const STATE_FILE: &str = "doomscrolling-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
+const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
+const ALLOWED_USAGE_DATABASE_FILES: &[&str] =
+    &["ganbaruai.db", "ganbaruai-dev.db", "ganbaruai-benchmark.db"];
 const EXTENSION_INSTALL_README_URL: &str =
     "https://github.com/opengrimoire/GanbaruAI/blob/dev/extensions/chrome/README.md";
 const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
@@ -167,6 +172,60 @@ pub struct DoomscrollingExtensionStatus {
     reason: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoomscrollingUsageSampleInput {
+    id: Option<String>,
+    source_type: String,
+    source_key: String,
+    display_name: Option<String>,
+    started_at: i64,
+    elapsed_seconds: i64,
+    local_date: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoomscrollingUsageSampleRow {
+    id: String,
+    source_type: String,
+    source_key: String,
+    display_name: Option<String>,
+    started_at: i64,
+    elapsed_seconds: i64,
+    local_date: String,
+    created_at: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoomscrollingLimitState {
+    local_date: String,
+    updated_at: String,
+    database_file_name: String,
+    limits: Vec<DoomscrollingLimitStateItem>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoomscrollingLimitStateItem {
+    id: String,
+    used_seconds: i64,
+    limit_seconds: i64,
+    remaining_seconds: i64,
+    exhausted: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoomscrollingForegroundDesktopAppStatus {
+    available: bool,
+    app_name: Option<String>,
+    process_name: Option<String>,
+    process_id: Option<u32>,
+    reason: Option<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DoomscrollingDesktopAppCandidate {
@@ -205,6 +264,13 @@ fn extension_connection_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Pa
     Ok(path)
 }
 
+fn limit_state_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+    let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&path).map_err(|e| format!("create app config dir: {e}"))?;
+    path.push(LIMIT_STATE_FILE);
+    Ok(path)
+}
+
 fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
     match state.phase.as_str() {
         "inactive" | "focus" | "short_break" | "long_break" => {}
@@ -224,6 +290,13 @@ fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
 
 fn now_utc() -> DateTime<Utc> {
     std::time::SystemTime::now().into()
+}
+
+fn now_epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0)
 }
 
 #[cfg(target_os = "linux")]
@@ -303,6 +376,112 @@ fn normalize_app_candidate_name(name: &str) -> Option<String> {
         return None;
     }
     Some(name.chars().take(80).collect())
+}
+
+fn normalize_usage_host(input: &str) -> Option<String> {
+    let trimmed = input.trim().trim_end_matches('.').to_ascii_lowercase();
+    let host = trimmed.strip_prefix("*.").unwrap_or(&trimmed);
+    if host.is_empty() || host.contains('*') || host.contains(' ') || host.contains('@') {
+        return None;
+    }
+    Some(host.to_string())
+}
+
+fn normalize_usage_source_key(source_type: &str, source_key: &str) -> Option<String> {
+    match source_type {
+        "website" => normalize_usage_host(source_key),
+        "desktop-app" | "mobile-app" => {
+            normalize_app_candidate_name(source_key).map(|name| name.to_lowercase())
+        }
+        _ => None,
+    }
+}
+
+fn normalize_usage_display_name(value: Option<String>) -> Option<String> {
+    value.and_then(|name| {
+        let normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if normalized.is_empty() {
+            None
+        } else {
+            Some(normalized.chars().take(120).collect())
+        }
+    })
+}
+
+fn validate_local_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
+}
+
+fn normalize_usage_sample(
+    sample: DoomscrollingUsageSampleInput,
+    fallback_id_prefix: &str,
+) -> Result<DoomscrollingUsageSampleRow, String> {
+    let source_type = match sample.source_type.as_str() {
+        "website" | "desktop-app" | "mobile-app" => sample.source_type,
+        other => return Err(format!("unsupported usage source type '{other}'")),
+    };
+    let source_key = normalize_usage_source_key(&source_type, &sample.source_key)
+        .ok_or_else(|| "usage sample source key is invalid".to_string())?;
+    if source_type == "desktop-app" && is_protected_desktop_app_name(&source_key) {
+        return Err("protected desktop apps cannot be tracked".to_string());
+    }
+    if sample.elapsed_seconds <= 0 || sample.elapsed_seconds > 86_400 {
+        return Err("elapsed_seconds must be between 1 and 86400".to_string());
+    }
+    if sample.started_at < 0 {
+        return Err("started_at must be non-negative".to_string());
+    }
+    if !validate_local_date(&sample.local_date) {
+        return Err("local_date must use yyyy-mm-dd".to_string());
+    }
+    let id = sample.id.unwrap_or_else(|| {
+        format!(
+            "{fallback_id_prefix}-{}-{}",
+            now_epoch_ms(),
+            std::process::id()
+        )
+    });
+    if id.trim().is_empty() {
+        return Err("usage sample id is required".to_string());
+    }
+
+    Ok(DoomscrollingUsageSampleRow {
+        id: id.chars().take(120).collect(),
+        source_type,
+        source_key,
+        display_name: normalize_usage_display_name(sample.display_name),
+        started_at: sample.started_at,
+        elapsed_seconds: sample.elapsed_seconds,
+        local_date: sample.local_date,
+        created_at: now_epoch_ms(),
+    })
+}
+
+fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<(), String> {
+    if !validate_local_date(&state.local_date) {
+        return Err("local_date must use yyyy-mm-dd".to_string());
+    }
+    DateTime::parse_from_rfc3339(&state.updated_at)
+        .map_err(|e| format!("parse updated_at: {e}"))?;
+    if !ALLOWED_USAGE_DATABASE_FILES.contains(&state.database_file_name.as_str()) {
+        return Err("database_file_name is not supported".to_string());
+    }
+    for limit in &state.limits {
+        if limit.id.trim().is_empty() {
+            return Err("limit id is required".to_string());
+        }
+        if limit.used_seconds < 0 || limit.limit_seconds <= 0 || limit.remaining_seconds < 0 {
+            return Err("limit seconds must be non-negative".to_string());
+        }
+    }
+    Ok(())
 }
 
 fn normalize_process_match_name(name: &str) -> Option<String> {
@@ -945,6 +1124,18 @@ fn close_desktop_process(_process_id: u32) -> Result<(), String> {
     Err("desktop app closing is only available on Linux for now".to_string())
 }
 
+fn foreground_desktop_app_status() -> DoomscrollingForegroundDesktopAppStatus {
+    DoomscrollingForegroundDesktopAppStatus {
+        available: false,
+        app_name: None,
+        process_name: None,
+        process_id: None,
+        reason: Some(
+            "Foreground desktop app detection is not available on this platform yet.".to_string(),
+        ),
+    }
+}
+
 fn disconnected_extension_status(
     checked_at: DateTime<Utc>,
     reason: impl Into<String>,
@@ -1024,6 +1215,82 @@ pub fn doomscrolling_write_state<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn doomscrolling_record_usage_sample<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    db_url: String,
+    sample: DoomscrollingUsageSampleInput,
+) -> Result<(), String> {
+    let sample = normalize_usage_sample(sample, "app")?;
+    let pool = connect_sqlite(app, db_url).await?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO doomscrolling_usage_samples
+            (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(sample.id)
+    .bind(sample.source_type)
+    .bind(sample.source_key)
+    .bind(sample.display_name)
+    .bind(sample.started_at)
+    .bind(sample.elapsed_seconds)
+    .bind(sample.local_date)
+    .bind(sample.created_at)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("record doomscrolling usage sample: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn doomscrolling_list_usage_samples<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    db_url: String,
+    local_date: String,
+) -> Result<Vec<DoomscrollingUsageSampleRow>, String> {
+    if !validate_local_date(&local_date) {
+        return Err("local_date must use yyyy-mm-dd".to_string());
+    }
+    let pool = connect_sqlite(app, db_url).await?;
+    let rows = sqlx::query(
+        "SELECT id, source_type, source_key, display_name, started_at,
+                elapsed_seconds, local_date, created_at
+         FROM doomscrolling_usage_samples
+         WHERE local_date = ?
+         ORDER BY started_at ASC, id ASC",
+    )
+    .bind(local_date)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("list doomscrolling usage samples: {e}"))?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(DoomscrollingUsageSampleRow {
+                id: row.try_get("id").map_err(|e| e.to_string())?,
+                source_type: row.try_get("source_type").map_err(|e| e.to_string())?,
+                source_key: row.try_get("source_key").map_err(|e| e.to_string())?,
+                display_name: row.try_get("display_name").map_err(|e| e.to_string())?,
+                started_at: row.try_get("started_at").map_err(|e| e.to_string())?,
+                elapsed_seconds: row.try_get("elapsed_seconds").map_err(|e| e.to_string())?,
+                local_date: row.try_get("local_date").map_err(|e| e.to_string())?,
+                created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
+            })
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn doomscrolling_write_limit_state<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    state: DoomscrollingLimitState,
+) -> Result<(), String> {
+    validate_limit_state(&state)?;
+    let path = limit_state_path(&app)?;
+    let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
+    write_text_file_atomically(&path, &json)
+}
+
+#[tauri::command]
 pub fn doomscrolling_get_extension_status<R: Runtime>(
     app: tauri::AppHandle<R>,
     fresh_after: Option<String>,
@@ -1071,12 +1338,18 @@ pub fn doomscrolling_close_desktop_app(process_id: u32) -> Result<(), String> {
     close_desktop_process(process_id)
 }
 
+#[tauri::command]
+pub fn doomscrolling_get_foreground_desktop_app() -> DoomscrollingForegroundDesktopAppStatus {
+    foreground_desktop_app_status()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         extension_status_from_file_contents, normalize_app_candidate_name,
         sort_and_deduplicate_candidates, validate_state, DoomscrollingDesktopAppCandidate,
-        DoomscrollingDesktopAppRuleInput, DoomscrollingRuntimeState,
+        DoomscrollingDesktopAppRuleInput, DoomscrollingLimitState, DoomscrollingLimitStateItem,
+        DoomscrollingRuntimeState, DoomscrollingUsageSampleInput,
     };
     use chrono::{DateTime, Utc};
 
@@ -1183,6 +1456,65 @@ mod tests {
         assert!(super::is_protected_desktop_app_name("python3.12"));
         assert!(super::is_protected_desktop_app_name("explorer.exe"));
         assert!(!super::is_protected_desktop_app_name("Steam"));
+    }
+
+    #[test]
+    fn foreground_app_detection_reports_unavailable_without_guessing() {
+        let status = super::foreground_desktop_app_status();
+        assert!(!status.available);
+        assert!(status.app_name.is_none());
+        assert!(status.process_name.is_none());
+        assert!(status.process_id.is_none());
+    }
+
+    #[test]
+    fn usage_samples_reject_protected_desktop_apps() {
+        let sample = DoomscrollingUsageSampleInput {
+            id: Some("sample-1".to_string()),
+            source_type: "desktop-app".to_string(),
+            source_key: "Terminal".to_string(),
+            display_name: Some("Terminal".to_string()),
+            started_at: 1_779_923_600_000,
+            elapsed_seconds: 30,
+            local_date: "2026-05-28".to_string(),
+        };
+
+        assert!(super::normalize_usage_sample(sample, "test").is_err());
+    }
+
+    #[test]
+    fn usage_samples_normalize_website_hosts() {
+        let sample = DoomscrollingUsageSampleInput {
+            id: Some("sample-1".to_string()),
+            source_type: "website".to_string(),
+            source_key: "YouTube.com.".to_string(),
+            display_name: Some("YouTube".to_string()),
+            started_at: 1_779_923_600_000,
+            elapsed_seconds: 30,
+            local_date: "2026-05-28".to_string(),
+        };
+
+        let normalized = super::normalize_usage_sample(sample, "test").unwrap();
+        assert_eq!(normalized.source_key, "youtube.com");
+        assert_eq!(normalized.elapsed_seconds, 30);
+    }
+
+    #[test]
+    fn limit_state_requires_a_local_date() {
+        let state = DoomscrollingLimitState {
+            local_date: "today".to_string(),
+            updated_at: "2026-05-28T00:00:00.000Z".to_string(),
+            database_file_name: "ganbaruai-dev.db".to_string(),
+            limits: vec![DoomscrollingLimitStateItem {
+                id: "youtube".to_string(),
+                used_seconds: 60,
+                limit_seconds: 600,
+                remaining_seconds: 540,
+                exhausted: false,
+            }],
+        };
+
+        assert!(super::validate_limit_state(&state).is_err());
     }
 
     #[test]

@@ -148,6 +148,16 @@ node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|c
 
 Check that GanbaruAI is running, browser blocking and Block during focus are enabled in Settings > Doomscrolling, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
 
+**Usage limits stay at zero.**
+
+Reload the GanbaruAI extension card after extension changes, and rebuild the native host after Rust native host changes:
+
+```sh
+pnpm -w run build:native-host
+```
+
+Keep GanbaruAI running while browsing. The extension records focused `http` and `https` tab time through native messaging, including fullscreen video while the browser window stays focused. The Limits UI refreshes from SQLite every few seconds, and browser samples are flushed roughly every 30 seconds.
+
 **The app window opens but looks blank.**
 
 Stop `pnpm tauri dev` with `Ctrl+C` and start it again. If this happens after a frontend dependency changes, also reload the app window.

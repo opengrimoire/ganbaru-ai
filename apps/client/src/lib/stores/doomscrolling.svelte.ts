@@ -1,9 +1,11 @@
 import {
   DEFAULT_DOOMSCROLLING_CONFIG,
   isProtectedDoomscrollingDesktopAppName,
+  doomscrollingLimitSourceKey,
   normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingCustomCategoryStackName,
+  normalizeDoomscrollingUsageLimitName,
   parseDoomscrollingHosts,
   type DoomscrollingAppRule,
   type DoomscrollingCategoryId,
@@ -12,7 +14,10 @@ import {
   type DoomscrollingCustomCategoryStack,
   type DoomscrollingDesktopConfig,
   type DoomscrollingHostRule,
+  type DoomscrollingLimitSource,
   type DoomscrollingMode,
+  type DoomscrollingUsageLimit,
+  type DoomscrollingUsageLimitKind,
 } from "$lib/doomscrolling";
 import { getConfigKey, setConfigKey } from "$lib/vault/config";
 
@@ -30,6 +35,22 @@ export type UpdateDoomscrollingCustomCategoryStackResult =
   | "invalid-name"
   | "invalid-hosts"
   | "duplicate-name";
+
+export type SaveDoomscrollingUsageLimitResult =
+  | "saved"
+  | "missing"
+  | "invalid-name"
+  | "invalid-minutes"
+  | "invalid-sources"
+  | "duplicate-source"
+  | "protected-source";
+
+export interface DoomscrollingUsageLimitDraft {
+  name: string;
+  kind: DoomscrollingUsageLimitKind;
+  minutesPerDay: number;
+  sources: readonly DoomscrollingLimitSource[];
+}
 
 function loadSavedConfig(): DoomscrollingConfig {
   const saved = getConfigKey<unknown>(CONFIG_KEY, undefined);
@@ -49,6 +70,10 @@ function update(partial: Partial<DoomscrollingConfig>): void {
 
 function updateDesktop(partial: Partial<DoomscrollingDesktopConfig>): void {
   update({ desktop: { ...config.desktop, ...partial } });
+}
+
+function updateLimits(partial: Partial<DoomscrollingConfig["limits"]>): void {
+  update({ limits: { ...config.limits, ...partial } });
 }
 
 function mergeHosts(
@@ -188,6 +213,52 @@ function duplicateCustomCategoryStackName(name: string, currentId: string | null
   ));
 }
 
+function createUsageLimitId(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "limit";
+  const suffix = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${base}-${suffix}`;
+}
+
+function limitSourceHasProtectedDesktopApp(source: DoomscrollingLimitSource): boolean {
+  return source.type === "desktop-app"
+    && (
+      isProtectedDoomscrollingDesktopAppName(source.name)
+      || source.matchNames.some((name) => isProtectedDoomscrollingDesktopAppName(name))
+    );
+}
+
+function normalizeLimitDraft(
+  draft: DoomscrollingUsageLimitDraft,
+): SaveDoomscrollingUsageLimitResult | Omit<DoomscrollingUsageLimit, "id" | "enabled"> {
+  const name = normalizeDoomscrollingUsageLimitName(draft.name);
+  if (!name) return "invalid-name";
+  if (!Number.isFinite(draft.minutesPerDay)) return "invalid-minutes";
+  const minutesPerDay = Math.trunc(draft.minutesPerDay);
+  if (minutesPerDay < 1 || minutesPerDay > 24 * 60) return "invalid-minutes";
+  if (draft.sources.length === 0) return "invalid-sources";
+  const seenSources = new Set<string>();
+  const sources: DoomscrollingLimitSource[] = [];
+  for (const source of draft.sources) {
+    if (limitSourceHasProtectedDesktopApp(source)) return "protected-source";
+    const key = doomscrollingLimitSourceKey(source);
+    if (seenSources.has(key)) return "duplicate-source";
+    seenSources.add(key);
+    sources.push(source);
+  }
+  return {
+    name,
+    kind: draft.kind === "group" ? "group" : "individual",
+    minutesPerDay,
+    sources,
+  };
+}
+
 export function getDoomscrolling() {
   return {
     get enabled(): boolean {
@@ -235,6 +306,15 @@ export function getDoomscrolling() {
     get blockedApps(): readonly DoomscrollingAppRule[] {
       return config.desktop.blockedApps;
     },
+    get limitsEnabled(): boolean {
+      return config.limits.enabled;
+    },
+    get usageLimits(): readonly DoomscrollingUsageLimit[] {
+      return config.limits.items;
+    },
+    get config(): DoomscrollingConfig {
+      return config;
+    },
     setMode(mode: DoomscrollingMode): void {
       update({ mode });
     },
@@ -261,6 +341,9 @@ export function getDoomscrolling() {
     },
     setDesktopBlockDuringLongBreaks(blockDuringLongBreaks: boolean): void {
       updateDesktop({ blockDuringLongBreaks });
+    },
+    setLimitsEnabled(enabled: boolean): void {
+      updateLimits({ enabled });
     },
     setBlockedCategoryEnabled(id: DoomscrollingCategoryId, enabled: boolean): void {
       update({ blockedCategories: setCategoryEnabled(config.blockedCategories, id, enabled) });
@@ -377,6 +460,52 @@ export function getDoomscrolling() {
     },
     setBlockedAppEnabled(name: string, enabled: boolean): void {
       updateDesktop({ blockedApps: setAppEnabled(config.desktop.blockedApps, name, enabled) });
+    },
+    addUsageLimit(draft: DoomscrollingUsageLimitDraft): SaveDoomscrollingUsageLimitResult {
+      const normalized = normalizeLimitDraft(draft);
+      if (typeof normalized === "string") return normalized;
+      const existingIds = new Set(config.limits.items.map((limit) => limit.id));
+      let id = createUsageLimitId(normalized.name);
+      while (existingIds.has(id)) {
+        id = createUsageLimitId(normalized.name);
+      }
+      updateLimits({
+        items: [
+          ...config.limits.items,
+          {
+            id,
+            enabled: true,
+            ...normalized,
+          },
+        ],
+      });
+      return "saved";
+    },
+    updateUsageLimit(id: string, draft: DoomscrollingUsageLimitDraft): SaveDoomscrollingUsageLimitResult {
+      const normalized = normalizeLimitDraft(draft);
+      if (typeof normalized === "string") return normalized;
+      let found = false;
+      const items = config.limits.items.map((limit) => {
+        if (limit.id !== id) return limit;
+        found = true;
+        return {
+          ...limit,
+          ...normalized,
+        };
+      });
+      if (!found) return "missing";
+      updateLimits({ items });
+      return "saved";
+    },
+    removeUsageLimit(id: string): void {
+      updateLimits({ items: config.limits.items.filter((limit) => limit.id !== id) });
+    },
+    setUsageLimitEnabled(id: string, enabled: boolean): void {
+      updateLimits({
+        items: config.limits.items.map((limit) =>
+          limit.id === id ? { ...limit, enabled } : limit
+        ),
+      });
     },
     reset(): void {
       persist({ ...DEFAULT_DOOMSCROLLING_CONFIG });

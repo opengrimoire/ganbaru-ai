@@ -2183,6 +2183,30 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_icalendar_value_nodes_parent
                 ON icalendar_value_nodes(parent_node_id, sort_order);
         ",
+    },
+    Migration {
+        version: 26,
+        description: "add doomscrolling active usage samples",
+        sql: "
+            CREATE TABLE IF NOT EXISTS doomscrolling_usage_samples (
+                id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+                source_type TEXT NOT NULL CHECK (source_type IN ('website', 'desktop-app', 'mobile-app')),
+                source_key TEXT NOT NULL CHECK (trim(source_key) <> ''),
+                display_name TEXT,
+                started_at INTEGER NOT NULL CHECK (started_at >= 0),
+                elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds > 0 AND elapsed_seconds <= 86400),
+                local_date TEXT NOT NULL CHECK (
+                    length(local_date) = 10
+                    AND substr(local_date, 5, 1) = '-'
+                    AND substr(local_date, 8, 1) = '-'
+                ),
+                created_at INTEGER NOT NULL CHECK (created_at >= 0)
+            );
+            CREATE INDEX IF NOT EXISTS idx_doomscrolling_usage_samples_date_source
+                ON doomscrolling_usage_samples(local_date, source_type, source_key);
+            CREATE INDEX IF NOT EXISTS idx_doomscrolling_usage_samples_started
+                ON doomscrolling_usage_samples(started_at);
+        ",
     }]
 }
 
@@ -2502,6 +2526,32 @@ mod tests {
             .await;
 
             assert!(second_open_pause.is_err());
+        });
+    }
+
+    #[test]
+    fn schema_creates_doomscrolling_usage_samples() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_memory_pool().await;
+
+            sqlx::query(
+                "INSERT INTO doomscrolling_usage_samples
+                    (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
+                 VALUES ('sample-1', 'website', 'youtube.com', 'youtube.com', 1779923600000, 30, '2026-05-28', 1779923630000)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let invalid = sqlx::query(
+                "INSERT INTO doomscrolling_usage_samples
+                    (id, source_type, source_key, started_at, elapsed_seconds, local_date, created_at)
+                 VALUES ('sample-2', 'website', 'youtube.com', 1779923600000, 0, '2026-05-28', 1779923630000)",
+            )
+            .execute(&pool)
+            .await;
+
+            assert!(invalid.is_err());
         });
     }
 }

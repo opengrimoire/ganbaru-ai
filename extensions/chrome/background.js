@@ -1,6 +1,8 @@
 const HOST_NAME = "org.opengrimoire.ganbaruai.doomscrolling";
 const STATUS_STORAGE_KEY = "status";
 const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
+const ACTIVE_USAGE_STORAGE_KEY = "activeUsage";
+const USAGE_IDLE_THRESHOLD_SECONDS = 60;
 const recentRedirects = new Map();
 let lastEnforcementStateKey = "";
 
@@ -44,6 +46,30 @@ function isActiveEnforcementPhase(status) {
     );
 }
 
+function activeUsageStore() {
+  return chrome.storage.session ?? chrome.storage.local;
+}
+
+async function readActiveUsage() {
+  const stored = await activeUsageStore().get(ACTIVE_USAGE_STORAGE_KEY);
+  const usage = stored[ACTIVE_USAGE_STORAGE_KEY];
+  if (!usage || typeof usage !== "object") return null;
+  if (typeof usage.host !== "string" || typeof usage.startedAt !== "number") return null;
+  return {
+    tabId: typeof usage.tabId === "number" ? usage.tabId : null,
+    host: usage.host,
+    startedAt: usage.startedAt,
+  };
+}
+
+async function writeActiveUsage(usage) {
+  await activeUsageStore().set({ [ACTIVE_USAGE_STORAGE_KEY]: usage });
+}
+
+async function clearActiveUsage() {
+  await activeUsageStore().remove(ACTIVE_USAGE_STORAGE_KEY);
+}
+
 async function updateStatus(status) {
   const nextEnforcementStateKey = [
     status?.active === true ? "1" : "0",
@@ -51,7 +77,7 @@ async function updateStatus(status) {
     typeof status?.rulesFingerprint === "string" ? status.rulesFingerprint : "unknown",
   ].join("|");
   const shouldRecheckOpenTabs = nextEnforcementStateKey !== lastEnforcementStateKey
-    && isActiveEnforcementPhase(status);
+    && (status?.connected === true || isActiveEnforcementPhase(status));
   lastEnforcementStateKey = nextEnforcementStateKey;
 
   await chrome.storage.local.set({
@@ -63,11 +89,96 @@ async function updateStatus(status) {
       reason: typeof status?.reason === "string" ? status.reason : null,
       rulesFingerprint: typeof status?.rulesFingerprint === "string" ? status.rulesFingerprint : null,
       lastBlockedHost: typeof status?.lastBlockedHost === "string" ? status.lastBlockedHost : null,
+      matchedRuleName: typeof status?.matchedRuleName === "string" ? status.matchedRuleName : null,
       updatedAt: new Date().toISOString(),
     },
   });
   if (shouldRecheckOpenTabs) {
     void recheckOpenTabs();
+  }
+}
+
+function localDateString(timestampMs) {
+  const date = new Date(timestampMs);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function queryIdleState() {
+  return new Promise((resolve) => {
+    if (!chrome.idle?.queryState) {
+      resolve("active");
+      return;
+    }
+    chrome.idle.queryState(USAGE_IDLE_THRESHOLD_SECONDS, (state) => {
+      resolve(chrome.runtime.lastError ? "active" : state);
+    });
+  });
+}
+
+async function queryFocusedActiveTab() {
+  const windows = await chrome.windows.getAll({ populate: false, windowTypes: ["normal"] });
+  const focused = windows.find((window) => window.focused);
+  if (!focused || typeof focused.id !== "number") return null;
+  const tabs = await chrome.tabs.query({ active: true, windowId: focused.id });
+  return tabs[0] ?? null;
+}
+
+async function queryTrackableFocusedTab() {
+  const idleState = await queryIdleState();
+  if (idleState === "locked") return null;
+  const tab = await queryFocusedActiveTab();
+  if (typeof tab?.url !== "string" || !isSupportedPageUrl(tab.url)) return null;
+  const host = hostFromUrl(tab.url);
+  if (!host) return null;
+  return {
+    tabId: typeof tab.id === "number" ? tab.id : null,
+    host,
+  };
+}
+
+async function recordUsageInterval(usage, endedAt) {
+  if (!usage) return;
+  const elapsedSeconds = Math.floor((endedAt - usage.startedAt) / 1000);
+  if (elapsedSeconds > 0) {
+    await sendNativeMessage({
+      type: "record_usage",
+      sourceType: "website",
+      sourceKey: usage.host,
+      displayName: usage.host,
+      elapsedSeconds,
+      startedAt: usage.startedAt,
+      localDate: localDateString(usage.startedAt),
+    });
+  }
+}
+
+async function refreshActiveUsage({ forceFlush = false } = {}) {
+  const now = Date.now();
+  const usage = await readActiveUsage();
+  const target = await queryTrackableFocusedTab();
+
+  if (!usage) {
+    if (target) await writeActiveUsage({ ...target, startedAt: now });
+    return;
+  }
+
+  const sameHost = target?.host === usage.host;
+  if (forceFlush || !sameHost) {
+    await recordUsageInterval(usage, now);
+    if (target) {
+      await writeActiveUsage({ ...target, startedAt: now });
+    } else {
+      await clearActiveUsage();
+    }
+    return;
+  }
+
+  if (!target) {
+    await recordUsageInterval(usage, now);
+    await clearActiveUsage();
   }
 }
 
@@ -85,6 +196,7 @@ async function storeBlockedPageState(originalUrl, decision) {
       remainingSeconds: typeof decision.remainingSeconds === "number"
         ? decision.remainingSeconds
         : null,
+      matchedRuleName: typeof decision.matchedRuleName === "string" ? decision.matchedRuleName : null,
       createdAt: Date.now(),
     },
   });
@@ -136,6 +248,7 @@ async function refreshBlockedPage(blockedPageId) {
     ...stored.value,
     host,
     remainingSeconds,
+    matchedRuleName: typeof decision?.matchedRuleName === "string" ? decision.matchedRuleName : null,
     blocked: decision?.blocked === true,
     updatedAt: Date.now(),
   };
@@ -147,6 +260,7 @@ async function refreshBlockedPage(blockedPageId) {
     active: decision?.active === true,
     phase: typeof decision?.phase === "string" ? decision.phase : "inactive",
     remainingSeconds,
+    matchedRuleName: typeof decision?.matchedRuleName === "string" ? decision.matchedRuleName : null,
     host,
     originalUrl,
   };
@@ -195,13 +309,29 @@ async function recheckOpenTabs() {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const url = changeInfo.url ?? tab.url;
   if (!url) return;
+  void refreshActiveUsage();
   void decideAndRedirect(tabId, url);
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
+  void refreshActiveUsage();
   void decideAndRedirect(details.tabId, details.url);
 });
+
+chrome.tabs.onActivated.addListener(() => {
+  void refreshActiveUsage();
+});
+
+chrome.windows.onFocusChanged.addListener(() => {
+  void refreshActiveUsage();
+});
+
+if (chrome.idle?.onStateChanged) {
+  chrome.idle.onStateChanged.addListener(() => {
+    void refreshActiveUsage();
+  });
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return false;
@@ -239,8 +369,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 void sendNativeMessage({ type: "get_state" }).then(updateStatus);
+void refreshActiveUsage();
 chrome.alarms.create("ganbaruai-state-poll", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== "ganbaruai-state-poll") return;
+  void refreshActiveUsage({ forceFlush: true });
   void sendNativeMessage({ type: "get_state" }).then(updateStatus);
 });

@@ -10,6 +10,7 @@
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
   import { getDoomscrollingDesktopBlocker } from "$lib/stores/doomscrolling-desktop-blocker.svelte";
+  import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
@@ -54,6 +55,7 @@
   const calendars = getCalendars();
   const doomscrolling = getDoomscrolling();
   const desktopBlocker = getDoomscrollingDesktopBlocker();
+  const doomscrollingUsage = getDoomscrollingUsage();
   const pomodoro = getPomodoro();
   const zoom = getZoom();
   const settingsLauncher = getSettingsLauncher();
@@ -61,6 +63,7 @@
   const detachedWindows = getDetachedWindows();
   let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
   let unlistenDoomscrollingDesktopSettingsOpen: UnlistenFn | null = null;
+  let unlistenDoomscrollingLimitsSettingsOpen: UnlistenFn | null = null;
   const ACTIVE_BLOCK_CHECK_INTERVAL_MS = 1000;
   const EVENT_NOTIFICATION_CHECK_INTERVAL_MS = 1000;
   const DESKTOP_BLOCKING_CHECK_INTERVAL_MS = 5_000;
@@ -175,6 +178,13 @@
           unlistenDoomscrollingDesktopSettingsOpen = unlisten;
         })
         .catch((e) => console.error("Failed to listen for doomscrolling settings opens:", e));
+      listen("doomscrolling-open-limits-settings", () => {
+        settingsLauncher.open("doomscrolling", { doomscrollingTab: "limits" });
+      })
+        .then((unlisten) => {
+          unlistenDoomscrollingLimitsSettingsOpen = unlisten;
+        })
+        .catch((e) => console.error("Failed to listen for doomscrolling limit settings opens:", e));
     }
 
     // Valid benchmark boots are claimed before normal calendar hydration so
@@ -243,6 +253,7 @@
     const desktopBlockerIntervalId = isMainWindow
       ? setInterval(checkDesktopAppBlocking, DESKTOP_BLOCKING_CHECK_INTERVAL_MS)
       : null;
+    const stopDoomscrollingUsage = isMainWindow ? doomscrollingUsage.start() : null;
     checkDesktopAppBlocking();
 
     return () => {
@@ -250,6 +261,8 @@
       unlistenCalendarNotificationOpen = null;
       unlistenDoomscrollingDesktopSettingsOpen?.();
       unlistenDoomscrollingDesktopSettingsOpen = null;
+      unlistenDoomscrollingLimitsSettingsOpen?.();
+      unlistenDoomscrollingLimitsSettingsOpen = null;
       document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
       document.removeEventListener("contextmenu", blockNativeContextMenu, { capture: true });
       document.removeEventListener("pointerdown", markPointerFocus, { capture: true });
@@ -259,6 +272,7 @@
       clearTimeout(startupMemoryTimerId);
       clearInterval(zoneIntervalId);
       if (desktopBlockerIntervalId) clearInterval(desktopBlockerIntervalId);
+      stopDoomscrollingUsage?.();
     };
   });
 
@@ -271,6 +285,12 @@
     const _longBreaks = doomscrolling.desktopBlockDuringLongBreaks;
     const _rules = doomscrolling.blockedApps;
     checkDesktopAppBlocking();
+  });
+
+  $effect(() => {
+    const _limitsEnabled = doomscrolling.limitsEnabled;
+    const _limits = doomscrolling.usageLimits;
+    if (isMainWindow) void doomscrollingUsage.refresh();
   });
 
   $effect(() => {

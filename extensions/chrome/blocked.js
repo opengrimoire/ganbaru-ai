@@ -41,13 +41,21 @@ function requestBlockedPageState() {
 function renderBlockedState(state) {
   const host = typeof state?.host === "string" ? state.host : "";
   const remaining = typeof state?.remainingSeconds === "number" ? state.remainingSeconds : 0;
+  const matchedRuleName = typeof state?.matchedRuleName === "string" ? state.matchedRuleName : "";
+  const blockedByLimit = matchedRuleName.startsWith("daily limit:");
   latestOriginalUrl = typeof state?.originalUrl === "string" ? state.originalUrl : latestOriginalUrl;
   latestBlocked = state?.blocked !== false;
 
   if (latestBlocked) {
-    titleEl.textContent = `${host ? displayHost(host) : "This site"} is blocked`;
-    copyEl.textContent = "Stay strong and keep moving forward.";
-    remainingEl.textContent = Number.isFinite(remaining) && remaining > 0
+    titleEl.textContent = blockedByLimit
+      ? `${host ? displayHost(host) : "This site"} reached today's limit`
+      : `${host ? displayHost(host) : "This site"} is blocked`;
+    copyEl.textContent = blockedByLimit
+      ? "Come back after your daily reset."
+      : "Stay strong and keep moving forward.";
+    remainingEl.textContent = blockedByLimit
+      ? "Daily limit reached"
+      : Number.isFinite(remaining) && remaining > 0
       ? `${Math.ceil(remaining / 60)} min left in focus`
       : "Focus session active";
     actionButton.textContent = "Close tab";

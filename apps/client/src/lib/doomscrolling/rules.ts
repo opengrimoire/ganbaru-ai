@@ -259,6 +259,29 @@ export interface DoomscrollingDesktopConfig {
   blockedApps: DoomscrollingAppRule[];
 }
 
+export type DoomscrollingUsageLimitKind = "individual" | "group";
+
+export type DoomscrollingLimitSource =
+  | { type: "website"; host: string }
+  | { type: "desktop-app"; name: string; matchNames: string[] }
+  | { type: "category"; id: DoomscrollingCategoryId }
+  | { type: "custom-stack"; id: string }
+  | { type: "mobile-app"; name: string; platform: string | null };
+
+export interface DoomscrollingUsageLimit {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: DoomscrollingUsageLimitKind;
+  minutesPerDay: number;
+  sources: DoomscrollingLimitSource[];
+}
+
+export interface DoomscrollingUsageLimitsConfig {
+  enabled: boolean;
+  items: DoomscrollingUsageLimit[];
+}
+
 export interface DoomscrollingConfig {
   mode: DoomscrollingMode;
   enabled: boolean;
@@ -271,6 +294,7 @@ export interface DoomscrollingConfig {
   exceptionHosts: DoomscrollingHostRule[];
   allowedHosts: DoomscrollingHostRule[];
   desktop: DoomscrollingDesktopConfig;
+  limits: DoomscrollingUsageLimitsConfig;
 }
 
 export interface DoomscrollingDecision {
@@ -278,6 +302,33 @@ export interface DoomscrollingDecision {
   host: string | null;
   matchedRule: string | null;
 }
+
+export interface DoomscrollingUsageSample {
+  sourceType: "website" | "desktop-app" | "mobile-app";
+  sourceKey: string;
+  displayName: string | null;
+  elapsedSeconds: number;
+  startedAt: number;
+  localDate: string;
+}
+
+export interface DoomscrollingDailyLimitTotal {
+  limitId: string;
+  usedSeconds: number;
+  limitSeconds: number;
+  remainingSeconds: number;
+  exhausted: boolean;
+}
+
+export interface DoomscrollingLimitDecision {
+  blocked: boolean;
+  host: string | null;
+  limitId: string | null;
+  limitName: string | null;
+  matchedRule: string | null;
+}
+
+const MAX_DAILY_LIMIT_MINUTES = 24 * 60;
 
 function defaultCategoryRules(): DoomscrollingCategoryRule[] {
   return DOOMSCROLLING_CATEGORY_DEFINITIONS.map((category) => ({
@@ -293,6 +344,13 @@ function defaultDesktopConfig(): DoomscrollingDesktopConfig {
     blockDuringShortBreaks: true,
     blockDuringLongBreaks: true,
     blockedApps: [],
+  };
+}
+
+function defaultUsageLimitsConfig(): DoomscrollingUsageLimitsConfig {
+  return {
+    enabled: true,
+    items: [],
   };
 }
 
@@ -319,6 +377,7 @@ export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
   exceptionHosts: [],
   allowedHosts: [],
   desktop: defaultDesktopConfig(),
+  limits: defaultUsageLimitsConfig(),
 });
 
 export function isDoomscrollingCategoryId(value: string): value is DoomscrollingCategoryId {
@@ -554,6 +613,161 @@ function normalizeCustomCategoryStacks(value: unknown): DoomscrollingCustomCateg
   return stacks;
 }
 
+function normalizeUsageLimitId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const id = value.trim();
+  if (!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(id)) return null;
+  return id;
+}
+
+export function normalizeDoomscrollingUsageLimitName(input: string): string | null {
+  const name = input.trim().replace(/\s+/g, " ").slice(0, 80);
+  return name.length > 0 ? name : null;
+}
+
+function normalizeLimitKind(value: unknown): DoomscrollingUsageLimitKind {
+  return value === "group" ? "group" : "individual";
+}
+
+function normalizeLimitMinutes(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const minutes = Math.trunc(value);
+  if (minutes < 1 || minutes > MAX_DAILY_LIMIT_MINUTES) return null;
+  return minutes;
+}
+
+function sourceType(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (value === "desktopApp" || value === "desktop-app") return "desktop-app";
+  if (value === "builtInCategory" || value === "category") return "category";
+  if (value === "customCategoryStack" || value === "custom-stack") return "custom-stack";
+  if (value === "mobileApp" || value === "mobile-app") return "mobile-app";
+  if (value === "website") return "website";
+  return null;
+}
+
+function normalizeMobileAppName(input: string): string | null {
+  const name = input.trim().replace(/\s+/g, " ").slice(0, 80);
+  if (name.length === 0) return null;
+  if (/[\u0000-\u001f]/.test(name)) return null;
+  return name;
+}
+
+function normalizeLimitSourceValue(value: unknown): DoomscrollingLimitSource | null {
+  if (typeof value === "string") {
+    const host = normalizeDoomscrollingHost(value);
+    return host ? { type: "website", host } : null;
+  }
+  if (!isRecord(value)) return null;
+  const type = sourceType(value.type ?? value.kind ?? value.sourceType);
+  if (type === "website") {
+    const hostValue = value.host ?? value.value;
+    if (typeof hostValue !== "string") return null;
+    const host = normalizeDoomscrollingHost(hostValue);
+    return host ? { type: "website", host } : null;
+  }
+  if (type === "desktop-app") {
+    const nameValue = value.name ?? value.value;
+    if (typeof nameValue !== "string") return null;
+    const rule = normalizeAppRuleValue({
+      name: nameValue,
+      enabled: true,
+      matchNames: value.matchNames,
+    });
+    if (!rule || isProtectedDoomscrollingDesktopAppName(rule.name)) return null;
+    if (rule.matchNames.some((matchName) => isProtectedDoomscrollingDesktopAppName(matchName))) {
+      return null;
+    }
+    return {
+      type: "desktop-app",
+      name: rule.name,
+      matchNames: rule.matchNames,
+    };
+  }
+  if (type === "category") {
+    const id = value.id ?? value.value;
+    return typeof id === "string" && isDoomscrollingCategoryId(id)
+      ? { type: "category", id }
+      : null;
+  }
+  if (type === "custom-stack") {
+    const id = normalizeCustomCategoryStackId(value.id ?? value.value);
+    return id ? { type: "custom-stack", id } : null;
+  }
+  if (type === "mobile-app") {
+    const nameValue = value.name ?? value.value;
+    if (typeof nameValue !== "string") return null;
+    const name = normalizeMobileAppName(nameValue);
+    if (!name) return null;
+    const platform = typeof value.platform === "string"
+      ? normalizeMobileAppName(value.platform.toLowerCase())
+      : null;
+    return { type: "mobile-app", name, platform };
+  }
+  return null;
+}
+
+export function doomscrollingLimitSourceKey(source: DoomscrollingLimitSource): string {
+  if (source.type === "website") return `website:${source.host}`;
+  if (source.type === "desktop-app") return `desktop-app:${appRuleKey(source.name)}`;
+  if (source.type === "category") return `category:${source.id}`;
+  if (source.type === "custom-stack") return `custom-stack:${source.id}`;
+  return `mobile-app:${source.platform ?? ""}:${source.name.toLowerCase()}`;
+}
+
+function normalizeLimitSources(value: unknown): DoomscrollingLimitSource[] | null {
+  if (!Array.isArray(value)) return null;
+  const seen = new Set<string>();
+  const sources: DoomscrollingLimitSource[] = [];
+  for (const item of value) {
+    const source = normalizeLimitSourceValue(item);
+    if (!source) continue;
+    const key = doomscrollingLimitSourceKey(source);
+    if (seen.has(key)) return null;
+    seen.add(key);
+    sources.push(source);
+  }
+  return sources.length > 0 ? sources : null;
+}
+
+function normalizeUsageLimitValue(value: unknown): DoomscrollingUsageLimit | null {
+  if (!isRecord(value)) return null;
+  const id = normalizeUsageLimitId(value.id);
+  const name = typeof value.name === "string"
+    ? normalizeDoomscrollingUsageLimitName(value.name)
+    : null;
+  const minutesPerDay = normalizeLimitMinutes(value.minutesPerDay);
+  const sources = normalizeLimitSources(value.sources);
+  if (!id || !name || minutesPerDay === null || !sources) return null;
+  return {
+    id,
+    name,
+    enabled: value.enabled !== false,
+    kind: normalizeLimitKind(value.kind),
+    minutesPerDay,
+    sources,
+  };
+}
+
+function normalizeUsageLimitsConfig(value: unknown): DoomscrollingUsageLimitsConfig {
+  if (!isRecord(value)) return defaultUsageLimitsConfig();
+  const itemsValue = value.items;
+  const items: DoomscrollingUsageLimit[] = [];
+  const seenIds = new Set<string>();
+  if (Array.isArray(itemsValue)) {
+    for (const item of itemsValue) {
+      const limit = normalizeUsageLimitValue(item);
+      if (!limit || seenIds.has(limit.id)) continue;
+      seenIds.add(limit.id);
+      items.push(limit);
+    }
+  }
+  return {
+    enabled: value.enabled !== false,
+    items,
+  };
+}
+
 function normalizeMode(value: unknown): DoomscrollingMode {
   return value === "whitelist" || value === "blacklist"
     ? value
@@ -591,6 +805,7 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
       ...DEFAULT_DOOMSCROLLING_CONFIG,
       blockedCategories: defaultCategoryRules(),
       desktop: defaultDesktopConfig(),
+      limits: defaultUsageLimitsConfig(),
     };
   }
   const record = value as Record<string, unknown>;
@@ -624,6 +839,7 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
         : legacyAllowedHosts,
     allowedHosts: hasMode ? legacyAllowedHosts : [],
     desktop: normalizeDesktopConfig(record.desktop),
+    limits: normalizeUsageLimitsConfig(record.limits),
   };
 }
 
@@ -658,6 +874,174 @@ function categoryRuleMatchesUrl(
   const subreddit = redditSubredditFromUrl(parsedUrl);
   return subreddit !== null
     && (category.redditSubredditKeywords?.some((keyword) => subreddit.includes(keyword)) ?? false);
+}
+
+function categoryRuleMatchesHost(host: string, categoryId: DoomscrollingCategoryId): boolean {
+  const category = getDoomscrollingCategoryDefinition(categoryId);
+  if (!category) return false;
+  if (category.hosts.some((ruleHost) => doomscrollingHostMatchesRule(host, ruleHost))) {
+    return true;
+  }
+  return category.domainKeywords?.some((keyword) => host.includes(keyword)) ?? false;
+}
+
+function customStackMatchesHost(
+  host: string,
+  stackId: string,
+  config: DoomscrollingConfig,
+): boolean {
+  const stack = config.customCategoryStacks.find((stack) => stack.id === stackId);
+  if (!stack || !stack.enabled) return false;
+  return stack.hosts.some((rule) => rule.enabled && doomscrollingHostMatchesRule(host, rule.host));
+}
+
+function normalizedUsageSourceKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function matchesDoomscrollingLimitSource(
+  source: DoomscrollingLimitSource,
+  sample: DoomscrollingUsageSample,
+  config: DoomscrollingConfig,
+): boolean {
+  if (sample.sourceType === "website" && source.type === "website") {
+    return doomscrollingHostMatchesRule(normalizedUsageSourceKey(sample.sourceKey), source.host);
+  }
+  if (sample.sourceType === "website" && source.type === "category") {
+    return categoryRuleMatchesHost(normalizedUsageSourceKey(sample.sourceKey), source.id);
+  }
+  if (sample.sourceType === "website" && source.type === "custom-stack") {
+    return customStackMatchesHost(normalizedUsageSourceKey(sample.sourceKey), source.id, config);
+  }
+  if (sample.sourceType === "desktop-app" && source.type === "desktop-app") {
+    const key = appRuleKey(sample.sourceKey);
+    return [source.name, ...source.matchNames].some((name) => appRuleKey(name) === key);
+  }
+  if (sample.sourceType === "mobile-app" && source.type === "mobile-app") {
+    return sample.sourceKey.toLowerCase() === source.name.toLowerCase();
+  }
+  return false;
+}
+
+export function computeDoomscrollingLimitDailyTotals(
+  config: DoomscrollingConfig,
+  samples: readonly DoomscrollingUsageSample[],
+  localDate: string,
+): DoomscrollingDailyLimitTotal[] {
+  return config.limits.items.map((limit) => {
+    let usedSeconds = 0;
+    for (const sample of samples) {
+      if (sample.localDate !== localDate) continue;
+      if (!Number.isFinite(sample.elapsedSeconds) || sample.elapsedSeconds <= 0) continue;
+      const matches = limit.sources.some((source) =>
+        matchesDoomscrollingLimitSource(source, sample, config)
+      );
+      if (matches) usedSeconds += Math.round(sample.elapsedSeconds);
+    }
+    const limitSeconds = limit.minutesPerDay * 60;
+    const remainingSeconds = Math.max(0, limitSeconds - usedSeconds);
+    return {
+      limitId: limit.id,
+      usedSeconds,
+      limitSeconds,
+      remainingSeconds,
+      exhausted: usedSeconds >= limitSeconds,
+    };
+  });
+}
+
+function totalForLimit(
+  totals: readonly DoomscrollingDailyLimitTotal[],
+  limitId: string,
+): DoomscrollingDailyLimitTotal | null {
+  return totals.find((total) => total.limitId === limitId) ?? null;
+}
+
+export function isSupportedDoomscrollingUsageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function doomscrollingWebsiteUsageSampleFromUrl(
+  url: string,
+  elapsedSeconds: number,
+  startedAt: number,
+  localDate: string,
+): DoomscrollingUsageSample | null {
+  if (!isSupportedDoomscrollingUsageUrl(url)) return null;
+  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  return {
+    sourceType: "website",
+    sourceKey: parsed.hostname.toLowerCase(),
+    displayName: parsed.hostname.toLowerCase(),
+    elapsedSeconds: Math.round(elapsedSeconds),
+    startedAt,
+    localDate,
+  };
+}
+
+function websiteSourceMatchesHost(
+  source: DoomscrollingLimitSource,
+  host: string,
+  config: DoomscrollingConfig,
+): boolean {
+  if (source.type === "website") return doomscrollingHostMatchesRule(host, source.host);
+  if (source.type === "category") return categoryRuleMatchesHost(host, source.id);
+  if (source.type === "custom-stack") return customStackMatchesHost(host, source.id, config);
+  return false;
+}
+
+export function evaluateDoomscrollingWebsiteLimit(
+  url: string,
+  config: DoomscrollingConfig,
+  totals: readonly DoomscrollingDailyLimitTotal[],
+): DoomscrollingLimitDecision {
+  let parsed: URL;
+  let host: string;
+  try {
+    parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { blocked: false, host: null, limitId: null, limitName: null, matchedRule: null };
+    }
+    host = parsed.hostname.toLowerCase();
+  } catch {
+    return { blocked: false, host: null, limitId: null, limitName: null, matchedRule: null };
+  }
+
+  if (!config.limits.enabled || isSafetyAllowedHost(host)) {
+    return { blocked: false, host, limitId: null, limitName: null, matchedRule: null };
+  }
+
+  for (const limit of config.limits.items) {
+    if (!limit.enabled) continue;
+    const total = totalForLimit(totals, limit.id);
+    if (!total?.exhausted) continue;
+    if (limit.sources.some((source) => websiteSourceMatchesHost(source, host, config))) {
+      return {
+        blocked: true,
+        host,
+        limitId: limit.id,
+        limitName: limit.name,
+        matchedRule: `daily limit: ${limit.name}`,
+      };
+    }
+  }
+
+  return { blocked: false, host, limitId: null, limitName: null, matchedRule: null };
+}
+
+function isSafetyAllowedHost(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".localhost");
 }
 
 /**
