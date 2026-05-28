@@ -1,5 +1,14 @@
 export type DoomscrollingMode = "blacklist" | "whitelist";
 
+interface DoomscrollingCategoryDefinition {
+  id: string;
+  label: string;
+  description: string;
+  hosts: readonly string[];
+  domainKeywords?: readonly string[];
+  redditSubredditKeywords?: readonly string[];
+}
+
 export const DOOMSCROLLING_PROTECTED_DESKTOP_APP_NAMES = [
   "GanbaruAI",
   "ganbaruai",
@@ -128,6 +137,85 @@ export const DOOMSCROLLING_PROTECTED_DESKTOP_PROCESS_NAMES = [
   "zsh",
 ] as const;
 
+const DOOMSCROLLING_PORN_DOMAIN_KEYWORDS = [
+  "porn",
+  "xxx",
+  "sex",
+  "xvideo",
+  "adult",
+  "nsfw",
+  "hentai",
+  "hanime",
+  "rule34",
+  "r34",
+  "booru",
+  "furry",
+  "jav",
+  "onlyfans",
+  "camgirl",
+  "nude",
+  "naked",
+  "erotic",
+  "bdsm",
+  "amateur",
+  "milf",
+  "anal",
+  "escort",
+  "fuck",
+  "fap",
+  "jerk",
+  "pussy",
+  "cock",
+  "dick",
+] as const;
+
+const DOOMSCROLLING_PORN_REDDIT_SUBREDDIT_KEYWORDS = [
+  "nsfw",
+  "porn",
+  "xxx",
+  "sex",
+  "slut",
+  "thot",
+  "gonewild",
+  "gw",
+  "nude",
+  "fuck",
+  "cock",
+  "dick",
+  "penis",
+  "pussy",
+  "booty",
+  "butt",
+  "anal",
+  "cream",
+  "cum",
+  "blowjob",
+  "tit",
+  "boob",
+  "busty",
+  "milf",
+  "teen",
+  "college",
+  "whore",
+  "onlyfans",
+  "wife",
+  "couple",
+  "bdsm",
+  "cuck",
+  "incest",
+  "thong",
+  "hentai",
+  "rule34",
+  "r34",
+  "ecchi",
+  "futa",
+  "furry",
+  "celeb",
+  "thick",
+  "thigh",
+  "petite",
+] as const;
+
 export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
   {
     id: "social-media",
@@ -200,14 +288,12 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
     id: "porn",
     label: "Porn",
     description: "High-intensity instant reward quickly overrides task intent",
+    domainKeywords: DOOMSCROLLING_PORN_DOMAIN_KEYWORDS,
+    redditSubredditKeywords: DOOMSCROLLING_PORN_REDDIT_SUBREDDIT_KEYWORDS,
     hosts: [
-      "pornhub.com",
-      "xvideos.com",
       "xnxx.com",
       "xhamster.com",
       "redtube.com",
-      "youporn.com",
-      "spankbang.com",
     ],
   },
   {
@@ -288,7 +374,7 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
       "coingecko.com",
     ],
   },
-] as const;
+] as const satisfies readonly DoomscrollingCategoryDefinition[];
 
 export type DoomscrollingCategoryId = (typeof DOOMSCROLLING_CATEGORY_DEFINITIONS)[number]["id"];
 
@@ -393,7 +479,9 @@ export function isDoomscrollingCategoryId(value: string): value is Doomscrolling
   return DOOMSCROLLING_CATEGORY_IDS.has(value);
 }
 
-export function getDoomscrollingCategoryDefinition(id: DoomscrollingCategoryId) {
+export function getDoomscrollingCategoryDefinition(
+  id: DoomscrollingCategoryId,
+): DoomscrollingCategoryDefinition | undefined {
   return DOOMSCROLLING_CATEGORY_DEFINITIONS.find((category) => category.id === id);
 }
 
@@ -697,9 +785,33 @@ export function doomscrollingHostMatchesRule(host: string, ruleHost: string): bo
   return host === ruleHost || host.endsWith(`.${ruleHost}`);
 }
 
-function categoryRuleMatchesHost(host: string, categoryId: DoomscrollingCategoryId): boolean {
+function redditSubredditFromUrl(parsedUrl: URL): string | null {
+  if (!doomscrollingHostMatchesRule(parsedUrl.hostname.toLowerCase(), "reddit.com")) return null;
+  const match = /^\/r\/([^/]+)/i.exec(parsedUrl.pathname);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]).toLowerCase();
+  } catch {
+    return match[1].toLowerCase();
+  }
+}
+
+function categoryRuleMatchesUrl(
+  parsedUrl: URL,
+  host: string,
+  categoryId: DoomscrollingCategoryId,
+): boolean {
   const category = getDoomscrollingCategoryDefinition(categoryId);
-  return category?.hosts.some((ruleHost) => doomscrollingHostMatchesRule(host, ruleHost)) ?? false;
+  if (!category) return false;
+  if (category.hosts.some((ruleHost) => doomscrollingHostMatchesRule(host, ruleHost))) {
+    return true;
+  }
+  if (category.domainKeywords?.some((keyword) => host.includes(keyword))) {
+    return true;
+  }
+  const subreddit = redditSubredditFromUrl(parsedUrl);
+  return subreddit !== null
+    && (category.redditSubredditKeywords?.some((keyword) => subreddit.includes(keyword)) ?? false);
 }
 
 /**
@@ -713,9 +825,10 @@ export function evaluateDoomscrollingUrl(
   url: string,
   config: DoomscrollingConfig,
 ): DoomscrollingDecision {
+  let parsed: URL;
   let host: string;
   try {
-    const parsed = new URL(url);
+    parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return { blocked: false, host: null, matchedRule: null };
     }
@@ -764,7 +877,7 @@ export function evaluateDoomscrollingUrl(
   }
   for (const categoryRule of config.blockedCategories) {
     if (!categoryRule.enabled) continue;
-    if (categoryRuleMatchesHost(host, categoryRule.id)) {
+    if (categoryRuleMatchesUrl(parsed, host, categoryRule.id)) {
       const category = getDoomscrollingCategoryDefinition(categoryRule.id);
       return { blocked: true, host, matchedRule: `category: ${category?.label ?? categoryRule.id}` };
     }

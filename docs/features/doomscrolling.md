@@ -95,10 +95,10 @@ Core rule kinds:
 - **Allowed keyword.** Allows a page when the title, URL, or supported site metadata contains task-relevant keywords.
 - **Blocked keyword.** Blocks a page when title, URL, or supported metadata contains distracting terms.
 - **Allowed channel or creator.** Allows specific supported content sources such as a YouTube channel.
-- **Blocked category.** A local preset such as social media, streaming, news, sports, porn, gambling, gaming, shopping, dating, or trading. Presets expand to ordinary domain rules.
+- **Blocked category.** A local preset such as social media, streaming, news, sports, porn, gambling, gaming, shopping, dating, or trading. Presets can include exact domains, domain keyword rules, and site-specific path rules.
 - **Custom category stack.** A user-named group of domains that can be enabled, disabled, edited, or deleted as one unit.
 
-Initial Chrome implementation should support blocked domains, allowed domains, blocked categories, and custom category stacks. URL pattern, keyword, and channel rules can ship once matching and site metadata extraction are stable.
+Initial Chrome implementation should support blocked domains, allowed domains, blocked categories, and custom category stacks. Built-in categories may include local URL-only keyword matching when the category risk is clear enough, such as porn domains and Reddit subreddit names. User-authored URL pattern, keyword, and channel rules can ship once matching and site metadata extraction are stable.
 
 ## Rule precedence
 

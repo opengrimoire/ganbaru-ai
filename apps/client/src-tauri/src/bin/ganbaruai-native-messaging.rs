@@ -15,7 +15,25 @@ struct BuiltInCategory {
     id: &'static str,
     label: &'static str,
     hosts: &'static [&'static str],
+    domain_keywords: &'static [&'static str],
+    reddit_subreddit_keywords: &'static [&'static str],
 }
+
+const PORN_DOMAIN_KEYWORDS: &[&str] = &[
+    "porn", "xxx", "sex", "xvideo", "adult", "nsfw", "hentai", "hanime", "rule34", "r34", "booru",
+    "furry", "jav", "onlyfans", "camgirl", "nude", "naked", "erotic", "bdsm", "amateur", "milf",
+    "anal", "escort", "fuck", "fap", "jerk", "pussy", "cock", "dick",
+];
+
+const PORN_REDDIT_SUBREDDIT_KEYWORDS: &[&str] = &[
+    "nsfw", "porn", "xxx", "sex", "slut", "thot", "gonewild", "gw", "nude", "fuck", "cock", "dick",
+    "penis", "pussy", "booty", "butt", "anal", "cream", "cum", "blowjob", "tit", "boob", "busty",
+    "milf", "teen", "college", "whore", "onlyfans", "wife", "couple", "bdsm", "cuck", "incest",
+    "thong", "hentai", "rule34", "r34", "ecchi", "futa", "furry", "celeb", "thick", "thigh",
+    "petite",
+];
+
+const BUILT_IN_RULESET_VERSION: &str = "2026-05-porn-keywords";
 
 const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
     BuiltInCategory {
@@ -34,6 +52,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "pinterest.com",
             "linkedin.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "streaming",
@@ -49,6 +69,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "peacocktv.com",
             "crunchyroll.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "news",
@@ -64,6 +86,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "nbcnews.com",
             "foxnews.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "sports",
@@ -80,19 +104,15 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "nhl.com",
             "fifa.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "porn",
         label: "Porn",
-        hosts: &[
-            "pornhub.com",
-            "xvideos.com",
-            "xnxx.com",
-            "xhamster.com",
-            "redtube.com",
-            "youporn.com",
-            "spankbang.com",
-        ],
+        hosts: &["xnxx.com", "xhamster.com", "redtube.com"],
+        domain_keywords: PORN_DOMAIN_KEYWORDS,
+        reddit_subreddit_keywords: PORN_REDDIT_SUBREDDIT_KEYWORDS,
     },
     BuiltInCategory {
         id: "gambling",
@@ -107,6 +127,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "bovada.lv",
             "pokerstars.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "gaming",
@@ -121,6 +143,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "itch.io",
             "speedrun.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "shopping",
@@ -136,6 +160,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "shein.com",
             "bestbuy.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "dating",
@@ -150,6 +176,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "grindr.com",
             "happn.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
         id: "trading",
@@ -166,6 +194,8 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "coinmarketcap.com",
             "coingecko.com",
         ],
+        domain_keywords: &[],
+        reddit_subreddit_keywords: &[],
     },
 ];
 
@@ -278,7 +308,7 @@ fn run() -> Result<NativeResponse, String> {
         if let Some(host) = normalized_request_host(&request) {
             response.host = Some(host.clone());
             if should_enforce(&snapshot, &mut response) {
-                let decision = decide_host(&host, &snapshot.config);
+                let decision = decide_url(&host, request.url.as_deref(), &snapshot.config);
                 response.blocked = decision.blocked;
                 response.matched_rule_name = decision.matched_rule_name;
                 if response.blocked && request.log_event.unwrap_or(true) {
@@ -720,7 +750,7 @@ struct HostDecision {
     matched_rule_name: Option<String>,
 }
 
-fn decide_host(host: &str, config: &DoomscrollingConfig) -> HostDecision {
+fn decide_url(host: &str, url: Option<&str>, config: &DoomscrollingConfig) -> HostDecision {
     if is_safety_allowed_host(host) {
         return HostDecision {
             blocked: false,
@@ -774,11 +804,7 @@ fn decide_host(host: &str, config: &DoomscrollingConfig) -> HostDecision {
                 let Some(category) = built_in_category(category_id) else {
                     continue;
                 };
-                if category
-                    .hosts
-                    .iter()
-                    .any(|category_host| host_matches_rule(host, category_host))
-                {
+                if category_matches_url(host, url, category) {
                     return HostDecision {
                         blocked: true,
                         matched_rule_name: Some(format!("category: {}", category.label)),
@@ -791,6 +817,33 @@ fn decide_host(host: &str, config: &DoomscrollingConfig) -> HostDecision {
             }
         }
     }
+}
+
+fn category_matches_url(host: &str, url: Option<&str>, category: &BuiltInCategory) -> bool {
+    if category
+        .hosts
+        .iter()
+        .any(|category_host| host_matches_rule(host, category_host))
+    {
+        return true;
+    }
+    if category
+        .domain_keywords
+        .iter()
+        .any(|keyword| host.contains(keyword))
+    {
+        return true;
+    }
+    if !host_matches_rule(host, "reddit.com") {
+        return false;
+    }
+    let Some(subreddit) = url.and_then(reddit_subreddit_from_url) else {
+        return false;
+    };
+    category
+        .reddit_subreddit_keywords
+        .iter()
+        .any(|keyword| subreddit.contains(keyword))
 }
 
 impl DoomscrollingMode {
@@ -824,6 +877,8 @@ fn feed_fingerprint_hosts(hash: &mut u64, label: &str, hosts: &[String]) {
 
 fn rules_fingerprint(config: &DoomscrollingConfig) -> String {
     let mut hash = 14_695_981_039_346_656_037_u64;
+    feed_fingerprint(&mut hash, "built_in_ruleset");
+    feed_fingerprint(&mut hash, BUILT_IN_RULESET_VERSION);
     feed_fingerprint(&mut hash, config.mode.as_str());
     feed_fingerprint_bool(&mut hash, config.enabled);
     feed_fingerprint_bool(&mut hash, config.block_during_focus);
@@ -879,6 +934,21 @@ fn host_matches_rule(host: &str, rule_host: &str) -> bool {
             .is_some_and(|prefix| prefix.ends_with('.'))
 }
 
+fn reddit_subreddit_from_url(url: &str) -> Option<String> {
+    let (_, rest) = url.split_once("://")?;
+    let path_start = rest.find('/')?;
+    let path = rest[path_start..]
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let subreddit = path.strip_prefix("/r/")?.split('/').next()?;
+    if subreddit.is_empty() {
+        return None;
+    }
+    Some(subreddit.to_string())
+}
+
 fn is_safety_allowed_host(host: &str) -> bool {
     host == "localhost" || host == "127.0.0.1" || host == "::1" || host.ends_with(".localhost")
 }
@@ -912,7 +982,7 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
 #[cfg(test)]
 mod tests {
     use super::{
-        decide_host, host_from_url, host_matches_rule, should_enforce, DoomscrollingConfig,
+        decide_url, host_from_url, host_matches_rule, should_enforce, DoomscrollingConfig,
         DoomscrollingMode, NativeResponse, StateSnapshot,
     };
 
@@ -1014,7 +1084,7 @@ mod tests {
 
     #[test]
     fn lets_exceptions_override_blocked_parent_domains() {
-        let decision = decide_host("music.youtube.com", &config());
+        let decision = decide_url("music.youtube.com", None, &config());
         assert!(!decision.blocked);
         assert_eq!(
             decision.matched_rule_name.as_deref(),
@@ -1024,7 +1094,7 @@ mod tests {
 
     #[test]
     fn blocks_matching_parent_domain() {
-        let decision = decide_host("old.reddit.com", &config());
+        let decision = decide_url("old.reddit.com", None, &config());
         assert!(decision.blocked);
         assert_eq!(
             decision.matched_rule_name.as_deref(),
@@ -1037,12 +1107,60 @@ mod tests {
         let mut config = config();
         config.blocked_hosts.clear();
         config.blocked_category_ids = vec!["social-media".to_string()];
-        let decision = decide_host("old.reddit.com", &config);
+        let decision = decide_url("old.reddit.com", None, &config);
         assert!(decision.blocked);
         assert_eq!(
             decision.matched_rule_name.as_deref(),
             Some("category: Social media")
         );
+    }
+
+    #[test]
+    fn blocks_porn_category_keyword_matches_in_domains() {
+        let mut config = config();
+        config.blocked_hosts.clear();
+        config.blocked_category_ids = vec!["porn".to_string()];
+        let decision = decide_url(
+            "example-porn-site.test",
+            Some("https://example-porn-site.test/watch"),
+            &config,
+        );
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("category: Porn")
+        );
+    }
+
+    #[test]
+    fn blocks_porn_category_keyword_matches_in_reddit_subreddits() {
+        let mut config = config();
+        config.blocked_hosts.clear();
+        config.blocked_category_ids = vec!["porn".to_string()];
+        let decision = decide_url(
+            "old.reddit.com",
+            Some("https://old.reddit.com/r/gwstories/comments/123/title"),
+            &config,
+        );
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("category: Porn")
+        );
+    }
+
+    #[test]
+    fn ignores_reddit_post_titles_for_porn_category_keyword_matching() {
+        let mut config = config();
+        config.blocked_hosts.clear();
+        config.blocked_category_ids = vec!["porn".to_string()];
+        let decision = decide_url(
+            "reddit.com",
+            Some("https://reddit.com/r/productivity/comments/123/nsfw_post_title"),
+            &config,
+        );
+        assert!(!decision.blocked);
+        assert_eq!(decision.matched_rule_name, None);
     }
 
     #[test]
@@ -1054,7 +1172,7 @@ mod tests {
             name: "Research traps".to_string(),
             hosts: vec!["news.ycombinator.com".to_string()],
         }];
-        let decision = decide_host("news.ycombinator.com", &config);
+        let decision = decide_url("news.ycombinator.com", None, &config);
         assert!(decision.blocked);
         assert_eq!(
             decision.matched_rule_name.as_deref(),
@@ -1100,7 +1218,7 @@ mod tests {
     fn blocks_hosts_outside_whitelist_mode() {
         let mut config = config();
         config.mode = DoomscrollingMode::Whitelist;
-        let decision = decide_host("reddit.com", &config);
+        let decision = decide_url("reddit.com", None, &config);
         assert!(decision.blocked);
         assert_eq!(
             decision.matched_rule_name.as_deref(),
@@ -1112,7 +1230,7 @@ mod tests {
     fn allows_hosts_inside_whitelist_mode() {
         let mut config = config();
         config.mode = DoomscrollingMode::Whitelist;
-        let decision = decide_host("docs.github.com", &config);
+        let decision = decide_url("docs.github.com", None, &config);
         assert!(!decision.blocked);
         assert_eq!(
             decision.matched_rule_name.as_deref(),

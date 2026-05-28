@@ -334,6 +334,33 @@ describe("evaluateDoomscrollingUrl", () => {
     expect(decision.matchedRule).toBe("category: Social media");
   });
 
+  it("blocks porn category keyword matches in domains", () => {
+    const decision = evaluateDoomscrollingUrl("https://example-porn-site.test/watch", config({
+      mode: "blacklist",
+      blockedCategories: categoryRulesWith("porn"),
+    }));
+    expect(decision.blocked).toBe(true);
+    expect(decision.matchedRule).toBe("category: Porn");
+  });
+
+  it("blocks porn category keyword matches in reddit subreddit names", () => {
+    const decision = evaluateDoomscrollingUrl("https://old.reddit.com/r/gwstories/comments/123/title", config({
+      mode: "blacklist",
+      blockedCategories: categoryRulesWith("porn"),
+    }));
+    expect(decision.blocked).toBe(true);
+    expect(decision.matchedRule).toBe("category: Porn");
+  });
+
+  it("ignores reddit post titles for porn category keyword matching", () => {
+    const decision = evaluateDoomscrollingUrl("https://reddit.com/r/productivity/comments/123/nsfw_post_title", config({
+      mode: "blacklist",
+      blockedCategories: categoryRulesWith("porn"),
+    }));
+    expect(decision.blocked).toBe(false);
+    expect(decision.matchedRule).toBeNull();
+  });
+
   it("blocks enabled custom category stacks in blacklist mode", () => {
     const decision = evaluateDoomscrollingUrl("https://news.ycombinator.com/item?id=1", config({
       mode: "blacklist",
