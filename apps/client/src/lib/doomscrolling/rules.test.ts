@@ -11,7 +11,7 @@ import {
   type DoomscrollingCategoryId,
   type DoomscrollingConfig,
   type DoomscrollingHostRule,
-} from "./doomscrolling";
+} from "./rules";
 
 function appRule(name: string, enabled = true): DoomscrollingAppRule {
   return { name, enabled, matchNames: [name] };

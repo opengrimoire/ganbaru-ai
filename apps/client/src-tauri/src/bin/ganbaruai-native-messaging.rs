@@ -1,8 +1,10 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 const HOST_NAME: &str = "org.opengrimoire.ganbaruai.doomscrolling";
 const STATE_FILE: &str = "doomscrolling-state.json";
@@ -11,242 +13,49 @@ const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
 const STALE_STATE_SECONDS: i64 = 180;
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BuiltInCategory {
-    id: &'static str,
-    label: &'static str,
-    hosts: &'static [&'static str],
-    domain_keywords: &'static [&'static str],
-    reddit_subreddit_keywords: &'static [&'static str],
+    id: String,
+    label: String,
+    #[serde(default)]
+    hosts: Vec<String>,
+    #[serde(default)]
+    domain_keywords: Vec<String>,
+    #[serde(default)]
+    reddit_subreddit_keywords: Vec<String>,
 }
 
-const PORN_DOMAIN_KEYWORDS: &[&str] = &[
-    "porn", "xxx", "sex", "xvideo", "adult", "nsfw", "hentai", "hanime", "rule34", "r34", "booru",
-    "furry", "jav", "onlyfans", "camgirl", "nude", "naked", "erotic", "bdsm", "amateur", "milf",
-    "anal", "escort", "fuck", "fap", "jerk", "pussy", "cock", "dick",
-];
+const BUILT_IN_CATEGORIES_JSON: &str =
+    include_str!("../../../src/lib/doomscrolling/categories.json");
 
-const PORN_REDDIT_SUBREDDIT_KEYWORDS: &[&str] = &[
-    "nsfw", "porn", "xxx", "sex", "slut", "thot", "gonewild", "gw", "nude", "fuck", "cock", "dick",
-    "penis", "pussy", "booty", "butt", "anal", "cream", "cum", "blowjob", "tit", "boob", "busty",
-    "milf", "teen", "college", "whore", "onlyfans", "wife", "couple", "bdsm", "cuck", "incest",
-    "thong", "hentai", "rule34", "r34", "ecchi", "futa", "furry", "celeb", "thick", "thigh",
-    "petite",
-];
+fn built_in_categories() -> &'static [BuiltInCategory] {
+    static CATEGORIES: OnceLock<Vec<BuiltInCategory>> = OnceLock::new();
+    CATEGORIES
+        .get_or_init(|| parse_built_in_categories(BUILT_IN_CATEGORIES_JSON))
+        .as_slice()
+}
 
-const STREAMING_DOMAIN_KEYWORDS: &[&str] = &["anime"];
-const NEWS_DOMAIN_KEYWORDS: &[&str] = &["news"];
-const SPORTS_DOMAIN_KEYWORDS: &[&str] = &["sports", "scores"];
-const GAMBLING_DOMAIN_KEYWORDS: &[&str] = &["casino", "bet", "poker", "slots"];
-const GAMING_DOMAIN_KEYWORDS: &[&str] = &["game"];
-const SHOPPING_DOMAIN_KEYWORDS: &[&str] = &[
-    "shopee",
-    "lazada",
-    "flipkart",
-    "tokopedia",
-    "mercadolibre",
-    "mercadolivre",
-    "coupang",
-    "rakuten",
-];
-const DATING_DOMAIN_KEYWORDS: &[&str] = &["dating", "hookup"];
-const TRADING_DOMAIN_KEYWORDS: &[&str] = &["crypto", "forex", "trading"];
-
-const BUILT_IN_RULESET_VERSION: &str = "2026-05-regional-category-rules";
-
-const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
-    BuiltInCategory {
-        id: "social-media",
-        label: "Social media",
-        hosts: &[
-            "facebook.com",
-            "instagram.com",
-            "x.com",
-            "twitter.com",
-            "tiktok.com",
-            "reddit.com",
-            "threads.net",
-            "bsky.app",
-            "snapchat.com",
-            "pinterest.com",
-            "linkedin.com",
-            "vk.com",
-            "ok.ru",
-            "weibo.com",
-            "douban.com",
-        ],
-        domain_keywords: &[],
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "streaming",
-        label: "Streaming",
-        hosts: &[
-            "youtube.com",
-            "netflix.com",
-            "hulu.com",
-            "disneyplus.com",
-            "primevideo.com",
-            "twitch.tv",
-            "max.com",
-            "peacocktv.com",
-            "crunchyroll.com",
-            "paramountplus.com",
-            "tv.apple.com",
-            "tubi.tv",
-            "fandangoathome.com",
-            "bilibili.com",
-            "iqiyi.com",
-            "youku.com",
-            "hotstar.com",
-        ],
-        domain_keywords: STREAMING_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "news",
-        label: "News",
-        hosts: &[
-            "cnn.com",
-            "bbc.com",
-            "nytimes.com",
-            "washingtonpost.com",
-            "theguardian.com",
-            "reuters.com",
-            "wsj.com",
-            "bloomberg.com",
-            "npr.org",
-            "latimes.com",
-            "politico.com",
-        ],
-        domain_keywords: NEWS_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "sports",
-        label: "Sports",
-        hosts: &[
-            "espn.com",
-            "bleacherreport.com",
-            "nba.com",
-            "nfl.com",
-            "mlb.com",
-            "nhl.com",
-            "fifa.com",
-            "theathletic.com",
-            "cricbuzz.com",
-            "espncricinfo.com",
-        ],
-        domain_keywords: SPORTS_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "porn",
-        label: "Porn",
-        hosts: &["xnxx.com", "xhamster.com", "redtube.com"],
-        domain_keywords: PORN_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: PORN_REDDIT_SUBREDDIT_KEYWORDS,
-    },
-    BuiltInCategory {
-        id: "gambling",
-        label: "Gambling",
-        hosts: &[
-            "stake.com",
-            "stake.us",
-            "draftkings.com",
-            "fanduel.com",
-            "caesars.com",
-            "bovada.lv",
-            "williamhill.com",
-            "ladbrokes.com",
-            "paddypower.com",
-        ],
-        domain_keywords: GAMBLING_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "gaming",
-        label: "Gaming",
-        hosts: &[
-            "steampowered.com",
-            "epicgames.com",
-            "roblox.com",
-            "battle.net",
-            "xbox.com",
-            "playstation.com",
-            "itch.io",
-            "speedrun.com",
-            "fortnite.com",
-            "minecraft.net",
-            "callofduty.com",
-            "riotgames.com",
-            "nintendo.com",
-        ],
-        domain_keywords: GAMING_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "shopping",
-        label: "Shopping",
-        hosts: &[
-            "amazon.com",
-            "ebay.com",
-            "aliexpress.com",
-            "temu.com",
-            "walmart.com",
-            "target.com",
-            "etsy.com",
-            "shein.com",
-            "bestbuy.com",
-            "homedepot.com",
-            "zara.com",
-            "depop.com",
-            "whatnot.com",
-        ],
-        domain_keywords: SHOPPING_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "dating",
-        label: "Dating",
-        hosts: &[
-            "tinder.com",
-            "bumble.com",
-            "hinge.co",
-            "okcupid.com",
-            "match.com",
-            "pof.com",
-            "grindr.com",
-            "happn.com",
-            "badoo.com",
-            "feeld.co",
-            "taimi.com",
-        ],
-        domain_keywords: DATING_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-    BuiltInCategory {
-        id: "trading",
-        label: "Trading",
-        hosts: &[
-            "robinhood.com",
-            "coinbase.com",
-            "binance.com",
-            "etoro.com",
-            "kraken.com",
-            "marketwatch.com",
-            "seekingalpha.com",
-            "coinmarketcap.com",
-            "coingecko.com",
-            "gemini.com",
-            "kucoin.com",
-            "bybit.com",
-            "okx.com",
-            "webull.com",
-        ],
-        domain_keywords: TRADING_DOMAIN_KEYWORDS,
-        reddit_subreddit_keywords: &[],
-    },
-];
+fn parse_built_in_categories(json: &str) -> Vec<BuiltInCategory> {
+    let categories: Vec<BuiltInCategory> =
+        serde_json::from_str(json).expect("embedded doomscrolling categories must be valid JSON");
+    let mut seen_ids = HashSet::new();
+    for category in &categories {
+        assert!(
+            !category.id.trim().is_empty(),
+            "embedded doomscrolling category id must not be empty"
+        );
+        assert!(
+            !category.label.trim().is_empty(),
+            "embedded doomscrolling category label must not be empty"
+        );
+        assert!(
+            seen_ids.insert(category.id.as_str()),
+            "embedded doomscrolling category ids must be unique"
+        );
+    }
+    categories
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -567,13 +376,13 @@ fn read_mode(doomscrolling: &Value) -> (DoomscrollingMode, bool) {
 }
 
 fn built_in_category(id: &str) -> Option<&'static BuiltInCategory> {
-    BUILT_IN_CATEGORIES
+    built_in_categories()
         .iter()
         .find(|category| category.id == id)
 }
 
 fn default_built_in_category_ids() -> Vec<String> {
-    BUILT_IN_CATEGORIES
+    built_in_categories()
         .iter()
         .map(|category| category.id.to_string())
         .collect()
@@ -926,8 +735,8 @@ fn feed_fingerprint_hosts(hash: &mut u64, label: &str, hosts: &[String]) {
 
 fn rules_fingerprint(config: &DoomscrollingConfig) -> String {
     let mut hash = 14_695_981_039_346_656_037_u64;
-    feed_fingerprint(&mut hash, "built_in_ruleset");
-    feed_fingerprint(&mut hash, BUILT_IN_RULESET_VERSION);
+    feed_fingerprint(&mut hash, "built_in_categories");
+    feed_fingerprint(&mut hash, BUILT_IN_CATEGORIES_JSON);
     feed_fingerprint(&mut hash, config.mode.as_str());
     feed_fingerprint_bool(&mut hash, config.enabled);
     feed_fingerprint_bool(&mut hash, config.block_during_focus);

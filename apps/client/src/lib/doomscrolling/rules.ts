@@ -1,7 +1,24 @@
+import rawDoomscrollingCategoryDefinitions from "./categories.json";
+
 export type DoomscrollingMode = "blacklist" | "whitelist";
 
+export const DOOMSCROLLING_CATEGORY_IDS = [
+  "social-media",
+  "streaming",
+  "news",
+  "sports",
+  "porn",
+  "gambling",
+  "gaming",
+  "shopping",
+  "dating",
+  "trading",
+] as const;
+
+export type DoomscrollingCategoryId = (typeof DOOMSCROLLING_CATEGORY_IDS)[number];
+
 interface DoomscrollingCategoryDefinition {
-  id: string;
+  id: DoomscrollingCategoryId;
   label: string;
   hosts: readonly string[];
   domainKeywords?: readonly string[];
@@ -136,319 +153,80 @@ export const DOOMSCROLLING_PROTECTED_DESKTOP_PROCESS_NAMES = [
   "zsh",
 ] as const;
 
-const DOOMSCROLLING_PORN_DOMAIN_KEYWORDS = [
-  "porn",
-  "xxx",
-  "sex",
-  "xvideo",
-  "adult",
-  "nsfw",
-  "hentai",
-  "hanime",
-  "rule34",
-  "r34",
-  "booru",
-  "furry",
-  "jav",
-  "onlyfans",
-  "camgirl",
-  "nude",
-  "naked",
-  "erotic",
-  "bdsm",
-  "amateur",
-  "milf",
-  "anal",
-  "escort",
-  "fuck",
-  "fap",
-  "jerk",
-  "pussy",
-  "cock",
-  "dick",
-] as const;
+const DOOMSCROLLING_CATEGORY_ID_SET = new Set<string>(DOOMSCROLLING_CATEGORY_IDS);
 
-const DOOMSCROLLING_PORN_REDDIT_SUBREDDIT_KEYWORDS = [
-  "nsfw",
-  "porn",
-  "xxx",
-  "sex",
-  "slut",
-  "thot",
-  "gonewild",
-  "gw",
-  "nude",
-  "fuck",
-  "cock",
-  "dick",
-  "penis",
-  "pussy",
-  "booty",
-  "butt",
-  "anal",
-  "cream",
-  "cum",
-  "blowjob",
-  "tit",
-  "boob",
-  "busty",
-  "milf",
-  "teen",
-  "college",
-  "whore",
-  "onlyfans",
-  "wife",
-  "couple",
-  "bdsm",
-  "cuck",
-  "incest",
-  "thong",
-  "hentai",
-  "rule34",
-  "r34",
-  "ecchi",
-  "futa",
-  "furry",
-  "celeb",
-  "thick",
-  "thigh",
-  "petite",
-] as const;
+function isKnownDoomscrollingCategoryId(value: string): value is DoomscrollingCategoryId {
+  return DOOMSCROLLING_CATEGORY_ID_SET.has(value);
+}
 
-const DOOMSCROLLING_STREAMING_DOMAIN_KEYWORDS = [
-  "anime",
-] as const;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-const DOOMSCROLLING_NEWS_DOMAIN_KEYWORDS = [
-  "news",
-] as const;
+function parseCategoryStringList(
+  value: unknown,
+  categoryId: string,
+  field: string,
+): readonly string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid doomscrolling category ${categoryId}.${field}`);
+  }
+  const strings: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      throw new Error(`Invalid doomscrolling category ${categoryId}.${field}`);
+    }
+    strings.push(item);
+  }
+  return strings;
+}
 
-const DOOMSCROLLING_SPORTS_DOMAIN_KEYWORDS = [
-  "sports",
-  "scores",
-] as const;
+function loadDoomscrollingCategoryDefinitions(value: unknown): readonly DoomscrollingCategoryDefinition[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Doomscrolling category definitions must be an array");
+  }
+  const definitions: DoomscrollingCategoryDefinition[] = [];
+  const seenIds = new Set<string>();
+  for (const item of value) {
+    if (!isRecord(item)) {
+      throw new Error("Doomscrolling category definitions must contain objects");
+    }
+    const id = item.id;
+    const label = item.label;
+    if (typeof id !== "string" || !isKnownDoomscrollingCategoryId(id)) {
+      throw new Error("Doomscrolling category definition has an unsupported id");
+    }
+    if (seenIds.has(id)) {
+      throw new Error(`Duplicate doomscrolling category id: ${id}`);
+    }
+    if (typeof label !== "string" || label.trim() === "") {
+      throw new Error(`Doomscrolling category ${id} has an invalid label`);
+    }
+    seenIds.add(id);
+    definitions.push({
+      id,
+      label,
+      hosts: parseCategoryStringList(item.hosts, id, "hosts"),
+      domainKeywords: parseCategoryStringList(item.domainKeywords, id, "domainKeywords"),
+      redditSubredditKeywords: parseCategoryStringList(
+        item.redditSubredditKeywords,
+        id,
+        "redditSubredditKeywords",
+      ),
+    });
+  }
+  for (const id of DOOMSCROLLING_CATEGORY_IDS) {
+    if (!seenIds.has(id)) {
+      throw new Error(`Missing doomscrolling category id: ${id}`);
+    }
+  }
+  return definitions;
+}
 
-const DOOMSCROLLING_GAMBLING_DOMAIN_KEYWORDS = [
-  "casino",
-  "bet",
-  "poker",
-  "slots",
-] as const;
-
-const DOOMSCROLLING_GAMING_DOMAIN_KEYWORDS = [
-  "game",
-] as const;
-
-const DOOMSCROLLING_SHOPPING_DOMAIN_KEYWORDS = [
-  "shopee",
-  "lazada",
-  "flipkart",
-  "tokopedia",
-  "mercadolibre",
-  "mercadolivre",
-  "coupang",
-  "rakuten",
-] as const;
-
-const DOOMSCROLLING_DATING_DOMAIN_KEYWORDS = [
-  "dating",
-  "hookup",
-] as const;
-
-const DOOMSCROLLING_TRADING_DOMAIN_KEYWORDS = [
-  "crypto",
-  "forex",
-  "trading",
-] as const;
-
-export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
-  {
-    id: "social-media",
-    label: "Social media",
-    hosts: [
-      "facebook.com",
-      "instagram.com",
-      "x.com",
-      "twitter.com",
-      "tiktok.com",
-      "reddit.com",
-      "threads.net",
-      "bsky.app",
-      "snapchat.com",
-      "pinterest.com",
-      "linkedin.com",
-      "vk.com",
-      "ok.ru",
-      "weibo.com",
-      "douban.com",
-    ],
-  },
-  {
-    id: "streaming",
-    label: "Streaming",
-    domainKeywords: DOOMSCROLLING_STREAMING_DOMAIN_KEYWORDS,
-    hosts: [
-      "youtube.com",
-      "netflix.com",
-      "hulu.com",
-      "disneyplus.com",
-      "primevideo.com",
-      "twitch.tv",
-      "max.com",
-      "peacocktv.com",
-      "crunchyroll.com",
-      "paramountplus.com",
-      "tv.apple.com",
-      "tubi.tv",
-      "fandangoathome.com",
-      "bilibili.com",
-      "iqiyi.com",
-      "youku.com",
-      "hotstar.com",
-    ],
-  },
-  {
-    id: "news",
-    label: "News",
-    domainKeywords: DOOMSCROLLING_NEWS_DOMAIN_KEYWORDS,
-    hosts: [
-      "cnn.com",
-      "bbc.com",
-      "nytimes.com",
-      "washingtonpost.com",
-      "theguardian.com",
-      "reuters.com",
-      "wsj.com",
-      "bloomberg.com",
-      "npr.org",
-      "latimes.com",
-      "politico.com",
-    ],
-  },
-  {
-    id: "sports",
-    label: "Sports",
-    domainKeywords: DOOMSCROLLING_SPORTS_DOMAIN_KEYWORDS,
-    hosts: [
-      "espn.com",
-      "bleacherreport.com",
-      "nba.com",
-      "nfl.com",
-      "mlb.com",
-      "nhl.com",
-      "fifa.com",
-      "theathletic.com",
-      "cricbuzz.com",
-      "espncricinfo.com",
-    ],
-  },
-  {
-    id: "porn",
-    label: "Porn",
-    domainKeywords: DOOMSCROLLING_PORN_DOMAIN_KEYWORDS,
-    redditSubredditKeywords: DOOMSCROLLING_PORN_REDDIT_SUBREDDIT_KEYWORDS,
-    hosts: [
-      "xnxx.com",
-      "xhamster.com",
-      "redtube.com",
-    ],
-  },
-  {
-    id: "gambling",
-    label: "Gambling",
-    domainKeywords: DOOMSCROLLING_GAMBLING_DOMAIN_KEYWORDS,
-    hosts: [
-      "stake.com",
-      "stake.us",
-      "draftkings.com",
-      "fanduel.com",
-      "caesars.com",
-      "bovada.lv",
-      "williamhill.com",
-      "ladbrokes.com",
-      "paddypower.com",
-    ],
-  },
-  {
-    id: "gaming",
-    label: "Gaming",
-    domainKeywords: DOOMSCROLLING_GAMING_DOMAIN_KEYWORDS,
-    hosts: [
-      "steampowered.com",
-      "epicgames.com",
-      "roblox.com",
-      "battle.net",
-      "xbox.com",
-      "playstation.com",
-      "itch.io",
-      "fortnite.com",
-      "minecraft.net",
-      "riotgames.com",
-      "nintendo.com",
-    ],
-  },
-  {
-    id: "shopping",
-    label: "Shopping",
-    domainKeywords: DOOMSCROLLING_SHOPPING_DOMAIN_KEYWORDS,
-    hosts: [
-      "amazon.com",
-      "ebay.com",
-      "aliexpress.com",
-      "temu.com",
-      "walmart.com",
-      "target.com",
-      "etsy.com",
-      "shein.com",
-      "bestbuy.com",
-      "homedepot.com",
-      "zara.com",
-      "depop.com",
-      "whatnot.com",
-    ],
-  },
-  {
-    id: "dating",
-    label: "Dating",
-    domainKeywords: DOOMSCROLLING_DATING_DOMAIN_KEYWORDS,
-    hosts: [
-      "tinder.com",
-      "bumble.com",
-      "hinge.co",
-      "okcupid.com",
-      "match.com",
-      "pof.com",
-      "grindr.com",
-      "happn.com",
-      "badoo.com",
-      "feeld.co",
-      "taimi.com",
-    ],
-  },
-  {
-    id: "trading",
-    label: "Trading",
-    domainKeywords: DOOMSCROLLING_TRADING_DOMAIN_KEYWORDS,
-    hosts: [
-      "robinhood.com",
-      "coinbase.com",
-      "binance.com",
-      "etoro.com",
-      "kraken.com",
-      "marketwatch.com",
-      "seekingalpha.com",
-      "coinmarketcap.com",
-      "coingecko.com",
-      "gemini.com",
-      "kucoin.com",
-      "bybit.com",
-      "okx.com",
-      "webull.com",
-    ],
-  },
-] as const satisfies readonly DoomscrollingCategoryDefinition[];
-
-export type DoomscrollingCategoryId = (typeof DOOMSCROLLING_CATEGORY_DEFINITIONS)[number]["id"];
+export const DOOMSCROLLING_CATEGORY_DEFINITIONS = loadDoomscrollingCategoryDefinitions(
+  rawDoomscrollingCategoryDefinitions,
+);
 
 export interface DoomscrollingHostRule {
   host: string;
@@ -501,10 +279,6 @@ export interface DoomscrollingDecision {
   matchedRule: string | null;
 }
 
-const DOOMSCROLLING_CATEGORY_IDS = new Set<string>(
-  DOOMSCROLLING_CATEGORY_DEFINITIONS.map((category) => category.id),
-);
-
 function defaultCategoryRules(): DoomscrollingCategoryRule[] {
   return DOOMSCROLLING_CATEGORY_DEFINITIONS.map((category) => ({
     id: category.id,
@@ -548,7 +322,7 @@ export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
 });
 
 export function isDoomscrollingCategoryId(value: string): value is DoomscrollingCategoryId {
-  return DOOMSCROLLING_CATEGORY_IDS.has(value);
+  return isKnownDoomscrollingCategoryId(value);
 }
 
 export function getDoomscrollingCategoryDefinition(

@@ -57,6 +57,7 @@ apps/
         hooks/: reusable Svelte hooks
         stores/: Svelte runes ($state), global app state
         api/: typed wrappers around Tauri invoke() calls
+        doomscrolling/: shared browser and desktop blocking rules
         utils/: shared helpers, formatters
         types/: frontend-specific TypeScript types
       windows/: (planned) entry points for each Tauri window
