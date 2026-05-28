@@ -13,7 +13,7 @@
   const doomscrolling = getDoomscrolling();
 
   type DesktopListKind = "blocked";
-  type DesktopConfigurationToggle = "focus" | "shortBreaks" | "longBreaks";
+  type DesktopConfigurationToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks";
 
   interface DoomscrollingAppSelection {
     name: string;
@@ -138,8 +138,10 @@
     toggle: DesktopConfigurationToggle,
     checked: boolean,
   ): void {
-    if (toggle === "focus") {
+    if (toggle === "enabled") {
       doomscrolling.setDesktopEnabled(checked);
+    } else if (toggle === "focus") {
+      doomscrolling.setDesktopBlockDuringFocus(checked);
     } else if (toggle === "shortBreaks") {
       doomscrolling.setDesktopBlockDuringShortBreaks(checked);
     } else {
@@ -180,7 +182,8 @@
 
   function pendingActionTitle(action: PendingAction): string {
     if (action.target === "desktopConfiguration") {
-      if (action.action.toggle === "focus") return "Turn off desktop blocking during focus?";
+      if (action.action.toggle === "enabled") return "Turn off desktop app blocking?";
+      if (action.action.toggle === "focus") return "Allow apps during focus?";
       if (action.action.toggle === "shortBreaks") return "Allow apps during short breaks?";
       return "Allow apps during long breaks?";
     }
@@ -191,6 +194,9 @@
 
   function pendingActionMessage(action: PendingAction): string {
     if (action.target === "desktopConfiguration") {
+      if (action.action.toggle === "enabled") {
+        return "App rules will not apply until you enable desktop app blocking again";
+      }
       if (action.action.toggle === "focus") {
         return "App rules will not apply during focus sessions until you enable this again";
       }
@@ -206,7 +212,7 @@
 
   function pendingActionConfirmLabel(action: PendingAction): string {
     if (action.target === "desktopConfiguration") {
-      return action.action.toggle === "focus" ? "Turn off (Enter)" : "Allow (Enter)";
+      return action.action.toggle === "enabled" ? "Turn off (Enter)" : "Allow (Enter)";
     }
     return action.action.type === "disable" ? "Allow (Enter)" : "Remove (Enter)";
   }
@@ -216,11 +222,13 @@
   <DoomscrollingConfigurationSection
     title="Desktop app configuration"
     enabled={doomscrolling.desktopEnabled}
+    blockDuringFocus={doomscrolling.desktopBlockDuringFocus}
     blockDuringShortBreaks={doomscrolling.desktopBlockDuringShortBreaks}
     blockDuringLongBreaks={doomscrolling.desktopBlockDuringLongBreaks}
     showMode={false}
-    enabledLabel="Enable during focus"
-    enabledDescription="Apply app rules while a focus session is running"
+    enabledLabel="Enable desktop app blocking"
+    enabledDescription="Allow app rules to run during selected Pomodoro phases"
+    focusDescription="Apply app rules while a focus session is running"
     shortBreakDescription="Apply app rules during short breaks"
     longBreakDescription="Apply app rules during long breaks"
     onScheduleChange={requestDesktopConfigurationToggleChange}

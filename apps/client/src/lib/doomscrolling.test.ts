@@ -122,6 +122,7 @@ describe("normalizeDoomscrollingConfig", () => {
     })).toEqual({
       mode: "blacklist",
       enabled: true,
+      blockDuringFocus: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
       blockedCategories: DEFAULT_DOOMSCROLLING_CONFIG.blockedCategories,
@@ -170,8 +171,21 @@ describe("normalizeDoomscrollingConfig", () => {
     expect(normalizeDoomscrollingConfig({
       blockDuringBreaks: false,
     })).toMatchObject({
+      blockDuringFocus: true,
       blockDuringShortBreaks: false,
       blockDuringLongBreaks: false,
+    });
+  });
+
+  it("normalizes focus blocking independently from global enablement", () => {
+    expect(normalizeDoomscrollingConfig({
+      enabled: true,
+      blockDuringFocus: false,
+      blockDuringShortBreaks: true,
+    })).toMatchObject({
+      enabled: true,
+      blockDuringFocus: false,
+      blockDuringShortBreaks: true,
     });
   });
 
@@ -221,6 +235,7 @@ describe("normalizeDoomscrollingConfig", () => {
       desktop: {
         mode: "whitelist",
         enabled: false,
+        blockDuringFocus: false,
         blockDuringBreaks: false,
         blockedApps: [
           "Steam",
@@ -239,6 +254,7 @@ describe("normalizeDoomscrollingConfig", () => {
     })).toMatchObject({
       desktop: {
         enabled: false,
+        blockDuringFocus: false,
         blockDuringShortBreaks: false,
         blockDuringLongBreaks: false,
         blockedApps: [

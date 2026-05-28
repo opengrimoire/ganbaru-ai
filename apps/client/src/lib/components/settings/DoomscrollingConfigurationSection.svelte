@@ -4,16 +4,18 @@
   import DoomscrollingModeSelector from "./DoomscrollingModeSelector.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
-  type ScheduleToggle = "focus" | "shortBreaks" | "longBreaks";
+  type ScheduleToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks";
 
   let {
     title,
     enabled,
+    blockDuringFocus,
     blockDuringShortBreaks,
     blockDuringLongBreaks,
     mode = "blacklist",
     enabledLabel,
     enabledDescription,
+    focusDescription,
     shortBreakDescription,
     longBreakDescription,
     showMode = true,
@@ -26,11 +28,13 @@
   }: {
     title: string;
     enabled: boolean;
+    blockDuringFocus: boolean;
     blockDuringShortBreaks: boolean;
     blockDuringLongBreaks: boolean;
     mode?: DoomscrollingMode;
     enabledLabel: string;
     enabledDescription: string;
+    focusDescription: string;
     shortBreakDescription: string;
     longBreakDescription: string;
     showMode?: boolean;
@@ -50,7 +54,7 @@
       label={enabledLabel}
       description={enabledDescription}
       checked={enabled}
-      onChange={(checked) => onScheduleChange("focus", checked)}
+      onChange={(checked) => onScheduleChange("enabled", checked)}
     />
 
     <fieldset
@@ -62,6 +66,12 @@
       )}
     >
       <div class="flex flex-col gap-3" aria-label="Blocking schedule">
+        <ToggleSetting
+          label="Block during focus"
+          description={focusDescription}
+          checked={blockDuringFocus}
+          onChange={(checked) => onScheduleChange("focus", checked)}
+        />
         <ToggleSetting
           label="Block during short breaks"
           description={shortBreakDescription}

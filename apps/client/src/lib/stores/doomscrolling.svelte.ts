@@ -196,6 +196,9 @@ export function getDoomscrolling() {
     get mode(): DoomscrollingMode {
       return config.mode;
     },
+    get blockDuringFocus(): boolean {
+      return config.blockDuringFocus;
+    },
     get blockDuringShortBreaks(): boolean {
       return config.blockDuringShortBreaks;
     },
@@ -220,6 +223,9 @@ export function getDoomscrolling() {
     get desktopEnabled(): boolean {
       return config.desktop.enabled;
     },
+    get desktopBlockDuringFocus(): boolean {
+      return config.desktop.blockDuringFocus;
+    },
     get desktopBlockDuringShortBreaks(): boolean {
       return config.desktop.blockDuringShortBreaks;
     },
@@ -235,6 +241,9 @@ export function getDoomscrolling() {
     setEnabled(enabled: boolean): void {
       update({ enabled });
     },
+    setBlockDuringFocus(blockDuringFocus: boolean): void {
+      update({ blockDuringFocus });
+    },
     setBlockDuringShortBreaks(blockDuringShortBreaks: boolean): void {
       update({ blockDuringShortBreaks });
     },
@@ -243,6 +252,9 @@ export function getDoomscrolling() {
     },
     setDesktopEnabled(enabled: boolean): void {
       updateDesktop({ enabled });
+    },
+    setDesktopBlockDuringFocus(blockDuringFocus: boolean): void {
+      updateDesktop({ blockDuringFocus });
     },
     setDesktopBlockDuringShortBreaks(blockDuringShortBreaks: boolean): void {
       updateDesktop({ blockDuringShortBreaks });

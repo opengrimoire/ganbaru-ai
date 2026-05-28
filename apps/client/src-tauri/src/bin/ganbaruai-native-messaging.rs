@@ -223,6 +223,7 @@ struct CustomCategoryStack {
 struct DoomscrollingConfig {
     mode: DoomscrollingMode,
     enabled: bool,
+    block_during_focus: bool,
     block_during_short_breaks: bool,
     block_during_long_breaks: bool,
     blocked_category_ids: Vec<String>,
@@ -444,6 +445,10 @@ fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        block_during_focus: doomscrolling
+            .get("blockDuringFocus")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
         block_during_short_breaks: doomscrolling
             .get("blockDuringShortBreaks")
             .and_then(Value::as_bool)
@@ -619,6 +624,7 @@ fn default_config() -> DoomscrollingConfig {
     DoomscrollingConfig {
         mode: DoomscrollingMode::Blacklist,
         enabled: true,
+        block_during_focus: true,
         block_during_short_breaks: true,
         block_during_long_breaks: true,
         blocked_category_ids: default_built_in_category_ids(),
@@ -702,7 +708,7 @@ fn should_enforce(snapshot: &StateSnapshot, response: &mut NativeResponse) -> bo
         return false;
     }
     match response.phase.as_str() {
-        "focus" => true,
+        "focus" => snapshot.config.block_during_focus,
         "short_break" => snapshot.config.block_during_short_breaks,
         "long_break" => snapshot.config.block_during_long_breaks,
         _ => false,
@@ -820,6 +826,7 @@ fn rules_fingerprint(config: &DoomscrollingConfig) -> String {
     let mut hash = 14_695_981_039_346_656_037_u64;
     feed_fingerprint(&mut hash, config.mode.as_str());
     feed_fingerprint_bool(&mut hash, config.enabled);
+    feed_fingerprint_bool(&mut hash, config.block_during_focus);
     feed_fingerprint_bool(&mut hash, config.block_during_short_breaks);
     feed_fingerprint_bool(&mut hash, config.block_during_long_breaks);
     feed_fingerprint_hosts(&mut hash, "category", &config.blocked_category_ids);
@@ -913,6 +920,7 @@ mod tests {
         DoomscrollingConfig {
             mode: DoomscrollingMode::Blacklist,
             enabled: true,
+            block_during_focus: true,
             block_during_short_breaks: true,
             block_during_long_breaks: true,
             blocked_category_ids: Vec::new(),
@@ -1069,6 +1077,23 @@ mod tests {
 
         assert!(should_enforce(&snapshot, &mut short_break));
         assert!(!should_enforce(&snapshot, &mut long_break));
+    }
+
+    #[test]
+    fn enforces_focus_independently_from_break_toggles() {
+        let mut config = config();
+        config.block_during_focus = false;
+        config.block_during_short_breaks = true;
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config,
+            runtime: None,
+        };
+        let mut focus = response_for_phase("focus");
+        let mut short_break = response_for_phase("short_break");
+
+        assert!(!should_enforce(&snapshot, &mut focus));
+        assert!(should_enforce(&snapshot, &mut short_break));
     }
 
     #[test]

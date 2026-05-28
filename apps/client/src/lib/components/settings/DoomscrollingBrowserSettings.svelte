@@ -64,7 +64,7 @@
     host: string;
   }
 
-  type BrowserConfigurationToggle = "focus" | "shortBreaks" | "longBreaks";
+  type BrowserConfigurationToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks";
 
   interface PendingBrowserConfigurationAction {
     toggle: BrowserConfigurationToggle;
@@ -377,8 +377,10 @@
     toggle: BrowserConfigurationToggle,
     checked: boolean,
   ): void {
-    if (toggle === "focus") {
+    if (toggle === "enabled") {
       doomscrolling.setEnabled(checked);
+    } else if (toggle === "focus") {
+      doomscrolling.setBlockDuringFocus(checked);
     } else if (toggle === "shortBreaks") {
       doomscrolling.setBlockDuringShortBreaks(checked);
     } else {
@@ -438,7 +440,8 @@
         : `Delete ${action.action.host}?`;
     }
     if (action.target === "browserConfiguration") {
-      if (action.action.toggle === "focus") return "Turn off browser blocking during focus?";
+      if (action.action.toggle === "enabled") return "Turn off browser blocking?";
+      if (action.action.toggle === "focus") return "Allow websites during focus?";
       if (action.action.toggle === "shortBreaks") return "Allow websites during short breaks?";
       return "Allow websites during long breaks?";
     }
@@ -463,6 +466,9 @@
         : "This cannot be undone";
     }
     if (action.target === "browserConfiguration") {
+      if (action.action.toggle === "enabled") {
+        return "Website rules will not apply until you enable browser blocking again";
+      }
       if (action.action.toggle === "focus") {
         return "Website rules will not apply during focus sessions until you enable this again";
       }
@@ -487,7 +493,7 @@
       return action.action.type === "disable" ? "Disable (Enter)" : "Delete (Enter)";
     }
     if (action.target === "browserConfiguration") {
-      return action.action.toggle === "focus" ? "Turn off (Enter)" : "Allow (Enter)";
+      return action.action.toggle === "enabled" ? "Turn off (Enter)" : "Allow (Enter)";
     }
     if (action.target === "category") return "Disable (Enter)";
     if (action.target === "customStackDraftHost") return "Delete (Enter)";
@@ -805,11 +811,13 @@
   <DoomscrollingConfigurationSection
     title="Browser configuration"
     enabled={doomscrolling.enabled}
+    blockDuringFocus={doomscrolling.blockDuringFocus}
     blockDuringShortBreaks={doomscrolling.blockDuringShortBreaks}
     blockDuringLongBreaks={doomscrolling.blockDuringLongBreaks}
     mode={doomscrolling.mode}
-    enabledLabel="Enable during focus"
-    enabledDescription="Apply website rules while a focus session is running"
+    enabledLabel="Enable browser blocking"
+    enabledDescription="Allow website rules to run during selected Pomodoro phases"
+    focusDescription="Apply website rules while a focus session is running"
     shortBreakDescription="Apply website rules during short breaks"
     longBreakDescription="Apply website rules during long breaks"
     modeHeading="Website mode"

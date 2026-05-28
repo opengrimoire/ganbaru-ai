@@ -61,7 +61,7 @@ cd apps/client
 pnpm tauri dev
 ```
 
-Open GanbaruAI, go to Settings > Doomscrolling, keep Blacklist mode selected, enable blocking, and add blocked websites such as:
+Open GanbaruAI, go to Settings > Doomscrolling, keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
 
 ```text
 reddit.com
@@ -91,7 +91,7 @@ You do not need to remove the extension for normal changes.
 1. Start GanbaruAI with `pnpm tauri dev`.
 2. Confirm the extension popup says connected.
 3. In GanbaruAI, open Settings > Doomscrolling.
-4. Keep Blacklist mode selected, enable blocking, and add `reddit.com` to blocked websites.
+4. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add `reddit.com` to blocked websites.
 5. Start a Pomodoro focus phase.
 6. Open `https://reddit.com`.
 7. Confirm the browser redirects to the GanbaruAI block page.
@@ -123,7 +123,7 @@ You do not need to remove the extension for normal changes.
 
    Add `chromium`, `brave`, or `edge` as the second argument when testing in those browsers.
 
-5. Start GanbaruAI, open Settings, then Doomscrolling. Keep Blacklist mode selected, enable blocking, and add blocked websites such as:
+5. Start GanbaruAI, open Settings, then Doomscrolling. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
 
    ```text
    reddit.com
@@ -132,7 +132,7 @@ You do not need to remove the extension for normal changes.
 
 6. Start a Pomodoro focus phase and open one of the blocked sites.
 
-The extension defaults to fail open. If the native host is not registered, Doomscrolling is disabled, no focus phase is active, or the app has not written a fresh runtime state, it will not block pages.
+The extension defaults to fail open. If the native host is not registered, Doomscrolling is disabled, the current phase toggle is off, no protected Pomodoro phase is active, or the app has not written a fresh runtime state, it will not block pages.
 
 ## Troubleshooting
 
@@ -146,7 +146,7 @@ node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|c
 
 **The extension is loaded but never blocks.**
 
-Check that GanbaruAI is running, Settings > Doomscrolling is enabled, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
+Check that GanbaruAI is running, browser blocking and Block during focus are enabled in Settings > Doomscrolling, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
 
 **The app window opens but looks blank.**
 

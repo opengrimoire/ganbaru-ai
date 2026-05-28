@@ -317,6 +317,7 @@ export interface DoomscrollingCustomCategoryStack {
 
 export interface DoomscrollingDesktopConfig {
   enabled: boolean;
+  blockDuringFocus: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
   blockedApps: DoomscrollingAppRule[];
@@ -325,6 +326,7 @@ export interface DoomscrollingDesktopConfig {
 export interface DoomscrollingConfig {
   mode: DoomscrollingMode;
   enabled: boolean;
+  blockDuringFocus: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
   blockedCategories: DoomscrollingCategoryRule[];
@@ -355,6 +357,7 @@ function defaultCategoryRules(): DoomscrollingCategoryRule[] {
 function defaultDesktopConfig(): DoomscrollingDesktopConfig {
   return {
     enabled: true,
+    blockDuringFocus: true,
     blockDuringShortBreaks: true,
     blockDuringLongBreaks: true,
     blockedApps: [],
@@ -375,6 +378,7 @@ function protectedDesktopAppKeys(): Set<string> {
 export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
   mode: "blacklist",
   enabled: true,
+  blockDuringFocus: true,
   blockDuringShortBreaks: true,
   blockDuringLongBreaks: true,
   blockedCategories: defaultCategoryRules(),
@@ -634,6 +638,9 @@ function normalizeDesktopConfig(value: unknown): DoomscrollingDesktopConfig {
     enabled: typeof record.enabled === "boolean"
       ? record.enabled
       : true,
+    blockDuringFocus: typeof record.blockDuringFocus === "boolean"
+      ? record.blockDuringFocus
+      : true,
     blockDuringShortBreaks: typeof record.blockDuringShortBreaks === "boolean"
       ? record.blockDuringShortBreaks
       : legacyBlockDuringBreaks ?? true,
@@ -664,6 +671,9 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
     enabled: typeof record.enabled === "boolean"
       ? record.enabled
       : DEFAULT_DOOMSCROLLING_CONFIG.enabled,
+    blockDuringFocus: typeof record.blockDuringFocus === "boolean"
+      ? record.blockDuringFocus
+      : DEFAULT_DOOMSCROLLING_CONFIG.blockDuringFocus,
     blockDuringShortBreaks: typeof record.blockDuringShortBreaks === "boolean"
       ? record.blockDuringShortBreaks
       : legacyBlockDuringBreaks ?? DEFAULT_DOOMSCROLLING_CONFIG.blockDuringShortBreaks,
