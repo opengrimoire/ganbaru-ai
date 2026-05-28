@@ -18,6 +18,7 @@ The current desktop implementation is an early Chrome and Brave development slic
 - Blacklist mode presents built-in and custom categories as category pills. The New category pill opens the custom category form, websites are entered as list items, and custom category deletion lives inside the edit form.
 - The current browser `doomscrolling` config uses `enabled`, `blockDuringFocus`, `blockDuringShortBreaks`, `blockDuringLongBreaks`, `mode`, `blockedCategories`, `customCategoryStacks`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Built-in categories are enabled by default. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Category stacks store a name, enabled state, and normalized hosts. Legacy string website entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions. Desktop app rules live under `doomscrolling.desktop` with the same enable and phase schedule toggles plus a blocked app list. Legacy desktop `mode` and `allowedApps` fields are ignored.
 - The native host includes a rules fingerprint in state responses so the extension rechecks already open tabs when website rules change during an active focus or break phase.
+- Built-in browser category definitions live in `apps/client/src/lib/doomscrolling/categories.json`, which is shared by the frontend rule model and the Rust native messaging host. This avoids separate browser and native-host category lists drifting apart.
 - Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
 
 This is intentionally smaller than the full spec below. It supports domain-level browser blocking, preset categories, and automatic Linux desktop app closing during Pomodoro sessions first. Work environment rules, access-change analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
@@ -264,18 +265,22 @@ The environment editor should include a blocker section with:
 
 ## Suggested defaults
 
-GanbaruAI should ship with editable presets, not hidden hardcoded rules.
+GanbaruAI should ship with built-in category presets plus user-created custom category stacks. Built-in presets are maintained by the project and should not be shown as a browsing catalogue in the normal settings UI. If a built-in category is too broad for a user, the expected path is to disable that category and create a custom stack with the exact sites they want blocked.
 
-Initial presets:
+Initial built-in presets:
 
-- **Social media.** Common social feeds and infinite-scroll platforms.
-- **Short-form video.** Shorts, reels, and similar paths where URL patterns allow it.
-- **Video distractions.** Broad video sites, with support for explicit allowed playlists or channels.
-- **News and feeds.** News, aggregation, and feed-reader domains.
-- **Shopping.** Shopping and marketplace domains.
-- **Forums.** Broad forums, with project-specific allow rules for technical communities.
+- **Social media.** Common social feeds, novelty loops, and infinite-scroll platforms.
+- **Streaming.** Broad video and passive watching platforms, with later support for explicit allowed playlists or channels.
+- **News.** News, aggregation, and repeated-checking sites.
+- **Sports.** Scores, rumors, and frequent update sites.
+- **Porn.** High-intensity adult sites and practical domain or Reddit subreddit keyword rules.
+- **Gambling.** Betting, casino, poker, and slot-related sites.
+- **Gaming.** Game stores, game launch surfaces, and browser game sites.
+- **Shopping.** Shopping, marketplace, and wishlisting domains.
+- **Dating.** Match and message-checking sites.
+- **Trading.** Market, crypto, forex, and price-monitoring sites.
 
-Presets should be inspectable before enabling. The user should be able to remove individual domains from a preset without disabling the whole preset.
+Built-in presets can combine exact hosts, practical domain keywords, and narrow site-specific URL rules. The matching rules must stay local and deterministic. User-authored exceptions and Whitelist mode rules remain the way to allow legitimate task resources.
 
 ## Analytics and logs
 
