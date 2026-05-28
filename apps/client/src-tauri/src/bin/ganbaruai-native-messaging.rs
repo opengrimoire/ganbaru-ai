@@ -33,7 +33,25 @@ const PORN_REDDIT_SUBREDDIT_KEYWORDS: &[&str] = &[
     "petite",
 ];
 
-const BUILT_IN_RULESET_VERSION: &str = "2026-05-porn-keywords";
+const STREAMING_DOMAIN_KEYWORDS: &[&str] = &["anime"];
+const NEWS_DOMAIN_KEYWORDS: &[&str] = &["news"];
+const SPORTS_DOMAIN_KEYWORDS: &[&str] = &["sports", "scores"];
+const GAMBLING_DOMAIN_KEYWORDS: &[&str] = &["casino", "bet", "poker", "slots"];
+const GAMING_DOMAIN_KEYWORDS: &[&str] = &["game"];
+const SHOPPING_DOMAIN_KEYWORDS: &[&str] = &[
+    "shopee",
+    "lazada",
+    "flipkart",
+    "tokopedia",
+    "mercadolibre",
+    "mercadolivre",
+    "coupang",
+    "rakuten",
+];
+const DATING_DOMAIN_KEYWORDS: &[&str] = &["dating", "hookup"];
+const TRADING_DOMAIN_KEYWORDS: &[&str] = &["crypto", "forex", "trading"];
+
+const BUILT_IN_RULESET_VERSION: &str = "2026-05-regional-category-rules";
 
 const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
     BuiltInCategory {
@@ -51,6 +69,10 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "snapchat.com",
             "pinterest.com",
             "linkedin.com",
+            "vk.com",
+            "ok.ru",
+            "weibo.com",
+            "douban.com",
         ],
         domain_keywords: &[],
         reddit_subreddit_keywords: &[],
@@ -68,8 +90,16 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "max.com",
             "peacocktv.com",
             "crunchyroll.com",
+            "paramountplus.com",
+            "tv.apple.com",
+            "tubi.tv",
+            "fandangoathome.com",
+            "bilibili.com",
+            "iqiyi.com",
+            "youku.com",
+            "hotstar.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: STREAMING_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
@@ -82,11 +112,13 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "washingtonpost.com",
             "theguardian.com",
             "reuters.com",
-            "apnews.com",
-            "nbcnews.com",
-            "foxnews.com",
+            "wsj.com",
+            "bloomberg.com",
+            "npr.org",
+            "latimes.com",
+            "politico.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: NEWS_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
@@ -95,16 +127,16 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
         hosts: &[
             "espn.com",
             "bleacherreport.com",
-            "cbssports.com",
-            "foxsports.com",
-            "skysports.com",
             "nba.com",
             "nfl.com",
             "mlb.com",
             "nhl.com",
             "fifa.com",
+            "theathletic.com",
+            "cricbuzz.com",
+            "espncricinfo.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: SPORTS_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
@@ -119,15 +151,16 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
         label: "Gambling",
         hosts: &[
             "stake.com",
+            "stake.us",
             "draftkings.com",
             "fanduel.com",
-            "bet365.com",
-            "betmgm.com",
             "caesars.com",
             "bovada.lv",
-            "pokerstars.com",
+            "williamhill.com",
+            "ladbrokes.com",
+            "paddypower.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: GAMBLING_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
@@ -142,8 +175,13 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "playstation.com",
             "itch.io",
             "speedrun.com",
+            "fortnite.com",
+            "minecraft.net",
+            "callofduty.com",
+            "riotgames.com",
+            "nintendo.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: GAMING_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
@@ -159,8 +197,12 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "etsy.com",
             "shein.com",
             "bestbuy.com",
+            "homedepot.com",
+            "zara.com",
+            "depop.com",
+            "whatnot.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: SHOPPING_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
@@ -175,8 +217,11 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "pof.com",
             "grindr.com",
             "happn.com",
+            "badoo.com",
+            "feeld.co",
+            "taimi.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: DATING_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
     BuiltInCategory {
@@ -186,15 +231,19 @@ const BUILT_IN_CATEGORIES: &[BuiltInCategory] = &[
             "robinhood.com",
             "coinbase.com",
             "binance.com",
-            "tradingview.com",
             "etoro.com",
             "kraken.com",
             "marketwatch.com",
             "seekingalpha.com",
             "coinmarketcap.com",
             "coingecko.com",
+            "gemini.com",
+            "kucoin.com",
+            "bybit.com",
+            "okx.com",
+            "webull.com",
         ],
-        domain_keywords: &[],
+        domain_keywords: TRADING_DOMAIN_KEYWORDS,
         reddit_subreddit_keywords: &[],
     },
 ];
@@ -1113,6 +1162,82 @@ mod tests {
             decision.matched_rule_name.as_deref(),
             Some("category: Social media")
         );
+    }
+
+    #[test]
+    fn blocks_streaming_category_keyword_matches_in_domains() {
+        let mut config = config();
+        config.blocked_hosts.clear();
+        config.blocked_category_ids = vec!["streaming".to_string()];
+        let decision = decide_url(
+            "watch-anime.example",
+            Some("https://watch-anime.example/episode/1"),
+            &config,
+        );
+        assert!(decision.blocked);
+        assert_eq!(
+            decision.matched_rule_name.as_deref(),
+            Some("category: Streaming")
+        );
+    }
+
+    #[test]
+    fn blocks_built_in_category_keyword_matches_in_domains() {
+        let cases = [
+            (
+                "local-news.example",
+                "https://local-news.example/story",
+                "news",
+                "category: News",
+            ),
+            (
+                "live-scores.example",
+                "https://live-scores.example/game",
+                "sports",
+                "category: Sports",
+            ),
+            (
+                "online-casino.example",
+                "https://online-casino.example/table",
+                "gambling",
+                "category: Gambling",
+            ),
+            (
+                "mini-game.example",
+                "https://mini-game.example/play",
+                "gaming",
+                "category: Gaming",
+            ),
+            (
+                "shopee.example",
+                "https://shopee.example/deals",
+                "shopping",
+                "category: Shopping",
+            ),
+            (
+                "best-hookup.example",
+                "https://best-hookup.example/profile",
+                "dating",
+                "category: Dating",
+            ),
+            (
+                "crypto-watch.example",
+                "https://crypto-watch.example/chart",
+                "trading",
+                "category: Trading",
+            ),
+        ];
+        for (host, url, category_id, matched_rule_name) in cases {
+            let mut config = config();
+            config.blocked_hosts.clear();
+            config.blocked_category_ids = vec![category_id.to_string()];
+            let decision = decide_url(host, Some(url), &config);
+            assert!(decision.blocked);
+            assert_eq!(
+                decision.matched_rule_name.as_deref(),
+                Some(matched_rule_name)
+            );
+        }
     }
 
     #[test]

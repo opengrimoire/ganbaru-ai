@@ -3,7 +3,6 @@ export type DoomscrollingMode = "blacklist" | "whitelist";
 interface DoomscrollingCategoryDefinition {
   id: string;
   label: string;
-  description: string;
   hosts: readonly string[];
   domainKeywords?: readonly string[];
   redditSubredditKeywords?: readonly string[];
@@ -216,11 +215,56 @@ const DOOMSCROLLING_PORN_REDDIT_SUBREDDIT_KEYWORDS = [
   "petite",
 ] as const;
 
+const DOOMSCROLLING_STREAMING_DOMAIN_KEYWORDS = [
+  "anime",
+] as const;
+
+const DOOMSCROLLING_NEWS_DOMAIN_KEYWORDS = [
+  "news",
+] as const;
+
+const DOOMSCROLLING_SPORTS_DOMAIN_KEYWORDS = [
+  "sports",
+  "scores",
+] as const;
+
+const DOOMSCROLLING_GAMBLING_DOMAIN_KEYWORDS = [
+  "casino",
+  "bet",
+  "poker",
+  "slots",
+] as const;
+
+const DOOMSCROLLING_GAMING_DOMAIN_KEYWORDS = [
+  "game",
+] as const;
+
+const DOOMSCROLLING_SHOPPING_DOMAIN_KEYWORDS = [
+  "shopee",
+  "lazada",
+  "flipkart",
+  "tokopedia",
+  "mercadolibre",
+  "mercadolivre",
+  "coupang",
+  "rakuten",
+] as const;
+
+const DOOMSCROLLING_DATING_DOMAIN_KEYWORDS = [
+  "dating",
+  "hookup",
+] as const;
+
+const DOOMSCROLLING_TRADING_DOMAIN_KEYWORDS = [
+  "crypto",
+  "forex",
+  "trading",
+] as const;
+
 export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
   {
     id: "social-media",
     label: "Social media",
-    description: "Repeated checking for updates, reactions, comments, and novelty",
     hosts: [
       "facebook.com",
       "instagram.com",
@@ -233,12 +277,16 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
       "snapchat.com",
       "pinterest.com",
       "linkedin.com",
+      "vk.com",
+      "ok.ru",
+      "weibo.com",
+      "douban.com",
     ],
   },
   {
     id: "streaming",
     label: "Streaming",
-    description: "Passive continuation turns short breaks into long sessions",
+    domainKeywords: DOOMSCROLLING_STREAMING_DOMAIN_KEYWORDS,
     hosts: [
       "youtube.com",
       "netflix.com",
@@ -249,12 +297,20 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
       "max.com",
       "peacocktv.com",
       "crunchyroll.com",
+      "paramountplus.com",
+      "tv.apple.com",
+      "tubi.tv",
+      "fandangoathome.com",
+      "bilibili.com",
+      "iqiyi.com",
+      "youku.com",
+      "hotstar.com",
     ],
   },
   {
     id: "news",
     label: "News",
-    description: "Repeated checking without any immediate action needed",
+    domainKeywords: DOOMSCROLLING_NEWS_DOMAIN_KEYWORDS,
     hosts: [
       "cnn.com",
       "bbc.com",
@@ -262,32 +318,33 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
       "washingtonpost.com",
       "theguardian.com",
       "reuters.com",
-      "apnews.com",
-      "nbcnews.com",
-      "foxnews.com",
+      "wsj.com",
+      "bloomberg.com",
+      "npr.org",
+      "latimes.com",
+      "politico.com",
     ],
   },
   {
     id: "sports",
     label: "Sports",
-    description: "Scores and rumors encourage frequent checking",
+    domainKeywords: DOOMSCROLLING_SPORTS_DOMAIN_KEYWORDS,
     hosts: [
       "espn.com",
       "bleacherreport.com",
-      "cbssports.com",
-      "foxsports.com",
-      "skysports.com",
       "nba.com",
       "nfl.com",
       "mlb.com",
       "nhl.com",
       "fifa.com",
+      "theathletic.com",
+      "cricbuzz.com",
+      "espncricinfo.com",
     ],
   },
   {
     id: "porn",
     label: "Porn",
-    description: "High-intensity instant reward quickly overrides task intent",
     domainKeywords: DOOMSCROLLING_PORN_DOMAIN_KEYWORDS,
     redditSubredditKeywords: DOOMSCROLLING_PORN_REDDIT_SUBREDDIT_KEYWORDS,
     hosts: [
@@ -299,22 +356,23 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
   {
     id: "gambling",
     label: "Gambling",
-    description: "Variable rewards encourage one more try behavior",
+    domainKeywords: DOOMSCROLLING_GAMBLING_DOMAIN_KEYWORDS,
     hosts: [
       "stake.com",
+      "stake.us",
       "draftkings.com",
       "fanduel.com",
-      "bet365.com",
-      "betmgm.com",
       "caesars.com",
       "bovada.lv",
-      "pokerstars.com",
+      "williamhill.com",
+      "ladbrokes.com",
+      "paddypower.com",
     ],
   },
   {
     id: "gaming",
     label: "Gaming",
-    description: "In-game goals chain together and delay returning to work",
+    domainKeywords: DOOMSCROLLING_GAMING_DOMAIN_KEYWORDS,
     hosts: [
       "steampowered.com",
       "epicgames.com",
@@ -323,13 +381,16 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
       "xbox.com",
       "playstation.com",
       "itch.io",
-      "speedrun.com",
+      "fortnite.com",
+      "minecraft.net",
+      "riotgames.com",
+      "nintendo.com",
     ],
   },
   {
     id: "shopping",
     label: "Shopping",
-    description: "Browsing, comparing, and wishlisting can replace actual work",
+    domainKeywords: DOOMSCROLLING_SHOPPING_DOMAIN_KEYWORDS,
     hosts: [
       "amazon.com",
       "ebay.com",
@@ -340,12 +401,16 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
       "etsy.com",
       "shein.com",
       "bestbuy.com",
+      "homedepot.com",
+      "zara.com",
+      "depop.com",
+      "whatnot.com",
     ],
   },
   {
     id: "dating",
     label: "Dating",
-    description: "Match and message checking creates validation loops",
+    domainKeywords: DOOMSCROLLING_DATING_DOMAIN_KEYWORDS,
     hosts: [
       "tinder.com",
       "bumble.com",
@@ -355,23 +420,30 @@ export const DOOMSCROLLING_CATEGORY_DEFINITIONS = [
       "pof.com",
       "grindr.com",
       "happn.com",
+      "badoo.com",
+      "feeld.co",
+      "taimi.com",
     ],
   },
   {
     id: "trading",
     label: "Trading",
-    description: "Constantly changing prices encourage compulsive monitoring",
+    domainKeywords: DOOMSCROLLING_TRADING_DOMAIN_KEYWORDS,
     hosts: [
       "robinhood.com",
       "coinbase.com",
       "binance.com",
-      "tradingview.com",
       "etoro.com",
       "kraken.com",
       "marketwatch.com",
       "seekingalpha.com",
       "coinmarketcap.com",
       "coingecko.com",
+      "gemini.com",
+      "kucoin.com",
+      "bybit.com",
+      "okx.com",
+      "webull.com",
     ],
   },
 ] as const satisfies readonly DoomscrollingCategoryDefinition[];

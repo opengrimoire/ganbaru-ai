@@ -334,6 +334,35 @@ describe("evaluateDoomscrollingUrl", () => {
     expect(decision.matchedRule).toBe("category: Social media");
   });
 
+  it("blocks streaming category keyword matches in domains", () => {
+    const decision = evaluateDoomscrollingUrl("https://watch-anime.example/episode/1", config({
+      mode: "blacklist",
+      blockedCategories: categoryRulesWith("streaming"),
+    }));
+    expect(decision.blocked).toBe(true);
+    expect(decision.matchedRule).toBe("category: Streaming");
+  });
+
+  it.each([
+    ["https://local-news.example/story", "news", "category: News"],
+    ["https://live-scores.example/game", "sports", "category: Sports"],
+    ["https://online-casino.example/table", "gambling", "category: Gambling"],
+    ["https://mini-game.example/play", "gaming", "category: Gaming"],
+    ["https://shopee.example/deals", "shopping", "category: Shopping"],
+    ["https://best-hookup.example/profile", "dating", "category: Dating"],
+    ["https://crypto-watch.example/chart", "trading", "category: Trading"],
+  ] satisfies Array<[string, DoomscrollingCategoryId, string]>)(
+    "blocks built-in category keyword matches in domains for %s",
+    (url, categoryId, matchedRule) => {
+      const decision = evaluateDoomscrollingUrl(url, config({
+        mode: "blacklist",
+        blockedCategories: categoryRulesWith(categoryId),
+      }));
+      expect(decision.blocked).toBe(true);
+      expect(decision.matchedRule).toBe(matchedRule);
+    },
+  );
+
   it("blocks porn category keyword matches in domains", () => {
     const decision = evaluateDoomscrollingUrl("https://example-porn-site.test/watch", config({
       mode: "blacklist",
